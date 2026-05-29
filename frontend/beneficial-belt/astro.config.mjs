@@ -28,6 +28,16 @@ export default defineConfig({
     server: {
       port: 4321,
       proxy: {
+        '/aether': {
+        target: 'http://localhost:80',   // Aether 前端容器映射的宿主机端口
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/aether/, '')
+      },
+      '/aether/api': {
+        target: 'http://localhost:8082', // Aether 后端容器映射的宿主机端口
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/aether\/api/, '/api')
+      },
         '/images': 'http://localhost:8080' , // 新增
         '/api': {
           target: 'http://localhost:8080',

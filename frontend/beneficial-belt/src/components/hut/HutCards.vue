@@ -63,8 +63,12 @@ function saveRecent(title, link, icon) {
 }
 
 const goRag = () => {
-  saveRecent('多模态 RAG 知识库', 'https://github.com/your-repo/rag-kb', 'ph:database-duotone');
-  window.open('https://github.com/your-repo/rag-kb', '_blank');
+  // 判断当前环境
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const aetherUrl = isLocalhost ? 'http://localhost' : '/aether/';
+  
+  saveRecent('Aether 知识库', aetherUrl, 'ph:database-duotone');
+  window.open(aetherUrl, '_blank');
 };
 const goCli = () => {
   saveRecent('全栈脚手架 CLI', 'https://github.com/your-repo/fullstack-scaffold', 'ph:terminal-duotone');
