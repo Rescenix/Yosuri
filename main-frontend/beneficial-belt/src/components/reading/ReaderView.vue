@@ -348,4 +348,5 @@ const back = async () => {
 .bookmark-item.swiped .delete-btn {
   right: 0;
 }
+
 </style>
