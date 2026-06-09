@@ -78,30 +78,31 @@ export function useAnnotation(flipContainerRef, currentPage) {
   let left, top, cardWidth
   const containerRect = flipContainerRef.value?.getBoundingClientRect()
 
-  if (useFixed) {
-    // 移动端：直接基于传入的 DOMRect 固定定位
-    const rect = rangeOrRect // 此时是 DOMRect 对象
-    if (!rect || rect.width === 0) {
-      // 无效位置，使用屏幕中央默认位置
-      left = window.innerWidth / 2 - 140
-      top = window.innerHeight / 2 - 50
-    } else {
-      cardWidth = Math.min(280, window.innerWidth - 32)
-      left = rect.left + rect.width / 2 - cardWidth / 2
-      left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
-      top = rect.bottom + 8
-      if (top + 150 > window.innerHeight) {
-        top = rect.top - 150
-      }
-    }
-    commentCardStyle.value = {
-      position: 'fixed',
-      left: `${left}px`,
-      top: `${Math.max(0, top)}px`,
-      maxWidth: `${cardWidth || 280}px`,
-      zIndex: 99999,   // 确保在最上层
-    }
-  } else {
+if (useFixed) {
+  // 移动端：智能定位，不超出屏幕
+  const rect = rangeOrRect // DOMRect
+  const cardWidth = Math.min(280, window.innerWidth - 32)
+  let left = rect.left + rect.width / 2 - cardWidth / 2
+  left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
+
+  let top = rect.bottom + 8
+  const cardHeight = 150 // 估计高度，实际可能变化
+  // 如果底部空间不足，显示在选区上方
+  if (top + cardHeight > window.innerHeight - 8) {
+    top = rect.top - cardHeight - 8
+  }
+  // 防止超出顶部
+  top = Math.max(8, top)
+
+  commentCardStyle.value = {
+    position: 'fixed',
+    left: `${left}px`,
+    top: `${top}px`,
+    maxWidth: `${cardWidth}px`,
+    zIndex: 99999,
+    wordBreak: 'break-word',
+  }
+}else {
   // 桌面端模式：相对 .three-reader 定位
   const rect = rangeOrRect.getBoundingClientRect()
   cardWidth = Math.min(280, containerRect.width - 32)
