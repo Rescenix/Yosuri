@@ -7,8 +7,7 @@ self.addEventListener('install', (event) => {
         '/',
         '/index.html',
         '/manifest.webmanifest',
-        '/registerSW.js',
-        // 可添加更多核心文件，但大多数静态资源会被自动缓存
+        // 可添加更多核心文件
       ]);
     })
   );
