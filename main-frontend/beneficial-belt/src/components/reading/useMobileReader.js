@@ -37,34 +37,42 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     }
   }
 
-  function updateMobileSelection() {
-    const selection = window.getSelection()
-    const text = selection.toString().trim()
-    if (text.length === 0) {
-      mobileSelectedText.value = ''
-      mobileSelectedRange.value = null
-      return
-    }
-    const range = selection.getRangeAt(0).cloneRange()
-    mobileSelectedText.value = text
-    mobileSelectedRange.value = range
+ function updateMobileSelection() {
+  const selection = window.getSelection()
+  const text = selection.toString().trim()
+  if (text.length === 0) {
+    mobileSelectedText.value = ''
+    mobileSelectedRange.value = null
+    return
+  }
+  const range = selection.getRangeAt(0).cloneRange()
+  mobileSelectedText.value = text
+  mobileSelectedRange.value = range
 
-    const rect = range.getBoundingClientRect()
-    mobileSelectionStyle.value = {
-      position: 'fixed',
-      left: `${rect.left + rect.width / 2 - 80}px`,
-      top: `${rect.bottom + 4}px`,
-      display: 'flex',
-      gap: '8px',
-      zIndex: 100
-    }
+  const rect = range.getBoundingClientRect()
+  mobileSelectionStyle.value = {
+    position: 'fixed',
+    left: `${rect.left + rect.width / 2 - 80}px`,
+    top: `${rect.bottom + 4}px`,
+    display: 'flex',
+    gap: '8px',
+    zIndex: 100
   }
 
-  function onMobileTouchEnd() {
-    setTimeout(() => {
-      updateMobileSelection()
-    }, 0)
-  }
+  // ★ 关键：立即清除系统选区，防止出现原生菜单
+  window.getSelection()?.removeAllRanges()
+}
+
+  function onMobileTouchEnd(event) {
+  event.preventDefault() // 阻止浏览器默认菜单
+  event.stopPropagation()
+  
+  setTimeout(() => {
+    updateMobileSelection()
+    // 再次清除选区，确保原生菜单不会出现
+    window.getSelection()?.removeAllRanges()
+  }, 10)
+}
 
   async function initMobileView() {
     const text = reader.fullText.value || ''

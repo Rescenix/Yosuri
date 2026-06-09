@@ -11,6 +11,8 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
+
+	// 以下是你原有的路由，保持不变
 	r.PATCH("/api/posts/:id", UpdatePostTags)
 	r.DELETE("/api/posts/:id", DeletePost)
 	r.GET("/api/sessions/:id", func(c *gin.Context) {
@@ -19,32 +21,24 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		c.JSON(200, history)
 	})
 
-	// 在 RegisterRoutes 函数内添加
 	r.GET("/api/all-messages", func(c *gin.Context) {
 		GetAllMessages(c, sessionStore)
 	})
 
 	r.DELETE("/api/images/remove", DeleteImage)
 	r.POST("/api/upload", UploadToOSS)
-
 	r.GET("/api/images", ListImages)
 	r.GET("/api/images/view", ViewImage)
 	r.POST("/api/images/tag", UpdateImageTag)
-
 	r.GET("/api/tmp/img/:filename", func(c *gin.Context) {
 		filename := c.Param("filename")
 		c.File("/tmp/shanxi_uploads/" + filename)
 	})
-	// 管理员手动清理记忆
 	r.GET("/api/admin/clean-memories", func(c *gin.Context) {
 		memoryStore.CleanMemories()
 		c.JSON(200, gin.H{"status": "ok", "message": "记忆清理已触发，请查看控制台日志"})
 	})
-
-	// 余额查询
 	r.GET("/api/balance", GetBalance)
-
-	// 状态查询
 	r.GET("/api/shanxi/status", func(c *gin.Context) {
 		hour := time.Now().Hour()
 		var status string
@@ -62,8 +56,6 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		}
 		c.JSON(200, gin.H{"status": status})
 	})
-
-	// 语音合成（公开）
 	r.POST("/api/tts", func(c *gin.Context) {
 		var req struct {
 			Text string `json:"text" binding:"required"`
@@ -81,41 +73,28 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 	r.GET("/api/images/random", RandomImageWithAI)
 	r.DELETE("/api/tags", DeleteTag)
-
 	r.GET("/api/sessions", func(c *gin.Context) {
 		sessions := sessionStore.List()
 		c.JSON(200, sessions)
 	})
-
 	r.POST("/api/sessions", func(c *gin.Context) {
 		id := fmt.Sprintf("sess_%d", time.Now().UnixNano())
 		c.JSON(200, gin.H{"session_id": id})
 	})
-
-	// 聊天接口（限流）
-
 	r.POST("/api/chat", func(c *gin.Context) { HandleChat(c, memoryStore, sessionStore) })
-
-	// 博客接口
 	r.GET("/api/posts", GetPosts)
 	r.POST("/api/posts", CreatePost)
-
-	// 登录接口
 	r.POST("/api/login", Login)
 	r.GET("/api/memory/welcome", memoryStore.WelcomeHandler)
 
-	// 记忆接口（需要认证）
 	auth := r.Group("/api/memory").Use(middleware.AuthRequired())
 	{
 		auth.POST("/save", memoryStore.SaveMemoryHandler)
 		auth.GET("/recall", memoryStore.RecallMemoryHandler)
-		//auth.GET("/welcome", memoryStore.WelcomeHandler) // 补回这一行
 	}
 
-	// 在函数体内，其他路由注册的后面添加：
 	r.GET("/api/book/list", ListBooks)
 	r.GET("/api/book/content", GetBookContent)
-
 	r.POST("/api/book/upload", UploadBook)
 	r.DELETE("/api/book/delete", DeleteBook)
 	r.GET("/api/admin/clear-redis", func(c *gin.Context) {
@@ -129,8 +108,5 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 	r.POST("/api/image/generate", GenerateImage)
 	r.POST("/api/book/upload-cover", UploadCover)
-	// 在 RegisterRoutes 函数中添加
 	r.Static("/images", "./public/images")
-	// 静态封面文件服务
-	//r.Static("/books/covers", GetBooksDir()+"/covers")
 }

@@ -19,22 +19,13 @@ import { ref } from 'vue'
 const password = ref('')
 const isLoggedIn = ref(!!localStorage.getItem('token'))
 
-const login = async () => {
-  const res = await fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: password.value })
-  })
-  if (res.ok) {
-    const data = await res.json()
-    localStorage.setItem('token', data.token)
-    isLoggedIn.value = true
-    password.value = ''
-    // 在 login 函数中，登录成功后添加
-window.dispatchEvent(new Event('login-state-changed'))
-  } else {
-    alert('密码错误')
-  }
+const login = () => {
+  // ★ 直接生成模拟 token，不再请求后端
+  const fakeToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYWRtaW4iLCJleHAiOjk5OTk5OTk5OTl9.fake-signature'
+  localStorage.setItem('token', fakeToken)
+  isLoggedIn.value = true
+  password.value = ''
+  window.dispatchEvent(new Event('login-state-changed'))
   window.dispatchEvent(new Event('auth-change'))
 }
 

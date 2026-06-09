@@ -4,26 +4,15 @@
     <div v-else-if="reader.error.value" class="status-msg error">{{ reader.error.value }}</div>
 
     <template v-else>
-      <div class="toolbar"  >
-
-
-
+      <div class="toolbar">
         <button class="tb-btn" @click="back">← 书架</button>
-        
         <div class="tb-actions">
-
-
-
-  <!-- 移动端专用：读书笔记和杉汐痕迹按钮 -->
-    <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('notes')">
-      <Icon icon="ph:notebook" width="18" />
-    </button>
-    <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('sidebar')">
-      <Icon icon="ph:list" width="18" />
-    </button>
-
-
-
+          <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('notes')">
+            <Icon icon="ph:notebook" width="18" />
+          </button>
+          <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('sidebar')">
+            <Icon icon="ph:list" width="18" />
+          </button>
           <button class="tb-btn" @click="toggleBookmarkAtCurrentPage">
             <Icon :icon="isCurrentPageBookmarked ? 'ph:bookmark-simple-fill' : 'ph:bookmark-simple'" width="18" />
           </button>
@@ -49,7 +38,7 @@
         </div>
       </div>
 
-      <!-- 目录浮层 -->
+      <!-- 目录/书签浮层 -->
       <transition name="outline-fade">
         <div v-if="showOutline" class="outline-overlay" @click.self="showOutline = false">
           <div class="outline-panel">
@@ -71,11 +60,26 @@
               <div v-if="outline.length === 0" class="outline-empty">未识别到章节标题</div>
             </div>
 
-            <!-- 书签列表 -->
+            <!-- 书签列表（滑动删除） -->
             <div v-show="outlineTab === 'bookmarks'" class="outline-list">
-              <div v-for="(bm, idx) in reader.bookmarks.value" :key="idx" class="outline-item" @click="jumpToBookmark(bm.page)">
-                <span class="bm-text">{{ bm.text }}</span>
-                <span class="bm-page">第{{ bm.page + 1 }}页</span>
+              <div v-for="(bm, idx) in reader.bookmarks.value" :key="idx" class="bookmark-wrapper">
+                <div
+                  class="bookmark-item"
+                  :class="{ swiped: swipedBookmarkIndex === idx }"
+                  @click="isMobile ? null : handleBookmarkClick(bm, idx)"
+                  @touchstart.prevent="onBookmarkTouchStart($event, idx)"
+                  @touchmove="onBookmarkTouchMove"
+                  @touchend="onBookmarkTouchEnd($event, bm, idx)"
+                >
+                  <div class="bm-info">
+                    <span class="bm-page">第{{ bm.page + 1 }}页</span>
+                    <span class="bm-text">{{ bm.text }}</span>
+                  </div>
+                  <!-- 修改为 @touchstart.prevent.stop 直接触发删除 -->
+                  <div class="delete-btn" @touchstart.prevent.stop="deleteBookmark(idx)">
+                    <Icon icon="ph:trash" width="18" />
+                  </div>
+                </div>
               </div>
               <div v-if="reader.bookmarks.value.length === 0" class="outline-empty">暂无书签</div>
             </div>
@@ -84,25 +88,26 @@
       </transition>
     </template>
 
- <!-- 移动端面板浮层（从顶部滑出） -->
-<transition name="slide-down">
-  <div v-if="isMobile && activeMobilePanel" class="mobile-panel-overlay" @click.self="activeMobilePanel = null">
-    <div class="mobile-panel">
-      <div class="mobile-panel-header">
-        <span>{{ activeMobilePanel === 'notes' ? '读书笔记' : '杉汐的痕迹' }}</span>
-       <button class="tb-btn" @click="activeMobilePanel = null">
-  <Icon icon="ph:x" width="18" />
-</button>
+    <!-- 移动端面板浮层 -->
+    <transition name="slide-down">
+      <div v-if="isMobile && activeMobilePanel" class="mobile-panel-overlay" @click.self="activeMobilePanel = null">
+        <div class="mobile-panel">
+          <div class="mobile-panel-header">
+            <span>{{ activeMobilePanel === 'notes' ? '读书笔记' : '杉汐的痕迹' }}</span>
+            <button class="tb-btn" @click="activeMobilePanel = null">
+              <Icon icon="ph:x" width="18" />
+            </button>
+          </div>
+          <div class="mobile-panel-content">
+            <NotesPanel v-if="activeMobilePanel === 'notes'" />
+            <SidePanel v-else :threeReaderRef="threeReaderRef" />
+          </div>
+        </div>
       </div>
-      <div class="mobile-panel-content">
-        <NotesPanel v-if="activeMobilePanel === 'notes'" />
-        <SidePanel v-else :threeReaderRef="threeReaderRef" />
-      </div>
-    </div>
-  </div>
-</transition>
+    </transition>
   </div>
 </template>
+
 <script setup>
 import { ref, onMounted, nextTick, computed, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
@@ -111,15 +116,18 @@ import ThreeReader from './ThreeReader.vue'
 import SidePanel from './SidePanel.vue'
 import NotesPanel from './NotesPanel.vue'
 
-
-
-const activeMobilePanel = ref(null) // 'notes' | 'sidebar' | null
-
+const activeMobilePanel = ref(null)
 const reader = useReader()
 const threeReaderRef = ref(null)
 const showOutline = ref(false)
 const outline = ref([])
 const outlineTab = ref('outline')
+const swipedBookmarkIndex = ref(-1)
+
+// 移动端滑动相关
+const touchStartX = {}
+const SWIPE_THRESHOLD = 40
+
 let panelTimer = null
 function openMobilePanel(type) {
   if (panelTimer) return
@@ -129,28 +137,22 @@ function openMobilePanel(type) {
   }, 100)
 }
 
-// ============ 移动端检测（顶层执行） ============
 const isMobile = ref(window.innerWidth <= 768)
 let mediaQuery = null
 
-// 在组件挂载时添加监听
 onMounted(() => {
   mediaQuery = window.matchMedia('(max-width: 768px)')
   isMobile.value = mediaQuery.matches
   const handler = (e) => { isMobile.value = e.matches }
   mediaQuery.addEventListener('change', handler)
-  
-  // 存储 handler 引用，以便移除
   mediaQuery._handler = handler
 })
 
-// 在组件卸载时移除监听
 onBeforeUnmount(() => {
   if (mediaQuery && mediaQuery._handler) {
     mediaQuery.removeEventListener('change', mediaQuery._handler)
   }
 })
-
 
 function parseOutline(fullText) {
   const lines = fullText.split('\n')
@@ -166,10 +168,7 @@ function parseOutline(fullText) {
 }
 
 const currentPage = computed(() => threeReaderRef.value?.currentPage ?? 0)
-
-const isCurrentPageBookmarked = computed(() => {
-  return reader.isBookmarked(currentPage.value)
-})
+const isCurrentPageBookmarked = computed(() => reader.isBookmarked(currentPage.value))
 
 const toggleBookmarkAtCurrentPage = () => {
   const page = currentPage.value
@@ -177,15 +176,69 @@ const toggleBookmarkAtCurrentPage = () => {
   reader.toggleBookmark(page, text)
 }
 
-const jumpToBookmark = (page) => {
+// 桌面端点击切换滑动状态
+function handleBookmarkClick(bm, idx) {
+  if (swipedBookmarkIndex.value === idx) {
+    jumpToPage(bm.page)
+    swipedBookmarkIndex.value = -1
+  } else {
+    swipedBookmarkIndex.value = idx
+  }
+}
+
+// 移动端触摸事件
+function onBookmarkTouchStart(e, idx) {
+  touchStartX[idx] = e.touches[0].clientX
+}
+
+function onBookmarkTouchMove() {}
+
+function onBookmarkTouchEnd(e, bm, idx) {
+  // 如果触摸发生在删除按钮上，不做任何处理（避免关闭滑动或跳转）
+  if (e.target.closest('.delete-btn')) return
+
+  const startX = touchStartX[idx]
+  delete touchStartX[idx]
+  if (startX === undefined) return
+
+  const endX = e.changedTouches[0].clientX
+  const dx = endX - startX
+
+  if (dx < -SWIPE_THRESHOLD) {
+    // 左滑显示删除
+    swipedBookmarkIndex.value = idx
+  } else if (dx > SWIPE_THRESHOLD) {
+    // 右滑关闭删除
+    swipedBookmarkIndex.value = -1
+  } else {
+    // 点击行为
+    if (swipedBookmarkIndex.value === idx) {
+      // 已处于滑动状态，点击关闭删除（不跳转）
+      swipedBookmarkIndex.value = -1
+    } else {
+      // 未滑动，直接跳转
+      jumpToPage(bm.page)
+      swipedBookmarkIndex.value = -1
+    }
+  }
+}
+
+function deleteBookmark(idx) {
+  // 响应式删除
+  reader.bookmarks.value = reader.bookmarks.value.filter((_, i) => i !== idx)
+  localStorage.setItem('shanxi_bookmarks', JSON.stringify(reader.bookmarks.value))
+  swipedBookmarkIndex.value = -1
+}
+
+function jumpToPage(page) {
   if (threeReaderRef.value?.flipToPage) {
     threeReaderRef.value.flipToPage(page)
   }
   showOutline.value = false
 }
 
-const jumpToChapter = (item) => {
-  if (threeReaderRef.value && threeReaderRef.value.jumpToChapter) {
+function jumpToChapter(item) {
+  if (threeReaderRef.value?.jumpToChapter) {
     threeReaderRef.value.jumpToChapter(item.title)
   }
   showOutline.value = false
@@ -222,4 +275,77 @@ const back = async () => {
 
 <style>
 @import './ReaderView.css';
+</style>
+
+<style scoped>
+/* 书签列表滑动删除样式 */
+.bookmark-wrapper {
+  position: relative;
+  margin-bottom: 6px;
+  border-radius: 8px;
+}
+
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  transition: transform 0.25s ease;
+  transform: translateX(0);
+  padding: 10px 12px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  border-radius: 8px;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.bookmark-item.swiped {
+  transform: translateX(-36px);
+}
+
+.bm-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.bm-page {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.bm-text {
+  font-size: 0.85rem;
+  color: #334155;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.delete-btn {
+  position: absolute;
+  right: -36px;
+  top: 0;
+  bottom: 0;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fee2e2;
+  color: #ef4444;
+  cursor: pointer;
+  border-radius: 0;
+  transition: right 0.25s ease;
+  z-index: 1;
+  border: none;
+  outline: none;
+}
+
+.bookmark-item.swiped .delete-btn {
+  right: 0;
+}
 </style>
