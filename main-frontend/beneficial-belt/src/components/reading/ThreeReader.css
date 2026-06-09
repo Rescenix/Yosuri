@@ -285,10 +285,7 @@
   background: #f1f5f9;
 }
 
-.shanxi-highlight.selected {
-  background-color: rgba(180, 80, 50, 0.25) !important;
-  border-radius: 2px;
-}
+
 
 .fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s ease;

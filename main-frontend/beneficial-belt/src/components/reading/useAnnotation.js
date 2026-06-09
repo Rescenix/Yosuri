@@ -24,22 +24,24 @@ export function useAnnotation(flipContainerRef, currentPage) {
   }
 
   function highlightText(text, range) {
-    const span = document.createElement('span')
-    span.className = 'shanxi-highlight selected'
-    span.textContent = text
-    Object.assign(span.style, {
-      outline: '2px solid rgba(180, 80, 50, 0.6)',
-      outlineOffset: '1px',
-      borderRadius: '6px',
-      boxShadow: '0 0 0 3px rgba(180, 80, 50, 0.2)',
-      display: 'inline',
-      lineHeight: 'inherit',
-      padding: '0',
-      margin: '0'
-    })
-    range.deleteContents()
-    range.insertNode(span)
-  }
+  const span = document.createElement('span')
+  span.className = 'shanxi-highlight'
+  span.textContent = text
+  // 只使用背景色，不设置 outline/border/box-shadow，避免布局抖动
+  Object.assign(span.style, {
+    backgroundColor: 'rgba(180, 80, 50, 0.25)',
+    borderRadius: '2px',
+    outline: 'none',
+    border: 'none',
+    boxShadow: 'none',
+    padding: '0 2px',
+    margin: '0',
+    display: 'inline',
+    lineHeight: 'inherit',
+  })
+  range.deleteContents()
+  range.insertNode(span)
+}
 
   function typewrite(text) {
     clearInterval(typingTimer)

@@ -65,20 +65,28 @@ export default defineConfig({
         registerType: 'autoUpdate',
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          // 关键：所有导航请求（即页面跳转）回退到 /index.html，保证 SPA 离线可用
+          navigateFallback: '/index.html',
           runtimeCaching: [
             {
               urlPattern: /\/api\/.*/,
-              handler: 'NetworkOnly',
+              handler: 'NetworkOnly',            // 不缓存 API，保持数据新鲜
             },
             {
               urlPattern: /\/book\/.*/,
               handler: 'NetworkFirst',
               options: {
                 cacheName: 'book-pages',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24,
-                },
+                expiration: { maxEntries: 100, maxAgeSeconds: 86400 },
+              },
+            },
+            {
+              // HTML 文件：网络优先，失败时回退缓存
+              urlPattern: ({ request }) => request.mode === 'navigate',
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'pages-cache',
+                expiration: { maxEntries: 50, maxAgeSeconds: 86400 },
               },
             },
           ],
