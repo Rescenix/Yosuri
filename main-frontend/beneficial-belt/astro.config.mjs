@@ -25,9 +25,14 @@ export default defineConfig({
       noExternal: ['tsparticles-engine', 'tsparticles-slim'],
     },
 
-    server: {
-      host: '0.0.0.0',           // ★ 允许局域网访问
-      port: 4321,
+ server: {
+  host: '0.0.0.0',
+  port: 4321,
+  headers: {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  },
       proxy: {
         '/aether': {
         target: 'http://localhost:80',   // Aether 前端容器映射的宿主机端口

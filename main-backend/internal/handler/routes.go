@@ -11,7 +11,16 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
-
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
 	// 以下是你原有的路由，保持不变
 	r.PATCH("/api/posts/:id", UpdatePostTags)
 	r.DELETE("/api/posts/:id", DeletePost)
@@ -108,5 +117,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 	r.POST("/api/image/generate", GenerateImage)
 	r.POST("/api/book/upload-cover", UploadCover)
+	// 新增：预排版与按页读取
+
 	r.Static("/images", "./public/images")
+
 }

@@ -1,5 +1,7 @@
+// src/components/reading/useMobileReader.js
 import { ref, nextTick } from 'vue'
 import { getCachedPages, setCachedPages } from './cachePagination.js'
+import { savePage, getPage } from '../../composables/usePageCache.js'
 
 export function useMobileReader(flipContainerRef, reader, statusMsg, progressPercent, totalPages, currentPage) {
   const htmlPages = ref([])
@@ -8,6 +10,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
   const mobileSelectedRange = ref(null)
   const mobileSelectionStyle = ref({})
 
+  // ─── HTML 辅助函数 ──────────────────────────
   function escapeHtml(str) {
     const div = document.createElement('div')
     div.textContent = str
@@ -23,6 +26,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a,#2c3e50);display:flex;justify-content:center;align-items:center;color:#e8d5b7;">封底</div>`
   }
 
+  // ─── 翻页 ────────────────────────────────
   function mobileFlipPrev() {
     if (mobilePageIndex.value > 0) {
       mobilePageIndex.value--
@@ -37,43 +41,11 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     }
   }
 
- function updateMobileSelection() {
-  const selection = window.getSelection()
-  const text = selection.toString().trim()
-  if (text.length === 0) {
-    mobileSelectedText.value = ''
-    mobileSelectedRange.value = null
-    return
-  }
-  const range = selection.getRangeAt(0).cloneRange()
-  mobileSelectedText.value = text
-  mobileSelectedRange.value = range
+  // ─── 选区处理（移动端）—— 已由 useMobileSelection 接管，保留空函数以防引用 ──
+  function updateMobileSelection() {}
+  function onMobileTouchEnd(event) {}
 
-  const rect = range.getBoundingClientRect()
-  mobileSelectionStyle.value = {
-    position: 'fixed',
-    left: `${rect.left + rect.width / 2 - 80}px`,
-    top: `${rect.bottom + 4}px`,
-    display: 'flex',
-    gap: '8px',
-    zIndex: 100
-  }
-
-  // ★ 关键：立即清除系统选区，防止出现原生菜单
-  window.getSelection()?.removeAllRanges()
-}
-
-  function onMobileTouchEnd(event) {
-  event.preventDefault() // 阻止浏览器默认菜单
-  event.stopPropagation()
-  
-  setTimeout(() => {
-    updateMobileSelection()
-    // 再次清除选区，确保原生菜单不会出现
-    window.getSelection()?.removeAllRanges()
-  }, 10)
-}
-
+  // ─── 初始化移动端视图（纯客户端排版 + 本地缓存）───────────
   async function initMobileView() {
     const text = reader.fullText.value || ''
     const fontSize = reader.fontSize.value
@@ -87,9 +59,9 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       return
     }
 
-    // 1. 尝试从缓存加载
+    // 1. 尝试从 IndexedDB 加载全本缓存（如果之前已排版并缓存过）
     const cached = await getCachedPages(bookId, fontSize, w, h)
-    if (cached) {
+    if (cached && cached.length > 0) {
       htmlPages.value = cached
       totalPages.value = cached.length
       mobilePageIndex.value = 1
@@ -99,7 +71,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       return
     }
 
-    // 2. 无缓存，执行分页
+    // 2. 无缓存，执行客户端精确排版（exactPaginate）
     statusMsg.value = '正在排版... 0%'
     progressPercent.value = 0
 
@@ -112,7 +84,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     const backHTML = createBackHTML()
     const fullPages = [coverHTML, ...bodyPages, backHTML]
 
-    // 3. 写入缓存
+    // 3. 写入 IndexedDB 缓存（下次秒开）
     await setCachedPages(bookId, fontSize, w, h, fullPages)
 
     htmlPages.value = fullPages
@@ -123,7 +95,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     progressPercent.value = 100
   }
 
-  // 占位函数，具体逻辑由 ThreeReader 绑定
+  // ─── 占位函数（由 ThreeReader 覆盖实际逻辑）───
   async function handleMobileComment() {}
   async function handleMobileSearch() {}
 

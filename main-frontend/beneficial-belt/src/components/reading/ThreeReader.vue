@@ -60,10 +60,10 @@
         @mousedown.prevent
         @touchstart.stop
       >
-        <div class="menu-item" @click="isMobile ? mobileChooseComment() : chooseComment()">
+        <div class="menu-item" @click="isMobile ? mobileChooseComment() : desktopChooseComment()">
           <Icon icon="ph:pen" width="16" /><span>批注</span>
         </div>
-        <div class="menu-item" @click="isMobile ? mobileChooseSearch() : chooseSearch()">
+        <div class="menu-item" @click="isMobile ? mobileChooseSearch() : desktopChooseSearch()">
           <Icon icon="ph:magnifying-glass" width="16" /><span>搜索</span>
         </div>
       </div>
@@ -157,6 +157,8 @@ const {
 } = useMobileSelection(flipContainerRef, {
   highlightText, generateComment, showResultCard, closeCard,
 })
+
+// 不再需要为 mobile.handleMobileSearch 单独赋值，因为 useMobileSelection 已经实现了相关逻辑
 
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 

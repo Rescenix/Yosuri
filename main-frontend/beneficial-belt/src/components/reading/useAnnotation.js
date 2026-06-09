@@ -73,34 +73,66 @@ export function useAnnotation(flipContainerRef, currentPage) {
     }
   }
 
-  function showResultCard(text, range, resultText, save = true) {
-    const containerRect = flipContainerRef.value.getBoundingClientRect()
-    const rect = range.getBoundingClientRect()
-    const cardWidth = Math.min(280, containerRect.width - 32)
-    let left = rect.left - containerRect.left + rect.width / 2 - cardWidth / 2
-    left = Math.max(8, Math.min(left, containerRect.width - cardWidth - 8))
-    const top = rect.bottom - containerRect.top + 8
+  function showResultCard(text, rangeOrRect, resultText, save = true, useFixed = false) {
+  console.log('[showResultCard] 调用', text, resultText, useFixed)
+  let left, top, cardWidth
+  const containerRect = flipContainerRef.value?.getBoundingClientRect()
+
+  if (useFixed) {
+    // 移动端：直接基于传入的 DOMRect 固定定位
+    const rect = rangeOrRect // 此时是 DOMRect 对象
+    if (!rect || rect.width === 0) {
+      // 无效位置，使用屏幕中央默认位置
+      left = window.innerWidth / 2 - 140
+      top = window.innerHeight / 2 - 50
+    } else {
+      cardWidth = Math.min(280, window.innerWidth - 32)
+      left = rect.left + rect.width / 2 - cardWidth / 2
+      left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
+      top = rect.bottom + 8
+      if (top + 150 > window.innerHeight) {
+        top = rect.top - 150
+      }
+    }
     commentCardStyle.value = {
+      position: 'fixed',
       left: `${left}px`,
-      top: `${Math.min(top, containerRect.height - 150)}px`,
-      maxWidth: `${cardWidth}px`
+      top: `${Math.max(0, top)}px`,
+      maxWidth: `${cardWidth || 280}px`,
+      zIndex: 99999,   // 确保在最上层
     }
-    showCommentCard.value = true
-    displayedComment.value = ''
-    commentTyping.value = true
-    typewrite(resultText)
-
-    if (save) {
-      annotations.value.push({
-        text: selectedText.value || text,
-        comment: resultText,
-        page: currentPage.value,
-        time: Date.now()
-      })
-      saveAnnotations()
-    }
+  } else {
+  // 桌面端模式：相对 .three-reader 定位
+  const rect = rangeOrRect.getBoundingClientRect()
+  cardWidth = Math.min(280, containerRect.width - 32)
+  let left = rect.left - containerRect.left + rect.width / 2 - cardWidth / 2
+  left = Math.max(0, Math.min(left, containerRect.width - cardWidth - 8))
+  let top = rect.bottom - containerRect.top + 8
+  top = Math.min(top, containerRect.height - 150)
+  commentCardStyle.value = {
+    left: `${left}px`,
+    top: `${Math.max(0, top)}px`,
+    maxWidth: `${cardWidth}px`,
+    zIndex: 100
   }
+}
 
+  showCommentCard.value = true
+  displayedComment.value = ''
+  commentTyping.value = true
+  typewrite(resultText)
+  console.log('[showResultCard] 卡片已显示', commentCardStyle.value)
+
+  if (save) {
+    annotations.value.push({
+      text: selectedText.value || text,
+      comment: resultText,
+      page: currentPage.value,
+      time: Date.now()
+    })
+    saveAnnotations()
+  }
+}
   function closeCard() {
     showCommentCard.value = false
     clearInterval(typingTimer)

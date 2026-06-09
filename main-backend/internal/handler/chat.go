@@ -119,7 +119,6 @@ func buildSystemPrompt(req ChatRequest, c *gin.Context, memoryStore *MemoryStore
 		description, err := AnalyzeImage(imageData, req.Message)
 		if description != "" {
 			fmt.Printf("✅ 图片分析成功\n")
-			// 注入更明确的指令，要求杉汐必须在回复中引用图片描述
 			prompt += fmt.Sprintf(
 				"\n你刚刚直接看到了一张图片，图片里的内容是：%s\n"+
 					"请用你自己的、自然的方式跟我聊聊你看到的东西。不要说你拿到的只是文字描述，因为这就是你亲眼看到的。",
@@ -157,9 +156,34 @@ func HandleChat(c *gin.Context, memoryStore *MemoryStore, sessionStore *SessionS
 	messages = append(messages, history...)
 	messages = append(messages, DSMessage{Role: "user", Content: req.Message})
 
-	// 4. 调用模型
-	reply, tokenUsage, latency := askDeepSeekWithMessages(messages, req.Temperature, req.TopP, req.MaxTokens, req.ReasoningEffort)
+	// 4. 调用模型（带错误恢复与友好降级）
+	var reply string
+	var tokenUsage int
+	var latency int64
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("❌ askDeepSeekWithMessages panic: %v\n", r)
+				reply = ""
+			}
+		}()
+		reply, tokenUsage, latency = askDeepSeekWithMessages(messages, req.Temperature, req.TopP, req.MaxTokens, req.ReasoningEffort)
+	}()
+
+	// 如果 AI 无回复（包括 DeepSeek API 返回非200或网络错误），返回友好提示
+	if reply == "" {
+		fmt.Println("⚠️ DeepSeek 无响应，返回默认提示")
+		c.JSON(http.StatusOK, ChatResponse{
+			Reply:      "杉汐暂时无法回复，请稍后重试。",
+			Emotion:    "neutral",
+			TokenUsage: 0,
+			Latency:    latency,
+		})
+		return
+	}
+
 	fmt.Printf("🤖 AI原始回复: %q (长度: %d)\n", reply, len(reply))
+
 	// 更新会话历史
 	sessionStore.Append(req.SessionID, DSMessage{Role: "user", Content: req.Message})
 	sessionStore.Append(req.SessionID, DSMessage{Role: "assistant", Content: reply})

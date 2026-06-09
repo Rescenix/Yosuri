@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,33 +23,91 @@ type PaginateResponse struct {
 	Pages []string `json:"pages"`
 }
 
-// 生成缓存 key（与 redis.go 无关，属于分页逻辑）
-func generateCacheKey(req PaginateRequest) string {
-	hash := md5.Sum([]byte(req.Text))
-	return fmt.Sprintf("pages:%x:%.0f:%.0f:%.0f", hash, req.FontSize, req.PageWidth, req.PageHeight)
-}
-
-// 估算文本宽度（像素）
-func estimateTextWidth(text string, fontSize float64) float64 {
-	var width float64
-	for _, r := range text {
-		if r > 0x7F {
-			width += fontSize
-		} else {
-			width += fontSize * 0.6
-		}
-	}
-	return width
-}
-
 var htmlEscaper = strings.NewReplacer(
 	"&", "&amp;",
 	"<", "&lt;",
 	">", "&gt;",
 )
 
-// 精确分页（二分法）
-func doPaginate(req PaginateRequest) []string {
+// ---------- 缓存 key (使用文本前2048字符 + 参数) ----------
+func generateCacheKey(req PaginateRequest) string {
+	prefix := req.Text
+	if len(prefix) > 2048 {
+		prefix = prefix[:2048]
+	}
+	hash := md5.Sum([]byte(fmt.Sprintf("%s:%.2f:%.2f:%.2f", prefix, req.FontSize, req.PageWidth, req.PageHeight)))
+	return fmt.Sprintf("pages:%x", hash)
+}
+
+// ---------- 精确字符宽度表 (单位: 相对于 1px 字体大小) ----------
+// 实际宽度 = fontSize * widthFactor
+// 以下数据基于 Inter 字体 + Noto Sans SC 在 16px 下的近似值
+var (
+	// 汉字 / 全角符号
+	fullWidthFactor = 1.0
+	// 英文小写字母平均宽度
+	lowerWidthFactor = 0.52
+	// 英文大写字母平均宽度
+	upperWidthFactor = 0.68
+	// 数字
+	digitWidthFactor = 0.55
+	// 空格
+	spaceWidthFactor = 0.28
+	// 常见标点 (半角)
+	punctuationWidth = 0.35
+)
+
+func getCharWidth(r rune, fontSize float64) float64 {
+	switch {
+	case r >= 0x4E00 && r <= 0x9FFF: // 常用汉字
+		return fontSize * fullWidthFactor
+	case r == ' ':
+		return fontSize * spaceWidthFactor
+	case r >= '0' && r <= '9':
+		return fontSize * digitWidthFactor
+	case r >= 'a' && r <= 'z':
+		return fontSize * lowerWidthFactor
+	case r >= 'A' && r <= 'Z':
+		return fontSize * upperWidthFactor
+	case strings.ContainsRune("，。！？；：“”‘’、", r):
+		// 中文标点全角
+		return fontSize * fullWidthFactor
+	case strings.ContainsRune(",.!?;:()[]{}", r):
+		return fontSize * punctuationWidth
+	default:
+		// 其他字符：按全角处理
+		return fontSize * fullWidthFactor
+	}
+}
+
+// 计算字符串精确宽度
+func measureWidth(s string, fontSize float64) float64 {
+	var width float64
+	for _, r := range s {
+		width += getCharWidth(r, fontSize)
+	}
+	return width
+}
+
+// 禁止出现在行首的标点 (需要挪到上一行行尾)
+var lineStartForbidden = map[rune]bool{
+	'。': true, '，': true, '！': true, '？': true, '；': true, '：': true,
+	'”': true, '’': true, '》': true, '】': true, '』': true, '、': true,
+	'.': true, ',': true, '!': true, '?': true, ';': true, ':': true,
+	')': true, ']': true, '}': true,
+}
+
+// 检查一个字符串是否以禁止行首的字符开头
+func startsWithForbidden(s string) bool {
+	if s == "" {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(s)
+	return lineStartForbidden[r]
+}
+
+// ---------- 高质量流式分页 (对标 Pretext) ----------
+func highQualityPaginate(req PaginateRequest) []string {
 	text := req.Text
 	fontSize := req.FontSize
 	pageWidth := req.PageWidth
@@ -58,38 +118,33 @@ func doPaginate(req PaginateRequest) []string {
 	contentWidth := pageWidth - pad*2
 	contentHeight := pageHeight - pad*2
 	maxLinesPerPage := int(contentHeight / lineHeight)
-
-	indentWidth := fontSize * 2
-	indentStr := "　　"
-
-	type Line struct {
-		text        string
-		width       float64
-		height      float64
-		paragraphID int
-		indent      bool
-		isFirst     bool
-		isLast      bool
+	if maxLinesPerPage < 1 {
+		maxLinesPerPage = 1
 	}
 
-	lines := make([]Line, 0)
+	indentWidth := fontSize * 2 // 首行缩进两个汉字的宽度
+	indentStr := "　　"
+
+	type lineInfo struct {
+		text   string
+		indent bool // 是否需要首行缩进
+	}
+
+	var allLines []lineInfo
 	paragraphs := strings.Split(text, "\n")
 
-	for p := 0; p < len(paragraphs); p++ {
-		para := paragraphs[p]
-
+	for _, para := range paragraphs {
 		if para == "" {
-			lines = append(lines, Line{text: "", width: 0, height: lineHeight, paragraphID: p, indent: false, isFirst: true, isLast: true})
+			allLines = append(allLines, lineInfo{text: "", indent: false})
+			continue
+		}
+		trimmed := strings.TrimLeft(para, " \t\r")
+		if trimmed == "" {
+			allLines = append(allLines, lineInfo{text: "", indent: false})
 			continue
 		}
 
-		para = strings.TrimLeft(para, " \t\r")
-		if para == "" {
-			lines = append(lines, Line{text: "", width: 0, height: lineHeight, paragraphID: p, indent: false, isFirst: true, isLast: true})
-			continue
-		}
-
-		remaining := para
+		remaining := trimmed
 		isFirstLine := true
 
 		for len(remaining) > 0 {
@@ -97,127 +152,124 @@ func doPaginate(req PaginateRequest) []string {
 			if isFirstLine {
 				maxWidth = contentWidth - indentWidth
 			}
-
+			// 二分查找最长可容纳的字符数
 			low, high := 0, len(remaining)
 			best := 0
 			for low <= high {
 				mid := (low + high) / 2
-				if estimateTextWidth(remaining[:mid], fontSize) <= maxWidth {
+				if mid == 0 {
+					best = 0
+					break
+				}
+				w := measureWidth(remaining[:mid], fontSize)
+				if w <= maxWidth {
 					best = mid
 					low = mid + 1
 				} else {
 					high = mid - 1
 				}
 			}
-
-			lineText := remaining[:best]
+			if best == 0 {
+				best = 1
+			}
+			// 获取当前行候选文本
+			candidate := remaining[:best]
 			cutPos := best
 
-			if best < len(remaining) && remaining[best] != ' ' {
-				lastSpace := strings.LastIndex(lineText, " ")
+			// 英文单词保护：如果切在了单词中间，回退到前一个空格
+			if best < len(remaining) && remaining[best] != ' ' && !unicode.IsSpace(rune(remaining[best])) {
+				lastSpace := strings.LastIndex(candidate, " ")
 				if lastSpace > 0 {
-					lineText = lineText[:lastSpace]
+					candidate = candidate[:lastSpace]
 					cutPos = lastSpace + 1
 				}
 			}
 
-			lineText = strings.TrimRight(lineText, " \t")
+			// 标点避头尾：检查下一行的首字符是否不允许出现在行首
 			nextStart := cutPos
 			for nextStart < len(remaining) && remaining[nextStart] == ' ' {
 				nextStart++
 			}
+			if nextStart < len(remaining) && startsWithForbidden(remaining[nextStart:]) {
+				// 把禁止标点挪到本行末尾
+				// 找到第一个不是禁止标点的位置
+				origCut := cutPos
+				for cutPos < len(remaining) && startsWithForbidden(remaining[cutPos:]) {
+					cutPos += utf8.RuneLen(rune(remaining[cutPos]))
+				}
+				if cutPos > origCut {
+					candidate = remaining[:cutPos]
+				}
+				nextStart = cutPos
+				for nextStart < len(remaining) && remaining[nextStart] == ' ' {
+					nextStart++
+				}
+			}
 
-			isLast := nextStart >= len(remaining)
-			lines = append(lines, Line{
-				text:        lineText,
-				width:       estimateTextWidth(lineText, fontSize),
-				height:      lineHeight,
-				paragraphID: p,
-				indent:      isFirstLine,
-				isFirst:     isFirstLine,
-				isLast:      isLast,
+			lineText := strings.TrimRight(candidate, " \t")
+			allLines = append(allLines, lineInfo{
+				text:   lineText,
+				indent: isFirstLine,
 			})
 			isFirstLine = false
 			remaining = remaining[nextStart:]
 		}
 	}
 
-	// 移除开头连续空行
-	for len(lines) > 0 && lines[0].text == "" {
-		lines = lines[1:]
+	// 移除开头的连续空行
+	for len(allLines) > 0 && allLines[0].text == "" {
+		allLines = allLines[1:]
 	}
 
-	pages := make([]string, 0)
-	startIdx := 0
+	// 分页 + 孤行控制
+	var pages []string
+	idx := 0
+	total := len(allLines)
 
-	for startIdx < len(lines) {
-		maxLines := maxLinesPerPage
-		if maxLines > len(lines)-startIdx {
-			maxLines = len(lines) - startIdx
+	for idx < total {
+		end := idx + maxLinesPerPage
+		if end > total {
+			end = total
 		}
-		endIdx := startIdx + maxLines - 1
+		// 孤行控制：如果当前页最后一行是段落首行且不是唯一行，则回退一行
+		if end < total && end > idx && allLines[end].indent {
+			// 将段首行移到下一页
+			end--
+		}
+		if end == idx { // 安全保护
+			end = idx + 1
+		}
 
-		// 孤行控制
-		if lines[endIdx].isFirst && !lines[endIdx].isLast {
-			if endIdx+1 < len(lines) && (endIdx+1-startIdx+1) <= maxLinesPerPage {
-				endIdx++
+		pageLines := allLines[idx:end]
+		var textParts []string
+		for _, line := range pageLines {
+			if line.indent {
+				textParts = append(textParts, indentStr+line.text)
 			} else {
-				endIdx--
+				textParts = append(textParts, line.text)
 			}
 		}
-		if lines[startIdx].isLast && !lines[startIdx].isFirst {
-			if startIdx > 0 && (endIdx-startIdx+2) <= maxLinesPerPage {
-				startIdx--
-				maxLines = maxLinesPerPage
-				if maxLines > len(lines)-startIdx {
-					maxLines = len(lines) - startIdx
-				}
-				endIdx = startIdx + maxLines - 1
-				if lines[endIdx].isFirst && !lines[endIdx].isLast {
-					if endIdx+1 < len(lines) && (endIdx+1-startIdx+1) <= maxLinesPerPage {
-						endIdx++
-					} else {
-						endIdx--
-					}
-				}
-			}
-		}
-
-		if endIdx < startIdx {
-			endIdx = startIdx
-		}
-
-		pageLines := lines[startIdx : endIdx+1]
-		var pageTextParts []string
-		for _, l := range pageLines {
-			if l.indent {
-				pageTextParts = append(pageTextParts, indentStr+l.text)
-			} else {
-				pageTextParts = append(pageTextParts, l.text)
-			}
-		}
-		pageText := strings.Join(pageTextParts, "\n")
+		pageText := strings.Join(textParts, "\n")
 		escaped := htmlEscaper.Replace(pageText)
 		html := fmt.Sprintf(`<div style="
-      width: 100%%; height: 100%%;
-      padding: %.0fpx;
-      box-sizing: border-box;
-      font-family: 'Inter', system-ui, sans-serif;
-      font-size: %.0fpx;
-      line-height: 1.8;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      text-align: justify;
-      overflow: hidden;
-    ">%s</div>`, pad, fontSize, escaped)
-
+			width: 100%%; height: 100%%;
+			padding: %.0fpx;
+			box-sizing: border-box;
+			font-family: 'Inter', system-ui, 'Noto Sans SC', sans-serif;
+			font-size: %.0fpx;
+			line-height: 1.8;
+			white-space: pre-wrap;
+			word-wrap: break-word;
+			text-align: justify;
+			overflow: hidden;
+		">%s</div>`, pad, fontSize, escaped)
 		pages = append(pages, html)
-		startIdx = endIdx + 1
+		idx = end
 	}
 	return pages
 }
 
-// 快速分页（估算字符数）
+// ---------- 极速分页（超大文本回退，保持原有逻辑）---------
 func fastPaginate(req PaginateRequest) []string {
 	text := req.Text
 	fontSize := req.FontSize
@@ -246,13 +298,11 @@ func fastPaginate(req PaginateRequest) []string {
 			lines = append(lines, line{"", false})
 			continue
 		}
-
 		trimmed := strings.TrimLeft(para, " \t\r")
 		if trimmed == "" {
 			lines = append(lines, line{"", false})
 			continue
 		}
-
 		var paraLines []string
 		for len(trimmed) > 0 {
 			end := charsPerLine
@@ -262,7 +312,6 @@ func fastPaginate(req PaginateRequest) []string {
 			paraLines = append(paraLines, trimmed[:end])
 			trimmed = trimmed[end:]
 		}
-
 		if len(paraLines) > 0 {
 			paraLines[0] = indentStr + paraLines[0]
 			lines = append(lines, line{paraLines[0], true})
@@ -272,7 +321,6 @@ func fastPaginate(req PaginateRequest) []string {
 		}
 	}
 
-	// 移除开头空行
 	for len(lines) > 0 && lines[0].text == "" {
 		lines = lines[1:]
 	}
@@ -293,24 +341,23 @@ func fastPaginate(req PaginateRequest) []string {
 		pageText := strings.Join(parts, "\n")
 		escaped := htmlEscaper.Replace(pageText)
 		html := fmt.Sprintf(`<div style="
-      width: 100%%; height: 100%%;
-      padding: %.0fpx;
-      box-sizing: border-box;
-      font-family: 'Inter', system-ui, sans-serif;
-      font-size: %.0fpx;
-      line-height: 1.8;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      text-align: justify;
-      overflow: hidden;
-    ">%s</div>`, pad, fontSize, escaped)
-
+			width: 100%%; height: 100%%;
+			padding: %.0fpx;
+			box-sizing: border-box;
+			font-family: 'Inter', system-ui, 'Noto Sans SC', sans-serif;
+			font-size: %.0fpx;
+			line-height: 1.8;
+			white-space: pre-wrap;
+			word-wrap: break-word;
+			text-align: justify;
+			overflow: hidden;
+		">%s</div>`, pad, fontSize, escaped)
 		pages = append(pages, html)
 	}
 	return pages
 }
 
-// HTTP 接口
+// ---------- HTTP 接口 ----------
 func Paginate(c *gin.Context) {
 	var req PaginateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -318,7 +365,7 @@ func Paginate(c *gin.Context) {
 		return
 	}
 
-	// 1. 尝试 Redis 缓存（使用 redis.go 中的变量和函数）
+	// 1. Redis 缓存
 	if redisEnabled {
 		key := generateCacheKey(req)
 		if cachedPages, err := getPagesFromCache(key); err == nil {
@@ -327,22 +374,22 @@ func Paginate(c *gin.Context) {
 		}
 	}
 
-	// 2. 分页计算
+	// 2. 选择分页算法
 	var pages []string
 	textSize := len(req.Text)
 	if textSize > 500_000 {
-		fmt.Printf("[INFO] 文本较大 (%d bytes)，启用极速分页模式\n", textSize)
+		fmt.Printf("[INFO] 超大文本 (%d bytes)，启用极速分页\n", textSize)
 		pages = fastPaginate(req)
 	} else {
 		done := make(chan []string, 1)
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("[WARN] 精确分页崩溃: %v，回退到极速模式\n", r)
+					fmt.Printf("[WARN] 高质量分页崩溃: %v\n", r)
 					done <- nil
 				}
 			}()
-			done <- doPaginate(req)
+			done <- highQualityPaginate(req)
 		}()
 		select {
 		case p := <-done:
@@ -351,18 +398,18 @@ func Paginate(c *gin.Context) {
 			} else {
 				pages = p
 			}
-		case <-time.After(5 * time.Second):
-			fmt.Println("[WARN] 精确分页超时，回退到极速模式")
+		case <-time.After(4 * time.Second):
+			fmt.Println("[WARN] 高质量分页超时，回退到极速模式")
 			pages = fastPaginate(req)
 		}
 	}
 
 	// 3. 异步写入 Redis
-	if redisEnabled {
+	if redisEnabled && len(pages) > 0 {
 		key := generateCacheKey(req)
 		go func() {
 			if err := setPagesToCache(key, pages); err != nil {
-				fmt.Printf("[WARN] 写入 Redis 缓存失败: %v\n", err)
+				fmt.Printf("[WARN] 写入 Redis 失败: %v\n", err)
 			}
 		}()
 	}
