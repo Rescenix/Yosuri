@@ -158,8 +158,6 @@ const {
   highlightText, generateComment, showResultCard, closeCard,
 })
 
-// 不再需要为 mobile.handleMobileSearch 单独赋值，因为 useMobileSelection 已经实现了相关逻辑
-
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 
 function highlightOnPage(text, targetIndex) {
@@ -274,6 +272,7 @@ async function reInit() {
   statusMsg.value = '正在准备...'
   if (isMobile.value) {
     await initMobileView()
+    // 如果首次加载或字体改变后，预排版会在 initMobileView 内部触发，这里无需重复
   } else {
     try {
       const flip = await desktopInitFlip()
@@ -287,7 +286,12 @@ async function reInit() {
   }
 }
 
-watch(() => props.reader.fontSize.value, (v) => { if (v !== currentFontSize) reInit() })
+watch(() => props.reader.fontSize.value, (v) => {
+  if (v !== currentFontSize) {
+    currentFontSize = v
+    reInit()
+  }
+})
 watch(() => props.reader.fullText.value, () => reInit())
 
 let blockCtx

@@ -73,27 +73,27 @@ export function useAnnotation(flipContainerRef, currentPage) {
     }
   }
 
-  function showResultCard(text, rangeOrRect, resultText, save = true, useFixed = false) {
-  console.log('[showResultCard] 调用', text, resultText, useFixed)
-  let left, top, cardWidth
-  const containerRect = flipContainerRef.value?.getBoundingClientRect()
+function showResultCard(text, rangeOrRect, resultText, save = true) {
+  let rect
+  if (rangeOrRect && typeof rangeOrRect.left === 'number') {
+    rect = rangeOrRect
+  } else if (rangeOrRect) {
+    rect = rangeOrRect.getBoundingClientRect()
+  } else {
+    rect = {
+      left: window.innerWidth / 2,
+      top: window.innerHeight / 2,
+      width: 0,
+      bottom: window.innerHeight / 2
+    }
+  }
 
-if (useFixed) {
-  // 移动端：智能定位，不超出屏幕
-  const rect = rangeOrRect // DOMRect
   const cardWidth = Math.min(280, window.innerWidth - 32)
   let left = rect.left + rect.width / 2 - cardWidth / 2
   left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
-
   let top = rect.bottom + 8
-  const cardHeight = 150 // 估计高度，实际可能变化
-  // 如果底部空间不足，显示在选区上方
-  if (top + cardHeight > window.innerHeight - 8) {
-    top = rect.top - cardHeight - 8
-  }
-  // 防止超出顶部
-  top = Math.max(8, top)
 
+  // 先设置初始样式（隐藏，避免闪烁）
   commentCardStyle.value = {
     position: 'fixed',
     left: `${left}px`,
@@ -101,28 +101,13 @@ if (useFixed) {
     maxWidth: `${cardWidth}px`,
     zIndex: 99999,
     wordBreak: 'break-word',
+    visibility: 'hidden'
   }
-}else {
-  // 桌面端模式：相对 .three-reader 定位
-  const rect = rangeOrRect.getBoundingClientRect()
-  cardWidth = Math.min(280, containerRect.width - 32)
-  let left = rect.left - containerRect.left + rect.width / 2 - cardWidth / 2
-  left = Math.max(0, Math.min(left, containerRect.width - cardWidth - 8))
-  let top = rect.bottom - containerRect.top + 8
-  top = Math.min(top, containerRect.height - 150)
-  commentCardStyle.value = {
-    left: `${left}px`,
-    top: `${Math.max(0, top)}px`,
-    maxWidth: `${cardWidth}px`,
-    zIndex: 100
-  }
-}
 
   showCommentCard.value = true
   displayedComment.value = ''
   commentTyping.value = true
   typewrite(resultText)
-  console.log('[showResultCard] 卡片已显示', commentCardStyle.value)
 
   if (save) {
     annotations.value.push({
@@ -133,6 +118,35 @@ if (useFixed) {
     })
     saveAnnotations()
   }
+
+  // 渲染后根据实际高度调整垂直位置
+  requestAnimationFrame(() => {
+    const card = document.querySelector('.comment-card')
+    if (card) {
+      const cardRect = card.getBoundingClientRect()
+      // 底部溢出 → 移到选区上方
+      if (cardRect.bottom > window.innerHeight - 8) {
+        top = rect.top - cardRect.height - 8
+        if (top < 8) top = 8
+      }
+      // 顶部溢出保护
+      if (top < 8) top = 8
+      // 水平再次确认
+      if (cardRect.right > window.innerWidth - 8) {
+        left = window.innerWidth - cardRect.width - 8
+      }
+      if (left < 8) left = 8
+
+      commentCardStyle.value = {
+        ...commentCardStyle.value,
+        left: `${left}px`,
+        top: `${top}px`,
+        visibility: 'visible'
+      }
+    } else {
+      commentCardStyle.value.visibility = 'visible'
+    }
+  })
 }
   function closeCard() {
     showCommentCard.value = false
