@@ -23,22 +23,22 @@ export function useAnnotation(flipContainerRef, currentPage) {
     window.dispatchEvent(new CustomEvent('annotations-updated'))
   }
 
-  function highlightText(text, range) {
+ function highlightText(text, range) {
   const span = document.createElement('span')
   span.className = 'shanxi-highlight'
   span.textContent = text
-  // 只使用背景色，不设置 outline/border/box-shadow，避免布局抖动
-  Object.assign(span.style, {
-    backgroundColor: 'rgba(180, 80, 50, 0.25)',
-    borderRadius: '2px',
-    outline: 'none',
-    border: 'none',
-    boxShadow: 'none',
-    padding: '0 2px',
-    margin: '0',
-    display: 'inline',
-    lineHeight: 'inherit',
-  })
+  // 只设置背景色，display: inline，无任何 margin/padding/border
+  span.style.backgroundColor = 'rgba(180, 80, 50, 0.25)'
+  span.style.display = 'inline'
+  span.style.lineHeight = 'inherit'
+  // 强制移除所有可能影响布局的属性（尤其是全局样式覆盖）
+  span.style.setProperty('outline', 'none', 'important')
+  span.style.setProperty('border', 'none', 'important')
+  span.style.setProperty('box-shadow', 'none', 'important')
+  span.style.setProperty('padding', '0', 'important')
+  span.style.setProperty('margin', '0', 'important')
+  span.style.setProperty('border-radius', '0', 'important')
+
   range.deleteContents()
   range.insertNode(span)
 }
