@@ -1,14 +1,18 @@
 const CACHE_NAME = 'shanxi-__BUILD_TIMESTAMP__';
 
+// 预缓存你的实际入口页面 + 核心资源
+const PRECACHE_URLS = [
+  '/shanxi-hut/',               // 应用主页面
+  '/shanxi-hut/index.html',     // 入口 HTML
+  '/manifest.webmanifest',      // 如果有
+  '/favicon.ico',
+  // 可以添加更多关键文件，如 '/_astro/xxx.css'
+];
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([
-        '/',
-        '/index.html',
-        '/manifest.webmanifest',
-        // 可添加更多核心文件
-      ]);
+      return cache.addAll(PRECACHE_URLS);
     })
   );
   self.skipWaiting();
