@@ -46,73 +46,75 @@ import { Icon } from '@iconify/vue'
 import UploadModal from './UploadModal.vue'
 import EditBookModal from './EditBookModal.vue'
 import { openDB, STORE_NAME } from './cachePagination.js'
+import { cacheBookList, getBookListFromCache, cacheBookText } from '../composables/bookCache.js'
 
 const books = ref([])
 const uploadModalVisible = ref(false)
 const editModalVisible = ref(false)
 const editingBook = ref(null)
 
-// 从 localStorage 读取书架缓存
-function loadBooksFromCache() {
-  try {
-    const cached = localStorage.getItem('shanxi_book_list')
-    if (cached) {
-      const list = JSON.parse(cached)
-      if (Array.isArray(list)) {
-        books.value = list
-        return true
-      }
-    }
-  } catch (e) {}
-  return false
-}
-
-// 保存书架数据到 localStorage
-function saveBooksToCache(list) {
+// 保存书架到 localStorage（辅助函数）
+function saveBooksToLocal(list) {
   try {
     localStorage.setItem('shanxi_book_list', JSON.stringify(list))
-  } catch (e) {}
+  } catch(e) {}
 }
 
 async function loadBooks() {
-  // 1. 优先显示缓存数据，提升离线体验
-  if (loadBooksFromCache()) {
-    // 后台静默更新（仅在线时成功）
-    fetch('/api/book/list')
-      .then(res => res.json())
-      .then(data => {
-        const list = data.books || []
-        books.value = list
-        saveBooksToCache(list)
-      })
-      .catch(() => {})  // 网络失败不影响已显示的数据
-    return
+  // 1. 先加载 IndexedDB 缓存
+  const cached = await getBookListFromCache()
+  if (cached && cached.length) {
+    books.value = cached
+  } else {
+    // 无缓存时尝试 localStorage 旧缓存
+    const local = localStorage.getItem('shanxi_book_list')
+    if (local) {
+      try {
+        books.value = JSON.parse(local)
+      } catch(e) {}
+    }
   }
 
-  // 2. 无缓存，必须网络请求
+  // 2. 联网更新书架并缓存书籍文本
   try {
     const res = await fetch('/api/book/list')
     if (res.ok) {
-      const list = (await res.json()).books || []
+      const data = await res.json()
+      const list = data.books || []
       books.value = list
-      saveBooksToCache(list)
+      await cacheBookList(list)
+      saveBooksToLocal(list)
+
+      // 后台缓存每本书的文本（仅当在线）
+      for (const book of list) {
+        try {
+          const textRes = await fetch(`/api/book/content?bookId=${encodeURIComponent(book.id)}`)
+          if (textRes.ok) {
+            const text = await textRes.text()
+            await cacheBookText(book.id, text)
+          }
+        } catch(e) {}
+      }
     }
   } catch (e) {
-    console.error('书架加载失败', e)
+    console.warn('联网更新失败，使用缓存数据')
   }
 }
 
-onMounted(async () => {
-  await loadBooks()
+onMounted(() => {
+  loadBooks()
 })
 
 function openBook(book) {
+  // 保存当前书籍ID，用于离线恢复
+  localStorage.setItem('shanxi_last_book', book.id)
   window.location.href = `/read?book=${encodeURIComponent(book.id)}`
 }
 
 function onBooksUploaded(newBooks) {
   books.value = newBooks || []
-  saveBooksToCache(books.value)
+  saveBooksToLocal(books.value)
+  loadBooks() // 重新加载以缓存新书文本
 }
 
 function openEditor(book) {
@@ -123,60 +125,17 @@ function openEditor(book) {
 async function handleSaveBook({ title, cover }) {
   await loadBooks()
   editModalVisible.value = false
-  saveBooksToCache(books.value)
 }
 
 async function handleDeleteBook() {
   const bookId = editingBook.value.id
   try {
     const res = await fetch(`/api/book/delete?bookId=${encodeURIComponent(bookId)}`, { method: 'DELETE' })
-    const text = await res.text()
-    let data
-    try {
-      data = JSON.parse(text)
-    } catch (e) {
-      throw new Error('服务器返回异常: ' + text.slice(0, 200))
-    }
-    if (!res.ok) throw new Error(data.error || '删除失败')
-
-    // 清除 IndexedDB 中该书的所有缓存
-    try {
-      const db = await openDB()
-      const tx = db.transaction(STORE_NAME, 'readwrite')
-      const store = tx.objectStore(STORE_NAME)
-      const keys = []
-      await new Promise((resolve, reject) => {
-        const cursorRequest = store.openCursor()
-        cursorRequest.onsuccess = (event) => {
-          const cursor = event.target.result
-          if (cursor) {
-            keys.push(cursor.key)
-            cursor.continue()
-          } else {
-            resolve()
-          }
-        }
-        cursorRequest.onerror = () => reject(cursorRequest.error)
-      })
-      for (const key of keys) {
-        if (key && key.toString().startsWith(`${bookId}_`)) {
-          store.delete(key)
-        }
-      }
-      await new Promise((resolve, reject) => {
-        tx.oncomplete = resolve
-        tx.onerror = reject
-      })
-    } catch (e) {
-      console.warn('清除本地缓存失败:', e)
-    }
-
+    if (!res.ok) throw new Error('删除失败')
     editModalVisible.value = false
     await loadBooks()
-    saveBooksToCache(books.value)
   } catch (e) {
     alert('删除失败: ' + e.message)
-    console.error(e)
   }
 }
 </script>

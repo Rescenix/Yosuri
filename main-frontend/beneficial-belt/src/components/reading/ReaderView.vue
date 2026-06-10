@@ -222,9 +222,12 @@ function jumpToChapter(item) {
   showOutline.value = false
 }
 
-// ★ 离线缓存与文本加载
+// 在文件顶部增加导入
+import { getBookTextFromCache, cacheBookText } from '../composables/bookCache.js'
+
+// 替换整个 onMounted
 onMounted(async () => {
-  // 立即缓存当前阅读页 URL
+  // 缓存当前页面（用于离线）
   if ('caches' in window) {
     caches.open('shanxi-reader-v5').then(cache => {
       cache.add(window.location.href).catch(() => {})
@@ -233,34 +236,59 @@ onMounted(async () => {
 
   try {
     const params = new URLSearchParams(window.location.search)
-    const file = params.get('book')
+    let file = params.get('book')
     if (!file) {
-      // 没有书籍ID，跳转到书架首页
-      window.location.href = '/reading-hut'
-      return
+      // 尝试从 localStorage 恢复上次阅读的书籍
+      const last = localStorage.getItem('shanxi_last_book')
+      if (last) {
+        file = last
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.set('book', file)
+        window.history.replaceState({}, '', newUrl)
+      } else {
+        window.location.href = '/reading-hut'
+        return
+      }
     }
+    // 保存当前书籍到 localStorage
+    localStorage.setItem('shanxi_last_book', file)
     reader.title.value = file.replace(/\.txt$/i, '')
 
     let text = ''
+    // 尝试网络获取
     try {
       const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
       if (res.ok) text = await res.text()
     } catch (e) {
-      console.warn('书籍文本获取失败，将使用本地缓存')
+      console.warn('网络获取失败，尝试本地缓存')
     }
-
+    // 如果网络失败，从 IndexedDB 读取
+    if (!text) {
+      text = await getBookTextFromCache(file)
+      if (!text) {
+        reader.error.value = '书籍内容未缓存，请联网后打开一次'
+        reader.loading.value = false
+        return
+      }
+    }
+    // 如果是从网络获取的，顺便缓存到本地
+    if (text && !text.startsWith('<!')) {
+      await cacheBookText(file, text)
+    }
     reader.fullText.value = text
     await nextTick()
     outline.value = parseOutline(text || '')
-    reader.restoreProgress()
+    // 只有有文本时才恢复进度
+    if (text) {
+      reader.restoreProgress()
+    }
   } catch (e) {
-    // 任何错误都跳转回书架
+    console.error(e)
     window.location.href = '/reading-hut'
   } finally {
     reader.loading.value = false
   }
 })
-
 const back = async () => {
   if (threeReaderRef.value?.flipToCoverAnimated) {
     await threeReaderRef.value.flipToCoverAnimated()

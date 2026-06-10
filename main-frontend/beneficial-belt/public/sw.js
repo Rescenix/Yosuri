@@ -9,9 +9,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.allSettled(
-        PRECACHE_URLS.map(url =>
-          cache.add(url).catch(err => console.warn('预缓存失败:', url, err))
-        )
+        PRECACHE_URLS.map(url => cache.add(url).catch(err => console.warn('预缓存失败:', url, err)))
       );
     })
   );
@@ -30,7 +28,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // 不拦截 API 请求
   if (event.request.url.includes('/api/')) return;
 
   event.respondWith(
@@ -44,12 +41,14 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
-        // 离线降级：所有导航请求都返回书架页面（避免闪屏）
         if (event.request.mode === 'navigate') {
-          // 无论原 URL 是什么，都返回书架页面
+          const url = new URL(event.request.url);
+          // 阅读页请求返回缓存的阅读页外壳
+          if (url.pathname === '/read' || url.pathname === '/read/') {
+            return caches.match('/read/');
+          }
           return caches.match('/reading-hut/');
         }
-        // 非导航请求返回简单错误提示（可选）
         return new Response('离线无法加载此资源', { status: 503 });
       });
     })
