@@ -234,7 +234,11 @@ onMounted(async () => {
   try {
     const params = new URLSearchParams(window.location.search)
     const file = params.get('book')
-    if (!file) throw new Error('未指定书籍')
+    if (!file) {
+      // 没有书籍ID，跳转到书架首页
+      window.location.href = '/reading-hut'
+      return
+    }
     reader.title.value = file.replace(/\.txt$/i, '')
 
     let text = ''
@@ -250,7 +254,8 @@ onMounted(async () => {
     outline.value = parseOutline(text || '')
     reader.restoreProgress()
   } catch (e) {
-    reader.error.value = e.message
+    // 任何错误都跳转回书架
+    window.location.href = '/reading-hut'
   } finally {
     reader.loading.value = false
   }
