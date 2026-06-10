@@ -13,30 +13,23 @@
 
     <div v-else class="book-grid">
       <div v-for="book in books" :key="book.id" class="book-card">
-        <!-- 编辑按钮（右上角） -->
         <button class="edit-btn" @click.stop="openEditor(book)">
           <Icon icon="ph:gear" width="16" />
         </button>
-
-        <!-- 封面区域（可点击打开书籍） -->
         <div class="book-cover-placeholder" @click="openBook(book)">
           <img v-if="book.cover" :src="book.cover" class="cover-image" />
           <span v-else class="book-icon">📖</span>
         </div>
-
-        <!-- 书名（可点击打开书籍） -->
         <h3 class="book-title" @click="openBook(book)">{{ book.title }}</h3>
       </div>
     </div>
 
-    <!-- 上传模态窗口 -->
     <UploadModal
       :visible="uploadModalVisible"
       @close="uploadModalVisible = false"
       @uploaded="onBooksUploaded"
     />
 
-    <!-- 编辑弹窗 -->
     <EditBookModal
       :visible="editModalVisible"
       :book="editingBook"
@@ -59,36 +52,55 @@ const uploadModalVisible = ref(false)
 const editModalVisible = ref(false)
 const editingBook = ref(null)
 
-onMounted(async () => {
+// 从 localStorage 读取书架缓存
+function loadBooksFromCache() {
   try {
-    const params = new URLSearchParams(window.location.search)
-    const file = params.get('book')
-    if (!file) throw new Error('未指定书籍')
-    reader.title.value = file.replace(/\.txt$/i, '')
-
-    // 直接从网络获取书籍内容，不使用任何缓存
-    const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
-    if (!res.ok) throw new Error('书籍加载失败')
-    const text = await res.text()
-
-    reader.fullText.value = text
-    await nextTick()
-    outline.value = parseOutline(text)
-    reader.restoreProgress()
-  } catch (e) {
-    reader.error.value = e.message
-  } finally {
-    reader.loading.value = false
-  }
-})
-
-async function loadBooks() {
-    const res = await fetch('/api/book/list')
-    if (res.ok) {
-        books.value = (await res.json()).books || []
+    const cached = localStorage.getItem('shanxi_book_list')
+    if (cached) {
+      const list = JSON.parse(cached)
+      if (Array.isArray(list)) {
+        books.value = list
+        return true
+      }
     }
+  } catch (e) {}
+  return false
 }
 
+// 保存书架数据到 localStorage
+function saveBooksToCache(list) {
+  try {
+    localStorage.setItem('shanxi_book_list', JSON.stringify(list))
+  } catch (e) {}
+}
+
+async function loadBooks() {
+  // 1. 优先显示缓存数据，提升离线体验
+  if (loadBooksFromCache()) {
+    // 后台静默更新（仅在线时成功）
+    fetch('/api/book/list')
+      .then(res => res.json())
+      .then(data => {
+        const list = data.books || []
+        books.value = list
+        saveBooksToCache(list)
+      })
+      .catch(() => {})  // 网络失败不影响已显示的数据
+    return
+  }
+
+  // 2. 无缓存，必须网络请求
+  try {
+    const res = await fetch('/api/book/list')
+    if (res.ok) {
+      const list = (await res.json()).books || []
+      books.value = list
+      saveBooksToCache(list)
+    }
+  } catch (e) {
+    console.error('书架加载失败', e)
+  }
+}
 
 onMounted(async () => {
   await loadBooks()
@@ -100,18 +112,20 @@ function openBook(book) {
 
 function onBooksUploaded(newBooks) {
   books.value = newBooks || []
+  saveBooksToCache(books.value)
 }
 
 function openEditor(book) {
   editingBook.value = book
   editModalVisible.value = true
 }
+
 async function handleSaveBook({ title, cover }) {
-  // 如果 cover 是 URL，说明已经上传成功；否则可能是 base64 或留空
-  // 这里无需再上传，直接刷新书架即可（后端已更新索引）
   await loadBooks()
   editModalVisible.value = false
+  saveBooksToCache(books.value)
 }
+
 async function handleDeleteBook() {
   const bookId = editingBook.value.id
   try {
@@ -125,13 +139,11 @@ async function handleDeleteBook() {
     }
     if (!res.ok) throw new Error(data.error || '删除失败')
 
-    // 清除 IndexedDB 中该书的所有缓存（兼容所有浏览器）
+    // 清除 IndexedDB 中该书的所有缓存
     try {
       const db = await openDB()
       const tx = db.transaction(STORE_NAME, 'readwrite')
       const store = tx.objectStore(STORE_NAME)
-      
-      // 使用游标遍历所有键，代替可能不支持的 getAllKeys()
       const keys = []
       await new Promise((resolve, reject) => {
         const cursorRequest = store.openCursor()
@@ -146,14 +158,11 @@ async function handleDeleteBook() {
         }
         cursorRequest.onerror = () => reject(cursorRequest.error)
       })
-
-      // 删除匹配的键
       for (const key of keys) {
         if (key && key.toString().startsWith(`${bookId}_`)) {
           store.delete(key)
         }
       }
-
       await new Promise((resolve, reject) => {
         tx.oncomplete = resolve
         tx.onerror = reject
@@ -164,6 +173,7 @@ async function handleDeleteBook() {
 
     editModalVisible.value = false
     await loadBooks()
+    saveBooksToCache(books.value)
   } catch (e) {
     alert('删除失败: ' + e.message)
     console.error(e)
@@ -184,7 +194,6 @@ async function handleDeleteBook() {
 .empty-shelf { text-align: center; color: var(--text-secondary, #64748b); padding: 40px; font-size: 0.95rem; }
 .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
 
-/* 书籍卡片 */
 .book-card {
   position: relative;
   cursor: pointer;
@@ -193,7 +202,6 @@ async function handleDeleteBook() {
 }
 .book-card:hover { transform: translateY(-4px); }
 
-/* 编辑按钮（右上角） */
 .edit-btn {
   position: absolute;
   top: 8px;
@@ -211,7 +219,6 @@ async function handleDeleteBook() {
 .book-card:hover .edit-btn { opacity: 1; }
 .edit-btn:hover { background: #f1f5f9; color: #3b82f6; }
 
-/* 封面区域 */
 .book-cover-placeholder {
   width: 100%; aspect-ratio: 2/3;
   background: #f8fafc;
@@ -223,7 +230,6 @@ async function handleDeleteBook() {
 }
 .cover-image { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
 
-/* 书名 */
 .book-title {
   font-size: 0.85rem;
   margin: 8px 0 0;
