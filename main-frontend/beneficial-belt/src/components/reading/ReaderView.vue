@@ -4,24 +4,24 @@
     <div v-else-if="reader.error.value" class="status-msg error">{{ reader.error.value }}</div>
 
     <template v-else>
-     <div class="toolbar">
-  <button class="tb-btn" @click="back">← 书架</button>
-  <div class="tb-actions">
-    <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('notes')">
-      <Icon icon="ph:notebook" width="18" />
-    </button>
-    <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('progress')">
-      <Icon icon="ph:chart-bar" width="18" />
-    </button>
-    <button class="tb-btn" @click="toggleBookmarkAtCurrentPage">
-      <Icon :icon="isCurrentPageBookmarked ? 'ph:bookmark-simple-fill' : 'ph:bookmark-simple'" width="18" />
-    </button>
-    <button class="tb-btn" @click="reader.changeFont()">{{ reader.fontSize.value }}px</button>
-    <button class="tb-btn" @click="showOutline = !showOutline">
-      <Icon icon="ph:list-bullets" width="18" />
-    </button>
-  </div>
-</div>
+      <div class="toolbar">
+        <button class="tb-btn" @click="back">← 书架</button>
+        <div class="tb-actions">
+          <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('notes')">
+            <Icon icon="ph:notebook" width="18" />
+          </button>
+          <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('progress')">
+            <Icon icon="ph:chart-bar" width="18" />
+          </button>
+          <button class="tb-btn" @click="toggleBookmarkAtCurrentPage">
+            <Icon :icon="isCurrentPageBookmarked ? 'ph:bookmark-simple-fill' : 'ph:bookmark-simple'" width="18" />
+          </button>
+          <button class="tb-btn" @click="reader.changeFont()">{{ reader.fontSize.value }}px</button>
+          <button class="tb-btn" @click="showOutline = !showOutline">
+            <Icon icon="ph:list-bullets" width="18" />
+          </button>
+        </div>
+      </div>
 
       <div class="reader-body">
         <div class="left-spacer"></div>
@@ -52,7 +52,6 @@
               </button>
             </div>
 
-            <!-- 目录列表 -->
             <div v-show="outlineTab === 'outline'" class="outline-list">
               <div v-for="(item, idx) in outline" :key="idx" class="outline-item" @click="jumpToChapter(item)">
                 {{ item.title }}
@@ -60,7 +59,6 @@
               <div v-if="outline.length === 0" class="outline-empty">未识别到章节标题</div>
             </div>
 
-            <!-- 书签列表（滑动删除） -->
             <div v-show="outlineTab === 'bookmarks'" class="outline-list">
               <div v-for="(bm, idx) in reader.bookmarks.value" :key="idx" class="bookmark-wrapper">
                 <div
@@ -75,7 +73,6 @@
                     <span class="bm-page">第{{ bm.page + 1 }}页</span>
                     <span class="bm-text">{{ bm.text }}</span>
                   </div>
-                  <!-- 修改为 @touchstart.prevent.stop 直接触发删除 -->
                   <div class="delete-btn" @touchstart.prevent.stop="deleteBookmark(idx)">
                     <Icon icon="ph:trash" width="18" />
                   </div>
@@ -98,15 +95,15 @@
               <Icon icon="ph:x" width="18" />
             </button>
           </div>
-<div class="mobile-panel-content">
-  <MarkdownNotes v-if="activeMobilePanel === 'notes'" />
-<ReadingProgress
-  v-else-if="activeMobilePanel === 'progress'"
-  :book-title="reader.title.value"
-  :total-pages="totalPages"
-  :current-page="currentPage"
-/>
-</div>
+          <div class="mobile-panel-content">
+            <MarkdownNotes v-if="activeMobilePanel === 'notes'" />
+            <ReadingProgress
+              v-else-if="activeMobilePanel === 'progress'"
+              :book-title="reader.title.value"
+              :total-pages="totalPages"
+              :current-page="currentPage"
+            />
+          </div>
         </div>
       </div>
     </transition>
@@ -123,7 +120,6 @@ import NotesPanel from './NotesPanel.vue'
 import MarkdownNotes from './MarkdownNotes.vue'
 import ReadingProgress from './ReadingProgress.vue'
 
-
 const activeMobilePanel = ref(null)
 const reader = useReader()
 const threeReaderRef = ref(null)
@@ -131,13 +127,11 @@ const showOutline = ref(false)
 const outline = ref([])
 const outlineTab = ref('outline')
 const swipedBookmarkIndex = ref(-1)
-// 在原有 activeMobilePanel 等状态基础上，添加计算属性
 const panelTitle = computed(() => {
   if (activeMobilePanel.value === 'notes') return '读书笔记'
   if (activeMobilePanel.value === 'progress') return '阅读进度'
   return ''
 })
-// 移动端滑动相关
 const touchStartX = {}
 const SWIPE_THRESHOLD = 40
 
@@ -189,7 +183,6 @@ const toggleBookmarkAtCurrentPage = () => {
   reader.toggleBookmark(page, text)
 }
 
-// 桌面端点击切换滑动状态
 function handleBookmarkClick(bm, idx) {
   if (swipedBookmarkIndex.value === idx) {
     jumpToPage(bm.page)
@@ -199,75 +192,45 @@ function handleBookmarkClick(bm, idx) {
   }
 }
 
-// 移动端触摸事件
-function onBookmarkTouchStart(e, idx) {
-  touchStartX[idx] = e.touches[0].clientX
-}
-
+function onBookmarkTouchStart(e, idx) { touchStartX[idx] = e.touches[0].clientX }
 function onBookmarkTouchMove() {}
-
 function onBookmarkTouchEnd(e, bm, idx) {
-  // 如果触摸发生在删除按钮上，不做任何处理（避免关闭滑动或跳转）
   if (e.target.closest('.delete-btn')) return
-
   const startX = touchStartX[idx]
   delete touchStartX[idx]
   if (startX === undefined) return
-
   const endX = e.changedTouches[0].clientX
   const dx = endX - startX
-
-  if (dx < -SWIPE_THRESHOLD) {
-    // 左滑显示删除
-    swipedBookmarkIndex.value = idx
-  } else if (dx > SWIPE_THRESHOLD) {
-    // 右滑关闭删除
-    swipedBookmarkIndex.value = -1
-  } else {
-    // 点击行为
-    if (swipedBookmarkIndex.value === idx) {
-      // 已处于滑动状态，点击关闭删除（不跳转）
-      swipedBookmarkIndex.value = -1
-    } else {
-      // 未滑动，直接跳转
-      jumpToPage(bm.page)
-      swipedBookmarkIndex.value = -1
-    }
+  if (dx < -SWIPE_THRESHOLD) swipedBookmarkIndex.value = idx
+  else if (dx > SWIPE_THRESHOLD) swipedBookmarkIndex.value = -1
+  else {
+    if (swipedBookmarkIndex.value === idx) swipedBookmarkIndex.value = -1
+    else { jumpToPage(bm.page); swipedBookmarkIndex.value = -1 }
   }
 }
-
 function deleteBookmark(idx) {
-  // 响应式删除
   reader.bookmarks.value = reader.bookmarks.value.filter((_, i) => i !== idx)
   localStorage.setItem('shanxi_bookmarks', JSON.stringify(reader.bookmarks.value))
   swipedBookmarkIndex.value = -1
 }
-
 function jumpToPage(page) {
-  if (threeReaderRef.value?.flipToPage) {
-    threeReaderRef.value.flipToPage(page)
-  }
+  if (threeReaderRef.value?.flipToPage) threeReaderRef.value.flipToPage(page)
   showOutline.value = false
 }
-
 function jumpToChapter(item) {
-  if (threeReaderRef.value?.jumpToChapter) {
-    threeReaderRef.value.jumpToChapter(item.title)
-  }
+  if (threeReaderRef.value?.jumpToChapter) threeReaderRef.value.jumpToChapter(item.title)
   showOutline.value = false
 }
 
-// ReaderView.vue <script setup> 中的 onMounted 部分
-// ReaderView.vue <script setup> 中的 onMounted 部分
+// ★ 离线缓存与文本加载
 onMounted(async () => {
+  // 立即缓存当前阅读页 URL
+  if ('caches' in window) {
+    caches.open('shanxi-reader-v5').then(cache => {
+      cache.add(window.location.href).catch(() => {})
+    })
+  }
 
-
-  // 在 onMounted 中
-if ('caches' in window) {
-  caches.open('shanxi-reader-v5').then(cache => {
-    cache.add(window.location.href).catch(() => {});
-  });
-}
   try {
     const params = new URLSearchParams(window.location.search)
     const file = params.get('book')
@@ -275,17 +238,16 @@ if ('caches' in window) {
     reader.title.value = file.replace(/\.txt$/i, '')
 
     let text = ''
-    // 尝试从网络获取文本（失败时不中断，以便后续使用缓存）
     try {
       const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
       if (res.ok) text = await res.text()
     } catch (e) {
-      console.warn('书籍文本获取失败，将尝试使用本地缓存')
+      console.warn('书籍文本获取失败，将使用本地缓存')
     }
 
     reader.fullText.value = text
     await nextTick()
-    outline.value = parseOutline(text)   // text 可能为空，不影响后续缓存加载
+    outline.value = parseOutline(text || '')
     reader.restoreProgress()
   } catch (e) {
     reader.error.value = e.message
@@ -293,6 +255,7 @@ if ('caches' in window) {
     reader.loading.value = false
   }
 })
+
 const back = async () => {
   if (threeReaderRef.value?.flipToCoverAnimated) {
     await threeReaderRef.value.flipToCoverAnimated()
@@ -300,7 +263,6 @@ const back = async () => {
   window.location.href = '/reading-hut'
 }
 </script>
-
 
 
 <style scoped>
