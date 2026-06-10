@@ -258,6 +258,7 @@ function jumpToChapter(item) {
 }
 
 // ReaderView.vue <script setup> 中的 onMounted 部分
+// ReaderView.vue <script setup> 中的 onMounted 部分
 onMounted(async () => {
   try {
     const params = new URLSearchParams(window.location.search)
@@ -265,30 +266,18 @@ onMounted(async () => {
     if (!file) throw new Error('未指定书籍')
     reader.title.value = file.replace(/\.txt$/i, '')
 
-   // 替换 onMounted 中的加载逻辑
-let text = ''
-
-// 1. 优先从安卓原生缓存读取（使用全局函数）
-if (typeof window.getBookText === 'function') {
-  text = window.getBookText(file)
-  if (text) console.log('[书籍文本] 命中原生缓存')
-}
-
-// 2. 无缓存则网络获取，并保存到原生缓存
-if (!text) {
-  console.log('[书籍文本] 开始网络下载...')
-  const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
-  if (!res.ok) throw new Error('书籍加载失败')
-  text = await res.text()
-  if (typeof window.saveBookText === 'function') {
-    window.saveBookText(file, text)
-    console.log('[书籍文本] 已缓存到安卓本地')
-  }
-}
+    let text = ''
+    // 尝试从网络获取文本（失败时不中断，以便后续使用缓存）
+    try {
+      const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
+      if (res.ok) text = await res.text()
+    } catch (e) {
+      console.warn('书籍文本获取失败，将尝试使用本地缓存')
+    }
 
     reader.fullText.value = text
     await nextTick()
-    outline.value = parseOutline(text)
+    outline.value = parseOutline(text)   // text 可能为空，不影响后续缓存加载
     reader.restoreProgress()
   } catch (e) {
     reader.error.value = e.message
