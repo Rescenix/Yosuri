@@ -1,9 +1,12 @@
 let worker = null;
-const WORKER_VERSION = '6';
 
 function createWorker() {
+  if (worker) {
+    worker.terminate();
+    worker = null;
+  }
   try {
-    worker = new Worker(`/pagination-worker.js?v=${WORKER_VERSION}`);
+    worker = new Worker(new URL('./pagination.worker.js', import.meta.url), { type: 'module' });
     return worker;
   } catch (e) {
     console.error('Worker 创建失败', e);
@@ -11,36 +14,53 @@ function createWorker() {
   }
 }
 
-export function paginate(text, pageWidth, pageHeight, fontSize) {
+/**
+ * 流式分页函数
+ * @param {string} text
+ * @param {number} pageWidth
+ * @param {number} pageHeight
+ * @param {number} fontSize
+ * @param {function} onPages - 每次收到一批页面时回调 (newPages, totalNow)
+ * @param {function} onProgress - 进度回调 (percent)
+ * @returns {Promise<number>} 解析时返回总页数
+ */
+export function paginate(text, pageWidth, pageHeight, fontSize, onPages, onProgress) {
   return new Promise((resolve, reject) => {
-    if (!worker) {
-      const w = createWorker();
-      if (!w) {
-        reject(new Error('分页 Worker 不可用'));
-        return;
-      }
+    const w = createWorker();
+    if (!w) {
+      reject(new Error('分页 Worker 不可用'));
+      return;
     }
-    worker.onmessage = function (e) {
-      console.log('Worker 原始返回:', e.data);
-      // 兼容各种可能的返回格式
-      let pages = [];
-      if (Array.isArray(e.data)) {
-        pages = e.data;
-      } else if (e.data && Array.isArray(e.data.pages)) {
-        pages = e.data.pages;
-      } else if (e.data && e.data.type === 'result' && Array.isArray(e.data.pages)) {
-        pages = e.data.pages;
-      } else if (typeof e.data === 'string') {
-        // 如果意外返回字符串，尝试当作单页处理
-        pages = [e.data];
+
+    w.onmessage = (e) => {
+      const { type, pages, total, percent, totalPages, message } = e.data;
+      switch (type) {
+        case 'pages':
+          if (onPages) onPages(pages, total);
+          break;
+        case 'progress':
+          if (onProgress) onProgress(percent);
+          break;
+        case 'complete':
+          resolve(totalPages);
+          w.terminate();
+          worker = null;
+          break;
+        case 'error':
+          reject(new Error(message));
+          w.terminate();
+          worker = null;
+          break;
       }
-      console.log('解析后页数:', pages.length);
-      resolve(pages);
     };
-    worker.onerror = function (err) {
+
+    w.onerror = (err) => {
       reject(err);
+      w.terminate();
+      worker = null;
     };
-    worker.postMessage({ text, pageWidth, pageHeight, fontSize });
+
+    w.postMessage({ text, pageWidth, pageHeight, fontSize });
   });
 }
 

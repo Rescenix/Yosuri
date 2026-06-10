@@ -40,11 +40,11 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     }
   }
 
-  // ─── 选区处理（移动端）—— 已由 useMobileSelection 接管，保留空函数以防引用 ──
+  // ─── 选区处理（移动端）── 已由 useMobileSelection 接管 ──
   function updateMobileSelection() {}
   function onMobileTouchEnd(event) {}
 
-  // ─── Worker 分页（带超时回退到主线程）─────────
+  // ─── 原有的 Worker 分页（一次性返回，供预取等使用）─────────
   async function paginateWithWorker(text, fontSize, pageWidth, pageHeight, onProgress) {
     return new Promise((resolve, reject) => {
       let worker = null
@@ -55,7 +55,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
         )
       } catch (e) {
         console.warn('Worker 创建失败，回退到主线程分页')
-        resolve(null) // 返回 null 表示需要回退
+        resolve(null)
         return
       }
 
@@ -83,14 +83,14 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
         clearTimeout(timeout)
         console.error('Worker 出错:', err)
         worker.terminate()
-        resolve(null) // 回退
+        resolve(null)
       }
 
       worker.postMessage({ text, fontSize, pageWidth, pageHeight })
     })
   }
 
-  // ─── 主线程分片分页（回退方案）─────────────
+  // ─── 主线程分片分页（一次性返回）─────────────
   async function paginateInMainThread(text, fontSize, pageWidth, pageHeight, onProgress) {
     const paragraphs = text.split('\n')
     const total = paragraphs.length
@@ -118,7 +118,59 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     return bodyPages
   }
 
-  // ─── 初始化移动端视图（纯客户端排版 + 本地缓存）───────────
+  // ─── 流式排版 Worker（用于初始加载，边排边显示）────
+  function streamPaginateWithWorker(text, fontSize, pageWidth, pageHeight, onPages, onProgress) {
+    return new Promise((resolve, reject) => {
+      let worker = null
+      try {
+        worker = new Worker(
+          new URL('./pagination.worker.js', import.meta.url),
+          { type: 'module' }
+        )
+      } catch (e) {
+        console.warn('流式 Worker 创建失败，回退到主线程')
+        resolve(null)
+        return
+      }
+
+      const timeout = setTimeout(() => {
+        console.warn('流式 Worker 超时，回退到主线程')
+        worker.terminate()
+        resolve(null)
+      }, 30000)
+
+      worker.onmessage = (e) => {
+        clearTimeout(timeout)
+        const { type, pages, percent, total, totalPages, message } = e.data
+        if (type === 'pages') {
+          // 收到一批页面
+          if (pages && pages.length > 0 && onPages) {
+            onPages(pages, total)
+          }
+          if (onProgress) {
+            onProgress(percent)
+          }
+        } else if (type === 'complete') {
+          resolve(totalPages)
+          worker.terminate()
+        } else if (type === 'error') {
+          reject(new Error(message))
+          worker.terminate()
+        }
+      }
+
+      worker.onerror = (err) => {
+        clearTimeout(timeout)
+        console.error('流式 Worker 出错:', err)
+        worker.terminate()
+        resolve(null)
+      }
+
+      worker.postMessage({ text, fontSize, pageWidth, pageHeight })
+    })
+  }
+
+  // ─── 初始化移动端视图（流式排版 + 本地缓存）───────────
   async function initMobileView() {
     const text = reader.fullText.value || ''
     const fontSize = reader.fontSize.value
@@ -146,38 +198,66 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       return
     }
 
-    // 2. 执行排版（优先 Worker，回退主线程）
-    statusMsg.value = '正在排版... 0%'
+    // 2. 无缓存，执行流式排版（无提示文字）
+    statusMsg.value = ''
     progressPercent.value = 0
 
-    let bodyPages = await paginateWithWorker(text, fontSize, w, h, (pct) => {
-      statusMsg.value = `正在排版... ${pct}%`
-      progressPercent.value = pct
-    })
+    // 立即显示封面
+    const coverHTML = createCoverHTML(reader.title.value)
+    htmlPages.value = [coverHTML]
+    totalPages.value = 1
+    mobilePageIndex.value = 0
+    currentPage.value = 0
 
-    // Worker 失败或不可用，回退到主线程分片排版
-    if (!bodyPages) {
-      bodyPages = await paginateInMainThread(text, fontSize, w, h, (pct) => {
-        statusMsg.value = `正在排版... ${pct}%`
-        progressPercent.value = pct
-      })
+    let allBodyPages = []
+    let streamFinished = false
+
+    const handleNewPages = (newPages, currentTotal) => {
+      allBodyPages = allBodyPages.concat(newPages)
+      htmlPages.value = [coverHTML, ...allBodyPages]
+      totalPages.value = htmlPages.value.length
+      if (mobilePageIndex.value === 0 && allBodyPages.length > 0) {
+        mobilePageIndex.value = 1
+        currentPage.value = 1
+      }
     }
 
-    const coverHTML = createCoverHTML(reader.title.value)
-    const backHTML = createBackHTML()
-    const fullPages = [coverHTML, ...bodyPages, backHTML]
+    const handleProgress = (percent) => {
+      progressPercent.value = percent   // 仅更新进度条，不显示文字
+    }
 
-    // 3. 写入 IndexedDB 缓存
-    await setCachedPages(bookId, fontSize, w, h, fullPages)
+    // 优先尝试流式 Worker
+    let totalPagesCount = await streamPaginateWithWorker(text, fontSize, w, h, handleNewPages, handleProgress)
 
-    htmlPages.value = fullPages
-    totalPages.value = fullPages.length
-    mobilePageIndex.value = 1
-    currentPage.value = 1
+    // 如果 Worker 失败，回退到主线程一次性排版
+    if (totalPagesCount === null) {
+      progressPercent.value = 0
+      allBodyPages = await paginateInMainThread(text, fontSize, w, h, (pct) => {
+        progressPercent.value = pct
+      })
+      const backHTML = createBackHTML()
+      const fullPages = [coverHTML, ...allBodyPages, backHTML]
+      htmlPages.value = fullPages
+      totalPages.value = fullPages.length
+      mobilePageIndex.value = 1
+      currentPage.value = 1
+      streamFinished = true
+    } else {
+      const backHTML = createBackHTML()
+      htmlPages.value = [...htmlPages.value, backHTML]
+      totalPages.value = htmlPages.value.length
+      streamFinished = true
+    }
+
+    // 写入 IndexedDB 缓存
+    if (streamFinished && htmlPages.value.length > 0) {
+      await setCachedPages(bookId, fontSize, w, h, htmlPages.value)
+    }
+
     statusMsg.value = ''
     progressPercent.value = 100
 
-    // 4. 后台预取附近字号
+    // 后台预取附近字号
     prefetchNearbySizes(text, bookId, fontSize, w, h)
   }
 
@@ -190,7 +270,6 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       const cached = await getCachedPages(bookId, size, pageWidth, pageHeight)
       if (cached && cached.length > 0) continue
 
-      // 后台排版，不阻塞
       setTimeout(async () => {
         try {
           let pages = await paginateWithWorker(text, size, pageWidth, pageHeight, () => {})
@@ -201,14 +280,11 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
           const back = createBackHTML()
           const full = [cover, ...pages, back]
           await setCachedPages(bookId, size, pageWidth, pageHeight, full)
-        } catch (e) {
-          // 预排版失败不影响主流程
-        }
+        } catch (e) {}
       }, 200)
     }
   }
 
-  // ─── 占位函数（由 ThreeReader 覆盖实际逻辑）───
   async function handleMobileComment() {}
   async function handleMobileSearch() {}
 

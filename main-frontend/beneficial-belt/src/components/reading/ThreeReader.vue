@@ -22,14 +22,14 @@
 
     <!-- 移动端（淡入淡出翻页） -->
     <template v-if="isMobile && htmlPages.length > 0">
-      <Transition name="fade" mode="out-in">
-        <div
-          :key="mobilePageIndex"
-          class="mobile-page-view"
-          v-html="htmlPages[mobilePageIndex]"
-          ref="mobilePageViewRef"
-        ></div>
-      </Transition>
+  <Transition name="fade">
+  <div
+    :key="mobilePageIndex"
+    class="mobile-page-view"
+    v-html="htmlPages[mobilePageIndex]"
+    ref="mobilePageViewRef"
+  ></div>
+</Transition>
       <div class="flip-tap-area left" @touchstart.prevent="mobileFlipPrev"></div>
       <div class="flip-tap-area right" @touchstart.prevent="mobileFlipNext"></div>
     </template>

@@ -285,25 +285,29 @@
   background: #f1f5f9;
 }
 
-
-
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+/* 翻页过渡（极速） */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.1s ease;   /* 缩短动画时间，消除延迟 */
 }
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 
+/* 移动端页面容器 */
 .mobile-page-view {
   position: absolute;
   inset: 0;
+  height: 100%;            /* 固定高度，防止跳动 */
+  width: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 0;
   margin: 0;
+  box-sizing: border-box;
 }
 
-/* 彻底禁用系统长按/选中菜单 */
 /* 彻底禁用系统长按/选中菜单 */
 .three-reader,
 .mobile-page-view {
@@ -322,8 +326,6 @@
     user-select: text !important;
     touch-action: manipulation;
   }
-
-
 
   .reader-body {
     flex: 1 1 auto;
@@ -443,4 +445,3 @@
     width: 10%;
   }
 }
-
