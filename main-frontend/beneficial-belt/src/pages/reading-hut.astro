@@ -15,14 +15,7 @@ import AuthGuard from '../components/AuthGuard.astro';
     });
   }
 </script>
-<script is:inline>
-  // 手动缓存入口页面，确保离线时可用
-  if ('caches' in window) {
-    caches.open('shanxi-reader-v3').then(cache => {
-      cache.add('/reading-hut/').catch(() => {});
-    });
-  }
-</script>
+
        <AuthGuard />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
