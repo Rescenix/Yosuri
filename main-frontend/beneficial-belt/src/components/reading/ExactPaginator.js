@@ -23,36 +23,49 @@ export async function exactPaginate(text, fontSize, pageWidth, pageHeight, onPro
   const totalParagraphs = paragraphs.length
 
   const allLines = []
+  let prevLineWasEmpty = false
+  let prevParaWasContent = false // 上一个段落是否有内容
 
-  // 异步分片处理段落，并压缩连续空行为一行
+  // 异步分片处理段落，插入段落空行，压缩连续空行
   await new Promise(resolve => {
     const CHUNK_SIZE = 200
     let paraIndex = 0
-    let prevLineWasEmpty = false
 
     function processChunk() {
       const end = Math.min(paraIndex + CHUNK_SIZE, totalParagraphs)
       for (let i = paraIndex; i < end; i++) {
         const para = paragraphs[i]
 
+        // 完全空段落（空字符串）
         if (para === '') {
           if (!prevLineWasEmpty) {
             allLines.push('')
             prevLineWasEmpty = true
           }
+          prevParaWasContent = false
           continue
         }
 
+        // 只有空白字符的段落
         const trimmed = para.trimStart()
         if (trimmed === '') {
           if (!prevLineWasEmpty) {
             allLines.push('')
             prevLineWasEmpty = true
           }
+          prevParaWasContent = false
           continue
         }
 
+        // 这是一个有内容的段落
+        // 如果上一个段落有内容，且当前中间没有空行，则插入一个空行作为分隔
+        if (prevParaWasContent && !prevLineWasEmpty) {
+          allLines.push('')
+          prevLineWasEmpty = true
+        }
+
         prevLineWasEmpty = false
+        prevParaWasContent = true
         const indentedPara = '\u3000\u3000' + trimmed
 
         const prepared = prepareWithSegments(indentedPara, font, { whiteSpace: 'pre-wrap' })
@@ -132,7 +145,6 @@ export async function exactPaginate(text, fontSize, pageWidth, pageHeight, onPro
     // 3. 填充不足的行数：将空行均匀分散到段落之间
     let needed = maxLinesPerPage - lines.length
     if (needed > 0) {
-      // 收集所有空行的索引
       const getEmptyIndices = () => {
         const indices = []
         for (let i = 0; i < lines.length; i++) {
@@ -143,20 +155,18 @@ export async function exactPaginate(text, fontSize, pageWidth, pageHeight, onPro
 
       let emptyIndices = getEmptyIndices()
       if (emptyIndices.length === 0) {
-        // 没有任何空行，只能在末尾补足（极少情况）
         while (lines.length < maxLinesPerPage) lines.push('')
       } else {
         let idx = 0
         while (needed > 0) {
           const pos = emptyIndices[idx % emptyIndices.length]
-          lines.splice(pos + 1, 0, '')   // 在空行后插入一个空行
+          lines.splice(pos + 1, 0, '')
           needed--
-          emptyIndices = getEmptyIndices()   // 重新计算索引（因为数组变化）
+          emptyIndices = getEmptyIndices()
           idx++
         }
       }
     } else if (needed < 0) {
-      // 超出最大行数，截断
       lines = lines.slice(0, maxLinesPerPage)
     }
 
@@ -169,7 +179,6 @@ export async function exactPaginate(text, fontSize, pageWidth, pageHeight, onPro
       const end = Math.min(processed + CHUNK, totalLines)
       for (let i = processed; i < end; i++) {
         const line = allLines[i]
-        // 当前页为空时跳过空行，确保首行有内容
         if (line === '' && currentPageLines.length === 0) {
           processed++
           continue

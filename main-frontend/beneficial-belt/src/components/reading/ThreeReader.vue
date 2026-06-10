@@ -11,7 +11,6 @@
       <span class="remain">剩余约 {{ remainingTime }} 分钟</span>
     </div>
 
-    <!-- 批注卡片 -->
     <div v-if="showCommentCard" class="comment-card" :style="commentCardStyle" @click.stop>
       <div class="comment-text">{{ displayedComment }}</div>
       <span v-if="commentTyping" class="typing-cursor">|</span>
@@ -20,21 +19,19 @@
       </button>
     </div>
 
-    <!-- 移动端（淡入淡出翻页） -->
     <template v-if="isMobile && htmlPages.length > 0">
-  <Transition name="fade">
-  <div
-    :key="mobilePageIndex"
-    class="mobile-page-view"
-    v-html="htmlPages[mobilePageIndex]"
-    ref="mobilePageViewRef"
-  ></div>
-</Transition>
+      <Transition name="fade">
+        <div
+          :key="mobilePageIndex"
+          class="mobile-page-view"
+          v-html="htmlPages[mobilePageIndex]"
+          ref="mobilePageViewRef"
+        ></div>
+      </Transition>
       <div class="flip-tap-area left" @touchstart.prevent="mobileFlipPrev"></div>
       <div class="flip-tap-area right" @touchstart.prevent="mobileFlipNext"></div>
     </template>
 
-    <!-- 桌面端（3D翻页） -->
     <template v-if="!isMobile">
       <div class="flip-tap-area left" @click.stop="flipPrev"></div>
       <div class="flip-tap-area right" @click.stop="flipNext"></div>
@@ -49,7 +46,6 @@
       </div>
     </div>
 
-    <!-- 自定义操作菜单 -->
     <Teleport to="body">
       <div
         v-if="isMobile ? mobileShowActionMenu : showActionMenu"
@@ -72,7 +68,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import EmotionGlow from './EmotionGlow.vue'
 import { usePageFlip } from './usePageFlip.js'
@@ -126,7 +122,16 @@ const mobile = useMobileReader(
 const { htmlPages, mobilePageIndex, mobileFlipPrev, mobileFlipNext, initMobileView } = mobile
 
 const textProvider = () => props.reader.fullText.value || ''
-const stats = useReadingStats(textProvider, currentPage, totalPages, flipContainerRef)
+
+// 计算真实的正文页数（去掉封面和封底）
+const realTotalPages = computed(() => {
+  if (isMobile.value) {
+    return Math.max(0, htmlPages.value.length - 2)
+  }
+  return totalPages.value
+})
+
+const stats = useReadingStats(textProvider, currentPage, realTotalPages, flipContainerRef)
 const { currentTime, remainingTime, recordPageTurn, startClock, destroy: destroyStats } = stats
 
 const {
@@ -271,8 +276,7 @@ async function reInit() {
   destroyFlip()
   statusMsg.value = '正在准备...'
   if (isMobile.value) {
-    await initMobileView()
-    // 如果首次加载或字体改变后，预排版会在 initMobileView 内部触发，这里无需重复
+    await initMobileView()   // 直接调用，内部不会修改页码
   } else {
     try {
       const flip = await desktopInitFlip()
@@ -304,6 +308,15 @@ onMounted(async () => {
 
   if (isMobile.value) {
     await initMobileView()
+    // 从 localStorage 恢复进度（useMobileReader 内部会处理保存和恢复）
+    const saved = parseInt(localStorage.getItem(`${reader.title.value}_pos`) || '1')
+    if (saved > 1 && saved < htmlPages.value.length) {
+      mobilePageIndex.value = saved
+      currentPage.value = Math.max(0, saved - 1)
+    } else if (htmlPages.value.length > 1) {
+      mobilePageIndex.value = 1
+      currentPage.value = 0
+    }
   } else {
     try {
       const flip = await desktopInitFlip()
@@ -331,6 +344,27 @@ onBeforeUnmount(() => {
   destroyFlip()
   destroyStats()
   clearMobileSelection()
+})
+
+// ★ 每日阅读进度记录（只统计正向翻页）
+let lastPageForStats = 0
+function saveDailyProgress() {
+  const today = new Date().toLocaleDateString()
+  const stored = localStorage.getItem('shanxi_reading_progress')
+  let records = stored ? JSON.parse(stored) : []
+  const existing = records.find(r => r.date === today)
+  if (existing) {
+    existing.pages += 1
+  } else {
+    records.push({ date: today, pages: 1, minutes: 0 })
+  }
+  localStorage.setItem('shanxi_reading_progress', JSON.stringify(records))
+}
+
+watch(currentPage, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal > oldVal) {
+    saveDailyProgress()
+  }
 })
 
 defineExpose({

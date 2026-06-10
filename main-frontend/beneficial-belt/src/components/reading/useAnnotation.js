@@ -23,26 +23,48 @@ export function useAnnotation(flipContainerRef, currentPage) {
     window.dispatchEvent(new CustomEvent('annotations-updated'))
   }
 
- function highlightText(text, range) {
+function highlightText(text, range) {
+  const content = range.extractContents()
   const span = document.createElement('span')
   span.className = 'shanxi-highlight'
-  span.textContent = text
-  // 只设置背景色，display: inline，无任何 margin/padding/border
-  span.style.backgroundColor = 'rgba(180, 80, 50, 0.25)'
-  span.style.display = 'inline'
-  span.style.lineHeight = 'inherit'
-  // 强制移除所有可能影响布局的属性（尤其是全局样式覆盖）
-  span.style.setProperty('outline', 'none', 'important')
-  span.style.setProperty('border', 'none', 'important')
-  span.style.setProperty('box-shadow', 'none', 'important')
-  span.style.setProperty('padding', '0', 'important')
-  span.style.setProperty('margin', '0', 'important')
-  span.style.setProperty('border-radius', '0', 'important')
+  span.appendChild(content)
 
-  range.deleteContents()
+  // 用 style 属性设置所有样式，并添加一个特殊标记类
+  span.style.cssText = `
+    background-color: rgba(180, 80, 50, 0.25) !important;
+    display: inline !important;
+    line-height: inherit !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+    font-weight: inherit !important;
+    font-style: inherit !important;
+    vertical-align: baseline !important;
+    white-space: inherit !important;
+    word-spacing: inherit !important;
+    letter-spacing: inherit !important;
+    text-indent: inherit !important;
+    text-transform: inherit !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    float: none !important;
+    clear: none !important;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+  `
+  span.classList.add('highlight-done')  // 标记已完成高亮
+
   range.insertNode(span)
-}
 
+  // 验证背景色是否生效（开发时可保留，发布后删除）
+  console.log('高亮背景:', span.style.backgroundColor)
+}
   function typewrite(text) {
     clearInterval(typingTimer)
     displayedComment.value = ''

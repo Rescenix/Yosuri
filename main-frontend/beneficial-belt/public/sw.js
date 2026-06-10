@@ -1,20 +1,18 @@
-const CACHE_NAME = 'shanxi-__BUILD_TIMESTAMP__';
-
-// 只预缓存确实存在的文件
+const CACHE_NAME = 'shanxi-reader-v2';  // 更新版本强制刷新缓存
 const PRECACHE_URLS = [
-  '/reading-hut/',
-  '/favicon.ico',   // 如果有
+  '/reading-hut/',          // 你的新入口
+  '/reading-hut/index.html',
+  '/favicon.ico',
+  // 可根据需要添加更多静态资源，但运行时也会自动缓存
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.allSettled(
-        PRECACHE_URLS.map(url =>
-          cache.add(url).catch(err => {
-            console.warn('预缓存失败: ' + url, err);
-          })
-        )
+        PRECACHE_URLS.map(url => cache.add(url).catch(err => {
+          console.warn('预缓存失败: ' + url, err);
+        }))
       );
     })
   );
@@ -33,17 +31,19 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // 不缓存 API 请求（保持数据新鲜）
   if (event.request.url.includes('/api/')) return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request).then((response) => {
-        if (response.ok && event.request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+    caches.match(event.request).then((cachedResponse) => {
+      const networkFetch = fetch(event.request).then((networkResponse) => {
+        if (networkResponse.ok && event.request.method === 'GET') {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
         }
-        return response;
-      }).catch(() => cached);
-      return cached || network;
+        return networkResponse;
+      }).catch(() => cachedResponse);
+      return cachedResponse || networkFetch;
     })
   );
 });

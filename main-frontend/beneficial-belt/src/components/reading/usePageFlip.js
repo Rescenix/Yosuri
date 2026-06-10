@@ -141,7 +141,7 @@ export function usePageFlip(flipContainerRef, reader, width, height, statusMsg, 
     const bookId = reader.title.value || 'unknown'
 
     try {
-      let htmlPages = await getCachedPages(bookId, fontSize, w, h)
+     let htmlPages = await getCachedPages(bookId, fontSize)
 
       if (!htmlPages) {
         statusMsg.value = '正在精确排版... 0%'
@@ -161,7 +161,7 @@ export function usePageFlip(flipContainerRef, reader, width, height, statusMsg, 
           const back = createBackHTML()
           htmlPages = [cover, ...bodyPages, back]
         }
-        await setCachedPages(bookId, fontSize, w, h, htmlPages)
+await setCachedPages(bookId, fontSize, htmlPages)
       }
 
       if (id !== taskId) return
@@ -186,9 +186,10 @@ export function usePageFlip(flipContainerRef, reader, width, height, statusMsg, 
         swipeDistance: 30, useMouseEvents: false,
         mobileScrollSupport: false, renderWhileFlipping: false,
       })
-      pageFlip.loadFromHTML(pageElements)
-      totalPages.value = Math.max(0, htmlPages.length - 2)
-
+     pageFlip.loadFromHTML(pageElements)
+      totalPages.value = htmlPages.length          // 使用总页数（不减2），PageFlip 会自行管理封面封底
+      statusMsg.value = ''                         // ★ 清除排版提示
+      progressPercent.value = 100                  // ★ 进度条满格
       return pageFlip
     } catch (err) {
       console.error('分页失败:', err)

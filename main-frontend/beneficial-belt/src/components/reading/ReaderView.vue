@@ -4,24 +4,24 @@
     <div v-else-if="reader.error.value" class="status-msg error">{{ reader.error.value }}</div>
 
     <template v-else>
-      <div class="toolbar">
-        <button class="tb-btn" @click="back">← 书架</button>
-        <div class="tb-actions">
-          <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('notes')">
-            <Icon icon="ph:notebook" width="18" />
-          </button>
-          <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('sidebar')">
-            <Icon icon="ph:list" width="18" />
-          </button>
-          <button class="tb-btn" @click="toggleBookmarkAtCurrentPage">
-            <Icon :icon="isCurrentPageBookmarked ? 'ph:bookmark-simple-fill' : 'ph:bookmark-simple'" width="18" />
-          </button>
-          <button class="tb-btn" @click="reader.changeFont()">{{ reader.fontSize.value }}px</button>
-          <button class="tb-btn" @click="showOutline = !showOutline">
-            <Icon icon="ph:list-bullets" width="18" />
-          </button>
-        </div>
-      </div>
+     <div class="toolbar">
+  <button class="tb-btn" @click="back">← 书架</button>
+  <div class="tb-actions">
+    <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('notes')">
+      <Icon icon="ph:notebook" width="18" />
+    </button>
+    <button v-if="isMobile" class="tb-btn" @click="openMobilePanel('progress')">
+      <Icon icon="ph:chart-bar" width="18" />
+    </button>
+    <button class="tb-btn" @click="toggleBookmarkAtCurrentPage">
+      <Icon :icon="isCurrentPageBookmarked ? 'ph:bookmark-simple-fill' : 'ph:bookmark-simple'" width="18" />
+    </button>
+    <button class="tb-btn" @click="reader.changeFont()">{{ reader.fontSize.value }}px</button>
+    <button class="tb-btn" @click="showOutline = !showOutline">
+      <Icon icon="ph:list-bullets" width="18" />
+    </button>
+  </div>
+</div>
 
       <div class="reader-body">
         <div class="left-spacer"></div>
@@ -98,10 +98,15 @@
               <Icon icon="ph:x" width="18" />
             </button>
           </div>
-          <div class="mobile-panel-content">
-            <NotesPanel v-if="activeMobilePanel === 'notes'" />
-            <SidePanel v-else :threeReaderRef="threeReaderRef" />
-          </div>
+<div class="mobile-panel-content">
+  <MarkdownNotes v-if="activeMobilePanel === 'notes'" />
+<ReadingProgress
+  v-else-if="activeMobilePanel === 'progress'"
+  :book-title="reader.title.value"
+  :total-pages="totalPages"
+  :current-page="currentPage"
+/>
+</div>
         </div>
       </div>
     </transition>
@@ -115,6 +120,9 @@ import { useReader } from './useReader.js'
 import ThreeReader from './ThreeReader.vue'
 import SidePanel from './SidePanel.vue'
 import NotesPanel from './NotesPanel.vue'
+import MarkdownNotes from './MarkdownNotes.vue'
+import ReadingProgress from './ReadingProgress.vue'
+
 
 const activeMobilePanel = ref(null)
 const reader = useReader()
@@ -123,7 +131,12 @@ const showOutline = ref(false)
 const outline = ref([])
 const outlineTab = ref('outline')
 const swipedBookmarkIndex = ref(-1)
-
+// 在原有 activeMobilePanel 等状态基础上，添加计算属性
+const panelTitle = computed(() => {
+  if (activeMobilePanel.value === 'notes') return '读书笔记'
+  if (activeMobilePanel.value === 'progress') return '阅读进度'
+  return ''
+})
 // 移动端滑动相关
 const touchStartX = {}
 const SWIPE_THRESHOLD = 40
