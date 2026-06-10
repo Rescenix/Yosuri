@@ -1,6 +1,7 @@
-const CACHE_NAME = 'shanxi-reader-v4';
+const CACHE_NAME = 'shanxi-reader-v5';
 const PRECACHE_URLS = [
   '/reading-hut/',
+  '/read/',
   '/favicon.ico',
 ];
 
@@ -40,8 +41,11 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
-        // 网络失败，对于导航请求回退到书架，不再返回空的阅读页
         if (event.request.mode === 'navigate') {
+          // 网络失败，导航请求回退到书架或阅读页外壳
+          if (event.request.url.includes('/read')) {
+            return caches.match('/read/') || caches.match('/reading-hut/');
+          }
           return caches.match('/reading-hut/');
         }
       });

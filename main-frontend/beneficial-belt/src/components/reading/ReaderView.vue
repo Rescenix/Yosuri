@@ -260,6 +260,14 @@ function jumpToChapter(item) {
 // ReaderView.vue <script setup> 中的 onMounted 部分
 // ReaderView.vue <script setup> 中的 onMounted 部分
 onMounted(async () => {
+
+
+  // 在 onMounted 中
+if ('caches' in window) {
+  caches.open('shanxi-reader-v5').then(cache => {
+    cache.add(window.location.href).catch(() => {});
+  });
+}
   try {
     const params = new URLSearchParams(window.location.search)
     const file = params.get('book')
