@@ -15,7 +15,7 @@ export async function exactPaginate(text, fontSize, pageWidth, pageHeight, onPro
   const contentWidth = pageWidth - pad * 2
   const contentHeight = pageHeight - pad * 2
   const lineHeight = fontSize * 1.8
-  const maxLinesPerPage = Math.max(1, Math.floor(contentHeight / lineHeight) - 2)
+  const maxLinesPerPage = Math.max(1, Math.floor(contentHeight / lineHeight))
   if (maxLinesPerPage < 1) return [flushPage([text], fontSize)]
 
   const font = `${fontSize}px 'Inter', system-ui, sans-serif`
@@ -88,42 +88,78 @@ export async function exactPaginate(text, fontSize, pageWidth, pageHeight, onPro
     processChunk()
   })
 
+  // 移除全文开头的所有空行
+  while (allLines.length > 0 && allLines[0] === '') {
+    allLines.shift()
+  }
+
   if (onProgress) onProgress(70)
 
-  // 分页，带页首清理和页末空行上移（后续内容自动下移）
+  // 分页，确保每页首行顶格、尾行贴底，行数严格一致
   const pages = []
   let currentPageLines = []
   const totalLines = allLines.length
   let processed = 0
 
   function adjustPage(lines) {
-    // 1. 去掉开头的空行
+    // 1. 去掉页首空行
     while (lines.length > 0 && lines[0] === '') {
       lines.shift()
     }
-    // 2. 页末空行上移至上一个空行处（后续行自动下移）
+
+    // 2. 处理页末空行：保留一个空行（段落间距），多余空行移到内部
     let trailingEmpties = 0
     for (let i = lines.length - 1; i >= 0 && lines[i] === ''; i--) {
       trailingEmpties++
     }
-    if (trailingEmpties > 0) {
+    if (trailingEmpties > 1) {
       const contentEnd = lines.length - trailingEmpties
+      const movedCount = trailingEmpties - 1   // 保留一个
+      const moved = lines.splice(contentEnd + 1, movedCount)
       let insertPos = -1
-      for (let i = contentEnd - 1; i >= 0; i--) {
+      for (let i = 0; i < lines.length; i++) {
         if (lines[i] === '') {
           insertPos = i
           break
         }
       }
       if (insertPos !== -1) {
-        const moved = lines.splice(contentEnd, trailingEmpties)
-        // 插入到找到的空行之后，后续行自动下移
         lines.splice(insertPos + 1, 0, ...moved)
-      } else {
-        // 无内部空行，直接丢弃末尾空行
-        lines.splice(contentEnd, trailingEmpties)
       }
+      // 若无内部空行，多余空行直接丢弃
     }
+
+    // 3. 填充不足的行数：将空行均匀分散到段落之间
+    let needed = maxLinesPerPage - lines.length
+    if (needed > 0) {
+      // 收集所有空行的索引
+      const getEmptyIndices = () => {
+        const indices = []
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i] === '') indices.push(i)
+        }
+        return indices
+      }
+
+      let emptyIndices = getEmptyIndices()
+      if (emptyIndices.length === 0) {
+        // 没有任何空行，只能在末尾补足（极少情况）
+        while (lines.length < maxLinesPerPage) lines.push('')
+      } else {
+        let idx = 0
+        while (needed > 0) {
+          const pos = emptyIndices[idx % emptyIndices.length]
+          lines.splice(pos + 1, 0, '')   // 在空行后插入一个空行
+          needed--
+          emptyIndices = getEmptyIndices()   // 重新计算索引（因为数组变化）
+          idx++
+        }
+      }
+    } else if (needed < 0) {
+      // 超出最大行数，截断
+      lines = lines.slice(0, maxLinesPerPage)
+    }
+
     return lines
   }
 
@@ -132,12 +168,18 @@ export async function exactPaginate(text, fontSize, pageWidth, pageHeight, onPro
     function chunk() {
       const end = Math.min(processed + CHUNK, totalLines)
       for (let i = processed; i < end; i++) {
+        const line = allLines[i]
+        // 当前页为空时跳过空行，确保首行有内容
+        if (line === '' && currentPageLines.length === 0) {
+          processed++
+          continue
+        }
         if (currentPageLines.length >= maxLinesPerPage) {
           currentPageLines = adjustPage(currentPageLines)
           pages.push(flushPage(currentPageLines, fontSize))
           currentPageLines = []
         }
-        currentPageLines.push(allLines[i])
+        currentPageLines.push(line)
       }
       processed = end
       if (onProgress) {

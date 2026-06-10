@@ -64,11 +64,47 @@ onMounted(async () => {
 })
 
 async function loadBooks() {
-  const res = await fetch('/api/book/list')
-  if (res.ok) {
-    books.value = (await res.json()).books || []
+  // 1. 优先从安卓原生缓存加载书架数据（离线可用）
+  if (window.nativeInterface && window.nativeInterface.loadBookList) {
+    const cached = window.nativeInterface.loadBookList()
+    if (cached) {
+      try {
+        const list = JSON.parse(cached)
+        books.value = list
+        // 后台静默更新一次，保持数据最新
+        fetchRemoteBooks(true)
+        return
+      } catch (e) {}
+    }
+  }
+
+  // 2. 没有原生缓存（或读取失败），从网络获取
+  await fetchRemoteBooks(false)
+}
+async function fetchRemoteBooks(silent = false) {
+  try {
+    const res = await fetch('/api/book/list')
+    if (res.ok) {
+      const data = await res.json()
+      const list = data.books || []
+      books.value = list
+      // 保存到原生缓存
+      if (window.nativeInterface && window.nativeInterface.saveBookList) {
+        window.nativeInterface.saveBookList(JSON.stringify(list))
+      }
+    } else if (!silent) {
+      console.error('书架加载失败')
+    }
+  } catch (e) {
+    if (!silent) {
+      console.error('网络错误，书架加载失败', e)
+    }
   }
 }
+
+onMounted(async () => {
+  await loadBooks()
+})
 
 function openBook(book) {
   window.location.href = `/read?book=${encodeURIComponent(book.id)}`

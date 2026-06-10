@@ -244,6 +244,7 @@ function jumpToChapter(item) {
   showOutline.value = false
 }
 
+// ReaderView.vue <script setup> 中的 onMounted 部分
 onMounted(async () => {
   try {
     const params = new URLSearchParams(window.location.search)
@@ -251,9 +252,23 @@ onMounted(async () => {
     if (!file) throw new Error('未指定书籍')
     reader.title.value = file.replace(/\.txt$/i, '')
 
-    const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
-    if (!res.ok) throw new Error('书籍加载失败')
-    const text = await res.text()
+    let text = ''
+
+    // 1. 优先从安卓原生缓存读取
+    if (window.nativeInterface && window.nativeInterface.getBookText) {
+      text = window.nativeInterface.getBookText(file)
+    }
+
+    // 2. 无缓存则网络获取，并保存到原生缓存
+    if (!text) {
+      const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
+      if (!res.ok) throw new Error('书籍加载失败')
+      text = await res.text()
+      if (window.nativeInterface && window.nativeInterface.saveBookText) {
+        window.nativeInterface.saveBookText(file, text)
+      }
+    }
+
     reader.fullText.value = text
     await nextTick()
     outline.value = parseOutline(text)
@@ -264,7 +279,6 @@ onMounted(async () => {
     reader.loading.value = false
   }
 })
-
 const back = async () => {
   if (threeReaderRef.value?.flipToCoverAnimated) {
     await threeReaderRef.value.flipToCoverAnimated()
