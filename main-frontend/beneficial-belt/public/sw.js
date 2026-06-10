@@ -1,8 +1,7 @@
-const CACHE_NAME = 'shanxi-reader-v4';
+const CACHE_NAME = 'shanxi-reader-v3';
 const PRECACHE_URLS = [
   '/reading-hut/',
   '/favicon.ico',
-  '/index'
 ];
 
 self.addEventListener('install', (event) => {
@@ -41,6 +40,7 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
+        // 网络失败，对于导航请求返回缓存的入口页面
         if (event.request.mode === 'navigate') {
           return caches.match('/reading-hut/');
         }
