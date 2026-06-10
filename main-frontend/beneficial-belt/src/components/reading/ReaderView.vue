@@ -252,22 +252,26 @@ onMounted(async () => {
     if (!file) throw new Error('未指定书籍')
     reader.title.value = file.replace(/\.txt$/i, '')
 
-    let text = ''
+   // 替换 onMounted 中的加载逻辑
+let text = ''
 
-    // 1. 优先从安卓原生缓存读取
-    if (window.nativeInterface && window.nativeInterface.getBookText) {
-      text = window.nativeInterface.getBookText(file)
-    }
+// 1. 优先从安卓原生缓存读取（使用全局函数）
+if (typeof window.getBookText === 'function') {
+  text = window.getBookText(file)
+  if (text) console.log('[书籍文本] 命中原生缓存')
+}
 
-    // 2. 无缓存则网络获取，并保存到原生缓存
-    if (!text) {
-      const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
-      if (!res.ok) throw new Error('书籍加载失败')
-      text = await res.text()
-      if (window.nativeInterface && window.nativeInterface.saveBookText) {
-        window.nativeInterface.saveBookText(file, text)
-      }
-    }
+// 2. 无缓存则网络获取，并保存到原生缓存
+if (!text) {
+  console.log('[书籍文本] 开始网络下载...')
+  const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
+  if (!res.ok) throw new Error('书籍加载失败')
+  text = await res.text()
+  if (typeof window.saveBookText === 'function') {
+    window.saveBookText(file, text)
+    console.log('[书籍文本] 已缓存到安卓本地')
+  }
+}
 
     reader.fullText.value = text
     await nextTick()

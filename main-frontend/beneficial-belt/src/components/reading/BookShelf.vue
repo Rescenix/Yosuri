@@ -65,42 +65,52 @@ onMounted(async () => {
 
 async function loadBooks() {
   // 1. 优先从安卓原生缓存加载书架数据（离线可用）
-  if (window.nativeInterface && window.nativeInterface.loadBookList) {
-    const cached = window.nativeInterface.loadBookList()
-    if (cached) {
-      try {
-        const list = JSON.parse(cached)
-        books.value = list
-        // 后台静默更新一次，保持数据最新
-        fetchRemoteBooks(true)
-        return
-      } catch (e) {}
+  if (typeof window.loadBookList === 'function') {
+    try {
+      const cached = window.loadBookList();
+      if (cached) {
+        const list = JSON.parse(cached);
+        if (Array.isArray(list) && list.length > 0) {
+          books.value = list;
+          console.log('[书架] 从安卓缓存加载，书籍数量:', list.length);
+          // 后台静默更新
+          fetchRemoteBooks(true);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[书架] 安卓缓存读取失败', e);
     }
   }
 
-  // 2. 没有原生缓存（或读取失败），从网络获取
-  await fetchRemoteBooks(false)
+  // 2. 没有缓存，从网络获取
+  await fetchRemoteBooks(false);
 }
+
 async function fetchRemoteBooks(silent = false) {
   try {
-    const res = await fetch('/api/book/list')
-    if (res.ok) {
-      const data = await res.json()
-      const list = data.books || []
-      books.value = list
-      // 保存到原生缓存
-      if (window.nativeInterface && window.nativeInterface.saveBookList) {
-        window.nativeInterface.saveBookList(JSON.stringify(list))
+    const res = await fetch('/api/book/list');
+    if (!res.ok) throw new Error('网络错误');
+    const data = await res.json();
+    const list = data.books || [];
+    books.value = list;
+    // 保存到安卓原生缓存
+    if (typeof window.saveBookList === 'function') {
+      try {
+        window.saveBookList(JSON.stringify(list));
+        console.log('[书架] 已保存书架到安卓缓存');
+      } catch (e) {
+        console.warn('[书架] 保存缓存失败', e);
       }
-    } else if (!silent) {
-      console.error('书架加载失败')
     }
   } catch (e) {
     if (!silent) {
-      console.error('网络错误，书架加载失败', e)
+      console.error('[书架] 加载失败', e);
+      books.value = []; // 显示空书架
     }
   }
 }
+
 
 onMounted(async () => {
   await loadBooks()
