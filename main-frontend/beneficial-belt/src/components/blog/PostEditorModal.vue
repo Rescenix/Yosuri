@@ -1,14 +1,13 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="modal-overlay" @click.self="close">
-      <div class="modal-container">
+      <div class="modal-fullscreen">
         <div class="modal-header">
           <h2>写新文章</h2>
           <button class="close-btn" @click="close">✕</button>
         </div>
 
         <div class="modal-body">
-          <!-- 标题 -->
           <input
             v-model="title"
             type="text"
@@ -16,12 +15,10 @@
             class="title-input"
           />
 
-          <!-- 编辑器 -->
           <div class="editor-wrapper">
             <EditorContent :editor="editor" class="editor-content" />
           </div>
 
-          <!-- 标签输入（放在编辑器下方） -->
           <div class="tags-section">
             <div class="tags-input-wrapper">
               <input
@@ -52,6 +49,7 @@
 </template>
 
 <script setup>
+// 脚本保持不变，无需修改
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -147,11 +145,9 @@ async function publish() {
       body: JSON.stringify(payload)
     })
     if (res.ok) {
-      // 重新获取所有文章
       const allPostsRes = await fetch('/api/posts')
       if (allPostsRes.ok) {
         const allPosts = await allPostsRes.json()
-        // 找到刚发布的文章（根据标题和内容匹配）
         const newPost = allPosts.find(p => p.title === title.value && p.content === content)
         if (newPost && tags.value.length > 0) {
           await fetch(`/api/posts/${newPost.id}`, {
@@ -198,7 +194,7 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(12px);
   z-index: 1000;
   display: flex;
@@ -206,83 +202,106 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-.modal-container {
-  width: 90%;
-  max-width: 900px;
-  max-height: 85vh;
+.modal-fullscreen {
+  width: 100vw;
+  height: 100vh;
   background: #ffffff;
-  border-radius: 32px;
-  box-shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: fadeInUp 0.2s ease;
+  animation: fadeIn 0.2s ease;
 }
 
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.5rem;
+  padding: 1rem 2rem;
   border-bottom: 1px solid #eef2f6;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px);
+  flex-shrink: 0;
 }
 .modal-header h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 500;
   color: #0f172a;
+  letter-spacing: -0.01em;
 }
 .close-btn {
   background: none;
   border: none;
-  font-size: 1.4rem;
+  font-size: 1.8rem;
+  line-height: 1;
   cursor: pointer;
   color: #94a3b8;
-  transition: color 0.2s;
+  transition: all 0.2s;
+  width: 36px;
+  height: 36px;
+  border-radius: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.close-btn:hover { color: #475569; }
+.close-btn:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
 
 .modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 2rem 2rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.2rem;
+  gap: 1.5rem;
+  background: #ffffff;
 }
 
 .title-input {
   width: 100%;
-  font-size: 1.8rem;
+  font-size: 2rem;
   font-weight: 600;
   border: none;
   border-bottom: 2px solid #e2e8f0;
-  padding: 0.5rem 0;
+  padding: 0.5rem 0 0.5rem 0;
   outline: none;
   transition: border-color 0.2s;
   color: #0f172a;
+  background: transparent;
 }
-.title-input:focus { border-bottom-color: #2563eb; }
-.title-input::placeholder { color: #cbd5e1; font-weight: 400; }
+.title-input:focus {
+  border-bottom-color: #2563eb;
+}
+.title-input::placeholder {
+  color: #cbd5e1;
+  font-weight: 400;
+}
 
 .editor-wrapper {
   border: 1px solid #e2e8f0;
-  border-radius: 20px;
+  border-radius: 24px;
   overflow: hidden;
   background: #ffffff;
+  transition: box-shadow 0.2s;
+}
+.editor-wrapper:focus-within {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #2563eb;
 }
 .editor-content :deep(.ProseMirror) {
-  min-height: 320px;
-  padding: 1rem;
+  min-height: 380px;
+  padding: 1.2rem;
   outline: none;
   color: #1e293b;
-  font-size: 0.95rem;
-  line-height: 1.6;
+  font-size: 1rem;
+  line-height: 1.7;
 }
 .editor-content :deep(.ProseMirror p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);
@@ -293,28 +312,29 @@ onBeforeUnmount(() => {
 }
 .editor-content :deep(.ProseMirror img) {
   max-width: 100%;
-  border-radius: 12px;
-  margin: 0.5rem 0;
+  border-radius: 16px;
+  margin: 0.8rem 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
-/* 标签区域（放在编辑器下方） */
 .tags-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.75rem;
 }
 .tags-input-wrapper {
   width: 100%;
 }
 .tag-input-field {
   width: 100%;
-  padding: 10px 0;
+  padding: 0.75rem 0;
   border: none;
   border-bottom: 1px solid #e2e8f0;
   font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s;
   color: #1e293b;
+  background: transparent;
 }
 .tag-input-field:focus {
   border-bottom-color: #2563eb;
@@ -331,32 +351,48 @@ onBeforeUnmount(() => {
 .tag-badge {
   background: #eef2ff;
   color: #2563eb;
-  padding: 4px 10px;
-  border-radius: 30px;
-  font-size: 0.8rem;
+  padding: 4px 12px;
+  border-radius: 40px;
+  font-size: 0.85rem;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  transition: background 0.2s;
+}
+.tag-badge:hover {
+  background: #e0e7ff;
 }
 .remove-tag {
   background: none;
   border: none;
-  font-size: 1rem;
+  font-size: 1.1rem;
   cursor: pointer;
   color: #64748b;
-  padding: 0 4px;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
 }
-.remove-tag:hover { color: #ef4444; }
+.remove-tag:hover {
+  background: rgba(0,0,0,0.05);
+  color: #ef4444;
+}
 
 .modal-footer {
-  padding: 1rem 1.5rem;
+  padding: 1rem 2rem;
   border-top: 1px solid #eef2f6;
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px);
+  flex-shrink: 0;
 }
 .publish-btn, .cancel-btn {
-  padding: 0.5rem 1.2rem;
+  padding: 0.6rem 1.6rem;
   border-radius: 40px;
   font-size: 0.9rem;
   font-weight: 500;
@@ -368,22 +404,33 @@ onBeforeUnmount(() => {
   border: none;
   color: white;
 }
-.publish-btn:hover { background: #1d4ed8; }
+.publish-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+}
 .publish-btn:disabled {
   background: #94a3b8;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 .cancel-btn {
   background: #f1f5f9;
   border: none;
   color: #475569;
 }
-.cancel-btn:hover { background: #e2e8f0; }
+.cancel-btn:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
 
 @media (max-width: 640px) {
-  .modal-container { width: 95%; max-height: 90vh; }
+  .modal-header { padding: 0.75rem 1rem; }
   .modal-body { padding: 1rem; }
-  .title-input { font-size: 1.4rem; }
-  .editor-content :deep(.ProseMirror) { min-height: 240px; }
+  .title-input { font-size: 1.5rem; }
+  .editor-content :deep(.ProseMirror) { min-height: 260px; }
+  .modal-footer { padding: 0.75rem 1rem; }
+  .publish-btn, .cancel-btn { padding: 0.5rem 1.2rem; }
 }
 </style>

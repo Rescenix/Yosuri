@@ -1,6 +1,6 @@
 ---
 import NavBar from '../../components/NavBar.astro';
-import ChatWidget from '../../components/shanxi/ChatWidget.vue';
+
 import BlogPost from '../../components/blog/BlogPost.vue';
 import AuthGuard from '../../components/AuthGuard.astro';
 ---
@@ -108,7 +108,7 @@ import AuthGuard from '../../components/AuthGuard.astro';
   </head>
   <body>
     <NavBar />
-    <ChatWidget client:only="vue" />
+  
     <div class="article-page">
       <BlogPost client:only="vue" />
     </div>

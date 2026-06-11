@@ -103,7 +103,20 @@
 
     <!-- 发布模态框 -->
     <PostEditorModal :visible="showEditor" @close="showEditor = false" @published="onPublished" />
+ <!-- 删除确认弹窗 -->
+<Teleport to="body">
+  <div v-if="showDeleteConfirm" class="confirm-overlay" @click.self="showDeleteConfirm = false">
+    <div class="confirm-box">
+      <div class="confirm-title">确认删除</div>
+      <div class="confirm-body">确定删除这篇文章吗？删除后无法恢复。</div>
+      <div class="confirm-actions">
+        <button class="confirm-btn cancel" @click="showDeleteConfirm = false">取消</button>
+        <button class="confirm-btn danger" @click="confirmDelete">删除</button>
+      </div>
+    </div>
   </div>
+</Teleport>
+ </div>
 </template>
 
 <script setup>
@@ -195,14 +208,32 @@ async function addTagToPost(post) {
   post.newTagInput = ''
 }
 
-// 删除文章
+// 新增变量
+const showDeleteConfirm = ref(false)
+const pendingDeleteId = ref(null)
+
+// 原来的 deletePost 改为只触发弹窗
 async function deletePost(id) {
-  if (!confirm('确定删除这篇文章吗？')) return
+  pendingDeleteId.value = id
+  showDeleteConfirm.value = true
+}
+
+// 确认删除
+async function confirmDelete() {
+  if (!pendingDeleteId.value) return
   try {
-    const res = await fetch(`/api/posts/${id}`, { method: 'DELETE' })
-    if (res.ok) fetchPosts()
-    else alert('删除失败')
-  } catch (err) { alert('删除失败') }
+    const res = await fetch(`/api/posts/${pendingDeleteId.value}`, { method: 'DELETE' })
+    if (res.ok) {
+      fetchPosts()
+    } else {
+      alert('删除失败')
+    }
+  } catch (err) {
+    alert('删除失败')
+  } finally {
+    showDeleteConfirm.value = false
+    pendingDeleteId.value = null
+  }
 }
 
 // 加载文章
@@ -598,6 +629,8 @@ onMounted(() => { fetchPosts() })
   border-color: #ef4444;
   color: #ef4444;
 }
+
+/* 移动端适配 */
 @media (max-width: 640px) {
   .post-list-container {
     padding: 1rem;
@@ -615,11 +648,80 @@ onMounted(() => { fetchPosts() })
   .post-card h2 {
     font-size: 1.2rem;
   }
+  /* 移动端删除按钮：降低透明度直接显示，但不重叠 */
   .delete-post-btn {
     opacity: 0.6;
+    bottom: 12px;
+    right: 12px;
   }
+  /* 移动端添加标签输入框不撑满，留出空间 */
   .add-tag-input {
-    width: 100%;
+    width: 120px;
   }
+}
+
+
+/* 删除确认弹窗 */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.confirm-box {
+  background: white;
+  border-radius: 20px;
+  padding: 28px 32px;
+  max-width: 340px;
+  width: 85%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  animation: fadeIn 0.2s ease;
+}
+.confirm-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+.confirm-body {
+  font-size: 0.9rem;
+  color: #475569;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.confirm-btn {
+  padding: 8px 20px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+.confirm-btn.cancel {
+  background: #f1f5f9;
+  color: #475569;
+}
+.confirm-btn.cancel:hover {
+  background: #e2e8f0;
+}
+.confirm-btn.danger {
+  background: #ef4444;
+  color: white;
+}
+.confirm-btn.danger:hover {
+  background: #dc2626;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 </style>
