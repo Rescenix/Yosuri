@@ -57,7 +57,7 @@
         @touchstart.stop
       >
         <div class="menu-item" @click="isMobile ? mobileChooseComment() : desktopChooseComment()">
-          <Icon icon="ph:pen" width="16" /><span>批注</span>
+          <Icon icon="ph:pen" width="16" /><span>注释</span>
         </div>
         <div class="menu-item" @click="isMobile ? mobileChooseSearch() : desktopChooseSearch()">
           <Icon icon="ph:magnifying-glass" width="16" /><span>搜索</span>

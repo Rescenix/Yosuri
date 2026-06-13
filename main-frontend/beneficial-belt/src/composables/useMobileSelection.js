@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 export function useMobileSelection(flipContainerRef, annotation) {
-  const { generateComment, showResultCard, closeCard } = annotation
+   const { highlightText, generateComment, showResultCard, closeCard } = annotation
 
   const mobileShowActionMenu = ref(false)
   const mobileActionMenuStyle = ref({})
@@ -75,9 +75,14 @@ export function useMobileSelection(flipContainerRef, annotation) {
     const range = mobileSelectedRange.value
     if (!text || !range) return
 
+    // 保存选区位置（用于卡片定位）
     const rect = range.getBoundingClientRect()
+    
+    // ★ 先执行高亮，再清除选区
+    highlightText(text, range)
     clearMobileSelection()
     closeCard?.()
+    
     const comment = await generateComment(text)
     showResultCard(text, rect, comment, true)
   }

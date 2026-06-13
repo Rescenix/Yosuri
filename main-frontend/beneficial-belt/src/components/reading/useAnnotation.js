@@ -83,13 +83,13 @@ export function useAnnotation(flipContainerRef, currentPage) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: `请用一句话批注以下文字：“${text}”，语气像脂砚斋，直接给出批语，不要多余解释。`
+          message: `请用一句话共读以下文字：“${text}”，语气像书友，结合理解和认识。`
         })
       })
       const data = await response.json()
       return data.reply || data.message || data.content || '此处妙极，值得细品。'
     } catch (e) {
-      return '杉汐暂时无法批注，但此句确有深意。'
+      return '杉汐暂时无法共读，但此句确有深意。'
     }
   }
 
