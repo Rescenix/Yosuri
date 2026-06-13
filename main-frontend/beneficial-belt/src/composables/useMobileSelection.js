@@ -2,7 +2,8 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 export function useMobileSelection(flipContainerRef, annotation) {
-   const { highlightText, generateComment, showResultCard, closeCard } = annotation
+  // ★ 确保解构了 highlightText
+  const { highlightText, generateComment, showResultCard, closeCard } = annotation
 
   const mobileShowActionMenu = ref(false)
   const mobileActionMenuStyle = ref({})
@@ -75,14 +76,17 @@ export function useMobileSelection(flipContainerRef, annotation) {
     const range = mobileSelectedRange.value
     if (!text || !range) return
 
-    // 保存选区位置（用于卡片定位）
+    // 保存选区矩形（必须在修改DOM前获取）
     const rect = range.getBoundingClientRect()
     
-    // ★ 先执行高亮，再清除选区
+    // ★ 立即高亮当前页（永久修改DOM）
     highlightText(text, range)
+    
+    // 清除选区与菜单
     clearMobileSelection()
     closeCard?.()
-    
+
+    // 获取批语并显示卡片
     const comment = await generateComment(text)
     showResultCard(text, rect, comment, true)
   }
@@ -113,21 +117,15 @@ export function useMobileSelection(flipContainerRef, annotation) {
     }
   }
 
-  // 新增复制功能，静默 Toast 提示
   function mobileCopySelection() {
     const text = mobileSelectedText.value
     if (!text) return
-
-    const copySuccess = () => {
-      // 优先使用安卓接口 Toast，否则降级为静默成功
-      if (window.androidJsBridge && window.androidJsBridge.toast) {
-        window.androidJsBridge.toast('复制成功')
-      }
-    }
-
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(copySuccess).catch(() => {
-        // 降级方案：创建 textarea
+      navigator.clipboard.writeText(text).then(() => {
+        if (window.androidJsBridge && window.androidJsBridge.toast) {
+          window.androidJsBridge.toast('已复制')
+        }
+      }).catch(() => {
         const textarea = document.createElement('textarea')
         textarea.value = text
         textarea.style.position = 'fixed'
@@ -136,10 +134,11 @@ export function useMobileSelection(flipContainerRef, annotation) {
         textarea.select()
         document.execCommand('copy')
         document.body.removeChild(textarea)
-        copySuccess()
+        if (window.androidJsBridge && window.androidJsBridge.toast) {
+          window.androidJsBridge.toast('已复制')
+        }
       })
     } else {
-      // 不支持 Clipboard API，直接降级
       const textarea = document.createElement('textarea')
       textarea.value = text
       textarea.style.position = 'fixed'
@@ -148,9 +147,10 @@ export function useMobileSelection(flipContainerRef, annotation) {
       textarea.select()
       document.execCommand('copy')
       document.body.removeChild(textarea)
-      copySuccess()
+      if (window.androidJsBridge && window.androidJsBridge.toast) {
+        window.androidJsBridge.toast('已复制')
+      }
     }
-
     clearMobileSelection()
   }
 
@@ -172,7 +172,7 @@ export function useMobileSelection(flipContainerRef, annotation) {
     clearMobileSelection,
     mobileChooseComment,
     mobileChooseSearch,
-    mobileCopySelection,         // 新增导出
+    mobileCopySelection,
     mobileSelectedText,
     mobileSelectedRange,
   }

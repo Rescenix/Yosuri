@@ -23,7 +23,7 @@ export function useAnnotation(flipContainerRef, currentPage) {
     window.dispatchEvent(new CustomEvent('annotations-updated'))
   }
 
-  // 批注高亮：仅设置背景色，不影响任何布局属性
+  // 高亮：永久修改DOM，只影响背景色
   function highlightText(text, range) {
     const content = range.extractContents()
     const span = document.createElement('span')
@@ -92,45 +92,82 @@ export function useAnnotation(flipContainerRef, currentPage) {
       return '杉汐暂时无法共读，但此句确有深意。'
     }
   }
-// 替换 showResultCard 函数
-function showResultCard(text, rangeOrRect, resultText, save = true) {
-  const maxChars = 200 // 限制显示字数
-  const truncated = resultText.length > maxChars ? resultText.substring(0, maxChars) + '…' : resultText
 
-  // 卡片样式：固定顶部、最大高度、可滚动
-  commentCardStyle.value = {
-    position: 'fixed',
-    top: '0',
-    left: '0',
-    right: '0',
-    maxWidth: '100%',
-    maxHeight: '40vh',         // 最大高度为视口 40%
-    overflowY: 'auto',        // 超出滚动
-    zIndex: 99999,
-    background: '#f7e9d0',
-    border: '1px solid #b8977a',
-    borderRadius: '0 0 12px 12px',
-    padding: '16px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    wordBreak: 'break-word',
-    display: showCommentCard.value ? 'block' : 'none'
-  }
+  function showResultCard(text, rangeOrRect, resultText, save = true) {
+    // 限制显示字数
+    const maxLen = 200
+    const truncated = resultText.length > maxLen ? resultText.substring(0, maxLen) + '…' : resultText
 
-  showCommentCard.value = true
-  displayedComment.value = ''
-  commentTyping.value = true
-  typewrite(truncated)
+    let rect
+    if (rangeOrRect && typeof rangeOrRect.left === 'number') {
+      rect = rangeOrRect
+    } else if (rangeOrRect) {
+      rect = rangeOrRect.getBoundingClientRect()
+    } else {
+      rect = { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, bottom: window.innerHeight / 2 }
+    }
 
-  if (save) {
-    annotations.value.push({
-      text: selectedText.value || text,
-      comment: resultText,
-      page: currentPage.value,
-      time: Date.now()
+    const cardWidth = Math.min(280, window.innerWidth - 32)
+    let left = rect.left + rect.width / 2 - cardWidth / 2
+    left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
+    let top = rect.bottom + 8
+
+    commentCardStyle.value = {
+      position: 'fixed',
+      left: `${left}px`,
+      top: `${top}px`,
+      maxWidth: `${cardWidth}px`,
+      zIndex: 99999,
+      wordBreak: 'break-word',
+      visibility: 'hidden'
+    }
+
+    showCommentCard.value = true
+    displayedComment.value = ''
+    commentTyping.value = true
+    typewrite(truncated)
+
+    if (save) {
+      annotations.value.push({
+        text: selectedText.value || text,
+        comment: resultText,
+        page: currentPage.value,
+        time: Date.now()
+      })
+      saveAnnotations()
+    }
+
+    requestAnimationFrame(() => {
+      const card = document.querySelector('.comment-card')
+      if (!card) {
+        commentCardStyle.value.visibility = 'visible'
+        return
+      }
+
+      const cardRect = card.getBoundingClientRect()
+      // 动态调整位置
+      if (cardRect.bottom > window.innerHeight - 8) {
+        top = rect.top - cardRect.height - 8
+        if (top < 8) top = 8
+      }
+      if (top < 8) top = 8
+      if (cardRect.right > window.innerWidth - 8) {
+        left = window.innerWidth - cardRect.width - 8
+      }
+      if (left < 8) left = 8
+
+      commentCardStyle.value = {
+        position: 'fixed',
+        left: `${left}px`,
+        top: `${top}px`,
+        maxWidth: `${cardWidth}px`,
+        zIndex: 99999,
+        wordBreak: 'break-word',
+        visibility: 'visible'
+      }
     })
-    saveAnnotations()
   }
-}
+
   function closeCard() {
     showCommentCard.value = false
     clearInterval(typingTimer)
