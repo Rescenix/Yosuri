@@ -97,22 +97,21 @@ export function useAnnotation(flipContainerRef, currentPage) {
 
     // 卡片固定底部，水平占满，圆角在上方
     commentCardStyle.value = {
-      position: 'fixed',
-      bottom: '0',
-      left: '0',
-      right: '0',
-      maxWidth: '100%',
-      maxHeight: '40vh',
-      overflowY: 'auto',
-      zIndex: 99999,
-      background: '#f7e9d0',
-      border: '1px solid #b8977a',
-      borderRadius: '12px 12px 0 0',
-      padding: '16px',
-      boxShadow: '0 -4px 12px rgba(0,0,0,0.15)',
-      wordBreak: 'break-word',
-      display: 'block'
-    }
+  position: 'fixed',
+  bottom: '20px',       // 距离底部 20px，留出“页脚上面”的空间
+  left: '16px',         // 左右留白 16px
+  right: '16px',
+  maxWidth: 'calc(100% - 32px)',
+  maxHeight: '40vh',
+  overflowY: 'auto',
+  zIndex: 99999,
+  background: '#f7e9d0',
+  border: '1px solid #b8977a',
+  borderRadius: '16px', // 统一圆角，不再是只有上方圆角
+  padding: '16px',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+  wordBreak: 'break-word'
+};
 
     showCommentCard.value = true
     displayedComment.value = ''
