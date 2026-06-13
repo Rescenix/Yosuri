@@ -23,13 +23,11 @@ export function useAnnotation(flipContainerRef, currentPage) {
     window.dispatchEvent(new CustomEvent('annotations-updated'))
   }
 
-  // 高亮：永久修改DOM，只影响背景色
   function highlightText(text, range) {
     const content = range.extractContents()
     const span = document.createElement('span')
     span.className = 'shanxi-highlight'
     span.appendChild(content)
-
     span.style.cssText = `
       background-color: rgba(180, 80, 50, 0.25) !important;
       display: inline !important;
@@ -94,32 +92,26 @@ export function useAnnotation(flipContainerRef, currentPage) {
   }
 
   function showResultCard(text, rangeOrRect, resultText, save = true) {
-    // 限制显示字数
     const maxLen = 200
     const truncated = resultText.length > maxLen ? resultText.substring(0, maxLen) + '…' : resultText
 
-    let rect
-    if (rangeOrRect && typeof rangeOrRect.left === 'number') {
-      rect = rangeOrRect
-    } else if (rangeOrRect) {
-      rect = rangeOrRect.getBoundingClientRect()
-    } else {
-      rect = { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, bottom: window.innerHeight / 2 }
-    }
-
-    const cardWidth = Math.min(280, window.innerWidth - 32)
-    let left = rect.left + rect.width / 2 - cardWidth / 2
-    left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
-    let top = rect.bottom + 8
-
+    // 卡片固定底部，水平占满，圆角在上方
     commentCardStyle.value = {
       position: 'fixed',
-      left: `${left}px`,
-      top: `${top}px`,
-      maxWidth: `${cardWidth}px`,
+      bottom: '0',
+      left: '0',
+      right: '0',
+      maxWidth: '100%',
+      maxHeight: '40vh',
+      overflowY: 'auto',
       zIndex: 99999,
+      background: '#f7e9d0',
+      border: '1px solid #b8977a',
+      borderRadius: '12px 12px 0 0',
+      padding: '16px',
+      boxShadow: '0 -4px 12px rgba(0,0,0,0.15)',
       wordBreak: 'break-word',
-      visibility: 'hidden'
+      display: 'block'
     }
 
     showCommentCard.value = true
@@ -136,42 +128,13 @@ export function useAnnotation(flipContainerRef, currentPage) {
       })
       saveAnnotations()
     }
-
-    requestAnimationFrame(() => {
-      const card = document.querySelector('.comment-card')
-      if (!card) {
-        commentCardStyle.value.visibility = 'visible'
-        return
-      }
-
-      const cardRect = card.getBoundingClientRect()
-      // 动态调整位置
-      if (cardRect.bottom > window.innerHeight - 8) {
-        top = rect.top - cardRect.height - 8
-        if (top < 8) top = 8
-      }
-      if (top < 8) top = 8
-      if (cardRect.right > window.innerWidth - 8) {
-        left = window.innerWidth - cardRect.width - 8
-      }
-      if (left < 8) left = 8
-
-      commentCardStyle.value = {
-        position: 'fixed',
-        left: `${left}px`,
-        top: `${top}px`,
-        maxWidth: `${cardWidth}px`,
-        zIndex: 99999,
-        wordBreak: 'break-word',
-        visibility: 'visible'
-      }
-    })
   }
 
   function closeCard() {
     showCommentCard.value = false
     clearInterval(typingTimer)
     commentTyping.value = false
+    commentCardStyle.value = {}   // 重置样式，避免影响下次
   }
 
   function closeActionMenu() {
@@ -214,9 +177,7 @@ export function useAnnotation(flipContainerRef, currentPage) {
     let left = rect.left + rect.width / 2 - menuWidth / 2
     left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8))
     let top = rect.bottom + 8
-    if (top + 60 > window.innerHeight) {
-      top = rect.top - 60
-    }
+    if (top + 60 > window.innerHeight) top = rect.top - 60
 
     actionMenuStyle.value = {
       position: 'fixed',
@@ -228,9 +189,7 @@ export function useAnnotation(flipContainerRef, currentPage) {
 
     if (outsideClickListener) document.removeEventListener('mousedown', outsideClickListener)
     outsideClickListener = (e) => {
-      if (!e.target.closest('.action-menu')) {
-        closeActionMenu()
-      }
+      if (!e.target.closest('.action-menu')) closeActionMenu()
     }
     setTimeout(() => document.addEventListener('mousedown', outsideClickListener), 100)
   }

@@ -1,8 +1,6 @@
-// src/composables/useMobileSelection.js
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 export function useMobileSelection(flipContainerRef, annotation) {
-  // ★ 确保解构了 highlightText
   const { highlightText, generateComment, showResultCard, closeCard } = annotation
 
   const mobileShowActionMenu = ref(false)
@@ -17,12 +15,9 @@ export function useMobileSelection(flipContainerRef, annotation) {
     window.getSelection()?.removeAllRanges()
   }
 
-  // 选区发生变化时立即响应
   function onSelectionChange() {
     const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      return
-    }
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
 
     const container = flipContainerRef.value
     if (!container) return
@@ -30,10 +25,7 @@ export function useMobileSelection(flipContainerRef, annotation) {
     let node = selection.anchorNode
     let inContainer = false
     while (node) {
-      if (node === container) {
-        inContainer = true
-        break
-      }
+      if (node === container) { inContainer = true; break }
       node = node.parentNode
     }
     if (!inContainer) return
@@ -50,9 +42,7 @@ export function useMobileSelection(flipContainerRef, annotation) {
     let left = rect.left + rect.width / 2 - menuWidth / 2
     left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8))
     let top = rect.bottom + 8
-    if (top + 60 > window.innerHeight - 8) {
-      top = rect.top - 60
-    }
+    if (top + 60 > window.innerHeight - 8) top = rect.top - 60
 
     mobileActionMenuStyle.value = {
       position: 'fixed',
@@ -66,9 +56,7 @@ export function useMobileSelection(flipContainerRef, annotation) {
   function onDocumentTouchStart(e) {
     if (!mobileShowActionMenu.value) return
     const menuEl = document.querySelector('.action-menu')
-    if (menuEl && !menuEl.contains(e.target)) {
-      clearMobileSelection()
-    }
+    if (menuEl && !menuEl.contains(e.target)) clearMobileSelection()
   }
 
   async function mobileChooseComment() {
@@ -76,17 +64,12 @@ export function useMobileSelection(flipContainerRef, annotation) {
     const range = mobileSelectedRange.value
     if (!text || !range) return
 
-    // 保存选区矩形（必须在修改DOM前获取）
     const rect = range.getBoundingClientRect()
-    
-    // ★ 立即高亮当前页（永久修改DOM）
+    // ★ 永久高亮
     highlightText(text, range)
-    
-    // 清除选区与菜单
     clearMobileSelection()
     closeCard?.()
 
-    // 获取批语并显示卡片
     const comment = await generateComment(text)
     showResultCard(text, rect, comment, true)
   }
@@ -105,10 +88,7 @@ export function useMobileSelection(flipContainerRef, annotation) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: `帮我搜索一下“${text}”` })
       })
-      if (!res.ok) {
-        showResultCard(text, rect, '搜索服务暂不可用，请稍后重试。', false)
-        return
-      }
+      if (!res.ok) { showResultCard(text, rect, '搜索服务暂不可用，请稍后重试。', false); return }
       const data = await res.json()
       const reply = data.reply || data.message || data.content || '暂无搜索结果。'
       showResultCard(text, rect, reply, false)
@@ -120,25 +100,9 @@ export function useMobileSelection(flipContainerRef, annotation) {
   function mobileCopySelection() {
     const text = mobileSelectedText.value
     if (!text) return
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        if (window.androidJsBridge && window.androidJsBridge.toast) {
-          window.androidJsBridge.toast('已复制')
-        }
-      }).catch(() => {
-        const textarea = document.createElement('textarea')
-        textarea.value = text
-        textarea.style.position = 'fixed'
-        textarea.style.left = '-9999px'
-        document.body.appendChild(textarea)
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-        if (window.androidJsBridge && window.androidJsBridge.toast) {
-          window.androidJsBridge.toast('已复制')
-        }
-      })
-    } else {
+    navigator.clipboard?.writeText(text)?.then(() => {
+      window.androidJsBridge?.toast?.('已复制')
+    }).catch(() => {
       const textarea = document.createElement('textarea')
       textarea.value = text
       textarea.style.position = 'fixed'
@@ -147,10 +111,8 @@ export function useMobileSelection(flipContainerRef, annotation) {
       textarea.select()
       document.execCommand('copy')
       document.body.removeChild(textarea)
-      if (window.androidJsBridge && window.androidJsBridge.toast) {
-        window.androidJsBridge.toast('已复制')
-      }
-    }
+      window.androidJsBridge?.toast?.('已复制')
+    })
     clearMobileSelection()
   }
 
