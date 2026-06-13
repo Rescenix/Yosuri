@@ -1,7 +1,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
-export function useMobileSelection(flipContainerRef, annotation) {
-  const { highlightText, generateComment, showResultCard, closeCard } = annotation
+export function useMobileSelection(flipContainerRef, options) {
+  const { generateComment, showResultCard, closeCard, createHighlightFromRange, addCommentToHighlight, setCurrentPageForLatestHighlight, currentPage } = options
 
   const mobileShowActionMenu = ref(false)
   const mobileActionMenuStyle = ref({})
@@ -64,14 +64,19 @@ export function useMobileSelection(flipContainerRef, annotation) {
     const range = mobileSelectedRange.value
     if (!text || !range) return
 
-    const rect = range.getBoundingClientRect()
-    // ★ 永久高亮
-    highlightText(text, range)
+    // 使用 web-highlighter 创建高亮
+    const highlightId = await createHighlightFromRange(range)
+    if (highlightId) {
+      const comment = await generateComment(text)
+      addCommentToHighlight(highlightId, comment)
+      if (currentPage && setCurrentPageForLatestHighlight) {
+        setCurrentPageForLatestHighlight(currentPage.value)
+      }
+      const rect = range.getBoundingClientRect()
+      showResultCard(text, rect, comment, false)  // save=false 避免重复
+    }
     clearMobileSelection()
     closeCard?.()
-
-    const comment = await generateComment(text)
-    showResultCard(text, rect, comment, true)
   }
 
   async function mobileChooseSearch() {

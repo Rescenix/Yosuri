@@ -98,7 +98,7 @@ export function useAnnotation(flipContainerRef, currentPage) {
     // 卡片固定底部，水平占满，圆角在上方
     commentCardStyle.value = {
   position: 'fixed',
-  bottom: '20px',       // 距离底部 20px，留出“页脚上面”的空间
+  bottom: '30px',       // 距离底部 30px，留出“页脚上面”的空间
   left: '16px',         // 左右留白 16px
   right: '16px',
   maxWidth: 'calc(100% - 32px)',

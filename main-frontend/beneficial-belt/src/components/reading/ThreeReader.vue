@@ -80,6 +80,7 @@ import { useBookmarks } from './useBookmarks.js'
 import { useAnnotation } from './useAnnotation.js'
 import { useMobileReader } from './useMobileReader.js'
 import { useMobileSelection } from '../../composables/useMobileSelection.js'
+import { useWebHighlighter } from '../../composables/useWebHighlighter.js'
 
 const props = defineProps({ reader: Object })
 const flipContainerRef = ref(null)
@@ -118,9 +119,20 @@ const {
   flipToCoverAnimated, flipPrev, flipNext,
 } = usePageFlip(flipContainerRef, props.reader, width, height, statusMsg, progressPercent)
 
+// 高亮器实例（先声明，后面使用）
+const { 
+  init: initHighlighter, 
+  restoreHighlights, 
+  createHighlightFromRange,
+  addCommentToHighlight,
+  setCurrentPageForLatestHighlight,
+  destroy: destroyHighlighter 
+} = useWebHighlighter()
+
+// 移动端 reader（传入 restoreHighlights 回调）
 const mobile = useMobileReader(
   flipContainerRef, props.reader, statusMsg, progressPercent,
-  totalPages, currentPage
+  totalPages, currentPage, restoreHighlights
 )
 const { htmlPages, mobilePageIndex, mobileFlipPrev, mobileFlipNext, initMobileView } = mobile
 
@@ -154,18 +166,67 @@ const annotation = useAnnotation(flipContainerRef, currentPage)
 const {
   showCommentCard, commentCardStyle, displayedComment, commentTyping,
   showActionMenu, actionMenuStyle, onMouseUp, closeCard,
-  chooseComment: desktopChooseComment, chooseSearch: desktopChooseSearch,
-  highlightText, generateComment, showResultCard,
+  chooseSearch: desktopChooseSearch,
+  generateComment, showResultCard,
 } = annotation
 
+// 重写 desktopChooseComment
+async function desktopChooseComment() {
+  const selection = window.getSelection()
+  const text = selection.toString().trim()
+  if (!text) return
+  const range = selection.getRangeAt(0).cloneRange()
+  
+  const highlightId = await createHighlightFromRange(range)
+  if (!highlightId) return
+  
+  const comment = await generateComment(text)
+  addCommentToHighlight(highlightId, comment)
+  setCurrentPageForLatestHighlight(currentPage.value)
+  
+  const rect = range.getBoundingClientRect()
+  showResultCard(text, rect, comment, false)  // save=false 避免重复存储
+  closeActionMenu()
+}
+
+// 移动端选区菜单（改造 mobileChooseComment 和 mobileChooseSearch）
 const {
   mobileShowActionMenu, mobileActionMenuStyle, clearMobileSelection,
-  mobileChooseComment, mobileChooseSearch, mobileCopySelection,
+  mobileChooseSearch, mobileCopySelection,
+  mobileSelectedText, mobileSelectedRange,
 } = useMobileSelection(flipContainerRef, {
-  highlightText, generateComment, showResultCard, closeCard,
+  generateComment, showResultCard, closeCard,
+  createHighlightFromRange, addCommentToHighlight, setCurrentPageForLatestHighlight, currentPage
 })
 
-// 桌面端复制功能（可通过 Clipboard API 或 execCommand 实现，这里提供一个简单实现）
+// 重写 mobileChooseComment
+async function mobileChooseComment() {
+  const text = mobileSelectedText.value
+  const range = mobileSelectedRange.value
+  if (!text || !range) return
+  
+  const highlightId = await createHighlightFromRange(range)
+  if (!highlightId) return
+  
+  const comment = await generateComment(text)
+  addCommentToHighlight(highlightId, comment)
+  setCurrentPageForLatestHighlight(currentPage.value)
+  
+  const rect = range.getBoundingClientRect()
+  showResultCard(text, rect, comment, false)
+  clearMobileSelection()
+  closeCard()
+}
+
+// 辅助：关闭选区菜单
+function closeActionMenu() {
+  // 桌面端关闭菜单的简单实现
+  if (showActionMenu.value) {
+    showActionMenu.value = false
+  }
+}
+
+// 桌面端复制功能
 function copyDesktopSelection() {
   const text = window.getSelection()?.toString().trim()
   if (!text) return
@@ -182,46 +243,8 @@ function copyDesktopSelection() {
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 
 function highlightOnPage(text, targetIndex) {
-  if (!flipContainerRef.value || !text) return
-  const pages = flipContainerRef.value.querySelectorAll('.flip-page')
-  if (targetIndex >= pages.length) return
-  const page = pages[targetIndex]
-  if (!page?.textContent.includes(text)) return
-  if (page.querySelector(`span.shanxi-highlight[data-quote="${text}"]`)) return
-
-  const innerDiv = page.querySelector('div:first-child')
-  if (!innerDiv) return
-
-  const walker = document.createTreeWalker(innerDiv, NodeFilter.SHOW_TEXT)
-  let node
-  while ((node = walker.nextNode())) {
-    const idx = node.textContent.indexOf(text)
-    if (idx !== -1) {
-      const before = document.createTextNode(node.textContent.slice(0, idx))
-      const after = document.createTextNode(node.textContent.slice(idx + text.length))
-      const span = document.createElement('span')
-      span.className = 'shanxi-highlight'
-      span.setAttribute('data-quote', text)
-      span.textContent = text
-      span.title = '杉汐批：此句妙极。'
-      Object.assign(span.style, {
-        outline: '2px solid rgba(180,80,50,0.6)',
-        outlineOffset: '1px',
-        borderRadius: '6px',
-        boxShadow: '0 0 0 3px rgba(180,80,50,0.2)',
-        display: 'inline',
-        lineHeight: 'inherit',
-        padding: '0',
-        margin: '0'
-      })
-      const parent = node.parentNode
-      parent.insertBefore(before, node)
-      parent.insertBefore(span, node)
-      parent.insertBefore(after, node)
-      parent.removeChild(node)
-      break
-    }
-  }
+  // 这个函数在桌面端跳转时可能被调用，但我们已经不再需要文本匹配高亮
+  // 保留空实现避免报错
 }
 
 function handleSidebarFlip(pageIndex, quote) {
@@ -229,6 +252,7 @@ function handleSidebarFlip(pageIndex, quote) {
     if (pageIndex >= 0 && pageIndex < htmlPages.value.length) {
       mobilePageIndex.value = pageIndex
       currentPage.value = pageIndex
+      nextTick(() => restoreHighlights())
     }
   } else {
     desktopFlipToPage(pageIndex, quote, highlightOnPage)
@@ -240,6 +264,8 @@ function bindFlipEvent(flip) {
   flip.on('flip', (e) => {
     currentPage.value = e.data ?? flip.getCurrentPageIndex()
     recordPageTurn()
+    // 桌面端翻页后也要恢复高亮
+    nextTick(() => restoreHighlights())
   })
 }
 
@@ -259,6 +285,7 @@ async function mobileJumpToChapter(title) {
       await nextTick()
       const view = mobilePageViewRef.value || flipContainerRef.value?.querySelector('.mobile-page-view')
       if (view) {
+        // 滚动到标题位置（代码略，保持原有）
         const walker = document.createTreeWalker(view, NodeFilter.SHOW_TEXT)
         let node
         while ((node = walker.nextNode())) {
@@ -293,12 +320,25 @@ async function reInit() {
   statusMsg.value = '正在准备...'
   if (isMobile.value) {
     await initMobileView()
+    // 重新初始化高亮器
+    await nextTick()
+    const container = document.querySelector('.mobile-page-view')
+    if (container) {
+      initHighlighter(container)
+      restoreHighlights()
+    }
   } else {
     try {
       const flip = await desktopInitFlip()
       if (flip) {
         bindFlipEvent(flip)
         statusMsg.value = ''
+        await nextTick()
+        const container = flipContainerRef.value?.querySelector('.flip-page')
+        if (container) {
+          initHighlighter(container)
+          restoreHighlights()
+        }
       } else statusMsg.value = '暂无内容'
     } catch (e) {
       statusMsg.value = '加载失败，请重试'
@@ -324,7 +364,7 @@ onMounted(async () => {
 
   if (isMobile.value) {
     await initMobileView()
-    const saved = parseInt(localStorage.getItem(`${reader.title.value}_pos`) || '1')
+    const saved = parseInt(localStorage.getItem(`${props.reader.title.value}_pos`) || '1')
     if (saved > 1 && saved < htmlPages.value.length) {
       mobilePageIndex.value = saved
       currentPage.value = Math.max(0, saved - 1)
@@ -332,12 +372,25 @@ onMounted(async () => {
       mobilePageIndex.value = 1
       currentPage.value = 0
     }
+    // 初始化高亮器
+    await nextTick()
+    const container = document.querySelector('.mobile-page-view')
+    if (container) {
+      initHighlighter(container)
+      restoreHighlights()
+    }
   } else {
     try {
       const flip = await desktopInitFlip()
       if (flip) {
         bindFlipEvent(flip)
         statusMsg.value = ''
+        await nextTick()
+        const container = flipContainerRef.value?.querySelector('.flip-page')
+        if (container) {
+          initHighlighter(container)
+          restoreHighlights()
+        }
       } else statusMsg.value = '暂无内容'
     } catch (e) {
       statusMsg.value = '加载失败，请重试'
@@ -359,6 +412,7 @@ onBeforeUnmount(() => {
   destroyFlip()
   destroyStats()
   clearMobileSelection()
+  destroyHighlighter()
 })
 
 let lastPageForStats = 0
