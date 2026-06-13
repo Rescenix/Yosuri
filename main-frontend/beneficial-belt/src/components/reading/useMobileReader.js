@@ -12,7 +12,50 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     div.textContent = str
     return div.innerHTML
   }
+// 在 useMobileReader 函数内部添加
+function applyAnnotationsToPage() {
+  const pageElement = document.querySelector('.mobile-page-view')
+  if (!pageElement) return
 
+  // 从 localStorage 读取所有批注
+  const stored = localStorage.getItem('shanxi_annotations')
+  const annotations = stored ? JSON.parse(stored) : []
+
+  // 遍历文本节点，查找批注文本并包裹高亮 span
+  const walker = document.createTreeWalker(pageElement, NodeFilter.SHOW_TEXT)
+  const nodesToReplace = []
+  while (walker.nextNode()) {
+    const node = walker.currentNode
+    for (const anno of annotations) {
+      const idx = node.textContent.indexOf(anno.text)
+      if (idx !== -1) {
+        nodesToReplace.push({ node, text: anno.text, offset: idx })
+      }
+    }
+  }
+
+  // 替换文本节点为高亮 span
+  nodesToReplace.forEach(({ node, text, offset }) => {
+    const before = document.createTextNode(node.textContent.slice(0, offset))
+    const after = document.createTextNode(node.textContent.slice(offset + text.length))
+    const span = document.createElement('span')
+    span.className = 'shanxi-highlight'
+    span.textContent = text
+    // 使用与 useAnnotation 中相同的样式
+    span.style.cssText = `
+      background-color: rgba(180, 80, 50, 0.25) !important;
+      display: inline !important;
+      line-height: inherit !important;
+      padding: 0 !important; margin: 0 !important;
+      border: none !important; outline: none !important;
+      box-shadow: none !important; border-radius: 0 !important;
+    `
+    node.parentNode.insertBefore(before, node)
+    node.parentNode.insertBefore(span, node)
+    node.parentNode.insertBefore(after, node)
+    node.parentNode.removeChild(node)
+  })
+}
   function createCoverHTML(title) {
     const safe = escapeHtml(title)
     return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a,#2c3e50);display:flex;flex-direction:column;justify-content:center;align-items:center;color:#e8d5b7;font-family:Georgia,serif;"><h1>${safe}</h1><p>杉汐注</p></div>`
@@ -28,6 +71,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       mobilePageIndex.value--
       currentPage.value = mobilePageIndex.value - 1
       savePosition()
+       applyAnnotationsToPage()   // ★ 重新应用高亮
     }
   }
 
@@ -36,6 +80,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       mobilePageIndex.value++
       currentPage.value = mobilePageIndex.value - 1
       savePosition()
+       applyAnnotationsToPage()   // ★ 重新应用高亮
     }
   }
 
