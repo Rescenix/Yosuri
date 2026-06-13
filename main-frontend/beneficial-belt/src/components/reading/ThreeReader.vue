@@ -46,42 +46,27 @@
       </div>
     </div>
 
-   <Teleport to="body">
-  <div
-    v-if="isMobile ? mobileShowActionMenu : showActionMenu"
-    class="action-menu"
-    :class="{ 'mobile-action-menu': isMobile }"
-    :style="isMobile ? mobileActionMenuStyle : actionMenuStyle"
-    @click.stop
-    @mousedown.prevent
-    @touchstart.stop
-  >
-    <!-- 注释按钮 -->
-    <div 
-      class="menu-item" 
-      :class="{ 'selected': activeMenuItem === 'comment' }"
-      @click="isMobile ? mobileChooseComment() : desktopChooseComment()"
-    >
-      <Icon icon="ph:pen" width="16" /><span>注释</span>
-    </div>
-    <!-- 搜索按钮 -->
-    <div 
-      class="menu-item" 
-      :class="{ 'selected': activeMenuItem === 'search' }"
-      @click="isMobile ? mobileChooseSearch() : desktopChooseSearch()"
-    >
-      <Icon icon="ph:magnifying-glass" width="16" /><span>搜索</span>
-    </div>
-    <!-- 复制按钮 -->
-    <div 
-      class="menu-item" 
-      :class="{ 'selected': activeMenuItem === 'copy' }"
-      @click="isMobile ? mobileCopySelection() : copyDesktopSelection()"
-    >
-      <Icon icon="ph:copy" width="16" /><span>复制</span>
-    </div>
-  </div>
-</Teleport>
+    <Teleport to="body">
+      <div
+        v-if="isMobile ? mobileShowActionMenu : showActionMenu"
+        class="action-menu"
+        :class="{ 'mobile-action-menu': isMobile }"
+        :style="isMobile ? mobileActionMenuStyle : actionMenuStyle"
+        @click.stop
+        @mousedown.prevent
+        @touchstart.stop
+      >
+        <div class="menu-item" @click="isMobile ? mobileChooseComment() : desktopChooseComment()">
+          <Icon icon="ph:pen" width="16" /><span>注释</span>
+        </div>
+        <div class="menu-item" @click="isMobile ? mobileChooseSearch() : desktopChooseSearch()">
+          <Icon icon="ph:magnifying-glass" width="16" /><span>搜索</span>
+        </div>
+        <div class="menu-item" @click="isMobile ? mobileCopySelection() : copyDesktopSelection()">
+          <Icon icon="ph:copy" width="16" /><span>复制</span>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -95,7 +80,6 @@ import { useBookmarks } from './useBookmarks.js'
 import { useAnnotation } from './useAnnotation.js'
 import { useMobileReader } from './useMobileReader.js'
 import { useMobileSelection } from '../../composables/useMobileSelection.js'
-import { useWebHighlighter } from '../../composables/useWebHighlighter.js'
 
 const props = defineProps({ reader: Object })
 const flipContainerRef = ref(null)
@@ -134,18 +118,10 @@ const {
   flipToCoverAnimated, flipPrev, flipNext,
 } = usePageFlip(flipContainerRef, props.reader, width, height, statusMsg, progressPercent)
 
-const { 
-  init: initHighlighter, 
-  restoreHighlights, 
-  createHighlightFromRange,
-  addCommentToHighlight,
-  setCurrentPageForLatestHighlight,
-  destroy: destroyHighlighter 
-} = useWebHighlighter()
-
+// 移动端 reader（不再需要 onPageChanged 回调）
 const mobile = useMobileReader(
   flipContainerRef, props.reader, statusMsg, progressPercent,
-  totalPages, currentPage, restoreHighlights
+  totalPages, currentPage, () => {}  // 传空函数避免报错
 )
 const { htmlPages, mobilePageIndex, mobileFlipPrev, mobileFlipNext, initMobileView } = mobile
 
@@ -180,37 +156,34 @@ const {
   generateComment, showResultCard, highlightText,
 } = annotation
 
-// ========== 桌面端注释 ==========
+// ========== 桌面端注释（使用原有 highlightText） ==========
 async function desktopChooseComment() {
   const selection = window.getSelection()
   const text = selection.toString().trim()
   if (!text) return
   const range = selection.getRangeAt(0).cloneRange()
-  const highlightId = await createHighlightFromRange(range)
-  if (!highlightId) return
-  const comment = await generateComment(text)
-  addCommentToHighlight(highlightId, comment)
-  setCurrentPageForLatestHighlight(currentPage.value)
+  
+  // 立即高亮
+  highlightText(text, range)
+  // 立即显示思考中卡片
   const rect = range.getBoundingClientRect()
-  showResultCard(text, rect, comment, false)
+  showResultCard(text, rect, '🤔 杉汐正在思考...', false)
+  // 生成评论
+  const comment = await generateComment(text)
+  // 更新卡片最终内容（并保存）
+  showResultCard(text, rect, comment, true)
   showActionMenu.value = false
 }
 
 // ========== 移动端选区菜单 ==========
-// 🔥 关键：传入 highlightText 用于回退高亮
 const {
   mobileShowActionMenu, mobileActionMenuStyle, clearMobileSelection,
   mobileChooseComment, mobileChooseSearch, mobileCopySelection,
-  mobileSelectedText, mobileSelectedRange, activeMenuItem,
 } = useMobileSelection(flipContainerRef, {
   generateComment,
   showResultCard,
   closeCard,
-  createHighlightFromRange,
-  addCommentToHighlight,
-  setCurrentPageForLatestHighlight,
-  currentPage,
-  highlightText,   // ✅ 传入旧高亮函数
+  highlightText,
 })
 
 // 桌面端复制
@@ -229,14 +202,13 @@ function copyDesktopSelection() {
 
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 
-function highlightOnPage(text, targetIndex) { /* 保留空函数 */ }
+function highlightOnPage(text, targetIndex) { /* 保留空函数，备用 */ }
 
 function handleSidebarFlip(pageIndex, quote) {
   if (isMobile.value) {
     if (pageIndex >= 0 && pageIndex < htmlPages.value.length) {
       mobilePageIndex.value = pageIndex
       currentPage.value = pageIndex
-      nextTick(() => restoreHighlights())
     }
   } else {
     desktopFlipToPage(pageIndex, quote, highlightOnPage)
@@ -248,7 +220,6 @@ function bindFlipEvent(flip) {
   flip.on('flip', (e) => {
     currentPage.value = e.data ?? flip.getCurrentPageIndex()
     recordPageTurn()
-    nextTick(() => restoreHighlights())
   })
 }
 
@@ -302,24 +273,12 @@ async function reInit() {
   statusMsg.value = '正在准备...'
   if (isMobile.value) {
     await initMobileView()
-    await nextTick()
-    const container = document.querySelector('.mobile-page-view')
-    if (container) {
-      initHighlighter(container)
-      restoreHighlights()
-    }
   } else {
     try {
       const flip = await desktopInitFlip()
       if (flip) {
         bindFlipEvent(flip)
         statusMsg.value = ''
-        await nextTick()
-        const container = flipContainerRef.value?.querySelector('.flip-page')
-        if (container) {
-          initHighlighter(container)
-          restoreHighlights()
-        }
       } else statusMsg.value = '暂无内容'
     } catch (e) {
       statusMsg.value = '加载失败，请重试'
@@ -353,24 +312,12 @@ onMounted(async () => {
       mobilePageIndex.value = 1
       currentPage.value = 0
     }
-    await nextTick()
-    const container = document.querySelector('.mobile-page-view')
-    if (container) {
-      initHighlighter(container)
-      restoreHighlights()
-    }
   } else {
     try {
       const flip = await desktopInitFlip()
       if (flip) {
         bindFlipEvent(flip)
         statusMsg.value = ''
-        await nextTick()
-        const container = flipContainerRef.value?.querySelector('.flip-page')
-        if (container) {
-          initHighlighter(container)
-          restoreHighlights()
-        }
       } else statusMsg.value = '暂无内容'
     } catch (e) {
       statusMsg.value = '加载失败，请重试'
@@ -392,7 +339,6 @@ onBeforeUnmount(() => {
   destroyFlip()
   destroyStats()
   clearMobileSelection()
-  destroyHighlighter()
 })
 
 function saveDailyProgress() {
