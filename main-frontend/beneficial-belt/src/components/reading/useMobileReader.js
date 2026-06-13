@@ -155,20 +155,11 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     processNextChunk()
   }
 
-  function updateMobileSelection() {}
-  function onMobileTouchEnd(event) {}
-  async function handleMobileComment() {}
-  async function handleMobileSearch() {}
-
   return {
     htmlPages,
     mobilePageIndex,
     mobileFlipPrev,
     mobileFlipNext,
-    onMobileTouchEnd,
-    updateMobileSelection,
     initMobileView,
-    handleMobileComment,
-    handleMobileSearch,
   }
 }

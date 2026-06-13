@@ -493,3 +493,8 @@
   background: rgba(180, 130, 100, 0.15);
   color: #8b5e3c;
 }
+/* 单击后等待双击的高亮（持久化，由 JS 控制） */
+.mobile-action-menu .menu-item.selected {
+  background: rgba(180, 130, 100, 0.35);
+  color: #8b5e3c;
+}

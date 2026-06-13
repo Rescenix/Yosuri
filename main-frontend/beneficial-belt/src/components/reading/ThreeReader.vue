@@ -46,27 +46,42 @@
       </div>
     </div>
 
-    <Teleport to="body">
-      <div
-        v-if="isMobile ? mobileShowActionMenu : showActionMenu"
-        class="action-menu"
-        :class="{ 'mobile-action-menu': isMobile }"
-        :style="isMobile ? mobileActionMenuStyle : actionMenuStyle"
-        @click.stop
-        @mousedown.prevent
-        @touchstart.stop
-      >
-        <div class="menu-item" @click="isMobile ? mobileChooseComment() : desktopChooseComment()">
-          <Icon icon="ph:pen" width="16" /><span>注释</span>
-        </div>
-        <div class="menu-item" @click="isMobile ? mobileChooseSearch() : desktopChooseSearch()">
-          <Icon icon="ph:magnifying-glass" width="16" /><span>搜索</span>
-        </div>
-        <div class="menu-item" @click="isMobile ? mobileCopySelection() : copyDesktopSelection()">
-          <Icon icon="ph:copy" width="16" /><span>复制</span>
-        </div>
-      </div>
-    </Teleport>
+   <Teleport to="body">
+  <div
+    v-if="isMobile ? mobileShowActionMenu : showActionMenu"
+    class="action-menu"
+    :class="{ 'mobile-action-menu': isMobile }"
+    :style="isMobile ? mobileActionMenuStyle : actionMenuStyle"
+    @click.stop
+    @mousedown.prevent
+    @touchstart.stop
+  >
+    <!-- 注释按钮 -->
+    <div 
+      class="menu-item" 
+      :class="{ 'selected': activeMenuItem === 'comment' }"
+      @click="isMobile ? mobileChooseComment() : desktopChooseComment()"
+    >
+      <Icon icon="ph:pen" width="16" /><span>注释</span>
+    </div>
+    <!-- 搜索按钮 -->
+    <div 
+      class="menu-item" 
+      :class="{ 'selected': activeMenuItem === 'search' }"
+      @click="isMobile ? mobileChooseSearch() : desktopChooseSearch()"
+    >
+      <Icon icon="ph:magnifying-glass" width="16" /><span>搜索</span>
+    </div>
+    <!-- 复制按钮 -->
+    <div 
+      class="menu-item" 
+      :class="{ 'selected': activeMenuItem === 'copy' }"
+      @click="isMobile ? mobileCopySelection() : copyDesktopSelection()"
+    >
+      <Icon icon="ph:copy" width="16" /><span>复制</span>
+    </div>
+  </div>
+</Teleport>
   </div>
 </template>
 
@@ -119,7 +134,7 @@ const {
   flipToCoverAnimated, flipPrev, flipNext,
 } = usePageFlip(flipContainerRef, props.reader, width, height, statusMsg, progressPercent)
 
-// 高亮器实例（先声明，后面使用）
+// 高亮器
 const { 
   init: initHighlighter, 
   restoreHighlights, 
@@ -129,7 +144,7 @@ const {
   destroy: destroyHighlighter 
 } = useWebHighlighter()
 
-// 移动端 reader（传入 restoreHighlights 回调）
+// 移动端 reader
 const mobile = useMobileReader(
   flipContainerRef, props.reader, statusMsg, progressPercent,
   totalPages, currentPage, restoreHighlights
@@ -170,7 +185,7 @@ const {
   generateComment, showResultCard,
 } = annotation
 
-// 重写 desktopChooseComment
+// ========== 桌面端注释（使用高亮器） ==========
 async function desktopChooseComment() {
   const selection = window.getSelection()
   const text = selection.toString().trim()
@@ -185,21 +200,58 @@ async function desktopChooseComment() {
   setCurrentPageForLatestHighlight(currentPage.value)
   
   const rect = range.getBoundingClientRect()
-  showResultCard(text, rect, comment, false)  // save=false 避免重复存储
-  closeActionMenu()
+  showResultCard(text, rect, comment, false)  // 不重复保存
+  // 关闭菜单（简单处理）
+  showActionMenu.value = false
 }
 
-// 移动端选区菜单（改造 mobileChooseComment 和 mobileChooseSearch）
+// ========== 移动端选区菜单（重写） ==========
 const {
   mobileShowActionMenu, mobileActionMenuStyle, clearMobileSelection,
-  mobileChooseSearch, mobileCopySelection,
-  mobileSelectedText, mobileSelectedRange,
-} = useMobileSelection(flipContainerRef, {
-  generateComment, showResultCard, closeCard,
-  createHighlightFromRange, addCommentToHighlight, setCurrentPageForLatestHighlight, currentPage
-})
+  mobileSelectedText, mobileSelectedRange,activeMenuItem,   // 添加这一行
+} = useMobileSelection(flipContainerRef, {})
 
-// 重写 mobileChooseComment
+// 移动端搜索（保持不变）
+async function mobileChooseSearch() {
+  const text = mobileSelectedText.value
+  const range = mobileSelectedRange.value
+  if (!text || !range) return
+  const rect = range.getBoundingClientRect()
+  clearMobileSelection()
+  closeCard()
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `帮我搜索一下“${text}”` })
+    })
+    if (!res.ok) { showResultCard(text, rect, '搜索服务暂不可用，请稍后重试。', false); return }
+    const data = await res.json()
+    const reply = data.reply || data.message || data.content || '暂无搜索结果。'
+    showResultCard(text, rect, reply, false)
+  } catch (e) {
+    showResultCard(text, rect, '搜索失败，请重试。', false)
+  }
+}
+
+// 移动端复制
+function mobileCopySelection() {
+  const text = mobileSelectedText.value
+  if (!text) return
+  navigator.clipboard?.writeText(text)?.catch(() => {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  })
+  clearMobileSelection()
+}
+
+// 移动端注释（使用高亮器）
 async function mobileChooseComment() {
   const text = mobileSelectedText.value
   const range = mobileSelectedRange.value
@@ -218,15 +270,7 @@ async function mobileChooseComment() {
   closeCard()
 }
 
-// 辅助：关闭选区菜单
-function closeActionMenu() {
-  // 桌面端关闭菜单的简单实现
-  if (showActionMenu.value) {
-    showActionMenu.value = false
-  }
-}
-
-// 桌面端复制功能
+// 桌面端复制
 function copyDesktopSelection() {
   const text = window.getSelection()?.toString().trim()
   if (!text) return
@@ -243,8 +287,7 @@ function copyDesktopSelection() {
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 
 function highlightOnPage(text, targetIndex) {
-  // 这个函数在桌面端跳转时可能被调用，但我们已经不再需要文本匹配高亮
-  // 保留空实现避免报错
+  // 保留空函数，避免报错
 }
 
 function handleSidebarFlip(pageIndex, quote) {
@@ -264,7 +307,6 @@ function bindFlipEvent(flip) {
   flip.on('flip', (e) => {
     currentPage.value = e.data ?? flip.getCurrentPageIndex()
     recordPageTurn()
-    // 桌面端翻页后也要恢复高亮
     nextTick(() => restoreHighlights())
   })
 }
@@ -285,7 +327,6 @@ async function mobileJumpToChapter(title) {
       await nextTick()
       const view = mobilePageViewRef.value || flipContainerRef.value?.querySelector('.mobile-page-view')
       if (view) {
-        // 滚动到标题位置（代码略，保持原有）
         const walker = document.createTreeWalker(view, NodeFilter.SHOW_TEXT)
         let node
         while ((node = walker.nextNode())) {
@@ -320,7 +361,6 @@ async function reInit() {
   statusMsg.value = '正在准备...'
   if (isMobile.value) {
     await initMobileView()
-    // 重新初始化高亮器
     await nextTick()
     const container = document.querySelector('.mobile-page-view')
     if (container) {
@@ -372,7 +412,6 @@ onMounted(async () => {
       mobilePageIndex.value = 1
       currentPage.value = 0
     }
-    // 初始化高亮器
     await nextTick()
     const container = document.querySelector('.mobile-page-view')
     if (container) {
@@ -415,7 +454,6 @@ onBeforeUnmount(() => {
   destroyHighlighter()
 })
 
-let lastPageForStats = 0
 function saveDailyProgress() {
   const today = new Date().toLocaleDateString()
   const stored = localStorage.getItem('shanxi_reading_progress')
