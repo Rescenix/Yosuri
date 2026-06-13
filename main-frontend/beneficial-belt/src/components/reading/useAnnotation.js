@@ -91,27 +91,72 @@ export function useAnnotation(flipContainerRef, currentPage) {
     }
   }
 
-  function showResultCard(text, rangeOrRect, resultText, save = true) {
-    const maxLen = 200
+  // 加载卡片样式
+  function showLoadingCard(message = '杉汐正在思考…') {
+    clearInterval(typingTimer)
+    commentTyping.value = false
+    commentCardStyle.value = {
+      position: 'fixed',
+      bottom: '70px',
+      left: '16px',
+      right: '16px',
+      maxWidth: 'calc(100% - 32px)',
+      maxHeight: '40vh',
+      overflowY: 'auto',
+      zIndex: 99999,
+      background: 'rgba(255, 255, 255, 0.78)',
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      border: '1px solid rgba(200, 210, 240, 0.4)',
+      borderRadius: '20px',
+      padding: '20px 18px',
+      boxShadow: '0 8px 32px rgba(99, 130, 220, 0.12), 0 2px 8px rgba(0,0,0,0.06)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      color: '#1e293b',
+      lineHeight: 1.6,
+      wordBreak: 'break-word',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '15px'
+    }
+    displayedComment.value = message
+    showCommentCard.value = true
+  }
+
+  // 结果卡片样式
+  function showResultCard(text, rangeOrRect, resultText, save = true, isLoading = false) {
+    if (isLoading) {
+      showLoadingCard(resultText)
+      return
+    }
+
+    const maxLen = 400
     const truncated = resultText.length > maxLen ? resultText.substring(0, maxLen) + '…' : resultText
 
-    // 卡片固定底部，水平占满，圆角在上方
     commentCardStyle.value = {
-  position: 'fixed',
-  bottom: '30px',       // 距离底部 30px，留出“页脚上面”的空间
-  left: '16px',         // 左右留白 16px
-  right: '16px',
-  maxWidth: 'calc(100% - 32px)',
-  maxHeight: '40vh',
-  overflowY: 'auto',
-  zIndex: 99999,
-  background: '#f7e9d0',
-  border: '1px solid #b8977a',
-  borderRadius: '16px', // 统一圆角，不再是只有上方圆角
-  padding: '16px',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-  wordBreak: 'break-word'
-};
+      position: 'fixed',
+      bottom: '70px',
+      left: '16px',
+      right: '16px',
+      maxWidth: 'calc(100% - 32px)',
+      maxHeight: '45vh',
+      overflowY: 'auto',
+      zIndex: 99999,
+      background: 'rgba(255, 255, 255, 0.82)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      border: '1px solid rgba(190, 210, 240, 0.5)',
+      borderRadius: '20px',
+      padding: '18px',
+      boxShadow: '0 12px 40px rgba(70, 110, 200, 0.1), 0 4px 12px rgba(0,0,0,0.05)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      color: '#1e293b',
+      fontSize: '14px',
+      lineHeight: 1.7,
+      wordBreak: 'break-word',
+      display: 'block'
+    }
 
     showCommentCard.value = true
     displayedComment.value = ''
@@ -133,7 +178,7 @@ export function useAnnotation(flipContainerRef, currentPage) {
     showCommentCard.value = false
     clearInterval(typingTimer)
     commentTyping.value = false
-    commentCardStyle.value = {}   // 重置样式，避免影响下次
+    commentCardStyle.value = {}
   }
 
   function closeActionMenu() {
@@ -144,23 +189,41 @@ export function useAnnotation(flipContainerRef, currentPage) {
     }
   }
 
+  // 桌面端批注
   async function chooseComment() {
     const text = selectedText.value
     const range = selectedRange.value
     if (!text || !range) return
     closeActionMenu()
     highlightText(text, range)
+    showResultCard(text, range, '杉汐正在思考…', false, true)
     const comment = await generateComment(text)
-    showResultCard(text, range, comment, true)
+    showResultCard(text, range, comment, true, false)
   }
 
-  function chooseSearch() {
+  // 桌面端搜索
+  async function chooseSearchDesktop() {
     const text = selectedText.value
     if (!text) return
     closeActionMenu()
-    window.dispatchEvent(new CustomEvent('search-text', { detail: { text } }))
+    showResultCard(text, null, '杉汐正在搜索…', false, true)
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `帮我搜索一下“${text}”` })
+      })
+      if (!res.ok) throw new Error('请求失败')
+      const data = await res.json()
+      const reply = data.reply || data.message || data.content || '暂无搜索结果。'
+      showResultCard(text, null, reply, false, false)
+    } catch (e) {
+      showResultCard(text, null, '搜索失败，请重试。', false, false)
+    }
   }
 
+  // 桌面端鼠标抬起，显示选区菜单
   function onMouseUp(event) {
     const selection = window.getSelection()
     const text = selection.toString().trim()
@@ -204,7 +267,7 @@ export function useAnnotation(flipContainerRef, currentPage) {
     onMouseUp,
     closeCard,
     chooseComment,
-    chooseSearch,
+    chooseSearch: chooseSearchDesktop,
     highlightText,
     generateComment,
     showResultCard,

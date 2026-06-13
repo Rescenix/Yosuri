@@ -11,12 +11,11 @@
       <span class="remain">剩余约 {{ remainingTime }} 分钟</span>
     </div>
 
+    <!-- 批注卡片（支持 HTML 渲染，用于旋转动画） -->
     <div v-if="showCommentCard" class="comment-card" :style="commentCardStyle" @click.stop>
-      <div class="comment-text">{{ displayedComment }}</div>
+      <div class="comment-text" v-html="displayedComment"></div>
       <span v-if="commentTyping" class="typing-cursor">|</span>
-      <button class="close-card" @click="closeCard">
-        <Icon icon="ph:x" width="14" />
-      </button>
+     
     </div>
 
     <template v-if="isMobile && htmlPages.length > 0">
@@ -118,10 +117,9 @@ const {
   flipToCoverAnimated, flipPrev, flipNext,
 } = usePageFlip(flipContainerRef, props.reader, width, height, statusMsg, progressPercent)
 
-// 移动端 reader（不再需要 onPageChanged 回调）
 const mobile = useMobileReader(
   flipContainerRef, props.reader, statusMsg, progressPercent,
-  totalPages, currentPage, () => {}  // 传空函数避免报错
+  totalPages, currentPage, () => {}
 )
 const { htmlPages, mobilePageIndex, mobileFlipPrev, mobileFlipNext, initMobileView } = mobile
 
@@ -156,23 +154,20 @@ const {
   generateComment, showResultCard, highlightText,
 } = annotation
 
-// ========== 桌面端注释（使用原有 highlightText） ==========
+// ========== 桌面端注释（菜单消失后再显示卡片） ==========
 async function desktopChooseComment() {
+  showActionMenu.value = false
   const selection = window.getSelection()
   const text = selection.toString().trim()
   if (!text) return
   const range = selection.getRangeAt(0).cloneRange()
   
-  // 立即高亮
   highlightText(text, range)
-  // 立即显示思考中卡片
   const rect = range.getBoundingClientRect()
-  showResultCard(text, rect, '🤔 杉汐正在思考...', false)
-  // 生成评论
+  // ★ 加上第五个参数 true
+  showResultCard(text, rect, '<span class="loading-dots">杉汐正在思考<span class="dots">...</span></span>', false, true)
   const comment = await generateComment(text)
-  // 更新卡片最终内容（并保存）
   showResultCard(text, rect, comment, true)
-  showActionMenu.value = false
 }
 
 // ========== 移动端选区菜单 ==========
@@ -185,7 +180,15 @@ const {
   closeCard,
   highlightText,
 })
-
+// 点击页面任意位置关闭卡片（但不影响菜单）
+function onDocumentClick(e) {
+  const card = document.querySelector('.comment-card')
+  const menu = document.querySelector('.action-menu')
+  if (!card) return
+  if (!card.contains(e.target) && (!menu || !menu.contains(e.target))) {
+    closeCard()
+  }
+}
 // 桌面端复制
 function copyDesktopSelection() {
   const text = window.getSelection()?.toString().trim()
@@ -202,7 +205,7 @@ function copyDesktopSelection() {
 
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 
-function highlightOnPage(text, targetIndex) { /* 保留空函数，备用 */ }
+function highlightOnPage(text, targetIndex) { /* 备用 */ }
 
 function handleSidebarFlip(pageIndex, quote) {
   if (isMobile.value) {
@@ -326,11 +329,14 @@ onMounted(async () => {
   }
 
   document.addEventListener('keydown', onKeyDown)
+
+  document.addEventListener('click', onDocumentClick)
   window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  document.removeEventListener('click', onDocumentClick)
   document.removeEventListener('contextmenu', blockCtx)
   document.removeEventListener('keydown', onKeyDown)
   if (!isMobile.value) {

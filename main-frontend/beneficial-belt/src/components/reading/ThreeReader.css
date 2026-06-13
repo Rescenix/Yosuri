@@ -252,15 +252,6 @@
 }
 .menu-item:hover { background: #f1f5f9; }
 
-.comment-card {
-  position: absolute; z-index: 50; background: #f7e9d0; border: 1px solid #b8977a; border-radius: 8px;
-  padding: 10px 14px; box-shadow: 2px 2px 12px rgba(0,0,0,0.15);
-  font-family: 'KaiTi', '楷体', serif; font-size: 13px; color: #3a2c1c;
-  line-height: 1.6; word-break: break-word;
-}
-.comment-card .typing-cursor { color: #b8977a; animation: blink 0.8s infinite; }
-@keyframes blink { 0%,100%{ opacity:1 } 50%{ opacity:0 } }
-.close-card { position: absolute; top: 4px; right: 6px; background: transparent; border: none; cursor: pointer; color: #8b5e3c; padding: 2px; }
 
 /* -------- 翻页触摸区 -------- */
 .flip-tap-area {
@@ -493,8 +484,26 @@
   background: rgba(180, 130, 100, 0.15);
   color: #8b5e3c;
 }
-/* 优化 emoji 显示 */
-body, .mobile-page-view, .comment-card, .action-menu {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-               "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+/* 加载提示三点跳动 */
+.loading-dots .dots {
+  animation: dotPulse 1.4s infinite;
+}
+
+@keyframes dotPulse {
+  0%   { opacity: 0.2; }
+  20%  { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+/* 卡片毛玻璃统一样式（覆盖内联可能被覆盖的情况） */
+.comment-card {
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  border: 1px solid rgba(190, 210, 240, 0.5) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 12px 40px rgba(70, 110, 200, 0.1), 0 4px 12px rgba(0,0,0,0.05) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #1e293b;
+  font-size: 14px;
+  line-height: 1.7;
 }

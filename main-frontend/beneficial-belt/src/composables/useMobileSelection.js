@@ -1,4 +1,3 @@
-// src/composables/useMobileSelection.js
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 export function useMobileSelection(flipContainerRef, options) {
@@ -16,56 +15,43 @@ export function useMobileSelection(flipContainerRef, options) {
     window.getSelection()?.removeAllRanges()
   }
 
-  async function mobileChooseComment() {
-    const text = mobileSelectedText.value
-    const range = mobileSelectedRange.value
-    if (!text || !range) return
+async function mobileChooseComment() {
+  const text = mobileSelectedText.value
+  const range = mobileSelectedRange.value
+  if (!text || !range) return
 
-    // 立即显示“思考中”卡片
-    const rect = range.getBoundingClientRect()
-    showResultCard(text, rect, '🤔 杉汐正在思考...', false)
+  clearMobileSelection()
+  if (highlightText) highlightText(text, range)
 
-    // 立即高亮（当前页）
-    if (highlightText) highlightText(text, range)
+  const rect = range.getBoundingClientRect()
+  showResultCard(text, rect, '<span class="loading-dots">杉汐正在思考<span class="dots">...</span></span>', false, true)  // ★ 加上 true
+  const comment = await generateComment(text)
+  showResultCard(text, rect, comment, true)
+}
 
-    // 生成评论（异步）
-    const comment = await generateComment(text)
+async function mobileChooseSearch() {
+  const text = mobileSelectedText.value
+  const range = mobileSelectedRange.value
+  if (!text || !range) return
 
-    // 更新卡片内容并保存到 annotations
-    showResultCard(text, rect, comment, true)
+  clearMobileSelection()
+  const rect = range.getBoundingClientRect()
+  showResultCard(text, rect, '<span class="loading-dots">杉汐正在搜索<span class="dots">...</span></span>', false, true)  // ★ 文案统一 + true
 
-    clearMobileSelection()
-    closeCard?.()
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `帮我搜索一下“${text}”` })
+    })
+    if (!res.ok) throw new Error('请求失败')
+    const data = await res.json()
+    const reply = data.reply || data.message || data.content || '暂无搜索结果。'
+    showResultCard(text, rect, reply, false)
+  } catch (e) {
+    showResultCard(text, rect, '搜索失败，请重试。', false)
   }
-
-  async function mobileChooseSearch() {
-    const text = mobileSelectedText.value
-    const range = mobileSelectedRange.value
-    if (!text || !range) return
-
-    const rect = range.getBoundingClientRect()
-    showResultCard(text, rect, '🔍 正在搜索...', false)
-
-    clearMobileSelection()
-    closeCard?.()
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `帮我搜索一下“${text}”` })
-      })
-      if (!res.ok) {
-        showResultCard(text, rect, '搜索服务暂不可用，请稍后重试。', false)
-        return
-      }
-      const data = await res.json()
-      const reply = data.reply || data.message || data.content || '暂无搜索结果。'
-      showResultCard(text, rect, reply, false)
-    } catch (e) {
-      showResultCard(text, rect, '搜索失败，请重试。', false)
-    }
-  }
+}
 
   function mobileCopySelection() {
     const text = mobileSelectedText.value
@@ -107,7 +93,7 @@ export function useMobileSelection(flipContainerRef, options) {
     const menuWidth = 180
     let left = rect.left + rect.width / 2 - menuWidth / 2
     left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8))
-    let top = rect.bottom + 24   // 下移 24px，避免与系统菜单重叠
+    let top = rect.bottom + 24
     if (top + 70 > window.innerHeight - 16) top = rect.top - 70
     mobileActionMenuStyle.value = {
       position: 'fixed',
