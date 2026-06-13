@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -27,6 +28,7 @@ func AuthRequired() gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
+			fmt.Printf("❌ JWT验证失败: %v, token: %s\n", err, tokenString[:20]+"...")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "无效token"})
 			c.Abort()
 			return

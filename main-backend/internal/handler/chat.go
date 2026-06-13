@@ -1,14 +1,16 @@
-// backend/internal/handler/chat.go
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"backend/internal/ai"
+	"backend/internal/ai/core"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -23,41 +25,44 @@ type ChatRequest struct {
 	TopP            float64 `json:"top_p,omitempty"`
 	MaxTokens       int     `json:"max_tokens,omitempty"`
 	ReasoningEffort string  `json:"reasoning_effort,omitempty"`
-	NextSong        *struct {
-		Name string `json:"name"`
-		Src  string `json:"src"`
-	} `json:"nextSong,omitempty"`
-	Image string `json:"image,omitempty"`
+	Image           string  `json:"image,omitempty"`
 }
 
 type ChatResponse struct {
-	Reply         string `json:"reply"`
-	Emotion       string `json:"emotion,omitempty"`
-	Action        string `json:"action,omitempty"`
-	Blog          string `json:"blog,omitempty"`
-	BlogPublished bool   `json:"blog_published,omitempty"`
-	TokenUsage    int    `json:"token_usage,omitempty"`
-	Latency       int64  `json:"latency,omitempty"`
+	Reply      string `json:"reply"`
+	Emotion    string `json:"emotion,omitempty"`
+	TokenUsage int    `json:"token_usage,omitempty"`
+	Latency    int64  `json:"latency,omitempty"`
 }
 
 type DSMessage struct {
-	Role      string    `json:"role"`
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
+	Role             string          `json:"role"`
+	Content          string          `json:"content,omitempty"`
+	ReasoningContent string          `json:"reasoning_content,omitempty"`
+	Timestamp        time.Time       `json:"-"`
+	ToolCalls        []core.ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string          `json:"tool_call_id,omitempty"`
 }
 
 type DSReq struct {
-	Model           string      `json:"model"`
-	Messages        []DSMessage `json:"messages"`
-	Temperature     float64     `json:"temperature,omitempty"`
-	TopP            float64     `json:"top_p,omitempty"`
-	MaxTokens       int         `json:"max_tokens,omitempty"`
-	ReasoningEffort string      `json:"reasoning_effort,omitempty"`
+	Model           string                `json:"model"`
+	Messages        []DSMessage           `json:"messages"`
+	Temperature     float64               `json:"temperature,omitempty"`
+	TopP            float64               `json:"top_p,omitempty"`
+	MaxTokens       int                   `json:"max_tokens,omitempty"`
+	ReasoningEffort string                `json:"reasoning_effort,omitempty"`
+	Tools           []core.ToolDefinition `json:"tools,omitempty"`
+	Stream          bool                  `json:"stream,omitempty"`
 }
 
 type DSResp struct {
 	Choices []struct {
-		Message DSMessage `json:"message"`
+		Message struct {
+			Role             string          `json:"role"`
+			Content          string          `json:"content,omitempty"`
+			ReasoningContent string          `json:"reasoning_content,omitempty"`
+			ToolCalls        []core.ToolCall `json:"tool_calls,omitempty"`
+		} `json:"message"`
 	} `json:"choices"`
 	Usage struct {
 		TotalTokens int `json:"total_tokens"`
@@ -73,16 +78,9 @@ func min(a, b int) int {
 	return b
 }
 
-// buildSystemPrompt 构造完整的系统提示词
 func buildSystemPrompt(req ChatRequest, c *gin.Context, memoryStore *MemoryStore) string {
-	prompt := ai.DeepSeekPrompt
+	prompt := core.SystemPrompt
 
-	// 切歌信息
-	if req.NextSong != nil && req.NextSong.Name != "" {
-		prompt += fmt.Sprintf("\n朋友想要切歌，下一首歌是《%s》。请在你回复朋友时，自然地评论一下这首歌，表达你对这首歌的感受。", req.NextSong.Name)
-	}
-
-	// 身份识别
 	authHeader := c.GetHeader("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
@@ -96,7 +94,6 @@ func buildSystemPrompt(req ChatRequest, c *gin.Context, memoryStore *MemoryStore
 		}
 	}
 
-	// 长期记忆注入
 	if memoryStore != nil {
 		related := memoryStore.SearchSimilar(req.Message, 3)
 		if len(related) > 0 {
@@ -109,16 +106,14 @@ func buildSystemPrompt(req ChatRequest, c *gin.Context, memoryStore *MemoryStore
 		}
 	}
 
-	// 图片分析
 	if req.Image != "" {
 		imageData := req.Image
 		if idx := strings.Index(imageData, "base64,"); idx != -1 {
 			imageData = imageData[idx+7:]
 		}
-
 		description, err := AnalyzeImage(imageData, req.Message)
 		if description != "" {
-			fmt.Printf("✅ 图片分析成功\n")
+			fmt.Println("✅ 图片分析成功")
 			prompt += fmt.Sprintf(
 				"\n你刚刚直接看到了一张图片，图片里的内容是：%s\n"+
 					"请用你自己的、自然的方式跟我聊聊你看到的东西。不要说你拿到的只是文字描述，因为这就是你亲眼看到的。",
@@ -134,10 +129,64 @@ func buildSystemPrompt(req ChatRequest, c *gin.Context, memoryStore *MemoryStore
 	return prompt
 }
 
-// ========== 核心处理函数 ==========
+func askDeepSeek(req DSReq) (DSMessage, int, int64) {
+	start := time.Now()
+
+	jsonData, err := json.Marshal(req)
+	if err != nil {
+		fmt.Printf("❌ JSON序列化失败: %v\n", err)
+		return DSMessage{}, 0, 0
+	}
+
+	apiURL := "https://api.deepseek.com/chat/completions"
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+
+	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("❌ 创建请求失败: %v\n", err)
+		return DSMessage{}, 0, 0
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		fmt.Printf("❌ DeepSeek API 请求失败: %v\n", err)
+		return DSMessage{}, 0, 0
+	}
+	defer httpResp.Body.Close()
+
+	body, _ := io.ReadAll(httpResp.Body)
+	fmt.Printf("🤖 DeepSeek API 返回状态: %d, 响应体: %s\n", httpResp.StatusCode, string(body))
+
+	var resp DSResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		fmt.Printf("❌ 解析响应失败: %v\n", err)
+		return DSMessage{}, 0, 0
+	}
+
+	latency := time.Since(start).Milliseconds()
+
+	if len(resp.Choices) == 0 {
+		fmt.Println("⚠️ 响应中没有 choices")
+		return DSMessage{}, 0, latency
+	}
+
+	// 从匿名结构体显式构建 DSMessage，避免类型不匹配
+	choice := resp.Choices[0].Message
+	msg := DSMessage{
+		Role:             choice.Role,
+		Content:          choice.Content,
+		ReasoningContent: choice.ReasoningContent,
+		ToolCalls:        choice.ToolCalls,
+	}
+	return msg, resp.Usage.TotalTokens, latency
+}
+
+// ========== 核心处理函数（重构后） ==========
 
 func HandleChat(c *gin.Context, memoryStore *MemoryStore, sessionStore *SessionStore) {
-	// 1. 解析请求
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fmt.Printf("❌ JSON解析失败: %v\n", err)
@@ -146,32 +195,39 @@ func HandleChat(c *gin.Context, memoryStore *MemoryStore, sessionStore *SessionS
 	}
 	fmt.Printf("📸 收到消息: %s, 图片长度: %d\n", req.Message, len(req.Image))
 
-	// 2. 构造系统提示
 	systemPrompt := buildSystemPrompt(req, c, memoryStore)
 
-	// 3. 获取历史会话并构造完整消息列表
 	history := sessionStore.Get(req.SessionID)
-	var messages []DSMessage
-	messages = append(messages, DSMessage{Role: "system", Content: systemPrompt})
+	messages := []DSMessage{
+		{Role: "system", Content: systemPrompt},
+	}
 	messages = append(messages, history...)
 	messages = append(messages, DSMessage{Role: "user", Content: req.Message})
 
-	// 4. 调用模型（带错误恢复与友好降级）
-	var reply string
+	firstReq := DSReq{
+		Model:           "deepseek-chat",
+		Messages:        messages,
+		Temperature:     req.Temperature,
+		TopP:            req.TopP,
+		MaxTokens:       req.MaxTokens,
+		ReasoningEffort: req.ReasoningEffort,
+		Tools:           core.ChatTools,
+	}
+
+	var assistantMsg DSMessage
 	var tokenUsage int
 	var latency int64
+
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Printf("❌ askDeepSeekWithMessages panic: %v\n", r)
-				reply = ""
+				fmt.Printf("❌ askDeepSeek panic: %v\n", r)
 			}
 		}()
-		reply, tokenUsage, latency = askDeepSeekWithMessages(messages, req.Temperature, req.TopP, req.MaxTokens, req.ReasoningEffort)
+		assistantMsg, tokenUsage, latency = askDeepSeek(firstReq)
 	}()
 
-	// 如果 AI 无回复（包括 DeepSeek API 返回非200或网络错误），返回友好提示
-	if reply == "" {
+	if assistantMsg.Content == "" && len(assistantMsg.ToolCalls) == 0 {
 		fmt.Println("⚠️ DeepSeek 无响应，返回默认提示")
 		c.JSON(http.StatusOK, ChatResponse{
 			Reply:      "杉汐暂时无法回复，请稍后重试。",
@@ -182,90 +238,93 @@ func HandleChat(c *gin.Context, memoryStore *MemoryStore, sessionStore *SessionS
 		return
 	}
 
-	fmt.Printf("🤖 AI原始回复: %q (长度: %d)\n", reply, len(reply))
+	// 工具调用分支
+	if len(assistantMsg.ToolCalls) > 0 {
+		// 存储助手消息，包含 reasoning_content，以便后续工具调用时回传
+		sessionStore.Append(req.SessionID, DSMessage{
+			Role:             "assistant",
+			Content:          assistantMsg.Content,
+			ReasoningContent: assistantMsg.ReasoningContent,
+			ToolCalls:        assistantMsg.ToolCalls,
+		})
 
-	// 更新会话历史
-	sessionStore.Append(req.SessionID, DSMessage{Role: "user", Content: req.Message})
-	sessionStore.Append(req.SessionID, DSMessage{Role: "assistant", Content: reply})
-
-	// 5. 解析回复并处理指令
-	cleanReply, emotion := parseEmotion(reply)
-	cleanReply, action := parseAction(cleanReply)
-	cleanReply = cleanInvalidChars(cleanReply)
-
-	// 处理博客撰写
-	var blogContent string
-	var blogPublished bool
-	if strings.HasPrefix(action, "write_blog:") {
-		topic := strings.TrimPrefix(action, "write_blog:")
-		blogContent = generateBlogPost(topic)
-		blogPublished = blogContent != ""
-	}
-
-	// 处理联网搜索指令
-	if strings.HasPrefix(action, "web_search:") {
-		query := strings.TrimPrefix(action, "web_search:")
-		fmt.Printf("🔍 触发联网搜索，关键词: %s\n", query)
-		searchResult, err := WebSearch(query)
-		if err != nil || searchResult == "" {
-			fmt.Printf("❌ 联网搜索失败或结果为空\n")
-			c.JSON(http.StatusOK, ChatResponse{
-				Reply:      cleanReply,
-				Emotion:    emotion,
-				TokenUsage: tokenUsage,
-				Latency:    latency,
+		for _, call := range assistantMsg.ToolCalls {
+			result, err := core.ExecuteToolCall(call)
+			if err != nil {
+				sessionStore.Append(req.SessionID, DSMessage{
+					Role:       "tool",
+					Content:    fmt.Sprintf("工具执行失败：%v", err),
+					ToolCallID: call.ID,
+				})
+				continue
+			}
+			sessionStore.Append(req.SessionID, DSMessage{
+				Role:       "tool",
+				Content:    result.Content,
+				ToolCallID: result.ToolCallID,
 			})
-			return
 		}
-		fmt.Printf("✅ 联网搜索成功，返回长度: %d\n", len(searchResult))
 
-		// 将搜索结果追加到历史，并重新生成回复
-		sessionStore.Append(req.SessionID, DSMessage{Role: "user", Content: req.Message})
+		updatedHistory := sessionStore.Get(req.SessionID)
+		secondMessages := []DSMessage{
+			{Role: "system", Content: systemPrompt},
+		}
+		secondMessages = append(secondMessages, updatedHistory...)
+
+		secondReq := DSReq{
+			Model:           "deepseek-chat",
+			Messages:        secondMessages,
+			Temperature:     req.Temperature,
+			TopP:            req.TopP,
+			MaxTokens:       req.MaxTokens,
+			ReasoningEffort: req.ReasoningEffort,
+		}
+
+		var finalMsg DSMessage
+		var finalTokens int
+		var finalLatency int64
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("❌ 第二次 askDeepSeek panic: %v\n", r)
+				}
+			}()
+			finalMsg, finalTokens, finalLatency = askDeepSeek(secondReq)
+		}()
+
+		cleanReply, emotion := parseEmotion(finalMsg.Content)
+		cleanReply = cleanInvalidChars(cleanReply)
+
 		sessionStore.Append(req.SessionID, DSMessage{
 			Role:    "assistant",
-			Content: fmt.Sprintf("朋友，我查到了以下信息：\n%s\n请用自然、简洁的语言把结果告诉朋友。", searchResult),
+			Content: cleanReply,
 		})
-
-		history := sessionStore.Get(req.SessionID)
-		var newMessages []DSMessage
-		newMessages = append(newMessages, DSMessage{Role: "system", Content: systemPrompt})
-		newMessages = append(newMessages, history...)
-		newMessages = append(newMessages, DSMessage{
-			Role:    "user",
-			Content: "请把上面的搜索结果用一句话告诉朋友。",
-		})
-
-		finalReply, finalToken, finalLatency := askDeepSeekWithMessages(newMessages, req.Temperature, req.TopP, req.MaxTokens, req.ReasoningEffort)
-		finalClean, finalEmotion := parseEmotion(finalReply)
-		finalClean, _ = parseAction(finalClean)
-		finalClean = cleanInvalidChars(finalClean)
 
 		c.JSON(http.StatusOK, ChatResponse{
-			Reply:         finalClean,
-			Emotion:       finalEmotion,
-			Blog:          blogContent,
-			BlogPublished: blogPublished,
-			TokenUsage:    finalToken,
-			Latency:       finalLatency,
+			Reply:      cleanReply,
+			Emotion:    emotion,
+			TokenUsage: finalTokens,
+			Latency:    finalLatency,
 		})
 		return
 	}
 
-	// 处理记忆清理指令
-	if action == "clean_memories" {
-		if memoryStore != nil {
-			go memoryStore.CleanMemories()
-		}
-	}
+	// 无工具调用，直接返回
+	cleanReply, emotion := parseEmotion(assistantMsg.Content)
+	cleanReply = cleanInvalidChars(cleanReply)
 
-	// 正常返回
+	sessionStore.Append(req.SessionID, DSMessage{Role: "user", Content: req.Message})
+	sessionStore.Append(req.SessionID, DSMessage{Role: "assistant", Content: cleanReply})
+
 	c.JSON(http.StatusOK, ChatResponse{
-		Reply:         cleanReply,
-		Emotion:       emotion,
-		Action:        action,
-		Blog:          blogContent,
-		BlogPublished: blogPublished,
-		TokenUsage:    tokenUsage,
-		Latency:       latency,
+		Reply:      cleanReply,
+		Emotion:    emotion,
+		TokenUsage: tokenUsage,
+		Latency:    latency,
 	})
+}
+
+func init() {
+	core.RegisterBlogFunc(generateBlogPost)
+	core.RegisterSearchFunc(WebSearch)
 }

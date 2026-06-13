@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"backend/internal/ai/core"
 	"backend/internal/middleware"
 	"context"
 	"fmt"
@@ -11,6 +12,11 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
+	chatHandler := NewChatHandler(memoryStore, sessionStore) // 新增
+	core.RegisterCleanFunc(func() {
+		memoryStore.CleanMemories()
+	})
+
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
@@ -21,6 +27,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		}
 		c.Next()
 	})
+
+	r.POST("/api/chat/stream", chatHandler.StreamChat) // 新增
 	// 以下是你原有的路由，保持不变
 	r.PATCH("/api/posts/:id", UpdatePostTags)
 	r.DELETE("/api/posts/:id", DeletePost)

@@ -763,4 +763,41 @@
   top: auto;
   left: auto;
   transform: none;
+  
+}
+
+/* 移除 bot 消息的气泡边框 */
+.message.bot {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 8px 0 !important;  /* 上下留点内边距，左右去掉 */
+  border-radius: 0 !important;
+}
+
+/* 但保留推理过程和 Markdown 内部元素的边框 */
+.reasoning-stream {
+  border-left: 3px solid #3b82f6;
+  background: #f9fafb;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+
+/* 让表格和代码块保留边框 */
+.markdown-body table,
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #d0d5dd;
+}
+
+.markdown-body pre {
+  border: 1px solid #e5e5e5;
+  background: #f5f5f5;
+}
+
+/* 用户消息保持原样 */
+.message.user {
+  /* 你的用户气泡样式保持不变 */
 }

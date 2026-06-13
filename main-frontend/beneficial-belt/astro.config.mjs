@@ -14,7 +14,6 @@ function replaceSwTimestamp() {
   return {
     name: 'replace-sw-timestamp',
     configResolved(config) {
-      // 获取构建输出目录（默认为 dist）
       swDestPath = path.resolve(config.build.outDir, 'sw.js');
     },
     closeBundle() {
@@ -37,6 +36,8 @@ export default defineConfig({
     define: {
       'process.env': '{}',
       global: 'globalThis',
+      // 以下新增：开发环境标志，在注册 SW 时用来跳过
+      '__DEV__': JSON.stringify(process.env.NODE_ENV === 'development'),
     },
     build: { charset: 'utf8' },
     esbuild: { charset: 'utf8' },
@@ -79,8 +80,7 @@ export default defineConfig({
       },
     },
     plugins: [
-      replaceSwTimestamp(),   // 自动替换时间戳，保证每次构建缓存版本更新
-      // 注意：已删除 VitePWA 插件
+      replaceSwTimestamp(),
     ],
     optimizeDeps: { include: [] },
   },
