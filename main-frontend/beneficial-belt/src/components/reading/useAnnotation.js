@@ -83,7 +83,7 @@ export function useAnnotation(flipContainerRef, currentPage) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: `请用一句话共读以下文字：“${text}”，语气像书友，结合理解和认识。`
+          message: `请用一句话共读以下文字：“${text}”，语气像书友，结合理解和认识，200字内。`
         })
       })
       const data = await response.json()
@@ -92,34 +92,34 @@ export function useAnnotation(flipContainerRef, currentPage) {
       return '杉汐暂时无法共读，但此句确有深意。'
     }
   }
+// 替换 showResultCard 函数
 function showResultCard(text, rangeOrRect, resultText, save = true) {
-  // 获取选区位置
-  let rect
-  if (rangeOrRect && typeof rangeOrRect.left === 'number') {
-    rect = rangeOrRect
-  } else if (rangeOrRect) {
-    rect = rangeOrRect.getBoundingClientRect()
-  } else {
-    rect = { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, bottom: window.innerHeight / 2 }
-  }
+  const maxChars = 200 // 限制显示字数
+  const truncated = resultText.length > maxChars ? resultText.substring(0, maxChars) + '…' : resultText
 
-  const cardWidth = Math.min(280, window.innerWidth - 32)
-
-  // 先设置一个安全的初始样式（透明、定位左上角，不显示）
+  // 卡片样式：固定顶部、最大高度、可滚动
   commentCardStyle.value = {
     position: 'fixed',
-    left: '0px',
-    top: '0px',
-    maxWidth: `${cardWidth}px`,
+    top: '0',
+    left: '0',
+    right: '0',
+    maxWidth: '100%',
+    maxHeight: '40vh',         // 最大高度为视口 40%
+    overflowY: 'auto',        // 超出滚动
     zIndex: 99999,
+    background: '#f7e9d0',
+    border: '1px solid #b8977a',
+    borderRadius: '0 0 12px 12px',
+    padding: '16px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     wordBreak: 'break-word',
-    visibility: 'hidden'
+    display: showCommentCard.value ? 'block' : 'none'
   }
 
   showCommentCard.value = true
   displayedComment.value = ''
   commentTyping.value = true
-  typewrite(resultText)
+  typewrite(truncated)
 
   if (save) {
     annotations.value.push({
@@ -130,37 +130,6 @@ function showResultCard(text, rangeOrRect, resultText, save = true) {
     })
     saveAnnotations()
   }
-
-  // 等待 DOM 渲染完成后，根据实际高度调整位置
-  requestAnimationFrame(() => {
-    const card = document.querySelector('.comment-card')
-    if (!card) return
-
-    const cardRect = card.getBoundingClientRect()
-    const margin = 8
-
-    // 水平定位
-    let left = rect.left + rect.width / 2 - cardRect.width / 2
-    left = Math.max(margin, Math.min(left, window.innerWidth - cardRect.width - margin))
-
-    // 垂直定位：优先下方，若下方空间不足则放上方
-    let top = rect.bottom + margin
-    if (top + cardRect.height > window.innerHeight - margin) {
-      top = rect.top - cardRect.height - margin
-    }
-    top = Math.max(margin, Math.min(top, window.innerHeight - cardRect.height - margin))
-
-    // 最终应用样式
-    commentCardStyle.value = {
-      position: 'fixed',
-      left: `${left}px`,
-      top: `${top}px`,
-      maxWidth: `${cardWidth}px`,
-      zIndex: 99999,
-      wordBreak: 'break-word',
-      visibility: 'visible'
-    }
-  })
 }
   function closeCard() {
     showCommentCard.value = false

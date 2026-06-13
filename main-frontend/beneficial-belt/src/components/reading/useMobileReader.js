@@ -6,56 +6,13 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
   const htmlPages = ref([])
   const mobilePageIndex = ref(0)
 
-  // HTML 辅助函数
+  // ─── HTML 辅助函数 ──────────
   function escapeHtml(str) {
     const div = document.createElement('div')
     div.textContent = str
     return div.innerHTML
   }
-// 在 useMobileReader 函数内部添加
-function applyAnnotationsToPage() {
-  const pageElement = document.querySelector('.mobile-page-view')
-  if (!pageElement) return
 
-  // 从 localStorage 读取所有批注
-  const stored = localStorage.getItem('shanxi_annotations')
-  const annotations = stored ? JSON.parse(stored) : []
-
-  // 遍历文本节点，查找批注文本并包裹高亮 span
-  const walker = document.createTreeWalker(pageElement, NodeFilter.SHOW_TEXT)
-  const nodesToReplace = []
-  while (walker.nextNode()) {
-    const node = walker.currentNode
-    for (const anno of annotations) {
-      const idx = node.textContent.indexOf(anno.text)
-      if (idx !== -1) {
-        nodesToReplace.push({ node, text: anno.text, offset: idx })
-      }
-    }
-  }
-
-  // 替换文本节点为高亮 span
-  nodesToReplace.forEach(({ node, text, offset }) => {
-    const before = document.createTextNode(node.textContent.slice(0, offset))
-    const after = document.createTextNode(node.textContent.slice(offset + text.length))
-    const span = document.createElement('span')
-    span.className = 'shanxi-highlight'
-    span.textContent = text
-    // 使用与 useAnnotation 中相同的样式
-    span.style.cssText = `
-      background-color: rgba(180, 80, 50, 0.25) !important;
-      display: inline !important;
-      line-height: inherit !important;
-      padding: 0 !important; margin: 0 !important;
-      border: none !important; outline: none !important;
-      box-shadow: none !important; border-radius: 0 !important;
-    `
-    node.parentNode.insertBefore(before, node)
-    node.parentNode.insertBefore(span, node)
-    node.parentNode.insertBefore(after, node)
-    node.parentNode.removeChild(node)
-  })
-}
   function createCoverHTML(title) {
     const safe = escapeHtml(title)
     return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a,#2c3e50);display:flex;flex-direction:column;justify-content:center;align-items:center;color:#e8d5b7;font-family:Georgia,serif;"><h1>${safe}</h1><p>杉汐注</p></div>`
@@ -65,13 +22,13 @@ function applyAnnotationsToPage() {
     return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a,#2c3e50);display:flex;justify-content:center;align-items:center;color:#e8d5b7;">封底</div>`
   }
 
-  // 翻页限制，禁止翻到封面
+  // ─── 翻页（禁止翻到封面） ──
   function mobileFlipPrev() {
     if (mobilePageIndex.value > 1) {
       mobilePageIndex.value--
       currentPage.value = mobilePageIndex.value - 1
       savePosition()
-       applyAnnotationsToPage()   // ★ 重新应用高亮
+      nextTick(() => applyAnnotationsToPage())
     }
   }
 
@@ -80,7 +37,7 @@ function applyAnnotationsToPage() {
       mobilePageIndex.value++
       currentPage.value = mobilePageIndex.value - 1
       savePosition()
-       applyAnnotationsToPage()   // ★ 重新应用高亮
+      nextTick(() => applyAnnotationsToPage())
     }
   }
 
@@ -100,7 +57,73 @@ function applyAnnotationsToPage() {
     }
   }
 
-  // 流式排版，优先从 IndexedDB 加载缓存，否则边排边显示
+  // ─── 批注高亮恢复（翻页后自动应用） ──
+  function applyAnnotationsToPage() {
+    const page = document.querySelector('.mobile-page-view')
+    if (!page) return
+
+    const stored = localStorage.getItem('shanxi_annotations')
+    if (!stored) return
+    const annotations = JSON.parse(stored)
+
+    const walker = document.createTreeWalker(page, NodeFilter.SHOW_TEXT)
+    const tasks = []
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      // 跳过已位于 shanxi-highlight 内的文本节点
+      if (node.parentElement && node.parentElement.classList.contains('shanxi-highlight')) continue
+
+      for (const anno of annotations) {
+        const idx = node.textContent.indexOf(anno.text)
+        if (idx !== -1) {
+          tasks.push({ node, text: anno.text, offset: idx })
+        }
+      }
+    }
+
+    tasks.forEach(({ node, text, offset }) => {
+      const before = document.createTextNode(node.textContent.substring(0, offset))
+      const after = document.createTextNode(node.textContent.substring(offset + text.length))
+      const span = document.createElement('span')
+      span.className = 'shanxi-highlight'
+      span.textContent = text
+      // 与 useAnnotation 完全相同的样式，确保不影响布局
+      span.style.cssText = `
+        background-color: rgba(180, 80, 50, 0.25) !important;
+        display: inline !important;
+        line-height: inherit !important;
+        font-size: inherit !important;
+        font-family: inherit !important;
+        font-weight: inherit !important;
+        font-style: inherit !important;
+        vertical-align: baseline !important;
+        white-space: inherit !important;
+        word-spacing: inherit !important;
+        letter-spacing: inherit !important;
+        text-indent: inherit !important;
+        text-transform: inherit !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        width: auto !important;
+        height: auto !important;
+        float: none !important;
+        clear: none !important;
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+      `
+      node.parentNode.insertBefore(before, node)
+      node.parentNode.insertBefore(span, node)
+      node.parentNode.insertBefore(after, node)
+      node.parentNode.removeChild(node)
+    })
+  }
+
+  // ─── 流式排版与缓存 ──────────
   async function initMobileView() {
     const text = reader.fullText.value || ''
     const fontSize = reader.fontSize.value
@@ -134,6 +157,7 @@ function applyAnnotationsToPage() {
       }
       statusMsg.value = ''
       progressPercent.value = 100
+      nextTick(() => applyAnnotationsToPage())
       return
     }
 
@@ -141,7 +165,6 @@ function applyAnnotationsToPage() {
     const coverHTML = createCoverHTML(reader.title.value)
     htmlPages.value = [coverHTML]
     totalPages.value = 1
-    // 暂设封面，正文出现后自动跳转
     mobilePageIndex.value = 0
     currentPage.value = 0
 
@@ -174,6 +197,7 @@ function applyAnnotationsToPage() {
         setCachedPages(bookId, fontSize, fullPages)
         statusMsg.value = ''
         progressPercent.value = 100
+        nextTick(() => applyAnnotationsToPage())
         return
       }
 
