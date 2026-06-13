@@ -102,47 +102,67 @@ router.post('/buy', async (req, res) => {
   }
 })
 
-// 搜索物品
+// 搜索物品（带分页、排序、关键词、价格、卖家过滤）
 router.get('/search', async (req, res) => {
-  const { keyword, minPrice, maxPrice, page = 1, limit = 20, sort = 'price_asc' } = req.query
+  const { keyword, minPrice, maxPrice, page = 1, limit = 20, sort = 'price_asc', sellerId } = req.query
   const offset = (page - 1) * limit
 
-  let query = `SELECT * FROM market_listings WHERE status = 'active'`
+  // 构建 WHERE 条件
+  const conditions = [`status = 'active'`]
   const params = []
 
   if (keyword) {
-    query += ` AND (item_id ILIKE $${params.length + 1} OR item_data->>'name' ILIKE $${params.length + 1})`
     params.push(`%${keyword}%`)
+    conditions.push(`(item_id ILIKE $${params.length} OR item_data->>'name' ILIKE $${params.length})`)
   }
   if (minPrice) {
-    query += ` AND price >= $${params.length + 1}`
     params.push(minPrice)
+    conditions.push(`price >= $${params.length}`)
   }
   if (maxPrice) {
-    query += ` AND price <= $${params.length + 1}`
     params.push(maxPrice)
+    conditions.push(`price <= $${params.length}`)
+  }
+  if (sellerId) {
+    params.push(sellerId)
+    conditions.push(`seller_id = $${params.length}`)
   }
 
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  // 排序
+  let order = ''
   switch (sort) {
-    case 'price_asc': query += ' ORDER BY price ASC'; break
-    case 'price_desc': query += ' ORDER BY price DESC'; break
-    case 'newest': query += ' ORDER BY created_at DESC'; break
-    default: query += ' ORDER BY price ASC'
+    case 'price_asc': order = 'ORDER BY price ASC'; break
+    case 'price_desc': order = 'ORDER BY price DESC'; break
+    case 'newest': order = 'ORDER BY created_at DESC'; break
+    default: order = 'ORDER BY price ASC'
   }
-
-  query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
-  params.push(limit, offset)
 
   try {
-    const result = await pool.query(query, params)
-    res.json({ listings: result.rows, page: Number(page), limit: Number(limit) })
+    // 先查总数
+    const countSql = `SELECT COUNT(*) FROM market_listings ${where}`
+    const countResult = await pool.query(countSql, params)
+    const total = parseInt(countResult.rows[0].count)
+
+    // 查数据
+    const dataSql = `SELECT * FROM market_listings ${where} ${order} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+    params.push(limit, offset)
+    const dataResult = await pool.query(dataSql, params)
+
+    res.json({
+      listings: dataResult.rows,
+      page: Number(page),
+      limit: Number(limit),
+      total
+    })
   } catch (err) {
     console.error('搜索失败:', err)
     res.status(500).json({ error: '查询失败' })
   }
 })
 
-// 下架物品
+// 下架物品（取消出售）
 router.post('/cancel', async (req, res) => {
   const { listingId } = req.body
   const userId = req.userId
@@ -162,15 +182,16 @@ router.post('/cancel', async (req, res) => {
 
     const listing = listingRes.rows[0]
 
+    // 标记为取消
     await client.query(
       `UPDATE market_listings SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
       [listingId]
     )
 
+    // 归还物品到库存（不合并，直接插入新行）
     await client.query(
       `INSERT INTO player_inventory (player_id, item_id, item_data, quantity)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (player_id, item_id) DO UPDATE SET quantity = player_inventory.quantity + $4`,
+       VALUES ($1, $2, $3, $4)`,
       [userId, listing.item_id, listing.item_data, listing.quantity]
     )
 

@@ -107,7 +107,12 @@ onMounted(async () => {
 })
 
 function openBook(book) {
-  window.location.href = `/read?book=${encodeURIComponent(book.id)}`
+  const baseUrl = `/read?book=${encodeURIComponent(book.id)}`;
+  if (book.id.startsWith('local_')) {
+    window.location.href = baseUrl + '&local=true';
+  } else {
+    window.location.href = baseUrl;
+  }
 }
 
 function onBooksUploaded(newBooks) {

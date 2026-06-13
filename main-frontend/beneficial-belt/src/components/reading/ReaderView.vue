@@ -223,10 +223,11 @@ function jumpToChapter(item) {
 }
 
 // ★ 离线缓存与文本加载
+// ★ 离线缓存与文本加载（已整合本地读取）
 onMounted(async () => {
   // 立即缓存当前阅读页 URL
   if ('caches' in window) {
-    caches.open('shanxi-reader-v5').then(cache => {
+    caches.open('shanxi-reader-v6').then(cache => {
       cache.add(window.location.href).catch(() => {})
     })
   }
@@ -234,39 +235,48 @@ onMounted(async () => {
   try {
     const params = new URLSearchParams(window.location.search)
     let file = params.get('book')
+    const isLocal = params.get('local') === 'true'
+
     if (!file) {
       // 没有 book 参数，尝试从 localStorage 恢复上次阅读的书籍
       const lastBook = localStorage.getItem('shanxi_last_book')
       if (lastBook) {
         file = lastBook
-        // 可选：更新 URL 参数（不刷新页面）
         const newUrl = new URL(window.location.href)
         newUrl.searchParams.set('book', file)
         window.history.replaceState({}, '', newUrl)
       } else {
-        // 真正没有书籍，跳转书架
         window.location.href = '/reading-hut'
         return
       }
     }
-    // 保存当前书籍 ID 到 localStorage
+
     localStorage.setItem('shanxi_last_book', file)
     reader.title.value = file.replace(/\.txt$/i, '')
 
     let text = ''
-    try {
-      const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
-      if (res.ok) text = await res.text()
-    } catch (e) {
-      console.warn('书籍文本获取失败，将使用本地缓存')
-      // 离线情况下，可以从 IndexedDB 读取已缓存的书籍文本（需要你实现缓存策略）
-      // 这里先留空，用户需提前联网下载过
+
+    if (isLocal && typeof window.getBookText === 'function') {
+      // 本地导入的书籍，直接从安卓文件系统读取
+      text = window.getBookText(file)
+      if (!text) {
+        throw new Error('本地书籍读取失败')
+      }
+      console.log('[书籍文本] 从安卓本地读取成功')
+    } else {
+      // 在线书籍，尝试网络获取（失败不中断，可能使用缓存）
+      try {
+        const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
+        if (res.ok) text = await res.text()
+      } catch (e) {
+        console.warn('书籍文本获取失败，将尝试使用本地缓存')
+        // 如果之前已经缓存过文本，可以在后续从 IndexedDB 等地方获取（排版缓存已处理）
+      }
     }
 
     reader.fullText.value = text
     await nextTick()
     outline.value = parseOutline(text || '')
-    // 只有在有文本时才恢复进度（避免空数据）
     if (text) {
       reader.restoreProgress()
     }

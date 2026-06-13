@@ -469,19 +469,19 @@
 .mobile-action-menu {
   flex-direction: row !important;   /* 横排 */
   gap: 0 !important;
-  padding: 6px 8px !important;
+   padding: 2px 4px !important;
   background: rgba(255, 255, 255, 0.72) !important; /* 半透明白底 */
   backdrop-filter: blur(14px);      /* 毛玻璃 */
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 24px !important;   /* 胶囊形状 */
+  border-radius: 8px !important;   /* 胶囊形状 */
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 
 .mobile-action-menu .menu-item {
-  font-size: 0.9rem;
-  padding: 8px 14px;
-  border-radius: 20px;              /* 按钮圆角 */
+  font-size: 0.8rem;
+  padding: 8px 10px;
+  border-radius: 8px;              /* 按钮圆角 */
   margin: 0 2px;
   color: #333;
   background: transparent;

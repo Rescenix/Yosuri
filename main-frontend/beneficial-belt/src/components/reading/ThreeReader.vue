@@ -62,6 +62,9 @@
         <div class="menu-item" @click="isMobile ? mobileChooseSearch() : desktopChooseSearch()">
           <Icon icon="ph:magnifying-glass" width="16" /><span>搜索</span>
         </div>
+        <div class="menu-item" @click="isMobile ? mobileCopySelection() : copyDesktopSelection()">
+          <Icon icon="ph:copy" width="16" /><span>复制</span>
+        </div>
       </div>
     </Teleport>
   </div>
@@ -123,7 +126,6 @@ const { htmlPages, mobilePageIndex, mobileFlipPrev, mobileFlipNext, initMobileVi
 
 const textProvider = () => props.reader.fullText.value || ''
 
-// 计算真实的正文页数（去掉封面和封底）
 const realTotalPages = computed(() => {
   if (isMobile.value) {
     return Math.max(0, htmlPages.value.length - 2)
@@ -158,10 +160,24 @@ const {
 
 const {
   mobileShowActionMenu, mobileActionMenuStyle, clearMobileSelection,
-  mobileChooseComment, mobileChooseSearch,
+  mobileChooseComment, mobileChooseSearch, mobileCopySelection,
 } = useMobileSelection(flipContainerRef, {
   highlightText, generateComment, showResultCard, closeCard,
 })
+
+// 桌面端复制功能（可通过 Clipboard API 或 execCommand 实现，这里提供一个简单实现）
+function copyDesktopSelection() {
+  const text = window.getSelection()?.toString().trim()
+  if (!text) return
+  navigator.clipboard.writeText(text).catch(() => {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  })
+}
 
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 
@@ -276,7 +292,7 @@ async function reInit() {
   destroyFlip()
   statusMsg.value = '正在准备...'
   if (isMobile.value) {
-    await initMobileView()   // 直接调用，内部不会修改页码
+    await initMobileView()
   } else {
     try {
       const flip = await desktopInitFlip()
@@ -308,7 +324,6 @@ onMounted(async () => {
 
   if (isMobile.value) {
     await initMobileView()
-    // 从 localStorage 恢复进度（useMobileReader 内部会处理保存和恢复）
     const saved = parseInt(localStorage.getItem(`${reader.title.value}_pos`) || '1')
     if (saved > 1 && saved < htmlPages.value.length) {
       mobilePageIndex.value = saved
@@ -346,7 +361,6 @@ onBeforeUnmount(() => {
   clearMobileSelection()
 })
 
-// ★ 每日阅读进度记录（只统计正向翻页）
 let lastPageForStats = 0
 function saveDailyProgress() {
   const today = new Date().toLocaleDateString()

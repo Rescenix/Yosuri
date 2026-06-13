@@ -45,7 +45,7 @@ export function useMobileSelection(flipContainerRef, annotation) {
     mobileSelectedRange.value = range
 
     const rect = range.getBoundingClientRect()
-    const menuWidth = 180  // 毛玻璃菜单估计宽度
+    const menuWidth = 180
     let left = rect.left + rect.width / 2 - menuWidth / 2
     left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8))
     let top = rect.bottom + 8
@@ -108,6 +108,47 @@ export function useMobileSelection(flipContainerRef, annotation) {
     }
   }
 
+  // 新增复制功能，静默 Toast 提示
+  function mobileCopySelection() {
+    const text = mobileSelectedText.value
+    if (!text) return
+
+    const copySuccess = () => {
+      // 优先使用安卓接口 Toast，否则降级为静默成功
+      if (window.androidJsBridge && window.androidJsBridge.toast) {
+        window.androidJsBridge.toast('复制成功')
+      }
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(copySuccess).catch(() => {
+        // 降级方案：创建 textarea
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.left = '-9999px'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+        copySuccess()
+      })
+    } else {
+      // 不支持 Clipboard API，直接降级
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      copySuccess()
+    }
+
+    clearMobileSelection()
+  }
+
   onMounted(() => {
     document.addEventListener('selectionchange', onSelectionChange)
     document.addEventListener('touchstart', onDocumentTouchStart, true)
@@ -126,6 +167,7 @@ export function useMobileSelection(flipContainerRef, annotation) {
     clearMobileSelection,
     mobileChooseComment,
     mobileChooseSearch,
+    mobileCopySelection,         // 新增导出
     mobileSelectedText,
     mobileSelectedRange,
   }

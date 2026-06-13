@@ -23,48 +23,44 @@ export function useAnnotation(flipContainerRef, currentPage) {
     window.dispatchEvent(new CustomEvent('annotations-updated'))
   }
 
-function highlightText(text, range) {
-  const content = range.extractContents()
-  const span = document.createElement('span')
-  span.className = 'shanxi-highlight'
-  span.appendChild(content)
+  // 批注高亮：仅设置背景色，不影响任何布局属性
+  function highlightText(text, range) {
+    const content = range.extractContents()
+    const span = document.createElement('span')
+    span.className = 'shanxi-highlight'
+    span.appendChild(content)
 
-  // 用 style 属性设置所有样式，并添加一个特殊标记类
-  span.style.cssText = `
-    background-color: rgba(180, 80, 50, 0.25) !important;
-    display: inline !important;
-    line-height: inherit !important;
-    font-size: inherit !important;
-    font-family: inherit !important;
-    font-weight: inherit !important;
-    font-style: inherit !important;
-    vertical-align: baseline !important;
-    white-space: inherit !important;
-    word-spacing: inherit !important;
-    letter-spacing: inherit !important;
-    text-indent: inherit !important;
-    text-transform: inherit !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    width: auto !important;
-    height: auto !important;
-    float: none !important;
-    clear: none !important;
-    position: static !important;
-    top: auto !important;
-    left: auto !important;
-  `
-  span.classList.add('highlight-done')  // 标记已完成高亮
+    span.style.cssText = `
+      background-color: rgba(180, 80, 50, 0.25) !important;
+      display: inline !important;
+      line-height: inherit !important;
+      font-size: inherit !important;
+      font-family: inherit !important;
+      font-weight: inherit !important;
+      font-style: inherit !important;
+      vertical-align: baseline !important;
+      white-space: inherit !important;
+      word-spacing: inherit !important;
+      letter-spacing: inherit !important;
+      text-indent: inherit !important;
+      text-transform: inherit !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      outline: none !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      width: auto !important;
+      height: auto !important;
+      float: none !important;
+      clear: none !important;
+      position: static !important;
+      top: auto !important;
+      left: auto !important;
+    `
+    range.insertNode(span)
+  }
 
-  range.insertNode(span)
-
-  // 验证背景色是否生效（开发时可保留，发布后删除）
-  console.log('高亮背景:', span.style.backgroundColor)
-}
   function typewrite(text) {
     clearInterval(typingTimer)
     displayedComment.value = ''
@@ -97,81 +93,77 @@ function highlightText(text, range) {
     }
   }
 
-function showResultCard(text, rangeOrRect, resultText, save = true) {
-  let rect
-  if (rangeOrRect && typeof rangeOrRect.left === 'number') {
-    rect = rangeOrRect
-  } else if (rangeOrRect) {
-    rect = rangeOrRect.getBoundingClientRect()
-  } else {
-    rect = {
-      left: window.innerWidth / 2,
-      top: window.innerHeight / 2,
-      width: 0,
-      bottom: window.innerHeight / 2
-    }
-  }
-
-  const cardWidth = Math.min(280, window.innerWidth - 32)
-  let left = rect.left + rect.width / 2 - cardWidth / 2
-  left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
-  let top = rect.bottom + 8
-
-  // 先设置初始样式（隐藏，避免闪烁）
-  commentCardStyle.value = {
-    position: 'fixed',
-    left: `${left}px`,
-    top: `${top}px`,
-    maxWidth: `${cardWidth}px`,
-    zIndex: 99999,
-    wordBreak: 'break-word',
-    visibility: 'hidden'
-  }
-
-  showCommentCard.value = true
-  displayedComment.value = ''
-  commentTyping.value = true
-  typewrite(resultText)
-
-  if (save) {
-    annotations.value.push({
-      text: selectedText.value || text,
-      comment: resultText,
-      page: currentPage.value,
-      time: Date.now()
-    })
-    saveAnnotations()
-  }
-
-  // 渲染后根据实际高度调整垂直位置
-  requestAnimationFrame(() => {
-    const card = document.querySelector('.comment-card')
-    if (card) {
-      const cardRect = card.getBoundingClientRect()
-      // 底部溢出 → 移到选区上方
-      if (cardRect.bottom > window.innerHeight - 8) {
-        top = rect.top - cardRect.height - 8
-        if (top < 8) top = 8
-      }
-      // 顶部溢出保护
-      if (top < 8) top = 8
-      // 水平再次确认
-      if (cardRect.right > window.innerWidth - 8) {
-        left = window.innerWidth - cardRect.width - 8
-      }
-      if (left < 8) left = 8
-
-      commentCardStyle.value = {
-        ...commentCardStyle.value,
-        left: `${left}px`,
-        top: `${top}px`,
-        visibility: 'visible'
-      }
+  function showResultCard(text, rangeOrRect, resultText, save = true) {
+    let rect
+    if (rangeOrRect && typeof rangeOrRect.left === 'number') {
+      rect = rangeOrRect
+    } else if (rangeOrRect) {
+      rect = rangeOrRect.getBoundingClientRect()
     } else {
-      commentCardStyle.value.visibility = 'visible'
+      rect = {
+        left: window.innerWidth / 2,
+        top: window.innerHeight / 2,
+        width: 0,
+        bottom: window.innerHeight / 2
+      }
     }
-  })
-}
+
+    const cardWidth = Math.min(280, window.innerWidth - 32)
+    let left = rect.left + rect.width / 2 - cardWidth / 2
+    left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8))
+    let top = rect.bottom + 8
+
+    commentCardStyle.value = {
+      position: 'fixed',
+      left: `${left}px`,
+      top: `${top}px`,
+      maxWidth: `${cardWidth}px`,
+      zIndex: 99999,
+      wordBreak: 'break-word',
+      visibility: 'hidden'
+    }
+
+    showCommentCard.value = true
+    displayedComment.value = ''
+    commentTyping.value = true
+    typewrite(resultText)
+
+    if (save) {
+      annotations.value.push({
+        text: selectedText.value || text,
+        comment: resultText,
+        page: currentPage.value,
+        time: Date.now()
+      })
+      saveAnnotations()
+    }
+
+    requestAnimationFrame(() => {
+      const card = document.querySelector('.comment-card')
+      if (card) {
+        const cardRect = card.getBoundingClientRect()
+        if (cardRect.bottom > window.innerHeight - 8) {
+          top = rect.top - cardRect.height - 8
+          if (top < 8) top = 8
+        }
+        if (top < 8) top = 8
+        if (cardRect.right > window.innerWidth - 8) {
+          left = window.innerWidth - cardRect.width - 8
+        }
+        if (left < 8) left = 8
+
+        commentCardStyle.value = {
+          ...commentCardStyle.value,
+          left: `${left}px`,
+          top: `${top}px`,
+          visibility: 'visible'
+        }
+      } else {
+        commentCardStyle.value.visibility = 'visible'
+      }
+    })
+  }
+
   function closeCard() {
     showCommentCard.value = false
     clearInterval(typingTimer)
@@ -184,7 +176,6 @@ function showResultCard(text, rangeOrRect, resultText, save = true) {
       document.removeEventListener('mousedown', outsideClickListener)
       outsideClickListener = null
     }
-    // 不清除选区，保留高亮
   }
 
   async function chooseComment() {
@@ -205,7 +196,6 @@ function showResultCard(text, rangeOrRect, resultText, save = true) {
   }
 
   function onMouseUp(event) {
-    // 桌面端专用，移动端不要调用此函数
     const selection = window.getSelection()
     const text = selection.toString().trim()
     if (text.length === 0) return
@@ -232,7 +222,6 @@ function showResultCard(text, rangeOrRect, resultText, save = true) {
     }
     showActionMenu.value = true
 
-    // 不清除选区，保留蓝色高亮
     if (outsideClickListener) document.removeEventListener('mousedown', outsideClickListener)
     outsideClickListener = (e) => {
       if (!e.target.closest('.action-menu')) {
@@ -254,7 +243,6 @@ function showResultCard(text, rangeOrRect, resultText, save = true) {
     closeCard,
     chooseComment,
     chooseSearch,
-    // 移动端需要的函数
     highlightText,
     generateComment,
     showResultCard,

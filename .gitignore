@@ -4,3 +4,7 @@ frontend/dist/shanca.tar.gz
 
 # 依赖目录（重要！）
 node_modules/
+
+.env
+*.env
+main-backend/.env
