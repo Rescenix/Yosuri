@@ -1,6 +1,7 @@
-const CACHE_NAME = 'shanxi-reader-v6';  // 更新版本号
+const CACHE_NAME = 'shanxi-reader-v5';
 const PRECACHE_URLS = [
   '/reading-hut/',
+  '/read/',
   '/favicon.ico',
 ];
 
@@ -30,39 +31,25 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/api/')) return;
 
   event.respondWith(
-    new Promise((resolve) => {
-      // 设置总超时 3 秒，确保不白屏
-      const timeoutId = setTimeout(() => {
-        // 超时后，如果是导航请求，返回入口缓存
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(event.request).then((response) => {
+        if (response.ok && event.request.method === 'GET') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => {
         if (event.request.mode === 'navigate') {
-          resolve(caches.match('/reading-hut/'));
-        } else {
-          resolve(new Response('', { status: 408, statusText: 'Timeout' }));
-        }
-      }, 3000);
-
-      caches.match(event.request).then((cached) => {
-        if (cached) {
-          clearTimeout(timeoutId);
-          resolve(cached);
-          return;
-        }
-
-        fetch(event.request).then((response) => {
-          clearTimeout(timeoutId);
-          if (response.ok && event.request.method === 'GET') {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          const url = new URL(event.request.url);
+          // 阅读页请求返回缓存的阅读页外壳
+          if (url.pathname === '/read' || url.pathname === '/read/') {
+            return caches.match('/read/');
           }
-          resolve(response);
-        }).catch(() => {
-          clearTimeout(timeoutId);
-          if (event.request.mode === 'navigate') {
-            resolve(caches.match('/reading-hut/'));
-          } else {
-            resolve(new Response('Network error', { status: 408 }));
-          }
-        });
+          return caches.match('/reading-hut/');
+        }
+        return new Response('离线无法加载此资源', { status: 503 });
       });
     })
   );

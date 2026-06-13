@@ -227,7 +227,7 @@ function jumpToChapter(item) {
 onMounted(async () => {
   // 立即缓存当前阅读页 URL
   if ('caches' in window) {
-    caches.open('shanxi-reader-v6').then(cache => {
+    caches.open('shanxi-reader-v5').then(cache => {
       cache.add(window.location.href).catch(() => {})
     })
   }
