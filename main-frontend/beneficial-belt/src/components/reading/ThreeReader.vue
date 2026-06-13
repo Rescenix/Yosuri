@@ -134,7 +134,6 @@ const {
   flipToCoverAnimated, flipPrev, flipNext,
 } = usePageFlip(flipContainerRef, props.reader, width, height, statusMsg, progressPercent)
 
-// 高亮器
 const { 
   init: initHighlighter, 
   restoreHighlights, 
@@ -144,7 +143,6 @@ const {
   destroy: destroyHighlighter 
 } = useWebHighlighter()
 
-// 移动端 reader
 const mobile = useMobileReader(
   flipContainerRef, props.reader, statusMsg, progressPercent,
   totalPages, currentPage, restoreHighlights
@@ -152,11 +150,8 @@ const mobile = useMobileReader(
 const { htmlPages, mobilePageIndex, mobileFlipPrev, mobileFlipNext, initMobileView } = mobile
 
 const textProvider = () => props.reader.fullText.value || ''
-
 const realTotalPages = computed(() => {
-  if (isMobile.value) {
-    return Math.max(0, htmlPages.value.length - 2)
-  }
+  if (isMobile.value) return Math.max(0, htmlPages.value.length - 2)
   return totalPages.value
 })
 
@@ -182,93 +177,41 @@ const {
   showCommentCard, commentCardStyle, displayedComment, commentTyping,
   showActionMenu, actionMenuStyle, onMouseUp, closeCard,
   chooseSearch: desktopChooseSearch,
-  generateComment, showResultCard,
+  generateComment, showResultCard, highlightText,
 } = annotation
 
-// ========== 桌面端注释（使用高亮器） ==========
+// ========== 桌面端注释 ==========
 async function desktopChooseComment() {
   const selection = window.getSelection()
   const text = selection.toString().trim()
   if (!text) return
   const range = selection.getRangeAt(0).cloneRange()
-  
   const highlightId = await createHighlightFromRange(range)
   if (!highlightId) return
-  
   const comment = await generateComment(text)
   addCommentToHighlight(highlightId, comment)
   setCurrentPageForLatestHighlight(currentPage.value)
-  
   const rect = range.getBoundingClientRect()
-  showResultCard(text, rect, comment, false)  // 不重复保存
-  // 关闭菜单（简单处理）
+  showResultCard(text, rect, comment, false)
   showActionMenu.value = false
 }
 
-// ========== 移动端选区菜单（重写） ==========
+// ========== 移动端选区菜单 ==========
+// 🔥 关键：传入 highlightText 用于回退高亮
 const {
   mobileShowActionMenu, mobileActionMenuStyle, clearMobileSelection,
-  mobileSelectedText, mobileSelectedRange,activeMenuItem,   // 添加这一行
-} = useMobileSelection(flipContainerRef, {})
-
-// 移动端搜索（保持不变）
-async function mobileChooseSearch() {
-  const text = mobileSelectedText.value
-  const range = mobileSelectedRange.value
-  if (!text || !range) return
-  const rect = range.getBoundingClientRect()
-  clearMobileSelection()
-  closeCard()
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `帮我搜索一下“${text}”` })
-    })
-    if (!res.ok) { showResultCard(text, rect, '搜索服务暂不可用，请稍后重试。', false); return }
-    const data = await res.json()
-    const reply = data.reply || data.message || data.content || '暂无搜索结果。'
-    showResultCard(text, rect, reply, false)
-  } catch (e) {
-    showResultCard(text, rect, '搜索失败，请重试。', false)
-  }
-}
-
-// 移动端复制
-function mobileCopySelection() {
-  const text = mobileSelectedText.value
-  if (!text) return
-  navigator.clipboard?.writeText(text)?.catch(() => {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.style.position = 'fixed'
-    textarea.style.left = '-9999px'
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-  })
-  clearMobileSelection()
-}
-
-// 移动端注释（使用高亮器）
-async function mobileChooseComment() {
-  const text = mobileSelectedText.value
-  const range = mobileSelectedRange.value
-  if (!text || !range) return
-  
-  const highlightId = await createHighlightFromRange(range)
-  if (!highlightId) return
-  
-  const comment = await generateComment(text)
-  addCommentToHighlight(highlightId, comment)
-  setCurrentPageForLatestHighlight(currentPage.value)
-  
-  const rect = range.getBoundingClientRect()
-  showResultCard(text, rect, comment, false)
-  clearMobileSelection()
-  closeCard()
-}
+  mobileChooseComment, mobileChooseSearch, mobileCopySelection,
+  mobileSelectedText, mobileSelectedRange, activeMenuItem,
+} = useMobileSelection(flipContainerRef, {
+  generateComment,
+  showResultCard,
+  closeCard,
+  createHighlightFromRange,
+  addCommentToHighlight,
+  setCurrentPageForLatestHighlight,
+  currentPage,
+  highlightText,   // ✅ 传入旧高亮函数
+})
 
 // 桌面端复制
 function copyDesktopSelection() {
@@ -286,9 +229,7 @@ function copyDesktopSelection() {
 
 watch(isMobile, (val) => { if (!val) clearMobileSelection() })
 
-function highlightOnPage(text, targetIndex) {
-  // 保留空函数，避免报错
-}
+function highlightOnPage(text, targetIndex) { /* 保留空函数 */ }
 
 function handleSidebarFlip(pageIndex, quote) {
   if (isMobile.value) {
