@@ -18,7 +18,7 @@
         </button>
         <div class="book-cover-placeholder" @click="openBook(book)">
           <img v-if="book.cover" :src="book.cover" class="cover-image" />
-          <span v-else class="book-icon">📖</span>
+          <span v-else class="book-icon"></span>
         </div>
         <h3 class="book-title" @click="openBook(book)">{{ book.title }}</h3>
       </div>
@@ -75,9 +75,8 @@ function saveBooksToCache(list) {
 }
 
 async function loadBooks() {
-  // 1. 优先显示缓存数据，提升离线体验
   if (loadBooksFromCache()) {
-    // 后台静默更新（仅在线时成功）
+    // 后台静默更新
     fetch('/api/book/list')
       .then(res => res.json())
       .then(data => {
@@ -85,11 +84,10 @@ async function loadBooks() {
         books.value = list
         saveBooksToCache(list)
       })
-      .catch(() => {})  // 网络失败不影响已显示的数据
+      .catch(() => {})
     return
   }
 
-  // 2. 无缓存，必须网络请求
   try {
     const res = await fetch('/api/book/list')
     if (res.ok) {
@@ -104,14 +102,27 @@ async function loadBooks() {
 
 onMounted(async () => {
   await loadBooks()
+
+  // ★ 暴露全局函数给安卓调用（无多余对象，不干扰组件）
+  window.importLocalBook = (bookJson) => {
+    try {
+      const book = JSON.parse(bookJson)
+      if (!books.value.some(b => b.id === book.id)) {
+        books.value.push(book)
+        saveBooksToCache(books.value)
+      }
+    } catch (e) {
+      console.error('导入本地书籍失败', e)
+    }
+  }
 })
 
 function openBook(book) {
-  const baseUrl = `/read?book=${encodeURIComponent(book.id)}`;
+  const baseUrl = `/read?book=${encodeURIComponent(book.id)}`
   if (book.id.startsWith('local_')) {
-    window.location.href = baseUrl + '&local=true';
+    window.location.href = baseUrl + '&local=true'
   } else {
-    window.location.href = baseUrl;
+    window.location.href = baseUrl
   }
 }
 
@@ -137,11 +148,7 @@ async function handleDeleteBook() {
     const res = await fetch(`/api/book/delete?bookId=${encodeURIComponent(bookId)}`, { method: 'DELETE' })
     const text = await res.text()
     let data
-    try {
-      data = JSON.parse(text)
-    } catch (e) {
-      throw new Error('服务器返回异常: ' + text.slice(0, 200))
-    }
+    try { data = JSON.parse(text) } catch (e) { throw new Error('服务器返回异常: ' + text.slice(0, 200)) }
     if (!res.ok) throw new Error(data.error || '删除失败')
 
     // 清除 IndexedDB 中该书的所有缓存
@@ -154,27 +161,16 @@ async function handleDeleteBook() {
         const cursorRequest = store.openCursor()
         cursorRequest.onsuccess = (event) => {
           const cursor = event.target.result
-          if (cursor) {
-            keys.push(cursor.key)
-            cursor.continue()
-          } else {
-            resolve()
-          }
+          if (cursor) { keys.push(cursor.key); cursor.continue() }
+          else resolve()
         }
         cursorRequest.onerror = () => reject(cursorRequest.error)
       })
       for (const key of keys) {
-        if (key && key.toString().startsWith(`${bookId}_`)) {
-          store.delete(key)
-        }
+        if (key && key.toString().startsWith(`${bookId}_`)) store.delete(key)
       }
-      await new Promise((resolve, reject) => {
-        tx.oncomplete = resolve
-        tx.onerror = reject
-      })
-    } catch (e) {
-      console.warn('清除本地缓存失败:', e)
-    }
+      await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject })
+    } catch (e) { console.warn('清除本地缓存失败:', e) }
 
     editModalVisible.value = false
     await loadBooks()
