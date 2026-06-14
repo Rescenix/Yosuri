@@ -21,6 +21,26 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
     return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a,#2c3e50);display:flex;justify-content:center;align-items:center;color:#e8d5b7;">封底</div>`
   }
 
+  // ★ 统一使用一个 key，与 ThreeReader.vue 中读取的 key 一致
+  function getStorageKey() {
+    return `${reader.title.value}_pos`
+  }
+
+  function savePosition() {
+    try {
+      localStorage.setItem(getStorageKey(), mobilePageIndex.value)
+    } catch (e) {}
+  }
+
+  function loadPosition() {
+    try {
+      const val = localStorage.getItem(getStorageKey())
+      return val !== null ? parseInt(val, 10) : null
+    } catch (e) {
+      return null
+    }
+  }
+
   function mobileFlipPrev() {
     if (mobilePageIndex.value > 1) {
       mobilePageIndex.value--
@@ -33,28 +53,14 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
   }
 
   function mobileFlipNext() {
-    if (mobilePageIndex.value < htmlPages.value.length - 1) {
+    // ★ 不允许翻到封底（封底索引 = htmlPages.length - 1）
+    if (mobilePageIndex.value < htmlPages.value.length - 2) {
       mobilePageIndex.value++
       currentPage.value = mobilePageIndex.value - 1
       savePosition()
       nextTick(() => {
         if (onPageChanged) onPageChanged()
       })
-    }
-  }
-
-  function savePosition() {
-    try {
-      localStorage.setItem(`mobile_pos_${reader.title.value}`, mobilePageIndex.value)
-    } catch (e) {}
-  }
-
-  function loadPosition() {
-    try {
-      const val = localStorage.getItem(`mobile_pos_${reader.title.value}`)
-      return val !== null ? parseInt(val, 10) : null
-    } catch (e) {
-      return null
     }
   }
 
@@ -80,13 +86,21 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       totalPages.value = cached.length
 
       const saved = loadPosition()
+      // ★ 修复：如果保存的索引是封底（最后一项），则自动改为正文最后一页
+      let target = 1 // 默认第一页正文
       if (saved !== null && saved >= 1 && saved < cached.length) {
-        mobilePageIndex.value = saved
-        currentPage.value = Math.max(0, saved - 1)
-      } else {
-        mobilePageIndex.value = 1
-        currentPage.value = 0
+        if (saved === cached.length - 1) {
+          // 保存的是封底 → 跳到正文最后一页
+          target = cached.length - 2
+          if (target < 1) target = 1
+        } else {
+          target = saved
+        }
       }
+      mobilePageIndex.value = target
+      currentPage.value = Math.max(0, target - 1)
+      savePosition() // 修正保存的位置
+
       statusMsg.value = ''
       progressPercent.value = 100
       nextTick(() => {
@@ -95,6 +109,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
       return
     }
 
+    // 无缓存，开始流式排版
     const coverHTML = createCoverHTML(reader.title.value)
     htmlPages.value = [coverHTML]
     totalPages.value = 1
@@ -111,14 +126,22 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
         htmlPages.value.push(backHTML)
         totalPages.value = htmlPages.value.length
 
+        // ★ 恢复进度（同样避免封底）
         const saved = loadPosition()
+        let target = 1
         if (saved !== null && saved >= 1 && saved < htmlPages.value.length) {
-          mobilePageIndex.value = saved
-          currentPage.value = Math.max(0, saved - 1)
+          if (saved === htmlPages.value.length - 1) {
+            target = htmlPages.value.length - 2
+            if (target < 1) target = 1
+          } else {
+            target = saved
+          }
         } else if (htmlPages.value.length > 1) {
-          mobilePageIndex.value = 1
-          currentPage.value = 0
+          target = 1
         }
+        mobilePageIndex.value = target
+        currentPage.value = Math.max(0, target - 1)
+        savePosition()
 
         setCachedPages(bookId, fontSize, htmlPages.value)
         statusMsg.value = ''
@@ -139,6 +162,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
           htmlPages.value.push(...chunkPages)
           totalPages.value = htmlPages.value.length
 
+          // 初次有内容时，如果还没设置索引，设到第一页正文
           if (mobilePageIndex.value === 0 && htmlPages.value.length > 1) {
             mobilePageIndex.value = 1
             currentPage.value = 0

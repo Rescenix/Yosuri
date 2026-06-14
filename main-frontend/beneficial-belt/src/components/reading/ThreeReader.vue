@@ -305,17 +305,10 @@ onMounted(async () => {
   startClock()
   await nextTick()
 
-  if (isMobile.value) {
-    await initMobileView()
-    const saved = parseInt(localStorage.getItem(`${props.reader.title.value}_pos`) || '1')
-    if (saved > 1 && saved < htmlPages.value.length) {
-      mobilePageIndex.value = saved
-      currentPage.value = Math.max(0, saved - 1)
-    } else if (htmlPages.value.length > 1) {
-      mobilePageIndex.value = 1
-      currentPage.value = 0
-    }
-  } else {
+ if (isMobile.value) {
+  await initMobileView()
+  // 恢复进度已经在 initMobileView 内部完成，无需再手动处理
+} else {
     try {
       const flip = await desktopInitFlip()
       if (flip) {
