@@ -149,11 +149,7 @@ let mediaQuery = null
 
 onMounted(() => {
   // 立即缓存当前阅读页 URL
-if ('caches' in window) {
-  caches.open('shanxi-reader-v7').then(cache => {
-    cache.add(window.location.href).catch(() => {})
-  })
-}s
+
   mediaQuery = window.matchMedia('(max-width: 768px)')
   isMobile.value = mediaQuery.matches
   const handler = (e) => { isMobile.value = e.matches }
@@ -233,7 +229,7 @@ function jumpToChapter(item) {
 onMounted(async () => {
   // 立即缓存当前阅读页 URL
   if ('caches' in window) {
-    caches.open('shanxi-reader-v5').then(cache => {
+    caches.open('shanxi-reader-v8').then(cache => {
       cache.add(window.location.href).catch(() => {})
     })
   }
