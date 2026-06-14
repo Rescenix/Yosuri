@@ -1,0 +1,449 @@
+/* ========================================
+   杉汐的星尘核心 · 全局样式（白蓝主题）
+   ======================================== */
+
+/* 全局变量 */
+:root {
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-glow: rgba(37, 99, 235, 0.15);
+  --bg-main: #ffffff;
+  --bg-card: #f8fafc;
+  --text-primary: #0f172a;
+  --text-secondary: #475467;
+  --border: #e2e8f0;
+}
+
+/* 全局背景与字体 */
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* 应用容器 */
+.app-container {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 100px;   /* 左右留出空间给固定按钮 */
+}
+
+/* 英雄区域 (Hero) */
+.hero {
+  text-align: center;
+  padding: 120px 0 40px;   /* 顶部留足空间，不被导航栏遮挡 */
+}
+
+.hero h1 {
+  font-size: 56px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 16px;
+}
+
+.hero .tagline {
+  font-size: 18px;
+  color: #475467;
+  margin-bottom: 24px;
+}
+
+.hero .intro {
+  font-size: 15px;
+  color: #334155;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.8;
+}
+
+/* 岛屿网格（五大卡片） */
+.island-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));  /* 缩小最小列宽，让卡片更灵活 */
+  gap: 20px;
+  margin: 40px auto;
+  max-width: 800px;   /* 限制最大宽度，防止卡片全部挤在一行 */
+}
+
+.island-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.island-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2563eb, #60a5fa, transparent);
+}
+
+.island-card:hover {
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 8px 32px rgba(37, 99, 235, 0.08);
+  transform: translateY(-4px);
+}
+
+.island-card h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+}
+
+.island-card p {
+  font-size: 13px;
+  color: #334155;
+  margin: 0;
+}
+
+/* 技能标签云 */
+.skill-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 30px 0 60px;
+}
+
+.skill-tag {
+  display: inline-block;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  color: #2563eb;
+  padding: 6px 16px;
+  margin: 5px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.skill-tag:hover {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: rgba(37, 99, 235, 0.4);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.15);
+}
+
+/* 博客页面 */
+.blog-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.blog-header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.blog-header h1 {
+  font-size: 48px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 12px;
+}
+
+.blog-header p {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.post-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.post-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 32px;
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.post-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2563eb, #60a5fa, transparent);
+}
+
+.post-card:hover {
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 8px 32px rgba(37, 99, 235, 0.08);
+  transform: translateY(-2px);
+}
+
+.post-card h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+}
+
+.post-card .post-date {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.post-card .post-desc {
+  font-size: 15px;
+  color: #475467;
+  line-height: 1.6;
+}
+
+/* 博客详情页 */
+.post-article {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.post-article h1 {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.post-article .post-date {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 40px;
+}
+
+.post-article .post-content {
+  font-size: 16px;
+  line-height: 1.8;
+  color: #334155;
+}
+
+.post-article .post-content p {
+  margin-bottom: 16px;
+}
+
+.post-not-found {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text-secondary);
+}
+
+.post-not-found a {
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 16px;
+}
+
+/* 手机端适配 */
+/* 手机端适配 */
+@media (max-width: 768px) {
+  .navbar {
+    padding: 8px 12px !important;
+  }
+  .nav-content {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+  .nav-links {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .nav-links a {
+    font-size: 0.7em !important;
+  }
+  .nav-actions {
+    display: none !important;
+  }
+  .app-container {
+    padding: 0 48px !important;
+  }
+  .hero h1 {
+    font-size: 28px !important;
+    padding-top: 100px !important;
+  }
+  .island-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .chat-window {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    border-radius: 0 !important;
+  }
+  .chat-window.expanded {
+    width: 100vw !important;
+    height: 100vh !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+  }
+  .chat-toggle-button {
+    right: 6px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .mini-player {
+    left: auto !important;
+    right: 8px !important;
+    bottom: 8px !important;
+    top: auto !important;
+    transform: none !important;
+    flex-direction: row !important;
+    padding: 4px 10px !important;
+    width: auto !important;
+    height: auto !important;
+  }
+  .player-info {
+    max-width: 70px !important;
+  }
+  .player-song {
+    font-size: 9px !important;
+  }
+  .message {
+    font-size: 14px !important;
+  }
+}
+body {
+  padding-top: 70px;
+}
+
+.navbar {
+  height: 60px; /* 根据你实际视觉调整，比如60px */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 100;
+  /* 你已有的其他样式 */
+}
+
+/* ========================================
+   修复主页布局：今日一图 + 轮播图 无滚动条
+   ======================================== */
+
+/* 强制 html, body 全屏无滚动 */
+html, body {
+  height: 100%;
+  /* overflow: hidden; */
+  
+  margin: 0;
+  padding: 0;
+}
+
+/* 应用容器占满全屏，垂直 flex */
+.app-container {
+  height: 100vh;
+  max-width: none;
+  margin: 0;
+  padding: 0 100px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* 内容区域：自动撑满，内部不再滚动（确保所有内容可见） */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;  /* 垂直居中，避免顶部拥挤 */
+  align-items: center;
+  gap: 12px;
+  overflow: visible;        /* 不允许滚动 */
+  padding: 12px 20px;
+  min-height: 0;            /* 允许flex收缩 */
+}
+
+/* 强制缩小今日一图卡片（覆盖 DailyImage 内部样式） */
+.daily-card {
+  max-width: 480px !important;
+  padding: 12px 16px !important;
+  margin: 4px auto !important;
+}
+.daily-card .daily-header {
+  margin-bottom: 8px !important;
+}
+.daily-card .image-wrapper img {
+  max-height: 140px !important;   /* 大幅降低图片高度 */
+  object-fit: contain;
+}
+.daily-card .comment {
+  padding: 10px !important;
+  font-size: 0.8rem !important;
+}
+
+/* 强制缩小轮播图区域 */
+.gallery-section {
+  margin: 8px auto 0 auto !important;
+  max-width: 900px;
+}
+.gallery-section .gallery-card {
+  width: 120px !important;
+}
+.gallery-section .card-image {
+  height: 120px !important;
+}
+.gallery-section .nav-btn {
+  width: 28px !important;
+  height: 28px !important;
+}
+.gallery-section .carousel-track {
+  gap: 10px !important;
+}
+.gallery-section .dots {
+  margin-top: 8px !important;
+}
+
+/* 隐藏原有的技能云（确保不占用空间） */
+.skill-cloud {
+  display: none !important;
+}
+
+/* 如果仍然出现滚动条，可让 body 强制隐藏 */
+/* 如果仍然出现滚动条，可让 body 强制隐藏 */
+/* 注释掉，避免影响其他页面滚动
+body {
+  overflow: hidden !important;
+  height: 100vh;
+}
+.app-container {
+  height: 100vh;
+  overflow: hidden;
+}
+*/

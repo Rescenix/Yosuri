@@ -142,7 +142,9 @@ import katex from 'katex'
 import markedKatex from 'marked-katex-extension'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
-
+const props = defineProps({
+  autoOpen: Boolean
+})
 marked.use(markedKatex({ throwOnError: false }))
 
 function renderMarkdown(text, skipSanitize = false) {
@@ -277,6 +279,10 @@ function cleanContent(content) {
 
 let lastScrollTop = 0
 onMounted(async () => {
+   if (props.autoOpen) {
+    isOpen.value = true
+    isExpanded.value = true
+  }
   fetchBalance()
   await loadAllHistory()
   if (messagesContainer.value) {

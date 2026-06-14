@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>杉汐阅读</title>
+  <style>
+    /* 强制背景，防止白底闪现 */
+    html, body {
+      margin: 0; padding: 0;
+      background: #f5f0e8;
+    }
+
+    /* 初始加载遮罩：自动播放，300ms 后淡出 */
+    #initial-loader {
+      position: fixed; inset: 0; z-index: 9999;
+      background: #f5f0e8;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      animation: fadeOut 0.3s ease-out 0.3s forwards;
+    }
+
+    /* Vue 内容区：初始透明，同步渐显 */
+    #app {
+      opacity: 0;
+      animation: fadeIn 0.3s ease-out 0.3s forwards;
+    }
+
+    @keyframes fadeOut {
+      from { opacity: 1; visibility: visible; }
+      to   { opacity: 0; visibility: hidden; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* 水墨动画组件（精简版，与 Vue 内样式同步） */
+    .ink-loader { position: relative; width: 80px; height: 80px; }
+    @keyframes dropFall {
+      0% { transform: translateY(0) scale(0.8) rotate(45deg); opacity: 0; }
+      20% { opacity: 1; transform: translateY(12px) scale(1) rotate(45deg); }
+      50% { transform: translateY(18px) scale(0.6) rotate(45deg); opacity: 0.5; }
+      100% { transform: translateY(30px) scale(0) rotate(45deg); opacity: 0; }
+    }
+    @keyframes rippleExpand {
+      0% { width: 20px; height: 20px; top: 30px; left: 30px; opacity: 0.8; border-width: 2px; }
+      100% { width: 60px; height: 60px; top: 10px; left: 10px; opacity: 0; border-width: 1px; }
+    }
+    .ink-drop {
+      position: absolute; top: 30px; left: 30px; width: 20px; height: 20px;
+      background: radial-gradient(circle at 40% 40%, #2c3e50, #1e2a3a);
+      border-radius: 50% 0 50% 50%; transform: rotate(45deg);
+      animation: dropFall 1.2s ease-in infinite; z-index: 4;
+    }
+    .ink-ripple {
+      position: absolute; top: 30px; left: 30px; width: 20px; height: 20px;
+      border: 2px solid #8b4513; border-radius: 50%; opacity: 0;
+      animation: rippleExpand 1.2s ease-out infinite;
+    }
+    .ripple-1 { animation-delay: 0.4s; } .ripple-2 { animation-delay: 0.7s; } .ripple-3 { animation-delay: 1.0s; }
+    .loading-text { margin-top: 24px; font-size: 14px; color: #8b4513; letter-spacing: 2px; font-family: "楷体","KaiTi",serif; }
+  </style>
+</head>
+<body>
+  <!-- 纯 CSS 遮罩，自动淡出 -->
+  <div id="initial-loader">
+    <div class="ink-loader">
+      <div class="ink-drop"></div>
+      <div class="ink-ripple ripple-1"></div>
+      <div class="ink-ripple ripple-2"></div>
+      <div class="ink-ripple ripple-3"></div>
+    </div>
+    <p class="loading-text">墨韵渐染，书页将开</p>
+  </div>
+
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

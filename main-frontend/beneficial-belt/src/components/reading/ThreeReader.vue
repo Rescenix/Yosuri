@@ -18,7 +18,7 @@
      
     </div>
 
-    <template v-if="isMobile && htmlPages.length > 0">
+    <template v-if="isMobile && htmlPages.length > 0 && mobilePageIndex > 0">
       <Transition name="fade">
         <div
           :key="mobilePageIndex"

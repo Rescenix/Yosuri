@@ -1,9 +1,11 @@
 ---
 import ChatContainer from '../components/shanxi/ChatContainer.vue';
+import AuthGuard from '../components/AuthGuard.astro';
 ---
 
 <html>
   <head>
+     <AuthGuard />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>杉汐 | 对话</title>
