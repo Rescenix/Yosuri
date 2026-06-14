@@ -1,7 +1,6 @@
-const CACHE_NAME = 'shanxi-reader-v8';
+const CACHE_NAME = 'shanxi-reader-v5';
 const PRECACHE_URLS = [
   '/reading-hut/',
-  '/reading-hut/index.html',
   '/favicon.ico',
 ];
 
@@ -28,6 +27,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // 不缓存 API 请求
   if (event.request.url.includes('/api/')) return;
 
   event.respondWith(
@@ -41,11 +41,8 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
-        // 导航请求且不是阅读页时，回退到书架页
-        if (event.request.mode === 'navigate' && !event.request.url.includes('/read')) {
-          return caches.match('/reading-hut/');
-        }
-        // 其他资源返回空响应，避免显示“网络错误”
+        // 网络失败时，不进行导航回退，让浏览器显示默认错误页（但前端已处理，不会出现）
+        // 这里返回空响应，避免显示“网络错误”文本
         return new Response('', { status: 408, statusText: 'Offline' });
       });
     })

@@ -148,8 +148,6 @@ const isMobile = ref(window.innerWidth <= 768)
 let mediaQuery = null
 
 onMounted(() => {
-  // 立即缓存当前阅读页 URL
-
   mediaQuery = window.matchMedia('(max-width: 768px)')
   isMobile.value = mediaQuery.matches
   const handler = (e) => { isMobile.value = e.matches }
@@ -224,12 +222,9 @@ function jumpToChapter(item) {
   showOutline.value = false
 }
 
-// ★ 离线缓存与文本加载
-// ★ 离线缓存与文本加载（已整合本地读取）
 onMounted(async () => {
-  // 立即缓存当前阅读页 URL
   if ('caches' in window) {
-    caches.open('shanxi-reader-v8').then(cache => {
+    caches.open('shanxi-reader-v5').then(cache => {
       cache.add(window.location.href).catch(() => {})
     })
   }
@@ -240,7 +235,6 @@ onMounted(async () => {
     const isLocal = params.get('local') === 'true'
 
     if (!file) {
-      // 没有 book 参数，尝试从 localStorage 恢复上次阅读的书籍
       const lastBook = localStorage.getItem('shanxi_last_book')
       if (lastBook) {
         file = lastBook
@@ -257,22 +251,14 @@ onMounted(async () => {
     reader.title.value = file.replace(/\.txt$/i, '')
 
     let text = ''
-
     if (isLocal && typeof window.getBookText === 'function') {
-      // 本地导入的书籍，直接从安卓文件系统读取
       text = window.getBookText(file)
-      if (!text) {
-        throw new Error('本地书籍读取失败')
-      }
-      console.log('[书籍文本] 从安卓本地读取成功')
     } else {
-      // 在线书籍，尝试网络获取（失败不中断，可能使用缓存）
       try {
         const res = await fetch(`/api/book/content?bookId=${encodeURIComponent(file)}`)
         if (res.ok) text = await res.text()
       } catch (e) {
         console.warn('书籍文本获取失败，将尝试使用本地缓存')
-        // 如果之前已经缓存过文本，可以在后续从 IndexedDB 等地方获取（排版缓存已处理）
       }
     }
 
@@ -283,12 +269,12 @@ onMounted(async () => {
       reader.restoreProgress()
     }
   } catch (e) {
-    console.error(e)
     window.location.href = '/reading-hut'
   } finally {
     reader.loading.value = false
   }
 })
+
 const back = async () => {
   if (threeReaderRef.value?.flipToCoverAnimated) {
     await threeReaderRef.value.flipToCoverAnimated()
@@ -296,7 +282,6 @@ const back = async () => {
   window.location.href = '/reading-hut'
 }
 </script>
-
 
 <style scoped>
 /* ========== 根容器 ========== */
