@@ -2,33 +2,9 @@ import { defineConfig } from 'astro/config';
 import vue from '@astrojs/vue';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import fs from 'fs';
-import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// 自定义 Vite 插件：构建结束后将 sw.js 中的 __BUILD_TIMESTAMP__ 替换为当前时间戳
-function replaceSwTimestamp() {
-  let swDestPath;
-  return {
-    name: 'replace-sw-timestamp',
-    configResolved(config) {
-      swDestPath = path.resolve(config.build.outDir, 'sw.js');
-    },
-    closeBundle() {
-      if (fs.existsSync(swDestPath)) {
-        let content = fs.readFileSync(swDestPath, 'utf-8');
-        const timestamp = Date.now().toString();
-        content = content.replace('__BUILD_TIMESTAMP__', timestamp);
-        fs.writeFileSync(swDestPath, content);
-        console.log(`[SW] 缓存版本已更新为: ${timestamp}`);
-      } else {
-        console.warn('[SW] 未找到 sw.js，请确认 public/sw.js 存在');
-      }
-    },
-  };
-}
 
 export default defineConfig({
   integrations: [vue()],
@@ -36,8 +12,6 @@ export default defineConfig({
     define: {
       'process.env': '{}',
       global: 'globalThis',
-      // 以下新增：开发环境标志，在注册 SW 时用来跳过
-      '__DEV__': JSON.stringify(process.env.NODE_ENV === 'development'),
     },
     build: { charset: 'utf8' },
     esbuild: { charset: 'utf8' },
@@ -79,9 +53,6 @@ export default defineConfig({
         ],
       },
     },
-    plugins: [
-      replaceSwTimestamp(),
-    ],
     optimizeDeps: { include: [] },
   },
 });

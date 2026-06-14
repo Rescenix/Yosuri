@@ -1,17 +1,20 @@
 <template>
   <div class="chat-layout" :class="{ 'standalone': isStandalone }">
     <!-- 仅在非独立模式下显示会话列表 -->
-    <!-- <SessionList 
+    <SessionList 
       v-if="!isStandalone"
       :currentSessionId="currentSessionId"
       @select="switchSession"
-    /> -->
-    <ChatWidget :sessionId="currentSessionId" :autoOpen="isStandalone" />
+    />
+    <ChatWidget 
+      :sessionId="currentSessionId"
+      :autoOpen="isStandalone"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import SessionList from './SessionList.vue'
 import ChatWidget from './ChatWidget.vue'
 
@@ -22,14 +25,18 @@ function switchSession(id) {
   localStorage.setItem('sessionId', id)
 }
 
-// 判断是否为独立聊天页（例如路由为 /chat 或移动端）
+// 防 tree shaking：直接在模板根元素上使用这个值
 const isStandalone = computed(() => {
-  // 方式1：检查 URL 路径
   if (typeof window !== 'undefined') {
     return window.location.pathname === '/chat'
   }
   return false
-  // 方式2：也可检测屏幕宽度，例如 window.innerWidth < 768
+})
+
+// 额外保险：在 onMounted 中打印，强制副作用保留
+import { onMounted } from 'vue'
+onMounted(() => {
+  console.log('[ChatContainer] isStandalone:', isStandalone.value)
 })
 </script>
 
@@ -43,7 +50,6 @@ const isStandalone = computed(() => {
   flex: 1;
 }
 
-/* 独立模式：去掉左侧边距 */
 .standalone {
   flex-direction: column;
 }
