@@ -10,15 +10,7 @@
       <button class="card-btn" @click.stop="goRag">了解</button>
     </div>
 
-    <!-- 项目二：全栈脚手架 CLI -->
-    <div class="tool-card" @click="goCli">
-      <div class="card-icon"><Icon icon="ph:terminal-duotone" width="32" color="var(--primary)" /></div>
-      <div class="card-content">
-        <h3>全栈脚手架 CLI</h3>
-        <p>一键生成前后端一体化项目骨架，集成 Gin + Vue3 模板与常用中间件。</p>
-      </div>
-      <button class="card-btn" @click.stop="goCli">了解</button>
-    </div>
+  
 
     <!-- 项目三：Prism 自研数据引擎 -->
     <div class="tool-card" @click="goPrism">
@@ -70,10 +62,7 @@ const goRag = () => {
   saveRecent('Aether 知识库', aetherUrl, 'ph:database-duotone');
   window.open(aetherUrl, '_blank');
 };
-const goCli = () => {
-  saveRecent('全栈脚手架 CLI', 'https://github.com/your-repo/fullstack-scaffold', 'ph:terminal-duotone');
-  window.open('https://github.com/your-repo/fullstack-scaffold', '_blank');
-};
+
 const goPrism = () => {
   saveRecent('Prism 自研数据引擎', 'https://github.com/your-repo/prism-engine', 'ph:cube-transparent-duotone');
   window.open('https://github.com/your-repo/prism-engine', '_blank');
