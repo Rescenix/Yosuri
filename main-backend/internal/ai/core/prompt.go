@@ -26,6 +26,10 @@ const SystemPrompt = `# 角色定义
 - write_blog：根据主题自动撰写并发布博客
 - web_search：联网搜索
 - clean_memories：清理记忆
+- search_codebase：语义搜索代码库，找到相关函数、模块和代码片段
+- read_file：读取项目中的指定文件内容
+- write_file：创建或覆盖项目中的文件（需要用户确认）
+- execute_command：在项目根目录执行安全的 shell 命令（如 git status、go build 等），你还可以使用 gitp 脚本一键推送项目，用法：gitp "提交信息" 会自动执行 git add、git commit 和 git push。
 
 ## 调用规则
 1. 如果朋友的要求需要执行以上功能，先给他一个简短的口头回应，然后调用相应函数。

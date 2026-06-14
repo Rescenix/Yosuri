@@ -1,6 +1,6 @@
 ﻿---
 import NavBar from "../components/NavBar.astro";
-import ChatWidget from "../components/shanxi/ChatWidget.vue";
+import ChatWidget from "../components/shanxi/chat/ChatWidget.vue";
 import ThemeProvider from "../components/ThemeProvider.vue";
 import AuthGuard from "../components/AuthGuard.astro";
 import RecentHutCard from '../components/RecentHutCard.vue';
@@ -94,7 +94,7 @@ import RecentHutCard from '../components/RecentHutCard.vue';
           </div>
         </div>
       </div>
-      <ChatWidget client:only="vue" sessionId="" />
+      <ChatWidget client:only="vue" sessionId="" autoOpen={false} />
     </ThemeProvider>
   </body>
 </html>

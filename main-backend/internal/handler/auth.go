@@ -38,7 +38,7 @@ func Login(c *gin.Context) {
 	// 密码匹配后才签发 token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"role": "admin",
-		"exp":  time.Now().Add(24 * time.Hour).Unix(),
+		"exp":  time.Now().Add(30 * 24 * time.Hour).Unix(), // 30 天
 	})
 	tokenString, _ := token.SignedString([]byte(jwtSecret))
 

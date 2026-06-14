@@ -142,10 +142,12 @@ import katex from 'katex'
 import markedKatex from 'marked-katex-extension'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
+marked.use(markedKatex({ katex, throwOnError: false }))
 const props = defineProps({
-  autoOpen: Boolean
+  autoOpen: { type: Boolean, default: false },
+  sessionId: { type: String, default: 'global_chat_session' }
 })
-marked.use(markedKatex({ throwOnError: false }))
+
 
 function renderMarkdown(text, skipSanitize = false) {
   if (!text) return ''
@@ -160,6 +162,12 @@ const isOpen = ref(false)
 const isExpanded = ref(false)
 const toggleExpand = () => { isExpanded.value = !isExpanded.value }
 const toggleChat = () => {
+  // 如果是独立页面（通过 URL 或 autoOpen prop），点击关闭时返回主页
+  if (props.autoOpen || window.location.pathname.startsWith('/chat')) {
+    window.location.href = '/'
+    return
+  }
+  // 普通模式：隐藏聊天窗口
   isOpen.value = !isOpen.value
   if (isOpen.value) {
     nextTick(() => forceScrollToBottom())
@@ -168,8 +176,11 @@ const toggleChat = () => {
 }
 const userInput = ref('')
 const messages = ref([])
+const sessionId = ref('global_chat_session')
 
-const sessionId = ref(`global_chat_session`)
+watch(() => props.sessionId, (newVal) => {
+  if (newVal) sessionId.value = newVal
+})
 const isLoggedIn = ref(!!localStorage.getItem('token'))
 
 const debugTemp = ref(localStorage.getItem('debugTemp') ? parseFloat(localStorage.getItem('debugTemp')) : 0.7)
@@ -279,13 +290,18 @@ function cleanContent(content) {
 
 let lastScrollTop = 0
 onMounted(async () => {
+  const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window
   if (window.location.pathname.startsWith('/chat')) {
-  isOpen.value = true
-  isExpanded.value = true
-}
-   if (props.autoOpen) {
     isOpen.value = true
-    isExpanded.value = true
+    if (!isMobile) {
+      isExpanded.value = true
+    }
+  }
+  if (props.autoOpen) {
+    isOpen.value = true
+    if (!isMobile) {
+      isExpanded.value = true
+    }
   }
 // 在 onMounted(async () => { 之后，紧接着加入这两行：
 
@@ -377,7 +393,7 @@ export default {}
 </script>
 
 <style scoped>
-@import '../../styles/shanxi/chat-widget.css';
+@import '../../../styles/shanxi/chat-widget.css';
 .chat-time {
   text-align: center;
   font-size: 10px;
@@ -748,4 +764,7 @@ export default {}
   margin-left: auto;
   margin-right: auto;
 }
+
+
+
 </style>

@@ -1,0 +1,40 @@
+/* ========== 移动端标题栏 —— 精确居中 ========== */
+.chat-window.mobile .chat-header {
+  position: relative;
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(18px) saturate(200%);
+  -webkit-backdrop-filter: blur(18px) saturate(200%);
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.08) !important;
+  padding: 12px 16px !important;
+  min-height: 52px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;          /* 确保整体居中 */
+  box-shadow: none !important;
+}
+
+/* 让名字和状态区域占满并内部居中 */
+.chat-window.mobile .header-left {
+  flex: 1;                          /* 撑开可用空间 */
+  display: flex;
+  justify-content: center;          /* 名字在可用空间内居中 */
+  align-items: center;
+  text-align: center;
+}
+
+/* 名字和状态垂直排列 */
+.chat-window.mobile .header-user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 关闭按钮绝对定位，不占用居中空间 */
+.chat-window.mobile .header-actions {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+}

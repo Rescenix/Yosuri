@@ -32,10 +32,11 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 	c.Writer.Flush()
 
 	systemPrompt := buildSystemPrompt(req, c, h.memoryStore)
+	// 获取当前会话全部历史（不截断）
 	history := h.sessionStore.Get(req.SessionID)
 
 	finalContent, finalReasoning, tokenUsage, err := h.resolveConversation(
-		c, // 传入上下文，用于实时推送推理和工具事件
+		c,
 		systemPrompt,
 		history,
 		req.Message,
@@ -85,10 +86,8 @@ func (h *ChatHandler) resolveConversation(
 	reasoningEffort string,
 ) (string, string, int, error) {
 
-	// 清洗历史：移除未完成工具调用的助手消息及其孤儿工具结果
+	// 清洗历史：移除未完成工具调用的助手消息
 	var cleanHistory []DSMessage
-	validToolCallIDs := make(map[string]bool)
-	// 先收集所有有效的 tool_call_id（出现在助手消息中的）
 	for _, msg := range history {
 		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
 			hasResult := false
@@ -97,25 +96,19 @@ func (h *ChatHandler) resolveConversation(
 					for _, tc := range msg.ToolCalls {
 						if tc.ID == next.ToolCallID {
 							hasResult = true
-							validToolCallIDs[tc.ID] = true
+							break
 						}
 					}
 				}
 			}
-			if hasResult {
-				cleanHistory = append(cleanHistory, msg)
+			if !hasResult {
+				continue // 丢弃未完成的工具调用
 			}
-			// 如果助手消息没有工具结果，跳过
-		} else if msg.Role == "tool" {
-			// 只保留有对应 assistant 消息的工具结果
-			if validToolCallIDs[msg.ToolCallID] {
-				cleanHistory = append(cleanHistory, msg)
-			}
-		} else {
-			cleanHistory = append(cleanHistory, msg)
 		}
+		cleanHistory = append(cleanHistory, msg)
 	}
 
+	// 构建完整上下文：系统提示 + 历史 + 当前用户消息
 	messages := []DSMessage{
 		{Role: "system", Content: systemPrompt},
 	}
@@ -192,7 +185,7 @@ func (h *ChatHandler) resolveConversation(
 			ToolCalls:        choice.Message.ToolCalls,
 		}
 
-		// 推送思考内容（如果有）
+		// 推送思考内容
 		if assistantMsg.ReasoningContent != "" {
 			reasoningAccum.WriteString(assistantMsg.ReasoningContent)
 			writeSSE(c, "reasoning", "reasoning", map[string]string{"content": assistantMsg.ReasoningContent})
@@ -212,16 +205,15 @@ func (h *ChatHandler) resolveConversation(
 				fmt.Errorf("思考过程过长，请尝试关闭深度思考或缩小问题范围")
 		}
 
-		// 没有工具调用，返回最终内容
+		// 最终回复
 		if len(assistantMsg.ToolCalls) == 0 {
 			return assistantMsg.Content, reasoningAccum.String(), totalUsage, nil
 		}
 
-		// ---- 关键修复：先追加助手消息，再追加工具结果 ----
+		// 工具调用：先追加助手消息，再追加工具结果
 		messages = append(messages, assistantMsg)
 
 		for _, tc := range assistantMsg.ToolCalls {
-			// 推送工具调用开始事件
 			writeSSE(c, "tool_call", "tool_call_start", map[string]string{
 				"name": tc.Function.Name,
 				"args": tc.Function.Arguments,

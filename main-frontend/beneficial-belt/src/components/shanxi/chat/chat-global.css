@@ -1,0 +1,288 @@
+/* chat-global.css —— 全局布局、气泡、输入框、调试面板等 */
+
+/* 全局 Markdown 表格样式（必须非 scoped，因为 v-html 渲染的内容不受 scoped 控制） */
+.markdown-body table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin: 10px 0;
+  font-size: 13px;
+  border: 2px solid #d0d5dd;
+  border-radius: 8px;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body th {
+  background: #f9fafb;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.markdown-body td {
+  background: #fff;
+}
+
+.markdown-body tr:nth-child(even) td {
+  background: #f9fafb;
+}
+
+/* ===== 全局字体 ===== */
+.chat-window,
+.chat-window * {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== 消息间距 ===== */
+.chat-messages .message-row {
+  margin-bottom: 12px;
+}
+
+/* ===== 用户气泡 ===== */
+.message.user {
+  background: linear-gradient(135deg, #2563eb, #7c3aed) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+  border: none !important;
+  border-radius: 18px 18px 4px 18px !important;
+  padding: 10px 16px !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+}
+
+/* ===== 输入框 ===== */
+.chat-input {
+  border-radius: 12px !important;
+  border: 1px solid #d1d5db !important;
+  padding: 10px 14px !important;
+  font-size: 15px !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.chat-input:focus {
+  outline: none;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* 输入区域整体微调 */
+.chat-input-area {
+  padding: 12px 16px !important;
+  gap: 10px !important;
+}
+
+/* ===== 工具调用指示器 ===== */
+.tool-call-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 4px;
+}
+
+/* ===== 思考过程微调 ===== */
+.reasoning-stream {
+  background: #f9fafb;
+  border-left: 3px solid #2563eb;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+/* 所有消息行居中，限制宽度产生留白 */
+.message-row {
+  max-width: 700px;
+  width: 100%;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 用户消息靠右 */
+.message-row.user {
+  justify-content: flex-end;
+}
+
+/* 助手消息居中，内容左对齐 */
+.message-row.bot {
+  justify-content: center;
+}
+/* 确保助手消息内部文本左对齐 */
+.message.bot {
+  text-align: left;
+}
+
+/* ===== 输入区域（置底，简洁融合） ===== */
+.chat-input-area {
+  padding: 10px 12px !important;
+  gap: 8px !important;
+  background: #f9fafb !important;
+  border-top: 1px solid #f0f0f0 !important;
+  display: flex;
+  align-items: flex-end;
+}
+
+.ds-btn-icon {
+  background: transparent !important;
+  border: none !important;
+  color: #888 !important;
+  padding: 6px !important;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.ds-btn-icon:hover {
+  background: #f0f0f0 !important;
+  color: #333 !important;
+}
+
+.chat-input {
+  flex: 1;
+  min-height: 42px;
+  max-height: 200px;
+  padding: 10px 14px !important;
+  font-size: 14px !important;
+  line-height: 1.5;
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  transition: border-color 0.15s ease;
+  font-family: inherit;
+}
+.chat-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* 发送按钮：无内容时低调，有内容时亮起 */
+.ds-btn-send {
+  background: #e5e5e5 !important;
+  border: none !important;
+  color: #aaa !important;
+  padding: 8px !important;
+  border-radius: 10px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-btn-send:not(:disabled) {
+  background: #2563eb !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+.ds-btn-send:not(:disabled):hover {
+  background: #1d4ed8 !important;
+}
+
+/* ===== 调试面板（纯文字排版，无粗粝感） ===== */
+.debug-panel {
+  border-top: 1px solid #f0f0f0 !important;
+  padding: 10px 16px !important;
+  background: #fff !important;
+  font-size: 12px !important;
+  color: #888 !important;
+  user-select: none;
+}
+.debug-panel summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #555;
+}
+.debug-badge {
+  margin-left: auto;
+  font-size: 11px;
+  color: #aaa;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.debug-content {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.debug-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.debug-label {
+  width: 36px;
+  color: #666;
+  font-weight: 500;
+}
+.debug-value {
+  width: 30px;
+  text-align: right;
+  color: #333;
+  font-weight: 500;
+}
+.debug-row input[type="range"] {
+  width: 80px;
+  accent-color: #2563eb;
+}
+.debug-row input[type="number"] {
+  width: 60px;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  text-align: center;
+}
+.debug-row select {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: #fff;
+}
+.debug-stats {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 16px;
+  color: #aaa;
+  font-size: 11px;
+}
+.debug-refresh-btn {
+  background: none;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: #666;
+  cursor: pointer;
+}
+.debug-refresh-btn:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+/* 移除 scoped 中可能冲突的旧样式 */
+.chat-window.expanded .chat-input-area,
+.chat-window.expanded .debug-panel {
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}

@@ -1,0 +1,82 @@
+.chat-time {
+  text-align: center;
+  font-size: 10px;
+  color: #aaa;
+  margin: 8px 0;
+  background: none;
+}
+
+.reasoning-details { margin-top: 8px; font-size: 12px; color: #4b5563; background: #f9fafb; border-radius: 8px; padding: 6px 10px; border-left: 2px solid #3b82f6; }
+.reasoning-details summary { cursor: pointer; font-weight: 500; user-select: none; display: flex; align-items: center; gap: 4px; }
+.reasoning-text { margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
+
+.reasoning-stream { margin-bottom: 10px; padding: 8px 12px; background: #f9fafb; border-left: 3px solid #3b82f6; border-radius: 6px; font-size: 13px; color: #4b5563; }
+.reasoning-label { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; font-weight: 500; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.markdown-body { word-break: break-word; line-height: 1.6; }
+.markdown-body p { margin-bottom: 8px; }
+.markdown-body table {
+  border-collapse: separate;        /* 用 separate 让外层边框生效 */
+  border-spacing: 0;
+  width: 100%;
+  margin: 10px 0;
+  font-size: 13px;
+  border: 2px solid #d0d5dd;        /* 表格整体边框 */
+  border-radius: 8px;               /* 圆角 */
+  overflow: hidden;                 /* 圆角剪切 */
+  word-break: break-word;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #e5e7eb;        /* 单元格细边框 */
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;              /* 顶部对齐，避免挤压 */
+}
+
+.markdown-body th {
+  background: #f9fafb;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.markdown-body td {
+  background: #fff;
+}
+
+/* 隔行变色（可选，增强可读性） */
+.markdown-body tr:nth-child(even) td {
+  background: #f9fafb;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 { margin: 12px 0 6px; font-weight: 600; color: #1d2939; }
+.markdown-body code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 0.9em; }
+.markdown-body pre { background: #f5f5f5; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 13px; }
+
+/* 展开模式居中 */
+.chat-window.expanded .message-row { max-width: 60%; margin-left: auto; margin-right: auto; }
+.chat-window.expanded .message-row.user { justify-content: flex-end; }
+
+.chat-window.expanded .chat-input-area,
+.chat-window.expanded .debug-panel { max-width: 60%; margin-left: auto; margin-right: auto; width: 100%; }
+.chat-window.expanded .chat-input-area { padding-left: 0; padding-right: 0; }
+
+/* 自适应 textarea 替换 input */
+.chat-input {
+  min-height: 60px;    /* 三行高度 */
+  max-height: 200px;
+  resize: none;
+  overflow-y: auto;
+}
+.tool-call-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0;
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+}

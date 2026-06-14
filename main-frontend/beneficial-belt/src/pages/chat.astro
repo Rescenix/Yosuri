@@ -1,20 +1,27 @@
 ---
-import ChatContainer from '../components/shanxi/ChatContainer.vue';
-import AuthGuard from '../components/AuthGuard.astro';
+import ChatWidget from "../components/shanxi/chat/ChatWidget.vue";
 ---
 
-<html>
+<!doctype html>
+<html lang="zh-CN">
   <head>
-     <AuthGuard />
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>杉汐 | 对话</title>
     <style>
-      body { margin: 0; padding: 0; }
-      @import "/src/styles/global.css";
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow: hidden; background: #fff; }
     </style>
+    <script>
+      // 强制注销所有 Service Worker，防止缓存导致白屏
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          regs.forEach(function(reg) { reg.unregister(); });
+        });
+      }
+    </script>
   </head>
   <body>
-    <ChatContainer client:only="vue" />
+    <ChatWidget client:only="vue" autoOpen={true} sessionId="" />
   </body>
 </html>

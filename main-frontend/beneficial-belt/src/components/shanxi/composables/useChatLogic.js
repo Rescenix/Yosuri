@@ -2,7 +2,11 @@ import { nextTick } from 'vue'
 const TOOL_NAME_MAP = {
   web_search: '联网搜索',
   write_blog: '撰写博客',
-  clean_memories: '整理记忆'
+  clean_memories: '清理记忆',
+  search_codebase: '搜索代码库',
+  read_file: '读取文件',
+  write_file: '写入文件',
+  execute_command: '执行命令'
 }
 export function useChatLogic({
   messages, userInput, sessionId,
