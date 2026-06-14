@@ -279,10 +279,18 @@ function cleanContent(content) {
 
 let lastScrollTop = 0
 onMounted(async () => {
+  if (window.location.pathname.startsWith('/chat')) {
+  isOpen.value = true
+  isExpanded.value = true
+}
    if (props.autoOpen) {
     isOpen.value = true
     isExpanded.value = true
   }
+// 在 onMounted(async () => { 之后，紧接着加入这两行：
+
+
+
   fetchBalance()
   await loadAllHistory()
   if (messagesContainer.value) {
