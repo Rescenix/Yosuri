@@ -1,15 +1,12 @@
 <template>
   <div class="chat-layout" :class="{ 'standalone': isStandalone }">
     <!-- 仅在非独立模式下显示会话列表 -->
-    <SessionList 
+    <!-- <SessionList 
       v-if="!isStandalone"
       :currentSessionId="currentSessionId"
       @select="switchSession"
-    />
-    <ChatWidget 
-      :sessionId="currentSessionId"
-      :autoOpen="isStandalone"
-    />
+    /> -->
+    <ChatWidget :sessionId="currentSessionId" :autoOpen="isStandalone" />
   </div>
 </template>
 
