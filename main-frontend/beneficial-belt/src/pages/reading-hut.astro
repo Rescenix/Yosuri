@@ -18,7 +18,7 @@ import AuthGuard from '../components/AuthGuard.astro';
 <script is:inline>
   // 手动缓存入口页面，使用与 sw.js 一致的缓存名
   if ('caches' in window) {
-    caches.open('shanxi-reader-v5').then(cache => {
+    caches.open('shanxi-reader-v7').then(cache => {
       cache.add('/reading-hut/').catch(() => {});
     });
   }

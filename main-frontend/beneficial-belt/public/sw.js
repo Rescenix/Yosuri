@@ -1,7 +1,7 @@
-const CACHE_NAME = 'shanxi-reader-v5';
+const CACHE_NAME = 'shanxi-reader-v7';
 const PRECACHE_URLS = [
   '/reading-hut/',
-  '/read/',
+  '/reading-hut/index.html',   // Astro 构建后会生成此文件，确保书架页外壳可离线
   '/favicon.ico',
 ];
 
@@ -41,15 +41,11 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
+        // 网络失败，导航请求返回书架页
         if (event.request.mode === 'navigate') {
-          const url = new URL(event.request.url);
-          // 阅读页请求返回缓存的阅读页外壳
-          if (url.pathname === '/read' || url.pathname === '/read/') {
-            return caches.match('/read/');
-          }
           return caches.match('/reading-hut/');
         }
-        return new Response('离线无法加载此资源', { status: 503 });
+        return new Response('', { status: 408, statusText: 'Offline' });
       });
     })
   );

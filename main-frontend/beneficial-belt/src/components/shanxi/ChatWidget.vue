@@ -42,7 +42,7 @@
             <div v-else class="message" :class="item.sender">
               <div v-if="item.reasoning" class="reasoning-stream">
                 <div class="reasoning-label">
-                  <Icon icon="mdi:brain" width="14" color="#6b7280" />
+                  <Icon icon="la:atom" width="14" color="#6b7280" />
                   思考中...
                 </div>
                 <div class="reasoning-text">{{ item.reasoning }}</div>
@@ -64,12 +64,13 @@
         </template>
       </div>
 
+           <!-- 输入区域（置底设计） -->
       <div class="chat-input-area">
-        <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn"
-          @change="handleImageUpload" />
-        <button v-if="isLoggedIn" class="ds-btn" @click="imageInput.click()" title="上传图片">
+        <button v-if="isLoggedIn" class="ds-btn ds-btn-icon" @click="imageInput.click()" title="上传图片">
           <Icon icon="heroicons:photo-20-solid" width="18" color="#666" />
         </button>
+        <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn" @change="handleImageUpload" />
+
         <textarea 
           ref="chatInputRef"
           class="chat-input" 
@@ -77,37 +78,47 @@
           placeholder="输入你的问题..."
           @keypress.enter="sendMessage"
           @input="adjustInputHeight"
-          rows="3"
+          rows="1"
         ></textarea>
+
         <button class="ds-btn ds-btn-send" @click="sendMessage" :disabled="!userInput.trim()">
           <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
         </button>
       </div>
 
+      <!-- 调试参数（纯文字排版） -->
       <details class="debug-panel" v-if="isLoggedIn">
-        <summary>调试参数</summary>
-        <div class="debug-controls">
-          <label>T: <input type="range" min="0" max="2" step="0.1" v-model.number="debugTemp" @change="updateParams" />
-            <span>{{ debugTemp }}</span>
-          </label>
-          <label>TopP: <input type="range" min="0" max="1" step="0.05" v-model.number="debugTopP"
-              @change="updateParams" />
-            <span>{{ debugTopP }}</span>
-          </label>
-          <label>MaxTokens: <input type="number" v-model.number="debugMaxTokens" min="100" max="8192" step="100"
-              @change="updateParams" /></label>
-          <label>深度思考:
+        <summary>
+          <Icon icon="mdi:tune" width="14" color="#888" />
+          <span>参数</span>
+          <span class="debug-badge">{{ lastTokenUsage || '0' }}T / {{ lastLatency || '0' }}ms</span>
+        </summary>
+        <div class="debug-content">
+          <div class="debug-row">
+            <span class="debug-label">T</span>
+            <input type="range" min="0" max="2" step="0.1" v-model.number="debugTemp" @change="updateParams" />
+            <span class="debug-value">{{ debugTemp }}</span>
+          </div>
+          <div class="debug-row">
+            <span class="debug-label">TopP</span>
+            <input type="range" min="0" max="1" step="0.05" v-model.number="debugTopP" @change="updateParams" />
+            <span class="debug-value">{{ debugTopP }}</span>
+          </div>
+          <div class="debug-row">
+            <span class="debug-label">Tokens</span>
+            <input type="number" v-model.number="debugMaxTokens" min="100" max="8192" step="100" @change="updateParams" />
+          </div>
+          <div class="debug-row">
+            <span class="debug-label">思考</span>
             <select v-model="debugReasoning" @change="updateParams">
               <option value="">关闭</option>
               <option value="high">开启（高）</option>
               <option value="max">开启（最强）</option>
             </select>
-          </label>
-          <div class="debug-stats">
-            <span>Token: {{ lastTokenUsage || '--' }}</span>
-            <span>延迟: {{ lastLatency || '--' }}ms</span>
-            <span>余额: {{ balance || '--' }}</span>
-            <button class="debug-refresh-btn" @click="fetchBalance">刷新余额</button>
+          </div>
+          <div class="debug-row debug-stats">
+            <span>余额 {{ balance || '--' }}</span>
+            <button class="debug-refresh-btn" @click="fetchBalance">刷新</button>
           </div>
         </div>
       </details>
@@ -438,6 +449,7 @@ export default {}
 </style>
 
 <style>
+
 /* 全局 Markdown 表格样式（必须非 scoped，因为 v-html 渲染的内容不受 scoped 控制） */
 .markdown-body table {
   border-collapse: separate;
@@ -538,5 +550,188 @@ export default {}
   padding: 8px 12px;
   border-radius: 6px;
   margin-bottom: 10px;
+}
+
+/* 所有消息行居中，限制宽度产生留白 */
+.message-row {
+  max-width: 700px;
+  width: 100%;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 用户消息靠右 */
+.message-row.user {
+  justify-content: flex-end;
+}
+
+/* 助手消息居中，内容左对齐 */
+.message-row.bot {
+  justify-content: center;
+}
+/* 确保助手消息内部文本左对齐 */
+.message.bot {
+  text-align: left;
+}
+/* ===== 输入区域（置底，简洁融合） ===== */
+.chat-input-area {
+  padding: 10px 12px !important;
+  gap: 8px !important;
+  background: #f9fafb !important;
+  border-top: 1px solid #f0f0f0 !important;
+  display: flex;
+  align-items: flex-end;
+}
+
+.ds-btn-icon {
+  background: transparent !important;
+  border: none !important;
+  color: #888 !important;
+  padding: 6px !important;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.ds-btn-icon:hover {
+  background: #f0f0f0 !important;
+  color: #333 !important;
+}
+
+.chat-input {
+  flex: 1;
+  min-height: 42px;            /* 单行高度，自适应时会撑开 */
+  max-height: 200px;
+  padding: 10px 14px !important;
+  font-size: 14px !important;
+  line-height: 1.5;
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  transition: border-color 0.15s ease;
+  font-family: inherit;
+}
+.chat-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* 发送按钮：无内容时低调，有内容时亮起 */
+.ds-btn-send {
+  background: #e5e5e5 !important;
+  border: none !important;
+  color: #aaa !important;
+  padding: 8px !important;
+  border-radius: 10px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-btn-send:not(:disabled) {
+  background: #2563eb !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+.ds-btn-send:not(:disabled):hover {
+  background: #1d4ed8 !important;
+}
+
+/* ===== 调试面板（纯文字排版，无粗粝感） ===== */
+.debug-panel {
+  border-top: 1px solid #f0f0f0 !important;
+  padding: 10px 16px !important;
+  background: #fff !important;
+  font-size: 12px !important;
+  color: #888 !important;
+  user-select: none;
+}
+.debug-panel summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #555;
+}
+.debug-badge {
+  margin-left: auto;
+  font-size: 11px;
+  color: #aaa;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.debug-content {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.debug-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.debug-label {
+  width: 36px;
+  color: #666;
+  font-weight: 500;
+}
+.debug-value {
+  width: 30px;
+  text-align: right;
+  color: #333;
+  font-weight: 500;
+}
+.debug-row input[type="range"] {
+  width: 80px;
+  accent-color: #2563eb;
+}
+.debug-row input[type="number"] {
+  width: 60px;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  text-align: center;
+}
+.debug-row select {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: #fff;
+}
+.debug-stats {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 16px;
+  color: #aaa;
+  font-size: 11px;
+}
+.debug-refresh-btn {
+  background: none;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: #666;
+  cursor: pointer;
+}
+.debug-refresh-btn:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+/* 移除 scoped 中可能冲突的旧样式 */
+.chat-window.expanded .chat-input-area,
+.chat-window.expanded .debug-panel {
+  max-width: 700px;  /* 与消息行同宽，保持阅读居中 */
+  margin-left: auto;
+  margin-right: auto;
 }
 </style>
