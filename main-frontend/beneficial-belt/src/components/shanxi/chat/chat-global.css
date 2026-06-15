@@ -123,6 +123,8 @@
 /* 确保助手消息内部文本左对齐 */
 .message.bot {
   text-align: left;
+  font-size: 15px;      /* DS 默认字号 */
+  line-height: 1.5;     /* 舒适的阅读间距 */
 }
 
 /* ===== 输入区域（置底，简洁融合） ===== */
@@ -295,4 +297,503 @@
   color: #6b7280;
   font-size: 13px;
   opacity: 0.8;
+}
+
+/* 右上角复制按钮 */
+.markdown-body pre .copy-code-btn {
+  position: absolute;
+  top: 0.4em;
+  right: 1em;
+  font-size: 12px;
+  font-weight: 500;
+  color: #a6adc8;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.markdown-body pre .copy-code-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #cdd6f4;
+}
+
+/* ===== 极简输入区域 ===== */
+.chat-input-area {
+  padding: 8px 12px 12px 12px !important; /* 上边距缩小，减少留白 */
+  background: transparent !important;
+  border-top: none !important;
+}
+
+.input-wrapper {
+  position: relative; /* 确保绝对定位的按钮相对于此容器定位 */
+  display: flex;
+  align-items: flex-end;
+  width: 100%; /* 确保它撑满输入区域 */
+}
+
+/* 输入框样式 */
+.chat-input {
+  flex: 1;
+  min-height: 44px;
+  max-height: 200px;
+  padding: 12px 50px 12px 50px !important; /* 左右留出充足空间给按钮 */
+  font-size: 15px !important;
+  line-height: 1.5;
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 24px !important;
+  background: #fff !important;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  transition: border-color 0.2s ease;
+  font-family: inherit;
+}
+
+.chat-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* 嵌入输入框内部的按钮 */
+.input-inner-btn {
+  position: absolute;
+  bottom: 8px; /* 微调按钮的垂直位置，使其在输入框中居中 */
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 2;
+}
+
+.input-left-btn {
+  left: 10px; /* 左按钮更靠近边缘 */
+  background: transparent;
+}
+
+.input-right-btn {
+  right: 10px; /* 右按钮更靠近边缘 */
+}
+
+.input-voice-btn {
+  background: transparent;
+}
+
+.input-voice-btn.recording {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3);
+}
+
+.input-send-btn {
+  background: #2563eb;
+}
+
+.input-send-btn:hover {
+  background: #1d4ed8;
+}
+
+/* ===== 极简顶部栏 ===== */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px !important; /* 上下内边距减小，减少顶部留白 */
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  min-height: 44px !important; /* 高度微调，更紧凑 */
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-text {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.header-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.header-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* 确保消息区域顶部不留白 */
+.chat-messages {
+  padding-top: 4px !important; /* 进一步减小顶部内边距 */
+}
+
+/* 移动端微调 */
+@media (max-width: 768px) {
+  .chat-input-area {
+    padding: 8px 10px 10px 10px !important;
+  }
+  .chat-input {
+    padding: 12px 48px 12px 48px !important;
+  }
+  .chat-header {
+    padding: 8px 14px !important;
+  }
+}
+
+/* 语音录音时输入框蓝色脉冲 */
+.chat-input.recording {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
+  animation: shanxi-pulse-border 1.5s ease-in-out infinite !important;
+}
+
+@keyframes shanxi-pulse-border {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.4); }
+}
+
+/* 语音按钮录音时变红并脉冲 */
+.ds-btn-voice.recording {
+  background: #ef4444 !important;
+  animation: shanxi-pulse-bg 1s ease-in-out infinite !important;
+}
+
+@keyframes shanxi-pulse-bg {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+}
+
+.ds-btn-voice.recording .iconify {
+  color: #fff !important;
+}
+
+/* ===== 代码块样式（DeepSeek 同款） ===== */
+.markdown-body pre {
+  position: relative;
+  background: #1e1e2e;
+  border-radius: 12px;
+  padding: 2.5em 1em 1em 1em;
+  margin: 1em 0;
+  overflow-x: auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.markdown-body pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  color: #cdd6f4;
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.7;           /* 行高增加，让代码更透气 */
+  letter-spacing: 0.02em;    /* 字符间距微调，字母不再拥挤 */
+  word-spacing: 0.05em;      /* 单词间距微调 */
+}
+
+/* 左上角语言标签 */
+.markdown-body pre::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0.4em;
+  left: 1em;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a6adc8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(0,0,0,0.3);
+  padding: 2px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* 1. 强制输入区域为垂直排列，参数面板独占一行 */
+.chat-input-area {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+/* 2. 输入框包裹器占满宽度 */
+.input-wrapper {
+  width: 100%;
+}
+
+/* 3. 统一所有内嵌按钮的尺寸和垂直基线 */
+.input-inner-btn {
+  width: 34px;
+  height: 34px;
+  bottom: 10px;   /* 统一按钮与输入框底边的距离 */
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  background: transparent;
+}
+
+/* 发送按钮和语音按钮稍微调整 */
+.input-right-btn {
+  right: 8px;
+}
+.input-left-btn {
+  left: 8px;
+}
+.input-param-btn {
+  left: 46px;  /* 紧挨图片按钮 */
+}
+
+/* 发送按钮保持蓝色背景 */
+.input-send-btn {
+  background: #2563eb;
+}
+.input-send-btn:hover {
+  background: #1d4ed8;
+}
+
+/* 确保输入框底部留出足够空间，不被状态栏和按钮遮挡 */
+.chat-input {
+  padding-bottom: 28px !important;
+}
+.input-inner-btn {
+  bottom: 8px !important;
+}
+.input-param-btn {
+  bottom: 8px !important;
+}
+/* 1. 顶部栏：减小留白，名字右移 */
+.chat-header {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  padding-left: 20px !important;  /* 名字右移 */
+  min-height: 36px !important;
+}
+
+/* 2. 输入框：左侧留足空间，让文字和按钮对齐 */
+.chat-input {
+  padding-left: 56px !important;   /* 给图片按钮和参数按钮留空间 */
+  padding-right: 52px !important;  /* 给右侧按钮留空间 */
+}
+
+/* 3. 左按钮位置微调，与输入框文字垂直居中对齐 */
+.input-left-btn {
+  left: 12px !important;
+  bottom: 12px !important;
+}
+.input-param-btn {
+  left: 44px !important;
+  bottom: 12px !important;
+}
+.input-right-btn {
+  right: 12px !important;
+  bottom: 12px !important;
+}
+
+/* 4. 内嵌状态栏（Token/延迟）位置微调 */
+.inline-status-bar {
+  bottom: 4px !important;
+}
+/* 顶部栏：减少留白，名字整体右移 */
+.chat-header {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  padding-left: 20px !important;   /* 名字和状态栏整体右移 */
+  min-height: 36px !important;
+}
+
+
+
+/* 左按钮位置精确对齐 */
+.input-left-btn {
+  left: 14px !important;
+  bottom: 10px !important;
+}
+.input-param-btn {
+  left: 48px !important;  /* 紧挨图片按钮 */
+  bottom: 10px !important;
+}
+.input-right-btn {
+  right: 14px !important;
+  bottom: 10px !important;
+}
+
+/* 内嵌状态栏微调 */
+.inline-status-bar {
+  bottom: 2px !important;
+}
+/* 顶部栏：减少留白，名字整体右移 */
+.chat-header {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  padding-left: 180px !important;
+  min-height: 36px !important;
+}
+
+
+
+
+
+
+/* ===== 输入框本身（控制 placeholder 起始位置） ===== */
+.chat-input {
+  flex: 1;
+  min-height: 44px;
+  max-height: 200px;
+  padding: 12px 48px 12px 12px !important; /* 左侧 12px，让 placeholder 从按钮左边缘开始 */
+  font-size: 15px !important;
+  line-height: 1.5;
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 24px !important;
+  background: #fff !important;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  transition: border-color 0.2s ease;
+  font-family: inherit;
+}
+.chat-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* ===== 所有内嵌按钮通用样式 ===== */
+.input-inner-btn {
+  position: absolute;
+  bottom: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  background: #fff;              /* 白色背景，遮挡下方文字 */
+  transition: all 0.15s ease;
+}
+
+/* ===== 三个按钮的具体位置 ===== */
+.input-left-btn {
+  left: 12px;                   /* 与 padding-left 一致 */
+}
+.input-param-btn {
+  left: 44px;                   /* 紧挨图片按钮：12 + 28 + 4 */
+}
+.input-right-btn {
+  right: 12px;
+}
+
+/* 发送按钮 */
+.input-send-btn {
+  background: #2563eb;
+}
+.input-send-btn:hover {
+  background: #1d4ed8;
+}
+
+/* 语音按钮录音状态 */
+.input-voice-btn.recording {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3);
+}
+
+/* ===== 最终统一：按钮和输入框高度（覆盖所有旧样式） ===== */
+.input-inner-btn {
+  width: 28px !important;
+  height: 28px !important;
+  bottom: 10px !important;       /* 所有按钮统一底部距离 */
+  border: none !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  z-index: 2 !important;
+  background: #fff !important;
+}
+
+.input-left-btn {
+  left: 12px !important;
+}
+.input-param-btn {
+  left: 44px !important;
+}
+.input-right-btn {
+  right: 12px !important;
+}
+
+.input-send-btn {
+  background: #2563eb !important;
+}
+.input-send-btn:hover {
+  background: #1d4ed8 !important;
+}
+
+.input-voice-btn.recording {
+  background: #ef4444 !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3) !important;
+}
+
+/* 确保输入框底部留出空间，不被按钮遮挡文字 */
+.chat-input {
+  padding-bottom: 28px !important;
+}
+/* ===== QQ 风格状态栏 ===== */
+.status-text {
+  font-style: normal !important;           /* 绝对不斜体 */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  transition: color 0.3s ease;             /* 颜色切换时平滑过渡 */
+}
+
+.reasoning-text pre {
+  background: #1e1e2e;
+  border-radius: 8px;
+  padding: 1em;
+  overflow-x: auto;
+}
+.reasoning-text pre code {
+  color: #cdd6f4;
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
 }

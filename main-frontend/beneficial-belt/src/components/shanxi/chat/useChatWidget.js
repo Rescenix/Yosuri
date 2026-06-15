@@ -54,6 +54,7 @@ const isMobile = computed(() => {
   function smartScrollAndRefresh() {
     smartScrollToBottom()
     messages.value = [...messages.value]
+  
   }
 
   function adjustInputHeight() {
@@ -81,13 +82,17 @@ const isMobile = computed(() => {
     isExpanded.value = !isExpanded.value
   }
 
-  function toggleChat() {
+function toggleChat() {
     if (props.autoOpen || (typeof window !== 'undefined' && window.location.pathname.startsWith('/chat'))) {
       window.location.href = '/'
       return
     }
     isOpen.value = !isOpen.value
     if (isOpen.value) {
+      // 桌面端打开时默认放大
+      if (!isMobile.value) {
+        isExpanded.value = true
+      }
       nextTick(() => forceScrollToBottom())
       setTimeout(() => forceScrollToBottom(), 200)
     }

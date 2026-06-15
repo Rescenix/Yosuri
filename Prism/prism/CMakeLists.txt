@@ -4,8 +4,11 @@ project(PrismStore LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 编译为共享库
-add_library(prism_store SHARED prism_store.cpp)
+# 编译为共享库（包含元胞引擎）
+add_library(prism_store SHARED
+    prism_store.cpp
+    cellular_engine.cpp
+)
 
 # 可选：编译测试程序
 add_executable(test_prism main.cpp)

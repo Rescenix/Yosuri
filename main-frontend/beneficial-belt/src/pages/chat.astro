@@ -12,14 +12,7 @@ import ChatWidget from "../components/shanxi/chat/ChatWidget.vue";
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; overflow: hidden; background: #fff; }
     </style>
-    <script>
-      // 强制注销所有 Service Worker，防止缓存导致白屏
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(regs) {
-          regs.forEach(function(reg) { reg.unregister(); });
-        });
-      }
-    </script>
+
   </head>
   <body>
     <ChatWidget client:only="vue" autoOpen={true} sessionId="" />

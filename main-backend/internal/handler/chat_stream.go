@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"backend/internal/ai/core"
+	"backend/internal/memory"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,6 +51,29 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 	systemPrompt := buildSystemPrompt(req, c, h.memoryStore)
 	history := h.sessionStore.Get(req.SessionID)
 
+	// ===== 元胞博弈：选择情绪色彩 =====
+	candidates := []memory.Candidate{
+		{ID: 1, Reward: 0.4}, // 温柔情绪
+		{ID: 2, Reward: 0.5}, // 理性情绪
+		{ID: 3, Reward: 0.3}, // 幽默情绪
+		{ID: 4, Reward: 0.2}, // 冷淡情绪
+	}
+	winningID := memory.RunStrategyGame(candidates, 64, 30, 0.02)
+	fmt.Printf("🎲 元胞博弈获胜情绪: %d\n", winningID)
+
+	// 根据获胜策略调整情绪色彩（不改人格）
+	switch winningID {
+	case 1:
+		systemPrompt += "\n[当前情绪] 你此刻心情比较柔软，虽然还是傲娇，但比平时更愿意流露关心。"
+	case 2:
+		systemPrompt += "\n[当前情绪] 你此刻进入了冷静分析模式，会用更严谨的逻辑回应，但傲娇的底色不变。"
+	case 3:
+		systemPrompt += "\n[当前情绪] 你此刻心情不错，可以适当幽默调侃，但别忘了你的傲娇人设。"
+	case 4:
+		systemPrompt += "\n[当前情绪] 你此刻有点不耐烦，话会更少，吐槽会更直接。"
+	}
+	// ===== 博弈结束 =====
+
 	finalContent, finalReasoning, tokenUsage, err := h.resolveConversation(
 		c,
 		systemPrompt,
@@ -69,6 +93,22 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 
 	latency := time.Since(start).Milliseconds()
 
+	// 全局清洗：将所有占位符替换为正常括号
+	finalContent = strings.ReplaceAll(finalContent, "OP_BRACKET___", "[")
+	finalContent = strings.ReplaceAll(finalContent, "___CL_BRACKET", "]")
+	finalReasoning = strings.ReplaceAll(finalReasoning, "OP_BRACKET___", "[")
+	finalReasoning = strings.ReplaceAll(finalReasoning, "___CL_BRACKET", "]")
+
+	// 逐字符推送思考过程
+	if finalReasoning != "" {
+		for _, ch := range finalReasoning {
+			writeSSE(c, "reasoning", "reasoning", map[string]string{"content": string(ch)})
+			c.Writer.Flush()
+			time.Sleep(30 * time.Millisecond)
+		}
+	}
+
+	// 逐字符推送正文
 	if finalContent != "" {
 		for _, ch := range finalContent {
 			writeSSE(c, "content", "content", map[string]string{"content": string(ch)})
@@ -273,6 +313,15 @@ func sanitizeMessages(msgs []DSMessage) []DSMessage {
 
 func writeSSE(c *gin.Context, event string, eventType string, data map[string]string) {
 	data["type"] = eventType
+	// 全局清洗：确保所有通过 SSE 发送的内容都正常显示括号
+	if content, ok := data["content"]; ok {
+		data["content"] = strings.ReplaceAll(content, "OP_BRACKET___", "[")
+		data["content"] = strings.ReplaceAll(data["content"], "___CL_BRACKET", "]")
+	}
+	if reasoning, ok := data["reasoning"]; ok {
+		data["reasoning"] = strings.ReplaceAll(reasoning, "OP_BRACKET___", "[")
+		data["reasoning"] = strings.ReplaceAll(data["reasoning"], "___CL_BRACKET", "]")
+	}
 	jsonData, _ := json.Marshal(data)
 	c.Writer.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData))))
 }

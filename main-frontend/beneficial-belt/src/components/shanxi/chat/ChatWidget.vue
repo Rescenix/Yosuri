@@ -6,34 +6,27 @@
 
     <div v-if="isOpen && isExpanded" class="chat-overlay" @click="toggleExpand"></div>
 
-<div class="chat-window" :class="{ expanded: isExpanded, mobile: isMobile }" :style="{ display: isOpen ? 'flex' : 'none' }">
+    <div class="chat-window" :class="{ expanded: isExpanded, mobile: isMobile }" :style="{ display: isOpen ? 'flex' : 'none' }">
       <div class="chat-header">
         <div class="header-left">
-          <div class="header-user-info">
-            <span class="header-name">杉汐</span>
-            <div class="status-wrapper">
-              <span class="status-dot" :style="{ background: statusDotColor }"></span>
-              <span class="status-text">{{ currentStatus }}</span>
-            </div>
-          </div>
+          <span class="header-name">杉汐</span>
+          <span class="status-dot" :style="{ background: statusDotColor }"></span>
+         <span class="status-text" :style="{ color: statusTextColor }">{{ currentStatus }}</span>
         </div>
         <div class="header-actions">
-          <button class="ds-btn" v-if="!isMobile"  @click="toggleExpand" :title="isExpanded ? '还原' : '放大'">
-            <Icon :icon="isExpanded ? 'mdi:arrow-collapse' : 'mdi:arrow-expand'" width="16" color="#666" />
-          </button>
-          <button class="ds-btn" @click="toggleChat">
-            <Icon icon="heroicons:x-mark-20-solid" width="16" color="#666" />
+          <button class="header-btn" @click="toggleChat">
+            <Icon icon="heroicons:x-mark-20-solid" width="16" color="#888" />
           </button>
         </div>
       </div>
 
       <div class="chat-messages" ref="messagesContainer">
         <div v-if="messages.length === 0 && !welcomeLoading" class="message-row bot">
-  <div class="message bot">{{ welcomeMessage }}</div>
-</div>
-<div v-if="messages.length === 0 && welcomeLoading" class="message-row bot">
-  <div class="message bot" style="opacity:0.6">杉汐正在想起你...</div>
-</div>
+          <div class="message bot">{{ welcomeMessage }}</div>
+        </div>
+        <div v-if="messages.length === 0 && welcomeLoading" class="message-row bot">
+          <div class="message bot" style="opacity:0.6">杉汐正在想起你...</div>
+        </div>
         <template v-for="item in groupedMessages">
           <div v-if="item.type === 'time'" :key="`time-${item.timestamp}`" class="chat-time">
             {{ formatChatTime(item.timestamp) }}
@@ -43,28 +36,24 @@
               <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
             </div>
             <div v-else class="message" :class="item.sender">
-  <!-- 回忆状态提示 -->
-  <div v-if="item.sender === 'bot' && item.recalling" class="recalling-hint">
-    <Icon icon="mdi:memory" width="14" color="#6b7280" />
-    <span>杉汐正在回忆与你的过去...</span>
-  </div>
-
+              <div v-if="item.sender === 'bot' && item.recalling" class="recalling-hint">
+                <Icon icon="mdi:memory" width="14" color="#6b7280" />
+                <span>杉汐正在回忆与你的过去...</span>
+              </div>
 
               <div v-if="item.reasoning" class="reasoning-stream">
                 <div class="reasoning-label">
                   <Icon icon="la:atom" width="14" color="#6b7280" />
                   思考中...
                 </div>
-                <div class="reasoning-text">{{ item.reasoning }}</div>
+             <div class="reasoning-text" v-html="renderMarkdown(item.reasoning, true)"></div>
               </div>
 
-
-   <div v-if="item.toolCallName" class="tool-call-indicator">
-    <Icon icon="mdi:cog-sync" width="14" color="#6b7280" />
-    <span>正在调用工具：{{ item.toolCallName }}</span>
-    <span v-if="item.toolCallDetail" class="tool-call-detail">{{ item.toolCallDetail }}</span>
-</div>
-              <!-- 始终渲染 Markdown，流式过程中也实时解析 -->
+              <div v-if="item.toolCallName" class="tool-call-indicator">
+                <Icon icon="mdi:cog-sync" width="14" color="#6b7280" />
+                <span>正在调用工具：{{ item.toolCallName }}</span>
+                <span v-if="item.toolCallDetail" class="tool-call-detail">{{ item.toolCallDetail }}</span>
+              </div>
               <div v-if="item.sender === 'bot'" class="markdown-body" v-html="renderMarkdown(item.content, true)"></div>
               <div v-else>{{ item.content }}</div>
               <button v-if="isLoggedIn && item.sender === 'bot'" class="ds-btn ds-btn-msg" @click="playVoice(item.content)" title="播放语音">
@@ -75,76 +64,84 @@
         </template>
       </div>
 
-           <!-- 输入区域（置底设计） -->
-      <!-- 输入区域（置底设计） -->
-<div class="chat-input-area">
-  <!-- 图片上传按钮（始终在左侧） -->
-  <button v-if="isLoggedIn" class="ds-btn ds-btn-icon" @click="imageInput.click()" title="上传图片">
-    <Icon icon="heroicons:photo-20-solid" width="18" color="#666" />
-  </button>
-  <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn" @change="handleImageUpload" />
-
-  <textarea 
-    ref="chatInputRef"
-    class="chat-input" 
-    :class="{ recording: isRecording }"
-    v-model="userInput" 
-    placeholder="输入你的问题..."
-    @keypress.enter="sendMessage"
-    @input="adjustInputHeight"
-    @focus="onInputFocus"
-    @blur="onInputBlur"
-    rows="1"
-  ></textarea>
-
-
-<!-- 语音按钮 -->
-<button v-if="!userInput.trim()" class="ds-btn ds-btn-voice" :class="{ recording: isRecording }" @click="startVoiceInput" title="语音输入">
-  <Icon icon="mdi:microphone" width="20" :color="isRecording ? '#fff' : '#666'" />
-</button>
-
-  <!-- 发送按钮（输入框有内容时显示） -->
-  <button v-else class="ds-btn ds-btn-send" @click="sendMessage">
-    <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
-  </button>
-</div>
-
-      <!-- 调试参数（纯文字排版） -->
-      <details class="debug-panel" v-if="isLoggedIn">
-        <summary>
-          <Icon icon="mdi:tune" width="14" color="#888" />
-          
-          <span class="debug-badge">{{ lastTokenUsage || '0' }}T / {{ lastLatency || '0' }}ms</span>
-        </summary>
-        <div class="debug-content">
-          <div class="debug-row">
-            <span class="debug-label">T</span>
+      <!-- 输入区域（极简融合） -->
+      <div class="chat-input-area">
+        <!-- 参数面板（输入框上方弹出） -->
+        <div v-if="showParams" class="params-panel">
+          <div class="param-row">
+            <span class="param-label">T</span>
             <input type="range" min="0" max="2" step="0.1" v-model.number="debugTemp" @change="updateParams" />
-            <span class="debug-value">{{ debugTemp }}</span>
+            <span class="param-value">{{ debugTemp }}</span>
           </div>
-          <div class="debug-row">
-            <span class="debug-label">TopP</span>
+          <div class="param-row">
+            <span class="param-label">TopP</span>
             <input type="range" min="0" max="1" step="0.05" v-model.number="debugTopP" @change="updateParams" />
-            <span class="debug-value">{{ debugTopP }}</span>
+            <span class="param-value">{{ debugTopP }}</span>
           </div>
-          <div class="debug-row">
-            <span class="debug-label">Tokens</span>
+          <div class="param-row">
+            <span class="param-label">Tokens</span>
             <input type="number" v-model.number="debugMaxTokens" min="100" max="8192" step="100" @change="updateParams" />
           </div>
-          <div class="debug-row">
-            <span class="debug-label">思考</span>
+          <div class="param-row">
+            <span class="param-label">思考</span>
             <select v-model="debugReasoning" @change="updateParams">
               <option value="">关闭</option>
               <option value="high">开启（高）</option>
               <option value="max">开启（最强）</option>
             </select>
           </div>
-          <div class="debug-row debug-stats">
-            <span>余额 {{ balance || '--' }}</span>
-            <button class="debug-refresh-btn" @click="fetchBalance">刷新</button>
-          </div>
         </div>
-      </details>
+
+        <div class="input-wrapper">
+          <!-- 图片按钮：嵌入输入框左下角 -->
+          <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="imageInput.click()" title="上传图片">
+            <Icon icon="heroicons:photo-20-solid" width="18" color="#888" />
+          </button>
+          <!-- 参数按钮：紧挨图片按钮 -->
+          <button v-if="isLoggedIn" class="input-inner-btn input-param-btn" @click="showParams = !showParams" title="参数">
+            <Icon icon="mdi:tune" width="18" color="#888" />
+          </button>
+          <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn" @change="handleImageUpload" />
+
+          <textarea 
+            ref="chatInputRef"
+            class="chat-input" 
+            :class="{ recording: isRecording }"
+            v-model="userInput" 
+            placeholder="输入你的问题..."
+            @keypress.enter="sendMessage"
+            @input="adjustInputHeight"
+            rows="1"
+          ></textarea>
+
+          <!-- 内嵌状态栏（Token/延迟/余额） -->
+          <div class="inline-status-bar" v-if="isLoggedIn">
+            <span class="status-item">Token: {{ lastTokenUsage || '--' }}</span>
+            <span class="status-item">延迟: {{ lastLatency || '--' }}ms</span>
+            <span class="status-item">余额: {{ balance || '--' }}</span>
+          </div>
+
+          <!-- 语音按钮：嵌入输入框右下角 -->
+          <button 
+            v-if="!userInput.trim()" 
+            class="input-inner-btn input-right-btn input-voice-btn" 
+            :class="{ recording: isRecording }"
+            @mousedown.prevent="startVoiceInput"
+            @mouseup.prevent="stopVoiceAndSend"
+            @mouseleave.prevent="stopVoiceAndSend"
+            @touchstart.prevent="startVoiceInput"
+            @touchend.prevent="stopVoiceAndSend"
+            title="按住说话"
+          >
+            <Icon icon="mdi:microphone" width="20" :color="isRecording ? '#fff' : '#888'" />
+          </button>
+
+          <!-- 发送按钮：嵌入输入框右下角 -->
+          <button v-else class="input-inner-btn input-right-btn input-send-btn" @click="sendMessage">
+            <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -152,19 +149,19 @@
 <script setup>
 import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { marked } from 'marked'          // marked 只导出 marked
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/atom-one-dark.min.css'
 import katex from 'katex'
 import markedKatex from 'marked-katex-extension'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
-
-// 引入解耦后的逻辑
 import { useChatWidget } from './useChatWidget.js'
 
+// 只保留 markedKatex 配置，不再自定义 marked 渲染器
+marked.use(markedKatex({ katex, throwOnError: false }))
 
-
-
-// 语音识别
+// ===== 语音识别 =====
 const isRecording = ref(false)
 let recognition = null
 
@@ -175,87 +172,119 @@ function startVoiceInput() {
     return
   }
 
-  // 如果之前有识别正在进行，先中止
   if (recognition) {
-    try {
-      recognition.abort()
-    } catch (e) {}
+    try { recognition.abort() } catch (e) {}
   }
 
-  // 强制设置为录音状态，确保动画触发
   isRecording.value = true
 
-  // 每次创建新的识别实例，避免 already started 错误
-  recognition = new SpeechRecognition()
-  recognition.lang = 'zh-CN'
-  recognition.interimResults = false
-  recognition.maxAlternatives = 1
-  recognition.continuous = false
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript
-    userInput.value = transcript
-    isRecording.value = false
-    nextTick(() => {
-      sendMessage()
-    })
-  }
-
-  recognition.onerror = (event) => {
-    console.error('语音识别错误:', event.error)
-    isRecording.value = false
-    if (event.error === 'not-allowed') {
-      alert('请允许麦克风权限后重试')
+  navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
     }
-    // no-speech, audio-capture 等其他错误静默处理，不需要弹窗
-  }
+  }).then(stream => {
+    recognition = new SpeechRecognition()
+    recognition.lang = 'zh-CN'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 3
+    recognition.continuous = false
 
-  recognition.onend = () => {
-    isRecording.value = false
-  }
+    recognition.onresult = (event) => {
+      let best = event.results[0][0].transcript
+      for (let i = 0; i < event.results[0].length; i++) {
+        const alt = event.results[0][i]
+        if (alt.confidence > 0.8) {
+          best = alt.transcript
+          break
+        }
+      }
+      userInput.value = best
+    }
 
-  try {
-    recognition.start()
-  } catch (e) {
-    console.error('语音识别启动失败:', e)
+    recognition.onerror = (event) => {
+      console.error('语音识别错误:', event.error)
+      isRecording.value = false
+      if (event.error === 'not-allowed') {
+        alert('请允许麦克风权限后重试')
+      }
+    }
+
+    recognition.onend = () => {
+      isRecording.value = false
+      stream.getTracks().forEach(track => track.stop())
+    }
+
+    try {
+      recognition.start()
+    } catch (e) {
+      console.error('语音识别启动失败:', e)
+      isRecording.value = false
+    }
+  }).catch(err => {
+    console.error('麦克风权限被拒绝:', err)
     isRecording.value = false
-  }
+    alert('请允许麦克风权限后重试')
+  })
 }
-marked.use(markedKatex({ katex, throwOnError: false }))
+
+function stopVoiceAndSend() {
+  if (!recognition) return
+  try { recognition.stop() } catch (e) {}
+  isRecording.value = false
+  setTimeout(() => {
+    if (userInput.value.trim()) sendMessage()
+  }, 300)
+}
 
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
   sessionId: { type: String, default: 'global_chat_session' }
 })
 
-// 保留 renderMarkdown，因为模板中直接用
+// ===== 代码块高亮函数 =====
+function highlightAllCodeBlocks() {
+  requestAnimationFrame(() => {
+   document.querySelectorAll('.chat-messages .markdown-body pre, .chat-messages .reasoning-text pre').forEach(pre => {
+      const code = pre.querySelector('code')
+      if (!code) return
+      
+      const classList = [...code.classList]
+      const langClass = classList.find(c => c.startsWith('language-'))
+      const lang = langClass ? langClass.replace('language-', '') : 'text'
+      pre.setAttribute('data-lang', lang)
+      
+      hljs.highlightElement(code)
+      
+      if (!pre.querySelector('.copy-code-btn')) {
+        const copyBtn = document.createElement('button')
+        copyBtn.className = 'copy-code-btn'
+        copyBtn.textContent = '复制'
+        copyBtn.onclick = function() {
+          navigator.clipboard.writeText(code.textContent || '').then(() => {
+            copyBtn.textContent = '已复制'
+            setTimeout(() => { copyBtn.textContent = '复制' }, 2000)
+          })
+        }
+        pre.appendChild(copyBtn)
+      }
+    })
+  })
+}
+
 function renderMarkdown(text, skipSanitize = false) {
   if (!text) return ''
-  
-  // 清洗可能导致 marked 解析异常的 Unicode 字符
   text = text
     .replace(/\u200B/g, '')
     .replace(/\u00A0/g, ' ')
     .replace(/\u200E/g, '')
     .replace(/\u200F/g, '')
-
-  // 保护中文书名号/括号等标点，防止 marked 误判为标记符
-  text = text
-    .replace(/\uff08/g, '___OP_BRACKET___')  // 中文左书名号
-    .replace(/\uff09/g, '___CL_BRACKET___')  // 中文右书名号
-
   const raw = marked.parse(text)
-  
-  // 还原占位符
-  const restored = raw
-    .replace(/___OP_BRACKET___/g, '（')
-    .replace(/___CL_BRACKET___/g, '）')
-
-  if (skipSanitize) return restored
-  return DOMPurify.sanitize(restored)
+  if (skipSanitize) return raw
+  return DOMPurify.sanitize(raw)
 }
 
-// 从 useChatWidget 获取所有响应式状态和方法
 const {
   isOpen, isExpanded, isMobile, userInput, messages,
   isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
@@ -266,44 +295,100 @@ const {
   toggleExpand, toggleChat, fetchBalance, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+const statusTextColor = computed(() => {
+  const status = currentStatus.value
+  if (!status) return '#98a2b3'
+  if (status.includes('活跃') || status.includes('在线') || status.includes('帮忙') || status.includes('聊聊天')) return '#12b76a'
+  if (status.includes('发呆') || status.includes('思绪') || status.includes('休眠')) return '#f59e0b'
+  if (status.includes('忙碌') || status.includes('整理') || status.includes('写文章')) return '#ef4444'
+  return '#98a2b3'
+})
+watch(messages, () => {
+  nextTick(() => {
+    highlightAllCodeBlocks()
+  })
+}, { deep: true })
+
+// 参数面板显示状态
+const showParams = ref(false)
 </script>
 
 <style scoped>
-/* 保留必要的 scoped 样式，也可以外移到 chat-scoped.css，但保留内联最安全 */
 @import '../../../styles/shanxi/chat-window.css';
-@import './chat-scoped.css';   /* 可选：把 scoped 样式也提出去，这里先保持内联 */
-
-
-
+@import './chat-scoped.css';
 </style>
 
 <style>
 @import './chat-global.css';
 @import './chat-mobile.css';
-/* 语音录音时输入框蓝色脉冲 */
-.chat-input.recording {
-  border-color: #2563eb !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
-  animation: shanxi-pulse-border 1.5s ease-in-out infinite !important;
+
+/* ===== 新增输入框内嵌元素样式 ===== */
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
 }
 
-@keyframes shanxi-pulse-border {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
-  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.4); }
+/* 参数按钮 */
+.input-param-btn {
+  left: 46px; /* 图片按钮宽度32px + 间距14px */
+  background: transparent;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  position: absolute;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  z-index: 2;
+}
+.input-param-btn:hover {
+  background: rgba(0,0,0,0.05);
 }
 
-/* 语音按钮录音时变红并脉冲 */
-.ds-btn-voice.recording {
-  background: #ef4444 !important;
-  animation: shanxi-pulse-bg 1s ease-in-out infinite !important;
+/* 内嵌状态栏（Token/延迟/余额） */
+.inline-status-bar {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: #aaa;
+  font-family: monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
 }
 
-@keyframes shanxi-pulse-bg {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
-  50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+/* 输入框底部留出状态栏空间 */
+.chat-input {
+  padding-bottom: 22px !important; /* 额外留空 */
 }
 
-.ds-btn-voice.recording .iconify {
-  color: #fff !important;
+/* 参数面板（输入框上方弹出） */
+.params-panel {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
 }
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.param-label { width: 36px; color: #666; }
+.param-value { width: 24px; text-align: right; }
+.param-row input[type="range"] { width: 70px; }
+.param-row input[type="number"] { width: 50px; border: 1px solid #d0d5dd; border-radius: 4px; padding: 2px 4px; }
+.param-row select { border: 1px solid #d0d5dd; border-radius: 4px; padding: 2px 4px; background: #fff; }
 </style>
