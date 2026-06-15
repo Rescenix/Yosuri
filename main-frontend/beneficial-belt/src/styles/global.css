@@ -447,3 +447,8 @@ body {
   overflow: hidden;
 }
 */
+
+.markdown-body strong,
+.markdown-body b {
+  font-weight: 700 !important;
+}

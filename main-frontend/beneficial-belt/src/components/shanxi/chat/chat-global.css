@@ -286,3 +286,13 @@
   margin-left: auto;
   margin-right: auto;
 }
+
+.recalling-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  color: #6b7280;
+  font-size: 13px;
+  opacity: 0.8;
+}

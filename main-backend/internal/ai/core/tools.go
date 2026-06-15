@@ -151,4 +151,26 @@ var ChatTools = []ToolDefinition{
 			},
 		},
 	},
+
+	{
+		Type: "function",
+		Function: ToolFunctionDetail{
+			Name:        "codegraph_query",
+			Description: "使用 CodeGraph 查询代码库的结构信息（如 callers, callees, impact, context 等）",
+			Parameters: ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"subcommand": {
+						Type:        "string",
+						Description: "CodeGraph 子命令（callers, callees, impact, context, search, status 等）",
+					},
+					"symbol": {
+						Type:        "string",
+						Description: "要查询的符号名称（如函数名、类名）",
+					},
+				},
+				Required: []string{"subcommand", "symbol"},
+			},
+		},
+	},
 }

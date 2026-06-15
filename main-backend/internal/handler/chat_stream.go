@@ -15,6 +15,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type thinkingConfig struct {
+	Type string `json:"type"`
+}
+
+type streamDSReq struct {
+	Model           string                `json:"model"`
+	Messages        []DSMessage           `json:"messages"`
+	Temperature     float64               `json:"temperature,omitempty"`
+	TopP            float64               `json:"top_p,omitempty"`
+	MaxTokens       int                   `json:"max_tokens,omitempty"`
+	ReasoningEffort string                `json:"reasoning_effort,omitempty"`
+	Tools           []core.ToolDefinition `json:"tools,omitempty"`
+	Stream          bool                  `json:"stream,omitempty"`
+	Thinking        *thinkingConfig       `json:"thinking,omitempty"`
+}
+
 func (h *ChatHandler) StreamChat(c *gin.Context) {
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -32,7 +48,6 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 	c.Writer.Flush()
 
 	systemPrompt := buildSystemPrompt(req, c, h.memoryStore)
-	// 获取当前会话全部历史（不截断）
 	history := h.sessionStore.Get(req.SessionID)
 
 	finalContent, finalReasoning, tokenUsage, err := h.resolveConversation(
@@ -54,7 +69,6 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 
 	latency := time.Since(start).Milliseconds()
 
-	// 逐字符推送正文（打字机效果）
 	if finalContent != "" {
 		for _, ch := range finalContent {
 			writeSSE(c, "content", "content", map[string]string{"content": string(ch)})
@@ -86,38 +100,21 @@ func (h *ChatHandler) resolveConversation(
 	reasoningEffort string,
 ) (string, string, int, error) {
 
-	// 清洗历史：移除未完成工具调用的助手消息
-	var cleanHistory []DSMessage
-	for _, msg := range history {
-		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
-			hasResult := false
-			for _, next := range history {
-				if next.Role == "tool" && next.ToolCallID != "" {
-					for _, tc := range msg.ToolCalls {
-						if tc.ID == next.ToolCallID {
-							hasResult = true
-							break
-						}
-					}
-				}
-			}
-			if !hasResult {
-				continue // 丢弃未完成的工具调用
-			}
-		}
-		cleanHistory = append(cleanHistory, msg)
-	}
-
-	// 构建完整上下文：系统提示 + 历史 + 当前用户消息
+	// 构建干净上下文：系统提示 + 纯文本历史（不含工具日志） + 当前用户消息
 	messages := []DSMessage{
 		{Role: "system", Content: systemPrompt},
 	}
-	messages = append(messages, cleanHistory...)
+	messages = append(messages, cleanHistory(history)...)
 	messages = append(messages, DSMessage{Role: "user", Content: userMessage})
 
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if apiKey == "" {
 		return "", "", 0, fmt.Errorf("missing API key")
+	}
+
+	model := os.Getenv("DEEPSEEK_MODEL")
+	if model == "" {
+		model = "deepseek-v4-flash"
 	}
 
 	client := &http.Client{Timeout: 2 * time.Minute}
@@ -131,24 +128,22 @@ func (h *ChatHandler) resolveConversation(
 	}
 
 	for {
-		// 清理无效的 assistant 空消息
-		var validMessages []DSMessage
-		for _, msg := range messages {
-			if msg.Role == "assistant" && strings.TrimSpace(msg.Content) == "" && len(msg.ToolCalls) == 0 {
-				continue
-			}
-			validMessages = append(validMessages, msg)
-		}
-		messages = validMessages
+		messages = sanitizeMessages(messages)
 
-		reqBody := DSReq{
-			Model:           "deepseek-chat",
-			Messages:        messages,
-			Temperature:     temperature,
-			TopP:            topP,
-			MaxTokens:       currentMaxTokens,
-			ReasoningEffort: reasoningEffort,
-			Tools:           core.ChatTools,
+		reqBody := streamDSReq{
+			Model:       model,
+			Messages:    messages,
+			Temperature: temperature,
+			TopP:        topP,
+			MaxTokens:   currentMaxTokens,
+			Tools:       core.ChatTools,
+		}
+
+		if reasoningEffort != "" {
+			reqBody.ReasoningEffort = reasoningEffort
+			reqBody.Thinking = &thinkingConfig{Type: "enabled"}
+		} else {
+			reqBody.Thinking = &thinkingConfig{Type: "disabled"}
 		}
 
 		body, _ := json.Marshal(reqBody)
@@ -185,14 +180,12 @@ func (h *ChatHandler) resolveConversation(
 			ToolCalls:        choice.Message.ToolCalls,
 		}
 
-		// 推送思考内容
 		if assistantMsg.ReasoningContent != "" {
 			reasoningAccum.WriteString(assistantMsg.ReasoningContent)
 			writeSSE(c, "reasoning", "reasoning", map[string]string{"content": assistantMsg.ReasoningContent})
 			c.Writer.Flush()
 		}
 
-		// 处理空消息
 		if assistantMsg.Content == "" && len(assistantMsg.ToolCalls) == 0 {
 			if currentMaxTokens < maxTokenLimit {
 				currentMaxTokens *= 2
@@ -205,7 +198,6 @@ func (h *ChatHandler) resolveConversation(
 				fmt.Errorf("思考过程过长，请尝试关闭深度思考或缩小问题范围")
 		}
 
-		// 最终回复
 		if len(assistantMsg.ToolCalls) == 0 {
 			return assistantMsg.Content, reasoningAccum.String(), totalUsage, nil
 		}
@@ -221,32 +213,62 @@ func (h *ChatHandler) resolveConversation(
 			c.Writer.Flush()
 
 			result, err := core.ExecuteToolCall(tc)
+			var toolContent string
 			if err != nil {
 				writeSSE(c, "tool_call", "tool_call_error", map[string]string{
 					"name":  tc.Function.Name,
 					"error": err.Error(),
 				})
-				c.Writer.Flush()
-				messages = append(messages, DSMessage{
-					Role:       "tool",
-					Content:    fmt.Sprintf("工具执行失败: %v", err),
-					ToolCallID: tc.ID,
-				})
+				toolContent = fmt.Sprintf("工具执行失败: %v", err)
 			} else {
 				writeSSE(c, "tool_call", "tool_call_result", map[string]string{
 					"name":   tc.Function.Name,
 					"result": result.Content,
 				})
-				c.Writer.Flush()
-				messages = append(messages, DSMessage{
-					Role:       "tool",
-					Content:    result.Content,
-					ToolCallID: result.ToolCallID,
-				})
+				toolContent = result.Content
 			}
+			// 无论如何都追加 tool 消息，确保数量匹配
+			messages = append(messages, DSMessage{
+				Role:       "tool",
+				Content:    toolContent,
+				ToolCallID: tc.ID,
+			})
+			c.Writer.Flush()
 		}
-		// 继续循环，模型会基于工具结果生成新回复
 	}
+}
+
+// cleanHistory 清洗历史：只保留 user 和 assistant 的纯文本内容，丢弃所有 tool 消息和 tool_calls 字段
+func cleanHistory(history []DSMessage) []DSMessage {
+	var cleaned []DSMessage
+	for _, msg := range history {
+		if msg.Role == "user" || msg.Role == "assistant" {
+			// 只保留纯文本内容，丢弃 tool_calls 和 timestamp 等字段
+			cleaned = append(cleaned, DSMessage{
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		}
+		// tool 消息直接丢弃，不进入上下文
+	}
+	return cleaned
+}
+
+// sanitizeMessages 发送前最后的清洗
+func sanitizeMessages(msgs []DSMessage) []DSMessage {
+	var cleaned []DSMessage
+	for _, msg := range msgs {
+		// 跳过既没有内容也没有工具调用的 assistant 消息
+		if msg.Role == "assistant" && msg.Content == "" && len(msg.ToolCalls) == 0 {
+			continue
+		}
+		// 跳过内容为空的 tool 消息
+		if msg.Role == "tool" && msg.Content == "" {
+			continue
+		}
+		cleaned = append(cleaned, msg)
+	}
+	return cleaned
 }
 
 func writeSSE(c *gin.Context, event string, eventType string, data map[string]string) {

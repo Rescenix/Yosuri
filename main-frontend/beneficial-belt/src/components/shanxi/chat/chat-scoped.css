@@ -80,3 +80,52 @@
   padding: 4px 8px;
   border-radius: 4px;
 }
+
+.tool-call-detail {
+    font-family: monospace;
+    font-size: 11px;
+    color: #666;
+    margin-left: 6px;
+    background: #f0f0f0;
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+/* 语音按钮 */
+.ds-btn-voice {
+  background: #f0f0f0;
+  border: none;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.ds-btn-voice:hover {
+  background: #e0e0e0;
+}
+
+/* 录音时输入框蓝色波浪边框 */
+.chat-input.recording {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.4); }
+}
+
+/* 录音时语音按钮变红并有脉冲效果 */
+.ds-btn-voice.recording {
+  background: #ef4444 !important;
+  animation: pulse-bg 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-bg {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}

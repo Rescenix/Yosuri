@@ -28,9 +28,12 @@
       </div>
 
       <div class="chat-messages" ref="messagesContainer">
-        <div v-if="messages.length === 0 && !welcomeLoading" class="message bot">{{ welcomeMessage }}</div>
-        <div v-if="messages.length === 0 && welcomeLoading" class="message bot" style="opacity:0.6">杉汐正在想起你...</div>
-
+        <div v-if="messages.length === 0 && !welcomeLoading" class="message-row bot">
+  <div class="message bot">{{ welcomeMessage }}</div>
+</div>
+<div v-if="messages.length === 0 && welcomeLoading" class="message-row bot">
+  <div class="message bot" style="opacity:0.6">杉汐正在想起你...</div>
+</div>
         <template v-for="item in groupedMessages">
           <div v-if="item.type === 'time'" :key="`time-${item.timestamp}`" class="chat-time">
             {{ formatChatTime(item.timestamp) }}
@@ -40,6 +43,13 @@
               <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
             </div>
             <div v-else class="message" :class="item.sender">
+  <!-- 回忆状态提示 -->
+  <div v-if="item.sender === 'bot' && item.recalling" class="recalling-hint">
+    <Icon icon="mdi:memory" width="14" color="#6b7280" />
+    <span>杉汐正在回忆与你的过去...</span>
+  </div>
+
+
               <div v-if="item.reasoning" class="reasoning-stream">
                 <div class="reasoning-label">
                   <Icon icon="la:atom" width="14" color="#6b7280" />
@@ -49,9 +59,10 @@
               </div>
 
 
-              <div v-if="item.toolCallName" class="tool-call-indicator">
+   <div v-if="item.toolCallName" class="tool-call-indicator">
     <Icon icon="mdi:cog-sync" width="14" color="#6b7280" />
     <span>正在调用工具：{{ item.toolCallName }}</span>
+    <span v-if="item.toolCallDetail" class="tool-call-detail">{{ item.toolCallDetail }}</span>
 </div>
               <!-- 始终渲染 Markdown，流式过程中也实时解析 -->
               <div v-if="item.sender === 'bot'" class="markdown-body" v-html="renderMarkdown(item.content, true)"></div>
@@ -65,26 +76,38 @@
       </div>
 
            <!-- 输入区域（置底设计） -->
-      <div class="chat-input-area">
-        <button v-if="isLoggedIn" class="ds-btn ds-btn-icon" @click="imageInput.click()" title="上传图片">
-          <Icon icon="heroicons:photo-20-solid" width="18" color="#666" />
-        </button>
-        <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn" @change="handleImageUpload" />
+      <!-- 输入区域（置底设计） -->
+<div class="chat-input-area">
+  <!-- 图片上传按钮（始终在左侧） -->
+  <button v-if="isLoggedIn" class="ds-btn ds-btn-icon" @click="imageInput.click()" title="上传图片">
+    <Icon icon="heroicons:photo-20-solid" width="18" color="#666" />
+  </button>
+  <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn" @change="handleImageUpload" />
 
-        <textarea 
-          ref="chatInputRef"
-          class="chat-input" 
-          v-model="userInput" 
-          placeholder="输入你的问题..."
-          @keypress.enter="sendMessage"
-          @input="adjustInputHeight"
-          rows="1"
-        ></textarea>
+  <textarea 
+    ref="chatInputRef"
+    class="chat-input" 
+    :class="{ recording: isRecording }"
+    v-model="userInput" 
+    placeholder="输入你的问题..."
+    @keypress.enter="sendMessage"
+    @input="adjustInputHeight"
+    @focus="onInputFocus"
+    @blur="onInputBlur"
+    rows="1"
+  ></textarea>
 
-        <button class="ds-btn ds-btn-send" @click="sendMessage" :disabled="!userInput.trim()">
-          <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
-        </button>
-      </div>
+
+<!-- 语音按钮 -->
+<button v-if="!userInput.trim()" class="ds-btn ds-btn-voice" :class="{ recording: isRecording }" @click="startVoiceInput" title="语音输入">
+  <Icon icon="mdi:microphone" width="20" :color="isRecording ? '#fff' : '#666'" />
+</button>
+
+  <!-- 发送按钮（输入框有内容时显示） -->
+  <button v-else class="ds-btn ds-btn-send" @click="sendMessage">
+    <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
+  </button>
+</div>
 
       <!-- 调试参数（纯文字排版） -->
       <details class="debug-panel" v-if="isLoggedIn">
@@ -127,11 +150,9 @@
 </template>
 
 <script setup>
-
+import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
-
-
-import { marked } from 'marked'
+import { marked } from 'marked'          // marked 只导出 marked
 import katex from 'katex'
 import markedKatex from 'marked-katex-extension'
 import DOMPurify from 'dompurify'
@@ -140,6 +161,66 @@ import 'katex/dist/katex.min.css'
 // 引入解耦后的逻辑
 import { useChatWidget } from './useChatWidget.js'
 
+
+
+
+// 语音识别
+const isRecording = ref(false)
+let recognition = null
+
+function startVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SpeechRecognition) {
+    alert('你的浏览器不支持语音识别，请使用 Chrome 或 Edge')
+    return
+  }
+
+  // 如果之前有识别正在进行，先中止
+  if (recognition) {
+    try {
+      recognition.abort()
+    } catch (e) {}
+  }
+
+  // 强制设置为录音状态，确保动画触发
+  isRecording.value = true
+
+  // 每次创建新的识别实例，避免 already started 错误
+  recognition = new SpeechRecognition()
+  recognition.lang = 'zh-CN'
+  recognition.interimResults = false
+  recognition.maxAlternatives = 1
+  recognition.continuous = false
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript
+    userInput.value = transcript
+    isRecording.value = false
+    nextTick(() => {
+      sendMessage()
+    })
+  }
+
+  recognition.onerror = (event) => {
+    console.error('语音识别错误:', event.error)
+    isRecording.value = false
+    if (event.error === 'not-allowed') {
+      alert('请允许麦克风权限后重试')
+    }
+    // no-speech, audio-capture 等其他错误静默处理，不需要弹窗
+  }
+
+  recognition.onend = () => {
+    isRecording.value = false
+  }
+
+  try {
+    recognition.start()
+  } catch (e) {
+    console.error('语音识别启动失败:', e)
+    isRecording.value = false
+  }
+}
 marked.use(markedKatex({ katex, throwOnError: false }))
 
 const props = defineProps({
@@ -150,9 +231,28 @@ const props = defineProps({
 // 保留 renderMarkdown，因为模板中直接用
 function renderMarkdown(text, skipSanitize = false) {
   if (!text) return ''
+  
+  // 清洗可能导致 marked 解析异常的 Unicode 字符
+  text = text
+    .replace(/\u200B/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u200E/g, '')
+    .replace(/\u200F/g, '')
+
+  // 保护中文书名号/括号等标点，防止 marked 误判为标记符
+  text = text
+    .replace(/\uff08/g, '___OP_BRACKET___')  // 中文左书名号
+    .replace(/\uff09/g, '___CL_BRACKET___')  // 中文右书名号
+
   const raw = marked.parse(text)
-  if (skipSanitize) return raw
-  return DOMPurify.sanitize(raw)
+  
+  // 还原占位符
+  const restored = raw
+    .replace(/___OP_BRACKET___/g, '（')
+    .replace(/___CL_BRACKET___/g, '）')
+
+  if (skipSanitize) return restored
+  return DOMPurify.sanitize(restored)
 }
 
 // 从 useChatWidget 获取所有响应式状态和方法
@@ -180,4 +280,30 @@ const {
 <style>
 @import './chat-global.css';
 @import './chat-mobile.css';
+/* 语音录音时输入框蓝色脉冲 */
+.chat-input.recording {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
+  animation: shanxi-pulse-border 1.5s ease-in-out infinite !important;
+}
+
+@keyframes shanxi-pulse-border {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.4); }
+}
+
+/* 语音按钮录音时变红并脉冲 */
+.ds-btn-voice.recording {
+  background: #ef4444 !important;
+  animation: shanxi-pulse-bg 1s ease-in-out infinite !important;
+}
+
+@keyframes shanxi-pulse-bg {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+}
+
+.ds-btn-voice.recording .iconify {
+  color: #fff !important;
+}
 </style>
