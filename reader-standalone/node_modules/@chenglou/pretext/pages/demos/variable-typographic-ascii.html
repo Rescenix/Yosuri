@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Proportional ASCII art driven by a shared particle-and-attractor brightness field. Georgia at 3 weights × normal/italic vs monospace comparison, with characters chosen by brightness and measured width via pretext.">
+  <title>Mockup 144 — Variable Typographic ASCII</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    html, body { background: linear-gradient(180deg, #0a0a12 0%, #06060a 100%); color: #ddd8d0; min-height: 100%; }
+    :root { --art-height: 448px; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 32px 20px 60px;
+    }
+    h1 { font: 600 24px/1.3 "Helvetica Neue"; color: rgba(255,255,255,0.9); margin-bottom: 6px; }
+    .subtitle { font: 400 13px/1.5 "Helvetica Neue"; color: rgba(255,255,255,0.3); margin-bottom: 28px; max-width: 720px; text-align: center; }
+    .comparison { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
+    .panel { display: flex; flex-direction: column; align-items: center; width: min(468px, calc(100vw - 40px)); }
+    .panel-label { font: 500 10px/1 "Helvetica Neue"; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+    .art-box {
+      width: 100%;
+      height: calc(var(--art-height) + 28px);
+      border: 1px solid rgba(255,255,255,0.05); border-radius: 10px;
+      padding: 14px; background: rgba(0,0,0,0.4); overflow: hidden;
+      box-shadow: inset 0 0 30px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .art-row {
+      display: block;
+      width: fit-content;
+      margin-inline: auto;
+      white-space: pre;
+      font-family: Georgia, Palatino, "Times New Roman", serif;
+      font-size: 14px;
+    }
+    .source-canvas {
+      display: block;
+      width: 100%;
+      height: var(--art-height);
+      object-fit: contain;
+      object-position: center;
+      border-radius: 4px;
+    }
+    #mono-box .art-row { font: 400 14px/16px "Courier New", Courier, monospace; color: rgba(130,155,210,0.7); }
+    .w3 { font-weight: 300; } .w5 { font-weight: 500; } .w8 { font-weight: 800; }
+    .it { font-style: italic; }
+    .a1 { color: rgba(196,163,90,0.10); } .a2 { color: rgba(196,163,90,0.20); }
+    .a3 { color: rgba(196,163,90,0.30); } .a4 { color: rgba(196,163,90,0.40); }
+    .a5 { color: rgba(196,163,90,0.50); } .a6 { color: rgba(196,163,90,0.60); }
+    .a7 { color: rgba(196,163,90,0.70); } .a8 { color: rgba(196,163,90,0.80); }
+    .a9 { color: rgba(196,163,90,0.90); } .a10 { color: rgba(196,163,90,1.0); }
+    .credit {
+      position: fixed; bottom: 12px; right: 16px; z-index: 20;
+      font: 400 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: rgba(255,255,255,0.28);
+      text-decoration: none;
+    }
+    .credit:hover { color: rgba(255,255,255,0.44); }
+  </style>
+</head>
+<body>
+  <h1>Variable Typographic ASCII</h1>
+  <p class="subtitle">
+    Proportional font (Georgia) rendered at 3 font-weights × normal/italic — each variant measured by pretext for precise width.
+    A shared particle-and-attractor brightness field drives all three panels, then characters are chosen by brightness AND width to preserve the shape in proportional type.
+  </p>
+  <div class="comparison">
+    <div class="panel">
+      <div class="panel-label">Source Field</div>
+      <div class="art-box" id="source-box"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">Proportional × 3 Weights × Italic</div>
+      <div class="art-box" id="prop-box"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">Monospace × Single Weight</div>
+      <div class="art-box" id="mono-box"></div>
+    </div>
+  </div>
+  <a class="credit" href="https://x.com/somnai_dreams" target="_blank" rel="noreferrer">Made by @somnai_dreams</a>
+
+  <script type="module" src="./variable-typographic-ascii.ts"></script>
+</body>
+</html>

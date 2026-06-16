@@ -2,6 +2,7 @@ package handler
 
 import (
 	"backend/internal/ai/core"
+
 	"backend/internal/middleware"
 	"context"
 	"fmt"
@@ -12,22 +13,35 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
-	chatHandler := NewChatHandler(memoryStore, sessionStore) // 新增
-	core.RegisterCleanFunc(func() {
-		memoryStore.CleanMemories()
-	})
 
+	// 全局 CORS 处理（必须在所有路由之前）
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
+			c.AbortWithStatus(http.StatusNoContent) // 204
 			return
 		}
 		c.Next()
 	})
 
+	chatHandler := NewChatHandler(memoryStore, sessionStore) // 新增
+	core.RegisterCleanFunc(func() {
+		memoryStore.CleanMemories()
+	})
+
+	// r.Use(func(c *gin.Context) {
+	// 	c.Header("Access-Control-Allow-Origin", "*")
+	// 	c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+	// 	c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+	// 	if c.Request.Method == "OPTIONS" {
+	// 		c.AbortWithStatus(204)
+	// 		return
+	// 	}
+	// 	c.Next()
+	// })
+	r.POST("/api/run", RunCodeHandler)
 	r.POST("/api/chat/stream", chatHandler.StreamChat) // 新增
 	// 以下是你原有的路由，保持不变
 	r.PATCH("/api/posts/:id", UpdatePostTags)

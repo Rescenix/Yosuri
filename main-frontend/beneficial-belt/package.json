@@ -15,6 +15,7 @@
     "@astrojs/vue": "^6.0.1",
     "@chenglou/pretext": "^0.0.7",
     "@iconify/vue": "^5.0.1",
+    "@neilsustc/markdown-it-katex": "^1.0.0",
     "@noction/vue-bezier": "^2.0.3",
     "@pixiv/three-vrm": "^3.5.3",
     "@talers/html-pages": "^0.5.5",
@@ -30,10 +31,13 @@
     "@worstone/vue-aplayer": "^1.0.8",
     "astro": "^6.3.1",
     "easymde": "^2.21.0",
+    "github-markdown-css": "^5.9.0",
     "gsap": "^3.15.0",
     "highlight.js": "^11.11.1",
     "jquery": "^4.0.0",
     "katex": "^0.17.0",
+    "markdown-it": "^14.2.0",
+    "markdown-it-katex": "^2.0.3",
     "marked": "^18.0.5",
     "marked-katex-extension": "^5.1.10",
     "page-flip": "^2.0.7",
@@ -44,7 +48,8 @@
     "vue": "^3.5.34",
     "vue-fluid": "^1.0.3",
     "vue-virtual-scroller": "^3.0.4",
-    "web-highlighter": "^0.7.4"
+    "web-highlighter": "^0.7.4",
+    "x-markdown-vue": "^0.0.200"
   },
   "devDependencies": {
     "@vicons/fluent": "^0.13.0",

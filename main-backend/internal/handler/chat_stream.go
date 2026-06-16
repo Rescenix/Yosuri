@@ -7,11 +7,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"backend/internal/ai/core"
-	"backend/internal/memory"
+	// "backend/internal/memory"
 
 	"github.com/gin-gonic/gin"
 )
@@ -51,28 +52,27 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 	systemPrompt := buildSystemPrompt(req, c, h.memoryStore)
 	history := h.sessionStore.Get(req.SessionID)
 
-	// ===== 元胞博弈：选择情绪色彩 =====
-	candidates := []memory.Candidate{
-		{ID: 1, Reward: 0.4}, // 温柔情绪
-		{ID: 2, Reward: 0.5}, // 理性情绪
-		{ID: 3, Reward: 0.3}, // 幽默情绪
-		{ID: 4, Reward: 0.2}, // 冷淡情绪
-	}
-	winningID := memory.RunStrategyGame(candidates, 64, 30, 0.02)
-	fmt.Printf("🎲 元胞博弈获胜情绪: %d\n", winningID)
+	// // ===== 元胞博弈：选择情绪色彩 =====
+	// candidates := []memory.Candidate{
+	// 	{ID: 1, Reward: 0.4},
+	// 	{ID: 2, Reward: 0.5},
+	// 	{ID: 3, Reward: 0.3},
+	// 	{ID: 4, Reward: 0.2},
+	// }
+	// winningID := memory.RunStrategyGame(candidates, 64, 30, 0.02)
+	// fmt.Printf("🎲 元胞博弈获胜情绪: %d\n", winningID)
 
-	// 根据获胜策略调整情绪色彩（不改人格）
-	switch winningID {
-	case 1:
-		systemPrompt += "\n[当前情绪] 你此刻心情比较柔软，虽然还是傲娇，但比平时更愿意流露关心。"
-	case 2:
-		systemPrompt += "\n[当前情绪] 你此刻进入了冷静分析模式，会用更严谨的逻辑回应，但傲娇的底色不变。"
-	case 3:
-		systemPrompt += "\n[当前情绪] 你此刻心情不错，可以适当幽默调侃，但别忘了你的傲娇人设。"
-	case 4:
-		systemPrompt += "\n[当前情绪] 你此刻有点不耐烦，话会更少，吐槽会更直接。"
-	}
-	// ===== 博弈结束 =====
+	// switch winningID {
+	// case 1:
+	// 	systemPrompt += "\n[当前情绪] 你此刻心情比较柔软，虽然还是傲娇，但比平时更愿意流露关心。"
+	// case 2:
+	// 	systemPrompt += "\n[当前情绪] 你此刻进入了冷静分析模式，会用更严谨的逻辑回应，但傲娇的底色不变。"
+	// case 3:
+	// 	systemPrompt += "\n[当前情绪] 你此刻心情不错，可以适当幽默调侃，但别忘了你的傲娇人设。"
+	// case 4:
+	// 	systemPrompt += "\n[当前情绪] 你此刻有点不耐烦，话会更少，吐槽会更直接。"
+	// }
+	// // ===== 博弈结束 =====
 
 	finalContent, finalReasoning, tokenUsage, err := h.resolveConversation(
 		c,
@@ -93,11 +93,11 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 
 	latency := time.Since(start).Milliseconds()
 
-	// 全局清洗：将所有占位符替换为正常括号
-	finalContent = strings.ReplaceAll(finalContent, "OP_BRACKET___", "[")
-	finalContent = strings.ReplaceAll(finalContent, "___CL_BRACKET", "]")
-	finalReasoning = strings.ReplaceAll(finalReasoning, "OP_BRACKET___", "[")
-	finalReasoning = strings.ReplaceAll(finalReasoning, "___CL_BRACKET", "]")
+	// 不再需要那些丑陋的占位符替换，因为清洗已在源头完成
+	// finalContent = strings.ReplaceAll(finalContent, "OP_BRACKET___", "[")
+	// finalContent = strings.ReplaceAll(finalContent, "___CL_BRACKET", "]")
+	// finalReasoning = strings.ReplaceAll(finalReasoning, "OP_BRACKET___", "[")
+	// finalReasoning = strings.ReplaceAll(finalReasoning, "___CL_BRACKET", "]")
 
 	// 逐字符推送思考过程
 	if finalReasoning != "" {
@@ -140,7 +140,6 @@ func (h *ChatHandler) resolveConversation(
 	reasoningEffort string,
 ) (string, string, int, error) {
 
-	// 构建干净上下文：系统提示 + 纯文本历史（不含工具日志） + 当前用户消息
 	messages := []DSMessage{
 		{Role: "system", Content: systemPrompt},
 	}
@@ -220,6 +219,10 @@ func (h *ChatHandler) resolveConversation(
 			ToolCalls:        choice.Message.ToolCalls,
 		}
 
+		// 🔥 核心清洗：将模型输出的 [ ... ] 公式转换为 $...$ 或 $$...$$
+		// assistantMsg.Content = replaceMathBrackets(assistantMsg.Content)
+		// assistantMsg.ReasoningContent = replaceMathBrackets(assistantMsg.ReasoningContent)
+
 		if assistantMsg.ReasoningContent != "" {
 			reasoningAccum.WriteString(assistantMsg.ReasoningContent)
 			writeSSE(c, "reasoning", "reasoning", map[string]string{"content": assistantMsg.ReasoningContent})
@@ -242,7 +245,7 @@ func (h *ChatHandler) resolveConversation(
 			return assistantMsg.Content, reasoningAccum.String(), totalUsage, nil
 		}
 
-		// 工具调用：先追加助手消息，再追加工具结果
+		// 工具调用
 		messages = append(messages, assistantMsg)
 
 		for _, tc := range assistantMsg.ToolCalls {
@@ -267,7 +270,6 @@ func (h *ChatHandler) resolveConversation(
 				})
 				toolContent = result.Content
 			}
-			// 无论如何都追加 tool 消息，确保数量匹配
 			messages = append(messages, DSMessage{
 				Role:       "tool",
 				Content:    toolContent,
@@ -278,18 +280,83 @@ func (h *ChatHandler) resolveConversation(
 	}
 }
 
-// cleanHistory 清洗历史：只保留 user 和 assistant 的纯文本内容，丢弃所有 tool 消息和 tool_calls 字段
+// 🔥 新增函数：将 DeepSeek 输出的 [ ... ] 公式转换为标准 LaTeX 标记
+// 增强版公式清洗：统一处理所有 DeepSeek 可能输出的 LaTeX 格式
+// func replaceMathBrackets(text string) string {
+// 	if text == "" {
+// 		return text
+// 	}
+
+// 	// 修复 \ begin → \begin, \ end → \end 等 (反斜杠后跟空格)
+// 	reSpaceBeforeCmd := regexp.MustCompile(`\\(\s+)([a-zA-Z]+)`)
+// 	text = reSpaceBeforeCmd.ReplaceAllString(text, `\$2`)
+
+// 	// 原有转换：修复缺失开头 $ 的行内公式
+// 	reMissingDollar := regexp.MustCompile(`(^|\s)(\\[a-zA-Z]+\{[^}]*\}[^\$]*?\$)`)
+// 	text = reMissingDollar.ReplaceAllString(text, "$1$$$2")
+
+// 	// 处理 \[ ... \] 块级公式 → $$ ... $$
+// 	reBlock := regexp.MustCompile(`\\\[([\s\S]*?)\\\]`)
+// 	text = reBlock.ReplaceAllStringFunc(text, func(match string) string {
+// 		inner := reBlock.FindStringSubmatch(match)[1]
+// 		return "$$\n" + strings.TrimSpace(inner) + "\n$$"
+// 	})
+
+// 	// 处理 \( ... \) 行内公式 → $ ... $
+// 	reInline := regexp.MustCompile(`\\\(([\s\S]*?)\\\)`)
+// 	text = reInline.ReplaceAllStringFunc(text, func(match string) string {
+// 		inner := reInline.FindStringSubmatch(match)[1]
+// 		return "$" + strings.TrimSpace(inner) + "$"
+// 	})
+
+// 	// 处理遗留的 [ ... ] 形式（内部含 LaTeX 命令）
+// 	reBracket := regexp.MustCompile(`\[([^\]]*\\[a-zA-Z]+[^\]]*?)\]`)
+// 	text = reBracket.ReplaceAllStringFunc(text, func(match string) string {
+// 		inner := match[1 : len(match)-1]
+// 		if strings.HasPrefix(strings.TrimSpace(inner), "$") {
+// 			return match
+// 		}
+// 		if isNumericArray(inner) {
+// 			return match
+// 		}
+// 		trimmed := strings.TrimSpace(inner)
+// 		if strings.Contains(trimmed, "\n") || len(trimmed) > 60 || strings.Contains(trimmed, "\\begin{") {
+// 			return "$$\n" + trimmed + "\n$$"
+// 		}
+// 		return "$" + trimmed + "$"
+// 	})
+
+// 	// 修复残损的 $ 转义
+// 	text = strings.ReplaceAll(text, "\\$", "$")
+
+// 	// 合并被撕裂的 $$ 块
+// 	reDirtyDisplay := regexp.MustCompile(`\$\$\s*\n\s*([\s\S]*?)\s*\n\s*\$\$`)
+// 	text = reDirtyDisplay.ReplaceAllString(text, "$$\n$1\n$$")
+
+// 	return text
+// }
+
+// 判断 [...] 内部是否只是数字、符号、空格等，不含任何字母
+func isNumericArray(s string) bool {
+	// 如果有字母，则不是数组
+	if matched, _ := regexp.MatchString(`[a-zA-Z]`, s); matched {
+		return false
+	}
+	// 允许数字、运算符号、逗号、空格、点号、方括号本身等
+	allowed := regexp.MustCompile(`^[\d.,;:\s\-+/*()\[\]{}<>|&^%#@!~"'?=]+$`)
+	return allowed.MatchString(s)
+}
+
+// cleanHistory 清洗历史：只保留 user 和 assistant 的纯文本内容
 func cleanHistory(history []DSMessage) []DSMessage {
 	var cleaned []DSMessage
 	for _, msg := range history {
 		if msg.Role == "user" || msg.Role == "assistant" {
-			// 只保留纯文本内容，丢弃 tool_calls 和 timestamp 等字段
 			cleaned = append(cleaned, DSMessage{
 				Role:    msg.Role,
 				Content: msg.Content,
 			})
 		}
-		// tool 消息直接丢弃，不进入上下文
 	}
 	return cleaned
 }
@@ -298,11 +365,9 @@ func cleanHistory(history []DSMessage) []DSMessage {
 func sanitizeMessages(msgs []DSMessage) []DSMessage {
 	var cleaned []DSMessage
 	for _, msg := range msgs {
-		// 跳过既没有内容也没有工具调用的 assistant 消息
 		if msg.Role == "assistant" && msg.Content == "" && len(msg.ToolCalls) == 0 {
 			continue
 		}
-		// 跳过内容为空的 tool 消息
 		if msg.Role == "tool" && msg.Content == "" {
 			continue
 		}
@@ -313,15 +378,7 @@ func sanitizeMessages(msgs []DSMessage) []DSMessage {
 
 func writeSSE(c *gin.Context, event string, eventType string, data map[string]string) {
 	data["type"] = eventType
-	// 全局清洗：确保所有通过 SSE 发送的内容都正常显示括号
-	if content, ok := data["content"]; ok {
-		data["content"] = strings.ReplaceAll(content, "OP_BRACKET___", "[")
-		data["content"] = strings.ReplaceAll(data["content"], "___CL_BRACKET", "]")
-	}
-	if reasoning, ok := data["reasoning"]; ok {
-		data["reasoning"] = strings.ReplaceAll(reasoning, "OP_BRACKET___", "[")
-		data["reasoning"] = strings.ReplaceAll(data["reasoning"], "___CL_BRACKET", "]")
-	}
+	// 不再需要占位符替换，因为所有内容已在源头清洗干净
 	jsonData, _ := json.Marshal(data)
 	c.Writer.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(jsonData))))
 }

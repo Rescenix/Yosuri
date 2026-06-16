@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pretext Demo — Accordion</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      :root {
+        color-scheme: light;
+        --page: #f5f2ec;
+        --panel: #fffdf9;
+        --ink: #1e1a18;
+        --muted: #6e655f;
+        --rule: #d8cec3;
+        --accent: #955f3b;
+      }
+
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+
+      .page {
+        width: min(780px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 48px;
+      }
+
+      .intro {
+        margin-bottom: 20px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        font: 12px/1.2 "SF Mono", ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 0;
+        font: 700 30px/1.08 Georgia, "Times New Roman", serif;
+      }
+
+      .intro p {
+        margin: 10px 0 0;
+        max-width: 58ch;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .stack {
+        border: 1px solid var(--rule);
+        border-radius: 18px;
+        background: var(--panel);
+        overflow: hidden;
+      }
+
+      .accordion-item + .accordion-item {
+        border-top: 1px solid var(--rule);
+      }
+
+      .accordion-toggle {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 14px;
+        align-items: center;
+        width: 100%;
+        padding: 18px 20px;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .accordion-toggle:hover {
+        background: rgb(0 0 0 / 0.02);
+      }
+
+      .accordion-heading {
+        min-width: 0;
+      }
+
+      .accordion-title {
+        display: block;
+        font: 600 17px/1.2 "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+
+      .accordion-meta {
+        justify-self: end;
+        font: 12px/1.2 "SF Mono", ui-monospace, monospace;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .accordion-glyph {
+        display: grid;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        color: var(--accent);
+        transition: transform 180ms ease;
+      }
+
+      .accordion-glyph::before {
+        content: "";
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 7px solid currentColor;
+      }
+
+      .accordion-body {
+        height: 0;
+        overflow: clip;
+        transition: height 180ms ease;
+      }
+
+      .accordion-inner {
+        padding: 0 20px 18px;
+      }
+
+      .accordion-copy {
+        margin: 0;
+        font: 16px/26px "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: var(--ink);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .accordion-glyph,
+        .accordion-body {
+          transition: none;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          width: min(100vw - 20px, 780px);
+          padding-top: 22px;
+        }
+
+        .accordion-toggle {
+          gap: 10px;
+        }
+
+        .accordion-meta {
+          font-size: 11px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="intro">
+        <p class="eyebrow">Demo</p>
+        <h1>Finally sane accordion</h1>
+        <p>
+          The section heights have been calculated without measuring the DOM and
+          without CSS hacks.
+        </p>
+      </section>
+
+      <section id="list" class="stack" aria-label="Accordion demo">
+        <article class="accordion-item">
+          <button type="button" class="accordion-toggle" aria-expanded="false">
+            <span class="accordion-heading">
+              <span class="accordion-title"></span>
+            </span>
+            <span class="accordion-meta"></span>
+            <span class="accordion-glyph" aria-hidden="true"></span>
+          </button>
+          <div class="accordion-body">
+            <div class="accordion-inner">
+              <p class="accordion-copy"></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="accordion-item">
+          <button type="button" class="accordion-toggle" aria-expanded="false">
+            <span class="accordion-heading">
+              <span class="accordion-title"></span>
+            </span>
+            <span class="accordion-meta"></span>
+            <span class="accordion-glyph" aria-hidden="true"></span>
+          </button>
+          <div class="accordion-body">
+            <div class="accordion-inner">
+              <p class="accordion-copy"></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="accordion-item">
+          <button type="button" class="accordion-toggle" aria-expanded="false">
+            <span class="accordion-heading">
+              <span class="accordion-title"></span>
+            </span>
+            <span class="accordion-meta"></span>
+            <span class="accordion-glyph" aria-hidden="true"></span>
+          </button>
+          <div class="accordion-body">
+            <div class="accordion-inner">
+              <p class="accordion-copy"></p>
+            </div>
+          </div>
+        </article>
+
+        <article class="accordion-item">
+          <button type="button" class="accordion-toggle" aria-expanded="false">
+            <span class="accordion-heading">
+              <span class="accordion-title"></span>
+            </span>
+            <span class="accordion-meta"></span>
+            <span class="accordion-glyph" aria-hidden="true"></span>
+          </button>
+          <div class="accordion-body">
+            <div class="accordion-inner">
+              <p class="accordion-copy"></p>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="./accordion.ts"></script>
+  </body>
+</html>

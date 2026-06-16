@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dynamic Layout</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f6f0e6;
+        --ink: #11100d;
+        --muted: #4f463b;
+        --accent: #d97757;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        height: 100%;
+        background: var(--paper);
+        color: var(--ink);
+        overscroll-behavior: none;
+      }
+
+      body {
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        cursor: default;
+        overflow: hidden;
+      }
+
+      .page {
+        position: relative;
+        height: 100vh;
+        overflow: hidden;
+        overscroll-behavior: none;
+        isolation: isolate;
+      }
+
+      .page--mobile {
+        min-height: 100svh;
+        height: 100svh;
+        overflow: hidden;
+      }
+
+      .atmosphere {
+        position: absolute;
+        inset: -10%;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 1;
+      }
+
+      .atmosphere--left {
+        background:
+          radial-gradient(62% 54% at 16% 82%, rgba(45, 88, 128, 0.16), transparent 69%),
+          radial-gradient(44% 34% at 28% 64%, rgba(57, 78, 124, 0.07), transparent 76%);
+      }
+
+      .atmosphere--right {
+        background:
+          radial-gradient(58% 48% at 86% 16%, rgba(217, 119, 87, 0.18), transparent 70%),
+          linear-gradient(135deg, rgba(217, 119, 87, 0.055) 0%, rgba(217, 119, 87, 0.02) 24%, transparent 42%, rgba(45, 88, 128, 0.045) 100%);
+      }
+
+      .hint-pill {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        margin: 0;
+        padding: 10px 16px 11px;
+        border-radius: 999px;
+        background: rgba(17, 16, 13, 0.94);
+        color: rgba(246, 240, 230, 0.96);
+        font: 500 12px/1.2 "Helvetica Neue", Helvetica, Arial, sans-serif;
+        letter-spacing: 0.015em;
+        white-space: nowrap;
+        user-select: none;
+        pointer-events: none;
+        z-index: 5;
+        box-shadow: 0 14px 32px rgba(17, 16, 13, 0.16);
+      }
+
+      .page--mobile .hint-pill {
+        display: none;
+      }
+
+      .stage {
+        position: relative;
+        height: 100%;
+      }
+
+      .page--mobile .stage {
+        height: 100%;
+        min-height: 0;
+      }
+
+      .headline {
+        position: absolute;
+        margin: 0;
+        font: inherit;
+        user-select: text;
+        z-index: 1;
+      }
+
+      .headline-line {
+        position: absolute;
+        white-space: pre;
+        color: var(--ink);
+        cursor: text;
+      }
+
+      .credit {
+        position: absolute;
+        margin: 0;
+        font: 12px/16px "Helvetica Neue", Helvetica, Arial, sans-serif;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        color: rgba(17, 16, 13, 0.58);
+        user-select: text;
+        cursor: text;
+        z-index: 1;
+      }
+
+      .logo {
+        position: absolute;
+        display: block;
+        user-select: none;
+        pointer-events: none;
+        transform-origin: center center;
+        z-index: 3;
+      }
+
+      .logo--openai {
+        filter: drop-shadow(0 26px 34px rgba(16, 16, 12, 0.14));
+      }
+
+      .logo--claude {
+        filter: drop-shadow(0 24px 32px rgba(140, 86, 52, 0.18));
+      }
+
+      .line {
+        position: absolute;
+        white-space: pre;
+        color: var(--ink);
+        font-weight: 450;
+        letter-spacing: 0.002em;
+        user-select: text;
+        cursor: text;
+        transition: color 120ms ease;
+        z-index: 1;
+      }
+
+      .line:hover {
+        color: var(--accent);
+      }
+
+      @media (max-width: 760px) {
+        .credit {
+          font-size: 11px;
+          letter-spacing: 0.12em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="atmosphere atmosphere--left"></div>
+      <div class="atmosphere atmosphere--right"></div>
+      <p class="hint-pill">Everything laid out in JS. Resize horizontally and vertically, then click the logos.</p>
+      <div id="stage" class="stage"></div>
+    </main>
+
+    <script type="module" src="./dynamic-layout.ts"></script>
+  </body>
+</html>

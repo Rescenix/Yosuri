@@ -1,0 +1,12 @@
+:root {
+  --shanxi-primary: #60a5fa;
+  --shanxi-primary-deep: #3b82f6;
+  --shanxi-glow: rgba(96, 165, 250, 0.4);
+  --shanxi-bg-dark: rgba(15, 23, 42, 0.85);
+  --shanxi-bg-card: rgba(30, 41, 59, 0.9);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

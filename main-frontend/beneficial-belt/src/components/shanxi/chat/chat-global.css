@@ -299,27 +299,7 @@
   opacity: 0.8;
 }
 
-/* 右上角复制按钮 */
-.markdown-body pre .copy-code-btn {
-  position: absolute;
-  top: 0.4em;
-  right: 1em;
-  font-size: 12px;
-  font-weight: 500;
-  color: #a6adc8;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  border-radius: 6px;
-  padding: 4px 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
-}
 
-.markdown-body pre .copy-code-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #cdd6f4;
-}
 
 /* ===== 极简输入区域 ===== */
 .chat-input-area {
@@ -778,9 +758,12 @@
 }
 /* ===== QQ 风格状态栏 ===== */
 .status-text {
-  font-style: normal !important;           /* 绝对不斜体 */
+ 
+  font-style: italic;
+  margin-top: 5px;        /* 向下偏移一点点 */
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 11px;
+  font-size: 6px;
   font-weight: 500;
   letter-spacing: 0.2px;
   transition: color 0.3s ease;             /* 颜色切换时平滑过渡 */
@@ -796,4 +779,219 @@
   color: #cdd6f4;
   font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
+}
+
+
+
+/* ===== 新增输入框内嵌元素样式 ===== */
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* 参数按钮 */
+.input-param-btn {
+  left: 46px; /* 图片按钮宽度32px + 间距14px */
+  background: transparent;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  position: absolute;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  z-index: 2;
+}
+.input-param-btn:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+/* 内嵌状态栏（Token/延迟/余额） */
+.inline-status-bar {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: #aaa;
+  font-family: monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 输入框底部留出状态栏空间 */
+.chat-input {
+  padding-bottom: 22px !important; /* 额外留空 */
+}
+
+/* 参数面板（输入框上方弹出） */
+.params-panel {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+}
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.param-label { width: 36px; color: #666; }
+.param-value { width: 24px; text-align: right; }
+.param-row input[type="range"] { width: 70px; }
+.param-row input[type="number"] { width: 50px; border: 1px solid #d0d5dd; border-radius: 4px; padding: 2px 4px; }
+.param-row select { border: 1px solid #d0d5dd; border-radius: 4px; padding: 2px 4px; background: #fff; }
+/* 按钮容器 */
+.code-btn-group {
+  position: absolute;
+  top: 0.4em;
+  right: 1em;
+  display: flex;
+  gap: 6px;
+}
+
+/* 按钮通用样式 */
+.code-btn-group button {
+  font-size: 12px;
+  font-weight: 500;
+  color: #a6adc8;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.code-btn-group button:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #cdd6f4;
+}
+/* 运行结果区域 */
+/* 运行结果区域 */
+/* 运行结果区域 */
+.code-output {
+  margin-top: 0;
+  padding: 8px 12px;
+  background: #f5f5f5 !important;       /* 强制浅灰背景 */
+  border-radius: 0 0 8px 8px;
+  font-size: 13px;
+  color: #333333 !important;            /* 强制深色文字 */
+  white-space: pre-wrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.code-output pre {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;   /* 强制透明背景 */
+  color: #333333 !important;            /* 强制深色文字 */
+  border: none;
+  box-shadow: none;
+}
+
+.output-error {
+  color: #ef4444;
+  font-weight: 500;
+}
+/* ===== 行内公式垂直对齐（必须放在全局文件末尾） ===== */
+/* === 强化版行内公式垂直对齐 === */
+.markdown-body .katex {
+  font-size: 1.1em !important;          /* 稍微放大，可读性更好 */
+  line-height: 1 !important;
+  vertical-align: -0.1em !important;    /* 负值上移，抵消偏下 */
+  display: inline-block !important;
+  position: relative;
+}
+
+/* 如果向量箭头/分数仍然偏下，微调内部容器 */
+.markdown-body .katex .vlist-t {
+  vertical-align: -0.05em !important;
+}
+
+.markdown-body .katex-html {
+  line-height: 1 !important;
+}
+
+/* 块级公式不受影响 */
+.markdown-body .katex-display {
+  margin: 1em 0;
+  text-align: center;
+}
+
+/* 万一你的字体导致过大偏移，用这个更暴力的修正 */
+.markdown-body .katex .mfrac {
+  /* 分数整体微上移 */
+  position: relative;
+  top: -0.05em;
+}
+
+/* 分数整体微调：轻微上移，避免分数整体偏下 */
+.markdown-body .katex .mfrac {
+  position: relative;
+  top: -0.04em;       /* 极小的整体上移，不会挤压分子 */
+}
+
+/* 确保分数的分子和分母内部元素基线正常 */
+.markdown-body .katex .mfrac .vlist-t {
+  vertical-align: baseline;  /* 恢复默认，不额外偏移 */
+}
+
+/* 普通行内符号（mord）保持原样，不做任何垂直偏移 */
+.markdown-body .katex .mord {
+  /* 重置任何可能残留的偏移 */
+  vertical-align: baseline;
+}
+.markdown-body .katex * {
+  vertical-align: inherit;   /* 强制所有子元素继承上层的 vertical-align */
+}
+/* 专治 mathrm 分母偏上 */
+.markdown-body .katex .mfrac .mathrm {
+  position: relative;
+  top: 0.06em;          /* 正值下移，可根据需要调大 */
+}
+
+/* === 优雅分数调整 === */
+
+/* 分数整体微上移，为分子争取空间 */
+.markdown-body .katex .mfrac {
+  position: relative;
+  top: -0.02em;
+}
+
+/* 分子容器轻微上移，避免被分数线遮挡 */
+.markdown-body .katex .mfrac .vlist:first-child {
+  position: relative;
+  top: -0.05em;
+}
+
+/* 分母容器轻微下移，远离基线 */
+.markdown-body .katex .mfrac .mathrm {
+  position: relative;
+  top: 0.1em;
+}
+
+/* 重置 mord 的基线，彻底清除之前可能残留的负偏移 */
+.markdown-body .katex .mord {
+  vertical-align: baseline !important;
+  line-height: 1 !important;
+  display: inline;
+}
+
+/* 特别针对 mathrm 变体（分子分母常用） */
+.markdown-body .katex .mord.mathrm {
+  vertical-align: baseline !important;
+  line-height: 1 !important;
 }

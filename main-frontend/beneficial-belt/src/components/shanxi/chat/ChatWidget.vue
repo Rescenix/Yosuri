@@ -11,7 +11,7 @@
         <div class="header-left">
           <span class="header-name">杉汐</span>
           <span class="status-dot" :style="{ background: statusDotColor }"></span>
-         <span class="status-text" :style="{ color: statusTextColor }">{{ currentStatus }}</span>
+          <span class="status-text" :style="{ color: statusTextColor }">{{ currentStatus }}</span>
         </div>
         <div class="header-actions">
           <button class="header-btn" @click="toggleChat">
@@ -46,7 +46,7 @@
                   <Icon icon="la:atom" width="14" color="#6b7280" />
                   思考中...
                 </div>
-             <div class="reasoning-text" v-html="renderMarkdown(item.reasoning, true)"></div>
+                <div class="reasoning-text" v-html="renderMarkdown(item.reasoning, true)"></div>
               </div>
 
               <div v-if="item.toolCallName" class="tool-call-indicator">
@@ -147,19 +147,54 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed, onMounted } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
-import katex from 'katex'
-import markedKatex from 'marked-katex-extension'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
+
+import MarkdownIt from 'markdown-it'
+import markdownItKatex from 'markdown-it-katex'
+
 import { useChatWidget } from './useChatWidget.js'
 
-// 只保留 markedKatex 配置，不再自定义 marked 渲染器
-marked.use(markedKatex({ katex, throwOnError: false }))
+// 创建 markdown-it 实例
+const md = new MarkdownIt({
+  breaks: true,
+  linkify: true,
+  html: true
+})
+
+// 修正后的插件：智能转换 [ ... ] 为行内或块级公式
+md.use(function(md) {
+  md.core.ruler.before('normalize', 'math_bracket', function(state) {
+    state.src = state.src.replace(/\[([\s\S]*?)\]/g, (match, inner) => {
+      // 必须先包含至少一个 LaTeX 命令
+      if (!/\\[a-zA-Z]+/.test(inner)) return match;
+      // 如果已经是 $...$ 或 $$...$$ 的内容，不动
+      if (/^\s*\${1,2}[\s\S]*\${1,2}\s*$/.test(inner)) return match;
+      
+      const trimmed = inner.trim();
+      if (trimmed.includes('\n') || trimmed.length > 60 || /\\begin\{/.test(trimmed)) {
+        return `$$\n${trimmed}\n$$`;
+      }
+      return `$${trimmed}$`;
+    });
+    return true;
+  });
+});
+
+md.use(markdownItKatex, {
+  throwOnError: false,
+  errorColor: '#ef4444',
+  strict: false
+})
+
+// 消除 highlight.js 警告
+hljs.registerLanguage('math', function() {
+  return { name: 'math' }
+})
 
 // ===== 语音识别 =====
 const isRecording = ref(false)
@@ -246,18 +281,78 @@ const props = defineProps({
 // ===== 代码块高亮函数 =====
 function highlightAllCodeBlocks() {
   requestAnimationFrame(() => {
-   document.querySelectorAll('.chat-messages .markdown-body pre, .chat-messages .reasoning-text pre').forEach(pre => {
+    document.querySelectorAll('.chat-messages .markdown-body pre').forEach(pre => {
       const code = pre.querySelector('code')
       if (!code) return
-      
+
       const classList = [...code.classList]
       const langClass = classList.find(c => c.startsWith('language-'))
       const lang = langClass ? langClass.replace('language-', '') : 'text'
       pre.setAttribute('data-lang', lang)
-      
+
       hljs.highlightElement(code)
-      
-      if (!pre.querySelector('.copy-code-btn')) {
+
+      if (!pre.querySelector('.code-btn-group')) {
+        const btnGroup = document.createElement('div')
+        btnGroup.className = 'code-btn-group'
+
+        const runBtn = document.createElement('button')
+        runBtn.className = 'run-code-btn'
+        runBtn.textContent = '运行'
+        runBtn.onclick = async function() {
+          runBtn.textContent = '运行中...'
+          runBtn.disabled = true
+          try {
+            const res = await fetch('/api/run', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ language: lang, code: code.textContent })
+            })
+            const data = await res.json()
+            const oldOutput = pre.parentElement.querySelector('.code-output')
+            if (oldOutput) oldOutput.remove()
+            const outputDiv = document.createElement('div')
+            outputDiv.className = 'code-output'
+            const errorHtml = data.error ? `<span style="color:#ef4444;font-weight:500;">${data.error}</span>` : ''
+            const outputText = (data.output || '(无输出)').trim()
+            outputDiv.innerHTML = errorHtml
+            const textDiv = document.createElement('div')
+            textDiv.textContent = outputText
+            textDiv.style.cssText = `
+              margin:0;
+              padding:8px 12px;
+              background:transparent;
+              color:#333;
+              border:none;
+              box-shadow:none;
+              line-height:1.5;
+              white-space:pre-wrap;
+              word-break:break-word;
+              font-family: monospace;
+            `
+            outputDiv.appendChild(textDiv)
+            outputDiv.style.cssText = `
+              margin-top: 0 !important;
+              padding: 0 !important;
+              background: #f5f5f5 !important;
+              border-radius: 0 0 8px 8px !important;
+              font-size: 13px !important;
+              color: #333333 !important;
+              white-space: pre-wrap !important;
+              width: 100% !important;
+              box-sizing: border-box !important;
+              border: none !important;
+              box-shadow: none !important;
+            `
+            pre.parentElement.insertBefore(outputDiv, pre.nextSibling)
+          } catch (e) {
+            alert('运行失败: ' + e.message)
+          } finally {
+            runBtn.textContent = '运行'
+            runBtn.disabled = false
+          }
+        }
+
         const copyBtn = document.createElement('button')
         copyBtn.className = 'copy-code-btn'
         copyBtn.textContent = '复制'
@@ -267,7 +362,10 @@ function highlightAllCodeBlocks() {
             setTimeout(() => { copyBtn.textContent = '复制' }, 2000)
           })
         }
-        pre.appendChild(copyBtn)
+
+        btnGroup.appendChild(runBtn)
+        btnGroup.appendChild(copyBtn)
+        pre.appendChild(btnGroup)
       }
     })
   })
@@ -275,16 +373,28 @@ function highlightAllCodeBlocks() {
 
 function renderMarkdown(text, skipSanitize = false) {
   if (!text) return ''
-  text = text
-    .replace(/\u200B/g, '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/\u200E/g, '')
-    .replace(/\u200F/g, '')
-  const raw = marked.parse(text)
-  if (skipSanitize) return raw
-  return DOMPurify.sanitize(raw)
-}
+  text = text.replace(/[\u200B\u00A0\u200E\u200F]/g, '')
 
+  // ===== 仅修复 \big$ 错误写法 =====
+  // 将 \big$ 和 \big\$$ 替换为空白（删除它们）
+  text = text.replace(/\\big\$/g, '')
+  text = text.replace(/\\big\\\$/g, '')
+
+  // 原有的其他修复（保留不变）
+  text = text.replace(/\\dots/g, '\\ldots')
+  text = text.replace(/(?<!\$)\\implies(?!\$)/g, ' $\\implies$ ')
+  text = text.replace(/(?<!\$)(\\bbox\[[^\]]*\])(?!\$)/g, (match) => `$${match}$`)
+  if (/\\bbox/.test(text)) {
+    text = '\\require{bbox}\n' + text
+  }
+  text = text.replace(/\\boxed\{([^}]*)\}/g, (_, content) => {
+    return `\\bbox[border:1px solid black]{${content}}`
+  })
+
+  // 注意：已移除自动块级包裹逻辑，不会破坏其他公式
+  const raw = md.render(text)
+  return skipSanitize ? raw : DOMPurify.sanitize(raw)
+}
 const {
   isOpen, isExpanded, isMobile, userInput, messages,
   isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
@@ -295,6 +405,7 @@ const {
   toggleExpand, toggleChat, fetchBalance, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+
 const statusTextColor = computed(() => {
   const status = currentStatus.value
   if (!status) return '#98a2b3'
@@ -303,13 +414,14 @@ const statusTextColor = computed(() => {
   if (status.includes('忙碌') || status.includes('整理') || status.includes('写文章')) return '#ef4444'
   return '#98a2b3'
 })
+
+// 消息更新后只做代码高亮，不再手动处理公式
 watch(messages, () => {
   nextTick(() => {
     highlightAllCodeBlocks()
   })
 }, { deep: true })
 
-// 参数面板显示状态
 const showParams = ref(false)
 </script>
 
@@ -321,74 +433,4 @@ const showParams = ref(false)
 <style>
 @import './chat-global.css';
 @import './chat-mobile.css';
-
-/* ===== 新增输入框内嵌元素样式 ===== */
-.input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-}
-
-/* 参数按钮 */
-.input-param-btn {
-  left: 46px; /* 图片按钮宽度32px + 间距14px */
-  background: transparent;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  position: absolute;
-  bottom: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border: none;
-  z-index: 2;
-}
-.input-param-btn:hover {
-  background: rgba(0,0,0,0.05);
-}
-
-/* 内嵌状态栏（Token/延迟/余额） */
-.inline-status-bar {
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-  font-size: 10px;
-  color: #aaa;
-  font-family: monospace;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 3;
-}
-
-/* 输入框底部留出状态栏空间 */
-.chat-input {
-  padding-bottom: 22px !important; /* 额外留空 */
-}
-
-/* 参数面板（输入框上方弹出） */
-.params-panel {
-  margin-bottom: 8px;
-  padding: 8px 12px;
-  background: #f9fafb;
-  border-radius: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 12px;
-}
-.param-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.param-label { width: 36px; color: #666; }
-.param-value { width: 24px; text-align: right; }
-.param-row input[type="range"] { width: 70px; }
-.param-row input[type="number"] { width: 50px; border: 1px solid #d0d5dd; border-radius: 4px; padding: 2px 4px; }
-.param-row select { border: 1px solid #d0d5dd; border-radius: 4px; padding: 2px 4px; background: #fff; }
 </style>

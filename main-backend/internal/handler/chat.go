@@ -87,9 +87,12 @@ func buildSystemPrompt(req ChatRequest, c *gin.Context, memoryStore *MemoryStore
 		token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return []byte(os.Getenv("JWT_SECRET")), nil
 		})
-		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-			if claims["role"] == "admin" {
-				prompt = "当前对话对象是朋友，你已经认出他了。" + prompt
+		// 防止 token 为 nil 导致空指针
+		if token != nil {
+			if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+				if claims["role"] == "admin" {
+					prompt = "当前对话对象是朋友，你已经认出他了。" + prompt
+				}
 			}
 		}
 	}

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="A full-screen virtualized markdown chat demo using marked for parsing, Pretext's rich-text inline flow helper for paragraph layout, and Pretext pre-wrap measurement for fenced code.">
+  <title>Markdown Chat</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    :root {
+      color-scheme: dark;
+      --page: #333740;
+      --panel: #333740;
+      --ink: #d5d9e1;
+      --muted: #9ea6b2;
+      --rule: #454b55;
+      --accent: #b7c0cf;
+      --user-bubble: #394048;
+      --user-bubble-border: rgba(255, 255, 255, 0.04);
+      --assistant-code: #313840;
+      --user-code: #323840;
+      --chat-width: 860px;
+      --message-side-padding: 22px;
+      --occlusion-banner-height: 61px;
+      --occlusion-banner-padding-block: 12px;
+      --virtualization-toggle-padding-block: 10px;
+      --virtualization-toggle-padding-inline: 14px;
+      --virtualization-toggle-font-size: 12px;
+    }
+    html, body {
+      min-height: 100%;
+      background: var(--page);
+      color: var(--ink);
+    }
+    body {
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .chat-shell {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: var(--panel);
+      overflow: clip;
+    }
+    .chat-viewport {
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+    }
+    .chat-canvas {
+      position: relative;
+      width: var(--chat-width);
+      min-height: 100%;
+      margin: 0 auto;
+    }
+    .occlusion-layer {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: min(100%, var(--chat-width));
+      transform: translateX(-50%);
+      z-index: 4;
+      pointer-events: none;
+    }
+    .occlusion-banner {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: var(--occlusion-banner-height);
+      background: var(--page);
+      transition:
+        background-color 140ms ease,
+        box-shadow 140ms ease,
+        border-color 140ms ease;
+    }
+    .occlusion-banner--top {
+      top: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: var(--occlusion-banner-padding-block) 20px;
+      background:
+        linear-gradient(
+          to bottom,
+          var(--page) 0%,
+          var(--page) 68%,
+          rgb(51 55 64 / 0.92) 82%,
+          rgb(51 55 64 / 0.62) 92%,
+          rgb(51 55 64 / 0) 100%
+        );
+      box-shadow: 0 1px 0 rgba(32, 33, 35, 0.03);
+    }
+    .occlusion-banner--bottom {
+      bottom: 0;
+      background:
+        linear-gradient(
+          to top,
+          var(--page) 0%,
+          var(--page) 68%,
+          rgb(51 55 64 / 0.92) 82%,
+          rgb(51 55 64 / 0.62) 92%,
+          rgb(51 55 64 / 0) 100%
+        );
+      box-shadow: 0 -1px 0 rgba(32, 33, 35, 0.03);
+    }
+    .chat-shell[data-visualization="on"] .occlusion-banner {
+      background: rgb(51 55 64 / 0.58);
+      box-shadow:
+        0 0 0 1px rgb(255 255 255 / 0.02),
+        0 8px 18px rgb(0 0 0 / 0.12);
+      backdrop-filter: blur(1px);
+    }
+    .virtualization-toggle {
+      pointer-events: auto;
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
+      padding:
+        var(--virtualization-toggle-padding-block)
+        var(--virtualization-toggle-padding-inline);
+      background: rgb(57 64 72 / 0.92);
+      color: var(--accent);
+      font:
+        600
+        var(--virtualization-toggle-font-size)
+        /1
+        "SF Mono",
+        ui-monospace,
+        Menlo,
+        monospace;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgb(0 0 0 / 0.14);
+    }
+    .chat-shell[data-visualization="on"] .virtualization-toggle {
+      background: rgb(57 64 72 / 0.98);
+    }
+    .msg {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      padding-inline: var(--message-side-padding);
+      display: flex;
+    }
+    .msg--assistant { justify-content: flex-start; }
+    .msg--user { justify-content: flex-end; }
+    .msg-bubble {
+      position: relative;
+      flex: 0 0 auto;
+      max-width: 100%;
+      border-radius: 16px;
+      background: transparent;
+    }
+    .msg--user .msg-bubble {
+      background: var(--user-bubble);
+      box-shadow:
+        inset 0 0 0 1px var(--user-bubble-border),
+        0 6px 14px rgb(0 0 0 / 0.09);
+    }
+    .msg--assistant .msg-bubble {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .block {
+      position: absolute;
+      left: 0;
+      width: 100%;
+    }
+    .quote-rail {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      border-radius: 999px;
+      background: rgb(158 166 178 / 0.18);
+    }
+    .block-marker {
+      position: absolute;
+      white-space: pre;
+      color: var(--muted);
+      font: 600 11px/1 "SF Mono", ui-monospace, Menlo, monospace;
+    }
+    .block-marker--task {
+      color: var(--muted);
+    }
+    .line-row {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      width: max-content;
+    }
+    .frag {
+      display: inline-block;
+      white-space: pre;
+      line-height: 1;
+      color: var(--ink);
+      vertical-align: baseline;
+    }
+    .frag--body {
+      font: 400 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .frag--heading-1 {
+      font: 700 20px/1 "Iowan Old Style", Georgia, "Times New Roman", serif;
+      letter-spacing: -0.01em;
+    }
+    .frag--heading-2 {
+      font: 700 17px/1 "Iowan Old Style", Georgia, "Times New Roman", serif;
+      letter-spacing: -0.01em;
+    }
+    .frag--code {
+      padding: 2px 6px 3px;
+      border-radius: 8px;
+      background: rgb(49 56 64 / 1);
+      font: 600 12px/1 "SF Mono", ui-monospace, Menlo, monospace;
+    }
+    .msg--user .frag--code {
+      background: rgb(49 56 64 / 1);
+    }
+    .frag--chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 7px;
+      min-height: 18px;
+      border-radius: 999px;
+      background: rgb(49 56 64 / 1);
+      color: var(--accent);
+      font: 700 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      transform: translateY(1px);
+    }
+    .is-link {
+      color: var(--accent);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.14em;
+    }
+    .msg--user .is-link {
+      color: var(--accent);
+    }
+    .is-em { font-style: italic; }
+    .is-strong { font-weight: 700; }
+    .is-del { text-decoration: line-through; text-decoration-thickness: 1px; }
+    .code-box {
+      position: absolute;
+      top: 0;
+      border-radius: 10px;
+      background: var(--assistant-code);
+      border: 1px solid rgba(255, 255, 255, 0.035);
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.02);
+    }
+    .msg--user .code-box {
+      background: var(--user-code);
+    }
+    .code-line {
+      position: absolute;
+      white-space: pre;
+      font: 500 12px/18px "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+      color: var(--ink);
+    }
+    .rule-line {
+      position: absolute;
+      height: 1px;
+      background: color-mix(in srgb, var(--rule) 86%, white 14%);
+    }
+  </style>
+</head>
+<body>
+  <main class="chat-shell" id="chat-shell" data-visualization="off">
+    <div class="chat-viewport" id="chat-viewport">
+      <div class="chat-canvas" id="chat-canvas"></div>
+    </div>
+
+    <div class="occlusion-layer">
+      <div class="occlusion-banner occlusion-banner--top" id="top-banner">
+        <button class="virtualization-toggle" id="virtualization-toggle" type="button" aria-pressed="false">
+          Show virtualization mask
+        </button>
+      </div>
+      <div class="occlusion-banner occlusion-banner--bottom" id="bottom-banner"></div>
+    </div>
+  </main>
+  <script type="module" src="./markdown-chat.ts"></script>
+</body>
+</html>

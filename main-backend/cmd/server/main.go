@@ -27,10 +27,10 @@ func main() {
 	database.InitDB()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:4321"},
+		AllowAllOrigins:  true, // 开发环境允许所有来源
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		AllowCredentials: true,
+		AllowCredentials: false, // 必须为 false，因为 AllowAllOrigins 不能用 true
 	}))
 
 	// 初始化记忆存储路径
@@ -45,7 +45,12 @@ func main() {
 
 	// 初始化记忆存储
 	memoryStore := handler.NewMemoryStore(memoryPath)
-
+	// 如果是开发模式，跳过认证
+	if os.Getenv("DEV_MODE") == "true" {
+		r.Use(func(c *gin.Context) {
+			c.Next()
+		})
+	}
 	// 注册路由
 	homeDir, _ := os.UserHomeDir()
 	sessionPath := filepath.Join(homeDir, "shanxi_data", "sessions.json")

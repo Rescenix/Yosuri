@@ -2,6 +2,7 @@
   "dependencies": {
     "@talers/html-pages": "npm:@jsr/talers__html-pages@^0.5.5",
     "jspdf": "^4.2.1",
+    "katex": "^0.17.0",
     "marked": "^18.0.4",
     "pagedjs": "^0.4.3",
     "turn.js": "^1.0.5",

@@ -1,0 +1,95 @@
+/* ========================================
+   杉汐 · 心跳星尘 — 内部光点核心
+   ======================================== */
+
+.star-core {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  position: relative;
+  
+  /* 基底暖雾 */
+  background: radial-gradient(circle at 50% 50%, rgba(255, 150, 180, 0.15) 0%, transparent 70%);
+  
+  /* 多层 box-shadow 模拟星尘粒子 */
+  box-shadow:
+    0 0 8px rgba(255, 180, 200, 0.9),
+    0 0 18px rgba(255, 140, 170, 0.6),
+    6px 4px 3px 1px rgba(255, 200, 220, 0.8),
+    -5px -3px 4px 1px rgba(255, 160, 190, 0.7),
+    3px -6px 2px 1px rgba(255, 180, 210, 0.6),
+    -7px 3px 3px 1px rgba(255, 140, 170, 0.7),
+    8px -2px 2px 0px rgba(255, 190, 210, 0.5),
+    -4px -7px 3px 0px rgba(255, 150, 180, 0.6),
+    2px 7px 2px 0px rgba(255, 170, 200, 0.7),
+    -6px -1px 2px 1px rgba(255, 210, 230, 0.5);
+    
+  animation: stardust-twinkle 2s ease-in-out infinite alternate, float 4s ease-in-out infinite;
+}
+
+/* 星尘粒子随机明灭 + 轻微位移 */
+@keyframes stardust-twinkle {
+  0% {
+    box-shadow:
+      0 0 8px rgba(255, 180, 200, 0.9),
+      0 0 18px rgba(255, 140, 170, 0.6),
+      6px 4px 3px 1px rgba(255, 200, 220, 0.8),
+      -5px -3px 4px 1px rgba(255, 160, 190, 0.7),
+      3px -6px 2px 1px rgba(255, 180, 210, 0.6),
+      -7px 3px 3px 1px rgba(255, 140, 170, 0.7),
+      8px -2px 2px 0px rgba(255, 190, 210, 0.5),
+      -4px -7px 3px 0px rgba(255, 150, 180, 0.6),
+      2px 7px 2px 0px rgba(255, 170, 200, 0.7),
+      -6px -1px 2px 1px rgba(255, 210, 230, 0.5);
+  }
+  30% {
+    box-shadow:
+      0 0 12px rgba(255, 200, 220, 1),
+      0 0 24px rgba(255, 150, 180, 0.8),
+      5px 5px 3px 1px rgba(255, 180, 200, 0.9),
+      -6px -2px 3px 0px rgba(255, 140, 170, 0.5),
+      4px -5px 3px 1px rgba(255, 190, 220, 0.7),
+      -8px 4px 2px 0px rgba(255, 130, 160, 0.6),
+      7px -1px 3px 0px rgba(255, 170, 200, 0.4),
+      -3px -8px 2px 1px rgba(255, 160, 190, 0.7),
+      3px 6px 3px 0px rgba(255, 150, 180, 0.6),
+      -5px 0px 2px 0px rgba(255, 200, 220, 0.4);
+  }
+  60% {
+    box-shadow:
+      0 0 6px rgba(255, 150, 180, 0.7),
+      0 0 14px rgba(255, 120, 150, 0.4),
+      7px 3px 2px 0px rgba(255, 210, 230, 0.7),
+      -4px -4px 3px 1px rgba(255, 170, 200, 0.8),
+      2px -7px 3px 0px rgba(255, 160, 190, 0.5),
+      -6px 2px 4px 1px rgba(255, 150, 180, 0.8),
+      9px -3px 1px 0px rgba(255, 200, 220, 0.4),
+      -5px -6px 2px 0px rgba(255, 130, 160, 0.5),
+      1px 8px 3px 1px rgba(255, 180, 210, 0.8),
+      -7px 0px 2px 0px rgba(255, 190, 210, 0.3);
+  }
+  100% {
+    box-shadow:
+      0 0 10px rgba(255, 190, 210, 0.8),
+      0 0 20px rgba(255, 140, 170, 0.5),
+      8px 2px 2px 1px rgba(255, 190, 210, 0.6),
+      -7px -1px 3px 0px rgba(255, 140, 170, 0.6),
+      5px -4px 2px 0px rgba(255, 170, 200, 0.4),
+      -9px 5px 2px 1px rgba(255, 120, 150, 0.5),
+      6px -1px 3px 1px rgba(255, 180, 200, 0.5),
+      -2px -9px 2px 0px rgba(255, 160, 190, 0.5),
+      4px 5px 2px 0px rgba(255, 140, 170, 0.5),
+      -8px -2px 3px 0px rgba(255, 200, 220, 0.4);
+  }
+}
+
+/* 核心浮动 */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+/* 悬浮时加速核心动画 */
+.chat-toggle-button:hover .star-core {
+  animation-duration: 1s, 2s;
+}

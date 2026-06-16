@@ -1,10 +1,38 @@
 # 编译产物
-backend/advisor
-frontend/dist/shanca.tar.gz
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.so
+*.dll
+*.dylib
 
-# 依赖目录（重要！）
-node_modules/
+# 构建目录
+/build/
+/dist/
+/target/
+/bin/
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 依赖目录
+/node_modules/
+/vendor/
+
+# 环境配置
 .env
-*.env
-main-backend/.env
+.env.local
+
+# 日志
+*.log
+/logs/

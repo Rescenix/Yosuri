@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pretext Demos</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    color-scheme: light;
+    --page: #f5f1ea;
+    --panel: #fffdf8;
+    --ink: #201b18;
+    --muted: #6d645d;
+    --rule: #d8cec3;
+    --accent: #955f3b;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(180deg, #fbf7f0 0%, var(--page) 100%);
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  .page {
+    width: min(940px, calc(100vw - 32px));
+    margin: 0 auto;
+    padding: 32px 0 48px;
+  }
+  .eyebrow {
+    margin: 0 0 8px;
+    font: 12px/1.2 "SF Mono", ui-monospace, monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    margin: 0;
+    font: 700 34px/1.08 Georgia, "Times New Roman", serif;
+  }
+  .intro {
+    margin: 10px 0 0;
+    max-width: 62ch;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 28px;
+  }
+  .card {
+    display: block;
+    padding: 18px;
+    border: 1px solid var(--rule);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--panel) 94%, white 6%);
+    color: inherit;
+    text-decoration: none;
+    box-shadow: 0 18px 40px rgb(54 40 23 / 0.08);
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  }
+  .card:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--rule) 65%);
+    box-shadow: 0 22px 44px rgb(54 40 23 / 0.12);
+  }
+  .card h2 {
+    margin: 0;
+    font: 600 20px/1.2 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  .card p {
+    margin: 10px 0 0;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  @media (max-width: 760px) {
+    .page {
+      width: min(100vw - 20px, 940px);
+      padding-top: 22px;
+    }
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">Pretext</p>
+    <h1>Demos</h1>
+    <p class="intro">
+      Small browser demos for the kinds of layout work Pretext unlocks: text
+      height without DOM measurement in the hot path, manual line routing, and
+      width-tight multiline UI.
+    </p>
+
+    <section class="grid" aria-label="Demo list">
+      <a class="card" href="/demos/accordion">
+        <h2>Accordion</h2>
+        <p>Expand and collapse sections whose text heights are calculated from Pretext.</p>
+      </a>
+
+      <a class="card" href="/demos/bubbles">
+        <h2>Bubbles</h2>
+        <p>Tight multiline message bubbles that keep the same line count with less wasted area.</p>
+      </a>
+
+      <a class="card" href="/demos/dynamic-layout">
+        <h2>Dynamic Layout</h2>
+        <p>A fixed-height editorial spread with obstacle-aware title routing and continuous flow.</p>
+      </a>
+
+      <a class="card" href="/demos/variable-typographic-ascii">
+        <h2>Variable Typographic ASCII</h2>
+        <p>Particle-driven ASCII art comparing proportional measured glyphs against a monospace version.</p>
+      </a>
+
+      <a class="card" href="/demos/editorial-engine">
+        <h2>Editorial Engine</h2>
+        <p>Animated orbs, live text reflow, pull quotes, and multi-column flow with zero DOM measurements.</p>
+      </a>
+
+      <a class="card" href="/demos/justification-comparison">
+        <h2>Justification Comparison</h2>
+        <p>CSS justification, greedy hyphenation, and Knuth-Plass paragraph layout shown side by side to reveal rivers and spacing tradeoffs.</p>
+      </a>
+
+      <a class="card" href="/demos/rich-note">
+        <h2>Rich Text</h2>
+        <p>Rich inline text, code spans, links, and chips laid out together, with pills staying whole while text keeps wrapping naturally.</p>
+      </a>
+
+      <a class="card" href="/demos/markdown-chat">
+        <h2>Markdown Chat</h2>
+        <p>A virtualized chat demo using marked for parsing, the rich-text inline flow helper for paragraph content, and pre-wrap for fenced code.</p>
+      </a>
+
+      <a class="card" href="/demos/masonry">
+        <h2>Masonry</h2>
+        <p>A text-card occlusion demo where height prediction comes from Pretext instead of DOM reads.</p>
+      </a>
+    </section>
+  </main>
+</body>
+</html>
