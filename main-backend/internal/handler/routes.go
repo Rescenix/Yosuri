@@ -2,8 +2,6 @@ package handler
 
 import (
 	"backend/internal/ai/core"
-
-	"backend/internal/middleware"
 	"context"
 	"fmt"
 	"net/http"
@@ -20,30 +18,20 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent) // 204
+			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 		c.Next()
 	})
 
-	chatHandler := NewChatHandler(memoryStore, sessionStore) // 新增
+	chatHandler := NewChatHandler(memoryStore, sessionStore)
 	core.RegisterCleanFunc(func() {
 		memoryStore.CleanMemories()
 	})
 
-	// r.Use(func(c *gin.Context) {
-	// 	c.Header("Access-Control-Allow-Origin", "*")
-	// 	c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-	// 	c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
-	// 	if c.Request.Method == "OPTIONS" {
-	// 		c.AbortWithStatus(204)
-	// 		return
-	// 	}
-	// 	c.Next()
-	// })
 	r.POST("/api/run", RunCodeHandler)
-	r.POST("/api/chat/stream", chatHandler.StreamChat) // 新增
-	// 以下是你原有的路由，保持不变
+	r.POST("/api/chat/stream", chatHandler.StreamChat)
+
 	r.PATCH("/api/posts/:id", UpdatePostTags)
 	r.DELETE("/api/posts/:id", DeletePost)
 	r.GET("/api/sessions/:id", func(c *gin.Context) {
@@ -112,17 +100,15 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		id := fmt.Sprintf("sess_%d", time.Now().UnixNano())
 		c.JSON(200, gin.H{"session_id": id})
 	})
-	r.POST("/api/chat", func(c *gin.Context) { HandleChat(c, memoryStore, sessionStore) })
+
 	r.GET("/api/posts", GetPosts)
 	r.POST("/api/posts", CreatePost)
 	r.POST("/api/login", Login)
 	r.GET("/api/memory/welcome", memoryStore.WelcomeHandler)
 
-	auth := r.Group("/api/memory").Use(middleware.AuthRequired())
-	{
-		auth.POST("/save", memoryStore.SaveMemoryHandler)
-		auth.GET("/recall", memoryStore.RecallMemoryHandler)
-	}
+	// 记忆保存和回忆接口，无需认证
+	r.POST("/api/memory/save", memoryStore.SaveMemoryHandler)
+	r.GET("/api/memory/recall", memoryStore.RecallMemoryHandler)
 
 	r.GET("/api/book/list", ListBooks)
 	r.GET("/api/book/content", GetBookContent)
@@ -139,8 +125,6 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 	r.POST("/api/image/generate", GenerateImage)
 	r.POST("/api/book/upload-cover", UploadCover)
-	// 新增：预排版与按页读取
 
 	r.Static("/images", "./public/images")
-
 }

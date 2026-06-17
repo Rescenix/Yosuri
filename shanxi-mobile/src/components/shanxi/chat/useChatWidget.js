@@ -3,7 +3,6 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useMemory } from '../composables/useMemory.js'
 import { useWelcome } from '../composables/useWelcome.js'
 import { useChatLogic } from '../composables/useChatLogic.js'
-import { useImageUpload } from '../composables/useImageUpload.js'
 import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 
@@ -22,7 +21,7 @@ export function useChatWidget(props) {
     if (newVal) sessionId.value = newVal
   })
 
-  const isLoggedIn = ref(false)   // 初始未登录
+  const isLoggedIn = ref(false)
   const debugTemp = ref(localStorage.getItem('debugTemp') ? parseFloat(localStorage.getItem('debugTemp')) : 0.7)
   const debugTopP = ref(localStorage.getItem('debugTopP') ? parseFloat(localStorage.getItem('debugTopP')) : 0.9)
   const debugReasoning = ref(localStorage.getItem('debugReasoning') || '')
@@ -54,25 +53,26 @@ export function useChatWidget(props) {
     smartScrollToBottom()
     messages.value = [...messages.value]
   }
-// 放在 balance 定义之后即可
-async function fetchBalance() {
-  try {
-    const res = await fetch(`${apiBase}/api/balance`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+
+  async function fetchBalance() {
+    try {
+      const res = await fetch(`${apiBase}/api/balance`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.is_available && data.balance_infos.length > 0) {
+          const info = data.balance_infos[0]
+          balance.value = `${info.total_balance} ${info.currency}`
+        }
       }
-    })
-    if (res.ok) {
-      const data = await res.json()
-      if (data.is_available && data.balance_infos.length > 0) {
-        const info = data.balance_infos[0]
-        balance.value = `${info.total_balance} ${info.currency}` // 显示“2.98 CNY”
-      }
+    } catch (e) {
+      console.warn('余额查询失败', e)
     }
-  } catch (e) {
-    console.warn('余额查询失败', e)
   }
-}
+
   function adjustInputHeight() {
     if (!chatInputRef.value) return
     chatInputRef.value.style.height = 'auto'
@@ -91,7 +91,144 @@ async function fetchBalance() {
     onStreamUpdate: smartScrollAndRefresh
   })
 
-  const { imageInput, handleImageUpload } = useImageUpload({ messages, sessionId, saveMemory })
+  // ==================== 图片上传逻辑 ====================
+  const imageInput = ref(null)
+  let msgId = 0
+
+  async function handleImageUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // 1. 显示用户图片
+    messages.value.push({
+      id: msgId++,
+      type: 'image',
+      image: URL.createObjectURL(file),
+      sender: 'user',
+      timestamp: new Date()
+    })
+
+    // 2. 创建杉汐占位消息
+    const botMsg = {
+      id: msgId++,
+      content: '',
+      reasoning: '',
+      recalling: true,
+      toolCallName: null,
+      toolCallDetail: '',
+      sender: 'bot',
+      isStreaming: true,
+      timestamp: new Date()
+    }
+    messages.value.push(botMsg)
+    forceScrollToBottom()
+
+    // 3. 图片转 Base64
+    const reader = new FileReader()
+    reader.onload = async (loadEvent) => {
+      const base64 = loadEvent.target.result.split(',')[1]
+
+      const requestBody = {
+        message: '帮我看看这张图片',
+        sessionId: sessionId.value,
+        image: base64,
+        temperature: parseFloat(localStorage.getItem('debugTemp') || 0.7),
+        top_p: parseFloat(localStorage.getItem('debugTopP') || 0.9),
+        max_tokens: parseInt(localStorage.getItem('debugMaxTokens') || 2000),
+        reasoning_effort: localStorage.getItem('debugReasoning') || undefined
+      }
+
+      const token = localStorage.getItem('token')
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      try {
+        const response = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody)
+        })
+
+        if (!response.ok) throw new Error('网络错误')
+
+        const streamReader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let partialLine = ''
+
+        while (true) {
+          const { done, value } = await streamReader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = (partialLine + chunk).split('\n')
+          partialLine = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const dataStr = line.slice(6)
+            if (!dataStr) continue
+
+            try {
+              const payload = JSON.parse(dataStr)
+              switch (payload.type) {
+                case 'reasoning':
+                  botMsg.recalling = false
+                  botMsg.reasoning += payload.content || ''
+                  break
+                case 'content':
+                  botMsg.recalling = false
+                  botMsg.content += payload.content || ''
+                  break
+                case 'tool_call_start':
+                  botMsg.toolCallName = payload.name || ''
+                  botMsg.toolCallDetail = payload.args || ''
+                  break
+                case 'tool_call_result':
+                case 'tool_call_error':
+                  botMsg.toolCallName = null
+                  botMsg.toolCallDetail = ''
+                  if (payload.type === 'tool_call_error') {
+                    botMsg.content += `\n[工具调用失败: ${payload.error}]\n`
+                  }
+                  break
+                case 'done':
+                  botMsg.content = payload.content || botMsg.content
+                  botMsg.reasoning = payload.reasoning || botMsg.reasoning
+                  botMsg.isStreaming = false
+                  botMsg.recalling = false
+                  botMsg.toolCallName = null
+                  botMsg.toolCallDetail = ''
+                  if (payload.token_usage) lastTokenUsage.value = payload.token_usage
+                  if (payload.latency) lastLatency.value = payload.latency
+                  if (saveMemory) {
+                    saveMemory('leader', requestBody.message)
+                    saveMemory('shanshi', botMsg.content)
+                  }
+                  break
+                case 'error':
+                  botMsg.content = `杉汐：抱歉，图片分析失败：${payload.message || '未知错误'}`
+                  botMsg.isStreaming = false
+                  botMsg.recalling = false
+                  break
+              }
+              smartScrollAndRefresh()
+            } catch (e) {}
+          }
+        }
+        botMsg.isStreaming = false
+        botMsg.recalling = false
+        smartScrollAndRefresh()
+      } catch (err) {
+        botMsg.content = '杉汐：抱歉，我的灵魂好像被风吹散了…稍等片刻可好？'
+        botMsg.isStreaming = false
+        botMsg.recalling = false
+        smartScrollAndRefresh()
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+  // ==================== 图片上传逻辑结束 ====================
+
   const { playVoice } = useVoicePlay()
 
   function toggleExpand() {
@@ -156,7 +293,6 @@ async function fetchBalance() {
     }
   }
 
-
   let lastScrollTop = 0
   onMounted(async () => {
     if (window.location.pathname.startsWith('/chat')) {
@@ -169,9 +305,9 @@ async function fetchBalance() {
     }
 
     localStorage.setItem('token', 'dev-permanent-token')
-isLoggedIn.value = true
-    await loadAllHistory()      // 再加载历史消息
-fetchBalance()  
+    isLoggedIn.value = true
+    await loadAllHistory()
+    fetchBalance()
     if (messagesContainer.value) {
       messagesContainer.value.addEventListener('scroll', () => {
         const el = messagesContainer.value
@@ -233,7 +369,7 @@ fetchBalance()
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight,
     sendMessage, handleImageUpload, playVoice,
-    toggleExpand, toggleChat, updateParams,fetchBalance,
+    toggleExpand, toggleChat, updateParams, fetchBalance,
     groupedMessages, formatChatTime
   }
 }

@@ -94,7 +94,7 @@
 
         <div class="input-wrapper">
           <!-- 图片按钮：嵌入输入框左下角 -->
-          <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="imageInput.click()" title="上传图片">
+          <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="$refs.imageInput.click()" title="上传图片">
             <Icon icon="heroicons:photo-20-solid" width="18" color="#888" />
           </button>
           <!-- 参数按钮：紧挨图片按钮 -->
@@ -170,9 +170,7 @@ const md = new MarkdownIt({
 md.use(function(md) {
   md.core.ruler.before('normalize', 'math_bracket', function(state) {
     state.src = state.src.replace(/\[([\s\S]*?)\]/g, (match, inner) => {
-      // 必须先包含至少一个 LaTeX 命令
       if (!/\\[a-zA-Z]+/.test(inner)) return match;
-      // 如果已经是 $...$ 或 $$...$$ 的内容，不动
       if (/^\s*\${1,2}[\s\S]*\${1,2}\s*$/.test(inner)) return match;
       
       const trimmed = inner.trim();
@@ -191,7 +189,6 @@ md.use(markdownItKatex, {
   strict: false
 })
 
-// 消除 highlight.js 警告
 hljs.registerLanguage('math', function() {
   return { name: 'math' }
 })
@@ -375,12 +372,9 @@ function renderMarkdown(text, skipSanitize = false) {
   if (!text) return ''
   text = text.replace(/[\u200B\u00A0\u200E\u200F]/g, '')
 
-  // ===== 仅修复 \big$ 错误写法 =====
-  // 将 \big$ 和 \big\$$ 替换为空白（删除它们）
   text = text.replace(/\\big\$/g, '')
   text = text.replace(/\\big\\\$/g, '')
 
-  // 原有的其他修复（保留不变）
   text = text.replace(/\\dots/g, '\\ldots')
   text = text.replace(/(?<!\$)\\implies(?!\$)/g, ' $\\implies$ ')
   text = text.replace(/(?<!\$)(\\bbox\[[^\]]*\])(?!\$)/g, (match) => `$${match}$`)
@@ -391,10 +385,10 @@ function renderMarkdown(text, skipSanitize = false) {
     return `\\bbox[border:1px solid black]{${content}}`
   })
 
-  // 注意：已移除自动块级包裹逻辑，不会破坏其他公式
   const raw = md.render(text)
   return skipSanitize ? raw : DOMPurify.sanitize(raw)
 }
+
 const {
   isOpen, isExpanded, isMobile, userInput, messages,
   isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
@@ -415,7 +409,6 @@ const statusTextColor = computed(() => {
   return '#98a2b3'
 })
 
-// 消息更新后只做代码高亮，不再手动处理公式
 watch(messages, () => {
   nextTick(() => {
     highlightAllCodeBlocks()

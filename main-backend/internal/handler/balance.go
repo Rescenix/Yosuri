@@ -1,3 +1,4 @@
+// handler/balance.go
 package handler
 
 import (
@@ -5,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +32,10 @@ func GetBalance(c *gin.Context) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: DeepSeekTransport, // 使用平台特化的传输层
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("请求失败: %v", err)})

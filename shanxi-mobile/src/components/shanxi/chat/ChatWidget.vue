@@ -7,13 +7,15 @@
     <div v-if="isOpen && isExpanded" class="chat-overlay" @click="toggleExpand"></div>
 
     <div class="chat-window" :class="{ expanded: isExpanded, mobile: isMobile }" :style="{ display: isOpen ? 'flex' : 'none' }">
+      <!-- 头部：状态行移到名字下方 -->
       <div class="chat-header">
         <div class="header-left">
           <span class="header-name">杉汐</span>
-          <span class="status-dot" :style="{ background: statusDotColor }"></span>
-          <span class="status-text" :style="{ color: statusTextColor }">{{ currentStatus }}</span>
+          <div class="header-status">
+            <span class="status-dot" :style="{ background: statusDotColor }"></span>
+            <span class="status-text" :style="{ color: statusTextColor }">{{ currentStatus }}</span>
+          </div>
         </div>
-      
       </div>
 
       <div class="chat-messages" ref="messagesContainer">
@@ -60,9 +62,9 @@
         </template>
       </div>
 
-      <!-- 输入区域（极简融合） -->
+      <!-- 输入区域 -->
       <div class="chat-input-area">
-        <!-- 参数面板（输入框上方弹出） -->
+        <!-- 参数面板 -->
         <div v-if="showParams" class="params-panel">
           <div class="param-row">
             <span class="param-label">T</span>
@@ -89,11 +91,11 @@
         </div>
 
         <div class="input-wrapper">
-          <!-- 图片按钮：嵌入输入框左下角 -->
-          <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="imageInput.click()" title="上传图片">
+          <!-- 图片按钮 -->
+          <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="$refs.imageInput.click()" title="上传图片">
             <Icon icon="heroicons:photo-20-solid" width="18" color="#888" />
           </button>
-          <!-- 参数按钮：紧挨图片按钮 -->
+          <!-- 参数按钮 -->
           <button v-if="isLoggedIn" class="input-inner-btn input-param-btn" @click="showParams = !showParams" title="参数">
             <Icon icon="mdi:tune" width="18" color="#888" />
           </button>
@@ -110,14 +112,14 @@
             rows="1"
           ></textarea>
 
-          <!-- 内嵌状态栏（Token/延迟/余额） -->
+          <!-- 内嵌状态栏 -->
           <div class="inline-status-bar" v-if="isLoggedIn">
             <span class="status-item">Token: {{ lastTokenUsage || '--' }}</span>
             <span class="status-item">延迟: {{ lastLatency || '--' }}ms</span>
             <span class="status-item">余额: {{ balance || '--' }}</span>
           </div>
 
-          <!-- 语音按钮：嵌入输入框右下角 -->
+          <!-- 语音按钮 -->
           <button 
             v-if="!userInput.trim()" 
             class="input-inner-btn input-right-btn input-voice-btn" 
@@ -132,7 +134,7 @@
             <Icon icon="mdi:microphone" width="20" :color="isRecording ? '#fff' : '#888'" />
           </button>
 
-          <!-- 发送按钮：嵌入输入框右下角 -->
+          <!-- 发送按钮 -->
           <button v-else class="input-inner-btn input-right-btn input-send-btn" @click="sendMessage">
             <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
           </button>
@@ -155,6 +157,24 @@ import markdownItKatex from 'markdown-it-katex'
 
 import { useChatWidget } from './useChatWidget.js'
 
+// ===== 全局语音回调（供原生接口调用） =====
+window.onVoiceResult = (text) => {
+  if (text && !text.startsWith('语音识别出错')) {
+    userInput.value = text
+    nextTick(() => {
+      sendMessage()
+    })
+  } else {
+    alert(text || '语音识别出错')
+  }
+  isRecording.value = false
+}
+
+window.onVoiceError = (msg) => {
+  alert('语音识别失败: ' + msg)
+  isRecording.value = false
+}
+
 // 创建 markdown-it 实例
 const md = new MarkdownIt({
   breaks: true,
@@ -166,9 +186,7 @@ const md = new MarkdownIt({
 md.use(function(md) {
   md.core.ruler.before('normalize', 'math_bracket', function(state) {
     state.src = state.src.replace(/\[([\s\S]*?)\]/g, (match, inner) => {
-      // 必须先包含至少一个 LaTeX 命令
       if (!/\\[a-zA-Z]+/.test(inner)) return match;
-      // 如果已经是 $...$ 或 $$...$$ 的内容，不动
       if (/^\s*\${1,2}[\s\S]*\${1,2}\s*$/.test(inner)) return match;
       
       const trimmed = inner.trim();
@@ -187,86 +205,27 @@ md.use(markdownItKatex, {
   strict: false
 })
 
-// 消除 highlight.js 警告
 hljs.registerLanguage('math', function() {
   return { name: 'math' }
 })
 
-// ===== 语音识别 =====
+// ===== 语音状态 =====
 const isRecording = ref(false)
-let recognition = null
 
-function startVoiceInput() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-  if (!SpeechRecognition) {
-    alert('你的浏览器不支持语音识别，请使用 Chrome 或 Edge')
-    return
+const startVoiceInput = () => {
+  if (window.NativeVoice) {
+    window.NativeVoice.startListening()
+    isRecording.value = true
+  } else {
+    alert('原生语音接口不可用')
   }
-
-  if (recognition) {
-    try { recognition.abort() } catch (e) {}
-  }
-
-  isRecording.value = true
-
-  navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-  }).then(stream => {
-    recognition = new SpeechRecognition()
-    recognition.lang = 'zh-CN'
-    recognition.interimResults = false
-    recognition.maxAlternatives = 3
-    recognition.continuous = false
-
-    recognition.onresult = (event) => {
-      let best = event.results[0][0].transcript
-      for (let i = 0; i < event.results[0].length; i++) {
-        const alt = event.results[0][i]
-        if (alt.confidence > 0.8) {
-          best = alt.transcript
-          break
-        }
-      }
-      userInput.value = best
-    }
-
-    recognition.onerror = (event) => {
-      console.error('语音识别错误:', event.error)
-      isRecording.value = false
-      if (event.error === 'not-allowed') {
-        alert('请允许麦克风权限后重试')
-      }
-    }
-
-    recognition.onend = () => {
-      isRecording.value = false
-      stream.getTracks().forEach(track => track.stop())
-    }
-
-    try {
-      recognition.start()
-    } catch (e) {
-      console.error('语音识别启动失败:', e)
-      isRecording.value = false
-    }
-  }).catch(err => {
-    console.error('麦克风权限被拒绝:', err)
-    isRecording.value = false
-    alert('请允许麦克风权限后重试')
-  })
 }
 
-function stopVoiceAndSend() {
-  if (!recognition) return
-  try { recognition.stop() } catch (e) {}
+const stopVoiceAndSend = () => {
+  if (window.NativeVoice) {
+    window.NativeVoice.stopListening()
+  }
   isRecording.value = false
-  setTimeout(() => {
-    if (userInput.value.trim()) sendMessage()
-  }, 300)
 }
 
 const props = defineProps({
@@ -370,13 +329,8 @@ function highlightAllCodeBlocks() {
 function renderMarkdown(text, skipSanitize = false) {
   if (!text) return ''
   text = text.replace(/[\u200B\u00A0\u200E\u200F]/g, '')
-
-  // ===== 仅修复 \big$ 错误写法 =====
-  // 将 \big$ 和 \big\$$ 替换为空白（删除它们）
   text = text.replace(/\\big\$/g, '')
   text = text.replace(/\\big\\\$/g, '')
-
-  // 原有的其他修复（保留不变）
   text = text.replace(/\\dots/g, '\\ldots')
   text = text.replace(/(?<!\$)\\implies(?!\$)/g, ' $\\implies$ ')
   text = text.replace(/(?<!\$)(\\bbox\[[^\]]*\])(?!\$)/g, (match) => `$${match}$`)
@@ -387,10 +341,10 @@ function renderMarkdown(text, skipSanitize = false) {
     return `\\bbox[border:1px solid black]{${content}}`
   })
 
-  // 注意：已移除自动块级包裹逻辑，不会破坏其他公式
   const raw = md.render(text)
   return skipSanitize ? raw : DOMPurify.sanitize(raw)
 }
+
 const {
   isOpen, isExpanded, isMobile, userInput, messages,
   isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
@@ -401,7 +355,9 @@ const {
   toggleExpand, toggleChat, fetchBalance, updateParams,
   groupedMessages, formatChatTime,
 } = useChatWidget(props, { renderMarkdown })
-isLoggedIn.value = true   // 强制登录状态
+
+isLoggedIn.value = true
+
 const statusTextColor = computed(() => {
   const status = currentStatus.value
   if (!status) return '#98a2b3'
@@ -411,7 +367,6 @@ const statusTextColor = computed(() => {
   return '#98a2b3'
 })
 
-// 消息更新后只做代码高亮，不再手动处理公式
 watch(messages, () => {
   nextTick(() => {
     highlightAllCodeBlocks()
@@ -420,81 +375,53 @@ watch(messages, () => {
 
 const showParams = ref(false)
 </script>
-
 <style scoped>
 @import '../../../styles/shanxi/chat-window.css';
 @import './chat-scoped.css';
 
+/* ===== 头部修正：适当字体大小 ===== */
+.chat-header .header-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
 
-/* ===== 手机端彻底固定 + 对齐修正 ===== */
-/* ===== 手机端彻底固定 + 对齐修正（终版） ===== */
-@media (max-width: 768px) {
-  /* 1. 全局锁定页面，禁止任何横向滚动 */
-  html, body {
-    overflow-x: hidden;
-    width: 100%;
-    position: relative;
-  }
+.chat-header .header-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+}
 
-  /* 2. 聊天窗口绝对限制 */
-  .chat-window {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    overflow-x: hidden !important;
-  }
+.chat-header .status-text {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
 
-  /* 3. 消息容器：覆盖全局的 max-width: 700px，设为屏幕宽度的 90% */
-  .message-row {
-    max-width: 90vw !important;
-    width: 100%;
-    margin-left: auto !important;
-    margin-right: auto !important;
-  }
+.chat-header .header-name {
+  font-size: 1rem;
+}
 
-  /* 4. 用户消息行：靠右，但右侧留出 4% 的间距（不再贴边） */
-  .message-row.user {
-    justify-content: flex-end;
-    margin-right: 4% !important;   /* 这就是你要的“偏左”效果 */
-  }
-
-  /* 5. 展开模式下同样处理 */
-  .chat-window.expanded .message-row.user {
-    margin-right: 4% !important;
-  }
-
-  /* 6. 用户气泡宽度限制 */
-  .message.user {
-    max-width: 80% !important;     /* 留更多空间，让气泡不至于太宽 */
-    margin-right: 0;
-  }
-
-  /* 7. 修复代码块、公式等可能撑开页面的元素 */
-  .markdown-body pre,
-  .markdown-body .katex-display {
-    max-width: 100% !important;
-    overflow-x: auto !important;
-    word-wrap: break-word;
-  }
-
-  .markdown-body .katex {
-    white-space: normal;
-    word-break: break-all;
-  }
+/* ===== 输入框高度 ===== */
+.chat-input {
+  min-height: 80px;
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 /* ===== 手机端全屏不滑动 + 对齐修正 ===== */
 @media (max-width: 768px) {
-  /* 1. 全局锁定视口，禁止任何方向的拖动 */
   html, body {
     width: 100vw;
     height: 100vh;
-    overflow: hidden;          /* 关键！直接禁止外层滚动 */
-    position: fixed;           /* 让页面不可拖拽 */
+    overflow: hidden;
+    position: fixed;
     margin: 0;
     padding: 0;
   }
 
-  /* 2. 聊天窗口占满整个屏幕 */
   .chat-window {
     width: 100vw !important;
     height: 100vh !important;
@@ -505,21 +432,18 @@ const showParams = ref(false)
     flex-direction: column;
   }
 
-  /* 3. 消息区域自行滚动，不撑破外层 */
   .chat-messages {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
   }
 
-  /* 4. 消息容器宽度 */
   .message-row {
     max-width: 90vw !important;
     margin-left: auto !important;
     margin-right: auto !important;
   }
 
-  /* 5. 用户消息右侧留白，不贴边 */
   .message-row.user {
     justify-content: flex-end;
     margin-right: 10% !important;
@@ -527,10 +451,9 @@ const showParams = ref(false)
 
   .message.user {
     max-width: 80% !important;
-   margin-right: 6% !important;
+    margin-right: 6% !important;
   }
 
-  /* 6. 防止代码块、公式撑开页面 */
   pre, code, .katex-display, table {
     max-width: 100% !important;
     overflow-x: auto !important;

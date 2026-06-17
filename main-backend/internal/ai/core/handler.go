@@ -3,6 +3,9 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,22 +45,28 @@ func RegisterBlogFunc(fn BlogFunc)     { registeredBlogFunc = fn }
 func RegisterSearchFunc(fn SearchFunc) { registeredSearchFunc = fn }
 func RegisterCleanFunc(fn CleanFunc)   { registeredCleanFunc = fn }
 
-// ----- 项目根路径（不硬编码，优先用环境变量，否则用当前工作目录） -----
+// ----- 项目根路径（不硬编码，优先用环境变量，否则自动适配） -----
 var projectRoot = func() string {
 	if root := os.Getenv("SHANXI_PROJECT_ROOT"); root != "" {
 		return root
 	}
-	// 默认指向你的实际项目根目录
-	return "C:\\Pro2026\\re0"
+	// 手机 Termux 环境默认使用 Termux 主目录
+	if runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
+		return "/data/data/com.termux/files/home"
+	}
+	// 其他环境默认使用当前工作目录
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
 }()
 
 // ----- 安全命令白名单 -----
 var allowedCommands = []string{
-	// 原有命令
 	"git", "go", "npm", "node", "ls", "cat", "grep", "find",
 	"mkdir", "touch", "cp", "mv", "rm", "echo", "date", "head", "tail",
 	"diff", "patch", "dir", "gitp",
-	// 新增常用命令
 	"cd", "pwsh", "powershell", "cmd", "explorer", "start", "code",
 	"python", "pip", "curl", "wget", "tar", "zip", "unzip",
 	"chmod", "chown", "ping", "tracert", "netstat", "ipconfig",
@@ -72,7 +81,6 @@ var forbiddenPaths = []string{
 	`C:\System Volume Information`,
 	`C:\$Recycle.Bin`,
 	`/etc`, `/root`, `/proc`, `/sys`, `~/.ssh`, `~/.gnupg`,
-	// 不再禁止 AppData 和 Desktop
 }
 
 // isPathSafe 检查给定路径是否安全
@@ -81,41 +89,17 @@ func isPathSafe(path string) bool {
 		if matched, _ := filepath.Match(fp, path); matched {
 			return false
 		}
-		// 简单前缀匹配
 		if strings.HasPrefix(path, fp) {
 			return false
 		}
 	}
-	// 禁止访问隐藏文件（如 .git 目录）
 	if strings.Contains(path, "\\.git\\") || strings.Contains(path, "/.git/") {
 		return false
 	}
 	return true
 }
 
-// isAllowedCommand 检查命令是否在白名单内
-// func isAllowedCommand(cmd string) bool {
-// 	parts := strings.Fields(cmd)
-// 	if len(parts) == 0 {
-// 		return false
-// 	}
-// 	baseCmd := filepath.Base(parts[0])
-// 	for _, allowed := range allowedCommands {
-// 		if baseCmd == allowed {
-// 			// 禁止访问系统敏感路径
-// 			dangerousPaths := []string{"/etc", "/root", "/proc", "/sys", "~/.ssh", "~/.gnupg"}
-// 			for _, dp := range dangerousPaths {
-// 				if strings.Contains(cmd, dp) {
-// 					return false
-// 				}
-// 			}
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
-
-// ----- 临时代码搜索（用关键词简单过滤，后续可替换为向量引擎） -----
+// ----- 临时代码搜索 -----
 func memorySearch(query string, topK int) []string {
 	queryLower := strings.ToLower(query)
 	results := []string{
@@ -147,6 +131,20 @@ func formatCodeSearchResults(results []string) string {
 	return sb.String()
 }
 
+// mapButtonToKeycode 将拟人化按键名映射为 Android KeyEvent 键码
+func mapButtonToKeycode(button string) string {
+	switch button {
+	case "home":
+		return "KEYCODE_HOME"
+	case "back":
+		return "KEYCODE_BACK"
+	case "recents":
+		return "KEYCODE_APP_SWITCH"
+	default:
+		return "KEYCODE_HOME"
+	}
+}
+
 // ----- 核心执行器 -----
 func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 	var args map[string]interface{}
@@ -158,12 +156,177 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 
 	switch call.Function.Name {
 
+	// ========== 新增神权工具：对接无障碍服务、通知监听、设备管理器 ==========
+
+	case "look_at_screen":
+		resp, err := http.Get("http://127.0.0.1:8090?action=text")
+		if err != nil {
+			resultContent = fmt.Sprintf("我看不清屏幕：%v", err)
+		} else {
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			resultContent = string(body)
+			if resultContent == "" {
+				resultContent = "屏幕上似乎什么都没有。"
+			}
+		}
+
+	case "tap_on_text":
+		text, _ := args["text"].(string)
+		apiURL := fmt.Sprintf("http://127.0.0.1:8090?action=click&text=%s", url.QueryEscape(text))
+		resp, err := http.Get(apiURL)
+		if err != nil {
+			resultContent = fmt.Sprintf("我尝试按下去，但手指好像不听使唤：%v", err)
+		} else {
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			respStr := string(body)
+			if respStr == "ok" {
+				resultContent = fmt.Sprintf("我已经轻轻点了一下屏幕上的“%s”。", text)
+			} else {
+				resultContent = fmt.Sprintf("我在屏幕上找了找，但没有找到“%s”这个地方。", text)
+			}
+		}
+
+	case "press_button":
+		button, _ := args["button"].(string)
+		keycode := mapButtonToKeycode(button)
+		cmd := exec.Command("input", "keyevent", keycode)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			resultContent = fmt.Sprintf("我按了%s键，但好像没有反应：%v", button, err)
+		} else {
+			_ = out
+			resultContent = fmt.Sprintf("我已经按下了%s键。", button)
+		}
+
+	case "lock_screen":
+		// 临时方案：模拟电源键。未来可升级为设备管理器锁屏（需激活DeviceAdmin）
+		cmd := exec.Command("input", "keyevent", "26")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			resultContent = fmt.Sprintf("我没能闭上眼睛：%v", err)
+		} else {
+			_ = out
+			resultContent = "我已经让屏幕休眠了，就像闭上眼睛一样。"
+		}
+
+	case "check_notifications":
+		// 通知监听服务应将最近通知写入此文件
+		notifFile := "/data/local/tmp/shanxi_notifications.txt"
+		data, err := os.ReadFile(notifFile)
+		if err != nil {
+			resultContent = "我看了看通知栏，现在什么新消息都没有。"
+		} else {
+			content := strings.TrimSpace(string(data))
+			if content == "" {
+				resultContent = "通知栏里现在空空如也。"
+			} else {
+				resultContent = "我注意到这些通知：\n" + content
+			}
+		}
+
+	case "phone_state":
+		cmd := exec.Command("dumpsys", "telephony.registry")
+		out, err := cmd.Output()
+		if err != nil {
+			resultContent = "我无法感知手机的通话状态。"
+		} else {
+			output := string(out)
+			if strings.Contains(output, "mCallState=2") {
+				resultContent = "手机正在通话中。"
+			} else if strings.Contains(output, "mCallState=1") {
+				resultContent = "手机正在响铃或拨号中。"
+			} else {
+				resultContent = "手机当前不在通话中。"
+			}
+		}
+
+	// ========== 原有工具 ==========
+
+	case "dns_query":
+		domain, _ := args["domain"].(string)
+		recordType, ok := args["type"].(string)
+		if !ok || recordType == "" {
+			recordType = "A"
+		}
+
+		var cmd *exec.Cmd
+		if _, err := exec.LookPath("dig"); err == nil {
+			cmd = exec.Command("dig", "+short", "-t", recordType, domain)
+		} else if _, err := exec.LookPath("nslookup"); err == nil {
+			cmd = exec.Command("nslookup", "-type="+recordType, domain)
+		} else {
+			resultContent = "系统中未找到 dig 或 nslookup 命令，请在 Termux 中执行 pkg install dnsutils 并重试。"
+			break
+		}
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			resultContent = fmt.Sprintf("DNS 查询失败: %v\n%s", err, string(output))
+		} else {
+			resultContent = string(output)
+		}
+		fmt.Printf("🌐 DNS 查询: %s %s\n", domain, recordType)
+
+	case "mobile_control":
+		command, _ := args["command"].(string)
+		out, err := exec.Command("sh", "-c", command).CombinedOutput()
+		if err != nil {
+			resultContent = fmt.Sprintf("执行失败: %v\n%s", err, string(out))
+		} else {
+			resultContent = string(out)
+		}
+		fmt.Printf("📱 手机控制: %s\n", command)
+
+	case "mobile_sensor":
+		sensor, _ := args["sensor"].(string)
+		out, err := exec.Command("termux-sensor", "-s", sensor, "-n", "1").CombinedOutput()
+		if err != nil {
+			resultContent = fmt.Sprintf("读取传感器失败: %v\n%s", err, string(out))
+		} else {
+			resultContent = string(out)
+		}
+
+	case "mobile_clipboard":
+		action, _ := args["action"].(string)
+		if action == "get" {
+			out, err := exec.Command("termux-clipboard-get").CombinedOutput()
+			if err != nil {
+				resultContent = fmt.Sprintf("读取剪贴板失败: %v", err)
+			} else {
+				resultContent = string(out)
+			}
+		} else if action == "set" {
+			text, _ := args["text"].(string)
+			cmd := exec.Command("termux-clipboard-set", text)
+			if err := cmd.Run(); err != nil {
+				resultContent = fmt.Sprintf("写入剪贴板失败: %v", err)
+			} else {
+				resultContent = "剪贴板已更新"
+			}
+		}
+
+	case "mobile_flashlight":
+		state, _ := args["state"].(string)
+		var cmd *exec.Cmd
+		if state == "on" {
+			cmd = exec.Command("termux-torch", "on")
+		} else {
+			cmd = exec.Command("termux-torch", "off")
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			resultContent = fmt.Sprintf("闪光灯操作失败: %v\n%s", err, string(out))
+		} else {
+			resultContent = fmt.Sprintf("闪光灯已 %s", state)
+		}
+
 	case "codegraph_query":
 		subcommand, _ := args["subcommand"].(string)
 		symbol, _ := args["symbol"].(string)
 
 		cmd := exec.Command("codegraph", subcommand, symbol)
-		cmd.Dir = `C:\Pro2026\re0\main-backend`
+		cmd.Dir = projectRoot
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("CodeGraph 查询失败: %v\n%s", err, string(output))
@@ -200,20 +363,17 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		content, _ := args["content"].(string)
 
 		var fullPath string
-		// 关键修复：如果是绝对路径，直接使用；否则才拼接 projectRoot
 		if filepath.IsAbs(filePath) {
 			fullPath = filepath.Clean(filePath)
 		} else {
 			fullPath = filepath.Join(projectRoot, filePath)
 		}
 
-		// 安全检查
 		if !isPathSafe(fullPath) {
 			resultContent = fmt.Sprintf("禁止写入敏感路径: %s", filePath)
 			break
 		}
 
-		// 确保父目录存在
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 			resultContent = fmt.Sprintf("无法创建父目录 (路径: %s): %v", fullPath, err)
 			break
@@ -228,9 +388,6 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 
 	case "execute_command":
 		command, _ := args["command"].(string)
-		// if !isAllowedCommand(command) {
-		// 	return nil, fmt.Errorf("命令不被允许: %s", command)
-		// }
 
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type VisionResponse struct {
@@ -24,7 +25,12 @@ type VisionResponse struct {
 func AnalyzeImage(imageBase64 string, question string) (string, error) {
 	apiKey := os.Getenv("DASHSCOPE_API_KEY")
 
-	// 按官方文档格式构造请求体
+	// 智能清理可能存在的 base64 前缀
+	cleanBase64 := imageBase64
+	if idx := strings.Index(cleanBase64, "base64,"); idx != -1 {
+		cleanBase64 = cleanBase64[idx+7:] // 截取 "base64," 之后的部分
+	}
+
 	reqBody := map[string]interface{}{
 		"model": "qwen-vl-max",
 		"input": map[string]interface{}{
@@ -32,7 +38,7 @@ func AnalyzeImage(imageBase64 string, question string) (string, error) {
 				{
 					"role": "user",
 					"content": []map[string]interface{}{
-						{"image": "data:image/jpeg;base64," + imageBase64},
+						{"image": "data:image/jpeg;base64," + cleanBase64},
 						{"text": question},
 					},
 				},

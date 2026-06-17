@@ -1,9 +1,8 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { useEmotion } from '../composables/useEmotion.js'
+
 import { useMemory } from '../composables/useMemory.js'
 import { useWelcome } from '../composables/useWelcome.js'
 import { useChatLogic } from '../composables/useChatLogic.js'
-import { useImageUpload } from '../composables/useImageUpload.js'
 import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 
@@ -12,17 +11,17 @@ export function useChatWidget(props) {
   const isExpanded = ref(false)
   const userInput = ref('')
   const messages = ref([])
- const sessionId = ref(props.sessionId || 'sess_' + Date.now().toString(36))
+  const sessionId = ref(props.sessionId || 'sess_' + Date.now().toString(36))
 
-const isMobile = computed(() => {
-  return typeof window !== 'undefined' && window.innerWidth <= 768
-})
+  const isMobile = computed(() => {
+    return typeof window !== 'undefined' && window.innerWidth <= 768
+  })
 
   watch(() => props.sessionId, (newVal) => {
     if (newVal) sessionId.value = newVal
   })
 
-  const isLoggedIn = ref(!!localStorage.getItem('token'))
+  const isLoggedIn = ref(false)
   const debugTemp = ref(localStorage.getItem('debugTemp') ? parseFloat(localStorage.getItem('debugTemp')) : 0.7)
   const debugTopP = ref(localStorage.getItem('debugTopP') ? parseFloat(localStorage.getItem('debugTopP')) : 0.9)
   const debugReasoning = ref(localStorage.getItem('debugReasoning') || '')
@@ -31,7 +30,6 @@ const isMobile = computed(() => {
   const debugMaxTokens = ref(localStorage.getItem('debugMaxTokens') ? parseInt(localStorage.getItem('debugMaxTokens')) : 2000)
   const balance = ref('')
 
-  const { updateEmotion } = useEmotion()
   const { saveMemory } = useMemory()
   const { welcomeMessage, welcomeLoading } = useWelcome()
   const { currentStatus } = useStatusPolling()
@@ -54,7 +52,25 @@ const isMobile = computed(() => {
   function smartScrollAndRefresh() {
     smartScrollToBottom()
     messages.value = [...messages.value]
-  
+  }
+
+  async function fetchBalance() {
+    try {
+      const res = await fetch(`${apiBase}/api/balance`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.is_available && data.balance_infos.length > 0) {
+          const info = data.balance_infos[0]
+          balance.value = `${info.total_balance} ${info.currency}`
+        }
+      }
+    } catch (e) {
+      console.warn('余额查询失败', e)
+    }
   }
 
   function adjustInputHeight() {
@@ -65,7 +81,7 @@ const isMobile = computed(() => {
 
   const { sendMessage } = useChatLogic({
     messages, userInput, sessionId,
-    updateEmotion, saveMemory, lastTokenUsage, lastLatency,
+    saveMemory, lastTokenUsage, lastLatency,
     onNewMessage: () => {
       forceScrollToBottom()
       nextTick(() => {
@@ -75,41 +91,163 @@ const isMobile = computed(() => {
     onStreamUpdate: smartScrollAndRefresh
   })
 
-  const { imageInput, handleImageUpload } = useImageUpload({ messages, sessionId, saveMemory })
+  // ==================== 图片上传逻辑（整合进 useChatWidget） ====================
+  const imageInput = ref(null)
+  let msgId = 0
+
+  async function handleImageUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // 1. 显示用户图片
+    messages.value.push({
+      id: msgId++,
+      type: 'image',
+      image: URL.createObjectURL(file),
+      sender: 'user',
+      timestamp: new Date()
+    })
+
+    // 2. 创建杉汐占位消息
+    const botMsg = {
+      id: msgId++,
+      content: '',
+      reasoning: '',
+      recalling: true,
+      toolCallName: null,
+      toolCallDetail: '',
+      sender: 'bot',
+      isStreaming: true,
+      timestamp: new Date()
+    }
+    messages.value.push(botMsg)
+    forceScrollToBottom()
+
+    // 3. 图片转 Base64
+    const reader = new FileReader()
+    reader.onload = async (loadEvent) => {
+      const base64 = loadEvent.target.result.split(',')[1]
+
+      const requestBody = {
+        message: '帮我看看这张图片',
+        sessionId: sessionId.value,
+        image: base64,
+        temperature: parseFloat(localStorage.getItem('debugTemp') || 0.7),
+        top_p: parseFloat(localStorage.getItem('debugTopP') || 0.9),
+        max_tokens: parseInt(localStorage.getItem('debugMaxTokens') || 2000),
+        reasoning_effort: localStorage.getItem('debugReasoning') || undefined
+      }
+
+      const token = localStorage.getItem('token')
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      try {
+        const response = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody)
+        })
+
+        if (!response.ok) throw new Error('网络错误')
+
+        const streamReader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let partialLine = ''
+
+        while (true) {
+          const { done, value } = await streamReader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = (partialLine + chunk).split('\n')
+          partialLine = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const dataStr = line.slice(6)
+            if (!dataStr) continue
+
+            try {
+              const payload = JSON.parse(dataStr)
+              switch (payload.type) {
+                case 'reasoning':
+                  botMsg.recalling = false
+                  botMsg.reasoning += payload.content || ''
+                  break
+                case 'content':
+                  botMsg.recalling = false
+                  botMsg.content += payload.content || ''
+                  break
+                case 'tool_call_start':
+                  botMsg.toolCallName = payload.name || ''
+                  botMsg.toolCallDetail = payload.args || ''
+                  break
+                case 'tool_call_result':
+                case 'tool_call_error':
+                  botMsg.toolCallName = null
+                  botMsg.toolCallDetail = ''
+                  if (payload.type === 'tool_call_error') {
+                    botMsg.content += `\n[工具调用失败: ${payload.error}]\n`
+                  }
+                  break
+                case 'done':
+                  botMsg.content = payload.content || botMsg.content
+                  botMsg.reasoning = payload.reasoning || botMsg.reasoning
+                  botMsg.isStreaming = false
+                  botMsg.recalling = false
+                  botMsg.toolCallName = null
+                   if (payload.token_usage) lastTokenUsage.value = payload.token_usage
+    if (payload.latency) lastLatency.value = payload.latency
+                  botMsg.toolCallDetail = ''
+                  if (saveMemory) {
+                    saveMemory('leader', requestBody.message)
+                    saveMemory('shanshi', botMsg.content)
+                  }
+                  break
+                case 'error':
+                  botMsg.content = `杉汐：抱歉，图片分析失败：${payload.message || '未知错误'}`
+                  botMsg.isStreaming = false
+                  botMsg.recalling = false
+                  break
+              }
+              smartScrollAndRefresh()
+            } catch (e) {}
+          }
+        }
+        botMsg.isStreaming = false
+        botMsg.recalling = false
+        smartScrollAndRefresh()
+      } catch (err) {
+        botMsg.content = '杉汐：抱歉，我的灵魂好像被风吹散了…稍等片刻可好？'
+        botMsg.isStreaming = false
+        botMsg.recalling = false
+        smartScrollAndRefresh()
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+  // ==================== 图片上传逻辑结束 ====================
+
   const { playVoice } = useVoicePlay()
 
   function toggleExpand() {
     isExpanded.value = !isExpanded.value
   }
 
-function toggleChat() {
+  function toggleChat() {
     if (props.autoOpen || (typeof window !== 'undefined' && window.location.pathname.startsWith('/chat'))) {
       window.location.href = '/'
       return
     }
     isOpen.value = !isOpen.value
     if (isOpen.value) {
-      // 桌面端打开时默认放大
       if (!isMobile.value) {
         isExpanded.value = true
       }
       nextTick(() => forceScrollToBottom())
       setTimeout(() => forceScrollToBottom(), 200)
     }
-  }
-
-  async function fetchBalance() {
-    try {
-      const res = await fetch('/api/balance')
-      if (res.ok) {
-        const data = await res.json()
-        if (data.is_available && data.balance_infos?.length > 0) {
-          balance.value = `${data.balance_infos[0].total_balance} ${data.balance_infos[0].currency}`
-        } else {
-          balance.value = '不可用'
-        }
-      }
-    } catch {}
   }
 
   function updateParams() {
@@ -132,39 +270,11 @@ function toggleChat() {
     return content ? content.replace(/\[(action|emotion):[^\]]*\]/g, '') : ''
   }
 
-  let lastScrollTop = 0
-  onMounted(async () => {
-    if (window.location.pathname.startsWith('/chat')) {
-      isOpen.value = true
-      if (!isMobile.value) isExpanded.value = true
-    }
-    if (props.autoOpen) {
-      isOpen.value = true
-      if (!isMobile.value) isExpanded.value = true
-    }
-
-    fetchBalance()
-    await loadAllHistory()
-
-    if (messagesContainer.value) {
-      messagesContainer.value.addEventListener('scroll', () => {
-        const el = messagesContainer.value
-        const currentScrollTop = el.scrollTop
-        const maxScroll = el.scrollHeight - el.clientHeight
-        const isAtBottom = Math.abs(currentScrollTop - maxScroll) < 10
-        if (isAtBottom) {
-          userScrolledUp.value = false
-        } else if (currentScrollTop < lastScrollTop) {
-          userScrolledUp.value = true
-        }
-        lastScrollTop = currentScrollTop
-      })
-    }
-  })
+  const apiBase = import.meta.env.VITE_API_BASE || ''
 
   async function loadAllHistory() {
     try {
-      const res = await fetch('/api/all-messages')
+      const res = await fetch(`${apiBase}/api/all-messages`)
       if (res.ok) {
         const history = await res.json()
         messages.value = history.map((item, idx) => ({
@@ -182,6 +292,37 @@ function toggleChat() {
       console.error('加载历史失败', e)
     }
   }
+
+  let lastScrollTop = 0
+  onMounted(async () => {
+    if (window.location.pathname.startsWith('/chat')) {
+      isOpen.value = true
+      if (!isMobile.value) isExpanded.value = true
+    }
+    if (props.autoOpen) {
+      isOpen.value = true
+      if (!isMobile.value) isExpanded.value = true
+    }
+
+    localStorage.setItem('token', 'dev-permanent-token')
+    isLoggedIn.value = true
+    await loadAllHistory()
+    fetchBalance()
+    if (messagesContainer.value) {
+      messagesContainer.value.addEventListener('scroll', () => {
+        const el = messagesContainer.value
+        const currentScrollTop = el.scrollTop
+        const maxScroll = el.scrollHeight - el.clientHeight
+        const isAtBottom = Math.abs(currentScrollTop - maxScroll) < 10
+        if (isAtBottom) {
+          userScrolledUp.value = false
+        } else if (currentScrollTop < lastScrollTop) {
+          userScrolledUp.value = true
+        }
+        lastScrollTop = currentScrollTop
+      })
+    }
+  })
 
   function shouldShowTime(prevMsg, currentMsg) {
     if (!prevMsg) return true
@@ -228,7 +369,7 @@ function toggleChat() {
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight,
     sendMessage, handleImageUpload, playVoice,
-    toggleExpand, toggleChat, fetchBalance, updateParams,
+    toggleExpand, toggleChat, updateParams, fetchBalance,
     groupedMessages, formatChatTime
   }
 }

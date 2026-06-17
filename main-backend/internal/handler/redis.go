@@ -36,6 +36,11 @@ func init() {
 }
 
 func getPagesFromCache(key string) ([]string, error) {
+	// 如果 Redis 没开，直接返回“缓存未命中”
+	if !redisEnabled {
+		return nil, nil
+	}
+
 	ctx := context.Background()
 	val, err := redisClient.Get(ctx, key).Result()
 	if err != nil {
@@ -49,6 +54,11 @@ func getPagesFromCache(key string) ([]string, error) {
 }
 
 func setPagesToCache(key string, pages []string) error {
+	// 如果 Redis 没开，直接跳过缓存写入
+	if !redisEnabled {
+		return nil
+	}
+
 	ctx := context.Background()
 	data, _ := json.Marshal(pages)
 	return redisClient.Set(ctx, key, data, 24*time.Hour).Err()
