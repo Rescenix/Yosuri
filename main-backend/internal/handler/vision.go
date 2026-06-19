@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 type VisionResponse struct {
@@ -55,7 +56,11 @@ func AnalyzeImage(imageBase64 string, question string) (string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := new(http.Client).Do(req)
+	client := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: AliyunTransport, // 走神权代理（手机端）或默认传输（电脑端）
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}

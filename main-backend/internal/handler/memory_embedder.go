@@ -27,6 +27,10 @@ type EmbeddingResponse struct {
 }
 
 func getEmbedding(text string) ([]float64, error) {
+	 // 手机端直接返回，不调用阿里云
+    if os.Getenv("SHANXI_PLATFORM") == "mobile" {
+        return nil, fmt.Errorf("手机端禁用阿里云 Embedding")
+    }
 	apiKey := os.Getenv("DASHSCOPE_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("缺少 DASHSCOPE_API_KEY")
@@ -57,7 +61,10 @@ func getEmbedding(text string) ([]float64, error) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: AliyunTransport,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %v", err)

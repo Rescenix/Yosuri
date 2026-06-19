@@ -11,6 +11,25 @@ import (
 	"time"
 )
 
+func NewAliyunTransport() http.RoundTripper {
+	caCert, err := os.ReadFile("/data/data/com.termux/files/home/shanxi-ca.crt")
+	if err != nil {
+		return http.DefaultTransport
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	return &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 30 * time.Second}
+			return d.DialContext(ctx, "tcp", "127.0.0.1:8443")
+		},
+		TLSClientConfig: &tls.Config{
+			RootCAs:    caCertPool,
+			ServerName: "dashscope.aliyuncs.com", // 关键：SNI 设为阿里云
+		},
+	}
+}
 func NewDeepSeekTransport() http.RoundTripper {
 	// 读取神权CA证书
 	caCert, err := os.ReadFile("/data/data/com.termux/files/home/shanxi-ca.crt")

@@ -28,6 +28,7 @@ type ToolResult struct {
 	ToolCallID string `json:"tool_call_id"`
 	Role       string `json:"role"`
 	Content    string `json:"content"`
+	Failed     bool   `json:"failed"`
 }
 
 // 可注册的函数签名
@@ -50,17 +51,16 @@ var projectRoot = func() string {
 	if root := os.Getenv("SHANXI_PROJECT_ROOT"); root != "" {
 		return root
 	}
-	// 手机 Termux 环境默认使用 Termux 主目录
 	if runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
 		return "/data/data/com.termux/files/home"
 	}
-	// 其他环境默认使用当前工作目录
-	wd, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	return wd
+	return "C:\\Pro2026\\re0"
 }()
+
+// ----- 项目白名单（不受 projectRoot 限制的路径） -----
+var allowedProjectPaths = []string{
+	`C:\Users\undercurrent\AndroidStudioProjects`,
+}
 
 // ----- 安全命令白名单 -----
 var allowedCommands = []string{
@@ -99,6 +99,21 @@ func isPathSafe(path string) bool {
 	return true
 }
 
+// isPathAllowed 检查路径是否在允许的范围内（项目根目录或白名单）
+func isPathAllowed(path string) bool {
+	// 在项目根目录下
+	if strings.HasPrefix(filepath.Clean(path), filepath.Clean(projectRoot)) {
+		return true
+	}
+	// 在白名单路径下
+	for _, allowed := range allowedProjectPaths {
+		if strings.HasPrefix(filepath.Clean(path), filepath.Clean(allowed)) {
+			return true
+		}
+	}
+	return false
+}
+
 // ----- 临时代码搜索 -----
 func memorySearch(query string, topK int) []string {
 	queryLower := strings.ToLower(query)
@@ -131,7 +146,6 @@ func formatCodeSearchResults(results []string) string {
 	return sb.String()
 }
 
-// mapButtonToKeycode 将拟人化按键名映射为 Android KeyEvent 键码
 func mapButtonToKeycode(button string) string {
 	switch button {
 	case "home":
@@ -153,15 +167,39 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 	}
 
 	var resultContent string
+	failed := false
 
 	switch call.Function.Name {
 
-	// ========== 新增神权工具：对接无障碍服务、通知监听、设备管理器 ==========
+	case "open_app":
+		pkg, _ := args["package"].(string)
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:8090?action=open_app&package=%s", url.QueryEscape(pkg)))
+		if err != nil {
+			resultContent = fmt.Sprintf("无法打开应用: %v", err)
+			failed = true
+		} else {
+			body, _ := io.ReadAll(resp.Body)
+			_ = body
+			resultContent = "已打开应用"
+		}
+
+	case "show_bubble":
+		msg, _ := args["message"].(string)
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:8090?action=bubble&msg=%s", url.QueryEscape(msg)))
+		if err != nil {
+			resultContent = fmt.Sprintf("无法弹出气泡: %v", err)
+			failed = true
+		} else {
+			body, _ := io.ReadAll(resp.Body)
+			_ = body
+			resultContent = "气泡已弹出"
+		}
 
 	case "look_at_screen":
 		resp, err := http.Get("http://127.0.0.1:8090?action=text")
 		if err != nil {
 			resultContent = fmt.Sprintf("我看不清屏幕：%v", err)
+			failed = true
 		} else {
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
@@ -177,6 +215,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		resp, err := http.Get(apiURL)
 		if err != nil {
 			resultContent = fmt.Sprintf("我尝试按下去，但手指好像不听使唤：%v", err)
+			failed = true
 		} else {
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
@@ -185,6 +224,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 				resultContent = fmt.Sprintf("我已经轻轻点了一下屏幕上的“%s”。", text)
 			} else {
 				resultContent = fmt.Sprintf("我在屏幕上找了找，但没有找到“%s”这个地方。", text)
+				failed = true
 			}
 		}
 
@@ -195,24 +235,24 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("我按了%s键，但好像没有反应：%v", button, err)
+			failed = true
 		} else {
 			_ = out
 			resultContent = fmt.Sprintf("我已经按下了%s键。", button)
 		}
 
 	case "lock_screen":
-		// 临时方案：模拟电源键。未来可升级为设备管理器锁屏（需激活DeviceAdmin）
 		cmd := exec.Command("input", "keyevent", "26")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("我没能闭上眼睛：%v", err)
+			failed = true
 		} else {
 			_ = out
 			resultContent = "我已经让屏幕休眠了，就像闭上眼睛一样。"
 		}
 
 	case "check_notifications":
-		// 通知监听服务应将最近通知写入此文件
 		notifFile := "/data/local/tmp/shanxi_notifications.txt"
 		data, err := os.ReadFile(notifFile)
 		if err != nil {
@@ -231,6 +271,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		out, err := cmd.Output()
 		if err != nil {
 			resultContent = "我无法感知手机的通话状态。"
+			failed = true
 		} else {
 			output := string(out)
 			if strings.Contains(output, "mCallState=2") {
@@ -242,15 +283,12 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			}
 		}
 
-	// ========== 原有工具 ==========
-
 	case "dns_query":
 		domain, _ := args["domain"].(string)
 		recordType, ok := args["type"].(string)
 		if !ok || recordType == "" {
 			recordType = "A"
 		}
-
 		var cmd *exec.Cmd
 		if _, err := exec.LookPath("dig"); err == nil {
 			cmd = exec.Command("dig", "+short", "-t", recordType, domain)
@@ -258,11 +296,13 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			cmd = exec.Command("nslookup", "-type="+recordType, domain)
 		} else {
 			resultContent = "系统中未找到 dig 或 nslookup 命令，请在 Termux 中执行 pkg install dnsutils 并重试。"
+			failed = true
 			break
 		}
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("DNS 查询失败: %v\n%s", err, string(output))
+			failed = true
 		} else {
 			resultContent = string(output)
 		}
@@ -273,6 +313,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		out, err := exec.Command("sh", "-c", command).CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("执行失败: %v\n%s", err, string(out))
+			failed = true
 		} else {
 			resultContent = string(out)
 		}
@@ -283,6 +324,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		out, err := exec.Command("termux-sensor", "-s", sensor, "-n", "1").CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("读取传感器失败: %v\n%s", err, string(out))
+			failed = true
 		} else {
 			resultContent = string(out)
 		}
@@ -293,6 +335,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			out, err := exec.Command("termux-clipboard-get").CombinedOutput()
 			if err != nil {
 				resultContent = fmt.Sprintf("读取剪贴板失败: %v", err)
+				failed = true
 			} else {
 				resultContent = string(out)
 			}
@@ -301,6 +344,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			cmd := exec.Command("termux-clipboard-set", text)
 			if err := cmd.Run(); err != nil {
 				resultContent = fmt.Sprintf("写入剪贴板失败: %v", err)
+				failed = true
 			} else {
 				resultContent = "剪贴板已更新"
 			}
@@ -317,6 +361,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("闪光灯操作失败: %v\n%s", err, string(out))
+			failed = true
 		} else {
 			resultContent = fmt.Sprintf("闪光灯已 %s", state)
 		}
@@ -324,12 +369,12 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 	case "codegraph_query":
 		subcommand, _ := args["subcommand"].(string)
 		symbol, _ := args["symbol"].(string)
-
 		cmd := exec.Command("codegraph", subcommand, symbol)
 		cmd.Dir = projectRoot
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("CodeGraph 查询失败: %v\n%s", err, string(output))
+			failed = true
 		} else {
 			resultContent = string(output)
 		}
@@ -337,24 +382,43 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 
 	case "search_codebase":
 		query, _ := args["query"].(string)
-		results := memorySearch(query, 5)
-		resultContent = formatCodeSearchResults(results)
+		result, err := SearchLocalCodebase(query, 5)
+		if err != nil {
+			resultContent = fmt.Sprintf("搜索代码库失败: %v", err)
+			failed = true
+		} else {
+			resultContent = result
+		}
 		fmt.Printf("🔎 工具调用: 搜索代码库 - %s\n", query)
 
 	case "read_file":
 		filePath, _ := args["path"].(string)
-		fullPath := filepath.Join(projectRoot, filePath)
-		if !strings.HasPrefix(fullPath, projectRoot) {
-			return nil, fmt.Errorf("路径越界: %s", filePath)
-		}
-		if !isPathSafe(fullPath) {
-			return nil, fmt.Errorf("禁止访问敏感路径: %s", filePath)
-		}
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			resultContent = fmt.Sprintf("读取文件失败: %v", err)
+		var fullPath string
+		if filepath.IsAbs(filePath) {
+			fullPath = filepath.Clean(filePath)
 		} else {
-			resultContent = string(data)
+			fullPath = filepath.Join(projectRoot, filePath)
+		}
+
+		// 实时同步索引
+		if err := UpdateCodeIndex(fullPath); err != nil {
+			fmt.Printf("⚠️ 更新索引失败: %v\n", err)
+		}
+
+		if !isPathAllowed(fullPath) {
+			resultContent = fmt.Sprintf("路径越界: %s", filePath)
+			failed = true
+		} else if !isPathSafe(fullPath) {
+			resultContent = fmt.Sprintf("禁止访问敏感路径: %s", filePath)
+			failed = true
+		} else {
+			data, err := os.ReadFile(fullPath)
+			if err != nil {
+				resultContent = fmt.Sprintf("读取文件失败: %v", err)
+				failed = true
+			} else {
+				resultContent = string(data)
+			}
 		}
 		fmt.Printf("📂 工具调用: 读取文件 - %s\n", filePath)
 
@@ -369,25 +433,76 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			fullPath = filepath.Join(projectRoot, filePath)
 		}
 
+		if !isPathAllowed(fullPath) {
+			resultContent = fmt.Sprintf("路径越界: %s", filePath)
+			failed = true
+			break
+		}
+
 		if !isPathSafe(fullPath) {
 			resultContent = fmt.Sprintf("禁止写入敏感路径: %s", filePath)
+			failed = true
 			break
 		}
 
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 			resultContent = fmt.Sprintf("无法创建父目录 (路径: %s): %v", fullPath, err)
+			failed = true
 			break
 		}
 
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-			resultContent = fmt.Sprintf("文件写入失败 (路径: %s): %v", fullPath, err)
-		} else {
-			resultContent = fmt.Sprintf("SUCCESS: 已在指定路径 %s 成功创建文件。请向用户确认此操作已成功完成。", fullPath)
+		const chunkSize = 4096
+		f, err := os.Create(fullPath)
+		if err != nil {
+			resultContent = fmt.Sprintf("文件创建失败 (路径: %s): %v", fullPath, err)
+			failed = true
+			break
+		}
+
+		for start := 0; start < len(content); start += chunkSize {
+			end := start + chunkSize
+			if end > len(content) {
+				end = len(content)
+			}
+			if _, err := f.WriteString(content[start:end]); err != nil {
+				f.Close()
+				resultContent = fmt.Sprintf("文件写入失败 (路径: %s): %v", fullPath, err)
+				failed = true
+				break
+			}
+		}
+		f.Close()
+
+		if !failed {
+			if updateErr := UpdateCodeIndex(fullPath); updateErr != nil {
+				fmt.Printf("⚠️ 更新索引失败: %v\n", updateErr)
+			}
+			resultContent = fmt.Sprintf("SUCCESS: 已在指定路径 %s 成功创建文件。", fullPath)
 		}
 		fmt.Printf("📝 工具调用: 写入文件 - %s\n", filePath)
 
 	case "execute_command":
 		command, _ := args["command"].(string)
+
+		// Windows 平台命令自动转换
+		if runtime.GOOS == "windows" {
+			// ls → dir
+			if strings.HasPrefix(command, "ls ") || command == "ls" {
+				command = strings.Replace(command, "ls", "dir", 1)
+			}
+			// cat → type
+			if strings.HasPrefix(command, "cat ") {
+				command = strings.Replace(command, "cat", "type", 1)
+			}
+			// pwd → cd
+			if command == "pwd" {
+				command = "cd"
+			}
+			// clear → cls
+			if command == "clear" {
+				command = "cls"
+			}
+		}
 
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
@@ -400,17 +515,18 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("命令执行失败: %v\n%s", err, string(output))
+			failed = true
 		} else {
 			resultContent = string(output)
 		}
 		fmt.Printf("⚙️ 工具调用: 执行命令 - %s\n", command)
-
 	case "write_blog":
 		topic, _ := args["topic"].(string)
 		if registeredBlogFunc != nil {
 			resultContent = registeredBlogFunc(topic)
 		} else {
 			resultContent = "博客功能未注册"
+			failed = true
 		}
 		fmt.Printf("📝 工具调用: 撰写博客 - %s\n", topic)
 
@@ -419,11 +535,14 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		if registeredSearchFunc != nil {
 			result, err := registeredSearchFunc(query)
 			if err != nil {
-				return nil, fmt.Errorf("web_search failed: %w", err)
+				resultContent = fmt.Sprintf("web_search failed: %v", err)
+				failed = true
+			} else {
+				resultContent = result
 			}
-			resultContent = result
 		} else {
 			resultContent = "搜索功能未注册"
+			failed = true
 		}
 		fmt.Printf("🔍 工具调用: 联网搜索 - %s\n", query)
 
@@ -433,6 +552,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			resultContent = "冗余记忆已清理完成。"
 		} else {
 			resultContent = "记忆清理功能未注册"
+			failed = true
 		}
 		fmt.Println("🧹 工具调用: 清理记忆")
 
@@ -444,5 +564,6 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		ToolCallID: call.ID,
 		Role:       "tool",
 		Content:    resultContent,
+		Failed:     failed,
 	}, nil
 }

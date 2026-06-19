@@ -7,7 +7,6 @@
     <div v-if="isOpen && isExpanded" class="chat-overlay" @click="toggleExpand"></div>
 
     <div class="chat-window" :class="{ expanded: isExpanded, mobile: isMobile }" :style="{ display: isOpen ? 'flex' : 'none' }">
-      <!-- 头部：状态行移到名字下方 -->
       <div class="chat-header">
         <div class="header-left">
           <span class="header-name">杉汐</span>
@@ -62,9 +61,7 @@
         </template>
       </div>
 
-      <!-- 输入区域 -->
       <div class="chat-input-area">
-        <!-- 参数面板 -->
         <div v-if="showParams" class="params-panel">
           <div class="param-row">
             <span class="param-label">T</span>
@@ -91,11 +88,9 @@
         </div>
 
         <div class="input-wrapper">
-          <!-- 图片按钮 -->
           <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="$refs.imageInput.click()" title="上传图片">
             <Icon icon="heroicons:photo-20-solid" width="18" color="#888" />
           </button>
-          <!-- 参数按钮 -->
           <button v-if="isLoggedIn" class="input-inner-btn input-param-btn" @click="showParams = !showParams" title="参数">
             <Icon icon="mdi:tune" width="18" color="#888" />
           </button>
@@ -112,14 +107,12 @@
             rows="1"
           ></textarea>
 
-          <!-- 内嵌状态栏 -->
           <div class="inline-status-bar" v-if="isLoggedIn">
             <span class="status-item">Token: {{ lastTokenUsage || '--' }}</span>
             <span class="status-item">延迟: {{ lastLatency || '--' }}ms</span>
             <span class="status-item">余额: {{ balance || '--' }}</span>
           </div>
 
-          <!-- 语音按钮 -->
           <button 
             v-if="!userInput.trim()" 
             class="input-inner-btn input-right-btn input-voice-btn" 
@@ -134,7 +127,6 @@
             <Icon icon="mdi:microphone" width="20" :color="isRecording ? '#fff' : '#888'" />
           </button>
 
-          <!-- 发送按钮 -->
           <button v-else class="input-inner-btn input-right-btn input-send-btn" @click="sendMessage">
             <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
           </button>
@@ -156,24 +148,6 @@ import MarkdownIt from 'markdown-it'
 import markdownItKatex from 'markdown-it-katex'
 
 import { useChatWidget } from './useChatWidget.js'
-
-// ===== 全局语音回调（供原生接口调用） =====
-window.onVoiceResult = (text) => {
-  if (text && !text.startsWith('语音识别出错')) {
-    userInput.value = text
-    nextTick(() => {
-      sendMessage()
-    })
-  } else {
-    alert(text || '语音识别出错')
-  }
-  isRecording.value = false
-}
-
-window.onVoiceError = (msg) => {
-  alert('语音识别失败: ' + msg)
-  isRecording.value = false
-}
 
 // 创建 markdown-it 实例
 const md = new MarkdownIt({
@@ -209,23 +183,68 @@ hljs.registerLanguage('math', function() {
   return { name: 'math' }
 })
 
-// ===== 语音状态 =====
+// ===== 纯前端语音识别（电脑端和手机端通用） =====
 const isRecording = ref(false)
+let recognition = null
 
-const startVoiceInput = () => {
-  if (window.NativeVoice) {
-    window.NativeVoice.startListening()
-    isRecording.value = true
-  } else {
-    alert('原生语音接口不可用')
+function startVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SpeechRecognition) {
+    alert('你的浏览器不支持语音识别，请使用 Chrome 或 Edge')
+    return
+  }
+
+  if (recognition) {
+    try { recognition.abort() } catch (e) {}
+  }
+
+  isRecording.value = true
+
+  recognition = new SpeechRecognition()
+  recognition.lang = 'zh-CN'
+  recognition.interimResults = false
+  recognition.maxAlternatives = 3
+  recognition.continuous = false
+
+  recognition.onresult = (event) => {
+    let best = event.results[0][0].transcript
+    for (let i = 0; i < event.results[0].length; i++) {
+      const alt = event.results[0][i]
+      if (alt.confidence > 0.8) {
+        best = alt.transcript
+        break
+      }
+    }
+    userInput.value = best
+  }
+
+  recognition.onerror = (event) => {
+    console.error('语音识别错误:', event.error)
+    isRecording.value = false
+    if (event.error === 'not-allowed') {
+      alert('请允许麦克风权限后重试')
+    }
+  }
+
+  recognition.onend = () => {
+    isRecording.value = false
+  }
+
+  try {
+    recognition.start()
+  } catch (e) {
+    console.error('语音识别启动失败:', e)
+    isRecording.value = false
   }
 }
 
-const stopVoiceAndSend = () => {
-  if (window.NativeVoice) {
-    window.NativeVoice.stopListening()
-  }
+function stopVoiceAndSend() {
+  if (!recognition) return
+  try { recognition.stop() } catch (e) {}
   isRecording.value = false
+  setTimeout(() => {
+    if (userInput.value.trim()) sendMessage()
+  }, 300)
 }
 
 const props = defineProps({
@@ -375,6 +394,7 @@ watch(messages, () => {
 
 const showParams = ref(false)
 </script>
+
 <style scoped>
 @import '../../../styles/shanxi/chat-window.css';
 @import './chat-scoped.css';

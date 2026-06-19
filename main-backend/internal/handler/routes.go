@@ -1,18 +1,20 @@
 package handler
 
 import (
-	"backend/internal/ai/core"
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
+
+	"backend/internal/ai/core"
 
 	"github.com/gin-gonic/gin"
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
 
-	// 全局 CORS 处理（必须在所有路由之前）
+	// 全局 CORS 处理
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -30,7 +32,13 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 
 	r.POST("/api/run", RunCodeHandler)
-	r.POST("/api/chat/stream", chatHandler.StreamChat)
+
+	// 根据平台注册不同的聊天处理器
+	if os.Getenv("SHANXI_PLATFORM") == "mobile" {
+		r.POST("/api/chat/stream", chatHandler.StreamChatMobile)
+	} else {
+		r.POST("/api/chat/stream", chatHandler.StreamChat)
+	}
 
 	r.PATCH("/api/posts/:id", UpdatePostTags)
 	r.DELETE("/api/posts/:id", DeletePost)
@@ -106,7 +114,6 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.POST("/api/login", Login)
 	r.GET("/api/memory/welcome", memoryStore.WelcomeHandler)
 
-	// 记忆保存和回忆接口，无需认证
 	r.POST("/api/memory/save", memoryStore.SaveMemoryHandler)
 	r.GET("/api/memory/recall", memoryStore.RecallMemoryHandler)
 

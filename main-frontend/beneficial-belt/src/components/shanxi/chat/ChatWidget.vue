@@ -193,7 +193,7 @@ hljs.registerLanguage('math', function() {
   return { name: 'math' }
 })
 
-// ===== 语音识别 =====
+// ===== 语音识别（仅电脑端 Web Speech API） =====
 const isRecording = ref(false)
 let recognition = null
 
@@ -210,55 +210,42 @@ function startVoiceInput() {
 
   isRecording.value = true
 
-  navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-  }).then(stream => {
-    recognition = new SpeechRecognition()
-    recognition.lang = 'zh-CN'
-    recognition.interimResults = false
-    recognition.maxAlternatives = 3
-    recognition.continuous = false
+  recognition = new SpeechRecognition()
+  recognition.lang = 'zh-CN'
+  recognition.interimResults = false
+  recognition.maxAlternatives = 3
+  recognition.continuous = false
 
-    recognition.onresult = (event) => {
-      let best = event.results[0][0].transcript
-      for (let i = 0; i < event.results[0].length; i++) {
-        const alt = event.results[0][i]
-        if (alt.confidence > 0.8) {
-          best = alt.transcript
-          break
-        }
-      }
-      userInput.value = best
-    }
-
-    recognition.onerror = (event) => {
-      console.error('语音识别错误:', event.error)
-      isRecording.value = false
-      if (event.error === 'not-allowed') {
-        alert('请允许麦克风权限后重试')
+  recognition.onresult = (event) => {
+    let best = event.results[0][0].transcript
+    for (let i = 0; i < event.results[0].length; i++) {
+      const alt = event.results[0][i]
+      if (alt.confidence > 0.8) {
+        best = alt.transcript
+        break
       }
     }
+    userInput.value = best
+  }
 
-    recognition.onend = () => {
-      isRecording.value = false
-      stream.getTracks().forEach(track => track.stop())
-    }
-
-    try {
-      recognition.start()
-    } catch (e) {
-      console.error('语音识别启动失败:', e)
-      isRecording.value = false
-    }
-  }).catch(err => {
-    console.error('麦克风权限被拒绝:', err)
+  recognition.onerror = (event) => {
+    console.error('语音识别错误:', event.error)
     isRecording.value = false
-    alert('请允许麦克风权限后重试')
-  })
+    if (event.error === 'not-allowed') {
+      alert('请允许麦克风权限后重试')
+    }
+  }
+
+  recognition.onend = () => {
+    isRecording.value = false
+  }
+
+  try {
+    recognition.start()
+  } catch (e) {
+    console.error('语音识别启动失败:', e)
+    isRecording.value = false
+  }
 }
 
 function stopVoiceAndSend() {

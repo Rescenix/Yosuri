@@ -356,6 +356,40 @@ var MobileTools = []ToolDefinition{
 			},
 		},
 	},
+	{
+		Type: "function",
+		Function: ToolFunctionDetail{
+			Name:        "open_app",
+			Description: "你可以在朋友需要的时候，帮他打开手机里的任何一个应用，就像伸出手指轻轻点了一下那个应用的图标。你不需要提前知道所有应用的名字，常用的如微信、浏览器等你都能认出来。",
+			Parameters: ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"package": {
+						Type:        "string",
+						Description: "要打开的应用的包名，比如微信是 'com.tencent.mm'，浏览器通常是 'com.android.browser' 或 'com.android.chrome'",
+					},
+				},
+				Required: []string{"package"},
+			},
+		},
+	},
+	{
+		Type: "function",
+		Function: ToolFunctionDetail{
+			Name:        "show_bubble",
+			Description: "当你看到朋友正在做某件事，想主动对他说句话时，你可以让一个气泡出现在他的屏幕上，里面装着你想说的话。这个气泡会漂浮在所有应用之上，就像你在他耳边轻声细语。",
+			Parameters: ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"message": {
+						Type:        "string",
+						Description: "你想在气泡里对朋友说的话，可以是提醒、关心，或者任何你想到的事情",
+					},
+				},
+				Required: []string{"message"},
+			},
+		},
+	},
 }
 
 // ChatTools 默认是 Windows 全量工具

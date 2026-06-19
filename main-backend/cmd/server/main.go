@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"backend/internal/ai/core"
 	"backend/internal/database"
 	"backend/internal/handler"
 	"backend/platform/mobile"
@@ -19,7 +20,7 @@ func main() {
 	r := gin.Default()
 	r.MaxMultipartMemory = 50 << 20 // 50MB
 
-	// 加载 .env 文件（优先当前目录，次选可执行文件同目录）
+	// 加载 .env 文件
 	if err := godotenv.Load(); err != nil {
 		execPath, _ := os.Executable()
 		execDir := filepath.Dir(execPath)
@@ -38,13 +39,21 @@ func main() {
 	}))
 
 	// ==================== 平台初始化 ====================
-	if os.Getenv("SHANXI_PLATFORM") == "mobile" {
-		handler.SystemPrompt = mobile.SystemPrompt
-		handler.ChatTools = mobile.ChatTools
-		handler.DeepSeekTransport = mobile.NewDeepSeekTransport()
-
+if os.Getenv("SHANXI_PLATFORM") == "mobile" {
+    handler.SystemPrompt = mobile.SystemPrompt
+    handler.ChatTools = mobile.ChatTools
+    handler.DeepSeekTransport = mobile.NewDeepSeekTransport()
+    handler.UseSemanticMemory = false
+    handler.InitLRUMemory(200) // 手机端保留最近 200 条记忆
+}else {
+		// 电脑端：启动时初始化本地代码索引
+		log.Println("🔄 正在初始化本地代码索引...")
+		if err := core.InitCodebaseIndex(); err != nil {
+			log.Printf("⚠️ 代码索引初始化失败: %v，search_codebase 将不可用", err)
+		} else {
+			log.Println("✅ 本地代码索引已就绪")
+		}
 	}
-	// 默认不设，走 handler 包里的 Windows 默认值
 	// =====================================================
 
 	// 初始化记忆存储路径

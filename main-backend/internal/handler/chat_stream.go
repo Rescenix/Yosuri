@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -80,8 +79,6 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 	systemPrompt := buildSystemPrompt(req, c, h.memoryStore)
 	history := h.sessionStore.Get(req.SessionID)
 
-	// 关键修复：将图片分析提前到构建上下文窗口之前
-	// 这样模型在开始思考前就已经拥有图片信息
 	if req.Image != "" {
 		imageData := req.Image
 		if idx := strings.Index(imageData, "base64,"); idx != -1 {
@@ -90,7 +87,6 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 		description, err := AnalyzeImage(imageData, req.Message)
 		if description != "" {
 			fmt.Println("✅ 图片分析成功，将图片内容作为上下文注入")
-			// 将图片描述作为一条额外的用户消息插入历史
 			imageMsg := DSMessage{
 				Role:    "user",
 				Content: fmt.Sprintf("用户发送了一张图片，图片内容如下：\n%s\n请根据图片内容进行回复，注意用户可能没有提供其他文字描述。", description),
@@ -155,7 +151,7 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 func (h *ChatHandler) resolveConversation(
 	c *gin.Context,
 	systemPrompt string,
-	messages []DSMessage, // 直接接收已构建好的消息列表
+	messages []DSMessage,
 	userMessage string,
 	temperature, topP float64,
 	maxTokens int,
@@ -263,6 +259,10 @@ func (h *ChatHandler) resolveConversation(
 
 		messages = append(messages, assistantMsg)
 
+		// 物理熔断：如果任何一个工具失败，立即终止本轮调用链
+		toolFailed := false
+		var failedReason string
+
 		for _, tc := range assistantMsg.ToolCalls {
 			writeSSE(c, "tool_call", "tool_call_start", map[string]string{
 				"name": tc.Function.Name,
@@ -273,37 +273,48 @@ func (h *ChatHandler) resolveConversation(
 			result, err := core.ExecuteToolCall(tc)
 			var toolContent string
 			if err != nil {
+				// Go error：参数解析失败、命令执行异常等，立即终止
 				writeSSE(c, "tool_call", "tool_call_error", map[string]string{
 					"name":  tc.Function.Name,
-					"error": err.Error(),
+					"error": fmt.Sprintf("工具执行异常: %v", err),
 				})
-				toolContent = fmt.Sprintf("工具执行失败: %v", err)
-			} else {
-				writeSSE(c, "tool_call", "tool_call_result", map[string]string{
-					"name":   tc.Function.Name,
-					"result": result.Content,
-				})
-				toolContent = result.Content
+				c.Writer.Flush()
+				return fmt.Sprintf("工具调用异常: %v", err), reasoningAccum.String(), totalUsage, nil
 			}
+
+			if result.Failed {
+				// 逻辑失败：路径越界、命令失败等，立即终止
+				writeSSE(c, "tool_call", "tool_call_error", map[string]string{
+					"name":  tc.Function.Name,
+					"error": result.Content,
+				})
+				c.Writer.Flush()
+				return result.Content, reasoningAccum.String(), totalUsage, nil
+			}
+
+			// 成功，正常追加结果
+			writeSSE(c, "tool_call", "tool_call_result", map[string]string{
+				"name":   tc.Function.Name,
+				"result": result.Content,
+			})
+			toolContent = result.Content
+
 			messages = append(messages, DSMessage{
 				Role:       "tool",
 				Content:    toolContent,
 				ToolCallID: tc.ID,
 			})
 			c.Writer.Flush()
+
+			if toolFailed {
+				// 物理熔断：工具失败后立即返回，不再执行剩余工具
+				return fmt.Sprintf("工具调用失败: %s", failedReason), reasoningAccum.String(), totalUsage, nil
+			}
 		}
 	}
 }
 
 // ========== 辅助函数 ==========
-
-func isNumericArray(s string) bool {
-	if matched, _ := regexp.MatchString(`[a-zA-Z]`, s); matched {
-		return false
-	}
-	allowed := regexp.MustCompile(`^[\d.,;:\s\-+/*()\[\]{}<>|&^%#@!~"'?=]+$`)
-	return allowed.MatchString(s)
-}
 
 func sanitizeMessages(msgs []DSMessage) []DSMessage {
 	var cleaned []DSMessage

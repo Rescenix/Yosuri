@@ -67,6 +67,12 @@
     "array": "cpp",
     "string_view": "cpp",
     "initializer_list": "cpp",
-    "utility": "cpp"
-  }
+    "utility": "cpp",
+    "ctime": "cpp",
+    "iostream": "cpp",
+    "cstring": "cpp",
+    "chrono": "cpp",
+    "iomanip": "cpp"
+  },
+  "cmake.sourceDirectory": "C:/Pro2026/re0/Prism/prism"
 }
