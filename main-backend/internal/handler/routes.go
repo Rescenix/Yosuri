@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"backend/internal/ai/core"
@@ -13,7 +12,7 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
-
+	r.POST("/api/prismql", PrimQLHandler(memoryStore))
 	// 全局 CORS 处理
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -34,11 +33,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.POST("/api/run", RunCodeHandler)
 
 	// 根据平台注册不同的聊天处理器
-	if os.Getenv("SHANXI_PLATFORM") == "mobile" {
-		r.POST("/api/chat/stream", chatHandler.StreamChatMobile)
-	} else {
-		r.POST("/api/chat/stream", chatHandler.StreamChat)
-	}
+
+	r.POST("/api/chat/stream", chatHandler.StreamChat)
 
 	r.PATCH("/api/posts/:id", UpdatePostTags)
 	r.DELETE("/api/posts/:id", DeletePost)

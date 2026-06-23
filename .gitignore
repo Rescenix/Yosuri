@@ -36,3 +36,4 @@ Thumbs.db
 # 日志
 *.log
 /logs/
+node_modules

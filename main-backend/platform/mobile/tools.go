@@ -6,5 +6,5 @@ var ChatTools []core.ToolDefinition
 
 func init() {
 	ChatTools = append(ChatTools, core.BaseTools...)
-	ChatTools = append(ChatTools, core.MobileTools...)
+
 }

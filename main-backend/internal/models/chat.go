@@ -14,6 +14,9 @@ type ChatRequest struct {
 	MaxTokens       int     `json:"max_tokens,omitempty"`
 	ReasoningEffort string  `json:"reasoning_effort,omitempty"`
 	Image           string  `json:"image,omitempty"`
+	Model           string  `json:"model"`
+	ApiKey          string  `json:"api_key"`
+	DsModel         string  `json:"ds_model"`
 }
 
 // ChatResponse 聊天响应（非流式使用，流式已废弃）

@@ -158,6 +158,25 @@ func mapButtonToKeycode(button string) string {
 		return "KEYCODE_HOME"
 	}
 }
+func executeCodebaseQuery(query string) string {
+	// 直接调用 Python 内置 sqlite3，零依赖，零故障
+	pythonScript := fmt.Sprintf(
+		"import sqlite3; conn=sqlite3.connect(r'C:\\Users\\undercurrent\\.cache\\codebase-memory-mcp\\C-Pro2026-re0.db'); cursor=conn.execute(\"SELECT name, file_path FROM nodes WHERE name = ? LIMIT 10\", [%q]); results=[f'{row[0]} -> {row[1]}' for row in cursor]; conn.close(); print('\\n'.join(results) if results else '在代码知识图谱中未找到匹配的代码实体。')",
+		query,
+	)
+
+	cmd := exec.Command("python", "-c", pythonScript)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("[错误] 代码知识图谱查询失败: %v\n%s", err, string(output))
+	}
+
+	result := strings.TrimSpace(string(output))
+	if result == "" {
+		return fmt.Sprintf("在代码知识图谱中未找到与 '%s' 匹配的代码实体。", query)
+	}
+	return result
+}
 
 // ----- 核心执行器 -----
 func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
@@ -390,7 +409,14 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			resultContent = result
 		}
 		fmt.Printf("🔎 工具调用: 搜索代码库 - %s\n", query)
-
+	case "codebase_query":
+		query, _ := args["query"].(string)
+		resultContent = executeCodebaseQuery(query)
+		// 关键：如果查询函数返回了错误信息，必须将工具标记为失败！
+		if strings.HasPrefix(resultContent, "[错误]") || strings.HasPrefix(resultContent, "[警告]") {
+			failed = true
+		}
+		fmt.Printf("🧬 工具调用: 代码知识图谱 - %s (失败: %v)\n", query, failed)
 	case "read_file":
 		filePath, _ := args["path"].(string)
 		var fullPath string
@@ -478,6 +504,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 				fmt.Printf("⚠️ 更新索引失败: %v\n", updateErr)
 			}
 			resultContent = fmt.Sprintf("SUCCESS: 已在指定路径 %s 成功创建文件。", fullPath)
+			fmt.Printf("📝 文件写入完成，实际写入 %d 字节\n", len(content))
 		}
 		fmt.Printf("📝 工具调用: 写入文件 - %s\n", filePath)
 

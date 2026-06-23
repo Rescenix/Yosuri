@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prism 管理控制台 v1.0</title>
+    <style>
+        :root {
+            --bg-primary: #1a1b26;
+            --bg-secondary: #24283b;
+            --bg-tertiary: #1e2030;
+            --text-primary: #a9b1d6;
+            --text-secondary: #565f89;
+            --text-bright: #c0caf5;
+            --accent: #7aa2f7;
+            --accent-bright: #bb9af7;
+            --success: #9ece6a;
+            --warning: #e0af68;
+            --error: #f7768e;
+            --border: #3b4261;
+            --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-bright);
+            letter-spacing: 1px;
+        }
+
+        .header-title span {
+            color: var(--accent);
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--error);
+            transition: background 0.3s;
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .editor-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .editor-label {
+            font-size: 12px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        #query-input {
+            flex: 1;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-bright);
+            font-family: var(--font-mono);
+            font-size: 14px;
+            padding: 12px 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #query-input:focus {
+            border-color: var(--accent);
+        }
+
+        #query-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .btn-execute {
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 4px;
+            padding: 12px 24px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-execute:hover {
+            background: var(--accent-bright);
+        }
+
+        .btn-execute:active {
+            background: var(--accent);
+            opacity: 0.8;
+        }
+
+        .result-panel {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: auto;
+            padding: 16px;
+        }
+
+        .result-label {
+            font-size: 12px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .result-meta {
+            color: var(--text-secondary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            table-layout: auto;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            color: var(--accent);
+            font-weight: 700;
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        tr:hover td {
+            background: rgba(122, 162, 247, 0.05);
+        }
+
+        .col-id {
+            color: var(--warning);
+        }
+        .col-conduct {
+            color: var(--accent);
+        }
+        .col-flux {
+            color: var(--success);
+        }
+        .col-chaos {
+            color: var(--accent-bright);
+        }
+
+        .message {
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .message.error {
+            color: var(--error);
+        }
+
+        .shortcuts {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+
+        .shortcuts kbd {
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid var(--border);
+            font-family: var(--font-mono);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-title">Prism <span>管理控制台 v1.0</span></div>
+        <div class="status">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">DISCONNECTED</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="editor-panel">
+            <div class="editor-label">PrimQL 查询编辑器</div>
+            <div class="input-row">
+                <input type="text" id="query-input" placeholder="LOOM / ENGRAM / STATS / DRIFT ..." autofocus>
+                <button class="btn-execute" onclick="executeQuery()">执行 (PrimQL)</button>
+            </div>
+            <div class="shortcuts">
+                <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 执行查询 &nbsp;|&nbsp;
+                <kbd>↑</kbd><kbd>↓</kbd> 历史命令
+            </div>
+        </div>
+
+        <div class="result-panel">
+            <div class="result-label">
+                <span>查询结果</span>
+                <span class="result-meta" id="result-meta"></span>
+            </div>
+            <div id="result-area">
+                <div class="message">等待执行 PrimQL 查询...</div>
+            </div>
+        </div>
+    </div>
+
+   <script>
+    const API_URL = 'http://localhost:5666';
+    let queryHistory = [];
+    let historyIndex = -1;
+
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const queryInput = document.getElementById('query-input');
+    const resultArea = document.getElementById('result-area');
+    const resultMeta = document.getElementById('result-meta');
+
+    async function executeQuery() {
+        const query = queryInput.value.trim();
+        if (!query) return;
+
+        queryHistory.push(query);
+        historyIndex = queryHistory.length;
+
+        resultArea.innerHTML = '<div class="message">执行中...</div>';
+        resultMeta.textContent = '';
+
+        const startTime = performance.now();
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: query
+            });
+            const endTime = performance.now();
+            const latency = (endTime - startTime).toFixed(1);
+            const text = await res.text();
+            renderPrimQLResult(text, latency);
+            updateStatus(true);
+        } catch (err) {
+            const endTime = performance.now();
+            const latency = (endTime - startTime).toFixed(1);
+            resultArea.innerHTML = `<div class="message error">❌ 无法连接到 PrismD (localhost:5666) [${latency}ms]</div>`;
+            resultMeta.textContent = ` ${latency}ms`;
+            updateStatus(false);
+        }
+    }
+
+    function renderPrimQLResult(rawText, latency) {
+        const lines = rawText.trim().split('\n');
+        if (lines.length === 0 || lines[0].startsWith('ERROR') || lines[0].startsWith('UNKNOWN')) {
+            resultArea.innerHTML = `<div class="message error">${escapeHtml(rawText)}</div>`;
+            resultMeta.textContent = ` ${latency}ms`;
+            updateStatus(true);
+            return;
+        }
+        
+        // 解析表头（STATS返回的格式：ID  CONTENT    CONDUCT FLUX CHAOS）
+        // 或者普通LOOM返回的格式：ID SCORE ROLE CONTENT
+        let html = '<table>';
+        let isHeader = true;
+        const processedLines = [];
+        
+        for (const line of lines) {
+            if (line === 'OK' || line.startsWith('RESONATE')) continue;
+            // 分割 tab
+            const cols = line.split('\t');
+            // 过滤掉完全空的列（保留有内容的列）
+            const nonEmptyCols = cols.map(c => c.trim() === '' ? '' : c);
+            processedLines.push(nonEmptyCols);
+        }
+
+        // 第一行作为表头
+        if (processedLines.length > 0) {
+            const headerCols = processedLines[0];
+            html += '<thead><tr>';
+            for (const col of headerCols) {
+                html += `<th>${escapeHtml(col || '(empty)')}</th>`;
+            }
+            html += '</tr></thead><tbody>';
+            
+            for (let i = 1; i < processedLines.length; i++) {
+                const rowCols = processedLines[i];
+                html += '<tr>';
+                for (let j = 0; j < headerCols.length; j++) {
+                    let cssClass = '';
+                    if (j === 0) cssClass = 'col-id';
+                    else if (j === 2) cssClass = 'col-conduct';
+                    else if (j === 3) cssClass = 'col-flux';
+                    else if (j === 4) cssClass = 'col-chaos';
+                    const val = rowCols[j] || '';
+                    html += `<td class="${cssClass}">${escapeHtml(val)}</td>`;
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            resultArea.innerHTML = html;
+            resultMeta.textContent = `${processedLines.length - 1} 行 ·  ${latency}ms`;
+        } else {
+            resultArea.innerHTML = '<div class="message">无数据</div>';
+            resultMeta.textContent = ` ${latency}ms`;
+        }
+        updateStatus(true);
+    }
+
+    function updateStatus(connected) {
+        if (connected) {
+            statusDot.classList.add('connected');
+            statusText.textContent = 'CONNECTED';
+            statusText.style.color = 'var(--success)';
+        } else {
+            statusDot.classList.remove('connected');
+            statusText.textContent = 'DISCONNECTED';
+            statusText.style.color = 'var(--text-secondary)';
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // 快捷键
+    queryInput.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'Enter') {
+            executeQuery();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (historyIndex > 0) {
+                historyIndex--;
+                queryInput.value = queryHistory[historyIndex];
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex < queryHistory.length - 1) {
+                historyIndex++;
+                queryInput.value = queryHistory[historyIndex];
+            } else {
+                historyIndex = queryHistory.length;
+                queryInput.value = '';
+            }
+        }
+    });
+
+    // 启动时检测连接
+    (async function checkConnection() {
+        try {
+            await fetch(API_URL, { method: 'GET' });
+            updateStatus(true);
+        } catch (e) {
+            updateStatus(false);
+        }
+    })();
+</script>
+</body>
+</html>

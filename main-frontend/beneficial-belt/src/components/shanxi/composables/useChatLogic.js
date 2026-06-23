@@ -7,7 +7,9 @@ const TOOL_NAME_MAP = {
     search_codebase: '搜索代码库',
     read_file: '读取文件',
     write_file: '写入文件',
-    execute_command: '执行命令'
+    execute_command: '执行命令',
+    codebase_query: '代码知识图谱', // 新增：核心结构查询
+    codegraph_query: '调用链分析'   // 新增：调用链关系查询
 }
 
 export function useChatLogic({

@@ -39,14 +39,13 @@ func main() {
 	}))
 
 	// ==================== 平台初始化 ====================
-if os.Getenv("SHANXI_PLATFORM") == "mobile" {
-    handler.SystemPrompt = mobile.SystemPrompt
-    handler.ChatTools = mobile.ChatTools
-    handler.DeepSeekTransport = mobile.NewDeepSeekTransport()
-    handler.UseSemanticMemory = false
-    handler.InitLRUMemory(200) // 手机端保留最近 200 条记忆
-}else {
-		// 电脑端：启动时初始化本地代码索引
+	if os.Getenv("SHANXI_PLATFORM") == "mobile" {
+		handler.SystemPrompt = mobile.SystemPrompt
+		handler.ChatTools = mobile.ChatTools
+		handler.DeepSeekTransport = mobile.NewDeepSeekTransport()
+
+		handler.InitLRUMemory(200)
+	} else {
 		log.Println("🔄 正在初始化本地代码索引...")
 		if err := core.InitCodebaseIndex(); err != nil {
 			log.Printf("⚠️ 代码索引初始化失败: %v，search_codebase 将不可用", err)
@@ -56,17 +55,25 @@ if os.Getenv("SHANXI_PLATFORM") == "mobile" {
 	}
 	// =====================================================
 
-	// 初始化记忆存储路径
-	memoryPath := os.Getenv("MEMORY_FILE_PATH")
-	if memoryPath == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			panic("无法获取用户目录: " + err.Error())
-		}
-		memoryPath = filepath.Join(homeDir, "shanxi_data", "memory.json")
-	}
+	// 初始化记忆存储
+	var memoryStore *handler.MemoryStore
 
-	memoryStore := handler.NewMemoryStore(memoryPath)
+	if os.Getenv("USE_PRISM") == "true" {
+		log.Println("⚡ 尝试连接 PrismD 宇宙引擎 (localhost:5666)...")
+		memoryStore = handler.NewMemoryStore("")
+		if err := memoryStore.ConnectPrism("localhost:5666"); err != nil {
+			log.Printf("⚠️ PrismD 连接失败: %v，回退到 JSON 存储", err)
+			memoryPath := getMemoryPath()
+			memoryStore = handler.NewMemoryStore(memoryPath)
+			log.Printf("📂 已回退到 JSON 记忆: %s", memoryPath)
+		} else {
+			log.Println("⚡ PrismD 宇宙引擎已连接，混沌记忆在线")
+		}
+	} else {
+		memoryPath := getMemoryPath()
+		memoryStore = handler.NewMemoryStore(memoryPath)
+		log.Printf("📂 使用 JSON 文件记忆: %s", memoryPath)
+	}
 
 	if os.Getenv("DEV_MODE") != "true" {
 		// TODO: 在此启用 JWT 认证中间件
@@ -85,5 +92,18 @@ if os.Getenv("SHANXI_PLATFORM") == "mobile" {
 
 	handler.RegisterRoutes(r, memoryStore, sessionStore)
 
+	log.Println("🚀 杉汐已启动，监听端口 :8080")
 	r.Run(":8080")
+}
+
+func getMemoryPath() string {
+	memoryPath := os.Getenv("MEMORY_FILE_PATH")
+	if memoryPath == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			panic("无法获取用户目录: " + err.Error())
+		}
+		memoryPath = filepath.Join(homeDir, "shanxi_data", "memory.json")
+	}
+	return memoryPath
 }
