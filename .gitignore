@@ -32,8 +32,9 @@ Thumbs.db
 # 环境配置
 .env
 .env.local
-
+bfg.jar
 # 日志
+..bfg-report/
 *.log
 /logs/
 node_modules
