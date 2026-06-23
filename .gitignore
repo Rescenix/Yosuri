@@ -24,7 +24,7 @@
 # 系统文件
 .DS_Store
 Thumbs.db
-
+.onnx
 # 依赖目录
 /node_modules/
 /vendor/
