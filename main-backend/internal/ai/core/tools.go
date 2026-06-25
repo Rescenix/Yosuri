@@ -60,23 +60,7 @@ var BaseTools = []ToolDefinition{
 			},
 		},
 	},
-	{
-		Type: "function",
-		Function: ToolFunctionDetail{
-			Name:        "codebase_query",
-			Description: "【最高优先级】这是你感知项目代码结构的主要方式。通过精确的代码符号名，从AST级代码知识图谱中查询其定义位置、调用关系等。当你需要查找函数、类、结构体、接口等任何代码实体的定义时，必须优先使用此工具。",
-			Parameters: ToolParameters{
-				Type: "object",
-				Properties: map[string]ToolProperty{
-					"query": {
-						Type:        "string",
-						Description: "需要查询的精确代码符号名，例如 'prism_insert' 或 'ChaoticState'。这是你从用户问题中提取出的核心代码实体名称。",
-					},
-				},
-				Required: []string{"query"},
-			},
-		},
-	},
+
 	{
 		Type: "function",
 		Function: ToolFunctionDetail{
@@ -101,6 +85,31 @@ var BaseTools = []ToolDefinition{
 	{
 		Type: "function",
 		Function: ToolFunctionDetail{
+			Name:        "edit_file",
+			Description: "精确编辑文件内容，通过替换指定旧字符串为新字符串实现修改。保留 diff 信息，要求 old_string 在文件中唯一。",
+			Parameters: ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"path": {
+						Type:        "string",
+						Description: "要编辑的文件路径，相对于项目根目录",
+					},
+					"old_string": {
+						Type:        "string",
+						Description: "要替换的旧字符串，必须在文件中唯一匹配",
+					},
+					"new_string": {
+						Type:        "string",
+						Description: "替换后的新字符串",
+					},
+				},
+				Required: []string{"path", "old_string", "new_string"},
+			},
+		},
+	},
+	{
+		Type: "function",
+		Function: ToolFunctionDetail{
 			Name:        "execute_command",
 			Description: "在项目根目录执行一条安全的白名单 shell 命令。需要用户确认。",
 			Parameters: ToolParameters{
@@ -115,12 +124,28 @@ var BaseTools = []ToolDefinition{
 			},
 		},
 	},
-
+	// {
+	// 	Type: "function",
+	// 	Function: ToolFunctionDetail{
+	// 		Name:        "search_memory",
+	// 		Description: "搜索你的长期记忆库，找回与当前对话相关的历史记忆。当且仅当当前上下文不知道的时候调用此工具。",
+	// 		Parameters: ToolParameters{
+	// 			Type: "object",
+	// 			Properties: map[string]ToolProperty{
+	// 				"query": {
+	// 					Type:        "string",
+	// 					Description: "从用户消息中提取的搜索查询，用于检索相关记忆",
+	// 				},
+	// 			},
+	// 			Required: []string{"query"},
+	// 		},
+	// 	},
+	// },
 	{
 		Type: "function",
 		Function: ToolFunctionDetail{
 			Name:        "clean_memories",
-			Description: "清理冗余或过时的记忆，优化记忆库。",
+			Description: "清理冗余或过时的记忆，优化记忆库,禁止主动调用。",
 			Parameters: ToolParameters{
 				Type:       "object",
 				Properties: map[string]ToolProperty{},
@@ -155,15 +180,10 @@ var WindowsTools = []ToolDefinition{
 	},
 }
 
-// MobileTools 是手机端专有的工具
-// MobileTools 是杉汐作为“人”的本能——她身体的自然能力
-// MobileTools 是杉汐作为“人”的本能——她身体的自然能力
-
 // ChatTools 默认是 Windows 全量工具
 var ChatTools []ToolDefinition
 
 func init() {
 	ChatTools = append(ChatTools, BaseTools...)
 	ChatTools = append(ChatTools, WindowsTools...)
-
 }

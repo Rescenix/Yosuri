@@ -9,7 +9,6 @@ import (
 	"backend/internal/ai/core"
 	"backend/internal/database"
 	"backend/internal/handler"
-	"backend/platform/mobile"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -17,20 +16,26 @@ import (
 )
 
 func main() {
-	r := gin.Default()
-	r.MaxMultipartMemory = 50 << 20 // 50MB
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(gin.Recovery())
 
-	// 加载 .env 文件
-	if err := godotenv.Load(); err != nil {
-		execPath, _ := os.Executable()
-		execDir := filepath.Dir(execPath)
-		if err2 := godotenv.Load(filepath.Join(execDir, ".env")); err2 != nil {
-			log.Println("未找到 .env 文件，将从系统环境变量读取配置")
-		}
+	// 加载环境变量
+	_ = godotenv.Load()
+
+	// 初始化数据库连接
+	database.InitDB()
+	database.InitPrismDB()
+
+	// 初始化代码搜索索引（保留原有功能）
+	log.Println("🔄 正在初始化本地代码索引...")
+	if err := core.InitCodebaseIndex(); err != nil {
+		log.Printf("⚠️ 代码索引初始化失败: %v，search_codebase 将不可用", err)
+	} else {
+		log.Println("✅ 本地代码索引已就绪")
 	}
 
-	database.InitDB()
-
+	// CORS 配置
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -38,47 +43,17 @@ func main() {
 		AllowCredentials: false,
 	}))
 
-	// ==================== 平台初始化 ====================
-	if os.Getenv("SHANXI_PLATFORM") == "mobile" {
-		handler.SystemPrompt = mobile.SystemPrompt
-		handler.ChatTools = mobile.ChatTools
-		handler.DeepSeekTransport = mobile.NewDeepSeekTransport()
-
-		handler.InitLRUMemory(200)
-	} else {
-		log.Println("🔄 正在初始化本地代码索引...")
-		if err := core.InitCodebaseIndex(); err != nil {
-			log.Printf("⚠️ 代码索引初始化失败: %v，search_codebase 将不可用", err)
-		} else {
-			log.Println("✅ 本地代码索引已就绪")
-		}
-	}
-	// =====================================================
-
-	// 初始化记忆存储
-	var memoryStore *handler.MemoryStore
-
-	if os.Getenv("USE_PRISM") == "true" {
-		log.Println("⚡ 尝试连接 PrismD 宇宙引擎 (localhost:5666)...")
-		memoryStore = handler.NewMemoryStore("")
-		if err := memoryStore.ConnectPrism("localhost:5666"); err != nil {
-			log.Printf("⚠️ PrismD 连接失败: %v，回退到 JSON 存储", err)
-			memoryPath := getMemoryPath()
-			memoryStore = handler.NewMemoryStore(memoryPath)
-			log.Printf("📂 已回退到 JSON 记忆: %s", memoryPath)
-		} else {
-			log.Println("⚡ PrismD 宇宙引擎已连接，混沌记忆在线")
-		}
-	} else {
+	// 初始化 PrismD 记忆存储
+	memoryStore := handler.NewMemoryStore("")
+	if err := memoryStore.ConnectPrism("localhost:5666"); err != nil {
+		log.Printf("⚠️ PrismD 连接失败: %v，回退到 JSON 存储", err)
 		memoryPath := getMemoryPath()
 		memoryStore = handler.NewMemoryStore(memoryPath)
-		log.Printf("📂 使用 JSON 文件记忆: %s", memoryPath)
+	} else {
+		log.Println("⚡ PrismD 数字海马体已连接")
 	}
 
-	if os.Getenv("DEV_MODE") != "true" {
-		// TODO: 在此启用 JWT 认证中间件
-	}
-
+	// 初始化会话存储
 	homeDir, _ := os.UserHomeDir()
 	sessionPath := filepath.Join(homeDir, "shanxi_data", "sessions.json")
 	sessionStore := handler.NewSessionStore(sessionPath)
@@ -92,8 +67,10 @@ func main() {
 
 	handler.RegisterRoutes(r, memoryStore, sessionStore)
 
-	log.Println("🚀 杉汐已启动，监听端口 :8080")
-	r.Run(":8080")
+	log.Println("🚀 Prism 引擎已启动，监听端口 :8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("服务启动失败: %v", err)
+	}
 }
 
 func getMemoryPath() string {

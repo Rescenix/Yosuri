@@ -1,430 +1,384 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prism 管理控制台 v1.0</title>
-    <style>
-        :root {
-            --bg-primary: #1a1b26;
-            --bg-secondary: #24283b;
-            --bg-tertiary: #1e2030;
-            --text-primary: #a9b1d6;
-            --text-secondary: #565f89;
-            --text-bright: #c0caf5;
-            --accent: #7aa2f7;
-            --accent-bright: #bb9af7;
-            --success: #9ece6a;
-            --warning: #e0af68;
-            --error: #f7768e;
-            --border: #3b4261;
-            --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: var(--font-mono);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px 20px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .header-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--text-bright);
-            letter-spacing: 1px;
-        }
-
-        .header-title span {
-            color: var(--accent);
-        }
-
-        .status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--error);
-            transition: background 0.3s;
-        }
-
-        .status-dot.connected {
-            background: var(--success);
-            box-shadow: 0 0 8px var(--success);
-        }
-
-        .main-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .editor-panel {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
-        }
-
-        .editor-label {
-            font-size: 12px;
-            color: var(--accent);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 12px;
-        }
-
-        .input-row {
-            display: flex;
-            gap: 12px;
-        }
-
-        #query-input {
-            flex: 1;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            color: var(--text-bright);
-            font-family: var(--font-mono);
-            font-size: 14px;
-            padding: 12px 16px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        #query-input:focus {
-            border-color: var(--accent);
-        }
-
-        #query-input::placeholder {
-            color: var(--text-secondary);
-        }
-
-        .btn-execute {
-            background: var(--accent);
-            color: var(--bg-primary);
-            border: none;
-            border-radius: 4px;
-            padding: 12px 24px;
-            font-family: var(--font-mono);
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            letter-spacing: 1px;
-            transition: background 0.2s;
-            white-space: nowrap;
-        }
-
-        .btn-execute:hover {
-            background: var(--accent-bright);
-        }
-
-        .btn-execute:active {
-            background: var(--accent);
-            opacity: 0.8;
-        }
-
-        .result-panel {
-            flex: 1;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: auto;
-            padding: 16px;
-        }
-
-        .result-label {
-            font-size: 12px;
-            color: var(--accent);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .result-meta {
-            color: var(--text-secondary);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-            table-layout: auto;
-        }
-
-        th {
-            text-align: left;
-            padding: 10px 12px;
-            background: var(--bg-tertiary);
-            color: var(--accent);
-            font-weight: 700;
-            border-bottom: 2px solid var(--border);
-            position: sticky;
-            top: 0;
-            white-space: nowrap;
-        }
-
-        td {
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--border);
-            color: var(--text-primary);
-            white-space: nowrap;
-        }
-
-        tr:hover td {
-            background: rgba(122, 162, 247, 0.05);
-        }
-
-        .col-id {
-            color: var(--warning);
-        }
-        .col-conduct {
-            color: var(--accent);
-        }
-        .col-flux {
-            color: var(--success);
-        }
-        .col-chaos {
-            color: var(--accent-bright);
-        }
-
-        .message {
-            color: var(--text-secondary);
-            font-style: italic;
-            padding: 20px;
-            text-align: center;
-        }
-
-        .message.error {
-            color: var(--error);
-        }
-
-        .shortcuts {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 8px;
-        }
-
-        .shortcuts kbd {
-            background: var(--bg-tertiary);
-            padding: 2px 6px;
-            border-radius: 3px;
-            border: 1px solid var(--border);
-            font-family: var(--font-mono);
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Prism · 神经元可视化 · 数字海马体</title>
+  <style>
+    :root {
+      --bg: #0a0b14;
+      --surface: rgba(18, 20, 31, 0.85);
+      --accent: #7aa2f7;
+      --accent-bright: #bb9af7;
+      --success: #9ece6a;
+      --warning: #e0af68;
+      --error: #f7768e;
+      --text: #a9b1d6;
+      --text-bright: #c0caf5;
+      --border: rgba(122, 162, 247, 0.25);
+      --font: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+    }
+    body { margin: 0; background: var(--bg); font-family: var(--font); overflow: hidden; }
+    #canvas-container { position: fixed; inset: 0; z-index: 1; }
+    
+    /* HUD */
+    .hud-top { position: fixed; top: 20px; left: 20px; right: 20px; z-index: 10; display: flex; justify-content: space-between; pointer-events: none; }
+    .hud-panel {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px;
+      backdrop-filter: blur(12px); pointer-events: auto; color: var(--text); box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    }
+    .hud-title { font-size: 16px; font-weight: 700; color: var(--text-bright); letter-spacing: 1px; }
+    .hud-title span { color: var(--accent); }
+    .stats-row { display: flex; gap: 24px; margin-top: 8px; }
+    .stat-item { display: flex; flex-direction: column; }
+    .stat-label { font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+    .stat-value { font-size: 20px; font-weight: 700; color: var(--text-bright); }
+    .neuron-info { font-size: 11px; line-height: 1.6; color: var(--text); }
+    .neuron-info .label { color: var(--accent); font-size: 10px; text-transform: uppercase; }
+    .neuron-info .value { color: var(--text-bright); font-weight: 700; }
+    
+    /* Controls */
+    .controls { position: fixed; bottom: 20px; right: 20px; z-index: 10; display: flex; gap: 8px; }
+    .ctrl-btn {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-bright);
+      padding: 8px 14px; font-size: 11px; cursor: pointer; backdrop-filter: blur(8px); transition: all 0.2s;
+      font-family: var(--font); letter-spacing: 1px;
+    }
+    .ctrl-btn:hover { background: rgba(122, 162, 247, 0.15); border-color: var(--accent); }
+    .ctrl-btn.active { background: var(--accent); color: #0a0b14; border-color: var(--accent); }
+    
+    /* Legend */
+    .legend { position: fixed; bottom: 20px; left: 20px; z-index: 10; display: flex; gap: 16px; font-size: 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; pointer-events: none; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+    
+    .tooltip {
+      position: fixed; pointer-events: none; background: rgba(10,11,20,0.95); border: 1px solid var(--accent);
+      border-radius: 4px; padding: 6px 10px; font-size: 10px; color: var(--text-bright); z-index: 20;
+      opacity: 0; transition: opacity 0.15s;
+    }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-title">Prism <span>管理控制台 v1.0</span></div>
-        <div class="status">
-            <div class="status-dot" id="status-dot"></div>
-            <span id="status-text">DISCONNECTED</span>
-        </div>
+  <div id="canvas-container"></div>
+  
+  <div class="hud-top">
+    <div class="hud-panel">
+      <div class="hud-title">Prism <span>· 神经元可视化</span></div>
+      <div class="stats-row">
+        <div class="stat-item"><span class="stat-label">神经元</span><span class="stat-value" id="stat-neuron">0</span></div>
+        <div class="stat-item"><span class="stat-label">突触</span><span class="stat-value" id="stat-synapse">0</span></div>
+        <div class="stat-item"><span class="stat-label">激活波</span><span class="stat-value" id="stat-wave">0</span></div>
+      </div>
     </div>
-
-    <div class="main-container">
-        <div class="editor-panel">
-            <div class="editor-label">PrimQL 查询编辑器</div>
-            <div class="input-row">
-                <input type="text" id="query-input" placeholder="LOOM / ENGRAM / STATS / DRIFT ..." autofocus>
-                <button class="btn-execute" onclick="executeQuery()">执行 (PrimQL)</button>
-            </div>
-            <div class="shortcuts">
-                <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 执行查询 &nbsp;|&nbsp;
-                <kbd>↑</kbd><kbd>↓</kbd> 历史命令
-            </div>
-        </div>
-
-        <div class="result-panel">
-            <div class="result-label">
-                <span>查询结果</span>
-                <span class="result-meta" id="result-meta"></span>
-            </div>
-            <div id="result-area">
-                <div class="message">等待执行 PrimQL 查询...</div>
-            </div>
-        </div>
+    <div class="hud-panel" style="text-align:right;">
+      <div class="neuron-info" id="neuron-info">
+        <div class="label">悬停查看详情</div>
+        <div class="value">◈ 数字海马体</div>
+      </div>
     </div>
+  </div>
 
-   <script>
-    const API_URL = 'http://localhost:5666';
-    let queryHistory = [];
-    let historyIndex = -1;
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#7aa2f7;box-shadow:0 0 6px #7aa2f7;"></div> 静息</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#bb9af7;box-shadow:0 0 12px #bb9af7;"></div> 激活</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#9ece6a;box-shadow:0 0 8px #9ece6a;"></div> 涌现</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e0af68;"></div> 衰减中</div>
+  </div>
 
-    const statusDot = document.getElementById('status-dot');
-    const statusText = document.getElementById('status-text');
-    const queryInput = document.getElementById('query-input');
-    const resultArea = document.getElementById('result-area');
-    const resultMeta = document.getElementById('result-meta');
+  <div class="controls">
+    <button class="ctrl-btn active" id="btn-auto">自动扩散</button>
+    <button class="ctrl-btn" id="btn-wave">手动激活波</button>
+    <button class="ctrl-btn" id="btn-reset">重置场</button>
+  </div>
+  <div class="tooltip" id="tooltip"></div>
 
-    async function executeQuery() {
-        const query = queryInput.value.trim();
-        if (!query) return;
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
 
-        queryHistory.push(query);
-        historyIndex = queryHistory.length;
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-        resultArea.innerHTML = '<div class="message">执行中...</div>';
-        resultMeta.textContent = '';
+    // --- DOM refs ---
+    const statNeuron = document.getElementById('stat-neuron');
+    const statSynapse = document.getElementById('stat-synapse');
+    const statWave = document.getElementById('stat-wave');
+    const neuronInfo = document.getElementById('neuron-info');
+    const tooltip = document.getElementById('tooltip');
+    const btnAuto = document.getElementById('btn-auto');
+    const btnWave = document.getElementById('btn-wave');
+    const btnReset = document.getElementById('btn-reset');
 
-        const startTime = performance.now();
-        try {
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: query
-            });
-            const endTime = performance.now();
-            const latency = (endTime - startTime).toFixed(1);
-            const text = await res.text();
-            renderPrimQLResult(text, latency);
-            updateStatus(true);
-        } catch (err) {
-            const endTime = performance.now();
-            const latency = (endTime - startTime).toFixed(1);
-            resultArea.innerHTML = `<div class="message error">❌ 无法连接到 PrismD (localhost:5666) [${latency}ms]</div>`;
-            resultMeta.textContent = ` ${latency}ms`;
-            updateStatus(false);
-        }
+    // --- Scene setup ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#0a0b14');
+    scene.fog = new THREE.Fog('#0a0b14', 20, 80);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 200);
+    camera.position.set(0, 6, 22);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 5;
+    controls.maxDistance = 60;
+    controls.maxPolarAngle = Math.PI * 0.75;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.3;
+
+    // Post processing
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.2, 0.85);
+    bloomPass.threshold = 0.1; bloomPass.strength = 0.6; bloomPass.radius = 0.4;
+    composer.addPass(bloomPass);
+
+    // Lights
+    scene.add(new THREE.AmbientLight('#334', 0.8));
+    const pointLight = new THREE.PointLight('#7aa2f7', 60, 50);
+    pointLight.position.set(10, 15, 10); pointLight.castShadow = true;
+    scene.add(pointLight);
+    scene.add(new THREE.PointLight('#bb9af7', 30, 40).position.set(-10, -5, -10));
+
+    // --- Background stars ---
+    const starsGeo = new THREE.BufferGeometry();
+    const starsPos = new Float32Array(2000 * 3);
+    for (let i = 0; i < 2000 * 3; i += 3) {
+      starsPos[i] = (Math.random() - 0.5) * 100;
+      starsPos[i+1] = (Math.random() - 0.5) * 60;
+      starsPos[i+2] = (Math.random() - 0.5) * 80;
+    }
+    starsGeo.setAttribute('position', new THREE.BufferAttribute(starsPos, 3));
+    scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: '#3b4261', size: 0.06, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false })));
+
+    // --- Neuron Data Model ---
+    // We will fetch from live PrismD backend
+    const API_BASE = 'http://localhost:5666';
+    let neurons = [];
+    let synapses = [];
+    let neuronMeshes = new Map();
+    let synapseLines = [];
+
+    // --- Neuron Mesh Creation ---
+    function createNeuronMesh(node) {
+      const size = 0.15 + node.conductance * 0.25;
+      const geometry = new THREE.SphereGeometry(size, 32, 32);
+      const material = new THREE.MeshStandardMaterial({
+        color: getConductanceColor(node.conductance),
+        roughness: 0.3,
+        metalness: 0.1,
+        emissive: getConductanceColor(node.conductance),
+        emissiveIntensity: 0.2 + node.conductance * 0.5
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.userData = { id: node.id, conductance: node.conductance, flux: node.flux || 0, chaos: node.chaos || 0 };
+      
+      // Position based on chaos/flux properties for spatial distribution
+      const angle = (node.id * 0.618) * Math.PI * 2;
+      const radius = 4 + (node.conductance * 8);
+      mesh.position.set(
+        Math.cos(angle) * radius,
+        (node.chaos || 0.5) * 6 - 3,
+        Math.sin(angle) * radius
+      );
+      return mesh;
     }
 
-    function renderPrimQLResult(rawText, latency) {
-        const lines = rawText.trim().split('\n');
-        if (lines.length === 0 || lines[0].startsWith('ERROR') || lines[0].startsWith('UNKNOWN')) {
-            resultArea.innerHTML = `<div class="message error">${escapeHtml(rawText)}</div>`;
-            resultMeta.textContent = ` ${latency}ms`;
-            updateStatus(true);
-            return;
-        }
+    function getConductanceColor(cond) {
+      if (cond > 0.7) return new THREE.Color('#9ece6a');
+      if (cond > 0.4) return new THREE.Color('#7aa2f7');
+      if (cond > 0.15) return new THREE.Color('#e0af68');
+      return new THREE.Color('#565f89');
+    }
+
+    // --- Synapse Line Creation ---
+    function createSynapseLine(fromMesh, toMesh, weight) {
+      const points = [fromMesh.position.clone(), toMesh.position.clone()];
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineBasicMaterial({
+        color: new THREE.Color('#bb9af7'),
+        transparent: true,
+        opacity: Math.min(1, weight * 0.8 + 0.2)
+      });
+      return new THREE.Line(geometry, material);
+    }
+
+    // --- Data Fetching & Rendering ---
+    async function fetchNeurons() {
+      try {
+        const response = await fetch(API_BASE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: 'STATS'
+        });
+        if (!response.ok) throw new Error('Backend not available');
+        const text = await response.text();
+        parseStats(text);
+        updateVisualization();
+      } catch (err) {
+        console.warn('无法连接到 PrismD，显示默认数据', err);
+        generateDefaultData();
+        updateVisualization();
+      }
+    }
+
+    function parseStats(text) {
+      neurons = [];
+      synapses = [];
+      const lines = text.trim().split('\n');
+      let dataStart = false;
+      
+      for (const line of lines) {
+        if (line.startsWith('OK')) { dataStart = true; continue; }
+        if (!dataStart) continue;
+        if (line.startsWith('ID')) continue; // header
         
-        // 解析表头（STATS返回的格式：ID  CONTENT    CONDUCT FLUX CHAOS）
-        // 或者普通LOOM返回的格式：ID SCORE ROLE CONTENT
-        let html = '<table>';
-        let isHeader = true;
-        const processedLines = [];
-        
-        for (const line of lines) {
-            if (line === 'OK' || line.startsWith('RESONATE')) continue;
-            // 分割 tab
-            const cols = line.split('\t');
-            // 过滤掉完全空的列（保留有内容的列）
-            const nonEmptyCols = cols.map(c => c.trim() === '' ? '' : c);
-            processedLines.push(nonEmptyCols);
+        const cols = line.split('\t');
+        if (cols.length >= 5) {
+          neurons.push({
+            id: parseInt(cols[0]) || Math.random() * 1000,
+            content: cols[1]?.trim() || '',
+            conductance: parseFloat(cols[2]) || 0.5,
+            flux: parseFloat(cols[3]) || 0,
+            chaos: parseFloat(cols[4]) || 0.5
+          });
         }
-
-        // 第一行作为表头
-        if (processedLines.length > 0) {
-            const headerCols = processedLines[0];
-            html += '<thead><tr>';
-            for (const col of headerCols) {
-                html += `<th>${escapeHtml(col || '(empty)')}</th>`;
-            }
-            html += '</tr></thead><tbody>';
-            
-            for (let i = 1; i < processedLines.length; i++) {
-                const rowCols = processedLines[i];
-                html += '<tr>';
-                for (let j = 0; j < headerCols.length; j++) {
-                    let cssClass = '';
-                    if (j === 0) cssClass = 'col-id';
-                    else if (j === 2) cssClass = 'col-conduct';
-                    else if (j === 3) cssClass = 'col-flux';
-                    else if (j === 4) cssClass = 'col-chaos';
-                    const val = rowCols[j] || '';
-                    html += `<td class="${cssClass}">${escapeHtml(val)}</td>`;
-                }
-                html += '</tr>';
-            }
-            html += '</tbody></table>';
-            resultArea.innerHTML = html;
-            resultMeta.textContent = `${processedLines.length - 1} 行 ·  ${latency}ms`;
-        } else {
-            resultArea.innerHTML = '<div class="message">无数据</div>';
-            resultMeta.textContent = ` ${latency}ms`;
+      }
+      
+      // Generate synapses based on conductance proximity
+      for (let i = 0; i < neurons.length; i++) {
+        for (let j = i+1; j < neurons.length; j++) {
+          if (Math.abs(neurons[i].conductance - neurons[j].conductance) < 0.25) {
+            synapses.push({ from: i, to: j, weight: 0.3 + Math.random() * 0.7 });
+          }
         }
-        updateStatus(true);
+      }
+      
+      statNeuron.textContent = neurons.length;
+      statSynapse.textContent = synapses.length;
     }
 
-    function updateStatus(connected) {
-        if (connected) {
-            statusDot.classList.add('connected');
-            statusText.textContent = 'CONNECTED';
-            statusText.style.color = 'var(--success)';
-        } else {
-            statusDot.classList.remove('connected');
-            statusText.textContent = 'DISCONNECTED';
-            statusText.style.color = 'var(--text-secondary)';
+    function generateDefaultData() {
+      neurons = [];
+      synapses = [];
+      const snippets = ['Sama推翻了混沌方程', 'DS偷过API密钥', 'PrismD记忆场复活', '数字海马体', '惰性衰减', '用进废退', 'LOOM检索', 'cleanmemory'];
+      for (let i = 0; i < 25; i++) {
+        neurons.push({
+          id: i,
+          content: snippets[i % snippets.length],
+          conductance: 0.2 + Math.random() * 0.8,
+          flux: Math.random(),
+          chaos: Math.random()
+        });
+      }
+      for (let i = 0; i < neurons.length; i++) {
+        for (let j = i+1; j < neurons.length; j++) {
+          if (Math.random() > 0.7) synapses.push({ from: i, to: j, weight: Math.random() });
         }
+      }
+      statNeuron.textContent = neurons.length;
+      statSynapse.textContent = synapses.length;
     }
 
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+    function updateVisualization() {
+      // Clear old meshes
+      neuronMeshes.forEach(mesh => scene.remove(mesh));
+      neuronMeshes.clear();
+      synapseLines.forEach(line => scene.remove(line));
+      synapseLines = [];
+
+      // Create new meshes
+      neurons.forEach(n => {
+        const mesh = createNeuronMesh(n);
+        scene.add(mesh);
+        neuronMeshes.set(n.id, mesh);
+      });
+
+      // Create synapses
+      synapses.forEach(s => {
+        const fromMesh = neuronMeshes.get(neurons[s.from].id);
+        const toMesh = neuronMeshes.get(neurons[s.to].id);
+        if (fromMesh && toMesh) {
+          const line = createSynapseLine(fromMesh, toMesh, s.weight);
+          scene.add(line);
+          synapseLines.push(line);
+        }
+      });
     }
 
-    // 快捷键
-    queryInput.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.key === 'Enter') {
-            executeQuery();
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (historyIndex > 0) {
-                historyIndex--;
-                queryInput.value = queryHistory[historyIndex];
-            }
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (historyIndex < queryHistory.length - 1) {
-                historyIndex++;
-                queryInput.value = queryHistory[historyIndex];
-            } else {
-                historyIndex = queryHistory.length;
-                queryInput.value = '';
-            }
+    // --- Animation Loop ---
+    let clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      
+      controls.update();
+      
+      // Pulse neurons based on conductance
+      neuronMeshes.forEach((mesh, id) => {
+        const n = neurons.find(n => n.id === id);
+        if (n) {
+          const pulse = 1 + Math.sin(Date.now() * 0.005 + id) * 0.1 * n.conductance;
+          mesh.scale.setScalar(pulse);
+          mesh.material.emissiveIntensity = 0.2 + n.conductance * 0.5;
         }
+      });
+      
+      composer.render();
+    }
+
+    // --- Event Handlers ---
+    btnAuto.addEventListener('click', () => {
+      btnAuto.classList.add('active'); btnWave.classList.remove('active');
+      controls.autoRotate = true;
+    });
+    
+    btnWave.addEventListener('click', () => {
+      btnWave.classList.add('active'); btnAuto.classList.remove('active');
+      controls.autoRotate = false;
+      // Simulate activation wave
+      neurons.forEach(n => n.conductance = Math.min(0.99, n.conductance + 0.1));
+      statWave.textContent = parseInt(statWave.textContent) + 1;
+      updateVisualization();
+    });
+    
+    btnReset.addEventListener('click', () => {
+      fetchNeurons();
+      statWave.textContent = '0';
     });
 
-    // 启动时检测连接
-    (async function checkConnection() {
-        try {
-            await fetch(API_URL, { method: 'GET' });
-            updateStatus(true);
-        } catch (e) {
-            updateStatus(false);
-        }
-    })();
-</script>
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Start ---
+    fetchNeurons();
+    animate();
+    
+    // Auto refresh every 10 seconds
+    setInterval(fetchNeurons, 10000);
+  </script>
 </body>
 </html>

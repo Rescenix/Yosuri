@@ -26,11 +26,10 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 
 	chatHandler := NewChatHandler(memoryStore, sessionStore)
+	go chatHandler.warmUpLocalModel() // 显式异步，不阻塞注册
 	core.RegisterCleanFunc(func() {
 		memoryStore.CleanMemories()
 	})
-
-	r.POST("/api/run", RunCodeHandler)
 
 	// 根据平台注册不同的聊天处理器
 
@@ -44,9 +43,7 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		c.JSON(200, history)
 	})
 
-	r.GET("/api/all-messages", func(c *gin.Context) {
-		GetAllMessages(c, sessionStore)
-	})
+	r.GET("/api/all-messages", GetAllMessagesHandler(sessionStore))
 
 	r.DELETE("/api/images/remove", DeleteImage)
 	r.POST("/api/upload", UploadToOSS)

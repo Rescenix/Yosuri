@@ -3,6 +3,7 @@
 package handler
 
 import (
+	"backend/internal/database"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -69,36 +70,8 @@ func (m *MemoryStore) sendPrimQL(ql string) (string, error) {
 
 // SmartAppend 不再生成向量，直接写入 PrismD（如果可用），否则回退 JSON
 func (m *MemoryStore) SmartAppend(role, content string) error {
-	// 不再调用 BGE 生成向量
-
-	if m.prismAddr != "" {
-		cleanContent := strings.ReplaceAll(content, "\n", " | ")
-		ql := fmt.Sprintf("ENGRAM %s %s", role, cleanContent)
-		resp, err := m.sendPrimQL(ql)
-		if err != nil || !strings.HasPrefix(resp, "OK") {
-			if err != nil {
-				fmt.Printf("⚠️ PrismD ENGRAM 失败: %v\n", err)
-			} else {
-				fmt.Printf("⚠️ PrismD ENGRAM 失败: %s\n", resp)
-			}
-		} else {
-			fmt.Println("⚡ 混沌记忆已存入 PrismD")
-			return nil
-		}
-	}
-
-	id := fmt.Sprintf("mem_%d", time.Now().UnixNano())
-	m.records = append(m.records, MemoryRecord{
-		Timestamp: time.Now(),
-		Role:      role,
-		Content:   content,
-		ID:        id,
-	})
-	if m.filePath != "" {
-		data, _ := json.MarshalIndent(m.records, "", "  ")
-		os.WriteFile(m.filePath, data, 0644)
-	}
-	return nil
+	_, err := database.PrismDB.Exec("ENGRAM " + role + " " + content)
+	return err
 }
 
 // SearchSimilar 不再调用 BGE/LOOM，返回空

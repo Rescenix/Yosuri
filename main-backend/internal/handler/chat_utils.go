@@ -41,15 +41,95 @@ type ToolCallRequest struct {
 
 // 从文本中解析工具调用（支持 JSON + XML 两种格式）
 func parseToolCallFromText(content string) (*ToolCallRequest, bool) {
-	// 先尝试 JSON 格式
-	if tc, ok := parseJSONToolCall(content); ok {
-		return tc, true
+	trimmed := strings.TrimSpace(content)
+
+	// 处理 markdown 代码块包裹的情况：```json ... ```
+	if strings.HasPrefix(trimmed, "```json") {
+		trimmed = strings.TrimPrefix(trimmed, "```json")
+		trimmed = strings.TrimSuffix(trimmed, "```")
+		trimmed = strings.TrimSpace(trimmed)
+	} else if strings.HasPrefix(trimmed, "```") {
+		trimmed = strings.TrimPrefix(trimmed, "```")
+		trimmed = strings.TrimSuffix(trimmed, "```")
+		trimmed = strings.TrimSpace(trimmed)
 	}
-	// 再尝试 XML 标签格式
-	if tc, ok := parseXMLToolCall(content); ok {
-		return tc, true
+
+	// 必须先以 { 开头
+	if !strings.HasPrefix(trimmed, "{") {
+		return nil, false
 	}
-	return nil, false
+
+	var tc ToolCallRequest
+	if err := json.Unmarshal([]byte(trimmed), &tc); err != nil {
+		return nil, false
+	}
+
+	if tc.Tool == "" || tc.Args == nil {
+		return nil, false
+	}
+	return &tc, true
+}
+func parseJSONToolCallStrict(content string) (*ToolCallRequest, bool) {
+	trimmed := strings.TrimSpace(content)
+
+	// 必须是纯 JSON：以 { 开头，以 } 结尾
+	if !strings.HasPrefix(trimmed, "{") || !strings.HasSuffix(trimmed, "}") {
+		return nil, false
+	}
+
+	// 不允许出现自然语言、emoji、markdown、代码块
+	if strings.ContainsAny(trimmed, "，。！？：；`*#[]()<>\n\r") {
+		return nil, false
+	}
+
+	var tc ToolCallRequest
+	if err := json.Unmarshal([]byte(trimmed), &tc); err != nil {
+		return nil, false
+	}
+
+	// 必须包含 tool 和 args
+	if tc.Tool == "" || tc.Args == nil {
+		return nil, false
+	}
+
+	return &tc, true
+}
+func parseXMLToolCallStrict(content string) (*ToolCallRequest, bool) {
+	trimmed := strings.TrimSpace(content)
+
+	// 必须严格以 <tool_call> 开头，以 </tool_call> 结尾
+	if !strings.HasPrefix(trimmed, "<tool_call>") ||
+		!strings.HasSuffix(trimmed, "</tool_call>") {
+		return nil, false
+	}
+
+	// 提取中间 JSON
+	inner := strings.TrimPrefix(trimmed, "<tool_call>")
+	inner = strings.TrimSuffix(inner, "</tool_call>")
+	inner = strings.TrimSpace(inner)
+
+	// 中间必须是纯 JSON
+	if !strings.HasPrefix(inner, "{") || !strings.HasSuffix(inner, "}") {
+		return nil, false
+	}
+
+	var call struct {
+		Name      string                 `json:"name"`
+		Arguments map[string]interface{} `json:"arguments"`
+	}
+
+	if err := json.Unmarshal([]byte(inner), &call); err != nil {
+		return nil, false
+	}
+
+	if call.Name == "" {
+		return nil, false
+	}
+
+	return &ToolCallRequest{
+		Tool: call.Name,
+		Args: call.Arguments,
+	}, true
 }
 
 // 解析 JSON 格式：{"tool":"xxx","args":{...}}

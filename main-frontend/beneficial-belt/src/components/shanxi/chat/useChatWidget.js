@@ -11,7 +11,13 @@ export function useChatWidget(props) {
   const isExpanded = ref(false)
   const userInput = ref('')
   const messages = ref([])
-  const sessionId = ref(props.sessionId || 'sess_' + Date.now().toString(36))
+  const sessionId = ref(
+  localStorage.getItem('prism_session_id') || 
+  'sess_' + Date.now().toString(36)
+)
+if (!localStorage.getItem('prism_session_id')) {
+  localStorage.setItem('prism_session_id', sessionId.value)
+}
 
   const isMobile = computed(() => {
     return typeof window !== 'undefined' && window.innerWidth <= 768
@@ -272,26 +278,26 @@ export function useChatWidget(props) {
 
   const apiBase = import.meta.env.VITE_API_BASE || ''
 
-  async function loadAllHistory() {
-    try {
-      const res = await fetch(`${apiBase}/api/all-messages`)
-      if (res.ok) {
-        const history = await res.json()
-        messages.value = history.map((item, idx) => ({
-          id: idx,
-          content: cleanContent(item.content),
-          sender: item.role === 'assistant' ? 'bot' : item.role,
-          timestamp: item.timestamp,
-          isStreaming: false,
-          reasoning: ''
-        }))
-        await nextTick()
-        forceScrollToBottom()
-      }
-    } catch (e) {
-      console.error('加载历史失败', e)
+ async function loadAllHistory() {
+  try {
+    const res = await fetch(`${apiBase}/api/sessions/${sessionId.value}`)
+    if (res.ok) {
+      const history = await res.json()
+      messages.value = history.map((item, idx) => ({
+        id: idx,
+        content: cleanContent(item.content),
+        sender: item.role === 'assistant' ? 'bot' : item.role,
+        timestamp: item.timestamp || new Date(),
+        isStreaming: false,
+        reasoning: ''
+      }))
+      await nextTick()
+      forceScrollToBottom()
     }
+  } catch (e) {
+    console.error('加载历史失败', e)
   }
+}
 
   let lastScrollTop = 0
   onMounted(async () => {

@@ -9,137 +9,140 @@
     <div class="chat-window" :class="{ expanded: isExpanded, mobile: isMobile }" :style="{ display: isOpen ? 'flex' : 'none' }">
       <div class="chat-header">
         <div class="header-left">
+          <button class="header-menu-btn" @click="toggleSidebar" aria-label="展开导航">
+            <Icon icon="mdi:menu" width="18" color="#696259" />
+          </button>
           <span class="header-name">杉汐</span>
           <span class="status-dot" :style="{ background: statusDotColor }"></span>
           <span class="status-text" :style="{ color: statusTextColor }">{{ currentStatus }}</span>
         </div>
-        <div class="header-actions">
-          <button class="header-btn" @click="toggleChat">
-            <Icon icon="heroicons:x-mark-20-solid" width="16" color="#888" />
-          </button>
-        </div>
       </div>
 
-      <div class="chat-messages" ref="messagesContainer">
-        <div v-if="messages.length === 0 && !welcomeLoading" class="message-row bot">
-          <div class="message bot">{{ welcomeMessage }}</div>
-        </div>
-        <div v-if="messages.length === 0 && welcomeLoading" class="message-row bot">
-          <div class="message bot" style="opacity:0.6">杉汐正在想起你...</div>
-        </div>
-        <template v-for="item in groupedMessages">
-          <div v-if="item.type === 'time'" :key="`time-${item.timestamp}`" class="chat-time">
-            {{ formatChatTime(item.timestamp) }}
-          </div>
-          <div v-else-if="item.type === 'message'" :key="item.id" class="message-row" :class="item.sender">
-            <div v-if="item.type === 'image'" class="image-card">
-              <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
-            </div>
-            <div v-else class="message" :class="item.sender">
-              <div v-if="item.sender === 'bot' && item.recalling" class="recalling-hint">
-                <Icon icon="mdi:memory" width="14" color="#6b7280" />
-                <span>杉汐正在回忆与你的过去...</span>
-              </div>
+      <div v-if="sidebarOpen" class="chat-sidebar-backdrop" @click="toggleSidebar"></div>
+      <aside class="chat-sidebar" :class="{ open: sidebarOpen }">
+        <h4>星辰核心</h4>
+        <a href="/shanxi-hut">项目库</a>
+        <a href="/blog">研习录</a>
+        <a href="/timeline">生命线</a>
+      </aside>
 
-              <div v-if="item.reasoning" class="reasoning-stream">
-                <div class="reasoning-label">
-                  <Icon icon="la:atom" width="14" color="#6b7280" />
-                  思考中...
+      <div class="chat-content">
+        <button
+          v-show="showScrollButton"
+          class="scroll-to-bottom-btn"
+          @click="forceScrollToBottom"
+          title="回到底部"
+        >
+          <Icon icon="mdi:chevron-down" width="20" color="#555" />
+        </button>
+
+        <div class="chat-messages" ref="messagesContainer">
+          <div v-if="messages.length === 0 && !welcomeLoading" class="message-row bot">
+            <div class="assistant-message">{{ welcomeMessage }}</div>
+          </div>
+          <div v-if="messages.length === 0 && welcomeLoading" class="message-row bot">
+            <div class="assistant-message" style="opacity:0.6">杉汐正在想起你...</div>
+          </div>
+
+          <template v-for="item in groupedMessages">
+            <div v-if="item.type === 'time'" :key="`time-${item.timestamp}`" class="chat-time">
+              {{ formatChatTime(item.timestamp) }}
+            </div>
+            <div v-else-if="item.type === 'message'" :key="item.id" class="message-row" :class="item.sender">
+              <div v-if="item.type === 'image'" class="image-card">
+                <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
+              </div>
+              <div v-else-if="item.sender === 'user'" class="message-bubble user">
+                {{ item.content }}
+              </div>
+              <div v-else class="assistant-message">
+                <div v-if="item.recalling" class="recalling-hint">
+                  <Icon icon="mdi:memory" width="14" color="#6b7280" />
+                  <span>杉汐正在回忆与你的过去...</span>
                 </div>
-                <div class="reasoning-text" v-html="renderMarkdown(item.reasoning, true)"></div>
+                <div v-if="item.reasoning" class="reasoning-stream">
+                  <div class="reasoning-label">
+                    <Icon icon="la:atom" width="14" color="#6b7280" />
+                    思考中...
+                  </div>
+                  <div class="reasoning-text" v-html="renderMarkdown(item.reasoning, true)"></div>
+                </div>
+                <div v-if="item.toolCallName" class="tool-call-indicator">
+                  <Icon icon="mdi:cog-sync" width="14" color="#6b7280" />
+                  <span>正在调用工具：{{ item.toolCallName }}</span>
+                  <span v-if="item.toolCallDetail" class="tool-call-detail">{{ item.toolCallDetail }}</span>
+                </div>
+                <div class="markdown-body" v-html="renderMarkdown(item.content, true)"></div>
+                <div class="assistant-tools">
+                  <button class="tool-btn" @click="playVoice(item.content)" title="朗读">
+                    <Icon icon="mdi:volume-high" width="16" />
+                  </button>
+                  <button class="tool-btn" @click="copyText(item.content)" title="复制">
+                    <Icon icon="mdi:content-copy" width="16" />
+                  </button>
+                </div>
               </div>
-
-              <div v-if="item.toolCallName" class="tool-call-indicator">
-                <Icon icon="mdi:cog-sync" width="14" color="#6b7280" />
-                <span>正在调用工具：{{ item.toolCallName }}</span>
-                <span v-if="item.toolCallDetail" class="tool-call-detail">{{ item.toolCallDetail }}</span>
-              </div>
-              <div v-if="item.sender === 'bot'" class="markdown-body" v-html="renderMarkdown(item.content, true)"></div>
-              <div v-else>{{ item.content }}</div>
-              <button v-if="isLoggedIn && item.sender === 'bot'" class="ds-btn ds-btn-msg" @click="playVoice(item.content)" title="播放语音">
-                <Icon icon="mdi:microphone" width="14" color="#666" />
-              </button>
             </div>
-          </div>
-        </template>
-      </div>
-
-      <!-- 输入区域（极简融合） -->
-      <div class="chat-input-area">
-        <!-- 参数面板（输入框上方弹出） -->
-        <div v-if="showParams" class="params-panel">
-          <div class="param-row">
-            <span class="param-label">T</span>
-            <input type="range" min="0" max="2" step="0.1" v-model.number="debugTemp" @change="updateParams" />
-            <span class="param-value">{{ debugTemp }}</span>
-          </div>
-          <div class="param-row">
-            <span class="param-label">TopP</span>
-            <input type="range" min="0" max="1" step="0.05" v-model.number="debugTopP" @change="updateParams" />
-            <span class="param-value">{{ debugTopP }}</span>
-          </div>
-          <div class="param-row">
-            <span class="param-label">Tokens</span>
-            <input type="number" v-model.number="debugMaxTokens" min="100" max="8192" step="100" @change="updateParams" />
-          </div>
-          <div class="param-row">
-            <span class="param-label">思考</span>
-            <select v-model="debugReasoning" @change="updateParams">
-              <option value="">关闭</option>
-              <option value="high">开启（高）</option>
-              <option value="max">开启（最强）</option>
-            </select>
-          </div>
+          </template>
         </div>
 
-        <div class="input-wrapper">
-          <!-- 图片按钮：嵌入输入框左下角 -->
-          <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="$refs.imageInput.click()" title="上传图片">
-            <Icon icon="heroicons:photo-20-solid" width="18" color="#888" />
-          </button>
-          <!-- 参数按钮：紧挨图片按钮 -->
-          <button v-if="isLoggedIn" class="input-inner-btn input-param-btn" @click="showParams = !showParams" title="参数">
-            <Icon icon="mdi:tune" width="18" color="#888" />
-          </button>
-          <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn" @change="handleImageUpload" />
+        <div v-if="copiedVisible" class="copy-toast">✓ 已复制</div>
 
-          <textarea 
-            ref="chatInputRef"
-            class="chat-input" 
-            :class="{ recording: isRecording }"
-            v-model="userInput" 
-            placeholder="输入你的问题..."
-            @keypress.enter="sendMessage"
-            @input="adjustInputHeight"
-            rows="1"
-          ></textarea>
-
-          <!-- 内嵌状态栏（Token/延迟/余额） -->
-          <div class="inline-status-bar" v-if="isLoggedIn">
-            <span class="status-item">Token: {{ lastTokenUsage || '--' }}</span>
-            <span class="status-item">延迟: {{ lastLatency || '--' }}ms</span>
-            <span class="status-item">余额: {{ balance || '--' }}</span>
+        <div class="chat-input-area">
+          <div v-if="showParams" class="params-panel">
+            <div class="param-row">
+              <span class="param-label">T</span>
+              <input type="range" min="0" max="2" step="0.1" v-model.number="debugTemp" @change="updateParams" />
+              <span class="param-value">{{ debugTemp }}</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">TopP</span>
+              <input type="range" min="0" max="1" step="0.05" v-model.number="debugTopP" @change="updateParams" />
+              <span class="param-value">{{ debugTopP }}</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Tokens</span>
+              <input type="number" v-model.number="debugMaxTokens" min="100" max="8192" step="100" @change="updateParams" />
+            </div>
+            <div class="param-row">
+              <span class="param-label">思考</span>
+              <select v-model="debugReasoning" @change="updateParams">
+                <option value="">关闭</option>
+                <option value="high">开启（高）</option>
+                <option value="max">开启（最强）</option>
+              </select>
+            </div>
           </div>
 
-          <!-- 语音按钮：嵌入输入框右下角 -->
-          <button 
-            v-if="!userInput.trim()" 
-            class="input-inner-btn input-right-btn input-voice-btn" 
-            :class="{ recording: isRecording }"
-            @mousedown.prevent="startVoiceInput"
-            @mouseup.prevent="stopVoiceAndSend"
-            @mouseleave.prevent="stopVoiceAndSend"
-            @touchstart.prevent="startVoiceInput"
-            @touchend.prevent="stopVoiceAndSend"
-            title="按住说话"
-          >
-            <Icon icon="mdi:microphone" width="20" :color="isRecording ? '#fff' : '#888'" />
-          </button>
+          <div class="input-wrapper">
+            <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="$refs.imageInput.click()" title="上传图片">
+              <Icon icon="heroicons:photo-20-solid" width="18" color="#888" />
+            </button>
+            <button v-if="isLoggedIn" class="input-inner-btn input-param-btn" @click="showParams = !showParams" title="参数">
+              <Icon icon="mdi:tune" width="18" color="#888" />
+            </button>
+            <input type="file" accept="image/*" ref="imageInput" style="display:none" v-if="isLoggedIn" @change="handleImageUpload" />
 
-          <!-- 发送按钮：嵌入输入框右下角 -->
-          <button v-else class="input-inner-btn input-right-btn input-send-btn" @click="sendMessage">
-            <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
-          </button>
+            <textarea
+              ref="chatInputRef"
+              class="chat-input"
+              v-model="userInput"
+              placeholder="输入你的问题..."
+              @keypress.enter="sendMessage"
+              @input="adjustInputHeight"
+              rows="1"
+            ></textarea>
+
+            <div class="inline-status-bar" v-if="isLoggedIn">
+              <span class="status-item">Token: {{ lastTokenUsage || '--' }}</span>
+              <span class="status-item">延迟: {{ lastLatency || '--' }}ms</span>
+              <span class="status-item">余额: {{ balance || '--' }}</span>
+            </div>
+
+            <button v-if="userInput.trim()" class="input-inner-btn input-right-btn input-send-btn" @click="sendMessage">
+              <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -153,26 +156,54 @@ import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
-
 import MarkdownIt from 'markdown-it'
 import markdownItKatex from 'markdown-it-katex'
 
-import { useChatWidget } from './useChatWidget.js'
+// 复制提示
+const copiedVisible = ref(false)
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedVisible.value = true
+    setTimeout(() => { copiedVisible.value = false }, 2000)
+    return true
+  } catch (err) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      document.execCommand('copy')
+      copiedVisible.value = true
+      setTimeout(() => { copiedVisible.value = false }, 2000)
+      return true
+    } catch (e) {
+      console.error('复制失败:', e)
+      return false
+    } finally {
+      document.body.removeChild(textarea)
+    }
+  }
+}
 
-// 创建 markdown-it 实例
+// Markdown 渲染
 const md = new MarkdownIt({
   breaks: true,
   linkify: true,
   html: true
 })
-
-// 修正后的插件：智能转换 [ ... ] 为行内或块级公式
+md.use(markdownItKatex, {
+  throwOnError: false,
+  errorColor: '#ef4444',
+  strict: false
+})
 md.use(function(md) {
   md.core.ruler.before('normalize', 'math_bracket', function(state) {
     state.src = state.src.replace(/\[([\s\S]*?)\]/g, (match, inner) => {
       if (!/\\[a-zA-Z]+/.test(inner)) return match;
       if (/^\s*\${1,2}[\s\S]*\${1,2}\s*$/.test(inner)) return match;
-      
       const trimmed = inner.trim();
       if (trimmed.includes('\n') || trimmed.length > 60 || /\\begin\{/.test(trimmed)) {
         return `$$\n${trimmed}\n$$`;
@@ -181,173 +212,43 @@ md.use(function(md) {
     });
     return true;
   });
-});
-
-md.use(markdownItKatex, {
-  throwOnError: false,
-  errorColor: '#ef4444',
-  strict: false
 })
 
-hljs.registerLanguage('math', function() {
-  return { name: 'math' }
-})
-
-// ===== 语音识别（仅电脑端 Web Speech API） =====
-const isRecording = ref(false)
-let recognition = null
-
-function startVoiceInput() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-  if (!SpeechRecognition) {
-    alert('你的浏览器不支持语音识别，请使用 Chrome 或 Edge')
-    return
-  }
-
-  if (recognition) {
-    try { recognition.abort() } catch (e) {}
-  }
-
-  isRecording.value = true
-
-  recognition = new SpeechRecognition()
-  recognition.lang = 'zh-CN'
-  recognition.interimResults = false
-  recognition.maxAlternatives = 3
-  recognition.continuous = false
-
-  recognition.onresult = (event) => {
-    let best = event.results[0][0].transcript
-    for (let i = 0; i < event.results[0].length; i++) {
-      const alt = event.results[0][i]
-      if (alt.confidence > 0.8) {
-        best = alt.transcript
-        break
-      }
-    }
-    userInput.value = best
-  }
-
-  recognition.onerror = (event) => {
-    console.error('语音识别错误:', event.error)
-    isRecording.value = false
-    if (event.error === 'not-allowed') {
-      alert('请允许麦克风权限后重试')
-    }
-  }
-
-  recognition.onend = () => {
-    isRecording.value = false
-  }
-
-  try {
-    recognition.start()
-  } catch (e) {
-    console.error('语音识别启动失败:', e)
-    isRecording.value = false
-  }
+function renderMarkdown(text, skipSanitize = false) {
+  if (!text) return ''
+  text = text.replace(/[\u200B\u00A0\u200E\u200F]/g, '')
+  text = text.replace(/\\dots/g, '\\ldots')
+  text = text.replace(/(?<!\$)\\implies(?!\$)/g, ' $\\implies$ ')
+  text = text.replace(/(?<!\$)(\\bbox\[[^\]]*\])(?!\$)/g, (match) => `$${match}$`)
+  if (/\\bbox/.test(text)) text = '\\require{bbox}\n' + text
+  const raw = md.render(text)
+  return skipSanitize ? raw : DOMPurify.sanitize(raw)
 }
 
-function stopVoiceAndSend() {
-  if (!recognition) return
-  try { recognition.stop() } catch (e) {}
-  isRecording.value = false
-  setTimeout(() => {
-    if (userInput.value.trim()) sendMessage()
-  }, 300)
-}
-
-const props = defineProps({
-  autoOpen: { type: Boolean, default: false },
-  sessionId: { type: String, default: 'global_chat_session' }
-})
-
-// ===== 代码块高亮函数 =====
+// 代码块高亮 & 复制
 function highlightAllCodeBlocks() {
   requestAnimationFrame(() => {
     document.querySelectorAll('.chat-messages .markdown-body pre').forEach(pre => {
       const code = pre.querySelector('code')
       if (!code) return
-
       const classList = [...code.classList]
       const langClass = classList.find(c => c.startsWith('language-'))
       const lang = langClass ? langClass.replace('language-', '') : 'text'
       pre.setAttribute('data-lang', lang)
-
       hljs.highlightElement(code)
-
       if (!pre.querySelector('.code-btn-group')) {
         const btnGroup = document.createElement('div')
         btnGroup.className = 'code-btn-group'
-
-        const runBtn = document.createElement('button')
-        runBtn.className = 'run-code-btn'
-        runBtn.textContent = '运行'
-        runBtn.onclick = async function() {
-          runBtn.textContent = '运行中...'
-          runBtn.disabled = true
-          try {
-            const res = await fetch('/api/run', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ language: lang, code: code.textContent })
-            })
-            const data = await res.json()
-            const oldOutput = pre.parentElement.querySelector('.code-output')
-            if (oldOutput) oldOutput.remove()
-            const outputDiv = document.createElement('div')
-            outputDiv.className = 'code-output'
-            const errorHtml = data.error ? `<span style="color:#ef4444;font-weight:500;">${data.error}</span>` : ''
-            const outputText = (data.output || '(无输出)').trim()
-            outputDiv.innerHTML = errorHtml
-            const textDiv = document.createElement('div')
-            textDiv.textContent = outputText
-            textDiv.style.cssText = `
-              margin:0;
-              padding:8px 12px;
-              background:transparent;
-              color:#333;
-              border:none;
-              box-shadow:none;
-              line-height:1.5;
-              white-space:pre-wrap;
-              word-break:break-word;
-              font-family: monospace;
-            `
-            outputDiv.appendChild(textDiv)
-            outputDiv.style.cssText = `
-              margin-top: 0 !important;
-              padding: 0 !important;
-              background: #f5f5f5 !important;
-              border-radius: 0 0 8px 8px !important;
-              font-size: 13px !important;
-              color: #333333 !important;
-              white-space: pre-wrap !important;
-              width: 100% !important;
-              box-sizing: border-box !important;
-              border: none !important;
-              box-shadow: none !important;
-            `
-            pre.parentElement.insertBefore(outputDiv, pre.nextSibling)
-          } catch (e) {
-            alert('运行失败: ' + e.message)
-          } finally {
-            runBtn.textContent = '运行'
-            runBtn.disabled = false
-          }
-        }
-
         const copyBtn = document.createElement('button')
         copyBtn.className = 'copy-code-btn'
         copyBtn.textContent = '复制'
-        copyBtn.onclick = function() {
-          navigator.clipboard.writeText(code.textContent || '').then(() => {
+        copyBtn.onclick = async () => {
+          const success = await copyText(code.textContent || '')
+          if (success) {
             copyBtn.textContent = '已复制'
             setTimeout(() => { copyBtn.textContent = '复制' }, 2000)
-          })
+          }
         }
-
-        btnGroup.appendChild(runBtn)
         btnGroup.appendChild(copyBtn)
         pre.appendChild(btnGroup)
       }
@@ -355,37 +256,29 @@ function highlightAllCodeBlocks() {
   })
 }
 
-function renderMarkdown(text, skipSanitize = false) {
-  if (!text) return ''
-  text = text.replace(/[\u200B\u00A0\u200E\u200F]/g, '')
+// Props 必须在 useChatWidget 之前定义
+const props = defineProps({
+  autoOpen: { type: Boolean, default: false },
+  sessionId: { type: String, default: 'global_chat_session' }
+})
 
-  text = text.replace(/\\big\$/g, '')
-  text = text.replace(/\\big\\\$/g, '')
-
-  text = text.replace(/\\dots/g, '\\ldots')
-  text = text.replace(/(?<!\$)\\implies(?!\$)/g, ' $\\implies$ ')
-  text = text.replace(/(?<!\$)(\\bbox\[[^\]]*\])(?!\$)/g, (match) => `$${match}$`)
-  if (/\\bbox/.test(text)) {
-    text = '\\require{bbox}\n' + text
-  }
-  text = text.replace(/\\boxed\{([^}]*)\}/g, (_, content) => {
-    return `\\bbox[border:1px solid black]{${content}}`
-  })
-
-  const raw = md.render(text)
-  return skipSanitize ? raw : DOMPurify.sanitize(raw)
-}
+import { useChatWidget } from './useChatWidget.js'
 
 const {
   isOpen, isExpanded, isMobile, userInput, messages,
   isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
   welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
   messagesContainer, chatInputRef, userScrolledUp,
-  forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight,
+  forceScrollToBottom, adjustInputHeight,
   sendMessage, handleImageUpload, playVoice,
-  toggleExpand, toggleChat, fetchBalance, updateParams,
+  toggleExpand, toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+
+const sidebarOpen = ref(false)
+const toggleSidebar = () => { sidebarOpen.value = !sidebarOpen.value }
+
+const showParams = ref(false)
 
 const statusTextColor = computed(() => {
   const status = currentStatus.value
@@ -396,21 +289,46 @@ const statusTextColor = computed(() => {
   return '#98a2b3'
 })
 
+const showScrollButton = computed(() => {
+  return isOpen.value && userScrolledUp.value
+})
+
 watch(messages, () => {
   nextTick(() => {
     highlightAllCodeBlocks()
   })
 }, { deep: true })
-
-const showParams = ref(false)
 </script>
 
 <style scoped>
 @import '../../../styles/shanxi/chat-window.css';
-@import './chat-scoped.css';
+
+.copy-toast {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(52, 51, 51, 0.75);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  z-index: 1000;
+  pointer-events: none;
+  animation: copyFadeIn 0.2s ease;
+}
+
+@keyframes copyFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.message-bubble.user {
+  font-family: 'Georgia', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', '宋体', serif;
+}
 </style>
 
 <style>
 @import './chat-global.css';
-@import './chat-mobile.css';
 </style>
