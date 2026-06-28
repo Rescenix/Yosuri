@@ -140,6 +140,15 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 
 // isMemoryRecallByLLM 判断用户是否在询问关于自己的记忆
 func (h *ChatHandler) isMemoryRecallByLLM(msg string) bool {
+	h.localModelMu.Lock()
+	blocked := h.localModelBlocked
+	h.localModelMu.Unlock()
+
+	// 如果已经熔断，降级关键词匹配
+	if blocked {
+		return fallbackKeywordCheck(msg)
+	}
+
 	fmt.Printf("🤖 调用本地模型判断记忆意图: %q\n", msg)
 	prompt := fmt.Sprintf(`判断用户这句话是否在询问关于他自己的记忆、偏好或过往对话。仅回复 yes 或 no。
 
@@ -165,13 +174,45 @@ func (h *ChatHandler) isMemoryRecallByLLM(msg string) bool {
 	}
 	body, _ := json.Marshal(reqBody)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 第一次尝试，超时 5 秒（更快失败）
+	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(body))
+
 	if err != nil {
-		fmt.Printf("❌ 本地模型请求失败: %v\n", err)
-		return false
+		fmt.Printf("⚠️ 本地模型第一次请求失败: %v，3秒后重试...\n", err)
+		time.Sleep(3 * time.Second)
+
+		// 重试一次
+		resp2, err2 := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(body))
+		if err2 != nil {
+			// 两次都失败
+			h.localModelMu.Lock()
+			h.localModelFails++
+			fails := h.localModelFails
+			if fails >= 3 {
+				h.localModelBlocked = true
+				fmt.Println("🔥 本地模型熔断，后续 5 分钟内降级为关键词匹配")
+				go func() {
+					time.Sleep(5 * time.Minute)
+					h.localModelMu.Lock()
+					h.localModelBlocked = false
+					h.localModelFails = 0
+					h.localModelMu.Unlock()
+					fmt.Println("🌱 熔断自动解除，恢复本地模型判断")
+				}()
+			}
+			h.localModelMu.Unlock()
+			fmt.Printf("❌ 本地模型重试仍然失败 (第%d次)，降级关键词\n", fails)
+			return fallbackKeywordCheck(msg)
+		}
+		resp = resp2
 	}
 	defer resp.Body.Close()
+
+	// 成功，重置失败计数
+	h.localModelMu.Lock()
+	h.localModelFails = 0
+	h.localModelMu.Unlock()
 
 	respBytes, _ := io.ReadAll(resp.Body)
 	var result struct {
@@ -182,6 +223,20 @@ func (h *ChatHandler) isMemoryRecallByLLM(msg string) bool {
 	isRecall := strings.Contains(strings.ToLower(result.Response), "yes")
 	fmt.Printf("📊 模型返回: %q, 判断结果: %v\n", result.Response, isRecall)
 	return isRecall
+}
+
+// fallbackKeywordCheck 降级关键词匹配（模型不可用时使用）
+func fallbackKeywordCheck(msg string) bool {
+	lower := strings.ToLower(msg)
+	keywords := []string{"记得我", "我的偏好", "了解我", "我是什么", "我告诉过你", "你还记得", "你记得我"}
+	for _, k := range keywords {
+		if strings.Contains(lower, k) {
+			fmt.Printf("📊 降级关键词命中: %q -> true\n", k)
+			return true
+		}
+	}
+	fmt.Println("📊 降级关键词未命中 -> false")
+	return false
 }
 
 // fetchBaseMemories 从 PrismD 拉取所有记忆，返回画像文本
@@ -324,6 +379,8 @@ func (h *ChatHandler) resolveConversation(
 	dsModel string,
 ) (string, string, int, error) {
 	switch modelType {
+	case "ds_browser":
+		return h.resolveDSBrowserConversation(c, systemPrompt, userMessage, sessionID)
 	case "ds":
 		return h.resolveDSConversation(c, systemPrompt, userMessage, sessionID, temperature, topP, maxTokens, reasoningEffort, apiKey, dsModel)
 	case "cloud":
@@ -364,25 +421,39 @@ func sanitizeMessages(msgs []DSMessage) []DSMessage {
 // warmUpLocalModel 在后台启动后立即调用，避免首次冷启动超时
 func (h *ChatHandler) warmUpLocalModel() {
 	go func() {
-		fmt.Println("🔥 预热本地模型...")
-		reqBody := map[string]interface{}{
-			"model":  "qwen2.5-coder:7b",
-			"prompt": ".",
-			"stream": false,
-			"options": map[string]interface{}{
-				"temperature": 0,
-				"num_predict": 1,
-			},
+		fmt.Println("🔥 本地模型看护循环已启动（每30秒检测一次）")
+		for {
+			reqBody := map[string]interface{}{
+				"model":  "qwen2.5-coder:7b",
+				"prompt": ".",
+				"stream": false,
+				"options": map[string]interface{}{
+					"temperature": 0,
+					"num_predict": 1,
+				},
+			}
+			body, _ := json.Marshal(reqBody)
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(body))
+			if err == nil {
+				resp.Body.Close()
+				// 模型正常，30秒后再检查
+				time.Sleep(30 * time.Second)
+				continue
+			}
+			// 模型挂了，持续重试直到恢复
+			fmt.Printf("⚠️ 本地模型失联，正在重新预热... (%v)\n", err)
+			retryClient := &http.Client{Timeout: 60 * time.Second}
+			for {
+				resp2, err2 := retryClient.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(body))
+				if err2 == nil {
+					resp2.Body.Close()
+					fmt.Println("✅ 本地模型已恢复，继续看护")
+					break
+				}
+				time.Sleep(5 * time.Second)
+			}
+			time.Sleep(30 * time.Second)
 		}
-		body, _ := json.Marshal(reqBody)
-		client := &http.Client{Timeout: 60 * time.Second}
-		resp, err := client.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(body))
-		if err != nil {
-			fmt.Printf("⚠️ 预热失败（可能本地模型不可用）: %v\n", err)
-			return
-		}
-		defer resp.Body.Close()
-		io.ReadAll(resp.Body)
-		fmt.Println("✅ 本地模型预热完成，已驻留显存")
 	}()
 }

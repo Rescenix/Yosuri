@@ -44,7 +44,7 @@ import AuthGuard from '../components/AuthGuard.astro';
       }
 
       .chat-page :global(.chat-window) {
-        position: fixed;
+        position: absolute; /* ← 改这里 */
         inset: 72px 24px 24px 24px;
         width: auto;
         height: auto;

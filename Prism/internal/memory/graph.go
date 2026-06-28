@@ -42,6 +42,7 @@ type MemoryNode struct {
 	SourceTurns  []string `json:"source_turns,omitempty"`
 	Importance   float64  `json:"importance,omitempty"`
 	Hash         string   `json:"hash,omitempty"`
+	Cluster      string   `json:"cluster,omitempty"` // 逻辑隔离：UserBase / CodeWork / ToolLog / Session
 }
 
 func (n *MemoryNode) EffectiveEnergy(now time.Time) float64 {
@@ -93,6 +94,34 @@ type Graph struct {
 	inverted *InvertedIndex
 }
 
+// ★ 簇间权重矩阵：控制不同记忆簇之间的激活扩散强度
+var clusterBridgeWeight = map[string]map[string]float64{
+	"UserBase": {
+		"UserBase": 1.0,
+		"CodeWork": 0.8,
+		"ToolLog":  0.05, // 阻断工具日志污染用户画像
+		"Session":  1.0,
+	},
+	"CodeWork": {
+		"UserBase": 0.8,
+		"CodeWork": 1.0,
+		"ToolLog":  0.3,
+		"Session":  0.8,
+	},
+	"ToolLog": {
+		"UserBase": 0.05,
+		"CodeWork": 0.3,
+		"ToolLog":  1.0,
+		"Session":  0.05,
+	},
+	"Session": {
+		"UserBase": 1.0,
+		"CodeWork": 0.8,
+		"ToolLog":  0.05,
+		"Session":  1.0,
+	},
+}
+
 func NewGraph(dbPath string) (*Graph, error) {
 	db, err := bbolt.Open(dbPath, 0666, nil)
 	if err != nil {
@@ -126,7 +155,6 @@ func NewGraph(dbPath string) (*Graph, error) {
 	}
 
 	g.inverted = NewInvertedIndex()
-	// 启动时从已有节点重建索引
 	for _, n := range g.nodes {
 		g.inverted.Add(n.ID, n.Text)
 	}
@@ -140,7 +168,6 @@ func (g *Graph) Close() error {
 // 从数据库加载所有节点和边
 func (g *Graph) loadFromDB() error {
 	return g.db.View(func(tx *bbolt.Tx) error {
-		// 加载节点
 		b := tx.Bucket([]byte("nodes"))
 		if err := b.ForEach(func(k, v []byte) error {
 			var n MemoryNode
@@ -156,7 +183,6 @@ func (g *Graph) loadFromDB() error {
 			return err
 		}
 
-		// 加载突触，并重建 OutEdges 索引
 		sb := tx.Bucket([]byte("synapses"))
 		return sb.ForEach(func(k, v []byte) error {
 			var s Synapse
@@ -167,7 +193,6 @@ func (g *Graph) loadFromDB() error {
 			if s.ID >= g.nextSID {
 				g.nextSID = s.ID + 1
 			}
-			// 更新起始节点的出边列表
 			if from, ok := g.nodes[s.From]; ok {
 				from.OutEdges = append(from.OutEdges, s.ID)
 			}
@@ -195,9 +220,7 @@ func (g *Graph) AddNode(role, text string) *MemoryNode {
 	g.nextNID++
 	g.nodes[n.ID] = n
 
-	// 持久化
 	g.saveNodeToDB(n)
-
 	g.inverted.Add(n.ID, text)
 	return n
 }
@@ -271,7 +294,7 @@ func (g *Graph) saveSynapseToDB(s *Synapse) {
 	})
 }
 
-// ==================== 多跳传播 ====================
+// ==================== 多跳传播（含簇间权重隔离） ====================
 func (g *Graph) SpreadActivation(st *ActivationState) []ScoredNode {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -289,16 +312,29 @@ func (g *Graph) SpreadActivation(st *ActivationState) []ScoredNode {
 			if e < st.Threshold {
 				continue
 			}
-			n := g.nodes[id]
-			if n == nil {
+			srcNode := g.nodes[id]
+			if srcNode == nil {
 				continue
 			}
-			for _, synID := range n.OutEdges {
+			for _, synID := range srcNode.OutEdges {
 				s := g.synapses[synID]
 				if s == nil {
 					continue
 				}
-				nextEnergy := e * s.EffectiveWeight(st.Now) * st.HopDecay
+				dstNode := g.nodes[s.To]
+				if dstNode == nil {
+					continue
+				}
+
+				// ★ 簇间权重衰减：阻断跨簇污染
+				clusterFactor := 1.0
+				if matrix, ok := clusterBridgeWeight[srcNode.Cluster]; ok {
+					if factor, ok2 := matrix[dstNode.Cluster]; ok2 {
+						clusterFactor = factor
+					}
+				}
+
+				nextEnergy := e * s.EffectiveWeight(st.Now) * st.HopDecay * clusterFactor
 				if nextEnergy < st.Threshold {
 					continue
 				}
@@ -358,13 +394,11 @@ func (g *Graph) PurgeAll() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// 清空内存
 	g.nodes = make(map[NodeID]*MemoryNode)
 	g.synapses = make(map[SynapseID]*Synapse)
 	g.nextNID = 1
 	g.nextSID = 1
 
-	// 清空 bolt 中的 buckets
 	g.db.Update(func(tx *bbolt.Tx) error {
 		tx.DeleteBucket([]byte("nodes"))
 		tx.CreateBucket([]byte("nodes"))
@@ -375,30 +409,41 @@ func (g *Graph) PurgeAll() {
 	g.inverted = NewInvertedIndex()
 }
 
-// ExpandSeeds 从种子节点出发，沿突触收集 n 跳内的邻居
+// ExpandSeeds 从种子节点出发，沿突触收集 n 跳内的邻居（带簇间权重）
 func (g *Graph) ExpandSeeds(seeds map[NodeID]bool, maxHops int) map[NodeID]float64 {
 	visited := make(map[NodeID]float64)
 	frontier := make(map[NodeID]bool)
 	for id := range seeds {
 		frontier[id] = true
-		visited[id] = 1.0 // 0 跳分数
+		visited[id] = 1.0
 	}
 
 	hopDecay := 0.6
 	for hop := 1; hop <= maxHops; hop++ {
 		nextFrontier := make(map[NodeID]bool)
 		for id := range frontier {
-			node := g.nodes[id]
-			if node == nil {
+			srcNode := g.nodes[id]
+			if srcNode == nil {
 				continue
 			}
-			for _, synID := range node.OutEdges {
+			for _, synID := range srcNode.OutEdges {
 				s := g.synapses[synID]
 				if s == nil {
 					continue
 				}
+				dstNode := g.nodes[s.To]
+				if dstNode == nil {
+					continue
+				}
 				if _, seen := visited[s.To]; !seen {
-					score := math.Pow(hopDecay, float64(hop)) * s.Weight
+					// ★ 簇间权重衰减
+					clusterFactor := 1.0
+					if matrix, ok := clusterBridgeWeight[srcNode.Cluster]; ok {
+						if factor, ok2 := matrix[dstNode.Cluster]; ok2 {
+							clusterFactor = factor
+						}
+					}
+					score := math.Pow(hopDecay, float64(hop)) * s.Weight * clusterFactor
 					visited[s.To] = score
 					nextFrontier[s.To] = true
 				}
@@ -408,6 +453,8 @@ func (g *Graph) ExpandSeeds(seeds map[NodeID]bool, maxHops int) map[NodeID]float
 	}
 	return visited
 }
+
+// ExpandSeeds 从种子节点出发，沿突触收集 n 跳内的邻居
 
 // fuseAndRank 多信号融合打分（原始版本，保留）
 func (g *Graph) fuseAndRank(query string, candidates map[NodeID]float64) []ScoredNode {

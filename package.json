@@ -1,11 +1,14 @@
 {
   "dependencies": {
     "@talers/html-pages": "npm:@jsr/talers__html-pages@^0.5.5",
+    "dompurify": "^3.4.11",
     "jspdf": "^4.2.1",
     "katex": "^0.17.0",
     "marked": "^18.0.4",
     "pagedjs": "^0.4.3",
+    "playwright": "^1.61.1",
     "turn.js": "^1.0.5",
+    "turndown": "^7.2.4",
     "vue-pdf": "^4.3.0"
   },
   "devDependencies": {

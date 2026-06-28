@@ -42,7 +42,11 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		history := sessionStore.Get(id)
 		c.JSON(200, history)
 	})
-
+	// 会话 v2（基于 PrismD Session 簇）
+	r.POST("/api/v2/sessions", CreateSession)
+	r.GET("/api/v2/sessions", ListSessions)
+	r.PATCH("/api/v2/sessions/:id", RenameSession)
+	r.DELETE("/api/v2/sessions/:id", DeleteSession)
 	r.GET("/api/all-messages", GetAllMessagesHandler(sessionStore))
 
 	r.DELETE("/api/images/remove", DeleteImage)

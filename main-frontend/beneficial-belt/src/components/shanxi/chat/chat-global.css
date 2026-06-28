@@ -408,7 +408,7 @@
 
 }
 .chat-window.expanded .chat-content {
-  max-width: 850px;   /* 可选稍微加大一点 */
+   width: 100%;  /* 可选稍微加大一点 */
 }
 /* 消息滚动区去掉横向滚动，撑满容器 */
 .chat-messages {
@@ -442,6 +442,8 @@
   min-height: 0;      /* ⭐ 允许内部滚动，不挤压输入框 */
   display: flex;
   flex-direction: column;
+   overflow-y: auto;
+  
 }
 /* 输入框撑满容器 */
 .input-wrapper {
@@ -459,11 +461,13 @@
 .chat-messages {
   flex: 1;
   min-height: 0;          /* ⭐ 防止把输入框挤下去 */
-  overflow-y: auto;       /* ⭐ 这里滚动 */
+overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 24px 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
+   
+  
 }
 
 .chat-input-area {

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// CompileMemory 压缩对话并直接生成图边（杉汐自主决定连线）
+// CompileMemory 压缩对话并直接生成图边（杉汐自主决定连线与簇归属）
 func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 	if len(sessionTurns) == 0 {
 		return nil, fmt.Errorf("no turns to compile")
@@ -40,6 +40,7 @@ func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 		EventType   string  `json:"event_type"`
 		WorthSaving bool    `json:"worth_saving"`
 		RelatedIDs  []int   `json:"related_ids"`
+		Cluster     string  `json:"cluster"` // 新增：簇归属
 	}
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse model output: %w", err)
@@ -57,7 +58,16 @@ func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 		return nil, fmt.Errorf("model refused or output irrelevant text: %s", summary)
 	}
 	if len([]rune(summary)) > 200 {
-		summary = string([]rune(summary)[:200])
+		truncated := string([]rune(summary)[:200])
+		for _, sep := range []string{"。", "？", "！", " ", "\n"} {
+			if idx := strings.LastIndex(truncated, sep); idx > 0 {
+				summary = truncated[:idx]
+				break
+			}
+		}
+		if summary == result.Summary {
+			summary = truncated
+		}
 	}
 
 	// 补全默认值
@@ -69,6 +79,10 @@ func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 	}
 	if result.EventType == "" {
 		result.EventType = "chat"
+	}
+	// 补全默认簇
+	if result.Cluster == "" {
+		result.Cluster = "UserBase"
 	}
 
 	// 去重（哈希）
@@ -83,15 +97,15 @@ func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 	node.Emotion = result.Emotion
 	node.Intensity = result.Intensity
 	node.EventType = result.EventType
+	node.Cluster = result.Cluster // 新增：设置簇
 	node.Hash = hashStr
 	g.saveNodeToDB(node)
 
-	// 根据模型输出的 related_ids 建立边
-	edgeWeight := 0.3 // 可依重要性或情感强度调整
+	// 根据模型输出的 related_ids 建立边（权重由 addEdgeIfNeeded 根据簇自动调整）
 	for _, rid := range result.RelatedIDs {
 		targetID := NodeID(rid)
 		if existing := g.Node(targetID); existing != nil {
-			g.addEdgeIfNeeded(node.ID, targetID, edgeWeight)
+			g.addEdgeIfNeeded(node.ID, targetID, 0.3)
 		}
 	}
 
@@ -117,7 +131,7 @@ func (g *Graph) buildMemoryList(maxCount int) string {
 		if n.Role != "compiled_memory" {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("ID:%d | %s\n", n.ID, n.Text))
+		sb.WriteString(fmt.Sprintf("ID:%d | Cluster:%s | %s\n", n.ID, n.Cluster, n.Text))
 		count++
 		if count >= maxCount {
 			break
@@ -145,24 +159,42 @@ func (g *Graph) getLatestMemory() *MemoryNode {
 	return latest
 }
 
-// addEdgeIfNeeded 创建或强化双向边（EdgeAssoc）
-func (g *Graph) addEdgeIfNeeded(a, b NodeID, weight float64) {
+// clusterBridgeWeight 簇间边权重矩阵
+
+// addEdgeIfNeeded 创建或强化双向边（EdgeAssoc），权重受簇间矩阵调控
+func (g *Graph) addEdgeIfNeeded(a, b NodeID, baseWeight float64) {
 	if a == b {
 		return
 	}
+
+	// 获取源节点和目标节点的簇
+	nodeA := g.Node(a)
+	nodeB := g.Node(b)
+	if nodeA == nil || nodeB == nil {
+		return
+	}
+
+	// 根据簇间权重矩阵调整实际权重
+	adjustedWeight := baseWeight
+	if matrix, ok := clusterBridgeWeight[nodeA.Cluster]; ok {
+		if factor, ok2 := matrix[nodeB.Cluster]; ok2 {
+			adjustedWeight = baseWeight * factor
+		}
+	}
+
 	for _, syn := range g.Synapses() {
 		if (syn.From == a && syn.To == b) || (syn.From == b && syn.To == a) {
-			if syn.Weight < weight {
-				syn.Weight = weight
+			if syn.Weight < adjustedWeight {
+				syn.Weight = adjustedWeight
 			}
 			return
 		}
 	}
-	g.AddSynapse(a, b, EdgeAssoc, weight)
-	g.AddSynapse(b, a, EdgeAssoc, weight)
+	g.AddSynapse(a, b, EdgeAssoc, adjustedWeight)
+	g.AddSynapse(b, a, EdgeAssoc, adjustedWeight)
 }
 
-// buildStructuredPrompt 含现有记忆清单和 related_ids 要求
+// buildStructuredPrompt 含现有记忆清单、related_ids 和 cluster 要求
 func buildStructuredPrompt(turns []string, existingMemoryList string) string {
 	return fmt.Sprintf(`你是一个高密度记忆压缩器与情绪分析师。
 你的任务是将以下对话历史压缩成一段不超过200字的高密度摘要，并分析其主导情绪和事件类型。
@@ -171,7 +203,13 @@ func buildStructuredPrompt(turns []string, existingMemoryList string) string {
 
 此外，请从现有记忆清单中选出与新摘要直接关联的节点ID（related_ids），最多5个。若没有关联，给空数组。
 
-现有记忆清单（格式：ID:xxx | 摘要）：
+请判断这条记忆属于哪个簇（cluster），可选值：
+- UserBase：用户身份、长期偏好、稳定事实
+- CodeWork：项目架构、代码决策、技术约束
+- ToolLog：工具调用记录、命令执行痕迹
+- Session：当前会话相关的临时信息
+
+现有记忆清单（格式：ID:xxx | Cluster:xxx | 摘要）：
 %s
 
 输出格式（严格 JSON，不要 markdown）：
@@ -181,7 +219,8 @@ func buildStructuredPrompt(turns []string, existingMemoryList string) string {
   "intensity": 0.8,
   "event_type": "事件类型（conflict/achievement/decision/chat/compilation）",
   "worth_saving": true,
-  "related_ids": [1, 3]
+  "related_ids": [1, 3],
+  "cluster": "UserBase"
 }
 
 对话历史：

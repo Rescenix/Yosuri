@@ -176,11 +176,16 @@ if (!localStorage.getItem('prism_session_id')) {
 
             try {
               const payload = JSON.parse(dataStr)
+                 console.log('[SSE event]', payload.type, payload); 
               switch (payload.type) {
-                case 'reasoning':
-                  botMsg.recalling = false
-                  botMsg.reasoning += payload.content || ''
-                  break
+               case 'reasoning':
+  // 将推理内容追加到当前 bot 消息的 reasoning 字段上
+  const botMsg = messages.value[messages.value.length - 1];
+  if (botMsg && botMsg.sender === 'bot') {
+    botMsg.reasoning = (botMsg.reasoning || '') + (payload.content || '');
+    botMsg.recalling = false;
+  }
+  break;
                 case 'content':
                   botMsg.recalling = false
                   botMsg.content += payload.content || ''

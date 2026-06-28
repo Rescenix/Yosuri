@@ -25,10 +25,12 @@ type PrimQLHandler struct {
 func NewPrimQLHandler(g *memory.Graph) *PrimQLHandler {
 	h := &PrimQLHandler{
 		graph:        g,
-		compileQueue: make(chan []string, 100), // 缓冲 100 个压缩任务
+		compileQueue: make(chan []string, 100),
 	}
-	// 启动后台压缩工人
+	// 后台压缩工人
 	go h.compileWorker()
+	// 夜间记忆整理工人
+	go h.consolidateWorker()
 	return h
 }
 
@@ -45,6 +47,19 @@ func (h *PrimQLHandler) compileWorker() {
 			continue
 		}
 		log.Printf("✅ 后台压缩完成，节点ID=%d，重要性=%.2f", node.ID, node.Intensity)
+	}
+}
+
+// consolidateWorker 每 6 小时自动运行一次记忆整理（GC）
+func (h *PrimQLHandler) consolidateWorker() {
+	for {
+		time.Sleep(6 * time.Hour)
+		log.Println("🌙 夜间记忆整理开始...")
+		if err := h.graph.ConsolidateMemory(); err != nil {
+			log.Printf("⚠️ 夜间记忆整理失败: %v", err)
+		} else {
+			log.Println("✅ 夜间记忆整理完成")
+		}
 	}
 }
 
@@ -218,8 +233,9 @@ func (h *PrimQLHandler) handle(raw string) string {
 				sb.WriteString(fmt.Sprintf("── ID: %d ──\n", n.ID))
 				sb.WriteString(fmt.Sprintf("Role: %s\n", n.Role))
 				sb.WriteString(fmt.Sprintf("Content: %s\n", n.Text))
-				sb.WriteString(fmt.Sprintf("Energy: %.2f | Emotion: %s | Intensity: %.2f | EventType: %s\n",
-					n.BaseEnergy, n.Emotion, n.Intensity, n.EventType))
+				// ★ 新增了 | Cluster: %s
+				sb.WriteString(fmt.Sprintf("Energy: %.2f | Emotion: %s | Intensity: %.2f | EventType: %s | Cluster: %s\n",
+					n.BaseEnergy, n.Emotion, n.Intensity, n.EventType, n.Cluster))
 				sb.WriteString(strings.Repeat("-", 60) + "\n")
 			}
 			sb.WriteString(fmt.Sprintf("\nTotal: %d neurons\n", len(h.graph.Nodes())))
@@ -270,11 +286,13 @@ func (h *PrimQLHandler) handle(raw string) string {
 		}
 		sb.WriteString(fmt.Sprintf("\nTotal: %d neurons\n", len(h.graph.Nodes())))
 		return "OK\n" + sb.String()
-	// case "CONSOLIDATE":
-	// 	if err := h.graph.ConsolidateMemory(); err != nil {
-	// 		return fmt.Sprintf("ERROR %v\n", err)
-	// 	}
-	// 	return "OK consolidated\n"
+
+	case "CONSOLIDATE":
+		if err := h.graph.ConsolidateMemory(); err != nil {
+			return fmt.Sprintf("ERROR %v\n", err)
+		}
+		return "OK consolidated\n"
+
 	case "GRAPH":
 		nodes := make([]map[string]interface{}, 0)
 		for _, n := range h.graph.Nodes() {
@@ -299,9 +317,9 @@ func (h *PrimQLHandler) handle(raw string) string {
 			"edges": edges,
 		})
 		return "OK " + string(resp) + "\n"
+
 	case "COMPILE":
 		turns := strings.Split(rest, "\n---\n")
-		// 异步投递，不阻塞
 		select {
 		case h.compileQueue <- turns:
 			log.Printf("📨 压缩任务已入队 (turns=%d)", len(turns))
