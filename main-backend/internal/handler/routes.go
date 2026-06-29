@@ -24,15 +24,18 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		}
 		c.Next()
 	})
-
+	r.GET("/api/git-status", gin.WrapH(http.HandlerFunc(GitStatusHandler)))
 	chatHandler := NewChatHandler(memoryStore, sessionStore)
 	go chatHandler.warmUpLocalModel() // 显式异步，不阻塞注册
 	core.RegisterCleanFunc(func() {
 		memoryStore.CleanMemories()
 	})
-
+	r.POST("/api/git/add-all", GitAddAll)
+	r.POST("/api/git/commit", GitCommit)
+	r.POST("/api/git/push", GitPush)
+	r.POST("/api/tool/execute", HandleToolExecute)
 	// 根据平台注册不同的聊天处理器
-
+	r.POST("/api/execute-marker", HandleExecuteMarker)
 	r.POST("/api/chat/stream", chatHandler.StreamChat)
 
 	r.PATCH("/api/posts/:id", UpdatePostTags)

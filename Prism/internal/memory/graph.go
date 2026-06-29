@@ -261,16 +261,26 @@ func (g *Graph) Synapse(id SynapseID) *Synapse {
 	return g.synapses[id]
 }
 
+// Nodes 返回所有节点的副本，避免外部并发读写崩溃
 func (g *Graph) Nodes() map[NodeID]*MemoryNode {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	return g.nodes
+	cpy := make(map[NodeID]*MemoryNode, len(g.nodes))
+	for id, n := range g.nodes {
+		cpy[id] = n
+	}
+	return cpy
 }
 
+// Synapses 返回所有突触的副本
 func (g *Graph) Synapses() map[SynapseID]*Synapse {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	return g.synapses
+	cpy := make(map[SynapseID]*Synapse, len(g.synapses))
+	for id, s := range g.synapses {
+		cpy[id] = s
+	}
+	return cpy
 }
 
 // ==================== 持久化辅助方法 ====================
@@ -347,7 +357,7 @@ func (g *Graph) SpreadActivation(st *ActivationState) []ScoredNode {
 		st.Frontier = dedup(nextFrontier)
 	}
 
-	return rankByEnergy(st.Energy)
+	return g.rankByEnergy(st.Energy)
 }
 
 func dedup(ids []NodeID) []NodeID {
@@ -367,11 +377,16 @@ type ScoredNode struct {
 	Score float64
 }
 
-func rankByEnergy(energy map[NodeID]float64) []ScoredNode {
+// rankByEnergy 现在作为 *Graph 的方法，返回完整的节点信息
+func (g *Graph) rankByEnergy(energy map[NodeID]float64) []ScoredNode {
 	result := make([]ScoredNode, 0, len(energy))
 	for id, e := range energy {
 		if e > 0 {
-			result = append(result, ScoredNode{Node: &MemoryNode{ID: id}, Score: e})
+			node := g.nodes[id]
+			if node == nil {
+				continue
+			}
+			result = append(result, ScoredNode{Node: node, Score: e})
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -381,6 +396,7 @@ func rankByEnergy(energy map[NodeID]float64) []ScoredNode {
 }
 
 func (g *Graph) HasMemoryHash(hash string) bool {
+	// Nodes() 已返回副本，内部加锁安全
 	for _, n := range g.Nodes() {
 		if n.Hash == hash {
 			return true
@@ -410,6 +426,7 @@ func (g *Graph) PurgeAll() {
 }
 
 // ExpandSeeds 从种子节点出发，沿突触收集 n 跳内的邻居（带簇间权重）
+// 调用方必须持有 g.mu.RLock / Lock
 func (g *Graph) ExpandSeeds(seeds map[NodeID]bool, maxHops int) map[NodeID]float64 {
 	visited := make(map[NodeID]float64)
 	frontier := make(map[NodeID]bool)
@@ -454,9 +471,7 @@ func (g *Graph) ExpandSeeds(seeds map[NodeID]bool, maxHops int) map[NodeID]float
 	return visited
 }
 
-// ExpandSeeds 从种子节点出发，沿突触收集 n 跳内的邻居
-
-// fuseAndRank 多信号融合打分（原始版本，保留）
+// fuseAndRank 多信号融合打分（调用方需持有读锁）
 func (g *Graph) fuseAndRank(query string, candidates map[NodeID]float64) []ScoredNode {
 	results := make([]ScoredNode, 0, len(candidates))
 	for id, graphScore := range candidates {
@@ -477,7 +492,7 @@ func (g *Graph) fuseAndRank(query string, candidates map[NodeID]float64) []Score
 	return results
 }
 
-// fuseAndRankWithIntent 基于意图的多信号融合打分（新增）
+// fuseAndRankWithIntent 基于意图的多信号融合打分（调用方需持有读锁）
 func (g *Graph) fuseAndRankWithIntent(query string, candidates map[NodeID]float64, intent *UserIntent) []ScoredNode {
 	results := make([]ScoredNode, 0, len(candidates))
 	for id, graphScore := range candidates {
@@ -512,7 +527,11 @@ func emotionMatch(query string, emotion string) int {
 	return 0
 }
 
+// RetrieveRelevant 关键词检索 + 图扩散（加读锁保护并发）
 func (g *Graph) RetrieveRelevant(query string) ([]*MemoryNode, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
 	seeds := g.inverted.Query(query)
 	if len(seeds) == 0 {
 		return nil, nil
@@ -532,7 +551,11 @@ func (g *Graph) RetrieveRelevant(query string) ([]*MemoryNode, error) {
 	return result, nil
 }
 
+// RetrieveRelevantByIntent 基于意图的检索（加读锁保护并发）
 func (g *Graph) RetrieveRelevantByIntent(intent *UserIntent) ([]*MemoryNode, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
 	var queryTerms []string
 	if intent.Keywords != nil {
 		queryTerms = append(queryTerms, intent.Keywords...)

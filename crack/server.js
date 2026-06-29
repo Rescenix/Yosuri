@@ -1,11 +1,26 @@
 const http = require('http');
 const { chromium } = require('playwright');
-const TurndownService = require('turndown');  // 引入转换库
+const TurndownService = require('turndown');
 
-const turndown = new TurndownService();       // 创建实例
+const turndown = new TurndownService({
+    headingStyle: 'atx',
+    bulletListMarker: '-',
+    codeBlockStyle: 'fenced',
+    emDelimiter: '*' // 用 * 表示斜体/粗体，避免下划线混淆
+});
+
+// 添加表格支持（原本 Turndown 不转表格，需要手动规则）
+turndown.addRule('table', {
+    filter: ['table'],
+    replacement: function (content) {
+        // 将 HTML 表格转换为 Markdown 表格
+        return '\n\n' + content.replace(/<\/td>/g, ' | ').replace(/<\/th>/g, ' | ').replace(/<\/tr>/g, '\n').replace(/<[^>]+>/g, '') + '\n\n';
+    }
+});
+
 
 let browser, page, input;
-let lastReplyLength = 0; // 记录发送前最后一条消息的长度
+let lastReplyLength = 0;
 
 async function initBrowser() {
     if (browser) return;
@@ -14,7 +29,7 @@ async function initBrowser() {
         executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     });
     page = browser.pages()[0];
-    await page.goto('https://chat.deepseek.com/a/chat/s/65cf206b-0a62-4182-b2e5-504aa0980040', {
+    await page.goto('https://chat.deepseek.com/a/chat/s/2345bc85-2e43-4823-a94e-0dc0e935736f', {
         waitUntil: 'networkidle', timeout: 60000
     });
     input = page.locator('[placeholder*="输入"], [placeholder*="问题"], textarea').first();
@@ -22,7 +37,7 @@ async function initBrowser() {
 }
 
 async function sendMessage(message) {
-    // 记录发送前最后一条消息的长度（用于后续 /ready 判断）
+    // 记录发送前最后一条消息的长度（用于 /ready 判断）
     try {
         const texts = await page.locator('.assistant-message, .bot-message, [class*="assistant"]').allTextContents();
         if (texts.length > 0) {
@@ -35,14 +50,14 @@ async function sendMessage(message) {
     }
     console.log(`[SEND] 发送前最后一条消息长度: ${lastReplyLength}`);
 
-    // 输入并发送
+   // 输入并发送
     await input.click();
     await page.waitForTimeout(300);
-    await input.fill('');
-    await input.type(message, { delay: 50 });
+    await input.fill('');                    // 清空
+    await input.fill(message);               // ★ 一次性填入整个消息，不逐字打字
     await page.waitForTimeout(500);
     await page.keyboard.press('Enter');
-    console.log('[SEND] 已发送:', message);
+    console.log('[SEND] 已发送');
 }
 
 async function checkReady() {
@@ -56,17 +71,20 @@ async function checkReady() {
     return false;
 }
 
-// ★ 核心改造：读取 HTML 并转换为 Markdown
 async function readLatestReplyAsMarkdown() {
     try {
         const elements = page.locator('.assistant-message, .bot-message, [class*="assistant"]');
         const count = await elements.count();
         if (count > 0) {
             const html = await elements.nth(count - 1).innerHTML();
+            console.log(`[READ] 获取 HTML 长度: ${html.length}, 前 100 字符: ${html.substring(0, 100)}`);
             const markdown = turndown.turndown(html);
+            console.log(`[READ] 转换 Markdown 长度: ${markdown.length}, 前 100 字符: ${markdown.substring(0, 100)}`);
             return markdown.trim();
         }
-    } catch (e) {}
+    } catch (e) {
+        console.log(`[READ] 出错: ${e.message}`);
+    }
     return '';
 }
 
@@ -87,17 +105,69 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const { message } = JSON.parse(body);
+                console.log(`[SEND] 收到前端消息，长度: ${message.length}, 内容: ${message.substring(0, 200)}...`);
                 await sendMessage(message);
                 res.writeHead(200, { 'Content-Type': 'text/plain' });
                 res.end('ok');
             } catch (e) {
+                console.log(`[SEND] 错误: ${e.message}`);
                 res.writeHead(500);
                 res.end('Error');
             }
         });
         return;
     }
+// ★ 流式推送 + DONE 信号
+if (req.method === 'POST' && req.url === '/stream') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+        try {
+            const { message } = JSON.parse(body);
+            await sendMessage(message);
 
+            res.writeHead(200, {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*'
+            });
+
+            // 等待 DS 开始回复
+            let ready = false;
+            for (let i = 0; i < 30; i++) {
+                await new Promise(r => setTimeout(r, 500));
+                if (await checkReady()) { ready = true; break; }
+            }
+            if (!ready) {
+                res.write(`data: 杉汐没有回应，请稍后再试\n\n`);
+                res.end();
+                return;
+            }
+
+            // 轮询 DOM 增量
+            let lastText = '';
+            for (let i = 0; i < 150; i++) {
+                await new Promise(r => setTimeout(r, 200));
+                try {
+                    const currentText = await readLatestReplyAsMarkdown();
+                    if (currentText && currentText.length > lastText.length) {
+                        const newPart = currentText.slice(lastText.length);
+                        res.write(`data: ${newPart}\n\n`);
+                        lastText = currentText;
+                    }
+                } catch (e) {}
+            }
+            // ★ 流式结束，发送 DONE 信号
+            res.write(`data: [DONE]\n\n`);
+            res.end();
+        } catch (e) {
+            res.write(`data: 流式推送出错: ${e.message}\n\n`);
+            res.end();
+        }
+    });
+    return;
+}
     if (req.method === 'GET' && req.url === '/ready') {
         const ready = await checkReady();
         res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -105,13 +175,19 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // ★ 将 /read 改为返回 Markdown
-    if (req.method === 'GET' && req.url === '/read') {
-        const reply = await readLatestReplyAsMarkdown();
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end(reply);
-        return;
-    }
+if (req.method === 'GET' && req.url === '/read') {
+    let reply = await readLatestReplyAsMarkdown();
+    // 只还原工具标记（write_file / read_file 中的下划线）
+    reply = reply.replace(/\\\[TOOL:/g, '[TOOL:');
+    reply = reply.replace(/\]\\/g, ']');
+    reply = reply.replace(/\\\\/g, '\\');
+    reply = reply.replace(/write\\_file/g, 'write_file');
+    reply = reply.replace(/read\\_file/g, 'read_file');
+    console.log('[READ] 最终返回：', reply.substring(0, 120));
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(reply);
+    return;
+}
 
     res.writeHead(404);
     res.end();

@@ -12,32 +12,37 @@ import (
 	"strings"
 	"time"
 
+	"prismd/internal/domain"
 	"prismd/internal/memory"
 
 	"golang.org/x/text/width"
 )
 
 type PrimQLHandler struct {
-	graph        *memory.Graph
-	compileQueue chan []string // 异步压缩任务队列
+	manager      *domain.Manager
+	compileQueue chan []string
 }
 
-func NewPrimQLHandler(g *memory.Graph) *PrimQLHandler {
+func NewPrimQLHandler(m *domain.Manager) *PrimQLHandler {
 	h := &PrimQLHandler{
-		graph:        g,
+		manager:      m,
 		compileQueue: make(chan []string, 100),
 	}
-	// 后台压缩工人
 	go h.compileWorker()
-	// 夜间记忆整理工人
 	go h.consolidateWorker()
 	return h
 }
 
-// compileWorker 不断从队列取任务，调用 CompileMemory
+// compileWorker 动态获取当前图进行压缩
+// compileWorker 动态获取当前图进行压缩
 func (h *PrimQLHandler) compileWorker() {
 	for turns := range h.compileQueue {
-		node, err := h.graph.CompileMemory(turns)
+		graph := h.manager.CurrentGraph()
+		if graph == nil {
+			continue
+		}
+		//node, err := graph.CompileMemoryForce(turns)
+		node, err := graph.CompileMemory(turns)
 		if err != nil {
 			if strings.Contains(err.Error(), "not worth saving") {
 				log.Printf("🧹 杉汐判定无长期价值，跳过压缩")
@@ -50,12 +55,16 @@ func (h *PrimQLHandler) compileWorker() {
 	}
 }
 
-// consolidateWorker 每 6 小时自动运行一次记忆整理（GC）
+// consolidateWorker 动态获取当前图进行整理
 func (h *PrimQLHandler) consolidateWorker() {
 	for {
 		time.Sleep(6 * time.Hour)
+		graph := h.manager.CurrentGraph()
+		if graph == nil {
+			continue
+		}
 		log.Println("🌙 夜间记忆整理开始...")
-		if err := h.graph.ConsolidateMemory(); err != nil {
+		if err := graph.ConsolidateMemory(); err != nil {
 			log.Printf("⚠️ 夜间记忆整理失败: %v", err)
 		} else {
 			log.Println("✅ 夜间记忆整理完成")
@@ -79,6 +88,11 @@ func (h *PrimQLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PrimQLHandler) handle(raw string) string {
+	graph := h.manager.CurrentGraph()
+	if graph == nil {
+		return "ERROR no active domain\n"
+	}
+
 	parts := strings.SplitN(strings.TrimSpace(raw), " ", 2)
 	cmd := strings.ToUpper(parts[0])
 	rest := ""
@@ -94,7 +108,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 		}
 		role := subParts[0]
 		text := strings.TrimSpace(subParts[1])
-		node := h.graph.AddNode(role, text)
+		node := graph.AddNode(role, text)
 		log.Printf("ENGRAM: id=%d, role=%s, text=%.40s", node.ID, role, text)
 		return fmt.Sprintf("OK %d\n", node.ID)
 
@@ -102,9 +116,13 @@ func (h *PrimQLHandler) handle(raw string) string {
 		var relevantNodes []*memory.MemoryNode
 		intent, err := memory.AnalyzeUserIntent(rest)
 		if err != nil || intent == nil {
-			relevantNodes, _ = h.graph.RetrieveRelevant(rest)
+			relevantNodes, _ = graph.RetrieveRelevant(rest)
 		} else {
-			relevantNodes, _ = h.graph.RetrieveRelevantByIntent(intent)
+			relevantNodes, _ = graph.RetrieveRelevantByIntent(intent)
+			// 新增：意图命中为空时回退
+			if len(relevantNodes) == 0 {
+				relevantNodes, _ = graph.RetrieveRelevant(rest)
+			}
 		}
 
 		if relevantNodes == nil {
@@ -126,10 +144,10 @@ func (h *PrimQLHandler) handle(raw string) string {
 			Threshold: 0.01,
 			Now:       now,
 		}
-		results := h.graph.SpreadActivation(st)
+		results := graph.SpreadActivation(st)
 
 		for _, sn := range results {
-			n := h.graph.Node(sn.Node.ID)
+			n := graph.Node(sn.Node.ID)
 			if n == nil {
 				continue
 			}
@@ -145,7 +163,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 		sb.WriteString(strings.Repeat("-", 95) + "\n")
 
 		for _, sn := range results {
-			n := h.graph.Node(sn.Node.ID)
+			n := graph.Node(sn.Node.ID)
 			if n == nil {
 				continue
 			}
@@ -175,7 +193,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 		if err := json.Unmarshal([]byte(rest), &params); err != nil {
 			return fmt.Sprintf("ERROR invalid json: %v\n", err)
 		}
-		n := h.graph.Node(memory.NodeID(params.ID))
+		n := graph.Node(memory.NodeID(params.ID))
 		if n == nil {
 			return "ERROR node not found\n"
 		}
@@ -196,7 +214,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 
 	case "PRUNE":
 		if strings.TrimSpace(rest) == "" {
-			h.graph.PurgeAll()
+			graph.PurgeAll()
 			log.Println("⚠️ PRUNE: 整个记忆场已被清空")
 			return "OK all memories pruned\n"
 		}
@@ -205,7 +223,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 		if err != nil {
 			return "ERROR invalid id\n"
 		}
-		n := h.graph.Node(memory.NodeID(id))
+		n := graph.Node(memory.NodeID(id))
 		if n == nil {
 			return "ERROR node not found\n"
 		}
@@ -216,7 +234,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 	case "DRIFT":
 		now := time.Now()
 		count := 0
-		for _, n := range h.graph.Nodes() {
+		for _, n := range graph.Nodes() {
 			if n.BaseEnergy > 0.01 {
 				n.BaseEnergy *= 0.95
 				n.LastAccessAt = now
@@ -229,16 +247,15 @@ func (h *PrimQLHandler) handle(raw string) string {
 	case "STATS":
 		if strings.ToUpper(rest) == "FULL" {
 			var sb strings.Builder
-			for _, n := range h.graph.Nodes() {
+			for _, n := range graph.Nodes() {
 				sb.WriteString(fmt.Sprintf("── ID: %d ──\n", n.ID))
 				sb.WriteString(fmt.Sprintf("Role: %s\n", n.Role))
 				sb.WriteString(fmt.Sprintf("Content: %s\n", n.Text))
-				// ★ 新增了 | Cluster: %s
 				sb.WriteString(fmt.Sprintf("Energy: %.2f | Emotion: %s | Intensity: %.2f | EventType: %s | Cluster: %s\n",
 					n.BaseEnergy, n.Emotion, n.Intensity, n.EventType, n.Cluster))
 				sb.WriteString(strings.Repeat("-", 60) + "\n")
 			}
-			sb.WriteString(fmt.Sprintf("\nTotal: %d neurons\n", len(h.graph.Nodes())))
+			sb.WriteString(fmt.Sprintf("\nTotal: %d neurons\n", len(graph.Nodes())))
 			return "OK\n" + sb.String()
 		}
 
@@ -254,7 +271,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 		)
 		sb.WriteString(strings.Repeat("-", 90) + "\n")
 
-		for _, n := range h.graph.Nodes() {
+		for _, n := range graph.Nodes() {
 			text := n.Text
 			if DisplayWidth(text) > 18 {
 				runes := []rune(text)
@@ -284,18 +301,18 @@ func (h *PrimQLHandler) handle(raw string) string {
 					PadRight(eventType, 10) + "\n",
 			)
 		}
-		sb.WriteString(fmt.Sprintf("\nTotal: %d neurons\n", len(h.graph.Nodes())))
+		sb.WriteString(fmt.Sprintf("\nTotal: %d neurons\n", len(graph.Nodes())))
 		return "OK\n" + sb.String()
 
 	case "CONSOLIDATE":
-		if err := h.graph.ConsolidateMemory(); err != nil {
+		if err := graph.ConsolidateMemory(); err != nil {
 			return fmt.Sprintf("ERROR %v\n", err)
 		}
 		return "OK consolidated\n"
 
 	case "GRAPH":
 		nodes := make([]map[string]interface{}, 0)
-		for _, n := range h.graph.Nodes() {
+		for _, n := range graph.Nodes() {
 			nodes = append(nodes, map[string]interface{}{
 				"id":     n.ID,
 				"role":   n.Role,
@@ -304,7 +321,7 @@ func (h *PrimQLHandler) handle(raw string) string {
 			})
 		}
 		edges := make([]map[string]interface{}, 0)
-		for _, s := range h.graph.Synapses() {
+		for _, s := range graph.Synapses() {
 			edges = append(edges, map[string]interface{}{
 				"from":   s.From,
 				"to":     s.To,
@@ -327,6 +344,54 @@ func (h *PrimQLHandler) handle(raw string) string {
 		default:
 			return "ERROR compile queue full\n"
 		}
+	case "COMPILE_SYNC":
+		turns := strings.Split(rest, "\n---\n")
+		if len(turns) == 0 {
+			return "ERROR no turns provided\n"
+		}
+		graph := h.manager.CurrentGraph()
+		if graph == nil {
+			return "ERROR no active domain\n"
+		}
+		node, err := graph.CompileMemory(turns)
+		if err != nil {
+			return fmt.Sprintf("ERROR %v\n", err)
+		}
+		log.Printf("✅ 同步压缩完成，节点ID=%d，重要性=%.2f", node.ID, node.Intensity)
+		return fmt.Sprintf("OK compiled %d (importance=%.2f)\n", node.ID, node.Intensity)
+	case "DOMAIN":
+		parts := strings.SplitN(rest, " ", 2)
+		subCmd := strings.ToUpper(parts[0])
+		subRest := ""
+		if len(parts) > 1 {
+			subRest = parts[1]
+		}
+		switch subCmd {
+		case "USE":
+			if err := h.manager.Use(subRest); err != nil {
+				return fmt.Sprintf("ERROR %v\n", err)
+			}
+			return fmt.Sprintf("OK switched to domain '%s'\n", subRest)
+		case "CREATE":
+			if err := h.manager.Create(subRest); err != nil {
+				return fmt.Sprintf("ERROR %v\n", err)
+			}
+			return fmt.Sprintf("OK created domain '%s'\n", subRest)
+		case "LIST":
+			list := h.manager.List()
+			var sb strings.Builder
+			for name, count := range list {
+				sb.WriteString(fmt.Sprintf("%s: %d nodes\n", name, count))
+			}
+			return "OK\n" + sb.String()
+		case "DROP":
+			if err := h.manager.Drop(subRest); err != nil {
+				return fmt.Sprintf("ERROR %v\n", err)
+			}
+			return fmt.Sprintf("OK dropped domain '%s'\n", subRest)
+		default:
+			return "ERROR unknown DOMAIN subcommand\n"
+		}
 
 	default:
 		return "UNKNOWN\n"
@@ -334,8 +399,12 @@ func (h *PrimQLHandler) handle(raw string) string {
 }
 
 func (h *PrimQLHandler) findSeeds(query string) []memory.NodeID {
+	graph := h.manager.CurrentGraph()
+	if graph == nil {
+		return nil
+	}
 	var seeds []memory.NodeID
-	for _, n := range h.graph.Nodes() {
+	for _, n := range graph.Nodes() {
 		if strings.Contains(strings.ToLower(n.Text), strings.ToLower(query)) {
 			seeds = append(seeds, n.ID)
 		}

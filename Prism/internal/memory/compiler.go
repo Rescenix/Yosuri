@@ -13,6 +13,22 @@ import (
 	"time"
 )
 
+// 允许的簇名（与 clusterBridgeWeight 矩阵 key 一致）
+var allowedClusters = map[string]bool{
+	"UserBase": true,
+	"CodeWork": true,
+	"ToolLog":  true,
+	"Session":  true,
+}
+
+// normalizeCluster 校验并返回合法的簇名，若无效则返回默认值
+func normalizeCluster(cluster string, defaultCluster string) string {
+	if allowedClusters[cluster] {
+		return cluster
+	}
+	return defaultCluster
+}
+
 // CompileMemory 压缩对话并直接生成图边（杉汐自主决定连线与簇归属）
 func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 	if len(sessionTurns) == 0 {
@@ -80,10 +96,8 @@ func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 	if result.EventType == "" {
 		result.EventType = "chat"
 	}
-	// 补全默认簇
-	if result.Cluster == "" {
-		result.Cluster = "UserBase"
-	}
+	// 簇名校验，默认 UserBase
+	result.Cluster = normalizeCluster(result.Cluster, "UserBase")
 
 	// 去重（哈希）
 	hash := sha1.Sum([]byte(summary))
@@ -97,7 +111,7 @@ func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 	node.Emotion = result.Emotion
 	node.Intensity = result.Intensity
 	node.EventType = result.EventType
-	node.Cluster = result.Cluster // 新增：设置簇
+	node.Cluster = result.Cluster // 设置簇
 	node.Hash = hashStr
 	g.saveNodeToDB(node)
 
@@ -159,8 +173,6 @@ func (g *Graph) getLatestMemory() *MemoryNode {
 	return latest
 }
 
-// clusterBridgeWeight 簇间边权重矩阵
-
 // addEdgeIfNeeded 创建或强化双向边（EdgeAssoc），权重受簇间矩阵调控
 func (g *Graph) addEdgeIfNeeded(a, b NodeID, baseWeight float64) {
 	if a == b {
@@ -194,7 +206,6 @@ func (g *Graph) addEdgeIfNeeded(a, b NodeID, baseWeight float64) {
 	g.AddSynapse(b, a, EdgeAssoc, adjustedWeight)
 }
 
-// buildStructuredPrompt 含现有记忆清单、related_ids 和 cluster 要求
 func buildStructuredPrompt(turns []string, existingMemoryList string) string {
 	return fmt.Sprintf(`你是一个高密度记忆压缩器与情绪分析师。
 你的任务是将以下对话历史压缩成一段不超过200字的高密度摘要，并分析其主导情绪和事件类型。
@@ -229,6 +240,116 @@ func buildStructuredPrompt(turns []string, existingMemoryList string) string {
 请直接输出 JSON：`, existingMemoryList, strings.Join(turns, "\n"))
 }
 
+// CompileMemoryForce 强制导入模式：不检查 worth_saving，直接写入
+func (g *Graph) CompileMemoryForce(sessionTurns []string) (*MemoryNode, error) {
+	if len(sessionTurns) == 0 {
+		return nil, fmt.Errorf("no turns to compile")
+	}
+
+	// 收集现有记忆清单
+	existingList := g.buildMemoryList(20)
+
+	// 构造简化的提示词，簇可选值已对齐矩阵定义
+	prompt := fmt.Sprintf(`你是一个高密度记忆压缩器。
+将以下对话历史压缩成一段不超过200字的高密度摘要，并分析其主导情绪和事件类型。
+这是从工程师对话中导入的历史，全部有价值。
+
+输出格式（严格 JSON）：
+{
+  "summary": "摘要内容",
+  "emotion": "主导情绪（angry/happy/sad/excited/anxious/neutral）",
+  "intensity": 0.8,
+  "event_type": "事件类型（conflict/achievement/decision/chat/compilation）",
+  "related_ids": [1, 3],
+  "cluster": "根据内容选择：UserBase/CodeWork/ToolLog/Session"
+}
+
+现有记忆清单：
+%s
+
+对话历史：
+%s
+
+请直接输出 JSON：`, existingList, strings.Join(sessionTurns, "\n"))
+
+	response, err := callLocalLLM(prompt)
+	if err != nil {
+		return nil, fmt.Errorf("compilation failed: %w", err)
+	}
+
+	jsonStr := cleanJSONResponse(response)
+	if jsonStr == "" {
+		return nil, fmt.Errorf("model returned empty response")
+	}
+
+	var result struct {
+		Summary    string  `json:"summary"`
+		Emotion    string  `json:"emotion"`
+		Intensity  float64 `json:"intensity"`
+		EventType  string  `json:"event_type"`
+		RelatedIDs []int   `json:"related_ids"`
+		Cluster    string  `json:"cluster"`
+	}
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse model output: %w", err)
+	}
+
+	summary := strings.TrimSpace(result.Summary)
+	if summary == "" || len(summary) < 10 {
+		return nil, fmt.Errorf("summary too short or empty")
+	}
+	if looksLikeRefusal(summary) {
+		return nil, fmt.Errorf("model refused or output irrelevant text: %s", summary)
+	}
+	if len([]rune(summary)) > 200 {
+		summary = string([]rune(summary)[:200])
+	}
+
+	if result.Emotion == "" {
+		result.Emotion = "neutral"
+	}
+	if result.Intensity <= 0 || result.Intensity > 1 {
+		result.Intensity = 0.5
+	}
+	if result.EventType == "" {
+		result.EventType = "chat"
+	}
+	// 簇名校验，默认 CodeWork（与之前行为一致）
+	result.Cluster = normalizeCluster(result.Cluster, "CodeWork")
+
+	// 去重
+	hash := sha1.Sum([]byte(summary))
+	hashStr := hex.EncodeToString(hash[:])
+	if g.HasMemoryHash(hashStr) {
+		return nil, fmt.Errorf("duplicate summary ignored")
+	}
+
+	// 创建节点
+	node := g.AddNode("compiled_memory", summary)
+	node.Emotion = result.Emotion
+	node.Intensity = result.Intensity
+	node.EventType = result.EventType
+	node.Cluster = result.Cluster
+	node.Hash = hashStr
+	g.saveNodeToDB(node)
+
+	// 建边
+	for _, rid := range result.RelatedIDs {
+		targetID := NodeID(rid)
+		if existing := g.Node(targetID); existing != nil {
+			g.addEdgeIfNeeded(node.ID, targetID, 0.3)
+		}
+	}
+	if len(result.RelatedIDs) == 0 {
+		if latest := g.getLatestMemory(); latest != nil && latest.ID != node.ID {
+			g.addEdgeIfNeeded(node.ID, latest.ID, 0.1)
+		}
+	}
+
+	return node, nil
+}
+
+// callLocalLLM 保持原样
 func callLocalLLM(prompt string) (string, error) {
 	reqBody := map[string]interface{}{
 		"model":  "qwen2.5-coder:7b",
