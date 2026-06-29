@@ -410,9 +410,23 @@ function cleanContent(content) {
 
 const copiedVisible = ref(false)
 async function copyText(text) {
-  // ...（保持原代码不变）
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedVisible.value = true
+    setTimeout(() => { copiedVisible.value = false }, 2000)
+  } catch (err) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    copiedVisible.value = true
+    setTimeout(() => { copiedVisible.value = false }, 2000)
+  }
 }
-
 // ==================== 模型选择 ====================
 const modelOptions = [
   { label: '本地 7B', value: 'local', icon: 'mdi:memory' },

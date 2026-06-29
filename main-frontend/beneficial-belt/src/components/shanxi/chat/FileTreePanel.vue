@@ -61,10 +61,17 @@
         </div>
       </div>
 
-      <button class="commit-main-btn" @click="gitCommit" :disabled="!commitMsg.trim()">
+      <!-- Commit 按钮 / 操作反馈（同一位置，互斥显示） -->
+      <div v-if="actionFeedback.show" class="action-feedback" :class="actionFeedback.type">
+        {{ actionFeedback.message }}
+      </div>
+      <button v-else class="commit-main-btn" @click="gitCommit" :disabled="!commitMsg.trim()">
         Commit
       </button>
+  
+
     </div>
+ 
   </aside>
 </template>
 
@@ -99,30 +106,78 @@ async function fetchGitStatus() {
     console.error('Git status fetch failed', e)
   }
 }
+// 反馈提示
+const actionFeedback = ref({ show: false, message: '', type: 'success' })
+let feedbackTimer = null
+
+function showFeedback(msg, type = 'success') {
+  actionFeedback.value = { show: true, message: msg, type }
+  clearTimeout(feedbackTimer)
+  feedbackTimer = setTimeout(() => {
+    actionFeedback.value.show = false
+  }, 2500)
+}
+
+
 
 async function gitAddAll() {
-  await fetch('/api/git/add-all', { method: 'POST' })
+  try {
+    const res = await fetch('/api/git/add-all', { method: 'POST' })
+    if (res.ok) {
+      showFeedback(' git add -A 成功')
+    } else {
+      showFeedback('Add 失败', 'error')
+    }
+  } catch (e) {
+    showFeedback('网络错误', 'error')
+  }
   showMore.value = false
   fetchGitStatus()
 }
-function getFileName(fullPath) {
-  return fullPath.split('/').pop() || fullPath
-}
+
 async function gitCommit() {
   if (!commitMsg.value.trim()) return
-  await fetch('/api/git/commit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: commitMsg.value.trim() })
-  })
-  commitMsg.value = ''
+  try {
+    const res = await fetch('/api/git/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: commitMsg.value.trim() })
+    })
+    if (res.ok) {
+      showFeedback('Commit 成功')
+      commitMsg.value = ''
+    } else {
+      const err = await res.text()
+      showFeedback(`Commit 失败: ${err}`, 'error')
+    }
+  } catch (e) {
+    showFeedback('网络错误', 'error')
+  }
+  showMore.value = false
   fetchGitStatus()
 }
 
 async function gitPush() {
-  await fetch('/api/git/push', { method: 'POST' })
+  try {
+    const res = await fetch('/api/git/push', { method: 'POST' })
+    if (res.ok) {
+      showFeedback('Push 成功')
+    } else {
+      const err = await res.text()
+      showFeedback(`Push 失败: ${err}`, 'error')
+    }
+  } catch (e) {
+    showFeedback('网络错误', 'error')
+  }
   showMore.value = false
 }
+
+function getFileName(fullPath) {
+  return fullPath.split('/').pop() || fullPath
+}
+
+
+
 
 onMounted(() => {
   fetchGitStatus()
@@ -278,8 +333,8 @@ onMounted(() => {
 /* ★ 悬浮菜单 */
 .floating-menu {
   position: absolute;
-  top: 32px;
-  right: 4px;
+  top: -70px;
+  right:-10px;
   z-index: 10;
   background: #fff;
   border: 1px solid #d4cfc4;
@@ -323,5 +378,69 @@ onMounted(() => {
 .commit-main-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+
+
+
+.action-feedback {
+  width: 100%;
+  padding: 6px 0;
+  font-size: 12px;
+  border: 1px solid #d4cfc4;
+  border-radius: 6px;
+  text-align: center;
+  transition: opacity 0.3s;
+}
+.action-feedback.success {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+.action-feedback.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+
+/* Commit 按钮 + 操作反馈（统一样式，避免突变） */
+.commit-main-btn,
+.action-feedback {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+  font-size: 12px;
+  border: 1px solid #d4cfc4;
+  border-radius: 6px;
+  text-align: center;
+  box-sizing: border-box;
+  line-height: 1.4;
+  cursor: pointer;
+  background: #fff;
+  color: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.commit-main-btn:hover {
+  background: #f0ede5;
+}
+
+.commit-main-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 反馈状态只覆盖颜色 */
+.action-feedback.success {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.action-feedback.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
 }
 </style>
