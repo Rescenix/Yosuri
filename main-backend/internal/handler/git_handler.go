@@ -78,11 +78,26 @@ func GitCommit(c *gin.Context) {
 		c.String(http.StatusBadRequest, "message required")
 		return
 	}
-	exec.Command("git", "commit", "-m", body.Message).Run()
+
+	// 使用 git commit -F - 从标准输入读取，完美支持多行
+	cmd := exec.Command("git", "commit", "-F", "-")
+	cmd.Dir = GitRepoRoot
+	cmd.Stdin = strings.NewReader(body.Message)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Commit 失败:\n"+string(out))
+		return
+	}
 	c.Status(http.StatusOK)
 }
 
 func GitPush(c *gin.Context) {
-	exec.Command("git", "push").Run()
-	c.Status(http.StatusOK)
+	cmd := exec.Command("git", "push", "origin", "main")
+	cmd.Dir = GitRepoRoot
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Push 失败:\n"+string(out))
+		return
+	}
+	c.String(http.StatusOK, "Push 成功:\n"+string(out))
 }

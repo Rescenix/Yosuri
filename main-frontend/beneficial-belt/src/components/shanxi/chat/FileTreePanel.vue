@@ -20,65 +20,56 @@
 
     <!-- Git Panel -->
     <div class="git-panel">
-
-      <!-- Git Title -->
       <div class="git-title">Git</div>
 
-      <!-- Branch -->
       <div class="git-branch">
         <Icon icon="mdi:source-branch" width="14" />
         <span class="branch-name">{{ gitStatus.branch || '...' }}</span>
         <span class="branch-dot"></span>
       </div>
 
-      <!-- Changes Count -->
-  <div class="git-count">
-  {{ (gitStatus.modified?.length || 0) + (gitStatus.untracked?.length || 0) }} changes
-</div>
+      <div class="git-count">
+        {{ (gitStatus.modified?.length || 0) + (gitStatus.untracked?.length || 0) }} changes
+      </div>
 
-      <!-- Changes List -->
       <div class="git-changes">
-   <div class="change-item" v-for="f in (gitStatus.modified || [])" :key="'m-'+f">
-          <Icon icon="mdi:file-document-edit-outline" width="12" class="change-icon modified" />
-          <span class="change-file">{{ f }}</span>
+        <div class="change-item" v-for="f in (gitStatus.modified || [])" :key="'m-'+f">
+          <span class="change-icon modified">M</span>
+          <span class="change-file" :title="f">{{ getFileName(f) }}</span>
         </div>
-       <div class="change-item" v-for="f in (gitStatus.untracked || [])" :key="'u-'+f">
-          <Icon icon="mdi:plus-circle-outline" width="12" class="change-icon added" />
-          <span class="change-file">{{ f }}</span>
+        <div class="change-item" v-for="f in (gitStatus.untracked || [])" :key="'u-'+f">
+          <span class="change-icon added">U</span>
+        <span class="change-file" :title="f">{{ getFileName(f) }}</span>
         </div>
       </div>
 
-      <!-- Commit Input -->
-      <input
-        v-model="commitMsg"
-        class="commit-input"
-        placeholder="message..."
-        @keyup.enter="gitCommit"
-      />
-
-      <!-- Commit Button + Dropdown -->
-      <div class="commit-actions">
-        <button class="commit-main-btn" @click="gitCommit" :disabled="!commitMsg.trim()">
-          Commit
+      <div class="commit-input-area">
+        <textarea
+          v-model="commitMsg"
+          class="commit-textarea"
+          placeholder="Commit message (支持多行)"
+          rows="3"
+        ></textarea>
+        <button class="commit-more-btn" @click="toggleMore" title="更多操作">
+          <Icon icon="mdi:chevron-down" width="16" />
         </button>
 
-        <button class="commit-dropdown-btn" @click="toggleMore">
-          ▼
-        </button>
+        <!-- ★ 悬浮菜单：绝对定位在按钮下方 -->
+        <div v-if="showMore" class="floating-menu">
+          <button class="git-btn" @click="gitAddAll">Add All</button>
+          <button class="git-btn" @click="gitPush">Push</button>
+        </div>
       </div>
 
-      <!-- Dropdown Options -->
-      <div v-if="showMore" class="commit-more">
-        <button class="git-btn" @click="gitAddAll">Add All</button>
-        <button class="git-btn" @click="gitPush">Push</button>
-      </div>
-
+      <button class="commit-main-btn" @click="gitCommit" :disabled="!commitMsg.trim()">
+        Commit
+      </button>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { ref, onMounted, defineProps, defineEmits } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import FileTreeNode from './FileTreeNode.vue'
 
@@ -89,16 +80,34 @@ const props = defineProps({
 })
 
 defineEmits(['select', 'toggle'])
+
 const commitMsg = ref('')
 const showMore = ref(false)
+const gitStatus = ref({ branch: '', modified: [], untracked: [] })
+
 function toggleMore() {
   showMore.value = !showMore.value
 }
-async function gitAddAll() {
-  await fetch('/api/git/add-all', { method: 'POST' })
-  fetchGitStatus()
+
+async function fetchGitStatus() {
+  try {
+    const res = await fetch('/api/git-status')
+    if (res.ok) {
+      gitStatus.value = await res.json()
+    }
+  } catch (e) {
+    console.error('Git status fetch failed', e)
+  }
 }
 
+async function gitAddAll() {
+  await fetch('/api/git/add-all', { method: 'POST' })
+  showMore.value = false
+  fetchGitStatus()
+}
+function getFileName(fullPath) {
+  return fullPath.split('/').pop() || fullPath
+}
 async function gitCommit() {
   if (!commitMsg.value.trim()) return
   await fetch('/api/git/commit', {
@@ -112,31 +121,17 @@ async function gitCommit() {
 
 async function gitPush() {
   await fetch('/api/git/push', { method: 'POST' })
-  // 可以加个简单的提示
-}
-// ★ 真实 Git 数据
-const gitStatus = ref({ branch: '', modified: [], untracked: [] })
-
-async function fetchGitStatus() {
-  try {
-    const res = await fetch('/api/git-status')
-    if (res.ok) {
-      gitStatus.value = await res.json()
-    }
-  } catch (e) {
-    console.error('Git status fetch failed', e)
-  }
+  showMore.value = false
 }
 
 onMounted(() => {
   fetchGitStatus()
-  // 可选：每 30 秒自动刷新
   setInterval(fetchGitStatus, 30000)
 })
 </script>
 
 <style scoped>
-/* 样式和之前一模一样，不动 */
+/* ========== 面板整体 ========== */
 .file-tree-panel {
   width: 220px;
   height: 100%;
@@ -146,6 +141,7 @@ onMounted(() => {
   flex-direction: column;
   flex-shrink: 0;
 }
+
 .file-tree-header {
   padding: 8px 12px;
   font-size: 12px;
@@ -153,154 +149,25 @@ onMounted(() => {
   color: #696259;
   border-bottom: 1px solid #e4dfd4;
 }
+
 .file-tree-body {
   flex: 1;
   overflow-y: auto;
   padding: 4px 0;
-  min-height: 0;             /* 关键：允许 flex 子项收缩 */
-}
-.file-tree-footer {
-  margin-top: auto;
-  padding: 8px 12px 12px;
-  border-top: 1px solid #e4dfd4;
-  font-size: 11px;
-  color: #696259;
-  max-height: 30vh;          /* 最多占 30% 视图高度 */
-  overflow-y: auto;          /* 超出滚动 */
-  flex-shrink: 0;            /* 不被压缩 */
-}
-.git-branch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: #1b1a18;
-  margin-bottom: 4px;
-}
-.git-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  margin-left: auto;
-}
-.git-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
+  min-height: 0;
 }
 
-.git-file {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.git-file-list {
-  max-height: 100px;
-  overflow-y: auto;
-  margin: 4px 0;
-}
-
-.git-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.git-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: #fff;
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.git-btn:hover {
-  background: #f0ede5;
-}
-
-.commit-row {
-  display: flex;
-  gap: 4px;
-}
-
-.commit-input {
-  flex: 1;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 10px;
-  outline: none;
-}
-
-.git-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.git-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid #d4cfc4;
-  border-radius: 6px;
-  background: #fff;
-  font-size: 12px;
-  color: #4a4540;
-  cursor: pointer;
-  transition: background 0.15s;
-  width: 100%;
-  justify-content: center;
-}
-
-.git-btn:hover {
-  background: #f0ede5;
-}
-
-.git-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.commit-row {
-  display: flex;
-  gap: 4px;
-  width: 100%;
-}
-
-.commit-input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid #d4cfc4;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
-  outline: none;
-  color: #4a4540;
-}
-
-.commit-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  justify-content: center;
-  flex-shrink: 0;
-}
+/* ========== Git 面板 ========== */
 .git-panel {
   padding: 10px 12px;
   border-top: 1px solid #e4dfd4;
   background: #f7f6f3;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .git-title {
@@ -314,12 +181,10 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
 }
-
 .branch-name {
   font-size: 12px;
   font-weight: 600;
 }
-
 .branch-dot {
   width: 6px;
   height: 6px;
@@ -334,10 +199,10 @@ onMounted(() => {
 }
 
 .git-changes {
-  max-height: 120px;
+  max-height: 100px;
   overflow-y: auto;
   border-top: 1px solid #e4dfd4;
-  padding-top: 6px;
+  padding-top: 4px;
 }
 
 .change-item {
@@ -347,57 +212,116 @@ onMounted(() => {
   padding: 2px 0;
 }
 
+.change-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.change-icon.modified {
+  background: #fef3c7;
+  color: #b45309;
+}
+.change-icon.added {
+  background: #d1fae5;
+  color: #065f46;
+}
+
 .change-file {
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: default;
 }
 
-.commit-input {
+/* ========== Commit 输入区域 ========== */
+.commit-input-area {
+  position: relative;
+}
+
+.commit-textarea {
   width: 100%;
-  padding: 6px 8px;
+  padding: 6px 30px 6px 8px;
   font-size: 12px;
   border: 1px solid #d4cfc4;
   border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+  background: #fff;
 }
 
-.commit-actions {
+.commit-more-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #6a665e;
+}
+.commit-more-btn:hover {
+  background: #e8e3d8;
 }
 
-.commit-main-btn {
-  flex: 1;
-  padding: 6px 8px;
-  font-size: 12px;
+/* ★ 悬浮菜单 */
+.floating-menu {
+  position: absolute;
+  top: 32px;
+  right: 4px;
+  z-index: 10;
+  background: #fff;
   border: 1px solid #d4cfc4;
   border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-}
-
-.commit-dropdown-btn {
-  width: 32px;
-  border: 1px solid #d4cfc4;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-}
-
-.commit-more {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 4px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
+  min-width: 100px;
 }
 
-.git-btn {
-  padding: 6px 8px;
+.floating-menu .git-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: none;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 4px;
+}
+.floating-menu .git-btn:hover {
+  background: #f0ede5;
+}
+
+/* Commit 主按钮 */
+.commit-main-btn {
+  width: 100%;
+  padding: 6px 0;
   font-size: 12px;
   border: 1px solid #d4cfc4;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
 }
-
+.commit-main-btn:hover {
+  background: #f0ede5;
+}
+.commit-main-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 </style>
