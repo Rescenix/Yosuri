@@ -30,6 +30,9 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	core.RegisterCleanFunc(func() {
 		memoryStore.CleanMemories()
 	})
+
+	r.GET("/api/file-tree", gin.WrapH(http.HandlerFunc(FileTreeHandler)))
+	r.GET("/api/file", gin.WrapH(http.HandlerFunc(FileReadHandler)))
 	r.POST("/api/git/add-all", GitAddAll)
 	r.POST("/api/git/commit", GitCommit)
 	r.POST("/api/git/push", GitPush)

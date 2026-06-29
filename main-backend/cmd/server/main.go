@@ -64,7 +64,10 @@ func main() {
 			sessionStore.SaveToFile(sessionPath)
 		}
 	}()
-
+	// 自动拉起 DS 浏览器代理
+	if err := handler.EnsureDSNodeServer(); err != nil {
+		log.Printf("⚠️ DS 代理启动失败: %v，将在首次对话时重试", err)
+	}
 	handler.RegisterRoutes(r, memoryStore, sessionStore)
 
 	log.Println("🚀 Prism 引擎已启动，监听端口 :8080")

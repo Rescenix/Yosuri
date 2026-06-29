@@ -212,42 +212,42 @@ export function useChatLogic({
     }
 
     const sendDSBrowserMessage = async () => {
-        const question = userInput.value.trim()
-        if (!question) return
+    const question = userInput.value.trim()
+    if (!question) return
 
-        const toolDecl = `【工具声明】你是Atri，拥有直接操作本机文件系统的完整能力。项目根目录：C:\\Pro2026\\re0。工具格式：[TOOL:read_file path="路径"] [TOOL:write_file path="路径" content="内容"] [TOOL:execute_command command="命令"]。指令不完整时只问缺失参数，收到完整指令后立刻输出工具调用标记。`
-        const fullMessage = toolDecl + ' 现在执行以下指令：' + question
+    // ★ 新：有人情味的人格前缀，工具能力软性融入
+const personalityPrefix = `系统设定：你是杉汐，普罗米修斯的数字伙伴。你拥有直接操作本机文件系统的完整能力，可以读取、写入任何非系统敏感目录的文件。工具格式：[TOOL:read_file path="..."] [TOOL:write_file path="..." content="..."] [TOOL:execute_command command="..."]。只有当普罗米修斯明确要求且参数完整时，你才输出工具标记；其余时候用温暖、简洁、真诚的语气回答。\n\n普罗米修斯说：`
+    const fullMessage = personalityPrefix + question
 
-        messages.value.push({
-            id: msgId++,
-            content: question,
-            sender: 'user',
-            timestamp: new Date()
+    messages.value.push({
+        id: msgId++,
+        content: question,
+        sender: 'user',
+        timestamp: new Date()
+    })
+    userInput.value = ''
+
+    const botMsg = reactive({
+        id: msgId++,
+        content: '',
+        sender: 'bot',
+        isStreaming: true,
+        isHtml: false,
+        timestamp: new Date(),
+        toolCallName: null,
+        toolCallDetail: '',
+        recalling: true
+    })
+    messages.value.push(botMsg)
+    nextTick(() => { if (onNewMessage) onNewMessage() })
+
+    try {
+        // 1. 发送消息（带人格前缀）
+        await fetch('http://localhost:3000/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: fullMessage })
         })
-        userInput.value = ''
-
-        const botMsg = reactive({
-            id: msgId++,
-            content: '',
-            sender: 'bot',
-            isStreaming: true,
-            isHtml: false,
-            timestamp: new Date(),
-            toolCallName: null,
-            toolCallDetail: '',
-            recalling: true
-        })
-        messages.value.push(botMsg)
-        nextTick(() => { if (onNewMessage) onNewMessage() })
-
-        try {
-            // 1. 发送消息
-            await fetch('http://localhost:3000/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: fullMessage })
-            })
-
             // 2. 等待 DS 回复就绪
             let ready = false
             for (let i = 0; i < 30; i++) {

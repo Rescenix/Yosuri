@@ -50,12 +50,12 @@
           placeholder="Commit message (支持多行)"
           rows="3"
         ></textarea>
-        <button class="commit-more-btn" @click="toggleMore" title="更多操作">
+                <button class="commit-more-btn" @click.stop="toggleMore" title="更多操作">
           <Icon icon="mdi:chevron-down" width="16" />
         </button>
 
         <!-- ★ 悬浮菜单：绝对定位在按钮下方 -->
-        <div v-if="showMore" class="floating-menu">
+         <div v-if="showMore" class="floating-menu" @click.stop>
           <button class="git-btn" @click="gitAddAll">Add All</button>
           <button class="git-btn" @click="gitPush">Push</button>
         </div>
@@ -76,7 +76,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted,onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import FileTreeNode from './FileTreeNode.vue'
 
@@ -87,7 +87,12 @@ const props = defineProps({
 })
 
 defineEmits(['select', 'toggle'])
-
+function handleClickOutside(event) {
+  // 如果菜单是打开的，且点击的不是菜单本身（已阻止冒泡），关闭菜单
+  if (showMore.value) {
+    showMore.value = false
+  }
+}
 const commitMsg = ref('')
 const showMore = ref(false)
 const gitStatus = ref({ branch: '', modified: [], untracked: [] })
@@ -158,18 +163,27 @@ async function gitCommit() {
 }
 
 async function gitPush() {
+  // 立刻显示加载状态
+  actionFeedback.value = { show: true, message: 'Pushing...', type: 'loading' }
+  showMore.value = false
+
   try {
     const res = await fetch('/api/git/push', { method: 'POST' })
     if (res.ok) {
-      showFeedback('Push 成功')
+      actionFeedback.value = { show: true, message: 'Push 成功', type: 'success' }
     } else {
       const err = await res.text()
-      showFeedback(`Push 失败: ${err}`, 'error')
+      actionFeedback.value = { show: true, message: `Push 失败: ${err}`, type: 'error' }
     }
   } catch (e) {
-    showFeedback('网络错误', 'error')
+    actionFeedback.value = { show: true, message: '网络错误', type: 'error' }
   }
-  showMore.value = false
+
+  // 2.5 秒后自动关闭反馈
+  clearTimeout(feedbackTimer)
+  feedbackTimer = setTimeout(() => {
+    actionFeedback.value.show = false
+  }, 2500)
 }
 
 function getFileName(fullPath) {
@@ -182,6 +196,11 @@ function getFileName(fullPath) {
 onMounted(() => {
   fetchGitStatus()
   setInterval(fetchGitStatus, 30000)
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -442,5 +461,21 @@ onMounted(() => {
   background: #fee2e2;
   color: #991b1b;
   border-color: #fecaca;
+}
+
+.action-feedback.loading {
+  background: #f0ede5;
+  color: #6a665e;
+  border-color: #d4cfc4;
+}
+.action-feedback.loading::after {
+  content: '...';
+  animation: loading-dots 1.5s infinite;
+}
+
+@keyframes loading-dots {
+  0% { content: '.'; }
+  33% { content: '..'; }
+  66% { content: '...'; }
 }
 </style>

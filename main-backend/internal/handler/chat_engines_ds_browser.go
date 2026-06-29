@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -16,39 +15,7 @@ var dsNodeProcess *exec.Cmd
 
 // startDSNodeServer 启动 Node.js 代理服务
 func (h *ChatHandler) startDSNodeServer() error {
-	// 先检查是否已有健康进程
-	if dsNodeProcess != nil && dsNodeProcess.Process != nil {
-		// 检查 /ready 接口是否真的可用
-		resp, err := http.Get("http://localhost:3000/ready")
-		if err == nil {
-			resp.Body.Close()
-			return nil // 进程健康，直接返回
-		}
-		// 进程存在但不健康，杀掉重启
-		fmt.Println("[DS_BROWSER] Node 代理不健康，重启中...")
-		dsNodeProcess.Process.Kill()
-		dsNodeProcess = nil
-	}
-
-	fmt.Println("🚀 启动 DS 浏览器代理...")
-	dsNodeProcess = exec.Command("node", "C:\\Pro2026\\re0\\crack\\server.js")
-	dsNodeProcess.Stdout = os.Stdout
-	dsNodeProcess.Stderr = os.Stderr
-	if err := dsNodeProcess.Start(); err != nil {
-		return fmt.Errorf("启动 DS 代理失败: %w", err)
-	}
-
-	// 等待代理就绪
-	for i := 0; i < 30; i++ {
-		time.Sleep(1 * time.Second)
-		resp, err := http.Get("http://localhost:3000/ready")
-		if err == nil {
-			resp.Body.Close()
-			fmt.Println("✅ DS 浏览器代理已就绪")
-			return nil
-		}
-	}
-	return fmt.Errorf("DS 代理启动超时")
+	return EnsureDSNodeServer()
 }
 
 // sendToDSBrowser 发送消息到 DS 浏览器代理

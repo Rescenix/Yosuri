@@ -99,18 +99,9 @@ func isPathSafe(path string) bool {
 }
 
 // isPathAllowed 检查路径是否在允许的范围内（项目根目录或白名单）
+// isPathAllowed 现在放行所有路径（敏感路径由 isPathSafe 拦截）
 func isPathAllowed(path string) bool {
-	// 在项目根目录下
-	if strings.HasPrefix(filepath.Clean(path), filepath.Clean(projectRoot)) {
-		return true
-	}
-	// 在白名单路径下
-	for _, allowed := range allowedProjectPaths {
-		if strings.HasPrefix(filepath.Clean(path), filepath.Clean(allowed)) {
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 // ----- 临时代码搜索 -----

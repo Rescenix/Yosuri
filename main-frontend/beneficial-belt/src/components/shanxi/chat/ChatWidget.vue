@@ -276,12 +276,15 @@
   v-if="showGitPanel && !selectedFile"
   @ai-commit="onAiCommit"
 />
-<CodePreviewPanel
-  v-else-if="selectedFile"
-  :selected-file="selectedFile"
-  :file-content="fileContent"
-  :loading="fileLoading"
-  @close="selectedFile = null"
+<CodeEditor
+  v-if="activeEditorFile"
+  :tabs="editorTabs"
+  :activeFilePath="activeEditorFile"
+  :fileContent="fileContent"
+  :language="editorLanguage"
+  @update:content="val => fileContent = val"
+  @switch-file="activeEditorFile = $event"
+  @close-file="closeEditorTab"
 />
 
 
@@ -302,7 +305,7 @@ import MarkdownIt from 'markdown-it'
 import markdownItKatex from 'markdown-it-katex'
 import { useChatWidget } from './useChatWidget.js'
 import FileTreePanel from './FileTreePanel.vue'
-import CodePreviewPanel from './CodePreviewPanel.vue'
+import CodeEditor from './CodeEditor.vue'
 import GitPanel from './GitPanel.vue'
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
@@ -314,16 +317,52 @@ const viewingFile = ref(null)    // 当前查看的文件对象
 const showGitPanel = ref(false)
 const fileContent = ref('')
 const fileLoading = ref(false)
+const editorTabs = ref([])              // 已打开的文件标签
+const activeEditorFile = ref(null)      // 当前编辑的文件路径
+const editorContent = ref('')
+const editorLanguage = ref('text')
+let monacoEditor = null                 // Monaco 实例引用
 
+
+function closeEditorTab(path) {
+  editorTabs.value = editorTabs.value.filter(t => t.path !== path)
+  if (activeEditorFile.value === path) {
+    activeEditorFile.value = editorTabs.value[0]?.path || null
+  }
+}
+function onEditorMounted(editor) {
+  monacoEditor = editor
+}
 async function onFileSelect(file) {
+  // 如果已经打开了同一个文件，不重复加载
+  if (activeEditorFile.value === file.path) return
+
   selectedFile.value = file
-  fileLoading.value = true
+  activeEditorFile.value = file.path
   fileContent.value = ''
-  // 模拟请求，实际应调用后端接口
-  setTimeout(() => {
-    fileContent.value = `// 这是 ${file.name} 的模拟内容\n// 实际应从后端获取`
-    fileLoading.value = false
-  }, 300)
+
+  // 自动判断语言
+  const ext = file.name.split('.').pop()
+  const langMap = { js: 'javascript', ts: 'typescript', vue: 'html', go: 'go', py: 'python', css: 'css', html: 'html', json: 'json', md: 'markdown' }
+  editorLanguage.value = langMap[ext] || 'text'
+
+  // 加入标签页
+  const existing = editorTabs.value.find(t => t.path === file.path)
+  if (!existing) {
+    editorTabs.value.push({ name: file.name, path: file.path })
+  }
+
+  // 从后端读取真实文件内容
+  try {
+    const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`)
+    if (res.ok) {
+      fileContent.value = await res.text()
+    } else {
+      fileContent.value = `// 无法加载文件: ${res.status}`
+    }
+  } catch (e) {
+    fileContent.value = `// 网络错误: ${e.message}`
+  }
 }
 // ==================== 新增：项目任务数据结构 ====================
 const projects = ref([
@@ -359,13 +398,22 @@ const projects = ref([
     ]
   }
 ])
-const fileTree = ref([
-  { name: 'src', type: 'folder', expanded: true, children: [
-      { name: 'main.go', type: 'file' },
-      { name: 'handler.go', type: 'file' }
-  ]},
-  { name: 'go.mod', type: 'file' }
-])
+const fileTree = ref([])
+
+async function fetchFileTree() {
+  try {
+    const res = await fetch('/api/file-tree')
+    if (res.ok) {
+      fileTree.value = await res.json()
+    }
+  } catch (e) {
+    console.error('文件树加载失败', e)
+  }
+}
+
+onMounted(() => {
+  fetchFileTree()
+})
 const selectedFile = ref(null)
 
 
@@ -729,6 +777,11 @@ watch(messages, () => {
   max-width: none !important;    /* 移除固定最大宽度 */
   min-width: 0;                  /* 允许收缩 */
   overflow: hidden;
+}
+/* 确保编辑器面板占用右侧空间，宽度自适应 */
+.chat-body > .code-editor-panel {
+  flex: 1;
+  min-width: 0;
 }
 </style>
 
