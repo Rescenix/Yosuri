@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -408,23 +409,25 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		resultContent = fmt.Sprintf("SUCCESS: 已在 %s 中精确替换 1 处内容", filePath)
 		fmt.Printf("✏️ 工具调用: 编辑文件 - %s (old: %q -> new: %q)\n", filePath, oldStr, newStr)
 	case "execute_command":
-		command, _ := args["command"].(string)
+
+		command, ok := args["command"].(string)
+		if !ok || command == "" {
+			resultContent = "错误：未提供有效的命令"
+			failed = true
+			break
+		}
 
 		// Windows 平台命令自动转换
 		if runtime.GOOS == "windows" {
-			// ls → dir
 			if strings.HasPrefix(command, "ls ") || command == "ls" {
 				command = strings.Replace(command, "ls", "dir", 1)
 			}
-			// cat → type
 			if strings.HasPrefix(command, "cat ") {
 				command = strings.Replace(command, "cat", "type", 1)
 			}
-			// pwd → cd
 			if command == "pwd" {
 				command = "cd"
 			}
-			// clear → cls
 			if command == "clear" {
 				command = "cls"
 			}
@@ -432,7 +435,8 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("cmd", "/c", command)
+			// 使用 PowerShell 执行，避免 cmd 对引号解析的兼容性问题
+			cmd = exec.Command("powershell", "-Command", command)
 		} else {
 			cmd = exec.Command("bash", "-c", command)
 		}
@@ -445,8 +449,8 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		} else {
 			resultContent = string(output)
 		}
-		fmt.Printf("⚙️ 工具调用: 执行命令 - %s\n", command)
-
+		log.Printf("[EXEC] 最终命令: [%s]", command)
+		fmt.Printf("⚙️ 工具调用: 执行命令 [%d字节] %s\n", len(command), command)
 	case "web_search":
 		query, _ := args["query"].(string)
 		if registeredSearchFunc != nil {

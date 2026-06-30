@@ -183,6 +183,13 @@ if (req.method === 'GET' && req.url === '/read') {
     reply = reply.replace(/\\\\/g, '\\');
     reply = reply.replace(/write\\_file/g, 'write_file');
     reply = reply.replace(/read\\_file/g, 'read_file');
+    // 新增：修复 execute_command 中的转义引号和路径
+    reply = reply.replace(/\\"/g, '"');              // \" → "
+    reply = reply.replace(/\\'/g, "'");              // \' → '
+    reply = reply.replace(/command="([^"]*)"/g, (match, cmd) => {
+        // 修复路径中的双反斜杠
+        return 'command="' + cmd.replace(/\\\\/g, '\\') + '"';
+    });
     console.log('[READ] 最终返回：', reply.substring(0, 120));
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end(reply);

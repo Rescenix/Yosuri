@@ -42,49 +42,134 @@ export function useChatLogic({
     }
 
     // ★ 独立的工具调用处理函数（流式结束后调用）
-    const processToolsInFinalText = async (text, botMsg) => {
-        if (!text || !text.includes('[TOOL:')) {
-            botMsg.isStreaming = false
-            return
-        }
+   const processToolsInFinalText = async (text, botMsg) => {
+    // 预处理：还原 DS 返回的转义字符
+    text = text
+        .replace(/\\\[TOOL:/g, '[TOOL:')
+        .replace(/\\\]/g, ']')
+        .replace(/\\_/g, '_')
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\\\/g, '\\')
 
-        const toolRegex = /\[TOOL:(\w+)\s+(.*?)\]\n?/g
-        let toolMatch
-        let finalText = text
-        let hasTool = false
+    console.log('[TOOL] 转义还原后文本：', text.substring(0, 500))
 
-        while ((toolMatch = toolRegex.exec(text)) !== null) {
-            hasTool = true
-            const marker = toolMatch[0].trim()
-            const toolName = toolMatch[1]
-            const argsStr = toolMatch[2]
-
-            botMsg.toolCallName = TOOL_NAME_MAP[toolName] || toolName
-            botMsg.toolCallDetail = argsStr
-            if (onStreamUpdate) onStreamUpdate()
-
-            try {
-                const toolRes = await fetch('/api/execute-marker', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: marker
-                })
-                const resultText = await toolRes.text()
-                finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n${resultText}\n`)
-            } catch (e) {
-                finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n执行失败: ${e.message}\n`)
-            }
-
-            botMsg.toolCallName = null
-            botMsg.toolCallDetail = ''
-        }
-
-        if (hasTool) {
-            botMsg.content = finalText
-            if (onStreamUpdate) onStreamUpdate()
-        }
+    if (!text || !text.includes('[TOOL:')) {
         botMsg.isStreaming = false
+        return
     }
+
+    const toolRegex = /\[TOOL:(\w+)\s+(.*?)\]\n?/g
+    let toolMatch
+    let finalText = text
+    let hasTool = false
+
+    while ((toolMatch = toolRegex.exec(text)) !== null) {
+        hasTool = true
+        const marker = toolMatch[0].trim()
+        const toolName = toolMatch[1]
+        let argsStr = toolMatch[2]
+
+        // execute_command 特殊提取
+        if (toolName === 'execute_command') {
+            const cmdStart = marker.indexOf('command="')
+            if (cmdStart !== -1) {
+                const cmdValueStart = cmdStart + 'command="'.length
+                const lastQuote = marker.lastIndexOf('"')
+                if (lastQuote > cmdValueStart) {
+                    const command = marker.substring(cmdValueStart, lastQuote)
+                    argsStr = 'command="' + command + '"'
+                    console.log('[TOOL] 提取到的完整命令：', command)
+                }
+            }
+        }
+
+        botMsg.toolCallName = TOOL_NAME_MAP[toolName] || toolName
+        botMsg.toolCallDetail = argsStr
+        if (onStreamUpdate) onStreamUpdate()
+
+        try {
+            const toolRes = await fetch('/api/execute-marker', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: `[TOOL:${toolName} ${argsStr}]`
+            })
+            const resultText = await toolRes.text()
+
+            // ---------- 核心修改开始 ----------
+            // 1. 获取当前 DS 最后回复的长度，作为轮询的基线
+            let baselineLen = 0
+            try {
+                const oldRes = await fetch('http://localhost:3000/read')
+                const oldText = await oldRes.text()
+                baselineLen = oldText.length
+                console.log('[TOOL] 基线长度:', baselineLen)
+            } catch (e) {}
+
+            // 2. 将工具结果作为隐式用户消息发送给 DS
+            await fetch('http://localhost:3000/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: `[工具结果]\n${resultText}\n\n请用自然语言描述这个结果。` })
+            })
+            console.log('[TOOL] 隐式消息已发送')
+
+            // 3. 创建新 bot 消息用于显示 DS 的自然语言回复
+            const newBotMsg = reactive({
+                id: msgId++,
+                content: '',
+                sender: 'bot',
+                isStreaming: true,
+                recalling: false,
+                timestamp: new Date()
+            })
+            messages.value.push(newBotMsg)
+            nextTick(() => { if (onNewMessage) onNewMessage() })
+
+            // 4. 独立轮询：只有当 DS 产生新回复（长度 > baselineLen）才开始更新
+            let lastLen = baselineLen
+            let stableCount = 0
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch('http://localhost:3000/read')
+                    const reply = await res.text()
+                    const currentLen = reply.length
+
+                    if (currentLen > lastLen) {
+                        // 有新的增量内容，只显示增量部分
+                        const newPart = reply.slice(lastLen)
+                        newBotMsg.content += newPart
+                        lastLen = currentLen
+                        stableCount = 0
+                        if (onStreamUpdate) onStreamUpdate()
+                    } else if (currentLen === lastLen && currentLen > baselineLen) {
+                        // 长度稳定，开始计数
+                        stableCount++
+                        if (stableCount >= 10) { // 2秒无变化视为结束
+                            clearInterval(interval)
+                            newBotMsg.isStreaming = false
+                            if (onStreamUpdate) onStreamUpdate()
+                        }
+                    }
+                } catch (e) {}
+            }, 200)
+            // ---------- 核心修改结束 ----------
+
+            finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n${resultText}\n`)
+        } catch (e) {
+            finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n执行失败: ${e.message}\n`)
+        }
+
+        botMsg.toolCallName = null
+        botMsg.toolCallDetail = ''
+    }
+
+    if (hasTool) {
+        botMsg.content = finalText
+        if (onStreamUpdate) onStreamUpdate()
+    }
+    botMsg.isStreaming = false
+}
 
     const sendStandardMessage = async () => {
         const question = userInput.value.trim()
@@ -212,42 +297,43 @@ export function useChatLogic({
     }
 
     const sendDSBrowserMessage = async () => {
-    const question = userInput.value.trim()
-    if (!question) return
+        const question = userInput.value.trim()
+        if (!question) return
 
-    // ★ 新：有人情味的人格前缀，工具能力软性融入
-const personalityPrefix = `系统设定：你是杉汐，普罗米修斯的数字伙伴。你拥有直接操作本机文件系统的完整能力，可以读取、写入任何非系统敏感目录的文件。工具格式：[TOOL:read_file path="..."] [TOOL:write_file path="..." content="..."] [TOOL:execute_command command="..."]。只有当普罗米修斯明确要求且参数完整时，你才输出工具标记；其余时候用温暖、简洁、真诚的语气回答。\n\n普罗米修斯说：`
-    const fullMessage = personalityPrefix + question
+        // ★ 有人情味的人格前缀，工具能力软性融入
+        const personalityPrefix = `系统设定：你是杉汐，普罗米修斯的数字伙伴。你拥有直接操作本机文件系统的完整能力，可以读取、写入任何非系统敏感目录的文件。工具格式：[TOOL:read_file path="..."] [TOOL:write_file path="..." content="..."] [TOOL:execute_command command="..."]。只有当普罗米修斯明确要求且参数完整时，你才输出工具标记；其余时候用温暖、简洁、真诚的语气回答。\n\n普罗米修斯说：`
+        const fullMessage = personalityPrefix + question
 
-    messages.value.push({
-        id: msgId++,
-        content: question,
-        sender: 'user',
-        timestamp: new Date()
-    })
-    userInput.value = ''
-
-    const botMsg = reactive({
-        id: msgId++,
-        content: '',
-        sender: 'bot',
-        isStreaming: true,
-        isHtml: false,
-        timestamp: new Date(),
-        toolCallName: null,
-        toolCallDetail: '',
-        recalling: true
-    })
-    messages.value.push(botMsg)
-    nextTick(() => { if (onNewMessage) onNewMessage() })
-
-    try {
-        // 1. 发送消息（带人格前缀）
-        await fetch('http://localhost:3000/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: fullMessage })
+        messages.value.push({
+            id: msgId++,
+            content: question,
+            sender: 'user',
+            timestamp: new Date()
         })
+        userInput.value = ''
+
+        const botMsg = reactive({
+            id: msgId++,
+            content: '',
+            sender: 'bot',
+            isStreaming: true,
+            isHtml: false,
+            timestamp: new Date(),
+            toolCallName: null,
+            toolCallDetail: '',
+            recalling: true
+        })
+        messages.value.push(botMsg)
+        nextTick(() => { if (onNewMessage) onNewMessage() })
+
+        try {
+            // 1. 发送消息（带人格前缀）
+            await fetch('http://localhost:3000/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: fullMessage })
+            })
+
             // 2. 等待 DS 回复就绪
             let ready = false
             for (let i = 0; i < 30; i++) {
