@@ -89,80 +89,62 @@ export function useChatLogic({
         if (onStreamUpdate) onStreamUpdate()
 
         try {
-            const toolRes = await fetch('/api/execute-marker', {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: `[TOOL:${toolName} ${argsStr}]`
-            })
-            const resultText = await toolRes.text()
+    const toolRes = await fetch('/api/execute-marker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: `[TOOL:${toolName} ${argsStr}]`
+    })
+    const resultText = await toolRes.text()
 
-            // ---------- 核心修改开始 ----------
-            // 1. 获取当前 DS 最后回复的长度，作为轮询的基线
-            let baselineLen = 0
-            try {
-                const oldRes = await fetch('http://localhost:3000/read')
-                const oldText = await oldRes.text()
-                baselineLen = oldText.length
-                console.log('[TOOL] 基线长度:', baselineLen)
-            } catch (e) {}
+    // 1. 创建新 bot 消息用于 DS 的自然语言回复
+    const newBotMsg = reactive({
+        id: msgId++,
+        content: '',
+        sender: 'bot',
+        isStreaming: true,
+        recalling: false,
+        timestamp: new Date()
+    })
+    messages.value.push(newBotMsg)
+    nextTick(() => { if (onNewMessage) onNewMessage() })
 
-            // 2. 将工具结果作为隐式用户消息发送给 DS
-            await fetch('http://localhost:3000/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: `[工具结果]\n${resultText}\n\n请用自然语言描述这个结果。` })
-            })
-            console.log('[TOOL] 隐式消息已发送')
-
-            // 3. 创建新 bot 消息用于显示 DS 的自然语言回复
-            const newBotMsg = reactive({
-                id: msgId++,
-                content: '',
-                sender: 'bot',
-                isStreaming: true,
-                recalling: false,
-                timestamp: new Date()
-            })
-            messages.value.push(newBotMsg)
-            nextTick(() => { if (onNewMessage) onNewMessage() })
-
-            // 4. 独立轮询：只有当 DS 产生新回复（长度 > baselineLen）才开始更新
-            let lastLen = baselineLen
-            let stableCount = 0
-            const interval = setInterval(async () => {
-                try {
-                    const res = await fetch('http://localhost:3000/read')
-                    const reply = await res.text()
-                    const currentLen = reply.length
-
-                    if (currentLen > lastLen) {
-                        // 有新的增量内容，只显示增量部分
-                        const newPart = reply.slice(lastLen)
-                        newBotMsg.content += newPart
-                        lastLen = currentLen
-                        stableCount = 0
+    // 2. 用 /stream 发送隐式消息，流式获取 DS 回复
+    fetch('http://localhost:3000/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `[工具结果]\n${resultText}\n\n请用自然语言描述这个结果。` })
+    }).then(async (res) => {
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || '' // 保留不完整的行
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const payload = line.slice(6)
+                    if (payload === '[DONE]') {
+                        newBotMsg.isStreaming = false
                         if (onStreamUpdate) onStreamUpdate()
-                    } else if (currentLen === lastLen && currentLen > baselineLen) {
-                        // 长度稳定，开始计数
-                        stableCount++
-                        if (stableCount >= 10) { // 2秒无变化视为结束
-                            clearInterval(interval)
-                            newBotMsg.isStreaming = false
-                            if (onStreamUpdate) onStreamUpdate()
-                        }
+                        return
                     }
-                } catch (e) {}
-            }, 200)
-            // ---------- 核心修改结束 ----------
-
-            finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n${resultText}\n`)
-        } catch (e) {
-            finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n执行失败: ${e.message}\n`)
+                    newBotMsg.content += payload
+                    if (onStreamUpdate) onStreamUpdate()
+                }
+            }
         }
+    }).catch(() => {
+        newBotMsg.content = '杉汐没有回应，请稍后再试'
+        newBotMsg.isStreaming = false
+    })
 
-        botMsg.toolCallName = null
-        botMsg.toolCallDetail = ''
-    }
+    finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n${resultText}\n`)
+} catch (e) {
+    finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n执行失败: ${e.message}\n`)
+}}
 
     if (hasTool) {
         botMsg.content = finalText
