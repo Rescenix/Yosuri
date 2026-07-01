@@ -79,11 +79,16 @@ if (!localStorage.getItem('prism_session_id')) {
     }
   }
 
-  function adjustInputHeight() {
-    if (!chatInputRef.value) return
-    chatInputRef.value.style.height = 'auto'
-    chatInputRef.value.style.height = Math.min(chatInputRef.value.scrollHeight, 200) + 'px'
-  }
+ // 替换你的 adjustInputHeight 函数
+function adjustInputHeight() {
+  if (!chatInputRef.value) return;
+  const el = chatInputRef.value;
+  // 先恢复默认高度，再获取实际滚动高度（防止缩小不回弹）
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+  // ✅ 强制滚动条复位到顶部，消除光标乱飘的副作用
+  el.scrollTop = 0;
+}
 
   const { sendMessage } = useChatLogic({
     messages, userInput, sessionId,

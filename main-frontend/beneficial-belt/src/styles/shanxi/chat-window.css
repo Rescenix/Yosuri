@@ -1278,3 +1278,194 @@ min-height: 90px !important;
 .session-time {
   font-size: 13px;           /* 原 11px */
 }
+
+/* 新增：项目任务树样式 */
+.project-task-tree {
+  margin-top: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tree-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #696259;
+  border-bottom: 1px solid #e4dfd4;
+  margin-bottom: 8px;
+}
+
+.project-item, .subtask-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 6px;
+  margin: 2px 6px;
+  font-size: 13px;
+  color: #1b1a18;
+}
+
+.project-item:hover, .subtask-item:hover {
+  background: #f2ede3;
+}
+
+.project-item.active, .subtask-item.active {
+  background: #e8e3d8;
+  font-weight: 600;
+}
+
+.expand-icon {
+  margin-right: 4px;
+}
+
+.subtask-list {
+  padding-left: 28px;
+}
+
+.subtask-item {
+  font-size: 12px;
+  color: #4a4540;
+}
+
+/* 顶部栏项目面包屑 */
+.project-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1b1a18;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.project-breadcrumb:hover {
+  background: #f2ede3;
+}
+
+.breadcrumb-separator {
+  color: #a0a0a0;
+  margin: 0 4px;
+}
+
+.task-current {
+  color: #696259;
+  font-weight: 400;
+}
+
+/* 任务下拉菜单 */
+.task-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #fff;
+  border: 1px solid #e4dfd4;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  z-index: 110;
+  min-width: 200px;
+  padding: 8px 0;
+}
+
+.dropdown-project {
+  padding: 4px 0;
+}
+
+.dropdown-project-name {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1b1a18;
+  cursor: pointer;
+}
+
+.dropdown-project-name:hover {
+  background: #f2ede3;
+}
+
+.dropdown-task {
+  padding: 6px 16px 6px 44px;
+  font-size: 12px;
+  color: #4a4540;
+  cursor: pointer;
+}
+
+.dropdown-task:hover {
+  background: #f2ede3;
+}
+
+.dropdown-task.active {
+  background: #e8e3d8;
+  font-weight: 600;
+}
+
+/* 确保顶部栏相对定位以容纳下拉 */
+.chat-header {
+  position: relative;
+}
+
+/* 其余样式保持不变 */
+.input-model-btn {
+  left: 44px;
+}
+
+.model-menu {
+  position: absolute;
+  bottom: 50px;
+  left: 44px;
+  background: #fff;
+  border: 1px solid #e4dfd4;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  z-index: 100;
+  min-width: 140px;
+  overflow: hidden;
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #1b1a18;
+  transition: background 0.15s;
+}
+
+.model-option:hover {
+  background: #f2ede3;
+}
+
+.model-option.active {
+  background: #e8e3d8;
+  font-weight: 600;
+}
+.chat-body { display: flex; flex: 1; overflow: hidden; }
+
+.chat-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-content {
+  flex: 1;
+  width: auto !important;        /* 强制覆盖可能存在的 width:100% */
+  max-width: none !important;    /* 移除固定最大宽度 */
+  min-width: 0;                  /* 允许收缩 */
+  overflow: hidden;
+}
+/* 确保编辑器面板占用右侧空间，宽度自适应 */
+.chat-body > .code-editor-panel {
+  flex: 1;
+  min-width: 0;
+}

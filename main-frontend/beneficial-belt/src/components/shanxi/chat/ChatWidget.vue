@@ -227,47 +227,46 @@
               </div>
             </div>
 <div class="input-wrapper">
-  <button v-if="isLoggedIn" class="input-inner-btn input-model-btn" @click.stop="showModelMenu = !showModelMenu" title="切换模型">
+  <!-- 模型切换按钮 -->
+  <button 
+    v-if="isLoggedIn" 
+    class="input-inner-btn input-model-btn" 
+    @click.stop="showModelMenu = !showModelMenu" 
+    title="切换模型"
+  >
     <Icon :icon="currentModelIcon" width="18" color="#888" />
   </button>
-  
-  <div v-if="showModelMenu" class="model-menu">
+
+  <!-- ★★★ 新添加的下拉菜单 ★★★ -->
+  <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
     <div 
       v-for="m in modelOptions" 
-      :key="m.value" 
-      class="model-option" 
+      :key="m.value"
+      class="model-menu-item"
       :class="{ active: selectedModel === m.value }"
       @click="selectModel(m.value)"
     >
       <Icon :icon="m.icon" width="16" style="margin-right:8px" />
-      <span>{{ m.label }}</span>
+      {{ m.label }}
     </div>
   </div>
 
-  <button v-if="isLoggedIn" class="input-inner-btn input-left-btn" @click="$refs.imageInput.click()" title="上传图片">
-    <Icon icon="heroicons:photo-20-solid" width="18" color="#888" />
+  <!-- 核心输入框 -->
+  <textarea
+    ref="chatInputRef"
+    class="chat-input"
+    v-model="userInput"
+    placeholder="输入你的问题..."
+    @keypress.enter="sendMessage"
+    @input="adjustInputHeight"
+    rows="1"
+  ></textarea>
+
+  <!-- 发送按钮 -->
+  <button v-if="userInput.trim()" class="input-inner-btn input-right-btn input-send-btn" @click="sendMessage">
+    <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
   </button>
-
-              <textarea
-                ref="chatInputRef"
-                class="chat-input"
-                v-model="userInput"
-                placeholder="输入你的问题..."
-                @keypress.enter="sendMessage"
-                @input="adjustInputHeight"
-                rows="1"
-              ></textarea>
-
-              <div class="inline-status-bar" v-if="isLoggedIn">
-                <span class="status-item">Token: {{ lastTokenUsage || '--' }}</span>
-                <span class="status-item">延迟: {{ lastLatency || '--' }}ms</span>
-                <span class="status-item">余额: {{ balance || '--' }}</span>
-              </div>
-
-              <button v-if="userInput.trim()" class="input-inner-btn input-right-btn input-send-btn" @click="sendMessage">
-                <Icon icon="heroicons:paper-airplane-20-solid" width="18" color="#fff" />
-              </button>
-            </div>
+</div>
           </div>
    </div>
 
@@ -413,6 +412,10 @@ async function fetchFileTree() {
 
 onMounted(() => {
   fetchFileTree()
+   document.addEventListener('click', () => {
+    showTaskDropdown.value = false;
+    showModelMenu.value = false; // 加上这一行
+  });
 })
 const selectedFile = ref(null)
 
@@ -592,196 +595,116 @@ watch(messages, () => {
 
 <style scoped>
 @import '../../../styles/shanxi/chat-window.css';
-
-/* 新增：项目任务树样式 */
-.project-task-tree {
-  margin-top: 8px;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.tree-header {
+/* ==================== 输入框容器（彻底改成 Flex 布局） ==================== */
+/* ==================== 输入框容器 ==================== */
+.input-wrapper {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #696259;
-  border-bottom: 1px solid #e4dfd4;
-  margin-bottom: 8px;
-}
-
-.project-item, .subtask-item {
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: background 0.15s;
-  border-radius: 6px;
-  margin: 2px 6px;
-  font-size: 13px;
-  color: #1b1a18;
-}
-
-.project-item:hover, .subtask-item:hover {
-  background: #f2ede3;
-}
-
-.project-item.active, .subtask-item.active {
-  background: #e8e3d8;
-  font-weight: 600;
-}
-
-.expand-icon {
-  margin-right: 4px;
-}
-
-.subtask-list {
-  padding-left: 28px;
-}
-
-.subtask-item {
-  font-size: 12px;
-  color: #4a4540;
-}
-
-/* 顶部栏项目面包屑 */
-.project-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #1b1a18;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.15s;
-}
-
-.project-breadcrumb:hover {
-  background: #f2ede3;
-}
-
-.breadcrumb-separator {
-  color: #a0a0a0;
-  margin: 0 4px;
-}
-
-.task-current {
-  color: #696259;
-  font-weight: 400;
-}
-
-/* 任务下拉菜单 */
-.task-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  background: #fff;
-  border: 1px solid #e4dfd4;
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-  z-index: 110;
-  min-width: 200px;
-  padding: 8px 0;
-}
-
-.dropdown-project {
-  padding: 4px 0;
-}
-
-.dropdown-project-name {
-  display: flex;
-  align-items: center;
-  padding: 6px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #1b1a18;
-  cursor: pointer;
-}
-
-.dropdown-project-name:hover {
-  background: #f2ede3;
-}
-
-.dropdown-task {
-  padding: 6px 16px 6px 44px;
-  font-size: 12px;
-  color: #4a4540;
-  cursor: pointer;
-}
-
-.dropdown-task:hover {
-  background: #f2ede3;
-}
-
-.dropdown-task.active {
-  background: #e8e3d8;
-  font-weight: 600;
-}
-
-/* 确保顶部栏相对定位以容纳下拉 */
-.chat-header {
+  gap: 4px;                  /* 保留极小的间隙，让图标和文字有呼吸感 */
+  padding: 6px 12px;         /* 整体内边距 */
+  border: 1px solid #d4cfc4;
+  border-radius: 24px;
+  background: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
   position: relative;
+  transition: border-color 0.2s;
+}
+.input-wrapper:focus-within {
+  border-color: #c96442;
 }
 
-/* 其余样式保持不变 */
-.input-model-btn {
-  left: 44px;
-}
-
-.model-menu {
-  position: absolute;
-  bottom: 50px;
-  left: 44px;
-  background: #fff;
-  border: 1px solid #e4dfd4;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-  z-index: 100;
-  min-width: 140px;
-  overflow: hidden;
-}
-
-.model-option {
+/* ==================== 按钮图标 ==================== */
+.input-inner-btn {
+  margin-left: -5%;
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  justify-content: center;
+  background: transparent;
+  border: none;
   cursor: pointer;
-  font-size: 13px;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #888;
+  border-radius: 50%;
+  transition: background 0.2s;
+  z-index: 10;               /* 确保按钮在输入框之上 */
+}
+.input-inner-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* 发送按钮 */
+.input-send-btn {
+  width: 32px;
+  height: 32px;
+  background: #c96442;
+  color: #fff;
+}
+.input-send-btn:hover {
+  background: #b85737;
+}
+
+/* ==================== 核心文本输入 ==================== */
+.chat-input {
+  margin-left: 1%;
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 15px 0 !important;  /* ✅ 左侧 padding 归零，占位符紧贴图标 */
+  resize: none;
+  min-height: 44px;
+  max-height: 150px;
+  line-height: 24px;
+  font-size: 15px;
   color: #1b1a18;
+  font-family: inherit;
+  box-sizing: border-box;
+  overflow-y: hidden;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  position: relative;
+  z-index: 1;                 /* 输入框在底层，让 z-index:10 的按钮可以点击 */
+}
+.chat-input::-webkit-scrollbar {
+  display: none;
+}
+.chat-input::placeholder {
+  color: #a9a9a9;
+  font-style: italic;
+}
+
+/* ==================== 模型下拉菜单 ==================== */
+.model-menu-dropdown {
+  position: absolute;
+  bottom: 56px;         /* 定位到输入框上方 */
+  left: 6px;            /* 与地球图标左对齐 */
+  background: #ffffff;
+  border: 1px solid #d4cfc4;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 6px 0;
+  min-width: 140px;
+  z-index: 9999;        /* 必须浮在最上层 */
+}
+
+.model-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
   transition: background 0.15s;
 }
-
-.model-option:hover {
-  background: #f2ede3;
+.model-menu-item:hover {
+  background: #f5f2ec;
 }
-
-.model-option.active {
-  background: #e8e3d8;
-  font-weight: 600;
-}
-.chat-body { display: flex; flex: 1; overflow: hidden; }
-
-.chat-body {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.chat-content {
-  flex: 1;
-  width: auto !important;        /* 强制覆盖可能存在的 width:100% */
-  max-width: none !important;    /* 移除固定最大宽度 */
-  min-width: 0;                  /* 允许收缩 */
-  overflow: hidden;
-}
-/* 确保编辑器面板占用右侧空间，宽度自适应 */
-.chat-body > .code-editor-panel {
-  flex: 1;
-  min-width: 0;
+.model-menu-item.active {
+  background: #f0e4d7;
+  font-weight: 500;
 }
 </style>
 
