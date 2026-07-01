@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -239,7 +241,10 @@ func fallbackKeywordCheck(msg string) bool {
 	return false
 }
 
-// fetchBaseMemories 从 PrismD 拉取所有记忆，返回画像文本
+// maxBaseMemories 限制注入系统提示词的 Base 记忆条数，避免上下文爆炸
+const maxBaseMemories = 5
+
+// fetchBaseMemories 从 PrismD 拉取 UserBase 簇的记忆，按 Energy 取 Top N 返回画像文本
 func (h *ChatHandler) fetchBaseMemories() string {
 	fmt.Println("📡 请求 PrismD STATS FULL...")
 	resp, err := http.Post("http://localhost:5666", "text/plain", strings.NewReader("STATS FULL"))
@@ -257,19 +262,50 @@ func (h *ChatHandler) fetchBaseMemories() string {
 		return ""
 	}
 
-	lines := strings.Split(respText, "\n")
-	var memories []string
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Content: ") {
-			content := strings.TrimPrefix(line, "Content: ")
-			content = strings.TrimSpace(content)
-			if content != "" {
-				memories = append(memories, "• "+content)
+	// STATS FULL 每条记忆占 5 行：ID 头 / Role / Content / Energy|Emotion|...|Cluster / 分隔线，
+	// 需要把 Content 和紧随其后的 Energy|Cluster 行配成一对，才能按 Cluster 过滤、按 Energy 排序。
+	type candidate struct {
+		content string
+		energy  float64
+	}
+	var candidates []candidate
+	var pendingContent string
+	for _, line := range strings.Split(respText, "\n") {
+		switch {
+		case strings.HasPrefix(line, "Content: "):
+			pendingContent = strings.TrimSpace(strings.TrimPrefix(line, "Content: "))
+		case strings.HasPrefix(line, "Energy: "):
+			if pendingContent == "" {
+				continue
 			}
+			cluster := ""
+			energy := 0.0
+			for _, field := range strings.Split(line, "|") {
+				field = strings.TrimSpace(field)
+				if v, ok := strings.CutPrefix(field, "Energy: "); ok {
+					energy, _ = strconv.ParseFloat(strings.TrimSpace(v), 64)
+				} else if v, ok := strings.CutPrefix(field, "Cluster: "); ok {
+					cluster = strings.TrimSpace(v)
+				}
+			}
+			if cluster == "UserBase" {
+				candidates = append(candidates, candidate{content: pendingContent, energy: energy})
+			}
+			pendingContent = ""
 		}
 	}
 
-	fmt.Printf("🧠 提取到 %d 条记忆\n", len(memories))
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].energy > candidates[j].energy })
+	if len(candidates) > maxBaseMemories {
+		candidates = candidates[:maxBaseMemories]
+	}
+
+	var memories []string
+	for _, cand := range candidates {
+		memories = append(memories, "• "+cand.content)
+	}
+
+	fmt.Printf("🧠 提取到 %d 条记忆（Top %d，Cluster=UserBase）\n", len(memories), maxBaseMemories)
 	return strings.Join(memories, "\n")
 }
 

@@ -12,7 +12,11 @@
         :icon="node.expanded ? 'mdi:folder-open-outline' : 'mdi:folder-outline'"
         width="16" class="node-icon"
       />
-      <Icon v-else icon="mdi:file-outline" width="16" class="node-icon" />
+      <span
+        v-else
+        class="file-badge"
+        :style="{ background: fileBadge(node.name).bg, color: fileBadge(node.name).color }"
+      >{{ fileBadge(node.name).label }}</span>
       <span class="node-name" :title="node.name">{{ node.name }}</span>
     </div>
 
@@ -58,6 +62,22 @@ const emit = defineEmits(['select', 'toggle'])
 const showMenu = ref(false)
 const menuX = ref(0)
 const menuY = ref(0)
+
+const FILE_BADGES = {
+  js: { bg: '#f4d35e', color: '#4a3b06', label: 'JS' },
+  json: { bg: '#eab308', color: '#3d2b06', label: '{}' },
+  vue: { bg: '#42b883', color: '#ffffff', label: 'V' },
+  py: { bg: '#4a9d6d', color: '#ffffff', label: 'PY' },
+  ps1: { bg: '#5b8def', color: '#ffffff', label: 'PS' },
+  txt: { bg: '#9a958a', color: '#ffffff', label: '≡' }
+}
+const DEFAULT_BADGE = { bg: '#9a958a', color: '#ffffff', label: '•' }
+
+function fileBadge(name) {
+  if (/^LICENSE$/i.test(name)) return DEFAULT_BADGE
+  const ext = name.split('.').pop()?.toLowerCase()
+  return FILE_BADGES[ext] || DEFAULT_BADGE
+}
 
 function handleClick() {
   if (props.node.type === 'folder') {
@@ -119,6 +139,18 @@ onUnmounted(() => {
 .tree-node:hover { background: #f2ede3; }
 .tree-node.active { background: #e8e3d8; font-weight: 600; }
 .node-icon { margin-right: 6px; flex-shrink: 0; }
+.file-badge {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border-radius: 4px;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
 .node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .file-context-menu {

@@ -1,17 +1,26 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/token"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+
+	"backend/internal/prismd"
 )
+
+var prismdClient = prismd.NewClient("localhost:5666")
 
 type ToolCall struct {
 	ID       string       `json:"id"`
@@ -182,53 +191,52 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 	switch call.Function.Name {
 
 	case "search_memory":
-		query, _ := args["query"].(string)
-		if query == "" {
-			resultContent = "搜索记忆需要提供查询内容"
-			failed = true
-			break
+		mode, _ := args["mode"].(string)
+		if mode == "" {
+			mode = "summary"
 		}
 
-		// 直接通过 HTTP 调用 PrismD 的 LOOM 原语
-		resp, err := http.Post("http://localhost:5666", "text/plain", strings.NewReader("LOOM "+query))
-		if err != nil {
-			resultContent = fmt.Sprintf("记忆检索失败: %v", err)
-			failed = true
-			break
-		}
-		defer resp.Body.Close()
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		responseText := string(bodyBytes)
-
-		if strings.HasPrefix(responseText, "OK") {
-			// 解析 PrismD 返回的 LOOM 结果，提取记忆内容
-			lines := strings.Split(responseText, "\n")
-			var memories []string
-			dataStart := false
-			for _, line := range lines {
-				if strings.HasPrefix(line, "OK") {
-					dataStart = true
-					continue
-				}
-				if !dataStart || strings.HasPrefix(line, "ID") {
-					continue
-				}
-				cols := strings.Split(line, "\t")
-				if len(cols) >= 3 {
-					memories = append(memories, fmt.Sprintf("[%s] %s", cols[1], cols[2]))
-				}
+		if mode == "summary" {
+			query, _ := args["query"].(string)
+			if query == "" {
+				resultContent = "搜索记忆需要提供查询内容"
+				failed = true
+				break
 			}
-			if len(memories) == 0 {
-				resultContent = "没有找到相关记忆"
-			} else {
-				resultContent = strings.Join(memories, "\n")
+
+			responseText, err := prismdClient.Loom(query)
+			if err != nil {
+				resultContent = fmt.Sprintf("记忆检索失败: %v", err)
+				failed = true
+				break
 			}
+
+			resultContent = formatMemorySummary(query, responseText)
+			fmt.Printf("🧠 工具调用: 搜索记忆(summary) - %s\n", query)
+
+		} else if mode == "detail" {
+			idFloat, ok := args["id"].(float64)
+			if !ok {
+				resultContent = "detail 模式需要提供有效的 id 参数"
+				failed = true
+				break
+			}
+			id := uint64(idFloat)
+
+			responseText, err := prismdClient.Loom(strconv.FormatUint(id, 10))
+			if err != nil {
+				resultContent = fmt.Sprintf("记忆检索失败: %v", err)
+				failed = true
+				break
+			}
+
+			resultContent, failed = formatMemoryDetail(id, responseText)
+			fmt.Printf("🧠 工具调用: 搜索记忆(detail) - id=%d\n", id)
+
 		} else {
-			resultContent = fmt.Sprintf("记忆检索失败: %s", responseText)
+			resultContent = "mode 参数无效，仅支持 summary 或 detail"
 			failed = true
 		}
-		fmt.Printf("🧠 工具调用: 搜索记忆 - %s\n", query)
 
 	case "codegraph_query":
 		subcommand, _ := args["subcommand"].(string)
@@ -264,6 +272,25 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		fmt.Printf("🧬 工具调用: 代码知识图谱 - %s (失败: %v)\n", query, failed)
 	case "read_file":
 		filePath, _ := args["path"].(string)
+		mode, _ := args["mode"].(string)
+		if mode == "" {
+			mode = "full"
+		}
+		startLine, hasStart := argToInt(args["start_line"])
+		endLine, hasEnd := argToInt(args["end_line"])
+		hasRange := hasStart || hasEnd
+
+		if mode != "full" && mode != "outline" {
+			resultContent = "mode 参数无效，仅支持 full 或 outline"
+			failed = true
+			break
+		}
+		if mode == "outline" && hasRange {
+			resultContent = "参数冲突：outline 模式不能与 start_line/end_line 同时使用"
+			failed = true
+			break
+		}
+
 		var fullPath string
 		if filepath.IsAbs(filePath) {
 			fullPath = filepath.Clean(filePath)
@@ -287,11 +314,15 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			if err != nil {
 				resultContent = fmt.Sprintf("读取文件失败: %v", err)
 				failed = true
+			} else if mode == "outline" {
+				resultContent = buildFileOutline(fullPath, data)
+			} else if hasRange {
+				resultContent = extractLineRange(data, startLine, hasStart, endLine, hasEnd)
 			} else {
 				resultContent = string(data)
 			}
 		}
-		fmt.Printf("📂 工具调用: 读取文件 - %s\n", filePath)
+		fmt.Printf("📂 工具调用: 读取文件 - %s (mode=%s, range=%v)\n", filePath, mode, hasRange)
 
 	case "write_file":
 		filePath, _ := args["path"].(string)
@@ -487,4 +518,173 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		Content:    resultContent,
 		Failed:     failed,
 	}, nil
+}
+
+// formatMemorySummary 把 PrismD LOOM <query> 的表格响应整理成给模型看的摘要列表。
+// 表格里除 Content 外的列本身不含空白字符，所以用 strings.Fields 从两端剥离，
+// 中间剩下的 token 拼回去就是 Content —— 避免按字节偏移量切列在中文内容下错位。
+func formatMemorySummary(query, responseText string) string {
+	if strings.HasPrefix(strings.TrimSpace(responseText), "OK 0 results") {
+		return fmt.Sprintf("没有找到与「%s」相关的记忆", query)
+	}
+
+	var rows []string
+	for _, line := range strings.Split(responseText, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || isLoomTableNoiseLine(trimmed) {
+			continue
+		}
+
+		fields := strings.Fields(trimmed)
+		if len(fields) < 6 { // ID Role [Content...] Energy Score Emotion Inten
+			continue
+		}
+		id := fields[0]
+		role := fields[1]
+		tail := fields[len(fields)-4:]
+		energy, score := tail[0], tail[1]
+		content := strings.Join(fields[2:len(fields)-4], " ")
+
+		rows = append(rows, fmt.Sprintf("[ID:%s] role=%s energy=%s score=%s content=%s", id, role, energy, score, content))
+	}
+
+	if len(rows) == 0 {
+		return fmt.Sprintf("没有找到与「%s」相关的记忆", query)
+	}
+
+	rows = append(rows, "（如需查看某条记忆的完整内容，调用 search_memory(mode=\"detail\", id=<对应ID>)）")
+	return strings.Join(rows, "\n")
+}
+
+// isLoomTableNoiseLine 判断该行是否为 LOOM 表格里的非数据行（表头/分隔线/统计行等）。
+func isLoomTableNoiseLine(trimmed string) bool {
+	if strings.HasPrefix(trimmed, "OK") || strings.HasPrefix(trimmed, "Query:") || strings.HasPrefix(trimmed, "ID ") {
+		return true
+	}
+	if strings.HasSuffix(trimmed, "results") {
+		return true
+	}
+	if strings.Count(trimmed, "-") == len(trimmed) {
+		return true
+	}
+	return false
+}
+
+// formatMemoryDetail 把 PrismD LOOM <id> 的响应整理成给模型看的完整记忆信息。
+func formatMemoryDetail(id uint64, responseText string) (string, bool) {
+	trimmed := strings.TrimSpace(responseText)
+	if strings.HasPrefix(trimmed, "ERROR") {
+		return fmt.Sprintf("未找到 ID 为 %d 的记忆，可能已被清理或 ID 有误", id), true
+	}
+	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "OK"))
+	if trimmed == "" {
+		return fmt.Sprintf("未找到 ID 为 %d 的记忆，可能已被清理或 ID 有误", id), true
+	}
+	return trimmed, false
+}
+
+// argToInt 将工具参数（JSON 数字解出来是 float64，部分模型会传字符串）转换为 int。
+func argToInt(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case string:
+		if i, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// extractLineRange 返回 [start, end] 闭区间（1-indexed）的行，越界自动 clamp，每行带 "行号:" 前缀。
+func extractLineRange(data []byte, start int, hasStart bool, end int, hasEnd bool) string {
+	lines := strings.Split(string(data), "\n")
+	total := len(lines)
+	if !hasStart || start < 1 {
+		start = 1
+	}
+	if !hasEnd || end > total {
+		end = total
+	}
+	if start > total {
+		return fmt.Sprintf("(文件共 %d 行，start_line=%d 已超出范围)\n", total, start)
+	}
+	if end < start {
+		end = start
+	}
+	var sb strings.Builder
+	for i := start; i <= end; i++ {
+		sb.WriteString(fmt.Sprintf("%d:%s\n", i, strings.TrimRight(lines[i-1], "\r")))
+	}
+	return sb.String()
+}
+
+// buildFileOutline 返回文件的签名骨架：Go 文件走 AST，其余（含 AST 解析失败）走正则。
+func buildFileOutline(path string, data []byte) string {
+	if strings.ToLower(filepath.Ext(path)) == ".go" {
+		if out := goOutline(path, data); out != "" {
+			return out
+		}
+	}
+	return regexOutline(data)
+}
+
+// 关键字后必须跟空白 + 标识符或 '('（Go 方法接收者），否则会误伤 HTML 的 class="..."、type="..." 等属性行。
+var outlineLinePattern = regexp.MustCompile(`^[ \t]*(export\s+(default\s+)?)?(async\s+)?(function|func|class|def|interface|type|struct|enum)\s+[A-Za-z_$(]`)
+
+// regexOutline 逐行匹配常见声明关键字（func/class/def/export/interface/type/struct/enum 等），返回带行号的签名列表。
+func regexOutline(data []byte) string {
+	lines := strings.Split(string(data), "\n")
+	var sb strings.Builder
+	for i, line := range lines {
+		line = strings.TrimRight(line, "\r")
+		if outlineLinePattern.MatchString(line) {
+			sb.WriteString(fmt.Sprintf("L%d  %s\n", i+1, strings.TrimSpace(line)))
+		}
+	}
+	if sb.Len() == 0 {
+		return "(未匹配到函数/类/导出等签名)\n"
+	}
+	return sb.String()
+}
+
+// goOutline 用 go/parser 提取顶层函数与类型声明的签名（含行号）；解析失败返回空串以便回退到正则。
+func goOutline(path string, data []byte) string {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, data, parser.SkipObjectResolution)
+	if err != nil {
+		return ""
+	}
+	var sb strings.Builder
+	for _, decl := range f.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			line := fset.Position(d.Pos()).Line
+			sb.WriteString(fmt.Sprintf("L%d  %s\n", line, goFuncSignature(fset, d)))
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				if ts, ok := spec.(*ast.TypeSpec); ok {
+					line := fset.Position(ts.Pos()).Line
+					sb.WriteString(fmt.Sprintf("L%d  type %s\n", line, ts.Name.Name))
+				}
+			}
+		}
+	}
+	if sb.Len() == 0 {
+		return "(未发现顶层函数或类型声明)\n"
+	}
+	return sb.String()
+}
+
+// goFuncSignature 打印去掉函数体后的函数声明，折叠为单行签名。
+func goFuncSignature(fset *token.FileSet, d *ast.FuncDecl) string {
+	body := d.Body
+	d.Body = nil
+	var buf bytes.Buffer
+	err := printer.Fprint(&buf, fset, d)
+	d.Body = body
+	if err != nil {
+		return "func " + d.Name.Name
+	}
+	return strings.Join(strings.Fields(buf.String()), " ")
 }

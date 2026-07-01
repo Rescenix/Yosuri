@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -53,13 +52,26 @@ var BaseTools = []ToolDefinition{
 		Type: "function",
 		Function: ToolFunctionDetail{
 			Name:        "read_file",
-			Description: "读取项目中的指定文件内容，返回完整文本。",
+			Description: "读取项目中的指定文件。默认返回完整文本；可选 start_line/end_line 只读某段行（1-indexed 闭区间），或 mode=\"outline\" 只看函数/类/导出的签名骨架（不含函数体，每行带行号）。建议先用 outline 看结构、再用行范围拉正文，避免整文件塞入上下文。行范围与 outline 互斥。",
 			Parameters: ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
 					"path": {
 						Type:        "string",
 						Description: "文件路径，相对于项目根目录（如 'internal/ai/core/tools.go'）",
+					},
+					"start_line": {
+						Type:        "integer",
+						Description: "可选，起始行号（1-indexed，闭区间）。越界自动裁剪。不能与 mode=outline 同用。",
+					},
+					"end_line": {
+						Type:        "integer",
+						Description: "可选，结束行号（1-indexed，闭区间）。越界自动裁剪到文件末行。不能与 mode=outline 同用。",
+					},
+					"mode": {
+						Type:        "string",
+						Description: "可选，读取模式：full（默认，返回正文）或 outline（只返回签名骨架，含行号）。outline 不能与 start_line/end_line 同用。",
+						Enum:        []string{"full", "outline"},
 					},
 				},
 				Required: []string{"path"},
@@ -132,6 +144,32 @@ var BaseTools = []ToolDefinition{
 	{
 		Type: "function",
 		Function: ToolFunctionDetail{
+			Name:        "search_memory",
+			Description: "检索长期记忆，分两阶段使用：默认 summary 模式，传 query 按语义检索，返回相关记忆的摘要列表（含 ID），不含完整正文，用来判断哪些值得深挖；需要看某条记忆完整内容时，用摘要里给出的 ID 再调用一次，传 mode=\"detail\" 和 id=<那个ID>。不要跳过 summary 直接用 detail 盲猜 ID。",
+			Parameters: ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"query": {
+						Type:        "string",
+						Description: "summary 模式下的检索词或语义描述（如 '用户的技术偏好'）。detail 模式下忽略此参数。",
+					},
+					"mode": {
+						Type:        "string",
+						Description: "检索模式：summary 返回摘要列表（默认，不传时按 summary 处理），detail 按 id 返回完整内容",
+						Enum:        []string{"summary", "detail"},
+					},
+					"id": {
+						Type:        "integer",
+						Description: "detail 模式下要展开的记忆 ID。summary 模式下忽略此参数。",
+					},
+				},
+				Required: []string{},
+			},
+		},
+	},
+	{
+		Type: "function",
+		Function: ToolFunctionDetail{
 			Name:        "clean_memories",
 			Description: "清理冗余或过时的记忆，优化记忆库,禁止主动调用。",
 			Parameters: ToolParameters{
@@ -187,11 +225,8 @@ func unescapeToolMarker(raw string) string {
 	return raw
 }
 
-// extractToolArgs 从 "[TOOL:xxx key="val" ...]" 中提取工具名和参数
 func ExtractToolArgs(marker string) (string, map[string]string, error) {
-	// 还原 DS 转义
-	marker = unescapeToolMarker(marker)
-
+	// 不再做任何 unescape，前端已经给的是干净的标记
 	if !strings.HasPrefix(marker, "[TOOL:") || !strings.HasSuffix(marker, "]") {
 		return "", nil, fmt.Errorf("not a tool marker")
 	}
@@ -200,41 +235,50 @@ func ExtractToolArgs(marker string) (string, map[string]string, error) {
 	parts := strings.SplitN(inner, " ", 2)
 	toolName := parts[0]
 	args := make(map[string]string)
+
 	if len(parts) < 2 {
 		return toolName, args, nil
 	}
 
-	// 对于 execute_command，单独提取 command 参数
-	if toolName == "execute_command" {
-		// 找到 command=" 的位置
-		cmdStart := strings.Index(parts[1], `command="`)
-		if cmdStart == -1 {
-			return toolName, nil, fmt.Errorf("missing command parameter")
+	remainder := parts[1] // 例如：path="C:\Pro2026\re0\.gitignore"
+
+	// 遍历所有 key="value" 对
+	i := 0
+	for i < len(remainder) {
+		// 跳过空格
+		for i < len(remainder) && remainder[i] == ' ' {
+			i++
 		}
-		// 从 command=" 之后开始截取
-		cmdRemainder := parts[1][cmdStart+len(`command="`):]
-		// 命令的结束是标记末尾之前的一个双引号，这里已经是 inner 里，所以结束引号在末尾之前
-		// 因为标记格式是 [TOOL:execute_command command="..."]，内层 inner 是 execute_command command="..."]
-		// 所以直接截取到倒数第二个字符（忽略尾随的 "]）
-		// 正确做法：找到最后一个双引号（即命令的闭合引号），但不能包括末尾可能多出的引号。
-		// 由于我们已经做了 unescape，标记结尾应该是 ...command="dir "C:\...""] 这种形式。
-		// 简单方案：从后往前找第一个双引号，它就是命令参数的结束引号。
-		lastQuote := strings.LastIndex(cmdRemainder, `"`)
-		if lastQuote > 0 {
-			args["command"] = cmdRemainder[:lastQuote]
-		} else {
-			args["command"] = cmdRemainder
+		if i >= len(remainder) {
+			break
 		}
-		return toolName, args, nil
+
+		// 找到等号
+		eqIdx := strings.Index(remainder[i:], "=")
+		if eqIdx == -1 {
+			break
+		}
+		eqIdx += i
+		key := strings.TrimSpace(remainder[i:eqIdx])
+		i = eqIdx + 1 // 移到等号后
+
+		// 值必须由引号包围
+		if i >= len(remainder) || remainder[i] != '"' {
+			return "", nil, fmt.Errorf("value must start with quote")
+		}
+		i++ // 跳过开始的引号
+
+		// 找到闭合引号（最后一个引号）
+		endQuote := strings.LastIndex(remainder[i:], `"`)
+		if endQuote == -1 {
+			return "", nil, fmt.Errorf("unclosed quote")
+		}
+		value := remainder[i : i+endQuote]
+		// 只将内部的 \" 还原为 "，其他保持不变
+		value = strings.ReplaceAll(value, `\"`, `"`)
+		args[key] = value
+		i = i + endQuote + 1 // 移到闭合引号之后
 	}
 
-	// 其他工具用简单正则
-	re := regexp.MustCompile(`(\w+)="([^"]*)"`)
-	matches := re.FindAllStringSubmatch(parts[1], -1)
-	for _, m := range matches {
-		if len(m) == 3 {
-			args[m[1]] = m[2]
-		}
-	}
 	return toolName, args, nil
 }

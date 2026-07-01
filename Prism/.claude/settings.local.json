@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build *)",
+      "Bash(mkdir -p \"/c/Users/UNDERC~1/AppData/Local/Temp/claude/C--Pro2026-re0-Prism/492a861e-72ca-4b23-8562-7824a68449ce/scratchpad\" 2>/dev/null; echo ok)"
+    ]
+  }
+}

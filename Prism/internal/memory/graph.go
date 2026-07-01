@@ -272,6 +272,24 @@ func (g *Graph) Nodes() map[NodeID]*MemoryNode {
 	return cpy
 }
 
+// NodesByTime 返回按创建时间倒序排列的最近 n 个节点
+func (g *Graph) NodesByTime(n int) []*MemoryNode {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	all := make([]*MemoryNode, 0, len(g.nodes))
+	for _, node := range g.nodes {
+		all = append(all, node)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].CreatedAt.After(all[j].CreatedAt)
+	})
+	if n > len(all) {
+		n = len(all)
+	}
+	return all[:n]
+}
+
 // Synapses 返回所有突触的副本
 func (g *Graph) Synapses() map[SynapseID]*Synapse {
 	g.mu.RLock()

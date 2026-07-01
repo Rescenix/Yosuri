@@ -58,11 +58,11 @@
 }
 
 .markdown-body pre {
+  position: relative;
   background: #f7f5f1;
   border: 1px solid #e6dfd3;
   border-radius: 14px;
   padding: 14px 16px;
-  overflow-x: auto;
   margin: 0.9em 0;
 }
 
@@ -72,6 +72,8 @@
   color: inherit;
   font-size: 13px;
   line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .markdown-body table {

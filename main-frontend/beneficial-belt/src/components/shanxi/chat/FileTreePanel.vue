@@ -1,101 +1,169 @@
 <template>
-  <aside class="file-tree-panel">
-    <!-- Header -->
-    <div class="file-tree-header">
-      <span>📁 {{ projectName || '项目' }}</span>
-    </div>
-
-    <!-- File Tree -->
-    <div class="file-tree-body">
-      <FileTreeNode
-        v-for="node in files"
-        :key="node.name"
-        :node="node"
-        :depth="0"
-        :selected="selected"
-        @select="$emit('select', $event)"
-        @toggle="$emit('toggle', $event)"
-      />
-    </div>
-
-    <!-- Git Panel -->
-    <div class="git-panel">
-      <div class="git-title">Git</div>
-
-      <div class="git-branch">
-        <Icon icon="mdi:source-branch" width="14" />
-        <span class="branch-name">{{ gitStatus.branch || '...' }}</span>
-        <span class="branch-dot"></span>
-      </div>
-
-      <div class="git-count">
-        {{ (gitStatus.modified?.length || 0) + (gitStatus.untracked?.length || 0) }} changes
-      </div>
-
-      <div class="git-changes">
-        <div class="change-item" v-for="f in (gitStatus.modified || [])" :key="'m-'+f">
-          <span class="change-icon modified">M</span>
-          <span class="change-file" :title="f">{{ getFileName(f) }}</span>
-        </div>
-        <div class="change-item" v-for="f in (gitStatus.untracked || [])" :key="'u-'+f">
-          <span class="change-icon added">U</span>
-        <span class="change-file" :title="f">{{ getFileName(f) }}</span>
-        </div>
-      </div>
-
-      <div class="commit-input-area">
-        <textarea
-          v-model="commitMsg"
-          class="commit-textarea"
-          placeholder="Commit message (支持多行)"
-          rows="3"
-        ></textarea>
-                <button class="commit-more-btn" @click.stop="toggleMore" title="更多操作">
-          <Icon icon="mdi:chevron-down" width="16" />
+  <aside class="sidebar-panel">
+    <!-- Files -->
+    <section class="accordion-section">
+      <div class="section-header" @click="toggleSection('files')">
+        <Icon icon="mdi:chevron-right" width="14" class="chevron" :class="{ rotated: isOpen('files') }" />
+        <span class="section-label">FILES</span>
+        <button class="section-more-btn" title="刷新" @click.stop="$emit('refresh-tree')">
+          <Icon icon="mdi:dots-horizontal" width="14" />
         </button>
-
-        <!-- ★ 悬浮菜单：绝对定位在按钮下方 -->
-         <div v-if="showMore" class="floating-menu" @click.stop>
-          <button class="git-btn" @click="gitAddAll">Add All</button>
-          <button class="git-btn" @click="gitPush">Push</button>
+      </div>
+      <div class="section-body-wrap" :class="{ expanded: isOpen('files') }">
+        <div class="section-body">
+          <div class="root-row" @click="rootExpanded = !rootExpanded">
+            <Icon
+              :icon="rootExpanded ? 'mdi:folder-open-outline' : 'mdi:folder-outline'"
+              width="16" style="color:#f59e0b; margin-right:6px; flex-shrink:0"
+            />
+            <span class="root-name">{{ projectName || '项目' }}</span>
+          </div>
+          <div v-if="rootExpanded" class="tree-body">
+            <FileTreeNode
+              v-for="node in files"
+              :key="node.name"
+              :node="node"
+              :depth="0"
+              :selected="selected"
+              @select="$emit('select', $event)"
+              @toggle="$emit('toggle', $event)"
+            />
+          </div>
         </div>
       </div>
+    </section>
 
-      <!-- Commit 按钮 / 操作反馈（同一位置，互斥显示） -->
-      <div v-if="actionFeedback.show" class="action-feedback" :class="actionFeedback.type">
-        {{ actionFeedback.message }}
+    <!-- Git -->
+    <section class="accordion-section">
+      <div class="section-header" @click="toggleSection('git')">
+        <Icon icon="mdi:chevron-right" width="14" class="chevron" :class="{ rotated: isOpen('git') }" />
+        <span class="section-label">GIT</span>
+        <span v-if="gitChangeCount > 0" class="section-badge">{{ gitChangeCount }}</span>
       </div>
-      <button v-else class="commit-main-btn" @click="gitCommit" :disabled="!commitMsg.trim()">
-        Commit
-      </button>
-  
+      <div class="section-body-wrap" :class="{ expanded: isOpen('git') }">
+        <div class="section-body git-body">
+          <div class="git-branch-row">
+            <span class="branch-name">{{ gitStatus.branch || '...' }}</span>
+            <span class="branch-dot"></span>
+          </div>
 
-    </div>
- 
+          <div class="git-changes">
+            <div class="change-item" v-for="f in (gitStatus.modified || [])" :key="'m-' + f">
+              <span class="change-icon modified">M</span>
+              <span class="change-file" :title="f">{{ getFileName(f) }}</span>
+            </div>
+            <div class="change-item" v-for="f in (gitStatus.untracked || [])" :key="'u-' + f">
+              <span class="change-icon added">U</span>
+              <span class="change-file" :title="f">{{ getFileName(f) }}</span>
+            </div>
+            <div v-if="gitChangeCount === 0" class="clean-msg">工作区干净</div>
+          </div>
+
+          <div class="commit-input-area">
+            <textarea
+              v-model="commitMsg"
+              class="commit-textarea"
+              placeholder="Commit message (支持多行)"
+              rows="3"
+            ></textarea>
+            <button class="commit-more-btn" @click.stop="toggleMore" title="更多操作">
+              <Icon icon="mdi:chevron-down" width="16" />
+            </button>
+            <div v-if="showMore" class="floating-menu" @click.stop>
+              <button class="git-btn" @click="gitAddAll">Add All</button>
+              <button class="git-btn" @click="gitPush">Push</button>
+            </div>
+          </div>
+
+          <div v-if="actionFeedback.show" class="action-feedback" :class="actionFeedback.type">
+            {{ actionFeedback.message }}
+          </div>
+          <button v-else class="commit-main-btn" @click="gitCommit" :disabled="!commitMsg.trim()">
+            Commit
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pinned -->
+    <section class="accordion-section" v-if="pinnedFiles.length">
+      <div class="section-header" @click="toggleSection('pinned')">
+        <Icon icon="mdi:chevron-right" width="14" class="chevron" :class="{ rotated: isOpen('pinned') }" />
+        <Icon icon="mdi:pin-outline" width="13" style="margin-right:4px; opacity:.75" />
+        <span class="section-label">PINNED</span>
+        <span class="section-badge">{{ pinnedFiles.length }}</span>
+      </div>
+      <div class="section-body-wrap" :class="{ expanded: isOpen('pinned') }">
+        <div class="section-body">
+          <div class="pinned-row" v-for="f in pinnedFiles" :key="f.path">
+            <span
+              class="file-badge"
+              :style="{ background: fileBadge(f.name).bg, color: fileBadge(f.name).color }"
+            >{{ fileBadge(f.name).label }}</span>
+            <span class="pinned-name" :title="f.path" @click="$emit('select', f)">{{ f.name }}</span>
+            <button class="unpin-btn" title="取消固定" @click="$emit('unpin-file', f)">
+              <Icon icon="mdi:close" width="12" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   </aside>
 </template>
 
 <script setup>
-import { ref, onMounted,onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import FileTreeNode from './FileTreeNode.vue'
 
 const props = defineProps({
   projectName: { type: String, default: '' },
   files: { type: Array, required: true },
-  selected: { type: Object, default: null }
+  selected: { type: Object, default: null },
+  pinnedFiles: { type: Array, default: () => [] }
 })
 
-defineEmits(['select', 'toggle'])
-function handleClickOutside(event) {
-  // 如果菜单是打开的，且点击的不是菜单本身（已阻止冒泡），关闭菜单
-  if (showMore.value) {
-    showMore.value = false
-  }
+defineEmits(['select', 'toggle', 'unpin-file', 'refresh-tree'])
+
+const rootExpanded = ref(true)
+const openSections = ref(new Set(['files', 'git']))
+
+function isOpen(name) {
+  return openSections.value.has(name)
 }
+function toggleSection(name) {
+  const next = new Set(openSections.value)
+  if (next.has(name)) next.delete(name)
+  else next.add(name)
+  openSections.value = next
+}
+
+const FILE_BADGES = {
+  js: { bg: '#f4d35e', color: '#4a3b06', label: 'JS' },
+  json: { bg: '#eab308', color: '#3d2b06', label: '{}' },
+  vue: { bg: '#42b883', color: '#ffffff', label: 'V' },
+  py: { bg: '#4a9d6d', color: '#ffffff', label: 'PY' },
+  ps1: { bg: '#5b8def', color: '#ffffff', label: 'PS' },
+  txt: { bg: '#9a958a', color: '#ffffff', label: '≡' }
+}
+const DEFAULT_BADGE = { bg: '#9a958a', color: '#ffffff', label: '•' }
+function fileBadge(name) {
+  if (/^LICENSE$/i.test(name)) return DEFAULT_BADGE
+  const ext = name.split('.').pop()?.toLowerCase()
+  return FILE_BADGES[ext] || DEFAULT_BADGE
+}
+
+function getFileName(fullPath) {
+  return fullPath.split('/').pop() || fullPath
+}
+
+// ---- Git (merged from former GitPanel.vue) ----
 const commitMsg = ref('')
 const showMore = ref(false)
 const gitStatus = ref({ branch: '', modified: [], untracked: [] })
+const gitChangeCount = computed(
+  () => (gitStatus.value.modified?.length || 0) + (gitStatus.value.untracked?.length || 0)
+)
 
 function toggleMore() {
   showMore.value = !showMore.value
@@ -104,35 +172,24 @@ function toggleMore() {
 async function fetchGitStatus() {
   try {
     const res = await fetch('/api/git-status')
-    if (res.ok) {
-      gitStatus.value = await res.json()
-    }
+    if (res.ok) gitStatus.value = await res.json()
   } catch (e) {
     console.error('Git status fetch failed', e)
   }
 }
-// 反馈提示
+
 const actionFeedback = ref({ show: false, message: '', type: 'success' })
 let feedbackTimer = null
-
 function showFeedback(msg, type = 'success') {
   actionFeedback.value = { show: true, message: msg, type }
   clearTimeout(feedbackTimer)
-  feedbackTimer = setTimeout(() => {
-    actionFeedback.value.show = false
-  }, 2500)
+  feedbackTimer = setTimeout(() => { actionFeedback.value.show = false }, 2500)
 }
-
-
 
 async function gitAddAll() {
   try {
     const res = await fetch('/api/git/add-all', { method: 'POST' })
-    if (res.ok) {
-      showFeedback(' git add -A 成功')
-    } else {
-      showFeedback('Add 失败', 'error')
-    }
+    showFeedback(res.ok ? 'git add -A 成功' : 'Add 失败', res.ok ? 'success' : 'error')
   } catch (e) {
     showFeedback('网络错误', 'error')
   }
@@ -152,8 +209,7 @@ async function gitCommit() {
       showFeedback('Commit 成功')
       commitMsg.value = ''
     } else {
-      const err = await res.text()
-      showFeedback(`Commit 失败: ${err}`, 'error')
+      showFeedback(`Commit 失败: ${await res.text()}`, 'error')
     }
   } catch (e) {
     showFeedback('网络错误', 'error')
@@ -163,161 +219,153 @@ async function gitCommit() {
 }
 
 async function gitPush() {
-  // 立刻显示加载状态
   actionFeedback.value = { show: true, message: 'Pushing...', type: 'loading' }
   showMore.value = false
-
   try {
     const res = await fetch('/api/git/push', { method: 'POST' })
-    if (res.ok) {
-      actionFeedback.value = { show: true, message: 'Push 成功', type: 'success' }
-    } else {
-      const err = await res.text()
-      actionFeedback.value = { show: true, message: `Push 失败: ${err}`, type: 'error' }
-    }
+    actionFeedback.value = res.ok
+      ? { show: true, message: 'Push 成功', type: 'success' }
+      : { show: true, message: `Push 失败: ${await res.text()}`, type: 'error' }
   } catch (e) {
     actionFeedback.value = { show: true, message: '网络错误', type: 'error' }
   }
-
-  // 2.5 秒后自动关闭反馈
   clearTimeout(feedbackTimer)
-  feedbackTimer = setTimeout(() => {
-    actionFeedback.value.show = false
-  }, 2500)
+  feedbackTimer = setTimeout(() => { actionFeedback.value.show = false }, 2500)
 }
 
-function getFileName(fullPath) {
-  return fullPath.split('/').pop() || fullPath
+function handleClickOutside() {
+  if (showMore.value) showMore.value = false
 }
 
-
-
-
+let statusPoll = null
 onMounted(() => {
   fetchGitStatus()
-  setInterval(fetchGitStatus, 30000)
+  statusPoll = setInterval(fetchGitStatus, 30000)
   document.addEventListener('click', handleClickOutside)
 })
-
 onUnmounted(() => {
+  clearInterval(statusPoll)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
 <style scoped>
-/* ========== 面板整体 ========== */
-.file-tree-panel {
-  width: 220px;
+.sidebar-panel {
+  width: 240px;
   height: 100%;
   border-right: 1px solid #e4dfd4;
   background: #faf9f6;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-}
-
-.file-tree-header {
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #696259;
-  border-bottom: 1px solid #e4dfd4;
-}
-
-.file-tree-body {
-  flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
+}
+
+/* ========== Accordion ========== */
+.accordion-section {
+  flex-shrink: 0;
+  border-bottom: 1px solid #eee7da;
+}
+
+.section-header {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.section-header:hover { background: #f0ede5; }
+
+.chevron { transition: transform 180ms ease; flex-shrink: 0; color: #8b847a; }
+.chevron.rotated { transform: rotate(90deg); }
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #696259;
+  flex: 1;
+}
+
+.section-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: #e8935a;
+  color: #fff;
+  border-radius: 8px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+
+.section-more-btn {
+  border: none;
+  background: transparent;
+  color: #8b847a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 2px;
+}
+.section-more-btn:hover { background: #e8e3d8; }
+
+/* Smooth accordion: grid-rows 0fr -> 1fr, no display:none jump */
+.section-body-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms ease;
+}
+.section-body-wrap.expanded {
+  grid-template-rows: 1fr;
+}
+.section-body-wrap > .section-body {
+  overflow: hidden;
   min-height: 0;
 }
 
-/* ========== Git 面板 ========== */
-.git-panel {
-  padding: 10px 12px;
-  border-top: 1px solid #e4dfd4;
-  background: #f7f6f3;
+/* ========== Files ========== */
+.root-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #4a473f;
+}
+.root-row:hover { background: #f0ede5; }
+.tree-body { padding: 2px 0 6px; }
+
+/* ========== Git ========== */
+.git-body {
+  padding: 8px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 45vh;
-  overflow-y: auto;
-  box-sizing: border-box;
 }
-
-.git-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #4a473f;
-}
-
-.git-branch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.branch-name {
-  font-size: 12px;
-  font-weight: 600;
-}
-.branch-dot {
-  width: 6px;
-  height: 6px;
-  background: #12b76a;
-  border-radius: 50%;
-  margin-left: auto;
-}
-
-.git-count {
-  font-size: 11px;
-  color: #6a665e;
-}
+.git-branch-row { display: flex; align-items: center; gap: 6px; }
+.branch-name { font-size: 12px; font-weight: 600; font-family: "JetBrains Mono", monospace; }
+.branch-dot { width: 6px; height: 6px; background: #12b76a; border-radius: 50%; margin-left: auto; }
 
 .git-changes {
   max-height: 100px;
   overflow-y: auto;
-  border-top: 1px solid #e4dfd4;
-  padding-top: 4px;
 }
-
-.change-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
-}
-
+.clean-msg { color: #12b76a; font-size: 11px; padding: 2px 0; }
+.change-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
 .change-icon {
-  width: 16px;
-  height: 16px;
-  font-size: 10px;
-  font-weight: 700;
-  text-align: center;
-  line-height: 16px;
-  border-radius: 3px;
-  flex-shrink: 0;
+  width: 16px; height: 16px; font-size: 10px; font-weight: 700;
+  text-align: center; line-height: 16px; border-radius: 3px; flex-shrink: 0;
 }
-.change-icon.modified {
-  background: #fef3c7;
-  color: #b45309;
-}
-.change-icon.added {
-  background: #d1fae5;
-  color: #065f46;
-}
-
+.change-icon.modified { background: #fef3c7; color: #b45309; }
+.change-icon.added { background: #d1fae5; color: #065f46; }
 .change-file {
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: default;
+  font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default;
 }
 
-/* ========== Commit 输入区域 ========== */
-.commit-input-area {
-  position: relative;
-}
-
+.commit-input-area { position: relative; }
 .commit-textarea {
   width: 100%;
   padding: 6px 30px 6px 8px;
@@ -329,153 +377,58 @@ onUnmounted(() => {
   box-sizing: border-box;
   background: #fff;
 }
-
 .commit-more-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  color: #6a665e;
+  position: absolute; top: 4px; right: 4px;
+  width: 24px; height: 24px; border: none; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; color: #6a665e;
 }
-.commit-more-btn:hover {
-  background: #e8e3d8;
-}
+.commit-more-btn:hover { background: #e8e3d8; }
 
-/* ★ 悬浮菜单 */
 .floating-menu {
-  position: absolute;
-  top: -70px;
-  right:-10px;
-  z-index: 10;
-  background: #fff;
-  border: 1px solid #d4cfc4;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 100px;
+  position: absolute; top: -70px; right: -10px; z-index: 10;
+  background: #fff; border: 1px solid #d4cfc4; border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 4px;
+  display: flex; flex-direction: column; gap: 2px; min-width: 100px;
 }
-
 .floating-menu .git-btn {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  font-size: 12px;
-  border: none;
-  background: #fff;
-  cursor: pointer;
-  text-align: left;
-  border-radius: 4px;
+  display: block; width: 100%; padding: 6px 10px; font-size: 12px;
+  border: none; background: #fff; cursor: pointer; text-align: left; border-radius: 4px;
 }
-.floating-menu .git-btn:hover {
-  background: #f0ede5;
-}
+.floating-menu .git-btn:hover { background: #f0ede5; }
 
-/* Commit 主按钮 */
-.commit-main-btn {
-  width: 100%;
-  padding: 6px 0;
-  font-size: 12px;
-  border: 1px solid #d4cfc4;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
+.commit-main-btn, .action-feedback {
+  display: block; width: 100%; padding: 6px 0; font-size: 12px;
+  border: 1px solid #d4cfc4; border-radius: 6px; text-align: center;
+  box-sizing: border-box; line-height: 1.4; cursor: pointer;
+  background: #fff; color: inherit; transition: background 0.15s, border-color 0.15s;
 }
-.commit-main-btn:hover {
-  background: #f0ede5;
-}
-.commit-main-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-
-
-
-.action-feedback {
-  width: 100%;
-  padding: 6px 0;
-  font-size: 12px;
-  border: 1px solid #d4cfc4;
-  border-radius: 6px;
-  text-align: center;
-  transition: opacity 0.3s;
-}
-.action-feedback.success {
-  background: #d1fae5;
-  color: #065f46;
-  border-color: #a7f3d0;
-}
-.action-feedback.error {
-  background: #fee2e2;
-  color: #991b1b;
-  border-color: #fecaca;
-}
-
-
-/* Commit 按钮 + 操作反馈（统一样式，避免突变） */
-.commit-main-btn,
-.action-feedback {
-  display: block;
-  width: 100%;
-  padding: 6px 0;
-  font-size: 12px;
-  border: 1px solid #d4cfc4;
-  border-radius: 6px;
-  text-align: center;
-  box-sizing: border-box;
-  line-height: 1.4;
-  cursor: pointer;
-  background: #fff;
-  color: inherit;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.commit-main-btn:hover {
-  background: #f0ede5;
-}
-
-.commit-main-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* 反馈状态只覆盖颜色 */
-.action-feedback.success {
-  background: #d1fae5;
-  color: #065f46;
-  border-color: #a7f3d0;
-}
-
-.action-feedback.error {
-  background: #fee2e2;
-  color: #991b1b;
-  border-color: #fecaca;
-}
-
-.action-feedback.loading {
-  background: #f0ede5;
-  color: #6a665e;
-  border-color: #d4cfc4;
-}
-.action-feedback.loading::after {
-  content: '...';
-  animation: loading-dots 1.5s infinite;
-}
-
+.commit-main-btn:hover { background: #f0ede5; }
+.commit-main-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.action-feedback.success { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+.action-feedback.error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.action-feedback.loading { background: #f0ede5; color: #6a665e; border-color: #d4cfc4; }
+.action-feedback.loading::after { content: '...'; animation: loading-dots 1.5s infinite; }
 @keyframes loading-dots {
-  0% { content: '.'; }
-  33% { content: '..'; }
-  66% { content: '...'; }
+  0% { content: '.'; } 33% { content: '..'; } 66% { content: '...'; }
+}
+
+/* ========== Pinned ========== */
+.pinned-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; font-size: 12px; cursor: default;
+}
+.pinned-row:hover { background: #f0ede5; }
+.pinned-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.unpin-btn {
+  border: none; background: transparent; color: #8b847a; cursor: pointer;
+  display: flex; align-items: center; border-radius: 3px; flex-shrink: 0;
+}
+.unpin-btn:hover { background: #e0dcd0; color: #4a473f; }
+
+.file-badge {
+  flex-shrink: 0; width: 16px; height: 16px; border-radius: 4px;
+  font-size: 8.5px; font-weight: 700; line-height: 16px; text-align: center;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 </style>

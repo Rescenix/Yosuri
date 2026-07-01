@@ -82,7 +82,8 @@ func (h *PrimQLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	response := h.handle(string(body))
-	w.Header().Set("Content-Type", "text/plain")
+	// 响应始终为 UTF-8；Windows cmd.exe 默认代码页是 GBK，查看中文前需先执行 chcp 65001
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write([]byte(response))
 }
@@ -113,6 +114,65 @@ func (h *PrimQLHandler) handle(raw string) string {
 		return fmt.Sprintf("OK %d\n", node.ID)
 
 	case "LOOM":
+		loomArg := strings.TrimSpace(rest)
+
+		// LOOM -N / --N：返回最近新增的 N 条记忆（按创建时间倒序）
+		if strings.HasPrefix(loomArg, "-") {
+			cleaned := strings.TrimLeft(loomArg, "-")
+			if strings.HasPrefix(strings.ToLower(cleaned), "n") {
+				nStr := strings.TrimSpace(cleaned[1:]) // 去掉 'n' 或 'N'，再取数字部分
+				if n, err := strconv.Atoi(nStr); err == nil && n > 0 {
+					nodes := graph.NodesByTime(n)
+
+					var sb strings.Builder
+					sb.WriteString(fmt.Sprintf("Recent %d memories:\n\n", len(nodes)))
+					sb.WriteString(
+						PadRight("ID", 5) + " " +
+							PadRight("Role", 12) + " " +
+							PadRight("Content", 35) + " " +
+							PadRight("Energy", 8) + " " +
+							PadRight("Emotion", 8) + "\n",
+					)
+					sb.WriteString(strings.Repeat("-", 72) + "\n")
+
+					for _, node := range nodes {
+						text := truncateByWidth(node.Text, 33)
+						role := truncateByWidth(node.Role, 12)
+						emotion := node.Emotion
+						if emotion == "" {
+							emotion = "-"
+						}
+						sb.WriteString(
+							PadRight(fmt.Sprintf("%d", node.ID), 5) + " " +
+								PadRight(role, 12) + " " +
+								PadRight(text, 35) + " " +
+								PadRight(fmt.Sprintf("%.2f", node.BaseEnergy), 8) + " " +
+								PadRight(emotion, 8) + "\n",
+						)
+					}
+					sb.WriteString(fmt.Sprintf("\n%d results\n", len(nodes)))
+					return "OK\n" + sb.String()
+				}
+			}
+		}
+
+		// LOOM <id>：按 ID 精确查询单条记忆
+		if id, err := strconv.ParseUint(loomArg, 10, 64); err == nil {
+			n := graph.Node(memory.NodeID(id))
+			if n == nil {
+				return "ERROR node not found\n"
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("── ID: %d ──\n", n.ID))
+			sb.WriteString(fmt.Sprintf("Role: %s\n", n.Role))
+			sb.WriteString(fmt.Sprintf("Content: %s\n", n.Text))
+			sb.WriteString(fmt.Sprintf("Energy: %.2f | Emotion: %s | Intensity: %.2f | EventType: %s | Cluster: %s\n",
+				n.BaseEnergy, n.Emotion, n.Intensity, n.EventType, n.Cluster))
+			return "OK\n" + sb.String()
+		}
+
+		// 原有文本检索逻辑保持不变...
+
 		var relevantNodes []*memory.MemoryNode
 		intent, err := memory.AnalyzeUserIntent(rest)
 		if err != nil || intent == nil {
@@ -431,4 +491,26 @@ func PadRight(s string, total int) string {
 		return s + strings.Repeat(" ", pad)
 	}
 	return s
+}
+
+// truncateByWidth 按显示宽度截断字符串，超出 maxWidth 时截断并追加 "..."
+func truncateByWidth(s string, maxWidth int) string {
+	if DisplayWidth(s) <= maxWidth {
+		return s
+	}
+	var sb strings.Builder
+	w := 0
+	for _, r := range s {
+		rw := 1
+		kind := width.LookupRune(r).Kind()
+		if kind == width.EastAsianWide || kind == width.EastAsianFullwidth {
+			rw = 2
+		}
+		if w+rw > maxWidth-3 {
+			break
+		}
+		sb.WriteRune(r)
+		w += rw
+	}
+	return sb.String() + "..."
 }

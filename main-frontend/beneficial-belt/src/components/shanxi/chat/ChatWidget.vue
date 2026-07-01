@@ -6,7 +6,7 @@
 
     <div v-if="isOpen && isExpanded" class="chat-overlay" @click="toggleExpand"></div>
 
-    <div class="chat-window" :class="{ expanded: isExpanded, mobile: isMobile }" :style="{ display: isOpen ? 'flex' : 'none' }">
+    <div class="chat-window" :class="{ expanded: isExpanded }" :style="{ display: isOpen ? 'flex' : 'none' }">
       
       <!-- ★ 左侧折叠菜单（侧边抽屉） —— 改为项目任务列表 -->
       <div v-if="menuOpen" class="drawer-backdrop" @click="menuOpen = false"></div>
@@ -121,17 +121,38 @@
           </div>
           <!-- 右侧可以保留原状态指示的位置，但不再显示杉汐状态 -->
           <div class="header-right">
-            <!-- 可放置其他操作，当前留空 -->
+            <button class="header-expand-btn" @click="toggleExpand" :title="isExpanded ? '退出工作区' : '展开工作区'">
+              <Icon :icon="isExpanded ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="18" color="#696259" />
+            </button>
           </div>
         </div>
     <div class="chat-body">
     <FileTreePanel
+      v-if="isExpanded"
       :project-name="currentProject?.name || ''"
       :files="fileTree"
       :selected="selectedFile"
+      :pinned-files="pinnedFiles"
       @select="onFileSelect"
       @toggle="onToggleFolder"
+      @unpin-file="handleUnpinFile"
+      @refresh-tree="fetchFileTree"
     />
+    <div class="editor-column" v-if="isExpanded">
+      <CodeEditor
+        :tabs="editorTabs"
+        :activeFilePath="activeEditorFile"
+        :fileContent="fileContent"
+        :language="editorLanguage"
+        :pinned-paths="pinnedFiles.map(f => f.path)"
+        @update:content="val => fileContent = val"
+        @switch-file="activeEditorFile = $event"
+        @close-file="closeEditorTab"
+        @pin-file="handlePinFile"
+        @unpin-file="handleUnpinFile"
+      />
+      <Terminal v-model:open="terminalOpen" :height="terminalHeight" />
+    </div>
     <div class="chat-content">
       
           <!-- 其余内容保持不变：滚动按钮、消息列表、欢迎语、推理链等 -->
@@ -269,24 +290,6 @@
 </div>
           </div>
    </div>
-
-
-<GitPanel
-  v-if="showGitPanel && !selectedFile"
-  @ai-commit="onAiCommit"
-/>
-<CodeEditor
-  v-if="activeEditorFile"
-  :tabs="editorTabs"
-  :activeFilePath="activeEditorFile"
-  :fileContent="fileContent"
-  :language="editorLanguage"
-  @update:content="val => fileContent = val"
-  @switch-file="activeEditorFile = $event"
-  @close-file="closeEditorTab"
-/>
-
-
       </div>
       
     </div>
@@ -305,7 +308,7 @@ import markdownItKatex from 'markdown-it-katex'
 import { useChatWidget } from './useChatWidget.js'
 import FileTreePanel from './FileTreePanel.vue'
 import CodeEditor from './CodeEditor.vue'
-import GitPanel from './GitPanel.vue'
+import Terminal from './Terminal.vue'
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
   sessionId: { type: String, default: 'global_chat_session' }
@@ -313,7 +316,6 @@ const props = defineProps({
 
 
 const viewingFile = ref(null)    // 当前查看的文件对象
-const showGitPanel = ref(false)
 const fileContent = ref('')
 const fileLoading = ref(false)
 const editorTabs = ref([])              // 已打开的文件标签
@@ -321,6 +323,19 @@ const activeEditorFile = ref(null)      // 当前编辑的文件路径
 const editorContent = ref('')
 const editorLanguage = ref('text')
 let monacoEditor = null                 // Monaco 实例引用
+
+const pinnedFiles = ref([])             // 已固定到侧边栏的文件 { name, path }
+const terminalOpen = ref(true)
+const terminalHeight = ref(180)
+
+function handlePinFile(tab) {
+  if (!pinnedFiles.value.find(f => f.path === tab.path)) {
+    pinnedFiles.value = [...pinnedFiles.value, { name: tab.name, path: tab.path }]
+  }
+}
+function handleUnpinFile(f) {
+  pinnedFiles.value = pinnedFiles.value.filter(x => x.path !== f.path)
+}
 
 
 function closeEditorTab(path) {
@@ -561,7 +576,7 @@ function highlightAllCodeBlocks() {
 
 // ==================== useChatWidget ====================
 const {
-  isOpen, isExpanded, isMobile, userInput, messages, sessionId,
+  isOpen, isExpanded, userInput, messages, sessionId,
   isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
   welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
   messagesContainer, chatInputRef, userScrolledUp,
@@ -706,8 +721,39 @@ watch(messages, () => {
   background: #f0e4d7;
   font-weight: 500;
 }
+
+.header-expand-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+.header-expand-btn:hover { background: rgba(0,0,0,0.05); }
+
+/* ==================== IDE 工作区三栏几何（仅全屏展开时生效） ==================== */
+/* 中间列：编辑器(flex:1) + 终端(卡在编辑区宽度下方，不横跨文件树/聊天) */
+.editor-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 </style>
 
 <style>
 @import './chat-global.css';
+
+/* 展开模式下聊天区变为固定宽度的全高右栏，把 flex:1 主体让给中间的编辑器列 */
+.chat-window.expanded .chat-content {
+  flex: 0 0 380px !important;
+  width: 380px !important;
+  max-width: 380px !important;
+  border-left: 1px solid #e4dfd4;
+}
 </style>

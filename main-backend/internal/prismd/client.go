@@ -17,11 +17,13 @@ type Client struct {
 }
 
 // NewClient 创建 PrismD 客户端，addr 格式如 "localhost:5666"。
+const DefaultClientTimeout = 60 * time.Second
+
 func NewClient(addr string) *Client {
 	return &Client{
 		baseURL: "http://" + addr,
 		cli: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: DefaultClientTimeout,
 		},
 	}
 }

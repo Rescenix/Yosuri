@@ -51,6 +51,12 @@ func truncateMessages(messages []map[string]interface{}, keepNonSystem int) []ma
 	if startIdx < 0 {
 		startIdx = 0
 	}
+	// 截断窗口不能以 "tool" 消息开头——那意味着丢弃了它对应的、带 tool_calls
+	// 的 assistant 消息，DS API 会因此拒绝整个请求（400: tool 消息必须紧跟在
+	// 带 tool_calls 的 assistant 消息后面）。往前找到那条 assistant 消息，一并带上。
+	for startIdx > 0 && messages[startIdx]["role"] == "tool" {
+		startIdx--
+	}
 	for i := startIdx; i < len(messages); i++ {
 		if messages[i]["role"] != "system" {
 			cleaned = append(cleaned, messages[i])

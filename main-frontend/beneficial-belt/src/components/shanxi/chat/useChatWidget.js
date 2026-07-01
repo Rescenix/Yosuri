@@ -19,10 +19,6 @@ if (!localStorage.getItem('prism_session_id')) {
   localStorage.setItem('prism_session_id', sessionId.value)
 }
 
-  const isMobile = computed(() => {
-    return typeof window !== 'undefined' && window.innerWidth <= 768
-  })
-
   watch(() => props.sessionId, (newVal) => {
     if (newVal) sessionId.value = newVal
   })
@@ -258,9 +254,7 @@ function adjustInputHeight() {
     }
     isOpen.value = !isOpen.value
     if (isOpen.value) {
-      if (!isMobile.value) {
-        isExpanded.value = true
-      }
+      isExpanded.value = true
       nextTick(() => forceScrollToBottom())
       setTimeout(() => forceScrollToBottom(), 200)
     }
@@ -313,11 +307,11 @@ function adjustInputHeight() {
   onMounted(async () => {
     if (window.location.pathname.startsWith('/chat')) {
       isOpen.value = true
-      if (!isMobile.value) isExpanded.value = true
+      isExpanded.value = true
     }
     if (props.autoOpen) {
       isOpen.value = true
-      if (!isMobile.value) isExpanded.value = true
+      isExpanded.value = true
     }
 
     localStorage.setItem('token', 'dev-permanent-token')
@@ -379,7 +373,7 @@ function adjustInputHeight() {
   }
 
   return {
-    isOpen, isExpanded, isMobile, userInput, messages, sessionId,
+    isOpen, isExpanded, userInput, messages, sessionId,
     isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
     welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
     messagesContainer, chatInputRef, userScrolledUp,
