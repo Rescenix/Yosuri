@@ -145,22 +145,47 @@ if (req.method === 'POST' && req.url === '/stream') {
                 return;
             }
 
-            // 轮询 DOM 增量
-            let lastText = '';
-            for (let i = 0; i < 150; i++) {
-                await new Promise(r => setTimeout(r, 200));
-                try {
-                    const currentText = await readLatestReplyAsMarkdown();
-                    if (currentText && currentText.length > lastText.length) {
-                        const newPart = currentText.slice(lastText.length);
-                        res.write(`data: ${newPart}\n\n`);
-                        lastText = currentText;
-                    }
-                } catch (e) {}
-            }
-            // ★ 流式结束，发送 DONE 信号
+        // ---------- 按词/按块推送，速度适中 ----------
+const queue = [];
+let consumerTimer = null;
+let finished = false;
+
+// 消费者：每 50ms 推送一个词（或片段）
+const consumer = () => {
+    if (queue.length === 0) {
+        if (finished) {
+            clearInterval(consumerTimer);
             res.write(`data: [DONE]\n\n`);
             res.end();
+        }
+        return;
+    }
+    const chunk = queue.shift();
+    res.write(`data: ${chunk}\n\n`);
+};
+consumerTimer = setInterval(consumer, 50);
+
+// 生产者：将增量拆成短词推入队列（按空格或每 10 字符切分）
+let lastText = '';
+let stableCount = 0;
+for (let i = 0; i < 150; i++) {
+    await new Promise(r => setTimeout(r, 200));
+    try {
+        const currentText = await readLatestReplyAsMarkdown();
+        if (currentText && currentText.length > lastText.length) {
+            const newPart = currentText.slice(lastText.length);
+            // 将 newPart 拆分为更自然的片段：按空格或每 10 个字符切分
+            const tokens = newPart.match(/[\s\S]{1,10}/g) || [newPart];
+            tokens.forEach(token => queue.push(token));
+            lastText = currentText;
+            stableCount = 0;
+        } else if (currentText && currentText.length === lastText.length && currentText.length > 10) {
+            stableCount++;
+            if (stableCount >= 15) break;
+        }
+    } catch (e) {}
+}
+finished = true;
         } catch (e) {
             res.write(`data: 流式推送出错: ${e.message}\n\n`);
             res.end();

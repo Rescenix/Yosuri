@@ -43,115 +43,117 @@ export function useChatLogic({
 
     // ★ 独立的工具调用处理函数（流式结束后调用）
    const processToolsInFinalText = async (text, botMsg) => {
-    // 预处理：还原 DS 返回的转义字符
+    // 只还原工具标记的外层转义，不碰内部参数
     text = text
-        .replace(/\\\[TOOL:/g, '[TOOL:')
-        .replace(/\\\]/g, ']')
-        .replace(/\\_/g, '_')
-        .replace(/\\"/g, '"')
-        .replace(/\\'/g, "'")
-        .replace(/\\\\/g, '\\')
+        .replace(/\\\[TOOL:/g, '[TOOL:') // 还原标记开头
+        .replace(/\]\\/g, ']');           // 还原标记结尾
 
-    console.log('[TOOL] 转义还原后文本：', text.substring(0, 500))
+    console.log('[TOOL] 转义还原后文本：', text.substring(0, 500));
 
     if (!text || !text.includes('[TOOL:')) {
-        botMsg.isStreaming = false
-        return
+        botMsg.isStreaming = false;
+        return;
     }
 
-    const toolRegex = /\[TOOL:(\w+)\s+(.*?)\]\n?/g
-    let toolMatch
-    let finalText = text
-    let hasTool = false
+    const toolRegex = /\[TOOL:(\w+)\s+(.*?)\]\n?/g;
+    let toolMatch;
+    let finalText = text;
+    let hasTool = false;
 
     while ((toolMatch = toolRegex.exec(text)) !== null) {
-        hasTool = true
-        const marker = toolMatch[0].trim()
-        const toolName = toolMatch[1]
-        let argsStr = toolMatch[2]
+        hasTool = true;
+        const marker = toolMatch[0].trim(); // 完整标记
+        const toolName = toolMatch[1];
+        let argsStr = toolMatch[2];
 
-        // execute_command 特殊提取
+        // execute_command 特殊处理：安全提取命令参数
         if (toolName === 'execute_command') {
-            const cmdStart = marker.indexOf('command="')
+            const cmdStart = marker.indexOf('command="');
             if (cmdStart !== -1) {
-                const cmdValueStart = cmdStart + 'command="'.length
-                const lastQuote = marker.lastIndexOf('"')
-                if (lastQuote > cmdValueStart) {
-                    const command = marker.substring(cmdValueStart, lastQuote)
-                    argsStr = 'command="' + command + '"'
-                    console.log('[TOOL] 提取到的完整命令：', command)
+                const valueStart = cmdStart + 'command="'.length;
+                const lastQuote = marker.lastIndexOf('"');
+                if (lastQuote > valueStart) {
+                    let command = marker.substring(valueStart, lastQuote);
+                    // 只还原命令内部被转义的引号 \" -> "
+                    command = command.replace(/\\"/g, '"');
+                    argsStr = `command="${command}"`;
+                    console.log('[TOOL] 提取到的完整命令：', command);
                 }
             }
         }
 
-        botMsg.toolCallName = TOOL_NAME_MAP[toolName] || toolName
-        botMsg.toolCallDetail = argsStr
-        if (onStreamUpdate) onStreamUpdate()
+        botMsg.toolCallName = TOOL_NAME_MAP[toolName] || toolName;
+        botMsg.toolCallDetail = argsStr;
+        if (onStreamUpdate) onStreamUpdate();
 
         try {
-    const toolRes = await fetch('/api/execute-marker', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: `[TOOL:${toolName} ${argsStr}]`
-    })
-    const resultText = await toolRes.text()
+            const toolRes = await fetch('/api/execute-marker', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: `[TOOL:${toolName} ${argsStr}]`
+            });
+            const resultText = await toolRes.text();
 
-    // 1. 创建新 bot 消息用于 DS 的自然语言回复
-    const newBotMsg = reactive({
-        id: msgId++,
-        content: '',
-        sender: 'bot',
-        isStreaming: true,
-        recalling: false,
-        timestamp: new Date()
-    })
-    messages.value.push(newBotMsg)
-    nextTick(() => { if (onNewMessage) onNewMessage() })
+            // 创建新 bot 消息用于 DS 的自然语言回复
+            const newBotMsg = reactive({
+                id: msgId++,
+                content: '',
+                sender: 'bot',
+                isStreaming: true,
+                recalling: false,
+                timestamp: new Date()
+            });
+            messages.value.push(newBotMsg);
+            nextTick(() => { if (onNewMessage) onNewMessage(); });
 
-    // 2. 用 /stream 发送隐式消息，流式获取 DS 回复
-    fetch('http://localhost:3000/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `[工具结果]\n${resultText}\n\n请用自然语言描述这个结果。` })
-    }).then(async (res) => {
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || '' // 保留不完整的行
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const payload = line.slice(6)
-                    if (payload === '[DONE]') {
-                        newBotMsg.isStreaming = false
-                        if (onStreamUpdate) onStreamUpdate()
-                        return
+            // 用 /stream 发送隐式消息，流式获取 DS 回复
+            fetch('http://localhost:3000/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: `[工具结果]\n${resultText}\n\n请用自然语言描述这个结果。` })
+            }).then(async (res) => {
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const payload = line.slice(6);
+                            if (payload === '[DONE]') {
+                                newBotMsg.isStreaming = false;
+                                if (onStreamUpdate) onStreamUpdate();
+                                return;
+                            }
+                            newBotMsg.content += payload;
+                            if (onStreamUpdate) onStreamUpdate();
+                        }
                     }
-                    newBotMsg.content += payload
-                    if (onStreamUpdate) onStreamUpdate()
                 }
-            }
-        }
-    }).catch(() => {
-        newBotMsg.content = '杉汐没有回应，请稍后再试'
-        newBotMsg.isStreaming = false
-    })
+            }).catch(() => {
+                newBotMsg.content = '杉汐没有回应，请稍后再试';
+                newBotMsg.isStreaming = false;
+            });
 
-    finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n${resultText}\n`)
-} catch (e) {
-    finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n执行失败: ${e.message}\n`)
-}}
+            finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n${resultText}\n`);
+        } catch (e) {
+            finalText = finalText.replace(marker, `[工具调用: ${toolName}]\n执行失败: ${e.message}\n`);
+        }
+
+        botMsg.toolCallName = null;
+        botMsg.toolCallDetail = '';
+    }
 
     if (hasTool) {
-        botMsg.content = finalText
-        if (onStreamUpdate) onStreamUpdate()
+        botMsg.content = finalText;
+        if (onStreamUpdate) onStreamUpdate();
     }
-    botMsg.isStreaming = false
-}
+    botMsg.isStreaming = false;
+};
 
     const sendStandardMessage = async () => {
         const question = userInput.value.trim()
