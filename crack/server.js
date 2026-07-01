@@ -77,9 +77,9 @@ async function readLatestReplyAsMarkdown() {
         const count = await elements.count();
         if (count > 0) {
             const html = await elements.nth(count - 1).innerHTML();
-            console.log(`[READ] 获取 HTML 长度: ${html.length}, 前 100 字符: ${html.substring(0, 100)}`);
+            //console.log(`[READ] 获取 HTML 长度: ${html.length}, 前 100 字符: ${html.substring(0, 100)}`);
             const markdown = turndown.turndown(html);
-            console.log(`[READ] 转换 Markdown 长度: ${markdown.length}, 前 100 字符: ${markdown.substring(0, 100)}`);
+            //console.log(`[READ] 转换 Markdown 长度: ${markdown.length}, 前 100 字符: ${markdown.substring(0, 100)}`);
             return markdown.trim();
         }
     } catch (e) {
@@ -202,19 +202,7 @@ finished = true;
 
 if (req.method === 'GET' && req.url === '/read') {
     let reply = await readLatestReplyAsMarkdown();
-    // 只还原工具标记（write_file / read_file 中的下划线）
-    reply = reply.replace(/\\\[TOOL:/g, '[TOOL:');
-    reply = reply.replace(/\]\\/g, ']');
-    reply = reply.replace(/\\\\/g, '\\');
-    reply = reply.replace(/write\\_file/g, 'write_file');
-    reply = reply.replace(/read\\_file/g, 'read_file');
-    // 新增：修复 execute_command 中的转义引号和路径
-    reply = reply.replace(/\\"/g, '"');              // \" → "
-    reply = reply.replace(/\\'/g, "'");              // \' → '
-    reply = reply.replace(/command="([^"]*)"/g, (match, cmd) => {
-        // 修复路径中的双反斜杠
-        return 'command="' + cmd.replace(/\\\\/g, '\\') + '"';
-    });
+    // 不再做任何转义还原，直接返回原始 Markdown
     console.log('[READ] 最终返回：', reply.substring(0, 120));
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end(reply);

@@ -63,7 +63,20 @@ func (h *ChatHandler) resolveDSBrowserConversation(
 		return "", "", 0, fmt.Errorf("DS 代理启动失败: %w", err)
 	}
 
-	if err := sendToDSBrowser(userMessage); err != nil {
+	// ----- 新增：从 sessionStore 获取历史消息 -----
+	history := h.sessionStore.Get(sessionID)
+	// 截断过长的历史，保持上下文精简
+	history = truncateHistory(history, maxHistoryMessages)
+
+	// ----- 新增：构建包含历史的完整消息发送给 DS -----
+	var contextBuilder strings.Builder
+	for _, msg := range history {
+		contextBuilder.WriteString(fmt.Sprintf("[%s]: %s\n", msg.Role, msg.Content))
+	}
+	contextBuilder.WriteString(fmt.Sprintf("[user]: %s", userMessage))
+	fullMessage := contextBuilder.String()
+
+	if err := sendToDSBrowser(fullMessage); err != nil {
 		return "", "", 0, fmt.Errorf("发送消息到 DS 失败: %w", err)
 	}
 
@@ -76,49 +89,64 @@ func (h *ChatHandler) resolveDSBrowserConversation(
 			break
 		}
 	}
+
+	var fullContent string
 	if !ready {
 		reply, err := readFromDSBrowser()
 		if err != nil {
 			return "", "", 0, fmt.Errorf("读取 DS 回复失败: %w", err)
 		}
+		fullContent = reply
 		writeSSE(c, "content", "content", map[string]string{"content": reply})
 		c.Writer.Flush()
-		return reply, "", 0, nil
-	}
+	} else {
+		// 轮询 /read，流式推送给前端
+		lastLength := 0
+		stableCount := 0
 
-	// 轮询 /read，流式推送给前端
-	var fullContent string
-	lastLength := 0
-	stableCount := 0
-
-	for i := 0; i < 150; i++ {
-		time.Sleep(200 * time.Millisecond)
-		reply, err := readFromDSBrowser()
-		if err != nil {
-			continue
+		for i := 0; i < 150; i++ {
+			time.Sleep(200 * time.Millisecond)
+			reply, err := readFromDSBrowser()
+			if err != nil {
+				continue
+			}
+			if len(reply) > lastLength {
+				newPart := reply[lastLength:]
+				writeSSE(c, "content", "content", map[string]string{"content": newPart})
+				c.Writer.Flush()
+				lastLength = len(reply)
+				fullContent = reply
+				stableCount = 0
+			} else if len(reply) == lastLength && len(reply) > 10 {
+				stableCount++
+				if stableCount >= 5 {
+					break
+				}
+			}
 		}
-		if len(reply) > lastLength {
-			newPart := reply[lastLength:]
-			writeSSE(c, "content", "content", map[string]string{"content": newPart})
-			c.Writer.Flush()
-			lastLength = len(reply)
-			fullContent = reply
-			stableCount = 0
-		} else if len(reply) == lastLength && len(reply) > 10 {
-			stableCount++
-			if stableCount >= 5 {
-				break
+
+		if fullContent == "" {
+			reply, err := readFromDSBrowser()
+			if err == nil {
+				fullContent = reply
 			}
 		}
 	}
 
-	if fullContent == "" {
-		reply, err := readFromDSBrowser()
-		if err == nil {
-			fullContent = reply
-		}
-	}
-	// 保存到 PrismD（Atri 域）
+	// ----- 新增：将对话保存到 sessionStore -----
+	now := time.Now()
+	h.sessionStore.Append(sessionID, DSMessage{
+		Role:      "user",
+		Content:   userMessage,
+		Timestamp: now,
+	})
+	h.sessionStore.Append(sessionID, DSMessage{
+		Role:      "assistant",
+		Content:   fullContent,
+		Timestamp: now,
+	})
+
+	// 保存到 PrismD（Atri 域）—— 保留原有逻辑
 	engramBody := fmt.Sprintf("ENGRAM Atri域 %s", fullContent)
 	go func() {
 		resp, err := http.Post("http://localhost:5666", "text/plain", strings.NewReader(engramBody))

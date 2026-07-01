@@ -320,23 +320,39 @@ func filterMemoryCandidates(messages []DSMessage) []DSMessage {
 	return clean
 }
 
-// ---------- 会话压缩 ----------
 func (h *ChatHandler) maybeCompressSession(sessionID string, modelType string) {
+	// 1. 只在云端模型下触发
 	if modelType == "local" || modelType == "" {
 		return
 	}
 
-	const compressRounds = 10
+	const compressThreshold = 6 // 按你说的，降到5-6轮
 
 	messages := h.sessionStore.Get(sessionID)
-	rounds := len(messages) / 2
-	if rounds == 0 || rounds%compressRounds != 0 {
+	totalMessages := len(messages)
+	totalRounds := totalMessages / 2
+	if totalRounds == 0 {
 		return
 	}
 
-	candidates := filterMemoryCandidates(messages)
+	// 2. 获取上次压缩的游标
+	lastIndex := h.sessionStore.GetCompressIndex(sessionID)
+
+	// 3. 检查是否有足够的新消息需要压缩
+	newMessages := messages[lastIndex:]
+	newRounds := len(newMessages) / 2
+	if newRounds < compressThreshold {
+		return // 新消息不够，不用急
+	}
+
+	fmt.Printf("🧠 触发增量记忆压缩 (session=%s, 新增轮次=%d, 总轮次=%d)\n", sessionID, newRounds, totalRounds)
+
+	// 4. 只压缩新增的消息（增量）
+	candidates := filterMemoryCandidates(newMessages)
 	if len(candidates) == 0 {
-		fmt.Printf("🧹 无有效记忆候选 (session=%s)\n", sessionID)
+		// 即使没有有效候选，也要把游标更新，避免每次都要重新扫描一遍噪声
+		h.sessionStore.SetCompressIndex(sessionID, totalMessages)
+		fmt.Printf("🧹 无有效记忆候选 (session=%s)，游标已更新\n", sessionID)
 		return
 	}
 
@@ -346,7 +362,7 @@ func (h *ChatHandler) maybeCompressSession(sessionID string, modelType string) {
 	}
 	compressedText := strings.Join(turns, "\n---\n")
 
-	fmt.Printf("🧠 触发记忆压缩 (session=%s, rounds=%d, candidates=%d)\n", sessionID, rounds, len(candidates))
+	// 5. 异步写 PrismD
 	go func() {
 		resp, err := http.Post("http://localhost:5666", "text/plain", strings.NewReader("COMPILE "+compressedText))
 		if err != nil {
@@ -359,6 +375,8 @@ func (h *ChatHandler) maybeCompressSession(sessionID string, modelType string) {
 		if strings.HasPrefix(bodyStr, "ERROR") {
 			fmt.Printf("⚠️ 记忆压缩失败: %s\n", bodyStr)
 		} else {
+			// 6. 只有成功才更新游标
+			h.sessionStore.SetCompressIndex(sessionID, totalMessages)
 			fmt.Printf("✅ 长期记忆已存入 PrismD (session=%s): %s\n", sessionID, bodyStr)
 		}
 	}()

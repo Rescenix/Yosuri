@@ -13,17 +13,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SessionStore 用内存 map 维护所有会话的对话历史
+// SessionStore 维护所有会话的对话历史与压缩游标
 type SessionStore struct {
-	mu       sync.RWMutex
-	sessions map[string][]DSMessage
-	filePath string
+	mu                  sync.RWMutex
+	sessions            map[string][]DSMessage
+	lastCompressIndexes map[string]int // 每个 session 上次压缩的消息数量
+	filePath            string
+}
+
+// 用于 JSON 持久化的结构体
+type sessionFileData struct {
+	Sessions            map[string][]DSMessage `json:"sessions"`
+	LastCompressIndexes map[string]int         `json:"last_compress_indexes"`
 }
 
 func NewSessionStore(filePath string) *SessionStore {
 	store := &SessionStore{
-		sessions: make(map[string][]DSMessage),
-		filePath: filePath,
+		sessions:            make(map[string][]DSMessage),
+		lastCompressIndexes: make(map[string]int),
+		filePath:            filePath,
 	}
 	dir := filepath.Dir(filePath)
 	os.MkdirAll(dir, 0755)
@@ -47,7 +55,7 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	}()
 }
 
-// Get 返回指定会话的消息切片（副本），保持追加顺序
+// Get 返回指定会话的消息切片（副本）
 func (s *SessionStore) Get(sessionID string) []DSMessage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -58,6 +66,20 @@ func (s *SessionStore) Get(sessionID string) []DSMessage {
 	copied := make([]DSMessage, len(msgs))
 	copy(copied, msgs)
 	return copied
+}
+
+// GetCompressIndex 获取上次压缩位置（已压缩的消息数量）
+func (s *SessionStore) GetCompressIndex(sessionID string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastCompressIndexes[sessionID]
+}
+
+// SetCompressIndex 更新压缩游标（通常在成功压缩后调用）
+func (s *SessionStore) SetCompressIndex(sessionID string, index int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastCompressIndexes[sessionID] = index
 }
 
 // List 列出所有会话摘要
@@ -85,33 +107,55 @@ func (s *SessionStore) List() []SessionInfo {
 	return infos
 }
 
-// SaveToFile 持久化所有会话到 JSON 文件
+// SaveToFile 持久化所有会话及压缩游标
 func (s *SessionStore) SaveToFile(path string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	data, err := json.Marshal(s.sessions)
+
+	data := sessionFileData{
+		Sessions:            s.sessions,
+		LastCompressIndexes: s.lastCompressIndexes,
+	}
+	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
+
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, jsonData, 0644)
 }
 
-// LoadFromFile 从 JSON 文件恢复所有会话
+// LoadFromFile 从 JSON 文件恢复所有会话及游标
 func (s *SessionStore) LoadFromFile(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	data, err := os.ReadFile(path)
+
+	fileData, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	return json.Unmarshal(data, &s.sessions)
+
+	var data sessionFileData
+	if err := json.Unmarshal(fileData, &data); err != nil {
+		return err
+	}
+
+	s.sessions = data.Sessions
+	if s.sessions == nil {
+		s.sessions = make(map[string][]DSMessage)
+	}
+
+	s.lastCompressIndexes = data.LastCompressIndexes
+	if s.lastCompressIndexes == nil {
+		s.lastCompressIndexes = make(map[string]int)
+	}
+	return nil
 }
 
 // SessionInfo 会话摘要
