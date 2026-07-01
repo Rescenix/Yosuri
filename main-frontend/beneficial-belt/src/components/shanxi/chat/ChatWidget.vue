@@ -92,16 +92,22 @@
               <Icon icon="mdi:menu" width="18" color="#696259" />
             </button>
             
-            <!-- 新：项目/子任务面包屑 + 折叠选择器 -->
-            <div class="project-breadcrumb" @click="showTaskDropdown = !showTaskDropdown">
+            <!-- Professional：项目/子任务面包屑 + 折叠选择器 -->
+            <div v-if="uiMode === 'pro'" class="project-breadcrumb" @click="showTaskDropdown = !showTaskDropdown">
               <span class="project-current">{{ currentProject?.name || '选择项目' }}</span>
               <span v-if="currentTask" class="breadcrumb-separator">→</span>
               <span v-if="currentTask" class="task-current">{{ currentTask.name }}</span>
               <Icon icon="mdi:chevron-down" width="16" color="#696259" style="margin-left:6px" />
             </div>
-            
+
+            <!-- AIStudio：当前会话名（纯文本，无下拉） -->
+            <div v-else class="studio-breadcrumb">
+              <span class="breadcrumb-separator">›</span>
+              <span class="studio-session-name">{{ activeSessionObj?.name || '未命名会话' }}</span>
+            </div>
+
             <!-- 折叠列表（下拉） -->
-            <div v-if="showTaskDropdown" class="task-dropdown" @click.stop>
+            <div v-if="uiMode === 'pro' && showTaskDropdown" class="task-dropdown" @click.stop>
               <div v-for="proj in projects" :key="proj.id" class="dropdown-project">
                 <div class="dropdown-project-name" @click="selectProject(proj); showTaskDropdown = false">
                   <Icon icon="mdi:folder-outline" width="14" color="#f59e0b" style="margin-right:4px" />
@@ -119,16 +125,21 @@
               </div>
             </div>
           </div>
-          <!-- 右侧可以保留原状态指示的位置，但不再显示杉汐状态 -->
+          <!-- 右侧：模式切换器 + 展开按钮 -->
           <div class="header-right">
+            <div class="mode-switch">
+              <div class="mode-seg" :class="{ active: uiMode === 'pro' }" @click="setUiMode('pro')">Professional</div>
+              <div class="mode-seg" :class="{ active: uiMode === 'studio' }" @click="setUiMode('studio')">AIStudio</div>
+            </div>
             <button class="header-expand-btn" @click="toggleExpand" :title="isExpanded ? '退出工作区' : '展开工作区'">
               <Icon :icon="isExpanded ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="18" color="#696259" />
             </button>
           </div>
         </div>
-    <div class="chat-body">
+    <div class="chat-body" :class="uiMode">
+    <!-- Professional 左：文件树手风琴 -->
     <FileTreePanel
-      v-if="isExpanded"
+      v-if="isExpanded && uiMode === 'pro'"
       :project-name="currentProject?.name || ''"
       :files="fileTree"
       :selected="selectedFile"
@@ -138,7 +149,8 @@
       @unpin-file="handleUnpinFile"
       @refresh-tree="fetchFileTree"
     />
-    <div class="editor-column" v-if="isExpanded">
+    <!-- Professional 中：编辑器 + 终端 -->
+    <div class="editor-column" v-if="isExpanded && uiMode === 'pro'">
       <CodeEditor
         :tabs="editorTabs"
         :activeFilePath="activeEditorFile"
@@ -153,7 +165,42 @@
       />
       <Terminal v-model:open="terminalOpen" :height="terminalHeight" />
     </div>
-    <div class="chat-content">
+    <!-- AIStudio 左：会话列表 -->
+    <SessionList
+      v-if="isExpanded && uiMode === 'studio'"
+      :sessions="sessionList"
+      :active-session="activeSession"
+      @select="selectSession"
+      @new-session="newSession"
+    />
+    <!-- 共享聊天列（Professional 右栏 / AIStudio 中栏时间线） -->
+    <div class="chat-content" :class="{ studio: isExpanded && uiMode === 'studio' }">
+      <!-- AIStudio 中栏头部：会话名 + 分支 + 状态 + 模型 -->
+      <div v-if="isExpanded && uiMode === 'studio'" class="studio-chat-header">
+        <span class="sch-name">{{ activeSessionObj?.name || '未命名会话' }}</span>
+        <span class="sch-branch">{{ activeSessionObj?.branch || 'main' }}</span>
+        <span class="sch-status">
+          <span class="sch-dot" :class="'status-' + (activeSessionObj?.status || 'idle')"></span>
+          {{ { running: '运行中', done: '已完成', idle: '空闲' }[activeSessionObj?.status] || '空闲' }}
+        </span>
+        <div class="sch-spacer"></div>
+        <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
+          <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || '模型' }}</span>
+          <span class="sch-caret">▾</span>
+          <div v-if="showModelMenu" class="model-menu-dropdown sch-model-menu" @click.stop>
+            <div
+              v-for="m in modelOptions"
+              :key="m.value"
+              class="model-menu-item"
+              :class="{ active: selectedModel === m.value }"
+              @click="selectModel(m.value)"
+            >
+              <Icon :icon="m.icon" width="16" style="margin-right:8px" />
+              {{ m.label }}
+            </div>
+          </div>
+        </div>
+      </div>
       
           <!-- 其余内容保持不变：滚动按钮、消息列表、欢迎语、推理链等 -->
           <button
@@ -183,6 +230,34 @@
                 </div>
                 <div v-else-if="item.sender === 'user'" class="message-bubble user">
                   {{ item.content }}
+                </div>
+                <!-- Agent 步骤组（AIStudio 展开：可折叠步骤卡；Professional：降级为工具药丸） -->
+                <div v-else-if="item.kind === 'group' && isExpanded && uiMode === 'studio'" class="agent-group">
+                  <div class="agent-group-summary" @click="toggleGroup(item.id)">
+                    <span>{{ item.text }}</span>
+                    <span class="agent-group-chev" :class="{ open: expandedGroups[item.id] }">›</span>
+                  </div>
+                  <div v-if="expandedGroups[item.id]" class="agent-group-card">
+                    <div
+                      v-for="(it, i) in item.items"
+                      :key="i"
+                      class="agent-group-item"
+                      :class="{ jump: item.gtype === 'edits' }"
+                      @click="item.gtype === 'edits' && openDiffFile(it.name)"
+                    >
+                      <span class="agv-verb">{{ it.verb }}</span>
+                      <span class="agv-name">{{ it.name }}</span>
+                      <template v-if="it.adds !== undefined">
+                        <span class="agv-add">{{ it.adds }}</span>
+                        <span class="agv-del">{{ it.dels }}</span>
+                      </template>
+                      <span v-else-if="it.meta" class="agv-meta">{{ it.meta }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-else-if="item.kind === 'group'" class="tool-call-indicator degraded">
+                  <Icon icon="mdi:cog-sync" width="14" color="#6b7280" />
+                  <span>{{ item.text }}</span>
                 </div>
                 <div v-else class="assistant-message">
                  <div v-if="item.recalling" class="recalling-hint">
@@ -290,8 +365,26 @@
 </div>
           </div>
    </div>
+
+    <!-- AIStudio 右：工具面板 Diff / Terminal -->
+    <aside class="tool-panel" v-if="isExpanded && uiMode === 'studio'">
+      <div class="tool-panel-tabs">
+        <div class="tool-tab" :class="{ active: toolTab === 'diff' }" @click="setToolTab('diff')">Diff</div>
+        <div class="tool-tab" :class="{ active: toolTab === 'terminal' }" @click="setToolTab('terminal')">Terminal</div>
+        <div class="tool-tabs-spacer"></div>
+        <span class="tool-panel-meta">{{ toolTab === 'diff' ? '3 files' : 'node' }}</span>
       </div>
-      
+      <DiffPanel
+        v-if="toolTab === 'diff'"
+        :files="diffFiles"
+        :expanded-diffs="expandedDiffs"
+        :totals="diffTotals"
+        @toggle-file="toggleDiffFile"
+      />
+      <Terminal v-else class="tool-panel-terminal" :open="true" :embedded="true" />
+    </aside>
+      </div>
+
     </div>
   </div></div>
 </template>
@@ -309,10 +402,88 @@ import { useChatWidget } from './useChatWidget.js'
 import FileTreePanel from './FileTreePanel.vue'
 import CodeEditor from './CodeEditor.vue'
 import Terminal from './Terminal.vue'
+import SessionList from './SessionList.vue'
+import DiffPanel from './DiffPanel.vue'
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
   sessionId: { type: String, default: 'global_chat_session' }
 })
+
+// ==================== AIStudio 模式状态 ====================
+// 两种模式共享 messages / selectedModel / 终端 / 列宽，仅呈现不同
+const uiMode = ref(localStorage.getItem('prism_ui_mode') || 'studio')  // 'pro' | 'studio'
+function setUiMode(mode) {
+  uiMode.value = mode
+  localStorage.setItem('prism_ui_mode', mode)
+}
+
+// 会话列表（演示数据种子，可后续落后端 /api/sessions）
+const STATUS_MAP = {
+  running: { label: '运行中', color: 'var(--chat-accent, #c96442)', pulse: true },
+  done: { label: '已完成', color: '#12b76a', pulse: false },
+  idle: { label: '空闲', color: '#a39c8f', pulse: false }
+}
+const sessionList = ref([
+  { id: 'aether', name: 'Aether', desc: '上下文注入层缓存优化', branch: 're0', status: 'running', time: '刚刚' },
+  { id: 'prism', name: 'Prism', desc: '文件树懒加载与固定标签', branch: 'main', status: 'done', time: '2 小时前' },
+  { id: 'nebula', name: 'Nebula', desc: '终端输出流式渲染', branch: 'dev', status: 'idle', time: '昨天' }
+])
+const activeSession = ref('aether')
+const activeSessionObj = computed(
+  () => sessionList.value.find(s => s.id === activeSession.value) || sessionList.value[0] || null
+)
+function selectSession(id) {
+  activeSession.value = id
+}
+function newSession() {
+  const id = 'sess_' + Date.now().toString(36)
+  sessionList.value = [
+    { id, name: '未命名会话', desc: '等待第一条指令…', branch: 'main', status: 'idle', time: '刚刚' },
+    ...sessionList.value
+  ]
+  activeSession.value = id
+}
+
+// 右侧工具面板：Diff / Terminal
+const toolTab = ref('diff')
+const expandedDiffs = ref({ 'server.js': true })
+function setToolTab(t) { toolTab.value = t }
+function toggleDiffFile(name) {
+  expandedDiffs.value = { ...expandedDiffs.value, [name]: !expandedDiffs.value[name] }
+}
+function openDiffFile(name) {
+  toolTab.value = 'diff'
+  expandedDiffs.value = { ...expandedDiffs.value, [name]: true }
+}
+// Diff 演示数据（占位条，实施接真实 /api/git-diff 时保留此结构）
+const diffFiles = ref([
+  { name: 'server.js', adds: '+18', dels: '-4', rows: [
+    { gap: '12 行未修改' },
+    { n: 41, t: 'ctx', w: 62 }, { n: 42, t: 'ctx', w: 48 },
+    { n: 43, t: 'del', w: 74 }, { n: 44, t: 'del', w: 58 },
+    { n: 43, t: 'add', w: 80 }, { n: 44, t: 'add', w: 66 }, { n: 45, t: 'add', w: 52 },
+    { n: 46, t: 'ctx', w: 44 },
+    { gap: '36 行未修改' },
+    { n: 83, t: 'ctx', w: 58 }, { n: 84, t: 'add', w: 70 }, { n: 85, t: 'add', w: 46 }, { n: 86, t: 'ctx', w: 62 }
+  ] },
+  { name: 'query.json', adds: '+2', dels: '-2', rows: [
+    { n: 3, t: 'ctx', w: 52 }, { n: 4, t: 'del', w: 64 }, { n: 4, t: 'add', w: 70 }, { n: 5, t: 'ctx', w: 40 },
+    { gap: '3 行未修改' },
+    { n: 9, t: 'del', w: 56 }, { n: 9, t: 'add', w: 62 }, { n: 10, t: 'ctx', w: 46 }
+  ] },
+  { name: 'verify_go_query.py', adds: '+9', dels: '-1', rows: [
+    { gap: '18 行未修改' },
+    { n: 22, t: 'ctx', w: 54 }, { n: 23, t: 'del', w: 48 }, { n: 23, t: 'add', w: 76 }, { n: 24, t: 'add', w: 60 }, { n: 25, t: 'add', w: 68 }, { n: 26, t: 'ctx', w: 42 },
+    { gap: '40 行未修改' }
+  ] }
+])
+const diffTotals = '+29 −7'
+
+// Agent 时间线步骤组折叠态
+const expandedGroups = ref({})
+function toggleGroup(id) {
+  expandedGroups.value = { ...expandedGroups.value, [id]: !expandedGroups.value[id] }
+}
 
 
 const viewingFile = ref(null)    // 当前查看的文件对象
@@ -722,6 +893,11 @@ watch(messages, () => {
   font-weight: 500;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .header-expand-btn {
   border: none;
   background: transparent;
@@ -734,6 +910,45 @@ watch(messages, () => {
   border-radius: 6px;
 }
 .header-expand-btn:hover { background: rgba(0,0,0,0.05); }
+
+/* 模式切换胶囊 [Professional | AIStudio] */
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #f4f2ec;
+  border: 1px solid #e4dfd4;
+  border-radius: 999px;
+  padding: 2px;
+}
+.mode-seg {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #a39c8f;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.mode-seg.active {
+  background: #c96442;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* AIStudio 面包屑（纯文本会话名） */
+.studio-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.studio-breadcrumb .breadcrumb-separator { color: #a39c8f; }
+.studio-session-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #696259;
+}
 
 /* ==================== IDE 工作区三栏几何（仅全屏展开时生效） ==================== */
 /* 中间列：编辑器(flex:1) + 终端(卡在编辑区宽度下方，不横跨文件树/聊天) */
@@ -749,11 +964,202 @@ watch(messages, () => {
 <style>
 @import './chat-global.css';
 
-/* 展开模式下聊天区变为固定宽度的全高右栏，把 flex:1 主体让给中间的编辑器列 */
-.chat-window.expanded .chat-content {
+/* ===== Professional：聊天区 = 固定宽度全高右栏，把 flex:1 让给中间编辑器列 ===== */
+.chat-window.expanded .chat-body.pro .chat-content {
   flex: 0 0 380px !important;
   width: 380px !important;
   max-width: 380px !important;
   border-left: 1px solid #e4dfd4;
+}
+
+/* ===== AIStudio：聊天区 = 中栏 flex:1，会话列表在左、工具面板在右 ===== */
+.chat-window.expanded .chat-body.studio .chat-content {
+  flex: 1 !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+  border-right: 1px solid #e4dfd4;
+  background: #ffffff;
+}
+
+/* 会话列表左栏（宽度固定，可后续接拖拽） */
+.chat-window.expanded .chat-body.studio > .session-panel {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid #e4dfd4;
+}
+
+/* 右侧工具面板 */
+.chat-window.expanded .tool-panel {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: #faf9f6;
+}
+.chat-window.expanded .tool-panel-tabs {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e4dfd4;
+}
+.chat-window.expanded .tool-tab {
+  padding: 5px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a39c8f;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.chat-window.expanded .tool-tab.active { background: #e8e3d8; color: #1b1a18; }
+.chat-window.expanded .tool-tabs-spacer { flex: 1; }
+.chat-window.expanded .tool-panel-meta {
+  font-size: 10.5px;
+  color: #a39c8f;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+.chat-window.expanded .tool-panel-terminal { border-radius: 0; }
+
+/* AIStudio 中栏头部 */
+.chat-window.expanded .studio-chat-header {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  border-bottom: 1px solid #e4dfd4;
+  position: relative;
+}
+.chat-window.expanded .studio-chat-header .sch-name { font-size: 13.5px; font-weight: 700; color: #1b1a18; }
+.chat-window.expanded .studio-chat-header .sch-branch {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid #e4dfd4;
+  color: #696259;
+  background: #f4f2ec;
+}
+.chat-window.expanded .studio-chat-header .sch-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #696259;
+}
+.chat-window.expanded .studio-chat-header .sch-dot { width: 7px; height: 7px; border-radius: 50%; }
+.chat-window.expanded .studio-chat-header .sch-dot.status-running { background: #c96442; animation: sess-pulse 1.6s ease-in-out infinite; }
+.chat-window.expanded .studio-chat-header .sch-dot.status-done { background: #12b76a; }
+.chat-window.expanded .studio-chat-header .sch-dot.status-idle { background: #a39c8f; }
+.chat-window.expanded .studio-chat-header .sch-spacer { flex: 1; }
+.chat-window.expanded .studio-chat-header .sch-model {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f4f2ec;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #1b1a18;
+}
+.chat-window.expanded .studio-chat-header .sch-caret { font-size: 9px; color: #a39c8f; }
+.chat-window.expanded .studio-chat-header .sch-model-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: auto;
+  bottom: auto;
+  margin-top: 6px;
+}
+@keyframes sess-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.25); }
+}
+
+/* AIStudio 中栏：消息流 + 输入框收在 720px 阅读列内居中 */
+.chat-window.expanded .chat-body.studio .chat-content .chat-messages {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 22px 24px;
+  box-sizing: border-box;
+}
+.chat-window.expanded .chat-body.studio .chat-content .input-wrapper {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* Agent 时间线步骤组 */
+.chat-window.expanded .agent-group { width: 100%; }
+.chat-window.expanded .agent-group-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #696259;
+  padding: 2px 0;
+  transition: color 0.15s ease;
+}
+.chat-window.expanded .agent-group-summary:hover { color: #1b1a18; }
+.chat-window.expanded .agent-group-chev {
+  display: inline-block;
+  font-size: 12px;
+  color: #a39c8f;
+  transition: transform 0.15s ease;
+}
+.chat-window.expanded .agent-group-chev.open { transform: rotate(90deg); }
+.chat-window.expanded .agent-group-card {
+  margin-top: 8px;
+  border: 1px solid #e4dfd4;
+  border-radius: 10px;
+  background: #f4f2ec;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-window.expanded .agent-group-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.chat-window.expanded .agent-group-item.jump { cursor: pointer; }
+.chat-window.expanded .agent-group-item .agv-verb { color: #696259; flex-shrink: 0; }
+.chat-window.expanded .agent-group-item .agv-name {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1b1a18;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-window.expanded .agent-group-item .agv-add,
+.chat-window.expanded .agent-group-item .agv-del {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.chat-window.expanded .agent-group-item .agv-add { color: #12b76a; }
+.chat-window.expanded .agent-group-item .agv-del { color: #d94834; }
+.chat-window.expanded .agent-group-item .agv-meta {
+  font-size: 11.5px;
+  color: #a39c8f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

@@ -1,10 +1,14 @@
 <template>
-  <div class="terminal-panel" :class="{ collapsed: !open }" :style="{ height: open ? height + 'px' : '28px' }">
-    <div class="terminal-titlebar" @click="$emit('update:open', !open)">
+  <div
+    class="terminal-panel"
+    :class="{ collapsed: !open, embedded }"
+    :style="embedded ? {} : { height: open ? height + 'px' : '28px' }"
+  >
+    <div v-if="!embedded" class="terminal-titlebar" @click="$emit('update:open', !open)">
       <span class="terminal-title">TERMINAL · node</span>
       <Icon icon="mdi:chevron-down" width="16" class="collapse-chevron" :class="{ rotated: !open }" />
     </div>
-    <div class="terminal-body" v-show="open">
+    <div class="terminal-body" v-show="open || embedded">
       <div class="term-line" v-for="(line, i) in lines" :key="i" v-html="line"></div>
       <div class="term-line term-cursor-line">
         <span class="term-prompt">PS C:\PrismD&gt;</span>
@@ -19,7 +23,8 @@ import { Icon } from '@iconify/vue'
 
 defineProps({
   open: { type: Boolean, default: true },
-  height: { type: Number, default: 180 }
+  height: { type: Number, default: 180 },
+  embedded: { type: Boolean, default: false }  // true = 右侧工具面板全高模式，无折叠标题栏
 })
 defineEmits(['update:open'])
 
@@ -34,6 +39,13 @@ const lines = [
 </script>
 
 <style scoped>
+.terminal-panel.embedded {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  border-top: none;
+  transition: none;
+}
 .terminal-panel {
   flex-shrink: 0;
   width: 100%;
