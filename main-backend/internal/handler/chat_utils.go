@@ -5,6 +5,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,11 +40,11 @@ type ToolCallRequest struct {
 	Args map[string]interface{} `json:"args"`
 }
 
-// 从文本中解析工具调用（支持 JSON + XML 两种格式）
-func parseToolCallFromText(content string) (*ToolCallRequest, bool) {
+// 从文本中解析工具调用（支持严格 JSON 与混合文本内嵌 JSON）
+func parseToolCallFromText(content string) (*ToolCallRequest, string, bool) {
 	trimmed := strings.TrimSpace(content)
 
-	// 处理 markdown 代码块包裹的情况：```json ... ```
+	// 处理 markdown 代码块包裹的情况：```json ... ``` 或 ``` ... ```
 	if strings.HasPrefix(trimmed, "```json") {
 		trimmed = strings.TrimPrefix(trimmed, "```json")
 		trimmed = strings.TrimSuffix(trimmed, "```")
@@ -54,20 +55,44 @@ func parseToolCallFromText(content string) (*ToolCallRequest, bool) {
 		trimmed = strings.TrimSpace(trimmed)
 	}
 
-	// 必须先以 { 开头
-	if !strings.HasPrefix(trimmed, "{") {
-		return nil, false
+	// 策略一：整段文本就是纯 JSON（严格模式）
+	if strings.HasPrefix(trimmed, "{") {
+		var tc ToolCallRequest
+		if err := json.Unmarshal([]byte(trimmed), &tc); err == nil {
+			if tc.Tool != "" && tc.Args != nil {
+				return &tc, trimmed, true
+			}
+		}
 	}
 
-	var tc ToolCallRequest
-	if err := json.Unmarshal([]byte(trimmed), &tc); err != nil {
-		return nil, false
+	// 策略二：从混合文本中提取内嵌的 {"tool":"...","args":{...}} JSON
+	if idx := strings.Index(trimmed, `{"tool":"`); idx >= 0 {
+		candidate := trimmed[idx:]
+		depth := 0
+		end := -1
+		for i, ch := range candidate {
+			if ch == '{' {
+				depth++
+			} else if ch == '}' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
+		if end > 0 {
+			jsonStr := candidate[:end]
+			var tc ToolCallRequest
+			if err := json.Unmarshal([]byte(jsonStr), &tc); err == nil {
+				if tc.Tool != "" && tc.Args != nil {
+					return &tc, jsonStr, true
+				}
+			}
+		}
 	}
 
-	if tc.Tool == "" || tc.Args == nil {
-		return nil, false
-	}
-	return &tc, true
+	return nil, "", false
 }
 func parseJSONToolCallStrict(content string) (*ToolCallRequest, bool) {
 	trimmed := strings.TrimSpace(content)
@@ -258,4 +283,49 @@ func executeToolSilently(sessionID string, toolCall ToolCallRequest) (string, er
 func mustJSON(v interface{}) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// formatToolArgs 将 map[string]interface{} 格式化为 key="value" 键值对字符串
+// 例：{"path": "a.py", "content": "print(1)"} → path="a.py" content="print(1)"
+// 前端用 /(\w+)="([\s\S]*?)"/g 解析，value 内部的双引号会被转义
+func formatToolArgs(args map[string]interface{}) string {
+	if len(args) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys) // 确定性顺序，便于前端调试
+	var parts []string
+	for _, k := range keys {
+		v := args[k]
+		val := fmt.Sprintf("%v", v)
+		// 转义 value 内部的双引号：\" → \\" 这样 JSON 序列化后前端
+		// 反序列化得到的是 \"，正则中的 ? 会停在反斜杠这里不被吞掉
+		val = strings.ReplaceAll(val, `"`, `\"`)
+		parts = append(parts, fmt.Sprintf(`%s="%s"`, k, val))
+	}
+	return strings.Join(parts, " ")
+}
+
+// stripToolJSON 从内容中移除找到的工具调用 JSON，返回纯叙述文本
+func stripToolJSON(content string, jsonStr string) string {
+	if jsonStr == "" {
+		return content
+	}
+	idx := strings.Index(content, jsonStr)
+	if idx < 0 {
+		return content
+	}
+	before := strings.TrimSpace(content[:idx])
+	after := strings.TrimSpace(content[idx+len(jsonStr):])
+	result := before
+	if after != "" {
+		if result != "" {
+			result += "\n"
+		}
+		result += after
+	}
+	return result
 }

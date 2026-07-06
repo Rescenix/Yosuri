@@ -73,7 +73,6 @@ func (h *ChatHandler) resolveDSConversation(
 	}
 
 	currentMessages := initialMessages
-	hasToolCalls := false
 
 	for {
 		// ===== Token 限制 =====
@@ -103,13 +102,16 @@ func (h *ChatHandler) resolveDSConversation(
 		}
 
 		body, _ := json.Marshal(reqBody)
-		httpReq, _ := http.NewRequest("POST", "https://api.deepseek.com/chat/completions", bytes.NewBuffer(body))
+		httpReq, _ := http.NewRequestWithContext(c.Request.Context(), "POST", "https://api.deepseek.com/chat/completions", bytes.NewBuffer(body))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 		client := &http.Client{Timeout: 5 * time.Minute}
 		resp, err := client.Do(httpReq)
 		if err != nil {
+			if c.Request.Context().Err() != nil {
+				return "", "", 0, c.Request.Context().Err()
+			}
 			return "", "", 0, fmt.Errorf("DS请求失败: %w", err)
 		}
 
@@ -200,22 +202,23 @@ func (h *ChatHandler) resolveDSConversation(
 			if ok && tc.Function.Name != "" && tc.Function.Arguments != "" {
 				completeCalls = append(completeCalls, *tc)
 				fmt.Printf("🔧 [DS] 完整工具调用 index=%d, name=%s, args=%s\n", i, tc.Function.Name, tc.Function.Arguments)
+				// 将 JSON 字符串参数转为 key="value" 格式
+				var argsMap map[string]interface{}
+				argsStr := tc.Function.Arguments
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &argsMap); err == nil {
+					argsStr = formatToolArgs(argsMap)
+				}
 				writeSSE(c, "tool_call", "tool_call_start", map[string]string{
 					"name": tc.Function.Name,
-					"args": tc.Function.Arguments,
+					"args": argsStr,
 				})
 				c.Writer.Flush()
 			}
 		}
 
 		if len(completeCalls) == 0 {
-			if hasToolCalls {
-				return "", "", 0, nil
-			}
 			return fullContent.String(), "", 0, nil
 		}
-
-		hasToolCalls = true
 
 		var toolResults []string
 		for _, tc := range completeCalls {

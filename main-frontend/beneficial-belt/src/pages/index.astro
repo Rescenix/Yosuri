@@ -10,14 +10,16 @@ import AuthGuard from '../components/AuthGuard.astro';
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>星尘核心</title>
-    <style>
+    <!-- ✨ 修复：加上 is:global，确保基础布局设定能真正触达根节点 ✨ -->
+    <style is:global>
       @import "/src/styles/global.css";
 
       html,
       body {
         height: 100%;
         margin: 0;
-        overflow-x: hidden;
+        /* 外部滚轴彻底消失的核心 */
+        overflow: hidden; 
         background: #f4f3ee;
         color: #1b1a18;
       }
@@ -44,8 +46,8 @@ import AuthGuard from '../components/AuthGuard.astro';
       }
 
       .chat-page :global(.chat-window) {
-        position: absolute; /* ← 改这里 */
-        inset: 72px 24px 24px 24px;
+        position: absolute;
+        inset: 0;
         width: auto;
         height: auto;
         max-height: none;
@@ -76,8 +78,6 @@ import AuthGuard from '../components/AuthGuard.astro';
   </head>
 
   <body>
-  
-
     <div class="app-shell">
       <main class="chat-page">
         <ChatWidget client:only="vue" sessionId="" autoOpen={true} />

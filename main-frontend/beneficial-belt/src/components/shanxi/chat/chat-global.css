@@ -541,3 +541,261 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .chat-messages::-webkit-scrollbar-track {
   background: transparent;
 }
+/* ==================== Agent 工作流快捷按钮 ==================== */
+.workflow-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 6px 0;        /* 去除原来的 padding，更紧凑 */
+  background: transparent;    /* 背景透明融入聊天背景 */
+  border: none;               /* 无边框 */
+  flex-wrap: wrap;
+}
+
+.workflow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid #ddd6cc;
+  background: #fff;
+  border-radius: 14px;
+  color: #5c4f42;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.workflow-btn:hover {
+  background: #e8e0d6;
+  border-color: #c4b8aa;
+  color: #3d3226;
+}
+.workflow-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.workflow-btn:disabled:hover {
+  background: #fff;
+  border-color: #ddd6cc;
+  color: #5c4f42;
+}
+.workflow-btn:active {
+  transform: scale(0.96);
+}
+
+.workflow-btn-code {
+  border-color: #c96442;
+  color: #c96442;
+}
+.workflow-btn-code:hover {
+  background: #f7e9e3;
+  border-color: #c96442;
+  color: #a6502f;
+}
+
+.workflow-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: #f0ece6;
+  border-bottom: 1px solid #e0d8cc;
+  font-size: 12px;
+  color: #5c4f42;
+}
+.workflow-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: #ddd6cc;
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 120px;
+}
+.workflow-progress-fill {
+  height: 100%;
+  background: #8a7f72;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.workflow-progress-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.workflow-spin {
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.agent-step-card {
+  width: 100%;
+  border: 1px solid #e8e0d6;
+  border-radius: 10px;
+  background: #fbfaf8;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+.agent-step-card.expanded {
+  background: #ffffff;
+}
+.agent-step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.agent-step-header:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+.step-status-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-right: 4px;
+}
+.step-agent-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #3d3226;
+  flex-shrink: 0;
+}
+.step-summary {
+  font-size: 12px;
+  color: #8a7f72;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.step-token-badge {
+  font-size: 10.5px;
+  color: #a39c8f;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  flex-shrink: 0;
+}
+.step-chev {
+  flex-shrink: 0;
+  color: #a39c8f;
+  transition: transform 0.15s ease;
+}
+.step-chev.open {
+  transform: rotate(180deg);
+}
+.agent-step-body {
+  padding: 4px 14px 14px;
+  border-top: 1px solid #eee7da;
+}
+
+/* ==================== Token 用量小面板（吸附输入框容器右上角） ==================== */
+.vision-status-toast {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 6;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e4dfd4;
+  font-size: 11px;
+  color: #8a7f72;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.vision-status-toast.error {
+  color: #d94834;
+  border-color: #f3c9c2;
+  background: rgba(255, 245, 243, 0.95);
+}
+
+.token-usage-widget {
+  position: absolute;
+  top: 6px;
+  right: 10px;    /* 重要：移到右上角 */
+  left: auto;     /* 清除左侧定位 */
+  z-index: 6;
+}
+.token-usage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #e4dfd4;
+  font-size: 10.5px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color: #8a7f72;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.token-usage-pill:hover {
+  background: #efece4;
+}
+.token-usage-pct {
+  color: #c96442;
+  font-weight: 600;
+}
+.token-usage-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  width: 220px;
+  background: #fff;
+  border: 1px solid #e4dfd4;
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+  padding: 12px 14px;
+  z-index: 20;
+}
+.tup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 3px 0;
+}
+.tup-label { color: #8a7f72; }
+.tup-value {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-weight: 600;
+  color: #3d3226;
+}
+.tup-bar {
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: #eee7da;
+  margin: 4px 0 8px;
+  overflow: hidden;
+}
+.tup-bar-fill {
+  height: 100%;
+  background: #c96442;
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+.tup-note {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #a39c8f;
+}
+/* ==================== 按钮高亮状态（模式化高亮） ==================== */
+.workflow-btn.active,
+.workflow-btn-code.active {
+  background: #c96442 !important;
+  color: #ffffff !important;
+  border-color: #c96442 !important;
+  box-shadow: 0 2px 8px rgba(201, 100, 66, 0.25);
+}

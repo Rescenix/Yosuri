@@ -146,6 +146,39 @@ func (h *ChatHandler) sendCloudStream(c *gin.Context, reqBody map[string]interfa
 
 	reader := bufio.NewReader(resp.Body)
 	var fullContent strings.Builder
+	var currentLine strings.Builder
+	lineIsJSON := false
+
+	// 按字符扫描一个 delta：一旦当前行（去掉行首空白后）以 { 开头，就判定这一行是
+	// 工具调用 JSON——从这个字符起不再转发 content 事件，避免 JSON 在拼完整之前就
+	// 裸露闪现在聊天记录里；JSON 前面那句自然语言（如果模型有说）照常实时流式转发。
+	// fullContent 始终完整累积（不受这个判断影响），后面解析工具调用要用完整文本。
+	emitDelta := func(delta string) {
+		fullContent.WriteString(delta)
+		if lineIsJSON {
+			return
+		}
+		var safe strings.Builder
+		for _, ch := range delta {
+			if ch == '\n' {
+				currentLine.Reset()
+				safe.WriteRune(ch)
+				continue
+			}
+			currentLine.WriteRune(ch)
+			trimmed := strings.TrimLeft(currentLine.String(), " \t")
+			if len(trimmed) > 0 && trimmed[0] == '{' {
+				lineIsJSON = true
+				break
+			}
+			safe.WriteRune(ch)
+		}
+		if s := safe.String(); s != "" {
+			writeSSE(c, "content", "content", map[string]string{"content": s})
+			c.Writer.Flush()
+		}
+	}
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -169,9 +202,7 @@ func (h *ChatHandler) sendCloudStream(c *gin.Context, reqBody map[string]interfa
 			continue
 		}
 		if chunk.Message.Content != "" {
-			fullContent.WriteString(chunk.Message.Content)
-			writeSSE(c, "content", "content", map[string]string{"content": chunk.Message.Content})
-			c.Writer.Flush()
+			emitDelta(chunk.Message.Content)
 		}
 		if chunk.Done {
 			break

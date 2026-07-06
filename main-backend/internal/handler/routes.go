@@ -41,6 +41,14 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.POST("/api/execute-marker", HandleExecuteMarker)
 	r.POST("/api/chat/stream", chatHandler.StreamChat)
 
+	// Agent 工作流编排
+	workflowRunner := NewWorkflowRunner(chatHandler)
+	r.POST("/api/workflow/run", workflowRunner.HandleWorkflowRun)
+	r.GET("/api/workflows", workflowRunner.HandleListWorkflows)
+
+	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
+	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)
+
 	r.PATCH("/api/posts/:id", UpdatePostTags)
 	r.DELETE("/api/posts/:id", DeletePost)
 	r.GET("/api/sessions/:id", func(c *gin.Context) {

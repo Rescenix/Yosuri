@@ -1,0 +1,100 @@
+<template>
+  <div class="smc-root" :class="{ fill }">
+    <div class="fm-mode-switch">
+      <button class="fm-mode-btn" :class="{ active: activeChatMode !== 'code' }" :disabled="workflowActive" @click="$emit('trigger-chat')">
+        <Icon icon="mdi:chat-outline" width="14" /> Chat
+      </button>
+      <button class="fm-mode-btn fm-mode-code" :class="{ active: activeChatMode === 'code' }" :disabled="workflowActive" @click="$emit('trigger-code')">
+        <Icon icon="mdi:code-braces" width="14" /> Code
+      </button>
+    </div>
+    <div class="fm-session-area">
+      <SessionList
+        :sessions="sessions"
+        :active-session="activeSession"
+        @select="$emit('select-session', $event)"
+        @new-session="$emit('new-session')"
+        @rename="$emit('rename-session', $event)"
+        @delete="$emit('delete-session', $event)"
+      />
+    </div>
+    <div class="fm-footer">
+      <Icon icon="mdi:account-circle" width="20" color="#8a7f72" />
+      <span>Prometheus · Pro</span>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { Icon } from '@iconify/vue'
+import SessionList from './SessionList.vue'
+
+defineProps({
+  sessions: { type: Array, default: () => [] },
+  activeSession: { type: String, default: '' },
+  activeChatMode: { type: String, default: null },
+  workflowActive: { type: Boolean, default: false },
+  // 悬浮预览走内容自身高度（session 区自带 max-height 上限）；
+  // 钉住态需要撑满整条侧栏，session 区改成 flex:1 吃掉剩余高度
+  fill: { type: Boolean, default: false }
+})
+defineEmits(['select-session', 'new-session', 'trigger-chat', 'trigger-code', 'rename-session', 'delete-session'])
+</script>
+
+<style scoped>
+.smc-root { display: flex; flex-direction: column; }
+.smc-root.fill { height: 100%; min-height: 0; }
+.smc-root.fill .fm-session-area { flex: 1; max-height: none; }
+
+.fm-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  padding: 2px;
+  margin: 4px 8px 8px;
+  flex-shrink: 0;
+}
+.fm-mode-btn {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #a3a3a3;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.fm-mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.fm-mode-btn.active { background: #ffffff; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); }
+
+.fm-session-area {
+  min-height: 0;
+  max-height: 400px;
+  display: flex;
+  padding: 0 8px;
+  overflow-y: auto;
+}
+
+.fm-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px 4px;
+  border-top: 1px solid #ececec;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #1a1a1a;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+</style>

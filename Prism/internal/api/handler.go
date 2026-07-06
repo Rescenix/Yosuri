@@ -373,20 +373,35 @@ func (h *PrimQLHandler) handle(raw string) string {
 	case "GRAPH":
 		nodes := make([]map[string]interface{}, 0)
 		for _, n := range graph.Nodes() {
+			// 按 rune 截断，避免切碎多字节 UTF-8 产生乱码尾巴
+			text := n.Text
+			if runes := []rune(text); len(runes) > 50 {
+				text = string(runes[:50])
+			}
 			nodes = append(nodes, map[string]interface{}{
 				"id":     n.ID,
 				"role":   n.Role,
-				"text":   n.Text[:min(len(n.Text), 50)],
-				"energy": n.BaseEnergy,
+				"text":   text,
+				"energy": n.BaseEnergy, // BaseEnergy 静态快照；前端配合下方两字段自算 EffectiveEnergy
+				// 衰减动画所需：EffectiveEnergy = energy * exp(-decay_rate * elapsedHours)
+				"last_access_at": n.LastAccessAt.Format(time.RFC3339),
+				"decay_rate":     n.DecayRate,
+				// 画像字段：省去前端再轮询一次 STATS FULL 并正则解析
+				"cluster":    n.Cluster,
+				"emotion":    n.Emotion,
+				"intensity":  n.Intensity,
+				"event_type": n.EventType,
 			})
 		}
 		edges := make([]map[string]interface{}, 0)
 		for _, s := range graph.Synapses() {
 			edges = append(edges, map[string]interface{}{
-				"from":   s.From,
-				"to":     s.To,
-				"kind":   s.Kind,
-				"weight": s.Weight,
+				"from":       s.From,
+				"to":         s.To,
+				"kind":       s.Kind,
+				"weight":     s.Weight, // 静态权重；前端自算 EffectiveWeight = weight * exp(-decay_rate * elapsedHours)
+				"last_used":  s.LastUsed.Format(time.RFC3339),
+				"decay_rate": s.DecayRate,
 			})
 		}
 		resp, _ := json.Marshal(map[string]interface{}{

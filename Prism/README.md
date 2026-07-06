@@ -1,170 +1,139 @@
-# Prism — 轻量级向量记忆存储库
+# Prism — 数字海马体
 
-## 概述
+**Prism** 是一个仿生记忆引擎，模拟生物海马体的记忆机制，为 AI 提供持久化、可检索、会遗忘的长期记忆系统。
 
-**Prism** 是一个用 C++17 编写的轻量级向量记忆存储引擎。它将文本记忆（包含角色、内容、关键词）与浮点向量（embedding）一起持久化到二进制文件中，并提供基于余弦相似度的暴力检索能力。
+## 架构总览
 
-Prism 以动态链接库（DLL）形式提供纯 C API，可被任何支持 C ABI 的语言（C/C++、Python、Go 等）调用。
+```
+┌─────────────────────────────────────────────────────────┐
+│                    prismd-visual (React)                 │
+│              神经元图谱可视化 · ECharts                   │
+├─────────────────────────────────────────────────────────┤
+│                    PrismD (Go HTTP 服务)                  │
+│         PrimQL 协议 · 图结构记忆 · 多域管理                │
+├─────────────────────────────────────────────────────────┤
+│              internal/memory (Go 核心引擎)                │
+│   图结构 · 突触扩散 · 倒排索引 · LLM压缩 · 记忆整理        │
+├─────────────────────────────────────────────────────────┤
+│             Prism C API (C++17 共享库)                    │
+│         向量存储 · 忆阻器混沌演化 · 余弦检索               │
+└─────────────────────────────────────────────────────────┘
+```
 
-## 特性
+## 核心概念
 
-- **纯 C API**：导出 `extern "C"` 函数，跨语言调用友好
-- **二进制持久化**：每条记录以紧凑的二进制格式追加写入文件，重启后自动恢复
-- **向量检索**：基于点积的暴力搜索（假设向量已归一化），返回余弦相似度最高的 top-k 结果
-- **增量写入**：插入即落盘（`fflush`），数据不丢失
-- **内存缓存**：全量记录缓存在内存中，搜索零磁盘 I/O
-- **轻量无依赖**：仅依赖 C/C++ 标准库，无需第三方库
+| 概念 | 对应生物模型 | 说明 |
+|------|-------------|------|
+| **神经元 (Node)** | 神经元 | 一条记忆，包含文本、情绪、强度、能量 |
+| **突触 (Synapse)** | 突触连接 | 记忆之间的关联，有类型和权重 |
+| **能量 (Energy)** | 记忆强度 | 随时间衰减，被访问时增强，驱动"用进废退" |
+| **簇 (Cluster)** | 脑区 | UserBase / CodeWork / ToolLog / Session 四类记忆隔离 |
+| **域 (Domain)** | 人格/角色**  不同用户或 AI 角色的记忆空间隔离 |
+| **激活扩散** | 联想激活 | 从种子节点沿突触传播，唤醒关联记忆 |
 
-## 构建
+## 组件说明
 
-### 环境要求
+### PrismD — Go HTTP 服务
 
-- CMake ≥ 3.12
-- 支持 C++17 的编译器（MSVC、GCC、Clang）
+主服务进程，提供 PrimQL 文本协议接口。
 
-### 构建步骤
+```bash
+cd Prism
+go run cmd/prismd/main.go -port 5666 -data ./data -domain Atri
+```
+
+**PrimQL 命令：**
+
+| 命令 | 功能 |
+|------|------|
+| `ENGRAM <role> <text>` | 写入一条记忆 |
+| `LOOM <query>` | 检索相关记忆（倒排索引 + 图扩散） |
+| `LOOM <id>` | 按 ID 查看单条记忆 |
+| `LOOM -N <n>` | 查看最近 N 条记忆 |
+| `REFRACT <json>` | 更新记忆（强化或修改） |
+| `PRUNE <id>` | 遗忘一条记忆（能量置零） |
+| `DRIFT` | 全局演化（能量衰减 5%） |
+| `COMPILE <turns>` | 后台压缩对话为摘要记忆 |
+| `COMPILE_SYNC <turns>` | 同步压缩 |
+| `CONSOLIDATE` | 记忆整理（合并重复、丢弃无用） |
+| `GRAPH` | 导出完整图结构（JSON） |
+| `STATS` | 查看所有记忆状态 |
+| `STATS FULL` | 查看完整记忆详情 |
+| `DOMAIN USE/CREATE/LIST/DROP` | 域管理 |
+
+### internal/memory — 记忆引擎核心
+
+| 文件 | 职责 |
+|------|------|
+| `graph.go` | 图结构、节点/突触 CRUD、激活扩散、多信号融合打分 |
+| `compiler.go` | LLM 驱动的记忆压缩，将对话压缩为高密度摘要 |
+| `consolidate.go` | 记忆整理：合并重复记忆、丢弃无价值记忆 |
+| `inverted.go` | 中文倒排索引（基于 gse 分词） |
+| `query_analyzer.go` | LLM 意图分析，提取查询意图、情绪、实体 |
+| `gate.go` | 记忆门控：判断当前对话是否需要检索长期记忆 |
+
+### Prism C API — 向量存储层
+
+C++17 编写的轻量级向量存储引擎，提供纯 C API。
 
 ```bash
 cd Prism/prism
 mkdir build && cd build
-cmake ..
-cmake --build .
+cmake .. && cmake --build .
 ```
 
-构建产物：
+| API | 功能 |
+|-----|------|
+| `prism_open(path)` | 打开存储 |
+| `prism_insert(store, role, content, keywords, embedding, dim)` | 插入记忆 |
+| `prism_search(store, query_vec, dim, top_k, results, min_score)` | 向量检索 |
+| `prism_get_all_states(store, infos, max)` | 获取忆阻器状态 |
+| `prism_set_evolution(store, enable)` | 开关混沌演化 |
 
-| 文件 | 说明 |
-|------|------|
-| `prism_store.dll` / `libprism_store.so` | 共享库 |
-| `test_prism.exe` | 测试程序 |
+### prismd-visual — 可视化面板
 
-## API 参考
+React + ECharts 前端，实时展示记忆图谱。
 
-所有函数在 `prism_store.h` 中声明。
-
-### `prism_open`
-
-```c
-PrismStore* prism_open(const char* data_path);
+```bash
+cd Prism/prismd-visual
+npm install && npm run dev
 ```
 
-打开（或创建）一个持久化存储文件。返回不透明指针，后续操作均通过该指针进行。
+### scripts/ — 桥接脚本
 
-### `prism_close`
+`prismd-bridge.ps1`：将 Claude Code 的 memory/*.md 文件同步到 PrismD 记忆场。
 
-```c
-void prism_close(PrismStore* store);
+```powershell
+# 创建记忆
+.\prismd-bridge.ps1 -File path\to\memory.md -Action create
+
+# 查询记忆
+.\prismd-bridge.ps1 -Query "用户偏好"
 ```
 
-关闭存储，释放所有内存。
-
-### `prism_insert`
-
-```c
-uint64_t prism_insert(
-    PrismStore* store,
-    const char* role,       // 角色（如 "user" / "assistant"）
-    const char* content,    // 记忆内容
-    const char* keywords,   // 关键词（可选，可传空字符串）
-    const float* embedding, // 浮点向量数组
-    int embedding_dim       // 向量维度
-);
-```
-
-插入一条记忆记录，返回自增的唯一 ID。
-
-### `prism_search`
-
-```c
-int prism_search(
-    PrismStore* store,
-    const float* query_vec,  // 查询向量
-    int dim,                 // 向量维度
-    int top_k,               // 返回前 k 个结果
-    PrismResult* results,    // 由调用方预分配的缓冲区（至少 top_k 个）
-    float min_score          // 最低相似度阈值，0.0 表示不限制
-);
-```
-
-暴力搜索与查询向量最相似的 top-k 条记忆。返回实际命中数，结果按相似度降序排列。
-
-**注意**：搜索基于点积运算，假设所有 embedding 向量已归一化（`||v|| = 1`），此时点积 = 余弦相似度。
-
-### `prism_count`
-
-```c
-int prism_count(PrismStore* store);
-```
-
-返回存储中总的记忆条数。
-
-### `prism_free_results`
-
-```c
-void prism_free_results(PrismResult* results, int count);
-```
-
-释放 `prism_search` 返回结果中的动态分配字符串。
-
-## 二进制存储格式
-
-每条记录在文件中的布局如下（小端序）：
-
-| 偏移 | 类型 | 字段 |
-|------|------|------|
-| 0 | `uint64_t` | id |
-| 8 | `uint32_t` | role 长度 (N) |
-| 12 | `char[N]` | role 数据 |
-| 12+N | `uint32_t` | content 长度 (M) |
-| 16+N | `char[M]` | content 数据 |
-| 16+N+M | `uint32_t` | keywords 长度 (K) |
-| 20+N+M | `char[K]` | keywords 数据 |
-| 20+N+M+K | `uint32_t` | 向量维度 (D) |
-| 24+N+M+K | `float[D]` | 向量数据 |
-
-文件以追加方式写入，每次插入只写入新记录，不做碎片整理。
-
-## 使用示例
-
-参见 `main.cpp`：
-
-```cpp
-PrismStore* store = prism_open("memory.dat");
-
-float emb[] = {1.0f, 0.0f};
-uint64_t id = prism_insert(store, "user", "hello", "", emb, 2);
-
-float query[] = {0.6f, 0.8f};
-PrismResult results[5];
-int n = prism_search(store, query, 2, 5, results, 0.0f);
-
-prism_free_results(results, n);
-prism_close(store);
-```
-
-## 项目结构
+## 记忆生命周期
 
 ```
-Prism/
-└── prism/
-    ├── CMakeLists.txt      # CMake 构建配置
-    ├── prism_store.h       # 公共头文件（C API 声明）
-    ├── prism_store.cpp     # 核心实现
-    ├── main.cpp            # 测试/演示程序
-    ├── prism_store.dll     # 预编译共享库
-    ├── test_prism.exe      # 预编译测试程序
-    ├── test_memory.dat     # 测试生成的数据文件
-    └── build/              # CMake 构建输出目录
+写入 (ENGRAM)
+    ↓
+能量衰减 (DRIFT / 时间自然衰减)
+    ↓
+访问增强 (LOOM 检索时 +0.01)
+    ↓
+后台压缩 (COMPILE → LLM 摘要)
+    ↓
+夜间整理 (CONSOLIDATE → 合并/丢弃)
+    ↓
+能量归零 → 遗忘 (PRUNE)
 ```
 
-## 已知局限
+## 依赖
 
-- **暴力搜索**：未使用近似最近邻（ANN）索引，大规模数据（>10 万条）时延迟较高
-- **全量内存加载**：启动时将所有记录读入内存，不适合超大规模持久化场景
-- **无并发控制**：未做线程安全处理，多线程同时操作需自行加锁
-- **无删除/更新**：当前仅支持追加插入，不支持删除或修改已有记录
-- **向量需归一化**：搜索直接使用点积，不会自动对查询向量做归一化，需调用方保证
+- Go ≥ 1.25
+- CMake ≥ 3.12 (C++ 层)
+- Ollama (本地 LLM，用于压缩/意图分析/整理)
+- Node.js ≥ 22 (可视化面板)
 
 ## 许可证
 
-本项目为内部工具，未指定开源许可证。
+内部工具，未指定开源许可证。

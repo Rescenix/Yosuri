@@ -86,7 +86,7 @@ function adjustInputHeight() {
   el.scrollTop = 0;
 }
 
-  const { sendMessage } = useChatLogic({
+  const { sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState } = useChatLogic({
     messages, userInput, sessionId,
     saveMemory, lastTokenUsage, lastLatency,
     onNewMessage: () => {
@@ -303,6 +303,17 @@ function adjustInputHeight() {
   }
 }
 
+// 真正切换到另一个后端会话（不只是改左侧列表的高亮）：立即清空当前消息，
+// 避免切换瞬间残留上一个会话的内容，再按新 id 去加载历史——新会话/没有
+// 历史记录的会话会得到空数组，messages.length===0 时首页视图自然显示
+async function switchSession(id) {
+  if (!id || id === sessionId.value) return
+  sessionId.value = id
+  localStorage.setItem('prism_session_id', id)
+  messages.value = []
+  await loadAllHistory()
+}
+
   let lastScrollTop = 0
   onMounted(async () => {
     if (window.location.pathname.startsWith('/chat')) {
@@ -356,6 +367,10 @@ function adjustInputHeight() {
     return result
   })
 
+  // 后台任务清单（BackgroundTasksPanel 用）直接从 messages 里的 kind:'group'
+  // 消息派生，不再是独立维护的一份数据——避免和消息流里的内嵌步骤组两处同步。
+  const backgroundTaskList = computed(() => messages.value.filter(m => m.kind === 'group'))
+
   function formatChatTime(timestamp) {
     if (!timestamp) return ''
     const date = new Date(timestamp)
@@ -377,8 +392,8 @@ function adjustInputHeight() {
     isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
     welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
     messagesContainer, chatInputRef, userScrolledUp,
-    forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight,
-    sendMessage, handleImageUpload, playVoice,
+    forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
+    sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
     toggleExpand, toggleChat, updateParams, fetchBalance,
     groupedMessages, formatChatTime
   }

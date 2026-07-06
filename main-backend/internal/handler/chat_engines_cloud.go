@@ -1,4 +1,4 @@
-package handler
+﻿package handler
 
 import (
 	"bufio"
@@ -61,13 +61,16 @@ func (h *ChatHandler) resolveCloudConversation(
 		}
 
 		body, _ := json.Marshal(reqBody)
-		httpReq, _ := http.NewRequest("POST", "https://ollama.com/api/chat", bytes.NewBuffer(body))
+		httpReq, _ := http.NewRequestWithContext(c.Request.Context(), "POST", "https://ollama.com/api/chat", bytes.NewBuffer(body))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 		client := &http.Client{Timeout: 5 * time.Minute}
 		resp, err := client.Do(httpReq)
 		if err != nil {
+			if c.Request.Context().Err() != nil {
+				return "", "", 0, c.Request.Context().Err()
+			}
 			return "", "", 0, fmt.Errorf("Cloud请求失败: %w", err)
 		}
 		defer resp.Body.Close()
@@ -114,13 +117,13 @@ func (h *ChatHandler) resolveCloudConversation(
 		finalContent := strings.TrimSpace(fullContent.String())
 
 		// 检测工具调用
-		if tc, ok := parseToolCallFromText(finalContent); ok {
+		if tc, _, ok := parseToolCallFromText(finalContent); ok {
 			fmt.Printf("🔧 [Cloud] 检测到工具调用: %s\n", tc.Tool)
 
 			// 发送工具调用开始事件
 			writeSSE(c, "tool_call", "tool_call_start", map[string]string{
 				"name": tc.Tool,
-				"args": fmt.Sprintf("%v", tc.Args),
+				"args": formatToolArgs(tc.Args),
 			})
 			c.Writer.Flush()
 
@@ -155,7 +158,11 @@ func (h *ChatHandler) resolveCloudConversation(
 			continue
 		}
 
-		// 不是工具调用，返回空，内容已在流式推送完毕
-		return "", "", 0, nil
+		// 不是工具调用：内容已经流式推送给客户端，但调用方（如 workflow_handler.go 的
+		// Planner）还需要拿到完整文本做服务端 JSON 解析，必须把 finalContent 真正返回，
+		// 不能像之前那样硬编码空字符串——那样会导致 planContent 恒为空。
+		return finalContent, "", estimateTokenCount(finalContent), nil
 	}
 }
+
+

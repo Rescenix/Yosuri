@@ -1,4 +1,4 @@
-// chat_engines_local.go — 简洁版（无调试日志）
+﻿// chat_engines_local.go — 简洁版（无调试日志）
 package handler
 
 import (
@@ -45,10 +45,13 @@ func (h *ChatHandler) resolveLocalConversation(
 	}
 	body, _ := json.Marshal(reqBody)
 
-	httpReq, _ := http.NewRequest("POST", ollamaURL, bytes.NewBuffer(body))
+	httpReq, _ := http.NewRequestWithContext(c.Request.Context(), "POST", ollamaURL, bytes.NewBuffer(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		if c.Request.Context().Err() != nil {
+			return "", "", 0, c.Request.Context().Err()
+		}
 		return "", "", 0, fmt.Errorf("本地模型请求失败: %w", err)
 	}
 	defer resp.Body.Close()
@@ -83,10 +86,10 @@ func (h *ChatHandler) resolveLocalConversation(
 
 	// 工具调用检测（仅 depth == 0 时）
 	if depth == 0 {
-		if tc, ok := parseToolCallFromText(fullContent); ok {
+		if tc, _, ok := parseToolCallFromText(fullContent); ok {
 			writeSSE(c, "tool_call", "tool_call_start", map[string]string{
 				"name": tc.Tool,
-				"args": fmt.Sprintf("%v", tc.Args),
+				"args": formatToolArgs(tc.Args),
 			})
 			c.Writer.Flush()
 
@@ -125,3 +128,4 @@ func processLine(line string, fullText *strings.Builder, c *gin.Context) {
 		c.Writer.Flush()
 	}
 }
+

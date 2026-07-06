@@ -54,17 +54,17 @@ defineEmits(['toggle-file'])
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  border-bottom: 1px solid #e4dfd4;
+  border-bottom: 1px solid #e5e5e5;
   flex-shrink: 0;
 }
-.diff-branch-row .arrow { color: #a39c8f; font-weight: 400; }
-.diff-branch-row .worktree { font-weight: 400; color: #696259; }
+.diff-branch-row .arrow { color: #a3a3a3; font-weight: 400; }
+.diff-branch-row .worktree { font-weight: 400; color: #6b6b6b; }
 .diff-totals {
   margin-left: auto;
   font-weight: 600;
   font-size: 11.5px;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #696259;
+  color: #6b6b6b;
 }
 
 .diff-body {
@@ -76,7 +76,7 @@ defineEmits(['toggle-file'])
 }
 
 .diff-file-card {
-  border: 1px solid #e4dfd4;
+  border: 1px solid #e5e5e5;
   border-radius: 10px;
   margin-bottom: 10px;
   overflow: hidden;
@@ -88,12 +88,12 @@ defineEmits(['toggle-file'])
   gap: 7px;
   padding: 8px 12px;
   cursor: pointer;
-  background: #f4f2ec;
+  background: #f5f5f5;
 }
 .diff-chev {
   display: inline-block;
   font-size: 12px;
-  color: #a39c8f;
+  color: #a3a3a3;
   transition: transform 0.15s ease;
 }
 .diff-chev.open { transform: rotate(90deg); }
@@ -115,14 +115,14 @@ defineEmits(['toggle-file'])
 .diff-adds { color: #12b76a; }
 .diff-dels { color: #d94834; }
 
-.diff-rows { border-top: 1px solid #e4dfd4; }
+.diff-rows { border-top: 1px solid #e5e5e5; }
 .diff-gap {
   padding: 5px 12px;
   font-size: 10.5px;
-  color: #a39c8f;
+  color: #a3a3a3;
   text-align: center;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  background: #f4f2ec;
+  background: #f5f5f5;
 }
 .diff-line {
   display: flex;
@@ -136,7 +136,7 @@ defineEmits(['toggle-file'])
   flex-shrink: 0;
   text-align: right;
   font-size: 10.5px;
-  color: #a39c8f;
+  color: #a3a3a3;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 .diff-sign {
