@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
 	"backend/internal/ai/core"
 	"backend/internal/database"
@@ -53,17 +52,10 @@ func main() {
 		log.Println("⚡ PrismD 数字海马体已连接")
 	}
 
-	// 初始化会话存储
-	homeDir, _ := os.UserHomeDir()
-	sessionPath := filepath.Join(homeDir, "shanxi_data", "sessions.json")
-	sessionStore := handler.NewSessionStore(sessionPath)
+	// 初始化会话存储：按用途分域落在 PrismD 里（chat_sessions / code_sessions 各自独立 bolt 文件），
+	// 每次 Append/SetCompressIndex 都会异步落盘，不再需要定时整份重写
+	sessionStore := handler.NewSessionStore(handler.ChatSessionsDomain)
 
-	go func() {
-		for {
-			time.Sleep(1 * time.Minute)
-			sessionStore.SaveToFile(sessionPath)
-		}
-	}()
 	// 自动拉起 DS 浏览器代理
 	if err := handler.EnsureDSNodeServer(); err != nil {
 		log.Printf("⚠️ DS 代理启动失败: %v，将在首次对话时重试", err)

@@ -2,6 +2,7 @@
 package memory
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -142,6 +143,9 @@ func NewGraph(dbPath string) (*Graph, error) {
 			return err
 		}
 		if _, err := tx.CreateBucketIfNotExists([]byte("clusters")); err != nil {
+			return err
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte("kv")); err != nil {
 			return err
 		}
 		return nil
@@ -359,6 +363,63 @@ func (g *Graph) SeedDefaultClusters(defaults map[string]string) {
 		g.clusters[name] = desc
 		g.saveClusterToDB(name, desc)
 	}
+}
+
+// ==================== 原始 KV 存储 ====================
+// 供不需要记忆图语义（激活扩散、簇、重要性衰减）的纯展示型数据使用，
+// 比如会话转录——它只需要"按 key 存/取一段 JSON"，直接读写 kv bucket，
+// 不经过 MemoryNode/ENGRAM/REFRACT 那一套。
+
+func (g *Graph) KVPut(key string, value []byte) error {
+	return g.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("kv"))
+		return b.Put([]byte(key), value)
+	})
+}
+
+// KVGet 返回 value 的副本；ok=false 表示 key 不存在
+func (g *Graph) KVGet(key string) (value []byte, ok bool, err error) {
+	err = g.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("kv"))
+		if b == nil {
+			return nil
+		}
+		v := b.Get([]byte(key))
+		if v != nil {
+			value = make([]byte, len(v))
+			copy(value, v)
+		}
+		return nil
+	})
+	return value, value != nil, err
+}
+
+func (g *Graph) KVDelete(key string) error {
+	return g.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("kv"))
+		if b == nil {
+			return nil
+		}
+		return b.Delete([]byte(key))
+	})
+}
+
+// KVKeys 返回所有以 prefix 开头的 key（prefix 为空表示列出全部）
+func (g *Graph) KVKeys(prefix string) ([]string, error) {
+	var keys []string
+	err := g.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("kv"))
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		p := []byte(prefix)
+		for k, _ := c.Seek(p); k != nil && bytes.HasPrefix(k, p); k, _ = c.Next() {
+			keys = append(keys, string(k))
+		}
+		return nil
+	})
+	return keys, err
 }
 
 func (g *Graph) AddSynapse(from, to NodeID, kind EdgeKind, weight float64) *Synapse {

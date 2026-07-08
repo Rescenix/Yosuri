@@ -1812,12 +1812,19 @@ min-height: 90px !important;
 
 /* ==================== 输入框：悬浮卡片风格（无硬顶边框，柔和投影） ==================== */
 .chat-input-area { position: relative; padding: 12px 20px 18px; background: transparent; }
+/* 这条规则故意把每个相关属性都显式写一遍（哪怕跟视觉上想要的值一样）——文件里
+   还有好几处历史遗留的 .input-wrapper{...} 重复定义（align-items/padding/width 等），
+   CSS 级联是按属性各自比较优先级，不是整条规则一起比，少写一个属性就可能被前面
+   那些遗留规则"捡漏"套用，所以这里不依赖任何隐式继承 */
 .input-wrapper {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  padding: 0 12px 0 16px;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  gap: 0;
   border: 1px solid #e5e5e5;
   border-radius: 12px;
   background: #ffffff;
@@ -1825,6 +1832,49 @@ min-height: 90px !important;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .input-wrapper:focus-within { border-color: #c96442; box-shadow: 0 8px 28px rgba(201, 100, 66, 0.14); }
+.input-row { display: flex; align-items: flex-end; gap: 4px; padding: 0 12px 0 16px; }
+
+/* 附件预览条：图片缩略图/文件文件夹占位卡，横向滚动，不挤压下面的输入行 */
+.attach-chip-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 0;
+  overflow-x: auto;
+}
+.attach-chip {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 168px;
+  padding: 6px 22px 6px 6px;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  background: #fafafa;
+  box-sizing: border-box;
+}
+.attach-chip.error { border-color: #f3c9c2; background: #fff5f3; }
+.attach-chip.analyzing { opacity: 0.7; }
+.attach-chip-thumb { width: 36px; height: 36px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
+.attach-chip-icon {
+  width: 36px; height: 36px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #ececec; color: #6b6b6b; font-size: 10px; font-weight: 700;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+.attach-chip-meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.attach-chip-name { font-size: 12px; color: #262626; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-chip-status { font-size: 10.5px; color: #a3a3a3; }
+.attach-chip-status.error { color: #d94834; }
+.attach-chip-remove {
+  position: absolute; top: -5px; right: -5px;
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: #404040; color: #fff; border: 1.5px solid #fff;
+  cursor: pointer; padding: 0;
+}
+.attach-chip-remove:hover { background: #1a1a1a; }
 
 /* min-height 必须 !important——历史遗留的 .chat-input{min-height:90px !important}
    靠 !important 直接碾过任何后写的普通规则，不加 !important 这里改了也没用 */
@@ -2143,6 +2193,35 @@ min-height: 90px !important;
   transition: background 0.15s ease;
 }
 .input-dir-add-btn:hover { background: #f0f0f0; }
+
+.input-dir-menu-wrap { min-width: 0; }
+.input-dir-clickable { cursor: pointer; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; transition: background 0.15s ease; }
+.input-dir-clickable:hover { background: rgba(0, 0, 0, 0.05); }
+
+/* 工作目录切换菜单：Recent 列表 + Open folder... 往上开（工作目录条本来就贴在
+   输入框上方，往下开会盖住输入框），跟 auto-menu-dropdown 同一个开合方向 */
+.workdir-menu-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 6px 0;
+  min-width: 190px;
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 60;
+}
+.workdir-menu-label { padding: 5px 14px; font-size: 11px; color: #a3a3a3; }
+.workdir-menu-back { display: flex; align-items: center; gap: 2px; cursor: pointer; color: #6b6b6b; }
+.workdir-menu-back:hover { color: #1a1a1a; }
+.workdir-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
+.workdir-menu-item:hover { background: #f5f5f5; }
+.workdir-menu-item.disabled { color: #a3a3a3; cursor: default; }
+.workdir-menu-item.disabled:hover { background: transparent; }
+.workdir-menu-divider { height: 1px; background: #ececec; margin: 6px 0; }
 
 /* git 状态条：Code 模式下代替工作目录条，同一个位置、同一套卡片外观 */
 .input-git-bar {

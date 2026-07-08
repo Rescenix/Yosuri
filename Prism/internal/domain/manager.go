@@ -85,6 +85,24 @@ func (m *Manager) Use(name string) error {
 	return nil
 }
 
+// Domain 按名获取（必要时打开/创建）指定域的 Graph，不修改 current。
+// 用于绕开 USE 隐式切换全局状态带来的竞争——调用方（比如 KV 接口）自己
+// 在每次请求里显式带上域名，而不是依赖"先 USE 再操作"这种非原子的两步协议。
+func (m *Manager) Domain(name string) (*memory.Graph, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if g, ok := m.domains[name]; ok {
+		return g, nil
+	}
+	dbPath := filepath.Join(m.dataDir, fmt.Sprintf("prismd_%s.bolt", name))
+	graph, err := memory.NewGraph(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	m.domains[name] = graph
+	return graph, nil
+}
+
 func (m *Manager) Create(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

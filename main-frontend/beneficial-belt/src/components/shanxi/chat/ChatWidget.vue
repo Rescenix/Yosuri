@@ -213,25 +213,65 @@
 
               <!-- 输入框上方工具栏三态切换 -->
               <div v-if="inputTopBarMode === 'dir'" class="input-dir-bar">
-                <div class="input-dir-left">
-                  <span class="input-dir-item">
-                    <Icon icon="mdi:laptop" width="13" color="#6b6b6b" />
-                    Local
-                  </span>
-                  <span class="input-dir-divider"></span>
-                  <span class="input-dir-item">
-                    <Icon icon="mdi:folder-outline" width="13" color="#6b6b6b" />
-                    {{ workingDirName }}
-                  </span>
-                  <span class="input-dir-divider"></span>
-                  <span class="input-dir-item">
-                    <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
-                    {{ activeSessionObj?.branch || 'main' }}
-                  </span>
-                  <span class="input-dir-divider"></span>
-                  <span class="input-dir-item input-dir-worktree">worktree</span>
+                <div class="toolbar-dropdown-wrap input-dir-menu-wrap">
+                  <div class="input-dir-left">
+                    <span class="input-dir-item">
+                      <Icon icon="mdi:laptop" width="13" color="#6b6b6b" />
+                      Local
+                    </span>
+                    <span class="input-dir-divider"></span>
+                    <span class="input-dir-item input-dir-clickable" @click.stop="toggleWorkDirMenu">
+                      <Icon icon="mdi:folder-outline" width="13" color="#6b6b6b" />
+                      {{ currentWorkDir.name }}
+                    </span>
+                    <span class="input-dir-divider"></span>
+                    <span class="input-dir-item">
+                      <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
+                      {{ activeSessionObj?.branch || 'main' }}
+                    </span>
+                    <span class="input-dir-divider"></span>
+                    <span class="input-dir-item input-dir-worktree">worktree</span>
+                  </div>
+
+                  <div v-if="showWorkDirMenu" class="workdir-menu-dropdown" @click.stop>
+                    <template v-if="workDirMenuView === 'recent'">
+                      <div class="workdir-menu-label">Recent</div>
+                      <div
+                        v-for="dir in workDirRecents"
+                        :key="dir.path"
+                        class="workdir-menu-item"
+                        @click="selectWorkDir(dir)"
+                      >
+                        <span>{{ dir.name }}</span>
+                        <Icon v-if="dir.path === currentWorkDir.path" icon="mdi:check" width="14" color="#1a1a1a" />
+                      </div>
+                      <div class="workdir-menu-divider"></div>
+                      <div class="workdir-menu-item" @click="openFolderBrowser">
+                        <span>Open folder...</span>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <div class="workdir-menu-label workdir-menu-back" @click="workDirMenuView = 'recent'">
+                        <Icon icon="mdi:chevron-left" width="14" /> Recent
+                      </div>
+                      <div v-if="workDirBrowseLoading" class="workdir-menu-item disabled">加载中…</div>
+                      <template v-else-if="workDirBrowseOptions.length">
+                        <div
+                          v-for="dir in workDirBrowseOptions"
+                          :key="dir.path"
+                          class="workdir-menu-item"
+                          @click="selectWorkDir(dir)"
+                        >
+                          <Icon icon="mdi:folder-outline" width="13" color="#6b6b6b" />
+                          <span>{{ dir.name }}</span>
+                        </div>
+                      </template>
+                      <div v-else class="workdir-menu-item disabled">未找到可选目录</div>
+                    </template>
+                  </div>
                 </div>
-                <button class="input-dir-add-btn" type="button" title="添加工作目录">
+
+                <button class="input-dir-add-btn" type="button" title="添加工作目录" @click.stop="toggleWorkDirMenu">
                   <Icon icon="mdi:plus" width="15" />
                 </button>
               </div>
@@ -269,7 +309,8 @@
                 </div>
               </div>
 
-              <!-- 输入框容器 -->
+              <!-- 输入框容器：外层改列布局，附件预览条占一整行浮在文字行上方，
+                   原来的横向内容（占位符/textarea/按钮）收进 .input-row 保持不变 -->
               <div class="input-wrapper" style="position: relative;">
                 <!-- 粘贴图片提示 -->
                 <div v-if="visionStatus" class="vision-status-toast" :class="{ error: visionStatus === 'error' }">
@@ -306,25 +347,48 @@
                   </div>
                 </div>
 
-                <!-- 渐变动画的浮动占位符 -->
-                <transition name="fade-placeholder" mode="out-in">
-                  <span v-if="!userInput.trim()" :key="randomPlaceholder" class="input-placeholder-text">
-                    {{ randomPlaceholder }}
-                  </span>
-                </transition>
+                <!-- 附件预览：图片缩略图 / 文件与文件夹占位卡，横向排在输入文字上方，
+                     真正的文字内容只在发送那一刻才拼进正文（buildOutgoingMessage） -->
+                <div v-if="attachments.length" class="attach-chip-row">
+                  <div v-for="att in attachments" :key="att.id" class="attach-chip" :class="[att.kind, att.status]">
+                    <img v-if="att.kind === 'image'" :src="att.previewUrl" class="attach-chip-thumb" />
+                    <div v-else class="attach-chip-icon">
+                      <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#8a8378" />
+                      <span v-else>{{ att.ext }}</span>
+                    </div>
+                    <div class="attach-chip-meta">
+                      <span class="attach-chip-name" :title="att.name">{{ att.name }}</span>
+                      <span v-if="att.status === 'analyzing'" class="attach-chip-status">分析中…</span>
+                      <span v-else-if="att.status === 'error'" class="attach-chip-status error">{{ att.errorMsg }}</span>
+                      <span v-else-if="att.kind === 'folder'" class="attach-chip-status">{{ att.fileCount }} 个文件</span>
+                    </div>
+                    <button class="attach-chip-remove" type="button" @click="removeAttachment(att.id)" title="移除">
+                      <Icon icon="mdi:close" width="11" />
+                    </button>
+                  </div>
+                </div>
 
-                <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keypress.enter="handleSend" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
+                <div class="input-row">
+                  <!-- 渐变动画的浮动占位符 -->
+                  <transition name="fade-placeholder" mode="out-in">
+                    <span v-if="!userInput.trim()" :key="randomPlaceholder" class="input-placeholder-text">
+                      {{ randomPlaceholder }}
+                    </span>
+                  </transition>
 
-                <!-- "+" 附加菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
-                <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
-                <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
+                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keypress.enter="handleSend" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
 
-                <button v-if="workflowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="stopWorkflow" title="停止工作流（已生成内容会保留）">
-                  <Icon icon="mdi:stop" width="16" color="#fff" />
-                </button>
-                <button v-else-if="userInput.trim()" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
-                  <Icon icon="fluent-mdl2:up" width="18" color="#fff" />
-                </button>
+                  <!-- "+" 附加菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
+                  <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
+                  <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
+
+                  <button v-if="workflowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="stopWorkflow" title="停止工作流（已生成内容会保留）">
+                    <Icon icon="mdi:stop" width="16" color="#fff" />
+                  </button>
+                  <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
+                    <Icon icon="fluent-mdl2:up" width="18" color="#fff" />
+                  </button>
+                </div>
               </div>
 
               <!-- ========== 底部工具条（本次漏掉的部分已精准补全） ========== -->
@@ -591,7 +655,60 @@ const diffFiles = computed(() => {
   return [...byPath.values()]
 })
 const diffTotals = ''
-const workingDirName = 'main-frontend'
+
+// ==================== 工作目录切换：Recent + Open folder ====================
+// "文件夹" 是当前 monorepo（GitRepoRoot）下的真实子目录，复用已有的 /api/file-tree
+// 拿顶层目录列表，不新开接口；选择结果和最近列表存 localStorage 做持久化
+const WORKDIR_STORAGE_KEY = 'aether_workdir_state_v1'
+const WORKDIR_IGNORED = new Set(['node_modules', 'build', '__pycache__', 'dist', '.git'])
+const currentWorkDir = ref({ name: 'main-frontend', path: 'main-frontend' })
+const workDirRecents = ref([{ name: 'main-frontend', path: 'main-frontend' }])
+const showWorkDirMenu = ref(false)
+const workDirMenuView = ref('recent') // 'recent' | 'browse'
+const workDirBrowseOptions = ref([])
+const workDirBrowseLoading = ref(false)
+
+function loadWorkDirState() {
+  try {
+    const raw = localStorage.getItem(WORKDIR_STORAGE_KEY)
+    if (!raw) return
+    const data = JSON.parse(raw)
+    if (data.current?.name) currentWorkDir.value = data.current
+    if (Array.isArray(data.recents) && data.recents.length) workDirRecents.value = data.recents
+  } catch (e) {}
+}
+function saveWorkDirState() {
+  try {
+    localStorage.setItem(WORKDIR_STORAGE_KEY, JSON.stringify({ current: currentWorkDir.value, recents: workDirRecents.value }))
+  } catch (e) {}
+}
+function toggleWorkDirMenu() {
+  showWorkDirMenu.value = !showWorkDirMenu.value
+  if (showWorkDirMenu.value) workDirMenuView.value = 'recent'
+}
+function selectWorkDir(dir) {
+  currentWorkDir.value = dir
+  // 去重后塞到最前面，最多保留 6 条最近记录
+  workDirRecents.value = [dir, ...workDirRecents.value.filter(d => d.path !== dir.path)].slice(0, 6)
+  saveWorkDirState()
+  showWorkDirMenu.value = false
+}
+async function openFolderBrowser() {
+  workDirMenuView.value = 'browse'
+  workDirBrowseLoading.value = true
+  try {
+    const res = await fetch('/api/file-tree')
+    if (!res.ok) throw new Error('拉取目录失败')
+    const tree = await res.json()
+    workDirBrowseOptions.value = (tree || [])
+      .filter(n => n.type === 'folder' && !n.name.startsWith('.') && !WORKDIR_IGNORED.has(n.name))
+      .map(n => ({ name: n.name, path: n.path || n.name }))
+  } catch (e) {
+    workDirBrowseOptions.value = []
+  } finally {
+    workDirBrowseLoading.value = false
+  }
+}
 
 // ==================== Git 状态条 + PR 面板（Add/Commit/Push） ====================
 // 复用后端已有的 /api/git-status、/api/git/add-all、/api/git/commit、/api/git/push，
@@ -885,7 +1002,11 @@ function triggerWorkflow() {
   chatInputRef.value?.focus()
 }
 function handleSend() {
-  if (!userInput.value.trim()) return
+  if (hasPendingAttachments.value) return
+  const combined = buildOutgoingMessage()
+  if (!combined) return
+  userInput.value = combined
+  clearAttachments()
   if (activeChatMode.value === 'code') {
     sendWorkflow('code', userInput.value.trim())
   } else {
@@ -1037,14 +1158,32 @@ const attachFolderInputRef = ref(null)
 function triggerAttachFiles() { showAddMenu.value = false; attachFileInputRef.value?.click() }
 function triggerAttachFolder() { showAddMenu.value = false; attachFolderInputRef.value?.click() }
 
-function appendToInput(text) {
-  const existing = userInput.value
-  userInput.value = existing ? `${existing}\n${text}` : text
-  nextTick(() => adjustInputHeight())
+// 附件不再直接怼进输入框文字里——改成跟 ChatGPT/Claude 一样，在输入框上方
+// 显示一排预览 chip（图片缩略图 / 文件占位卡），真正的文字内容只在发送那一刻
+// 才拼进消息正文，见 buildOutgoingMessage()
+const attachments = ref([])
+let attachmentSeq = 0
+
+function extOf(name) {
+  const m = /\.([a-zA-Z0-9]+)$/.exec(name || '')
+  return m ? m[1].toUpperCase() : 'FILE'
 }
+function removeAttachment(id) {
+  const idx = attachments.value.findIndex(a => a.id === id)
+  if (idx === -1) return
+  const [removed] = attachments.value.splice(idx, 1)
+  if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl)
+}
+function clearAttachments() {
+  for (const a of attachments.value) { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl) }
+  attachments.value = []
+}
+const hasPendingAttachments = computed(() => attachments.value.some(a => a.status === 'analyzing'))
 
 async function attachImageFile(file) {
-  clearTimeout(visionStatusTimer); visionStatus.value = 'analyzing'
+  const id = ++attachmentSeq
+  const previewUrl = URL.createObjectURL(file)
+  attachments.value.push({ id, kind: 'image', name: file.name, status: 'analyzing', previewUrl })
   try {
     const base64 = await fileToBase64(file)
     const res = await fetch('/api/aether/vision-preprocess', {
@@ -1055,42 +1194,64 @@ async function attachImageFile(file) {
     if (!res.ok) throw new Error(`请求失败 (${res.status})`)
     const data = await res.json()
     if (!data.text) throw new Error('未返回分析文本')
-    visionStatus.value = ''
-    appendToInput(`[已添加图片: ${file.name}]\n${data.text}`)
+    const item = attachments.value.find(a => a.id === id)
+    if (item) { item.status = 'ready'; item.analysisText = data.text }
   } catch (err) {
-    showVisionError(`图片「${file.name}」分析失败`)
+    const item = attachments.value.find(a => a.id === id)
+    if (item) { item.status = 'error'; item.errorMsg = '分析失败' }
   }
 }
 
 async function attachTextFile(file) {
+  const id = ++attachmentSeq
+  attachments.value.push({ id, kind: 'file', name: file.name, ext: extOf(file.name), status: 'analyzing' })
   try {
     const text = await file.text()
     const truncated = text.length > 4000 ? text.slice(0, 4000) + '\n…（已截断）' : text
-    appendToInput(`[已添加文件: ${file.name}]\n\`\`\`\n${truncated}\n\`\`\``)
+    const item = attachments.value.find(a => a.id === id)
+    if (item) { item.status = 'ready'; item.content = truncated }
   } catch (err) {
-    showVisionError(`文件「${file.name}」读取失败`)
+    const item = attachments.value.find(a => a.id === id)
+    if (item) { item.status = 'error'; item.errorMsg = '读取失败' }
   }
 }
 
-async function onAttachFilesSelected(e) {
+function onAttachFilesSelected(e) {
   const files = Array.from(e.target.files || [])
   e.target.value = ''
   for (const file of files) {
-    if (file.type && file.type.startsWith('image/')) await attachImageFile(file)
-    else await attachTextFile(file)
+    if (file.type && file.type.startsWith('image/')) attachImageFile(file)
+    else attachTextFile(file)
   }
 }
 
 // 文件夹选择拿到的是扁平文件列表（每个文件带 webkitRelativePath），浏览器不允许
 // 直接读目录结构——先给个清单让模型知道有哪些文件，需要看内容再走 read_file 工具
-async function onAttachFolderSelected(e) {
+function onAttachFolderSelected(e) {
   const files = Array.from(e.target.files || [])
   e.target.value = ''
   if (files.length === 0) return
   const folderName = files[0].webkitRelativePath?.split('/')[0] || '未命名文件夹'
   const list = files.slice(0, 200).map(f => f.webkitRelativePath).join('\n')
   const more = files.length > 200 ? `\n…（共 ${files.length} 个文件，已截断显示）` : ''
-  appendToInput(`[已添加文件夹: ${folderName}，共 ${files.length} 个文件]\n${list}${more}`)
+  attachments.value.push({
+    id: ++attachmentSeq, kind: 'folder', name: folderName, status: 'ready',
+    fileCount: files.length, manifest: list + more
+  })
+}
+
+// 发送那一刻才把附件序列化进正文：图片用 vision 分析结果、文本文件用代码块、
+// 文件夹用清单——顺序固定放在用户自己敲的文字前面，读起来像"这是材料，这是我的问题"
+function buildOutgoingMessage() {
+  const blocks = attachments.value
+    .filter(a => a.status === 'ready')
+    .map(a => {
+      if (a.kind === 'image') return `[图片: ${a.name}]\n${a.analysisText || ''}`
+      if (a.kind === 'folder') return `[文件夹: ${a.name}，共 ${a.fileCount} 个文件]\n${a.manifest}`
+      return `[文件: ${a.name}]\n\`\`\`\n${a.content || ''}\n\`\`\``
+    })
+  const typed = userInput.value.trim()
+  return [...blocks, typed].filter(Boolean).join('\n')
 }
 
 const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.value })
@@ -1103,9 +1264,10 @@ watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
 onMounted(() => {
   loadCustomApiConfig()
   fetchGitStatus()
+  loadWorkDirState()
   document.addEventListener('click', () => {
     showModelMenu.value = false; showTokenPanel.value = false; menuHovering.value = false; showMoreMenu.value = false
-    showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false
+    showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false
   })
 
 })

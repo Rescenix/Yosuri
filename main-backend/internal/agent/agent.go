@@ -48,7 +48,8 @@ const (
 
 // WorkflowRequest 启动工作流的请求
 type WorkflowRequest struct {
-	Task string `json:"task" binding:"required"`
+	Task  string `json:"task" binding:"required"`
+	Model string `json:"model,omitempty"` // ""/"ds" 走原生工具调用(DeepSeek)；"cloud"/"local" 走旧的正则解析兜底路径
 }
 
 // ========== 工具调用格式说明（Agent 通用） ==========
@@ -106,6 +107,22 @@ func MainAgentConfig() MainAgent {
 - search_codebase —— 语义搜索代码
 - codegraph_query —— 查询代码结构（callers/callees/impact）
 - search_memory —— 检索长期记忆
+
+` + SoulTemplateCodeProtocol + `
+
+你的工作目录是 C:\Pro2026\re0。`,
+		Temp: 0.2,
+		TopP: 0.85,
+	}
+}
+
+// MainAgentConfigNative 返回走原生 tools 参数调用时的主Agent配置。
+// 不含 ToolCallFormatInstruction 和工具清单散文——模型已经通过 API 的
+// tools 字段拿到结构化工具定义，再要求它额外输出文本 JSON 只会造成干扰。
+func MainAgentConfigNative() MainAgent {
+	return MainAgent{
+		SystemPrompt: `你是Aurora的主工程师Agent。你的核心工作方式是：
+通过工具调用完成任务，而不是在回复里写 bash 命令。
 
 ` + SoulTemplateCodeProtocol + `
 

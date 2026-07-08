@@ -53,6 +53,7 @@ func main() {
 	mux.HandleFunc("/clusters", handler.HandleListClusters)  // GET
 	mux.HandleFunc("/cluster", handler.HandleCreateCluster)  // POST
 	mux.HandleFunc("/cluster/", handler.HandleDeleteCluster) // DELETE /cluster/:name
+	mux.HandleFunc("/kv/", handler.HandleKV)                 // GET/PUT/DELETE /kv/:domain/:key，绕开图语义的原始存取
 	mux.Handle("/", handler)
 
 	// 优雅停机

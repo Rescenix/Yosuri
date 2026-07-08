@@ -133,7 +133,21 @@ func (r *WorkflowRunner) HandleWorkflowRun(c *gin.Context) {
 		return
 	}
 
-	// ★ 第二层：Tool Loop 迭代执行
+	// 发送 workflow_start
+	rawWriteSSE(c, "workflow_start", "workflow_start", map[string]string{
+		"workflow_id": workflowID,
+		"task":        req.Task,
+		"total_steps": "1",
+	})
+	c.Writer.Flush()
+
+	// ★ 第二层：Tool Loop 迭代执行 —— DeepSeek 走原生 tools 参数调用（默认路径），
+	// cloud/local 走原有的正则解析兜底路径（完全不变，保留作为回滚路径）
+	if req.Model == "" || req.Model == "ds" {
+		r.runNativeToolLoop(c, req, workflowID)
+		return
+	}
+
 	agt := agent.MainAgentConfig()
 	systemPrompt := agt.SystemPrompt
 
@@ -145,14 +159,6 @@ func (r *WorkflowRunner) HandleWorkflowRun(c *gin.Context) {
 	cumulativeInputTokens := estimateTokenCount(systemPrompt + req.Task)
 	cumulativeOutputTokens := 0
 	iterationCount := 0
-
-	// 发送 workflow_start
-	rawWriteSSE(c, "workflow_start", "workflow_start", map[string]string{
-		"workflow_id": workflowID,
-		"task":        req.Task,
-		"total_steps": "1",
-	})
-	c.Writer.Flush()
 
 	for {
 		if c.Request.Context().Err() != nil {
@@ -294,6 +300,88 @@ func (r *WorkflowRunner) HandleWorkflowRun(c *gin.Context) {
 		c.Writer.Flush()
 		return
 	}
+}
+
+// runNativeToolLoop 用 DeepSeek 的原生 tools 参数驱动一次完整任务。
+// resolveDSConversation 内部已经完整实现了多轮工具调用循环，并且已经在
+// 流式过程中发出了 content/tool_call_start/tool_call_result/tool_call_error
+// 事件——这里只需要在外面包一层 step_start/step_done 就能满足 SSE 契约，
+// 不需要重新实现一遍工具循环。
+func (r *WorkflowRunner) runNativeToolLoop(c *gin.Context, req agent.WorkflowRequest, workflowID string) {
+	agt := agent.MainAgentConfigNative()
+	sessionID := "wf_" + workflowID
+	stepID := agent.NewStepID()
+
+	rawWriteSSE(c, "step_start", "step_start", map[string]string{
+		"step_id":    stepID,
+		"agent":      "main",
+		"agent_role": "主控Agent",
+		"step_index": "0",
+		"prompt":     req.Task,
+	})
+	c.Writer.Flush()
+
+	cumulativeInputTokens := estimateTokenCount(agt.SystemPrompt + req.Task)
+
+	finalContent, _, _, err := r.chatHandler.resolveDSConversation(
+		c, agt.SystemPrompt, req.Task, sessionID,
+		agt.Temp, agt.TopP, 4096, "", "", "",
+	)
+
+	if err != nil {
+		ctxPct := float64(cumulativeInputTokens) / float64(estimatedContextWindow) * 100
+		rawWriteSSE(c, "step_done", "step_done", map[string]string{
+			"step_id":                  stepID,
+			"agent":                    "main",
+			"status":                   "failed",
+			"content":                  err.Error(),
+			"output_tokens":            "0",
+			"cumulative_input_tokens":  fmt.Sprintf("%d", cumulativeInputTokens),
+			"cumulative_output_tokens": "0",
+			"context_window":           fmt.Sprintf("%d", estimatedContextWindow),
+			"context_window_pct":       fmt.Sprintf("%.1f", ctxPct),
+		})
+		c.Writer.Flush()
+
+		rawWriteSSE(c, "workflow_done", "workflow_done", map[string]string{
+			"workflow_id":              workflowID,
+			"status":                   string(agent.WorkflowFailed),
+			"final_output":             fmt.Sprintf("任务执行失败: %s", err.Error()),
+			"cumulative_input_tokens":  fmt.Sprintf("%d", cumulativeInputTokens),
+			"cumulative_output_tokens": "0",
+			"context_window":           fmt.Sprintf("%d", estimatedContextWindow),
+			"context_window_pct":       fmt.Sprintf("%.1f", ctxPct),
+		})
+		c.Writer.Flush()
+		return
+	}
+
+	outputTokens := estimateTokenCount(finalContent)
+	ctxPct := float64(cumulativeInputTokens+outputTokens) / float64(estimatedContextWindow) * 100
+
+	rawWriteSSE(c, "step_done", "step_done", map[string]string{
+		"step_id":                  stepID,
+		"agent":                    "main",
+		"status":                   "completed",
+		"content":                  finalContent,
+		"output_tokens":            fmt.Sprintf("%d", outputTokens),
+		"cumulative_input_tokens":  fmt.Sprintf("%d", cumulativeInputTokens),
+		"cumulative_output_tokens": fmt.Sprintf("%d", outputTokens),
+		"context_window":           fmt.Sprintf("%d", estimatedContextWindow),
+		"context_window_pct":       fmt.Sprintf("%.1f", ctxPct),
+	})
+	c.Writer.Flush()
+
+	rawWriteSSE(c, "workflow_done", "workflow_done", map[string]string{
+		"workflow_id":              workflowID,
+		"status":                   string(agent.WorkflowCompleted),
+		"final_output":             finalContent,
+		"cumulative_input_tokens":  fmt.Sprintf("%d", cumulativeInputTokens),
+		"cumulative_output_tokens": fmt.Sprintf("%d", outputTokens),
+		"context_window":           fmt.Sprintf("%d", estimatedContextWindow),
+		"context_window_pct":       fmt.Sprintf("%.1f", ctxPct),
+	})
+	c.Writer.Flush()
 }
 
 // HandleListWorkflows GET /api/workflows — 列出可用工作流
