@@ -31,6 +31,7 @@
     "@tsparticles/plugin-emitters": "^3.9.1",
     "@worstone/vue-aplayer": "^1.0.8",
     "astro": "^6.3.1",
+    "diff": "^8.0.4",
     "easymde": "^2.21.0",
     "github-markdown-css": "^5.9.0",
     "gsap": "^3.15.0",
@@ -53,14 +54,14 @@
     "vue-virtual-scroller": "^3.0.4",
     "web-highlighter": "^0.7.4",
     "x-markdown-vue": "^0.0.200"
-  },  
+  },
   "devDependencies": {
     "@vicons/fluent": "^0.13.0",
     "@vicons/ionicons5": "^0.13.0",
     "naive-ui": "^2.44.1",
     "vite-plugin-pwa": "^1.3.0"
   },
-   "eslintConfig": {
+  "eslintConfig": {
     "rules": {
       "vue/no-v-model-argument": "off"
     }

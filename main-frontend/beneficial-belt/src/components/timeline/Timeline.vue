@@ -50,7 +50,10 @@ const defaultData = [
   { name: 'v0.3 - 神性初现', date: '2026-05-17', type: 'major', changes: ['Function Calling：杉汐可自主切歌、写博客、清理记忆', '博客自动生成：一句话指令自动发布文章到数据库', '情绪系统升级：从固定关键词改为后端驱动的情绪表达', '阿里云Embedding：接入text-embedding-v4，实现语义向量检索'] },
   { name: 'v0.4 - 感官觉醒', date: '2026-05-18', type: 'major', changes: ['语音合成：接入千问3-TTS-Flash，杉汐开口说话', '图片分析：接入qwen-vl-max，杉汐拥有视觉能力', '联网搜索：接入qwen-plus内置搜索，可查询实时信息', '调试面板：实时监控Token消耗、延迟、API余额'] },
   { name: 'v0.5 - 界面重构', date: '2026-05-19', type: 'major', changes: ['白蓝极简主题：全面复刻DeepSeek设计哲学', '播放器重做：从大圆盘改为左侧悬浮控制条', '图片卡片：上传图片直接展示在对话框中', '手机端适配：导航栏、播放器、卡片布局优化', '调试面板：支持深度思考模式切换'] },
-  { name: 'v0.6 - 工具箱与阅读', date: '2026-05-20', type: 'minor', changes: ['阅读小屋上线：支持TXT导入、分页阅读、杉汐朗读', '工具箱页面：展示杉汐的所有能力卡片', '生命线页面：记录网站版本迭代历史', '成本优化：记忆检索增加相似度阈值，Token消耗降低47%'] }
+  { name: 'v0.6 - 工具箱与阅读', date: '2026-05-20', type: 'minor', changes: ['阅读小屋上线：支持TXT导入、分页阅读、杉汐朗读', '工具箱页面：展示杉汐的所有能力卡片', '生命线页面：记录网站版本迭代历史', '成本优化：记忆检索增加相似度阈值，Token消耗降低47%'] },
+  { name: 'v0.7 - 代码对比与统计', date: '2026-06-05', type: 'major', changes: ['DiffViewer组件：基于diff库实现代码差异对比，支持语法高亮', '统计面板：新增Token消耗、会话数、活跃天数多维度统计', '深度思考可视化：消息步骤分组展示思维链过程', '工具参数面板：ToolActionRow组件优化工具调用展示'] },
+  { name: 'v0.8 - 对话引擎升级', date: '2026-06-20', type: 'major', changes: ['DeepSeek浏览器引擎：chat_engines_ds_browser支持网页内容提取', '对话流优化：chat_stream重构，提升流式响应稳定性', '会话管理：session处理器增强，支持会话元数据更新', '路由重构：routes模块化拆分，提升可维护性'] },
+  { name: 'v0.9 - 工具链与交互', date: '2026-07-01', type: 'minor', changes: ['toolArgs工具参数解析器：统一处理Function Calling参数', 'DiffPanel对比面板：支持文件级别的差异查看', 'NewSessionHome：新建会话首页交互优化', 'ChatWidget：聊天组件响应式布局改进'] }
 ];
 
 const timelineData = ref([]);

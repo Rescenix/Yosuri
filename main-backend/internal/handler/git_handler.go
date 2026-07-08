@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -13,13 +15,38 @@ type GitStatus struct {
 	Branch    string   `json:"branch"`
 	Modified  []string `json:"modified"`
 	Untracked []string `json:"untracked"`
+	Added     int      `json:"added"`
+	Removed   int      `json:"removed"`
+}
+
+var shortstatInsRe = regexp.MustCompile(`(\d+) insertion`)
+var shortstatDelRe = regexp.MustCompile(`(\d+) deletion`)
+
+// PR 面板顶部的 +N/-N 用的就是这个：相对 HEAD 的合计增删行数（覆盖已暂存 + 未暂存的
+// 已跟踪文件改动），未跟踪的新文件不计入——跟 git diff 本身的语义保持一致
+func gitDiffShortstat() (added int, removed int) {
+	cmd := exec.Command("git", "diff", "HEAD", "--shortstat")
+	cmd.Dir = GitRepoRoot
+	out, _ := cmd.Output()
+	s := string(out)
+	if m := shortstatInsRe.FindStringSubmatch(s); m != nil {
+		added, _ = strconv.Atoi(m[1])
+	}
+	if m := shortstatDelRe.FindStringSubmatch(s); m != nil {
+		removed, _ = strconv.Atoi(m[1])
+	}
+	return
 }
 
 func GitStatusHandler(w http.ResponseWriter, r *http.Request) {
-	branchBytes, _ := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	branchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd.Dir = GitRepoRoot
+	branchBytes, _ := branchCmd.Output()
 	branch := strings.TrimSpace(string(branchBytes))
 
-	out, err := exec.Command("git", "status", "--porcelain").Output()
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusCmd.Dir = GitRepoRoot
+	out, err := statusCmd.Output()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -47,11 +74,15 @@ func GitStatusHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	added, removed := gitDiffShortstat()
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(GitStatus{
 		Branch:    branch,
 		Modified:  modified,
 		Untracked: untracked,
+		Added:     added,
+		Removed:   removed,
 	})
 }
 
@@ -66,7 +97,12 @@ func GitStageAllHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 func GitAddAll(c *gin.Context) {
-	exec.Command("git", "add", "-A").Run()
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = GitRepoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		c.String(http.StatusInternalServerError, "Add 失败:\n"+string(out))
+		return
+	}
 	c.Status(http.StatusOK)
 }
 

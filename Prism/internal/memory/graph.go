@@ -4,6 +4,7 @@ package memory
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"math"
 	"sort"
 	"strings"
@@ -12,6 +13,9 @@ import (
 
 	"go.etcd.io/bbolt"
 )
+
+// ErrClusterExists 在尝试注册一个已存在的簇时返回
+var ErrClusterExists = errors.New("cluster already exists")
 
 type NodeID uint64
 type SynapseID uint64
@@ -88,6 +92,7 @@ type Graph struct {
 	mu       sync.RWMutex
 	nodes    map[NodeID]*MemoryNode
 	synapses map[SynapseID]*Synapse
+	clusters map[string]string // 动态簇注册表：name -> description
 	nextNID  NodeID
 	nextSID  SynapseID
 	db       *bbolt.DB
@@ -136,6 +141,9 @@ func NewGraph(dbPath string) (*Graph, error) {
 		if _, err := tx.CreateBucketIfNotExists([]byte("synapses")); err != nil {
 			return err
 		}
+		if _, err := tx.CreateBucketIfNotExists([]byte("clusters")); err != nil {
+			return err
+		}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -144,6 +152,7 @@ func NewGraph(dbPath string) (*Graph, error) {
 	g := &Graph{
 		nodes:    make(map[NodeID]*MemoryNode),
 		synapses: make(map[SynapseID]*Synapse),
+		clusters: make(map[string]string),
 		nextNID:  1,
 		nextSID:  1,
 		db:       db,
@@ -151,6 +160,9 @@ func NewGraph(dbPath string) (*Graph, error) {
 
 	// 恢复数据
 	if err := g.loadFromDB(); err != nil {
+		return nil, err
+	}
+	if err := g.loadClustersFromDB(); err != nil {
 		return nil, err
 	}
 
@@ -223,6 +235,130 @@ func (g *Graph) AddNode(role, text string) *MemoryNode {
 	g.saveNodeToDB(n)
 	g.inverted.Add(n.ID, text)
 	return n
+}
+
+// AddNodeWithCluster 创建带指定簇归属的节点并持久化（供 ENGRAM 动态绑定簇使用）
+func (g *Graph) AddNodeWithCluster(role, cluster, text string) *MemoryNode {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	now := time.Now()
+	n := &MemoryNode{
+		ID:           g.nextNID,
+		Text:         text,
+		Role:         role,
+		Cluster:      cluster,
+		CreatedAt:    now,
+		LastAccessAt: now,
+		BaseEnergy:   0.5,
+		DecayRate:    0.001,
+		OutEdges:     make([]SynapseID, 0),
+	}
+	g.nextNID++
+	g.nodes[n.ID] = n
+
+	g.saveNodeToDB(n)
+	g.inverted.Add(n.ID, text)
+	return n
+}
+
+// ==================== 动态簇注册表 ====================
+
+// loadClustersFromDB 从 bolt 的 clusters bucket 恢复簇注册表
+func (g *Graph) loadClustersFromDB() error {
+	return g.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("clusters"))
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(k, v []byte) error {
+			g.clusters[string(k)] = string(v)
+			return nil
+		})
+	})
+}
+
+func (g *Graph) saveClusterToDB(name, desc string) {
+	g.db.Update(func(tx *bbolt.Tx) error {
+		return tx.Bucket([]byte("clusters")).Put([]byte(name), []byte(desc))
+	})
+}
+
+func (g *Graph) deleteClusterFromDB(name string) {
+	g.db.Update(func(tx *bbolt.Tx) error {
+		return tx.Bucket([]byte("clusters")).Delete([]byte(name))
+	})
+}
+
+// Clusters 返回当前所有活跃簇的副本（name -> description）
+func (g *Graph) Clusters() map[string]string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	cpy := make(map[string]string, len(g.clusters))
+	for k, v := range g.clusters {
+		cpy[k] = v
+	}
+	return cpy
+}
+
+// ClusterExists 判断簇是否已注册
+func (g *Graph) ClusterExists(name string) bool {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	_, ok := g.clusters[name]
+	return ok
+}
+
+// AddCluster 注册一个新簇；若同名簇已存在，返回 ErrClusterExists
+func (g *Graph) AddCluster(name, desc string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if _, ok := g.clusters[name]; ok {
+		return ErrClusterExists
+	}
+	g.clusters[name] = desc
+	g.saveClusterToDB(name, desc)
+	return nil
+}
+
+// countNodesInClusterLocked 统计归属某簇的节点数（调用方须持有锁）
+func (g *Graph) countNodesInClusterLocked(name string) int {
+	count := 0
+	for _, n := range g.nodes {
+		if n.Cluster == name {
+			count++
+		}
+	}
+	return count
+}
+
+// RemoveClusterIfEmpty 仅当簇下没有关联记忆节点时才删除该簇。
+// 返回：exists=簇是否存在；nodeCount=非空时的关联节点数；removed=是否已删除。
+func (g *Graph) RemoveClusterIfEmpty(name string) (exists bool, nodeCount int, removed bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if _, ok := g.clusters[name]; !ok {
+		return false, 0, false
+	}
+	if c := g.countNodesInClusterLocked(name); c > 0 {
+		return true, c, false
+	}
+	delete(g.clusters, name)
+	g.deleteClusterFromDB(name)
+	return true, 0, true
+}
+
+// SeedDefaultClusters 仅当注册表为空（首次启动）时，播种默认簇，保证旧系统平滑过渡
+func (g *Graph) SeedDefaultClusters(defaults map[string]string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.clusters) > 0 {
+		return
+	}
+	for name, desc := range defaults {
+		g.clusters[name] = desc
+		g.saveClusterToDB(name, desc)
+	}
 }
 
 func (g *Graph) AddSynapse(from, to NodeID, kind EdgeKind, weight float64) *Synapse {

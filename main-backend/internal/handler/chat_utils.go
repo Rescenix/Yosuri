@@ -249,8 +249,8 @@ func (h *ChatHandler) executeToolAndNotify(c *gin.Context, sessionID string, fin
 	})
 	c.Writer.Flush()
 
-	h.sessionStore.Append(sessionID, DSMessage{Role: "assistant", Content: finalContent})
-	h.sessionStore.Append(sessionID, DSMessage{Role: "tool", Content: result.Content})
+	h.sessionStore.Append(sessionID, DSMessage{Role: "assistant", Content: finalContent, Model: "local"})
+	h.sessionStore.Append(sessionID, DSMessage{Role: "tool", Content: result.Content, Model: "local"})
 
 	return result.Content, nil
 }

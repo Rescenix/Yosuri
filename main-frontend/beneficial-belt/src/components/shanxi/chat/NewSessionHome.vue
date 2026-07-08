@@ -45,8 +45,8 @@
       </template>
 
       <template v-else>
-        <div class="home-model-list">
-          <div v-for="m in MODEL_USAGE" :key="m.label" class="home-model-row">
+        <div v-if="modelUsageItems.length" class="home-model-list">
+          <div v-for="m in modelUsageItems" :key="m.label" class="home-model-row">
             <div class="home-model-top">
               <span class="home-model-name">{{ m.label }}</span>
               <span class="home-model-pct">{{ m.pct }}%</span>
@@ -56,14 +56,17 @@
             </div>
           </div>
         </div>
+        <div v-else class="home-model-empty">暂无模型使用数据</div>
       </template>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
+
+const apiBase = import.meta.env.VITE_API_BASE || ''
 
 
 const props = defineProps({
@@ -91,6 +94,9 @@ const displayGreeting = computed(() => {
 
 
 onMounted(() => {
+  fetchOverview()
+  fetchDailyStats()
+
   // 确保初始化前 DOM 已存在
   setTimeout(() => {
     const randomIndex = Math.floor(Math.random() * greetingMessages.length)
@@ -116,33 +122,45 @@ const HOME_RANGES = [
   { value: '7d', label: '7 天' }
 ]
 
-// 仅作占位的演示数据，接入真实用量接口时替换，结构不变
-const ACTIVITY_STATS = {
-  all: { sessions: 32, messages: '6,947', tokens: '9.8M', activeDays: '5 天', currentStreak: '0 天', longestStreak: '4 天', peakHour: '凌晨 1 点', favoriteModel: 'DS 官方' },
-  '30d': { sessions: 21, messages: '4,380', tokens: '6.1M', activeDays: '5 天', currentStreak: '0 天', longestStreak: '4 天', peakHour: '凌晨 1 点', favoriteModel: 'DS 官方' },
-  '7d': { sessions: 6, messages: '980', tokens: '1.4M', activeDays: '3 天', currentStreak: '0 天', longestStreak: '2 天', peakHour: '晚上 11 点', favoriteModel: 'Cloud 480B' }
-}
+// 后端真实统计数据（/api/stats/overview、/api/stats/daily）
+const overviewData = ref(null)
+const dailyStats = ref([])
 
-const MODEL_USAGE = [
-  { label: 'DS 官方', pct: 46 },
-  { label: 'Cloud 480B', pct: 28 },
-  { label: '本地 7B', pct: 18 },
-  { label: 'DS 浏览器', pct: 8 }
-]
+const HEATMAP_ROWS = 7
+const HEATMAP_DAYS = 26 * HEATMAP_ROWS // 26 列 x 7 行，约半年的对话活动窗口
 
-function buildHeatmap() {
-  const cols = 26, rows = 7
-  const active = { '25,2': 2, '25,3': 3, '25,4': 2, '25,5': 1, '24,3': 1, '20,4': 1, '14,2': 1, '9,5': 1 }
-  const cells = []
-  for (let c = 0; c < cols; c++) {
-    for (let r = 0; r < rows; r++) {
-      cells.push({ c, r, level: active[c + ',' + r] || 0 })
-    }
+const RANGE_TO_WINDOW = { all: 'total', '30d': 'last_30d', '7d': 'last_7d' }
+
+async function fetchOverview() {
+  try {
+    const res = await fetch(`${apiBase}/api/stats/overview`)
+    if (!res.ok) throw new Error(`status ${res.status}`)
+    overviewData.value = await res.json()
+  } catch (err) {
+    console.error('加载统计总览失败:', err)
   }
-  return cells
 }
-const heatmapCells = buildHeatmap()
-const heatmapCaption = '这些对话消耗的 token，抵得上手抄 12 遍《逆天邪神》全本。'
+
+async function fetchDailyStats() {
+  try {
+    const res = await fetch(`${apiBase}/api/stats/daily?days=${HEATMAP_DAYS}`)
+    if (!res.ok) throw new Error(`status ${res.status}`)
+    dailyStats.value = await res.json()
+  } catch (err) {
+    console.error('加载每日活动数据失败:', err)
+  }
+}
+
+function formatCount(n) {
+  return (n ?? 0).toLocaleString('zh-CN')
+}
+
+function formatTokens(n) {
+  const v = n ?? 0
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (v >= 1_000) return (v / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
+  return String(v)
+}
 
 function heatmapLevelColor(level) {
   if (level === 3) return '#c96442'
@@ -151,18 +169,83 @@ function heatmapLevelColor(level) {
   return '#ececec'
 }
 
+// 当前所选时间窗口（总共 / 30 天 / 7 天）对应的后端聚合数据
+const currentWindow = computed(() => {
+  const key = RANGE_TO_WINDOW[homeRange.value] || 'total'
+  return overviewData.value ? overviewData.value[key] : null
+})
+
 const statsGridItems = computed(() => {
-  const s = ACTIVITY_STATS[homeRange.value] || ACTIVITY_STATS.all
+  const w = currentWindow.value
+  if (!w) {
+    return [
+      { label: '会话数', value: '-' },
+      { label: '消息数', value: '-' },
+      { label: '总 Token 数', value: '-' },
+      { label: '活跃天数', value: '-' },
+      { label: '当前连续', value: '-' },
+      { label: '最长连续', value: '-' },
+      { label: '高峰时段', value: '-' },
+      { label: '常用模型', value: '-' }
+    ]
+  }
   return [
-    { label: '会话数', value: s.sessions },
-    { label: '消息数', value: s.messages },
-    { label: '总 Token 数', value: s.tokens },
-    { label: '活跃天数', value: s.activeDays },
-    { label: '当前连续', value: s.currentStreak },
-    { label: '最长连续', value: s.longestStreak },
-    { label: '高峰时段', value: s.peakHour },
-    { label: '常用模型', value: s.favoriteModel }
+    { label: '会话数', value: formatCount(w.total_sessions) },
+    { label: '消息数', value: formatCount(w.total_messages) },
+    { label: '总 Token 数', value: formatTokens(w.total_tokens) },
+    { label: '活跃天数', value: `${w.active_days} 天` },
+    { label: '当前连续', value: `${w.current_streak} 天` },
+    { label: '最长连续', value: `${w.longest_streak} 天` },
+    { label: '高峰时段', value: w.peak_hour },
+    { label: '常用模型', value: w.favorite_model }
   ]
+})
+
+const modelUsageItems = computed(() => {
+  const tokens = currentWindow.value?.model_tokens || []
+  const total = tokens.reduce((sum, m) => sum + m.tokens, 0)
+  if (total <= 0) return []
+  return tokens.map(m => ({
+    label: m.model,
+    pct: Math.round((m.tokens / total) * 100)
+  }))
+})
+
+// 按绝对消息数分档，而不是相对当前窗口内的最大值——
+// 否则数据稀疏时（比如只活跃过一天），那一天会永远被判成"最深"档
+function heatmapLevelForCount(count) {
+  if (count <= 0) return 0
+  if (count <= 2) return 1
+  if (count <= 6) return 2
+  return 3
+}
+
+// 按日历周排布成 26 列 x 7 行的热力图格子
+const heatmapCells = computed(() => {
+  const data = dailyStats.value
+  if (!data.length) return []
+  return data.map((d, i) => ({
+    c: Math.floor(i / HEATMAP_ROWS),
+    r: i % HEATMAP_ROWS,
+    level: heatmapLevelForCount(d.count)
+  }))
+})
+
+// 手抄一遍《逆天邪神》全本大致需要的字数（数字仅为营造效果的粗略估算）
+const NOVEL_TOTAL_TOKENS = 800_000
+
+const heatmapCaption = computed(() => {
+  const totalTokens = dailyStats.value.reduce((sum, d) => sum + (d.tokens || 0), 0)
+  if (totalTokens <= 0) return '最近还没有对话记录，开始聊点什么吧。'
+
+  const copies = totalTokens / NOVEL_TOTAL_TOKENS
+  if (copies >= 1) {
+    const copiesText = copies >= 10 ? copies.toFixed(0) : copies.toFixed(1)
+    return `这些对话消耗的 token，抵得上手抄 ${copiesText} 遍《逆天邪神》全本。`
+  }
+  const percent = copies * 100
+  const percentText = percent < 0.01 ? '不到 0.01' : percent.toFixed(2)
+  return `这些对话消耗的 token，抵得上手抄了《逆天邪神》全本的 ${percentText}%。`
 })
 </script>
 
@@ -260,6 +343,7 @@ const statsGridItems = computed(() => {
 }
 .home-heatmap-caption { font-size: 11px; color: #a3a3a3; }
 
+.home-model-empty { font-size: 12.5px; color: #a3a3a3; padding: 8px 0; }
 .home-model-list { display: flex; flex-direction: column; gap: 14px; }
 .home-model-row { display: flex; flex-direction: column; gap: 6px; }
 .home-model-top { display: flex; justify-content: space-between; gap: 10px; }

@@ -144,6 +144,7 @@ func (h *ChatHandler) resolveDSBrowserConversation(
 		Role:      "assistant",
 		Content:   fullContent,
 		Timestamp: now,
+		Model:     "ds_browser",
 	})
 
 	// 保存到 PrismD（Atri 域）—— 保留原有逻辑

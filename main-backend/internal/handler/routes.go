@@ -63,6 +63,12 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.DELETE("/api/v2/sessions/:id", DeleteSession)
 	r.GET("/api/all-messages", GetAllMessagesHandler(sessionStore))
 
+	// 统计仪表盘（数据完全来自 SessionStore，不依赖 PrismD）
+	statsHandler := NewStatsHandler(sessionStore)
+	r.GET("/api/stats/overview", statsHandler.HandleOverview)
+	r.GET("/api/stats/daily", statsHandler.HandleDailyStats)
+	r.GET("/api/stats/detail", statsHandler.HandleDayDetail)
+
 	r.DELETE("/api/images/remove", DeleteImage)
 	r.POST("/api/upload", UploadToOSS)
 	r.GET("/api/images", ListImages)
@@ -143,6 +149,10 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 	r.POST("/api/image/generate", GenerateImage)
 	r.POST("/api/book/upload-cover", UploadCover)
+
+	// 用户自定义 API 接入配置（设置面板用，QQ 登录接入前先用固定 "default" 用户）
+	r.GET("/api/models/config", HandleGetModelConfig)
+	r.PUT("/api/models/config", HandlePutModelConfig)
 
 	r.Static("/images", "./public/images")
 }

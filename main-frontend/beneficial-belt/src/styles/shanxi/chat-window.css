@@ -1452,8 +1452,8 @@ min-height: 90px !important;
   border: none;
   cursor: pointer;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   color: #888;
   border-radius: 50%;
@@ -1463,16 +1463,16 @@ min-height: 90px !important;
 .input-inner-btn:hover { background: rgba(0, 0, 0, 0.05); }
 
 .input-send-btn {
-  width: 32px;
-  height: 32px;
+  width: 20px;
+  height: 20px;
   background: #c96442;
   color: #fff;
 }
 .input-send-btn:hover { background: #b85737; }
 
 .input-stop-btn {
-  width: 32px;
-  height: 32px;
+  width: 20px;
+  height: 20px;
   background: #8a7f72;
 }
 .input-stop-btn:hover { background: #6f6558; }
@@ -1624,7 +1624,7 @@ min-height: 90px !important;
   font-weight: 600;
   border: 1px solid #ddd6cc;
   background: #fff;
-  border-radius: 999px;
+  border-radius: 8px;
   color: #5c4f42;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1797,9 +1797,9 @@ min-height: 90px !important;
 
 /* ==================== 仿 Claude 折叠栏悬浮菜单 ==================== */
 .floating-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
-.floating-menu-panel { position: absolute; top: calc(100% + 6px); left: 8px; width: 280px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12); z-index: 50; padding: 8px 0; display: flex; flex-direction: column; gap: 4px; }
-.fm-mode-switch { display: flex; align-items: center; gap: 4px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 999px; padding: 2px; margin: 4px 8px 8px; }
-.fm-mode-btn { flex: 1; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 0; border-radius: 999px; font-size: 12px; font-weight: 500; color: #a3a3a3; background: transparent; border: none; cursor: pointer; transition: all 0.2s ease; }
+.floating-menu-panel { position: absolute; top: calc(100% + 6px); left: 8px; width: 280px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12); z-index: 50; padding: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.fm-mode-switch { display: flex; align-items: center; gap: 4px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 8px; padding: 2px; margin: 4px 8px 8px; }
+.fm-mode-btn { flex: 1; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 0; border-radius: 8px; font-size: 12px; font-weight: 500; color: #a3a3a3; background: transparent; border: none; cursor: pointer; transition: all 0.2s ease; }
 .fm-mode-btn.active { background: #ffffff; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 .fm-mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .fm-session-area { padding: 0 8px; max-height: 400px; overflow-y: auto; }
@@ -1834,9 +1834,9 @@ min-height: 90px !important;
 
 .input-inner-btn { display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; flex-shrink: 0; width: 28px; height: 28px; padding: 0; color: #888; border-radius: 50%; transition: background 0.2s; z-index: 10; }
 .input-inner-btn:hover { background: rgba(0, 0, 0, 0.05); }
-.input-send-btn { width: 32px; height: 32px; background: #c96442; color: #fff; }
+.input-send-btn { width: 28px; height: 28px; background: #c96442; color: #fff; }
 .input-send-btn:hover { background: #b85737; }
-.input-stop-btn { width: 32px; height: 32px; background: #8a7f72; }
+.input-stop-btn { width: 28px; height: 28px; background: #8a7f72; }
 .input-stop-btn:hover { background: #6f6558; }
 
 /* 纯圆环 Token 进度：无胶囊背景、无文字，锚定在输入框内部右上角 */
@@ -2203,6 +2203,94 @@ min-height: 90px !important;
 }
 .input-git-pr-btn:hover { background: #333333; }
 
+/* PR 按钮右侧的折叠菜单：Git Add ./Commit/Push，往下开，锚在按钮正下方 */
+.pr-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 6px 0;
+  min-width: 160px;
+  z-index: 60;
+}
+.pr-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
+.pr-menu-item:hover { background: #f5f5f5; }
+
+.git-action-toast {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(52, 51, 51, 0.75);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  z-index: 1000;
+  pointer-events: none;
+  animation: copyFadeIn 0.2s ease;
+}
+
+/* Git Commit 的毛玻璃浮层：居中悬浮在整个 chat-window 之上 */
+.commit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.commit-modal-glass {
+  width: min(420px, 86vw);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  padding: 16px;
+}
+.commit-modal-title { font-size: 12.5px; font-weight: 600; color: #6b6b6b; margin-bottom: 8px; }
+.commit-modal-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  /* 无滚轴、随内容撑高：靠 JS 里的 adjustCommitTextareaHeight 同步 scrollHeight，
+     这里只需要禁掉 resize 手柄和滚动条 */
+  resize: none;
+  overflow: hidden;
+  min-height: 60px;
+  max-height: 50vh;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  font-family: inherit;
+}
+.commit-modal-textarea:focus { outline: none; border-color: #c96442; background: rgba(255, 255, 255, 0.85); }
+.commit-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.commit-modal-btn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.commit-modal-cancel { background: rgba(0, 0, 0, 0.06); color: #404040; }
+.commit-modal-cancel:hover { background: rgba(0, 0, 0, 0.1); }
+.commit-modal-confirm { background: #1a1a1a; color: #fff; }
+.commit-modal-confirm:hover { background: #333333; }
+.commit-modal-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* 工作目录条 / git 状态条 / 底部工具条都要跟输入框卡片严格对齐——input-wrapper 有
    max-width:720px+居中，这几个兄弟元素之前漏了同一条规则，只有窗口恰好被 dock
    面板挤窄到刚好剩 720px 宽时才会“碰巧”对齐，其余情况会跑到视口两侧 */
@@ -2276,11 +2364,14 @@ min-height: 90px !important;
   min-width: 130px;
   z-index: 50;
 }
+.add-menu-dropdown { min-width: 170px; }
 .auto-menu-item { padding: 7px 14px; font-size: 12.5px; color: #6b6b6b; cursor: pointer; }
 .auto-menu-item:hover { background: #f5f5f5; }
 .auto-menu-item.active { background: #ececec; color: #1a1a1a; font-weight: 600; }
-.add-menu-item { padding: 7px 14px; font-size: 12.5px; color: #6b6b6b; }
+.add-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
+.add-menu-item:hover { background: #f5f5f5; }
 .add-menu-item.disabled { color: #a3a3a3; cursor: not-allowed; }
+.add-menu-item.disabled:hover { background: transparent; }
 
 /* Token 圆环从输入框卡片内部（absolute 锚右上角）搬到底部工具条右侧后，
    改成正常内联流布局，下拉面板锚点也从旧的角落定位改成贴自身正下方 */

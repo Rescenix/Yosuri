@@ -1,28 +1,19 @@
 <template>
   <div class="diff-panel">
-    <div class="diff-branch-row">
-      <span>main</span>
-      <span class="arrow">→</span>
-      <span class="worktree">working tree</span>
-      <span class="diff-totals">{{ totals }}</span>
+    <div v-if="files.length === 0" class="diff-empty">
+      <Icon icon="mdi:file-compare" width="24" color="#c4c4c4" />
+      <span>本次会话还没有文件改动</span>
     </div>
-    <div class="diff-body">
-      <div class="diff-file-card" v-for="df in files" :key="df.name">
-        <div class="diff-file-head" @click="$emit('toggle-file', df.name)">
-          <span class="diff-chev" :class="{ open: !!expandedDiffs[df.name] }">›</span>
-          <span class="diff-file-name">{{ df.name }}</span>
-          <span class="diff-adds">{{ df.adds }}</span>
-          <span class="diff-dels">{{ df.dels }}</span>
+    <div v-else class="diff-body">
+      <div class="diff-file-card" v-for="df in files" :key="df.path">
+        <div class="diff-file-head" @click="$emit('toggle-file', df.path)">
+          <span class="diff-chev" :class="{ open: !!expandedDiffs[df.path] }">›</span>
+          <span class="diff-file-name">{{ fileBaseName(df.path) }}</span>
+          <span class="diff-adds">+{{ stats(df).added }}</span>
+          <span class="diff-dels">−{{ stats(df).removed }}</span>
         </div>
-        <div v-if="expandedDiffs[df.name]" class="diff-rows">
-          <template v-for="(r, i) in df.rows" :key="i">
-            <div v-if="r.gap" class="diff-gap">⋯ {{ r.gap }} ⋯</div>
-            <div v-else class="diff-line" :class="'t-' + r.t">
-              <span class="diff-lineno">{{ r.n }}</span>
-              <span class="diff-sign" :class="'t-' + r.t">{{ r.t === 'add' ? '+' : (r.t === 'del' ? '−' : '') }}</span>
-              <span class="diff-bar" :class="'t-' + r.t" :style="{ maxWidth: r.w + '%' }"></span>
-            </div>
-          </template>
+        <div v-if="expandedDiffs[df.path]" class="diff-rows">
+          <DiffViewer :old-content="df.oldContent" :new-content="df.newContent" :path="df.path" />
         </div>
       </div>
     </div>
@@ -30,12 +21,29 @@
 </template>
 
 <script setup>
+import { Icon } from '@iconify/vue'
+import { diffLines } from 'diff'
+import { fileBaseName } from './toolArgs.js'
+import DiffViewer from './DiffViewer.vue'
+
 defineProps({
   files: { type: Array, default: () => [] },
-  expandedDiffs: { type: Object, default: () => ({}) },
-  totals: { type: String, default: '' }
+  expandedDiffs: { type: Object, default: () => ({}) }
 })
 defineEmits(['toggle-file'])
+
+// 只给文件行标题的 +N/-N 用，真正的逐行渲染在 DiffViewer 里自己算一遍
+function stats(df) {
+  const parts = diffLines(df.oldContent || '', df.newContent || '')
+  let added = 0, removed = 0
+  for (const p of parts) {
+    const lines = p.value.split('\n')
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+    if (p.added) added += lines.length
+    else if (p.removed) removed += lines.length
+  }
+  return { added, removed }
+}
 </script>
 
 <style scoped>
@@ -47,24 +55,15 @@ defineEmits(['toggle-file'])
   overflow: hidden;
 }
 
-.diff-branch-row {
-  padding: 9px 14px;
+.diff-empty {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  border-bottom: 1px solid #e5e5e5;
-  flex-shrink: 0;
-}
-.diff-branch-row .arrow { color: #a3a3a3; font-weight: 400; }
-.diff-branch-row .worktree { font-weight: 400; color: #6b6b6b; }
-.diff-totals {
-  margin-left: auto;
-  font-weight: 600;
-  font-size: 11.5px;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #6b6b6b;
+  justify-content: center;
+  gap: 8px;
+  color: #a3a3a3;
+  font-size: 12.5px;
 }
 
 .diff-body {
@@ -84,12 +83,13 @@ defineEmits(['toggle-file'])
 }
 .diff-file-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 7px;
   padding: 8px 12px;
   cursor: pointer;
   background: #f5f5f5;
 }
+.diff-chev { align-self: center; }
 .diff-chev {
   display: inline-block;
   font-size: 12px;
@@ -108,7 +108,7 @@ defineEmits(['toggle-file'])
 }
 .diff-adds, .diff-dels {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -116,47 +116,4 @@ defineEmits(['toggle-file'])
 .diff-dels { color: #d94834; }
 
 .diff-rows { border-top: 1px solid #e5e5e5; }
-.diff-gap {
-  padding: 5px 12px;
-  font-size: 10.5px;
-  color: #a3a3a3;
-  text-align: center;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  background: #f5f5f5;
-}
-.diff-line {
-  display: flex;
-  align-items: center;
-  padding: 3.5px 0;
-}
-.diff-line.t-add { background: rgba(18, 183, 106, 0.10); }
-.diff-line.t-del { background: rgba(217, 72, 52, 0.08); }
-.diff-lineno {
-  width: 30px;
-  flex-shrink: 0;
-  text-align: right;
-  font-size: 10.5px;
-  color: #a3a3a3;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-}
-.diff-sign {
-  width: 16px;
-  flex-shrink: 0;
-  text-align: center;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-}
-.diff-sign.t-add { color: #12b76a; }
-.diff-sign.t-del { color: #d94834; }
-.diff-bar {
-  display: block;
-  height: 8px;
-  border-radius: 3px;
-  flex-grow: 1;
-  margin: 0 14px 0 10px;
-}
-.diff-bar.t-add { background: rgba(18, 183, 106, 0.55); }
-.diff-bar.t-del { background: rgba(217, 72, 52, 0.5); }
-.diff-bar.t-ctx { background: rgba(163, 156, 143, 0.22); }
 </style>

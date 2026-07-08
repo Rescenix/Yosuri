@@ -18,6 +18,10 @@
         @delete="$emit('delete-session', $event)"
       />
     </div>
+    <div class="fm-settings-row" @click="$emit('open-settings')">
+      <Icon icon="mdi:cog-outline" width="18" color="#6b6b6b" />
+      <span>设置</span>
+    </div>
     <div class="fm-footer">
       <Icon icon="mdi:account-circle" width="20" color="#8a7f72" />
       <span>Prometheus · Pro</span>
@@ -38,7 +42,7 @@ defineProps({
   // 钉住态需要撑满整条侧栏，session 区改成 flex:1 吃掉剩余高度
   fill: { type: Boolean, default: false }
 })
-defineEmits(['select-session', 'new-session', 'trigger-chat', 'trigger-code', 'rename-session', 'delete-session'])
+defineEmits(['select-session', 'new-session', 'trigger-chat', 'trigger-code', 'rename-session', 'delete-session', 'open-settings'])
 </script>
 
 <style scoped>
@@ -65,7 +69,7 @@ defineEmits(['select-session', 'new-session', 'trigger-chat', 'trigger-code', 'r
   justify-content: center;
   gap: 4px;
   padding: 4px 0;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
   color: #a3a3a3;
@@ -85,13 +89,27 @@ defineEmits(['select-session', 'new-session', 'trigger-chat', 'trigger-code', 'r
   overflow-y: auto;
 }
 
+.fm-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  margin-top: 6px;
+  border-top: 1px solid #ececec;
+  font-size: 13px;
+  color: #262626;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.fm-settings-row:hover { background: #f5f5f5; }
+
 .fm-footer {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px 4px;
-  border-top: 1px solid #ececec;
-  margin-top: 6px;
+  padding: 8px 16px 14px;
   font-size: 13px;
   color: #1a1a1a;
   font-weight: 500;

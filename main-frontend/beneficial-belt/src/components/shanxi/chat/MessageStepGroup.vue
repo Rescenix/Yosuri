@@ -83,7 +83,7 @@ const summaryText = computed(() => {
   let reads = 0, edits = 0, commands = 0, others = 0
   for (const tc of allToolCalls.value) {
     if (tc.name === 'read_file') reads++
-    else if (tc.name === 'write_file') edits++
+    else if (tc.name === 'write_file' || tc.name === 'edit_file') edits++
     else if (tc.name === 'execute_command') commands++
     else others++
   }

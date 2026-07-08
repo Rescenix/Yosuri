@@ -128,10 +128,12 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 	writeSSE(c, "done", "done", finalData)
 	c.Writer.Flush()
 
-	// 保存对话
-	h.sessionStore.Append(req.SessionID, DSMessage{Role: "user", Content: req.Message})
-	if finalContent != "" {
-		h.sessionStore.Append(req.SessionID, DSMessage{Role: "assistant", Content: finalContent})
+	// 保存对话（ds_browser 引擎在 resolveDSBrowserConversation 内部已自行保存，这里跳过避免重复计入统计）
+	if modelType != "ds_browser" {
+		h.sessionStore.Append(req.SessionID, DSMessage{Role: "user", Content: req.Message})
+		if finalContent != "" {
+			h.sessionStore.Append(req.SessionID, DSMessage{Role: "assistant", Content: finalContent, Model: modelType})
+		}
 	}
 
 	// 定期压缩

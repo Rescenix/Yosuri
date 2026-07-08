@@ -108,6 +108,7 @@
               @delete-session="deleteSession"
               @trigger-chat="triggerChat"
               @trigger-code="triggerWorkflow()"
+              @open-settings="showSettings = true"
             />
           </div>
         </div>
@@ -129,6 +130,7 @@
             @delete-session="deleteSession"
             @trigger-chat="triggerChat"
             @trigger-code="triggerWorkflow()"
+            @open-settings="showSettings = true"
           />
         </aside>
 
@@ -237,17 +239,33 @@
               <div v-else-if="inputTopBarMode === 'git'" class="input-git-bar">
                 <div class="input-git-left">
                   <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
-                  <span class="input-git-branch">{{ activeSessionObj?.branch || 'main' }}</span>
+                  <span class="input-git-branch">{{ gitStatus.branch || activeSessionObj?.branch || 'main' }}</span>
                 </div>
                 <div class="input-git-right">
                   <span class="input-git-diff-badge">
-                    <span class="input-git-add">+{{ diffAdded }}</span>
-                    <span class="input-git-remove">−{{ diffRemoved }}</span>
+                    <span class="input-git-add">+{{ gitStatus.added }}</span>
+                    <span class="input-git-remove">−{{ gitStatus.removed }}</span>
                   </span>
-                  <button class="input-git-pr-btn" type="button">
-                    Create PR
-                    <span class="sch-caret">▾</span>
-                  </button>
+                  <div class="toolbar-dropdown-wrap">
+                    <button class="input-git-pr-btn" type="button" @click.stop="showPrMenu = !showPrMenu">
+                      Create PR
+                      <span class="sch-caret">▾</span>
+                    </button>
+                    <div v-if="showPrMenu" class="pr-menu-dropdown" @click.stop>
+                      <div class="pr-menu-item" @click="runGitAdd">
+                        <Icon icon="mdi:plus-box-outline" width="14" />
+                        <span>Git Add .</span>
+                      </div>
+                      <div class="pr-menu-item" @click="openCommitModal">
+                        <Icon icon="mdi:content-save-edit-outline" width="14" />
+                        <span>Git Commit</span>
+                      </div>
+                      <div class="pr-menu-item" @click="runGitPush">
+                        <Icon icon="mdi:cloud-upload-outline" width="14" />
+                        <span>Git Push</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -297,6 +315,10 @@
 
                 <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keypress.enter="handleSend" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
 
+                <!-- "+" 附加菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
+                <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
+                <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
+
                 <button v-if="workflowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="stopWorkflow" title="停止工作流（已生成内容会保留）">
                   <Icon icon="mdi:stop" width="16" color="#fff" />
                 </button>
@@ -329,7 +351,14 @@
                       <Icon icon="mdi:plus" width="16" />
                     </button>
                     <div v-if="showAddMenu" class="add-menu-dropdown" @click.stop>
-                      <div class="add-menu-item disabled">更多功能开发中</div>
+                      <div class="add-menu-item" @click="triggerAttachFiles">
+                        <Icon icon="mdi:paperclip" width="14" color="#6b6b6b" />
+                        <span>添加文件或照片</span>
+                      </div>
+                      <div class="add-menu-item" @click="triggerAttachFolder">
+                        <Icon icon="mdi:folder-outline" width="14" color="#6b6b6b" />
+                        <span>添加文件夹</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -396,7 +425,6 @@
                     v-if="panelKey === 'diff'"
                     :files="diffFiles"
                     :expanded-diffs="expandedDiffs"
-                    :totals="diffTotals"
                     @toggle-file="toggleDiffFile"
                   />
                   <Terminal v-else-if="panelKey === 'terminal'" class="tool-panel-terminal" :open="true" :embedded="true" />
@@ -425,6 +453,35 @@
         @close="showBackgroundTasks = false"
         @select-task="jumpToGroup"
       />
+
+      <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
+
+      <div v-if="gitActionMessage" class="git-action-toast">{{ gitActionMessage }}</div>
+
+      <!-- Git Commit 的毛玻璃浮层：居中悬浮，跟侧边栏抽屉一样挂在 chat-window 根下
+           避免被内部 transform 影响定位 -->
+      <div v-if="showCommitModal" class="commit-modal-backdrop" @click.self="closeCommitModal">
+        <div class="commit-modal-glass">
+          <div class="commit-modal-title">Commit message</div>
+          <textarea
+            ref="commitTextareaRef"
+            v-model="commitMessage"
+            class="commit-modal-textarea"
+            placeholder="输入提交信息，支持多行…"
+            rows="1"
+            @input="adjustCommitTextareaHeight"
+            @keydown.esc="closeCommitModal"
+          ></textarea>
+          <div class="commit-modal-actions">
+            <button class="commit-modal-btn commit-modal-cancel" @click="closeCommitModal">取消</button>
+            <button
+              class="commit-modal-btn commit-modal-confirm"
+              :disabled="!commitMessage.trim() || committing"
+              @click="runGitCommit"
+            >{{ committing ? '提交中…' : '确认提交' }}</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -442,7 +499,9 @@ import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth, useResizableSplit } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
+import SettingsModal from './SettingsModal.vue'
 import DiffPanel from './DiffPanel.vue'
+import { parseToolArgs } from './toolArgs.js'
 import Terminal from './Terminal.vue'
 import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import AuroraStatusIcon from './AuroraStatusIcon.vue'
@@ -505,15 +564,123 @@ function closeDockPanel(key) {
   dockPanels.value = dockPanels.value.filter(k => k !== key)
 }
 
-const expandedDiffs = ref({ 'server.js': true })
-function toggleDiffFile(name) {
-  expandedDiffs.value = { ...expandedDiffs.value, [name]: !expandedDiffs.value[name] }
+const expandedDiffs = ref({})
+function toggleDiffFile(path) {
+  expandedDiffs.value = { ...expandedDiffs.value, [path]: !expandedDiffs.value[path] }
 }
-const diffFiles = ref([ /* ... 省略模拟数据 ... */ ])
-const diffTotals = '+29 −7'
-const diffAdded = 29
-const diffRemoved = 7
+// Diff 面板的文件列表不再是硬编码假数据，从消息流里所有 write_file/edit_file
+// 工具调用中提取真实的 before/after；同一路径出现多次只保留最后一次改动
+// （不尝试重建整个会话期间的累计 diff，后端目前也没提供完整快照可供重建）
+const diffFiles = computed(() => {
+  const byPath = new Map()
+  for (const msg of messages.value) {
+    if (msg.kind !== 'group') continue
+    for (const step of msg.steps) {
+      for (const tc of (step.toolCalls || [])) {
+        if (tc.name !== 'write_file' && tc.name !== 'edit_file') continue
+        const args = parseToolArgs(tc.args)
+        if (!args.path) continue
+        if (tc.name === 'write_file') {
+          byPath.set(args.path, { path: args.path, oldContent: '', newContent: args.content || '' })
+        } else {
+          byPath.set(args.path, { path: args.path, oldContent: args.old_string || '', newContent: args.new_string || '' })
+        }
+      }
+    }
+  }
+  return [...byPath.values()]
+})
+const diffTotals = ''
 const workingDirName = 'main-frontend'
+
+// ==================== Git 状态条 + PR 面板（Add/Commit/Push） ====================
+// 复用后端已有的 /api/git-status、/api/git/add-all、/api/git/commit、/api/git/push，
+// 不新增接口——面板上的分支名、+N/-N 都是这里拉回来的真实数据，不再是写死的假值
+const gitStatus = ref({ branch: '', added: 0, removed: 0 })
+async function fetchGitStatus() {
+  try {
+    const res = await fetch('/api/git-status')
+    if (!res.ok) return
+    const data = await res.json()
+    // 兼容后端还没重启、旧二进制不返回 added/removed 字段的情况，避免面板上显示 "+undefined"
+    gitStatus.value = { branch: '', added: 0, removed: 0, ...data }
+  } catch (e) {}
+}
+
+const showPrMenu = ref(false)
+const gitActionMessage = ref('')
+let gitToastTimer = null
+function showGitToast(msg) {
+  gitActionMessage.value = msg
+  clearTimeout(gitToastTimer)
+  gitToastTimer = setTimeout(() => { gitActionMessage.value = '' }, 2500)
+}
+
+async function runGitAdd() {
+  showPrMenu.value = false
+  try {
+    const res = await fetch('/api/git/add-all', { method: 'POST' })
+    if (!res.ok) throw new Error(await res.text())
+    showGitToast('已执行 git add .')
+    await fetchGitStatus()
+  } catch (e) { showGitToast('git add 失败') }
+}
+
+async function runGitPush() {
+  showPrMenu.value = false
+  showGitToast('推送中…')
+  try {
+    const res = await fetch('/api/git/push', { method: 'POST' })
+    const text = await res.text()
+    if (!res.ok) throw new Error(text)
+    showGitToast('推送成功')
+  } catch (e) { showGitToast('推送失败，详见控制台'); console.error(e) }
+}
+
+const showCommitModal = ref(false)
+const commitMessage = ref('')
+const committing = ref(false)
+const commitTextareaRef = ref(null)
+
+function openCommitModal() {
+  showPrMenu.value = false
+  commitMessage.value = ''
+  showCommitModal.value = true
+  nextTick(() => { commitTextareaRef.value?.focus(); adjustCommitTextareaHeight() })
+}
+function closeCommitModal() {
+  if (committing.value) return
+  showCommitModal.value = false
+}
+// 跟主输入框的 adjustInputHeight 同一套手法：先回弹 auto 量出真实内容高度，
+// 再赋值成 scrollHeight，撑开容器而不是在 textarea 内部出滚动条
+function adjustCommitTextareaHeight() {
+  const el = commitTextareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+async function runGitCommit() {
+  if (!commitMessage.value.trim() || committing.value) return
+  committing.value = true
+  try {
+    const res = await fetch('/api/git/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: commitMessage.value })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    showCommitModal.value = false
+    commitMessage.value = ''
+    showGitToast('提交成功')
+    await fetchGitStatus()
+  } catch (e) {
+    showGitToast('提交失败，详见控制台')
+    console.error(e)
+  } finally {
+    committing.value = false
+  }
+}
 
 // 输入框上方工具栏三态：首页/新会话(无消息)显示工作目录条；Code 模式(有消息)
 // 显示 git 状态条；普通 Chat 模式(有消息)整个区域不显示
@@ -563,15 +730,34 @@ async function copyText(text) {
 }
 
 // ==================== 模型选择 ====================
-const modelOptions = [
-  { label: '本地 7B', value: 'local'},
+// "自定义" 是动态的第5个选项，标签取用户在设置面板里配的默认 API 配置名——
+// 这里只做选择器展示，真正让 custom 这个 value 能发出消息是下一阶段的事
+const customApiConfig = ref(null)
+async function loadCustomApiConfig() {
+  try {
+    const res = await fetch('/api/models/config')
+    if (!res.ok) return
+    const data = await res.json()
+    customApiConfig.value = (data.configs || []).find(c => c.is_default) || null
+  } catch (e) {}
+}
+const modelOptions = computed(() => [
+  { label: '本地 7B', value: 'local' },
   { label: 'Cloud 480B', value: 'cloud' },
   { label: 'DeepSeek', value: 'ds' },
-  { label: 'DeepSeekProxy', value: 'ds_browser'},
-]
+  { label: 'DeepSeekProxy', value: 'ds_browser' },
+  { label: customApiConfig.value ? (customApiConfig.value.name || '自定义') : '自定义 · 未配置', value: 'custom' }
+])
 const selectedModel = ref(localStorage.getItem('selectedModel') || 'ds_browser')
 const showModelMenu = ref(false)
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
+
+// ==================== 设置面板 ====================
+const showSettings = ref(false)
+function onSettingsClosed() {
+  showSettings.value = false
+  loadCustomApiConfig()
+}
 
 // ==================== 底部工具条：Auto 模式 + "+" 附加菜单 ====================
 const autoModeOptions = ['Auto', 'Ask', 'Plan']
@@ -842,15 +1028,84 @@ async function handlePaste(e) {
   } catch (err) { showVisionError('图片分析失败') }
 }
 
+// ==================== "+" 附加菜单：添加文件/照片、添加文件夹 ====================
+// 跟粘贴图片（handlePaste）共用同一套 vision-preprocess 接口和状态提示，但这里是
+// "先附加、用户自己决定何时发送"，不像粘贴那样识别完直接 sendWorkflow
+const attachFileInputRef = ref(null)
+const attachFolderInputRef = ref(null)
+
+function triggerAttachFiles() { showAddMenu.value = false; attachFileInputRef.value?.click() }
+function triggerAttachFolder() { showAddMenu.value = false; attachFolderInputRef.value?.click() }
+
+function appendToInput(text) {
+  const existing = userInput.value
+  userInput.value = existing ? `${existing}\n${text}` : text
+  nextTick(() => adjustInputHeight())
+}
+
+async function attachImageFile(file) {
+  clearTimeout(visionStatusTimer); visionStatus.value = 'analyzing'
+  try {
+    const base64 = await fileToBase64(file)
+    const res = await fetch('/api/aether/vision-preprocess', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_base64: base64, mime_type: file.type || 'image/png' })
+    })
+    if (!res.ok) throw new Error(`请求失败 (${res.status})`)
+    const data = await res.json()
+    if (!data.text) throw new Error('未返回分析文本')
+    visionStatus.value = ''
+    appendToInput(`[已添加图片: ${file.name}]\n${data.text}`)
+  } catch (err) {
+    showVisionError(`图片「${file.name}」分析失败`)
+  }
+}
+
+async function attachTextFile(file) {
+  try {
+    const text = await file.text()
+    const truncated = text.length > 4000 ? text.slice(0, 4000) + '\n…（已截断）' : text
+    appendToInput(`[已添加文件: ${file.name}]\n\`\`\`\n${truncated}\n\`\`\``)
+  } catch (err) {
+    showVisionError(`文件「${file.name}」读取失败`)
+  }
+}
+
+async function onAttachFilesSelected(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ''
+  for (const file of files) {
+    if (file.type && file.type.startsWith('image/')) await attachImageFile(file)
+    else await attachTextFile(file)
+  }
+}
+
+// 文件夹选择拿到的是扁平文件列表（每个文件带 webkitRelativePath），浏览器不允许
+// 直接读目录结构——先给个清单让模型知道有哪些文件，需要看内容再走 read_file 工具
+async function onAttachFolderSelected(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ''
+  if (files.length === 0) return
+  const folderName = files[0].webkitRelativePath?.split('/')[0] || '未命名文件夹'
+  const list = files.slice(0, 200).map(f => f.webkitRelativePath).join('\n')
+  const more = files.length > 200 ? `\n…（共 ${files.length} 个文件，已截断显示）` : ''
+  appendToInput(`[已添加文件夹: ${folderName}，共 ${files.length} 个文件]\n${list}${more}`)
+}
+
 const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.value })
 
 watch(messages, () => { nextTick(() => { highlightAllCodeBlocks() }) }, { deep: true })
+// 切进 git 状态条可见的 Code 模式时刷新一次，避免面板上的 +N/-N 停留在挂载时的旧快照
+watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
 
 // ==================== 初始化 ====================
 onMounted(() => {
+  loadCustomApiConfig()
+  fetchGitStatus()
   document.addEventListener('click', () => {
     showModelMenu.value = false; showTokenPanel.value = false; menuHovering.value = false; showMoreMenu.value = false
-    showAutoMenu.value = false; showAddMenu.value = false
+    showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false
   })
 
 })

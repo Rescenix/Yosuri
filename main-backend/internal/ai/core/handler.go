@@ -426,6 +426,11 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			break
 		}
 
+		// old_string 在文件里的起始行号——diff 面板展示这次编辑时用它做行号偏移，
+		// 不然前端只能拿 old_string 自身的相对行号（永远从 1 开始），跟文件里的真实位置对不上
+		matchIdx := strings.Index(content, oldStr)
+		startLine := strings.Count(content[:matchIdx], "\n") + 1
+
 		newContent := strings.Replace(content, oldStr, newStr, 1)
 		if err := os.WriteFile(fullPath, []byte(newContent), 0644); err != nil {
 			resultContent = fmt.Sprintf("写入文件失败: %v", err)
@@ -437,7 +442,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		if updateErr := UpdateCodeIndex(fullPath); updateErr != nil {
 			fmt.Printf("⚠️ 更新索引失败: %v\n", updateErr)
 		}
-		resultContent = fmt.Sprintf("SUCCESS: 已在 %s 中精确替换 1 处内容", filePath)
+		resultContent = fmt.Sprintf("SUCCESS: 已在 %s 第 %d 行精确替换 1 处内容", filePath, startLine)
 		fmt.Printf("✏️ 工具调用: 编辑文件 - %s (old: %q -> new: %q)\n", filePath, oldStr, newStr)
 	case "execute_command":
 

@@ -7,22 +7,34 @@
     </div>
     <!-- 第三层：真实审计数据，紧邻动作行下方展开，顺着文档流推开后续动作 -->
     <div v-if="expanded" class="bgstep-action-detail">
-      <!-- write_file：文件路径 + 行级 diff（新增行标绿） -->
-      <template v-if="tc.name === 'write_file' && writeDiff(tc)">
+      <!-- write_file：全新写入，没有 before 快照，DiffViewer 里 oldContent 传空
+           字符串，jsdiff 会正确地把所有内容展示成新增行 -->
+      <template v-if="tc.name === 'write_file' && readArgs(tc).path">
         <div class="bgdiff-card">
           <div class="bgdiff-head">
             <Icon icon="mdi:file-outline" width="13" color="#a3a3a3" />
-            <span class="bgdiff-path">{{ writeDiff(tc).path }}</span>
-            <span class="bgdiff-add-count">+{{ writeDiff(tc).lineCount }}</span>
+            <span class="bgdiff-path">{{ readArgs(tc).path }}</span>
+            <span class="bgdiff-add-count">+{{ diffStats(tc).added }}</span>
           </div>
-          <div class="bgdiff-lines">
-            <div v-for="(line, li) in writeDiff(tc).preview" :key="li" class="bgdiff-line add">
-              <span class="bgdiff-gutter">+</span><span class="bgdiff-text">{{ line || ' ' }}</span>
-            </div>
-            <div v-if="writeDiff(tc).truncated" class="bgdiff-more">
-              ⋯ 还有 {{ writeDiff(tc).lineCount - writeDiff(tc).preview.length }} 行 ⋯
-            </div>
+          <DiffViewer :old-content="''" :new-content="readArgs(tc).content || ''" :path="readArgs(tc).path" />
+        </div>
+      </template>
+
+      <!-- edit_file：old_string → new_string，是真正意义上的前后对比 -->
+      <template v-else-if="tc.name === 'edit_file' && readArgs(tc).path">
+        <div class="bgdiff-card">
+          <div class="bgdiff-head">
+            <Icon icon="mdi:file-outline" width="13" color="#a3a3a3" />
+            <span class="bgdiff-path">{{ readArgs(tc).path }}</span>
+            <span class="bgdiff-add-count">+{{ diffStats(tc).added }}</span>
+            <span class="bgdiff-del-count">−{{ diffStats(tc).removed }}</span>
           </div>
+          <DiffViewer
+            :old-content="readArgs(tc).old_string || ''"
+            :new-content="readArgs(tc).new_string || ''"
+            :path="readArgs(tc).path"
+            :start-line="editStartLine(tc)"
+          />
         </div>
       </template>
 
@@ -56,6 +68,9 @@
 <script setup>
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import { diffLines } from 'diff'
+import { parseToolArgs, fileBaseName } from './toolArgs.js'
+import DiffViewer from './DiffViewer.vue'
 
 defineProps({
   tc: { type: Object, required: true }
@@ -63,34 +78,8 @@ defineProps({
 
 const expanded = ref(false)
 
-function parseToolArgs(argsStr) {
-  const args = {}
-  const re = /(\w+)="([\s\S]*?)"/g
-  let m
-  while ((m = re.exec(argsStr || '')) !== null) args[m[1]] = m[2]
-  return args
-}
 function readArgs(tc) {
   return parseToolArgs(tc.args)
-}
-
-const WRITE_PREVIEW_LIMIT = 8
-function writeDiff(tc) {
-  if (tc.name !== 'write_file' || !tc.args) return null
-  const args = parseToolArgs(tc.args)
-  if (!args.path || args.content === undefined) return null
-  const lines = args.content.split('\n')
-  return {
-    path: args.path,
-    lineCount: lines.length,
-    preview: lines.slice(0, WRITE_PREVIEW_LIMIT),
-    truncated: lines.length > WRITE_PREVIEW_LIMIT
-  }
-}
-
-function fileBaseName(path) {
-  if (!path) return '文件'
-  return path.split(/[\\/]/).pop()
 }
 
 function truncateText(text, limit) {
@@ -98,27 +87,56 @@ function truncateText(text, limit) {
   return text.length > limit ? text.slice(0, limit) + '\n⋯（已截断）' : text
 }
 
+// old_string/new_string 只是文件片段，行号天然从 1 开始；后端在 result 文本里
+// 附带了这段片段在真实文件中的起始行号（"第 N 行"），这里解析出来传给 DiffViewer
+// 做偏移，解析不到就退回 1（老会话记录、非 edit_file 场景等兜底）
+function editStartLine(tc) {
+  const m = /第\s*(\d+)\s*行/.exec(tc.result || '')
+  return m ? parseInt(m[1], 10) : 1
+}
+
+// 轻量统计增删行数，只给折叠摘要/标题栏用——真正的逐行渲染在 DiffViewer 里
+function diffStats(tc) {
+  const args = readArgs(tc)
+  const oldStr = tc.name === 'edit_file' ? (args.old_string || '') : ''
+  const newStr = tc.name === 'edit_file' ? (args.new_string || '') : (args.content || '')
+  const parts = diffLines(oldStr, newStr)
+  let added = 0, removed = 0
+  for (const p of parts) {
+    const lines = p.value.split('\n')
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+    if (p.added) added += lines.length
+    else if (p.removed) removed += lines.length
+  }
+  return { added, removed }
+}
+
 function actionLabel(tc) {
   if (tc.name === 'write_file') {
-    const args = parseToolArgs(tc.args)
-    const diff = writeDiff(tc)
-    return `编辑了 ${fileBaseName(args.path)}${diff ? ' +' + diff.lineCount : ''}`
+    const args = readArgs(tc)
+    return `编辑了 ${fileBaseName(args.path)} +${diffStats(tc).added}`
+  }
+  if (tc.name === 'edit_file') {
+    const args = readArgs(tc)
+    const { added, removed } = diffStats(tc)
+    return `编辑了 ${fileBaseName(args.path)} +${added} −${removed}`
   }
   if (tc.name === 'execute_command') {
-    const args = parseToolArgs(tc.args)
+    const args = readArgs(tc)
     const cmd = args.command || tc.args || ''
     return `运行了 ${cmd.length > 42 ? cmd.slice(0, 42) + '…' : cmd}`
   }
   if (tc.name === 'read_file') {
-    const args = parseToolArgs(tc.args)
+    const args = readArgs(tc)
     return `读取了 ${fileBaseName(args.path)}`
   }
   return tc.name
 }
-// 设计稿要求的 16x16 圆角色块字母徽章：R 读取(蓝) / W 编辑(强调色) / > 执行命令(灰) / · 说明性文字(弱色)
+// 设计稿要求的 16x16 圆角色块字母徽章：R 读取(蓝) / W 编辑(强调色，write_file 和
+// edit_file 共用，都是"改文件"这个语义) / > 执行命令(灰) / · 说明性文字(弱色)
 function actionBadge(tc) {
   if (tc.name === 'read_file') return { letter: 'R', color: '#5b8def' }
-  if (tc.name === 'write_file') return { letter: 'W', color: '#c96442' }
+  if (tc.name === 'write_file' || tc.name === 'edit_file') return { letter: 'W', color: '#c96442' }
   if (tc.name === 'execute_command') return { letter: '>', color: '#8a8378' }
   return { letter: '·', color: '#a3a3a3' }
 }
@@ -187,13 +205,9 @@ function actionBadge(tc) {
 .bgstep-raw-block.error { color: #d94834; border-color: #f3c9c2; background: #fff5f3; }
 
 .bgdiff-card { border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; background: #fff; }
-.bgdiff-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #f5f5f5; border-bottom: 1px solid #e5e5e5; }
+.bgdiff-head { display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; background: #f5f5f5; border-bottom: 1px solid #e5e5e5; }
+.bgdiff-head :deep(svg) { align-self: center; }
 .bgdiff-path { flex: 1; min-width: 0; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: #262626; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bgdiff-add-count { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 700; color: #12b76a; flex-shrink: 0; }
-.bgdiff-lines { padding: 2px 0; }
-.bgdiff-line { display: flex; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; line-height: 1.6; padding: 0 10px; }
-.bgdiff-line.add { background: rgba(18, 183, 106, 0.08); }
-.bgdiff-gutter { width: 16px; flex-shrink: 0; color: #12b76a; font-weight: 700; user-select: none; }
-.bgdiff-text { flex: 1; min-width: 0; color: #262626; white-space: pre; overflow-x: auto; }
-.bgdiff-more { padding: 4px 10px; font-size: 10.5px; color: #a3a3a3; text-align: center; }
+.bgdiff-add-count { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 700; color: #12b76a; flex-shrink: 0; }
+.bgdiff-del-count { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 700; color: #d94834; flex-shrink: 0; }
 </style>

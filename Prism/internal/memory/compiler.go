@@ -13,17 +13,9 @@ import (
 	"time"
 )
 
-// 允许的簇名（与 clusterBridgeWeight 矩阵 key 一致）
-var allowedClusters = map[string]bool{
-	"UserBase": true,
-	"CodeWork": true,
-	"ToolLog":  true,
-	"Session":  true,
-}
-
-// normalizeCluster 校验并返回合法的簇名，若无效则返回默认值
-func normalizeCluster(cluster string, defaultCluster string) string {
-	if allowedClusters[cluster] {
+// normalizeCluster 对照动态簇注册表校验簇名，未注册则回退到默认簇
+func (g *Graph) normalizeCluster(cluster string, defaultCluster string) string {
+	if g.ClusterExists(cluster) {
 		return cluster
 	}
 	return defaultCluster
@@ -97,7 +89,7 @@ func (g *Graph) CompileMemory(sessionTurns []string) (*MemoryNode, error) {
 		result.EventType = "chat"
 	}
 	// 簇名校验，默认 UserBase
-	result.Cluster = normalizeCluster(result.Cluster, "UserBase")
+	result.Cluster = g.normalizeCluster(result.Cluster, "UserBase")
 
 	// 去重（哈希）
 	hash := sha1.Sum([]byte(summary))
@@ -315,7 +307,7 @@ func (g *Graph) CompileMemoryForce(sessionTurns []string) (*MemoryNode, error) {
 		result.EventType = "chat"
 	}
 	// 簇名校验，默认 CodeWork（与之前行为一致）
-	result.Cluster = normalizeCluster(result.Cluster, "CodeWork")
+	result.Cluster = g.normalizeCluster(result.Cluster, "CodeWork")
 
 	// 去重
 	hash := sha1.Sum([]byte(summary))

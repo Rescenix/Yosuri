@@ -34,6 +34,7 @@ type DSMessage struct {
 	Timestamp        time.Time       `json:"-"`
 	ToolCalls        []core.ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string          `json:"tool_call_id,omitempty"`
+	Model            string          `json:"model,omitempty"` // 生成该消息所用的模型标识（ds/cloud/local/ds_browser），仅统计用途
 }
 
 type DSReq struct {

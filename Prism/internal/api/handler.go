@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -103,14 +104,19 @@ func (h *PrimQLHandler) handle(raw string) string {
 
 	switch cmd {
 	case "ENGRAM":
-		subParts := strings.SplitN(rest, " ", 2)
-		if len(subParts) < 2 {
-			return "ERROR role and content required\n"
+		// 动态绑定簇：ENGRAM <role> <cluster> <content>
+		subParts := strings.SplitN(rest, " ", 3)
+		if len(subParts) < 3 {
+			return "ERROR role, cluster and content required\n"
 		}
 		role := subParts[0]
-		text := strings.TrimSpace(subParts[1])
-		node := graph.AddNode(role, text)
-		log.Printf("ENGRAM: id=%d, role=%s, text=%.40s", node.ID, role, text)
+		cluster := subParts[1]
+		text := strings.TrimSpace(subParts[2])
+		if !graph.ClusterExists(cluster) {
+			return fmt.Sprintf("ERROR 400 簇 '%s' 不存在，请先创建该簇\n", cluster)
+		}
+		node := graph.AddNodeWithCluster(role, cluster, text)
+		log.Printf("ENGRAM: id=%d, role=%s, cluster=%s, text=%.40s", node.ID, role, cluster, text)
 		return fmt.Sprintf("OK %d\n", node.ID)
 
 	case "LOOM":
@@ -410,6 +416,13 @@ func (h *PrimQLHandler) handle(raw string) string {
 		})
 		return "OK " + string(resp) + "\n"
 
+	case "MEMORY_SYNC":
+		// 供 Agent 查询当前可用的簇列表
+		resp, _ := json.Marshal(map[string]interface{}{
+			"clusters": clusterList(graph),
+		})
+		return "OK " + string(resp) + "\n"
+
 	case "COMPILE":
 		turns := strings.Split(rest, "\n---\n")
 		select {
@@ -528,4 +541,106 @@ func truncateByWidth(s string, maxWidth int) string {
 		w += rw
 	}
 	return sb.String() + "..."
+}
+
+// ==================== 动态簇管理 REST 端点 ====================
+
+// clusterList 把某个图的簇注册表整理成按名称排序的 [{name, description}] 列表
+func clusterList(graph *memory.Graph) []map[string]string {
+	clusters := graph.Clusters()
+	names := make([]string, 0, len(clusters))
+	for name := range clusters {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	list := make([]map[string]string, 0, len(clusters))
+	for _, name := range names {
+		list = append(list, map[string]string{"name": name, "description": clusters[name]})
+	}
+	return list
+}
+
+// writeJSON 写出标准 JSON 响应，附带 CORS 头
+func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// HandleCreateCluster 处理 POST /cluster —— 动态创建新簇
+func (h *PrimQLHandler) HandleCreateCluster(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	graph := h.manager.CurrentGraph()
+	if graph == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no active domain"})
+		return
+	}
+	var body struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	body.Name = strings.TrimSpace(body.Name)
+	if body.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+	if err := graph.AddCluster(body.Name, body.Description); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": fmt.Sprintf("簇 '%s' 已存在", body.Name)})
+		return
+	}
+	log.Printf("CLUSTER CREATE: %s", body.Name)
+	writeJSON(w, http.StatusCreated, map[string]string{"name": body.Name, "description": body.Description})
+}
+
+// HandleListClusters 处理 GET /clusters —— 返回所有活跃簇
+func (h *PrimQLHandler) HandleListClusters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	graph := h.manager.CurrentGraph()
+	if graph == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no active domain"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"clusters": clusterList(graph)})
+}
+
+// HandleDeleteCluster 处理 DELETE /cluster/:name —— 删除簇（簇下有节点时拒绝）
+func (h *PrimQLHandler) HandleDeleteCluster(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	graph := h.manager.CurrentGraph()
+	if graph == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no active domain"})
+		return
+	}
+	name := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/cluster/"))
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cluster name is required"})
+		return
+	}
+	exists, nodeCount, removed := graph.RemoveClusterIfEmpty(name)
+	if !exists {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("簇 '%s' 不存在", name)})
+		return
+	}
+	if !removed {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": fmt.Sprintf("簇 '%s' 下仍有 %d 个记忆节点，请先迁移或删除该簇下的所有记忆节点", name, nodeCount),
+		})
+		return
+	}
+	log.Printf("CLUSTER DELETE: %s", name)
+	writeJSON(w, http.StatusOK, map[string]string{"deleted": name})
 }
