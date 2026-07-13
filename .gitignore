@@ -49,3 +49,6 @@ bfg.jar
 crack/chrome_temp/
 
 Prism/prism/prismd_memory.dat
+
+# Go 构建缓存
+.gocache/
