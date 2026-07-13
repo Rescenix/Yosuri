@@ -164,6 +164,11 @@
                       :group="item"
                       :ref="(el) => setGroupRef(item.id, el)"
                     />
+                    <AgentWorkflowPanel
+                      v-else-if="item.kind === 'agentflow'"
+                      :id="'group-' + item.id"
+                      :flow="item"
+                    />
                     <div v-else class="assistant-message">
                       <div v-if="item.reasoning" class="reasoning-stream">
                         <div class="reasoning-label">
@@ -189,17 +194,6 @@
                     </div>
                   </div>
                 </template>
-
-                <!-- 全局工作流审计状态栏：只在有消息时显示 -->
-                <div v-if="messages.length > 0" class="global-audit-bar">
-                  <div class="audit-left">
-                    <Icon icon="majesticons:shooting-star-line" width="16" class="audit-star-icon" :class="auroraState" />
-                    <span class="audit-status-text">{{ dynamicStatusText }}</span>
-                  </div>
-                  <div class="audit-right">
-                    <span class="audit-stats">{{ formatDuration(elapsedSeconds) }} · {{ formatTok(tokenStats.inputTokens + tokenStats.outputTokens) }} tokens</span>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -371,7 +365,7 @@
                 <div class="input-row">
                   <!-- 渐变动画的浮动占位符 -->
                   <transition name="fade-placeholder" mode="out-in">
-                    <span v-if="!userInput.trim()" :key="randomPlaceholder" class="input-placeholder-text">
+                    <span v-if="!userInput.trim() && attachments.length === 0" :key="randomPlaceholder" class="input-placeholder-text">
                       {{ randomPlaceholder }}
                     </span>
                   </transition>
@@ -382,7 +376,7 @@
                   <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
                   <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
 
-                  <button v-if="workflowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="stopWorkflow" title="停止工作流（已生成内容会保留）">
+                  <button v-if="workflowState.active || flowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="flowState.active ? stopCodeWorkflow() : stopWorkflow()" title="停止工作流（已生成内容会保留）">
                     <Icon icon="mdi:stop" width="16" color="#fff" />
                   </button>
                   <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
@@ -479,23 +473,15 @@
               <div class="tool-dock-pane" :style="{ flex: (dockRatios[panelKey] || 0) + ' 1 0%' }">
                 <div class="tool-dock-pane-header">
                   <span class="tool-dock-pane-title">{{ dockPanelLabel(panelKey) }}</span>
-                  <span class="tool-dock-pane-meta">{{ { diff: diffTotals, terminal: 'node', preview: '' }[panelKey] }}</span>
+                  <span class="tool-dock-pane-meta">{{ { diff: '', terminal: 'node', preview: '' }[panelKey] }}</span>
                   <button class="tool-dock-pane-close" @click="closeDockPanel(panelKey)" title="关闭">
                     <Icon icon="mdi:close" width="14" color="#a3a3a3" />
                   </button>
                 </div>
                 <div class="tool-dock-pane-body">
-                  <DiffPanel
-                    v-if="panelKey === 'diff'"
-                    :files="diffFiles"
-                    :expanded-diffs="expandedDiffs"
-                    @toggle-file="toggleDiffFile"
-                  />
+                  <DiffPanel v-if="panelKey === 'diff'" />
                   <Terminal v-else-if="panelKey === 'terminal'" class="tool-panel-terminal" :open="true" :embedded="true" />
-                  <div v-else class="tool-panel-preview-empty">
-                    <Icon icon="mdi:monitor-dashboard" width="28" color="#c4bcae" />
-                    <span>预览功能开发中</span>
-                  </div>
+                  <PreviewBrowser v-else-if="panelKey === 'preview'" />
                 </div>
               </div>
               <div
@@ -555,10 +541,8 @@ import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
-import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
-import MarkdownIt from 'markdown-it'
-import markdownItKatex from 'markdown-it-katex'
+import { renderMarkdown } from './markdownRenderer.js'
 import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth, useResizableSplit } from './useResizable.js'
 import SessionList from './SessionList.vue'
@@ -570,6 +554,8 @@ import Terminal from './Terminal.vue'
 import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import AuroraStatusIcon from './AuroraStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
+import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
+import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
 
 const props = defineProps({
@@ -628,37 +614,15 @@ function closeDockPanel(key) {
   dockPanels.value = dockPanels.value.filter(k => k !== key)
 }
 
-const expandedDiffs = ref({})
-function toggleDiffFile(path) {
-  expandedDiffs.value = { ...expandedDiffs.value, [path]: !expandedDiffs.value[path] }
-}
-// Diff 面板的文件列表不再是硬编码假数据，从消息流里所有 write_file/edit_file
-// 工具调用中提取真实的 before/after；同一路径出现多次只保留最后一次改动
-// （不尝试重建整个会话期间的累计 diff，后端目前也没提供完整快照可供重建）
-const diffFiles = computed(() => {
-  const byPath = new Map()
-  for (const msg of messages.value) {
-    if (msg.kind !== 'group') continue
-    for (const step of msg.steps) {
-      for (const tc of (step.toolCalls || [])) {
-        if (tc.name !== 'write_file' && tc.name !== 'edit_file') continue
-        const args = parseToolArgs(tc.args)
-        if (!args.path) continue
-        if (tc.name === 'write_file') {
-          byPath.set(args.path, { path: args.path, oldContent: '', newContent: args.content || '' })
-        } else {
-          byPath.set(args.path, { path: args.path, oldContent: args.old_string || '', newContent: args.new_string || '' })
-        }
-      }
-    }
-  }
-  return [...byPath.values()]
-})
-const diffTotals = ''
+// Diff 面板已改为 git 工作树全量 diff（DiffPanel 自己拉 /api/git/working-diff），
+// 不再从会话工具调用里拼 before/after
 
 // ==================== 工作目录切换：Recent + Open folder ====================
 // "文件夹" 是当前 monorepo（GitRepoRoot）下的真实子目录，复用已有的 /api/file-tree
-// 拿顶层目录列表，不新开接口；选择结果和最近列表存 localStorage 做持久化
+// 拿顶层目录列表，不新开接口。localStorage 只是 UI 层的即时展示缓存——真正的持久化
+// 和"agent 记不记得"由后端 /api/workdir 负责（落盘到 ~/shanxi_data/workdir.txt，
+// 所有 read_file/write_file/edit_file/execute_command 立刻切到新目录），
+// 不调这个接口的话，选目录就只是好看，agent 该读哪还是读哪，等于没切
 const WORKDIR_STORAGE_KEY = 'aether_workdir_state_v1'
 const WORKDIR_IGNORED = new Set(['node_modules', 'build', '__pycache__', 'dist', '.git'])
 const currentWorkDir = ref({ name: 'main-frontend', path: 'main-frontend' })
@@ -667,6 +631,7 @@ const showWorkDirMenu = ref(false)
 const workDirMenuView = ref('recent') // 'recent' | 'browse'
 const workDirBrowseOptions = ref([])
 const workDirBrowseLoading = ref(false)
+const workDirSwitching = ref(false)
 
 function loadWorkDirState() {
   try {
@@ -682,16 +647,50 @@ function saveWorkDirState() {
     localStorage.setItem(WORKDIR_STORAGE_KEY, JSON.stringify({ current: currentWorkDir.value, recents: workDirRecents.value }))
   } catch (e) {}
 }
+// 挂载时用后端真实值校准——localStorage 只是缓存，后端 workdir.txt 才是权威来源
+// （比如换了台机器、或者上次没走前端直接调了接口，localStorage 会跟真实值不一致）
+async function syncWorkDirFromBackend() {
+  try {
+    const res = await fetch('/api/workdir')
+    if (!res.ok) return
+    const data = await res.json()
+    if (!data.path) return
+    const dir = { name: data.name || data.path, path: data.path }
+    currentWorkDir.value = dir
+    workDirRecents.value = [dir, ...workDirRecents.value.filter(d => d.path !== dir.path)].slice(0, 6)
+    saveWorkDirState()
+  } catch (e) {}
+}
 function toggleWorkDirMenu() {
   showWorkDirMenu.value = !showWorkDirMenu.value
   if (showWorkDirMenu.value) workDirMenuView.value = 'recent'
 }
-function selectWorkDir(dir) {
-  currentWorkDir.value = dir
-  // 去重后塞到最前面，最多保留 6 条最近记录
-  workDirRecents.value = [dir, ...workDirRecents.value.filter(d => d.path !== dir.path)].slice(0, 6)
-  saveWorkDirState()
-  showWorkDirMenu.value = false
+async function selectWorkDir(dir) {
+  if (workDirSwitching.value) return
+  workDirSwitching.value = true
+  try {
+    const res = await fetch('/api/workdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: dir.path })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || `切换失败 (${res.status})`)
+    }
+    const data = await res.json()
+    const resolved = { name: data.name || dir.name, path: data.path || dir.path }
+    currentWorkDir.value = resolved
+    // 去重后塞到最前面，最多保留 6 条最近记录
+    workDirRecents.value = [resolved, ...workDirRecents.value.filter(d => d.path !== resolved.path)].slice(0, 6)
+    saveWorkDirState()
+    showWorkDirMenu.value = false
+    showGitToast(`已切换工作目录: ${resolved.name}`)
+  } catch (e) {
+    showGitToast(e.message || '切换工作目录失败')
+  } finally {
+    workDirSwitching.value = false
+  }
 }
 async function openFolderBrowser() {
   workDirMenuView.value = 'browse'
@@ -847,33 +846,33 @@ async function copyText(text) {
 }
 
 // ==================== 模型选择 ====================
-// "自定义" 是动态的第5个选项，标签取用户在设置面板里配的默认 API 配置名——
-// 这里只做选择器展示，真正让 custom 这个 value 能发出消息是下一阶段的事
-const customApiConfig = ref(null)
-async function loadCustomApiConfig() {
-  try {
-    const res = await fetch('/api/models/config')
-    if (!res.ok) return
-    const data = await res.json()
-    customApiConfig.value = (data.configs || []).find(c => c.is_default) || null
-  } catch (e) {}
+// ==================== 模型选择 ====================
+// 聊天下拉框只常驻白嫖的 DeepSeekProxy；其余模型（本地 Ollama / Cloud / 免费池已配 Key 的 /
+// 自定义免费配置）全部由用户在设置面板勾选"加入聊天列表"，写入 localStorage('chatModelList')，
+// 这里动态拼进去。custom 分支已取消——Agnes 等免费模型走免费池，不再有独立 custom 选项。
+const CHAT_LIST_KEY = 'chatModelList'
+function loadChatModelList() {
+  try { return JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]') } catch (e) { return [] }
 }
-const modelOptions = computed(() => [
-  { label: '本地 7B', value: 'local' },
-  { label: 'Cloud 480B', value: 'cloud' },
-  { label: 'DeepSeek', value: 'ds' },
-  { label: 'DeepSeekProxy', value: 'ds_browser' },
-  { label: customApiConfig.value ? (customApiConfig.value.name || '自定义') : '自定义 · 未配置', value: 'custom' }
-])
+const modelOptions = computed(() => {
+  const base = [{ label: 'DeepSeekProxy', value: 'ds_browser' }]
+  const extra = loadChatModelList()
+  return [...base, ...extra]
+})
 const selectedModel = ref(localStorage.getItem('selectedModel') || 'ds_browser')
 const showModelMenu = ref(false)
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
+// 防止历史 localStorage 里残留已删除的硬编码项（local/cloud/ds/custom）导致下拉框显示空白
+if (!modelOptions.value.some(m => m.value === selectedModel.value)) {
+  selectedModel.value = 'ds_browser'
+  localStorage.setItem('selectedModel', 'ds_browser')
+}
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
 function onSettingsClosed() {
   showSettings.value = false
-  loadCustomApiConfig()
+  // modelOptions 是 computed，自动从 localStorage('chatModelList') 重算，无需手动刷新
 }
 
 // ==================== 底部工具条：Auto 模式 + "+" 附加菜单 ====================
@@ -884,32 +883,9 @@ const showAddMenu = ref(false)
 function selectAutoMode(opt) { autoMode.value = opt; showAutoMenu.value = false }
 
 // ==================== Markdown 渲染 ====================
-const md = new MarkdownIt({ breaks: true, linkify: true, html: true })
-md.use(markdownItKatex, { throwOnError: false, errorColor: '#ef4444', strict: false })
-md.use(function(md) {
-  md.core.ruler.before('normalize', 'math_bracket', function(state) {
-    state.src = state.src.replace(/\[([\s\S]*?)\]/g, (match, inner) => {
-      if (!/\\[a-zA-Z]+/.test(inner)) return match;
-      if (/^\s*\${1,2}[\s\S]*\${1,2}\s*$/.test(inner)) return match;
-      const trimmed = inner.trim();
-      if (trimmed.includes('\n') || trimmed.length > 60 || /\\begin\{/.test(trimmed)) {
-        return `$$\n${trimmed}\n$$`;
-      }
-      return `$${trimmed}$`;
-    });
-    return true;
-  });
-})
-function renderMarkdown(text, skipSanitize = false) {
-  if (!text) return ''
-  text = text.replace(/[\u200B\u00A0\u200E\u200F]/g, '')
-  text = text.replace(/\\dots/g, '\\ldots')
-  text = text.replace(/(?<!\$)\\implies(?!\$)/g, ' $\\implies$ ')
-  text = text.replace(/(?<!\$)(\\bbox\[[^\]]*\])(?!\$)/g, (match) => `$${match}$`)
-  if (/\\bbox/.test(text)) text = '\\require{bbox}\n' + text
-  const raw = md.render(text)
-  return skipSanitize ? raw : DOMPurify.sanitize(raw)
-}
+// renderMarkdown 挪进了 markdownRenderer.js，跟 MessageStepGroup 共用同一套
+// markdown-it + katex 管线——之前 code 模式的 step 卡片没走这条管线，公式/代码块/
+// markdown 语法全部裸奔成纯文本
 function highlightAllCodeBlocks() {
   requestAnimationFrame(() => {
     document.querySelectorAll('.chat-messages .markdown-body pre').forEach(pre => {
@@ -945,6 +921,7 @@ const {
   messagesContainer, chatInputRef, userScrolledUp,
   forceScrollToBottom, adjustInputHeight, switchSession,
   sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
+  flowState, startCodeWorkflow, stopCodeWorkflow,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
@@ -992,12 +969,12 @@ function jumpToGroup(id) {
 // ==================== 模式及悬浮菜单 ====================
 const activeChatMode = ref(null)
 function triggerChat() {
-  if (workflowState.active) return
+  if (workflowState.active || flowState.active) return
   activeChatMode.value = activeChatMode.value === 'chat' ? null : 'chat'
   chatInputRef.value?.focus()
 }
 function triggerWorkflow() {
-  if (workflowState.active) return
+  if (workflowState.active || flowState.active) return
   activeChatMode.value = activeChatMode.value === 'code' ? null : 'code'
   chatInputRef.value?.focus()
 }
@@ -1008,7 +985,7 @@ function handleSend() {
   userInput.value = combined
   clearAttachments()
   if (activeChatMode.value === 'code') {
-    sendWorkflow('code', userInput.value.trim())
+    startCodeWorkflow(userInput.value.trim())
   } else {
     sendMessage()
   }
@@ -1023,86 +1000,6 @@ function formatTok(n) {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return String(n)
 }
-
-// ==================== 全局工作流审计状态栏：实时计时 ====================
-// Chat 模式（非工作流）之前完全没有接入这套计时/aurora 状态机，导致发普通消息
-// 时审计栏一直显示"待机"——isBusy 把两条路径统一起来
-const isBusy = computed(() => workflowState.active || chatState.active)
-const elapsedSeconds = ref(0)
-let elapsedTimer = null
-
-// 监听忙碌状态，控制计时器的启动与停止
-watch(isBusy, (isRunning) => {
-  if (isRunning) {
-    // 工作流开始，重置时间为0并开启计时
-    elapsedSeconds.value = 0
-    clearInterval(elapsedTimer)
-    elapsedTimer = setInterval(() => {
-      elapsedSeconds.value++
-    }, 1000)
-  } else {
-    // 工作流结束（无论是完成、停止还是报错），立刻停止计时
-    clearInterval(elapsedTimer)
-    elapsedTimer = null
-  }
-})
-
-function formatDuration(totalSeconds) {
-  const m = Math.floor(totalSeconds / 60)
-  const s = totalSeconds % 60
-  if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`
-  return `${m}m ${s}s`
-}
-
-// ==================== Aurora 状态图标：三种质感状态机 ====================
-// idle：静止/极轻微呼吸；processing：工作流处理中；commit：任务完成的一次性回弹反馈
-const auroraState = ref('待机')
-let commitResetTimer = null
-
-// ==================== 右侧动态状态标语：轮换文案 ====================
-const statusMessages = ['幻想中...', '想到了绝妙的点子!', '几乎要完成了...', '尝试放弃思考...']
-const statusMessageIndex = ref(0)
-let statusRotateTimer = null
-const dynamicStatusText = computed(() => isBusy.value ? statusMessages[statusMessageIndex.value] : '待机 ...')
-
-// 记录这一次"忙碌"是工作流驱动的还是普通 Chat 驱动的——Chat 模式没有
-// workflowState.status 那种 completed/failed/stopped 细分，结束时默认当作成功处理
-let busyWasWorkflow = false
-watch(isBusy, (isRunning) => {
-  if (isRunning) {
-    busyWasWorkflow = workflowState.active
-    // 开始忙碌：核心星体进入 processing 态，状态标语从头轮换
-    auroraState.value = 'processing'
-    clearTimeout(commitResetTimer)
-
-    statusMessageIndex.value = 0
-    clearInterval(statusRotateTimer)
-    statusRotateTimer = setInterval(() => {
-      statusMessageIndex.value = (statusMessageIndex.value + 1) % statusMessages.length
-    }, 2500)
-  } else {
-    // 忙碌结束：停止标语轮换；如果是正常完成，触发一次 150ms 的物理回弹反馈，
-    // 反馈播完再回到 idle，避免和 idle 的呼吸动画打架
-    clearInterval(statusRotateTimer)
-    statusRotateTimer = null
-
-    const success = busyWasWorkflow ? workflowState.status === 'completed' : true
-    if (success) {
-      auroraState.value = 'commit'
-      clearTimeout(commitResetTimer)
-      commitResetTimer = setTimeout(() => { auroraState.value = '待机' }, 200)
-    } else {
-      auroraState.value = '待机'
-    }
-  }
-})
-
-// 组件销毁时的兜底清理，防止内存泄漏
-onUnmounted(() => {
-  if (elapsedTimer) clearInterval(elapsedTimer)
-  if (statusRotateTimer) clearInterval(statusRotateTimer)
-  if (commitResetTimer) clearTimeout(commitResetTimer)
-})
 
 // ==================== 图片粘贴 ====================
 const visionStatus = ref('')
@@ -1145,6 +1042,7 @@ async function handlePaste(e) {
     const existing = userInput.value
     const assembledTask = `[用户上传了一张图片，Gemini分析结果如下]\n${data.text}\n基于以上信息，请完成以下任务：` + (existing ? `\n${existing}` : '')
     userInput.value = assembledTask
+    adjustInputHeight()
     sendWorkflow('code', assembledTask)
   } catch (err) { showVisionError('图片分析失败') }
 }
@@ -1262,9 +1160,9 @@ watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
 
 // ==================== 初始化 ====================
 onMounted(() => {
-  loadCustomApiConfig()
   fetchGitStatus()
   loadWorkDirState()
+  syncWorkDirFromBackend()
   document.addEventListener('click', () => {
     showModelMenu.value = false; showTokenPanel.value = false; menuHovering.value = false; showMoreMenu.value = false
     showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false

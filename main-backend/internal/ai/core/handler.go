@@ -16,8 +16,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"backend/internal/prismd"
+	"backend/internal/swiftnet"
 )
 
 var prismdClient = prismd.NewClient("localhost:5666")
@@ -55,8 +57,37 @@ func RegisterBlogFunc(fn BlogFunc)     { registeredBlogFunc = fn }
 func RegisterSearchFunc(fn SearchFunc) { registeredSearchFunc = fn }
 func RegisterCleanFunc(fn CleanFunc)   { registeredCleanFunc = fn }
 
-// ----- 项目根路径（不硬编码，优先用环境变量，否则自动适配） -----
-var projectRoot = func() string {
+// ----- 项目根路径：可运行时切换 + 落盘持久化，不再是启动时算一次就锁死 -----
+// 优先级：上次持久化的选择 > SHANXI_PROJECT_ROOT 环境变量 > 平台默认值。
+// 用 atomic.Value 而不是裸 var + mutex：读多写极少（几乎只在切工作目录时写一次），
+// 工具调用（read_file/execute_command 等）高频读，atomic.Load 比加锁更轻。
+var projectRootAtomic atomic.Value
+
+func init() {
+	projectRootAtomic.Store(loadInitialProjectRoot())
+}
+
+// workdirStateFile 支持 SHANXI_WORKDIR_STATE_FILE 覆盖路径——主要是给测试用，
+// 避免 SetProjectRoot 的落盘操作意外写到真实用户的 ~/shanxi_data/workdir.txt
+func workdirStateFile() string {
+	if override := os.Getenv("SHANXI_WORKDIR_STATE_FILE"); override != "" {
+		return override
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+	return filepath.Join(home, "shanxi_data", "workdir.txt")
+}
+
+func loadInitialProjectRoot() string {
+	if data, err := os.ReadFile(workdirStateFile()); err == nil {
+		if saved := strings.TrimSpace(string(data)); saved != "" {
+			if info, statErr := os.Stat(saved); statErr == nil && info.IsDir() {
+				return saved
+			}
+		}
+	}
 	if root := os.Getenv("SHANXI_PROJECT_ROOT"); root != "" {
 		return root
 	}
@@ -64,7 +95,34 @@ var projectRoot = func() string {
 		return "/data/data/com.termux/files/home"
 	}
 	return "C:\\Pro2026\\re0"
-}()
+}
+
+// GetProjectRoot 返回当前生效的工作目录——所有工具调用（read_file/write_file/
+// edit_file/execute_command）都应该用这个，不要再直接引用旧的 projectRoot 变量。
+func GetProjectRoot() string {
+	return projectRootAtomic.Load().(string)
+}
+
+// SetProjectRoot 切换工作目录并落盘持久化，供 /api/workdir 调用。
+// 校验路径必须真实存在且是目录，避免切到一个不存在的路径导致后续所有工具调用报错。
+func SetProjectRoot(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("目录不存在: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("不是目录: %s", path)
+	}
+	projectRootAtomic.Store(path)
+	// 代码搜索索引存的是相对当前工作目录的路径；目录切换后必须丢弃旧索引。
+	// 新索引在下一次 search_codebase / 文件变更时按需创建，避免阻塞切换接口。
+	ResetCodebaseIndex()
+	stateFile := workdirStateFile()
+	if err := os.MkdirAll(filepath.Dir(stateFile), 0755); err != nil {
+		return fmt.Errorf("持久化工作目录失败: %w", err)
+	}
+	return os.WriteFile(stateFile, []byte(path), 0644)
+}
 
 // ----- 项目白名单（不受 projectRoot 限制的路径） -----
 var allowedProjectPaths = []string{
@@ -204,45 +262,84 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 				break
 			}
 
-			responseText, err := prismdClient.Loom(query)
-			if err != nil {
-				resultContent = fmt.Sprintf("记忆检索失败: %v", err)
-				failed = true
-				break
+			hits := swiftnet.Default().Select(query, 600, 0.12)
+			if len(hits) == 0 {
+				resultContent = fmt.Sprintf("记忆库中没有与 %q 相关的内容", query)
+			} else {
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("找到 %d 条相关记忆（需要全文时用 mode=\"detail\" + id 展开）：\n", len(hits)))
+				for _, h := range hits {
+					text := h.Text
+					if r := []rune(text); len(r) > 60 {
+						text = string(r[:60]) + "…"
+					}
+					sb.WriteString(fmt.Sprintf("- %s [%s] %s\n", h.ID, h.Cluster, text))
+				}
+				resultContent = sb.String()
 			}
-
-			resultContent = formatMemorySummary(query, responseText)
-			fmt.Printf("🧠 工具调用: 搜索记忆(summary) - %s\n", query)
+			fmt.Printf("🧠 工具调用: 搜索记忆(summary) - %s，命中 %d\n", query, len(hits))
 
 		} else if mode == "detail" {
-			idFloat, ok := args["id"].(float64)
+			// SwiftNet 的 ID 是 0x 开头的十六进制字符串
+			id, _ := args["id"].(string)
+			if id == "" {
+				if idFloat, ok := args["id"].(float64); ok {
+					id = fmt.Sprintf("0x%x", uint64(idFloat))
+				}
+			}
+			if id == "" {
+				resultContent = "detail 模式需要提供有效的 id 参数（summary 结果里 0x 开头的 ID）"
+				failed = true
+				break
+			}
+
+			node, ok := swiftnet.Default().Expand(id)
 			if !ok {
-				resultContent = "detail 模式需要提供有效的 id 参数"
+				resultContent = fmt.Sprintf("记忆 %s 不存在", id)
 				failed = true
 				break
 			}
-			id := uint64(idFloat)
-
-			responseText, err := prismdClient.Loom(strconv.FormatUint(id, 10))
-			if err != nil {
-				resultContent = fmt.Sprintf("记忆检索失败: %v", err)
-				failed = true
-				break
-			}
-
-			resultContent, failed = formatMemoryDetail(id, responseText)
-			fmt.Printf("🧠 工具调用: 搜索记忆(detail) - id=%d\n", id)
+			resultContent = fmt.Sprintf("── %s ──\n簇: %s\n关键词: %s\n内容: %s", node.ID, node.Cluster, node.Keywords, node.Text)
+			fmt.Printf("🧠 工具调用: 搜索记忆(detail) - id=%s\n", id)
 
 		} else {
 			resultContent = "mode 参数无效，仅支持 summary 或 detail"
 			failed = true
 		}
 
+	case "list_dir":
+		dirPath, _ := args["path"].(string)
+		recursive, _ := args["recursive"].(bool)
+		if dirPath == "" {
+			resultContent = "list_dir 需要 path 参数"
+			failed = true
+			break
+		}
+		var fullPath string
+		if filepath.IsAbs(dirPath) {
+			fullPath = filepath.Clean(dirPath)
+		} else {
+			fullPath = filepath.Join(GetProjectRoot(), dirPath)
+		}
+		if !isPathSafe(fullPath) {
+			resultContent = fmt.Sprintf("禁止访问敏感路径: %s", dirPath)
+			failed = true
+			break
+		}
+		listing, err := listDirTool(fullPath, recursive)
+		if err != nil {
+			resultContent = fmt.Sprintf("列目录失败: %v", err)
+			failed = true
+			break
+		}
+		resultContent = listing
+		fmt.Printf("📁 工具调用: 列目录 - %s (recursive=%v)\n", dirPath, recursive)
+
 	case "codegraph_query":
 		subcommand, _ := args["subcommand"].(string)
 		symbol, _ := args["symbol"].(string)
 		cmd := exec.Command("codegraph", subcommand, symbol)
-		cmd.Dir = projectRoot
+		cmd.Dir = GetProjectRoot()
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			resultContent = fmt.Sprintf("CodeGraph 查询失败: %v\n%s", err, string(output))
@@ -295,7 +392,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		if filepath.IsAbs(filePath) {
 			fullPath = filepath.Clean(filePath)
 		} else {
-			fullPath = filepath.Join(projectRoot, filePath)
+			fullPath = filepath.Join(GetProjectRoot(), filePath)
 		}
 
 		// 实时同步索引
@@ -332,7 +429,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		if filepath.IsAbs(filePath) {
 			fullPath = filepath.Clean(filePath)
 		} else {
-			fullPath = filepath.Join(projectRoot, filePath)
+			fullPath = filepath.Join(GetProjectRoot(), filePath)
 		}
 
 		if !isPathAllowed(fullPath) {
@@ -392,7 +489,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		if filepath.IsAbs(filePath) {
 			fullPath = filepath.Clean(filePath)
 		} else {
-			fullPath = filepath.Join(projectRoot, filePath)
+			fullPath = filepath.Join(GetProjectRoot(), filePath)
 		}
 
 		if !isPathAllowed(fullPath) {
@@ -476,7 +573,7 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		} else {
 			cmd = exec.Command("bash", "-c", command)
 		}
-		cmd.Dir = projectRoot
+		cmd.Dir = GetProjectRoot()
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {

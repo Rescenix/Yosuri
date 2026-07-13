@@ -9,11 +9,51 @@
           </button>
         </div>
         <div class="settings-modal-body">
-          <div class="settings-section-title">API 配置</div>
-          <div class="settings-section-desc">配置自己的模型接入方式，保存后可以在底部模型切换器里选择"自定义"使用。</div>
+          <div class="settings-section-title">免费模型池</div>
+          <div class="settings-section-desc">内置免费路由池：填了 Key 的源会自动进入调用链（参数规模降序，任一源失败秒切下一个，本地模型永远兜底）。</div>
 
           <div v-if="loading" class="settings-loading">加载中...</div>
           <template v-else>
+            <div v-for="grp in vendorGroups" :key="grp.vendor" class="vendor-group">
+              <div class="vendor-head" @click="toggleVendor(grp.vendor)">
+                <span class="vendor-caret" :class="{ open: !collapsedVendors[grp.vendor] }">▸</span>
+                <span class="vendor-name">{{ grp.vendor }}</span>
+                <span class="vendor-count">{{ grp.items.length }}</span>
+                <span class="vendor-keystate" :class="{ on: grp.hasKey }">{{ grp.hasKey ? '已配 Key' : '未配 Key' }}</span>
+                <button v-if="editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
+                <button v-else class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
+              </div>
+              <div v-show="!collapsedVendors[grp.vendor]" class="vendor-body">
+                <!-- 内联填 Key：就地展开在厂商头正下方，不滚到页面底部 -->
+                <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
+                  <input
+                    v-model="vendorKeyDraft"
+                    type="password"
+                    class="vendor-key-input"
+                    :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
+                    @keyup.enter="saveVendorKey(grp)"
+                  />
+                  <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
+                  <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
+                </div>
+                <div v-for="fm in grp.items" :key="fm.id" class="api-config-card free">
+                  <div class="api-config-row">
+                    <span class="api-config-name">{{ fm.name }}</span>
+                    <span class="api-free-badge">免费</span>
+                    <span v-if="fm.is_default" class="api-config-default-badge">默认</span>
+                  </div>
+                  <div class="api-config-meta">
+                    {{ fm.note }} · {{ fm.model }} · {{ fm.api_key_set ? '✓ 已配 Key' : '未配 Key（不进调用链）' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div class="settings-section-title" style="margin-top: 18px;">自定义 API 配置</div>
+          <div class="settings-section-desc">配置自己的模型接入方式；设为默认的配置会排在调用链最前面。</div>
+
+          <template v-if="!loading">
             <div v-for="cfg in configs" :key="cfg.id" class="api-config-card">
               <div class="api-config-row">
                 <span class="api-config-name">{{ cfg.name || '未命名配置' }}</span>
@@ -65,6 +105,16 @@
               </div>
             </div>
           </template>
+
+          <div class="settings-section-title" style="margin-top: 18px;">聊天可用模型</div>
+          <div class="settings-section-desc">勾选的模型会出现在聊天界面的模型切换下拉框里（DeepSeekProxy 已常驻，无需勾选）。本地 Ollama / Cloud 与已配 Key 的免费模型、自定义配置均可选。</div>
+          <div v-if="!loading" class="chat-model-select-list">
+            <label v-for="m in allChatSelectable" :key="m.value" class="chat-model-select-row">
+              <input type="checkbox" :checked="isInChatList(m.value)" @change="toggleChatModel(m)" />
+              <span>{{ m.label }}</span>
+            </label>
+          </div>
+
           <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
         </div>
       </div>
@@ -73,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps({
@@ -90,10 +140,33 @@ const PRESETS = [
 const MASKED = '••••••••'
 
 const configs = ref([])
+const freeModels = ref([])
+const collapsedVendors = ref({})   // { vendor: true } 表示该厂商折叠
 const loading = ref(true)
 const errorMsg = ref('')
 const editingConfig = ref(null)
+const editingVendor = ref(null)   // 当前内联编辑 Key 的免费池厂商（null=无）
+const vendorKeyDraft = ref('')    // 内联 Key 输入框草稿
 const isNew = ref(false)
+
+// 按厂商折叠分组：同 vendor 归一组，组头显示数量与是否已配 Key。
+// 默认全部折叠（collapsedVendors 初始空对象 → 任意厂商默认折叠）。
+const vendorGroups = computed(() => {
+  const map = new Map()
+  for (const fm of freeModels.value) {
+    const v = fm.vendor || '其他'
+    if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false })
+    const g = map.get(v)
+    g.items.push(fm)
+    if (fm.api_key_set) g.hasKey = true
+  }
+  // 保持后端目录顺序（freeModelCatalog 已是参数降序/厂商顺序）
+  return Array.from(map.values())
+})
+
+function toggleVendor(vendor) {
+  collapsedVendors.value = { ...collapsedVendors.value, [vendor]: !collapsedVendors.value[vendor] }
+}
 
 function configUrl() {
   return `/api/models/config${props.openid ? '?openid=' + encodeURIComponent(props.openid) : ''}`
@@ -107,6 +180,7 @@ async function loadConfigs() {
     if (!res.ok) throw new Error('加载失败')
     const data = await res.json()
     configs.value = data.configs || []
+    freeModels.value = data.free_models || []
   } catch (e) {
     errorMsg.value = '加载配置失败，请稍后再试'
   } finally {
@@ -140,6 +214,49 @@ function startEdit(cfg) {
   errorMsg.value = ''
   // api_key 故意留空——用户不填就代表"不改密钥"，绝不会把已经打码的值当真密钥送回后端
   editingConfig.value = { ...cfg, api_key: '' }
+}
+function startEditVendor(grp) {
+  // 免费池按厂商填 Key：内联展开在该厂商头正下方，一次输入扇出到该 vendor 全部模型
+  // 强制展开该厂商，确保内联输入框可见（按钮在厂商头，点击不触发折叠切换）
+  collapsedVendors.value = { ...collapsedVendors.value, [grp.vendor]: false }
+  editingVendor.value = grp.vendor
+  vendorKeyDraft.value = ''
+}
+function cancelVendorEdit() {
+  editingVendor.value = null
+  vendorKeyDraft.value = ''
+}
+async function saveVendorKey(grp) {
+  const key = vendorKeyDraft.value
+  if (!key || !key.trim()) {
+    errorMsg.value = '请输入 API Key'
+    return
+  }
+  errorMsg.value = ''
+  const ids = grp.items.map(fm => fm.id)
+  const idSet = new Set(ids)
+  const untouched = configs.value
+    .filter(c => !idSet.has(c.id))
+    .map(c => ({ ...c, api_key: MASKED }))
+  const vendorEntries = ids.map(id => {
+    const fm = grp.items.find(x => x.id === id)
+    return {
+      id,
+      name: grp.vendor,
+      endpoint: fm.endpoint,
+      api_key: key,
+      default_model: fm.model,
+      is_default: false
+    }
+  })
+  try {
+    await persist([...untouched, ...vendorEntries])
+    await loadConfigs()
+    editingVendor.value = null
+    vendorKeyDraft.value = ''
+  } catch (e) {
+    errorMsg.value = e.message
+  }
 }
 function cancelEdit() {
   editingConfig.value = null
@@ -199,12 +316,46 @@ async function setDefault(id) {
   }
 }
 
+// —— 聊天可用模型：用户在设置里勾选"加入聊天列表"，写入 localStorage('chatModelList') ——
+// 下拉框（ChatWidget）动态读取这份列表。常驻的 DeepSeekProxy 不在此列（前端硬编码常驻）。
+const CHAT_LIST_KEY = 'chatModelList'
+const chatList = ref([])
+function loadChatList() {
+  try { chatList.value = JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]') } catch (e) { chatList.value = [] }
+}
+function isInChatList(value) {
+  return chatList.value.some(m => m.value === value)
+}
+function toggleChatModel(item) {
+  const i = chatList.value.findIndex(m => m.value === item.value)
+  if (i >= 0) chatList.value.splice(i, 1)
+  else chatList.value.push({ label: item.label, value: item.value })
+  localStorage.setItem(CHAT_LIST_KEY, JSON.stringify(chatList.value))
+}
+// 固定可勾选项（白嫖的本地/Cloud）；免费池与自定义配置从接口数据动态生成
+const fixedChatModels = [
+  { label: '本地 Ollama 7B', value: 'local' },
+  { label: 'Cloud 480B', value: 'cloud' }
+]
+// 合并所有可勾选项：固定 + 免费池(有Key) + 自定义配置
+const allChatSelectable = computed(() => {
+  const list = [...fixedChatModels]
+  for (const fm of freeModels.value) {
+    if (fm.api_key_set) list.push({ label: fm.name, value: fm.id })
+  }
+  for (const c of configs.value) {
+    list.push({ label: c.name || '未命名配置', value: c.id })
+  }
+  return list
+})
+
 function handleEsc(e) {
   if (e.key === 'Escape') emit('close')
 }
 
 onMounted(() => {
   loadConfigs()
+  loadChatList()
   document.addEventListener('keydown', handleEsc)
 })
 onUnmounted(() => {
@@ -265,7 +416,16 @@ onUnmounted(() => {
 
 .settings-section-title { font-size: 13.5px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
 .settings-section-desc { font-size: 12px; color: #a3a3a3; margin-bottom: 14px; }
-.settings-loading { font-size: 12.5px; color: #a3a3a3; padding: 12px 0; }
+.settings-error { font-size: 12px; color: #d94834; padding: 8px 0; }
+
+.chat-model-select-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.chat-model-select-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: #1a1a1a; cursor: pointer; user-select: none;
+  padding: 6px 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fafafa;
+}
+.chat-model-select-row:hover { background: #f0f0f0; }
+.chat-model-select-row input { width: 15px; height: 15px; cursor: pointer; }
 
 .api-config-card { border: 1px solid #e5e5e5; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fafafa; }
 .api-config-row { display: flex; align-items: center; gap: 8px; }
@@ -301,7 +461,74 @@ onUnmounted(() => {
 .api-config-add-btn:hover { background: #fafafa; border-color: #c4c4c4; }
 
 .api-config-form { border: 1px solid #e5e5e5; border-radius: 10px; padding: 14px; background: #fafafa; }
-.api-preset-row { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.api-free-badge { font-size: 10px; font-weight: 700; color: #0d9488; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 999px; padding: 1px 7px; }
+.api-config-card.free { background: #fcfffe; }
+.api-config-card.free:first-child { margin-top: 0; }
+
+/* 厂商折叠分组（仿 Hermes 提供方分类） */
+.vendor-group { margin-bottom: 8px; }
+.vendor-group:last-child { margin-bottom: 0; }
+.vendor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.vendor-head:hover { background: #ededee; }
+.vendor-caret {
+  font-size: 10px;
+  color: #9b9b9b;
+  transition: transform 0.15s ease;
+  transform: rotate(0deg);
+  display: inline-block;
+}
+.vendor-caret.open { transform: rotate(90deg); }
+.vendor-name { font-size: 13px; font-weight: 700; color: #1a1a1a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vendor-count {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #8a8a8a;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  padding: 1px 8px;
+  flex-shrink: 0;
+}
+.vendor-keystate { font-size: 10.5px; font-weight: 600; color: #b0b0b0; flex-shrink: 0; }
+.vendor-keystate.on { color: #12b76a; }
+.vendor-key-btn {
+  font-size: 11px; font-weight: 600; color: #1a1a1a;
+  background: #ffffff; border: 1px solid #e5e5e5; border-radius: 999px;
+  padding: 3px 10px; cursor: pointer; flex-shrink: 0;
+}
+.vendor-key-btn:hover { background: #f0f0f0; }
+.vendor-body { padding: 8px 0 2px 12px; border-left: 2px solid #eeeeee; margin-left: 6px; }
+.vendor-key-inline {
+  display: flex; align-items: center; gap: 8px;
+  background: #ffffff; border: 1px solid #e5e5e5; border-radius: 10px;
+  padding: 8px 10px; margin-bottom: 8px;
+}
+.vendor-key-input {
+  flex: 1; min-width: 0; font-size: 12.5px; color: #1a1a1a;
+  border: 1px solid #e5e5e5; border-radius: 8px; padding: 6px 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.vendor-key-input:focus { outline: none; border-color: #c0c0c0; }
+.vendor-key-save {
+  font-size: 12px; font-weight: 600; color: #fff;
+  background: #1a1a1a; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; flex-shrink: 0;
+}
+.vendor-key-save:hover { background: #333; }
+.vendor-key-cancel {
+  font-size: 12px; font-weight: 600; color: #6b6b6b;
+  background: #f4f4f5; border: 1px solid #e5e5e5; border-radius: 8px; padding: 6px 12px; cursor: pointer; flex-shrink: 0;
+}
+.vendor-key-cancel:hover { background: #ededee; }
 .api-preset-label { font-size: 11.5px; color: #a3a3a3; margin-right: 2px; }
 .api-preset-btn { font-size: 11.5px; font-weight: 600; color: #1a1a1a; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 999px; padding: 4px 10px; cursor: pointer; }
 .api-preset-btn:hover { background: #f0f0f0; }

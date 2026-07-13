@@ -3,6 +3,8 @@ package agent
 import (
 	"fmt"
 	"time"
+
+	"backend/internal/ai/core"
 )
 
 // ModelConfig 模型配置
@@ -110,7 +112,7 @@ func MainAgentConfig() MainAgent {
 
 ` + SoulTemplateCodeProtocol + `
 
-你的工作目录是 C:\Pro2026\re0。`,
+你的工作目录是 ` + core.GetProjectRoot() + `。`,
 		Temp: 0.2,
 		TopP: 0.85,
 	}
@@ -126,7 +128,7 @@ func MainAgentConfigNative() MainAgent {
 
 ` + SoulTemplateCodeProtocol + `
 
-你的工作目录是 C:\Pro2026\re0。`,
+你的工作目录是 ` + core.GetProjectRoot() + `。`,
 		Temp: 0.2,
 		TopP: 0.85,
 	}

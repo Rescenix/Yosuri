@@ -26,7 +26,7 @@ type ModelConfigEntry struct {
 	Name         string `json:"name"`
 	Endpoint     string `json:"endpoint"`
 	APIKey       string `json:"api_key,omitempty"` // 只在请求体里写入时使用，响应里永远清空
-	APIKeySet    bool   `json:"api_key_set"`        // 响应里用这个告诉前端"已经存了一把 key"
+	APIKeySet    bool   `json:"api_key_set"`       // 响应里用这个告诉前端"已经存了一把 key"
 	DefaultModel string `json:"default_model"`
 	IsDefault    bool   `json:"is_default"`
 }
@@ -82,7 +82,15 @@ func saveModelConfigs(userKey string, entries []ModelConfigEntry) error {
 	return os.WriteFile(path, data, 0600)
 }
 
+// freeModelView 是免费模型池给前端的展示形态
+type freeModelView struct {
+	FreeModelDef
+	APIKeySet bool `json:"api_key_set"` // 用户存过 Key 或服务端环境变量里有
+	IsDefault bool `json:"is_default"`
+}
+
 // HandleGetModelConfig GET /api/models/config?openid=...
+// 返回用户自定义配置 + 内置免费模型池（设置面板默认展示后者）。
 func HandleGetModelConfig(c *gin.Context) {
 	userKey := c.Query("openid")
 	entries, err := loadModelConfigs(userKey)
@@ -90,13 +98,32 @@ func HandleGetModelConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取配置失败: " + err.Error()})
 		return
 	}
-	safe := make([]ModelConfigEntry, len(entries))
-	for i, e := range entries {
+	entryByID := make(map[string]ModelConfigEntry, len(entries))
+	safe := make([]ModelConfigEntry, 0, len(entries))
+	for _, e := range entries {
+		entryByID[e.ID] = e
+		if isFreeCatalogID(e.ID) {
+			continue // 免费池条目走下面的 free_models 视图，不在自定义列表里重复出现
+		}
 		e.APIKeySet = e.APIKey != ""
 		e.APIKey = ""
-		safe[i] = e
+		safe = append(safe, e)
 	}
-	c.JSON(http.StatusOK, gin.H{"configs": safe})
+
+	freeModels := make([]freeModelView, 0, len(freeModelCatalog))
+	for _, f := range freeModelCatalog {
+		v := freeModelView{FreeModelDef: f}
+		if e, ok := entryByID[f.ID]; ok {
+			v.APIKeySet = e.APIKey != ""
+			v.IsDefault = e.IsDefault
+		}
+		if !v.APIKeySet && os.Getenv(f.KeyEnv) != "" {
+			v.APIKeySet = true
+		}
+		freeModels = append(freeModels, v)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"configs": safe, "free_models": freeModels})
 }
 
 // HandlePutModelConfig PUT /api/models/config?openid=...
@@ -138,6 +165,19 @@ func HandlePutModelConfig(c *gin.Context) {
 		} else if len(e.APIKey) < 8 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "「" + e.Name + "」的 API Key 长度不合理"})
 			return
+		}
+	}
+
+	// GET 不把免费池条目放进 configs 列表（它们在 free_models 视图里），
+	// 所以前端整表覆盖时不会带上它们——这里把磁盘上已有、且本次请求没提到的
+	// 免费池条目合并回来，避免用户存过的免费模型 Key 被覆盖丢失
+	incomingIDs := make(map[string]bool, len(req.Configs))
+	for _, e := range req.Configs {
+		incomingIDs[e.ID] = true
+	}
+	for _, old := range existing {
+		if isFreeCatalogID(old.ID) && !incomingIDs[old.ID] {
+			req.Configs = append(req.Configs, old)
 		}
 	}
 

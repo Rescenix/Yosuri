@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useMemory } from '../composables/useMemory.js'
 import { useWelcome } from '../composables/useWelcome.js'
 import { useChatLogic } from '../composables/useChatLogic.js'
+import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
 import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 
@@ -97,6 +98,19 @@ function adjustInputHeight() {
     },
     onStreamUpdate: smartScrollAndRefresh
   })
+
+  // 四态机 Code 工作流（GET /api/code/workflow，EventSource）
+  // 流式期间用 forceScrollToBottom：长工作流流式中持续跟底，无视用户是否上滑，
+  // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
+  const { flowState, startCodeWorkflow: startFlow, stopCodeWorkflow } = useAgentWorkflow({
+    messages,
+    onNewMessage: forceScrollToBottom,
+    onStreamUpdate: forceScrollToBottom
+  })
+  function startCodeWorkflow(task) {
+    startFlow(task)
+    userInput.value = ''
+  }
 
   // ==================== 图片上传逻辑（整合进 useChatWidget） ====================
   const imageInput = ref(null)
@@ -367,9 +381,32 @@ async function switchSession(id) {
     return result
   })
 
-  // 后台任务清单（BackgroundTasksPanel 用）直接从 messages 里的 kind:'group'
-  // 消息派生，不再是独立维护的一份数据——避免和消息流里的内嵌步骤组两处同步。
-  const backgroundTaskList = computed(() => messages.value.filter(m => m.kind === 'group'))
+  // 后台任务清单（BackgroundTasksPanel 用）：
+  // - 旧工作流的 kind:'group' 消息（形状本来就匹配面板）
+  // - 四态机工作流派发的雨燕子代理（agentflow.subagents），点击跳转到所属流
+  const backgroundTaskList = computed(() => {
+    const out = []
+    for (const m of messages.value) {
+      if (m.kind === 'group') {
+        out.push(m)
+      } else if (m.kind === 'agentflow') {
+        for (const sa of (m.subagents || [])) {
+          out.push({
+            id: m.id,               // 跳转目标 = 所属的 agentflow 消息
+            key: `${m.id}_${sa.id}`, // 面板渲染 key（同一流可有多只雨燕）
+            agentLabel: '雨燕',
+            description: sa.task,
+            status: sa.status,
+            startTime: sa.startTime,
+            endTime: sa.endTime,
+            totalTokens: 0,
+            toolUseCount: (sa.tools || []).length
+          })
+        }
+      }
+    }
+    return out
+  })
 
   function formatChatTime(timestamp) {
     if (!timestamp) return ''
@@ -394,6 +431,7 @@ async function switchSession(id) {
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
+    flowState, startCodeWorkflow, stopCodeWorkflow,
     toggleExpand, toggleChat, updateParams, fetchBalance,
     groupedMessages, formatChatTime
   }

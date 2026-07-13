@@ -3,15 +3,17 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
+
+	"backend/internal/ai/core"
+	"backend/internal/swiftnet"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -25,6 +27,8 @@ func (h *ChatHandler) buildSystemPrompt(req ChatRequest, c *gin.Context, modelTy
 	} else {
 		soul = SoulTemplateLocal
 	}
+	// 工作目录可由 /api/workdir 在运行时切换，不能写进常量提示词。
+	soul += fmt.Sprintf("\n# 工作环境\n你的工作目录是 %s。\n", core.GetProjectRoot())
 
 	authHeader := c.GetHeader("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") {
@@ -243,72 +247,15 @@ func fallbackKeywordCheck(msg string) bool {
 	return false
 }
 
-// maxBaseMemories 限制注入系统提示词的 Base 记忆条数，避免上下文爆炸
-const maxBaseMemories = 5
-
-// fetchBaseMemories 从 PrismD 拉取 UserBase 簇的记忆，按 Energy 取 Top N 返回画像文本
+// fetchBaseMemories 返回 SwiftNet 的无条件注入区（pinned 身份 + handoff 工作态 + inbox）。
+// 旧实现从 PrismD STATS FULL 抓 UserBase 簇按 Energy 排序——SwiftNet 的分区判断是：
+// 身份记忆本就不该走召回/排序，pinned 区无条件全量注入（≤150 tok 预算由写侧纪律保证）。
 func (h *ChatHandler) fetchBaseMemories() string {
-	fmt.Println("📡 请求 PrismD STATS FULL...")
-	resp, err := http.Post("http://localhost:5666", "text/plain", strings.NewReader("STATS FULL"))
-	if err != nil {
-		fmt.Printf("❌ PrismD 请求失败: %v\n", err)
-		return ""
+	base := swiftnet.Default().UnconditionalInject()
+	if base != "" {
+		fmt.Printf("🧠 SwiftNet 无条件注入 %d 字节（pinned/handoff/inbox）\n", len(base))
 	}
-	defer resp.Body.Close()
-	respBytes, _ := io.ReadAll(resp.Body)
-	respText := string(respBytes)
-	fmt.Printf("📦 PrismD 返回 %d 字节\n", len(respText))
-
-	if strings.HasPrefix(respText, "ERROR") {
-		fmt.Println("⚠️ PrismD 返回错误")
-		return ""
-	}
-
-	// STATS FULL 每条记忆占 5 行：ID 头 / Role / Content / Energy|Emotion|...|Cluster / 分隔线，
-	// 需要把 Content 和紧随其后的 Energy|Cluster 行配成一对，才能按 Cluster 过滤、按 Energy 排序。
-	type candidate struct {
-		content string
-		energy  float64
-	}
-	var candidates []candidate
-	var pendingContent string
-	for _, line := range strings.Split(respText, "\n") {
-		switch {
-		case strings.HasPrefix(line, "Content: "):
-			pendingContent = strings.TrimSpace(strings.TrimPrefix(line, "Content: "))
-		case strings.HasPrefix(line, "Energy: "):
-			if pendingContent == "" {
-				continue
-			}
-			cluster := ""
-			energy := 0.0
-			for _, field := range strings.Split(line, "|") {
-				field = strings.TrimSpace(field)
-				if v, ok := strings.CutPrefix(field, "Energy: "); ok {
-					energy, _ = strconv.ParseFloat(strings.TrimSpace(v), 64)
-				} else if v, ok := strings.CutPrefix(field, "Cluster: "); ok {
-					cluster = strings.TrimSpace(v)
-				}
-			}
-			if cluster == "UserBase" {
-				candidates = append(candidates, candidate{content: pendingContent, energy: energy})
-			}
-			pendingContent = ""
-		}
-	}
-
-	sort.Slice(candidates, func(i, j int) bool { return candidates[i].energy > candidates[j].energy })
-	if len(candidates) > maxBaseMemories {
-		candidates = candidates[:maxBaseMemories]
-	}
-
-	var memories []string
-	for _, cand := range candidates {
-		memories = append(memories, "• "+cand.content)
-	}
-
-	fmt.Printf("🧠 提取到 %d 条记忆（Top %d，Cluster=UserBase）\n", len(memories), maxBaseMemories)
-	return strings.Join(memories, "\n")
+	return base
 }
 
 // ---------- 记忆过滤辅助 ----------
@@ -400,24 +347,70 @@ func (h *ChatHandler) maybeCompressSession(sessionID string, modelType string) {
 	}
 	compressedText := strings.Join(turns, "\n---\n")
 
-	// 5. 异步写 PrismD
+	// 5. 异步压缩后写 SwiftNet（LLM 判定价值 + 提取事实与同义关键词；失败不更新游标，下轮重试）
 	go func() {
-		resp, err := http.Post("http://localhost:5666", "text/plain", strings.NewReader("COMPILE "+compressedText))
+		fact, cluster, keywords, keep, err := compressToFact(compressedText)
 		if err != nil {
-			fmt.Printf("⚠️ 记忆压缩请求失败: %v\n", err)
+			fmt.Printf("⚠️ 记忆压缩失败: %v\n", err)
 			return
 		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		bodyStr := string(body)
-		if strings.HasPrefix(bodyStr, "ERROR") {
-			fmt.Printf("⚠️ 记忆压缩失败: %s\n", bodyStr)
-		} else {
-			// 6. 只有成功才更新游标
+		if !keep {
+			// 无长期价值也算处理完成，推进游标避免反复扫噪声
 			h.sessionStore.SetCompressIndex(sessionID, totalMessages)
-			fmt.Printf("✅ 长期记忆已存入 PrismD (session=%s): %s\n", sessionID, bodyStr)
+			fmt.Printf("🧹 压缩判定无长期价值 (session=%s)，游标已更新\n", sessionID)
+			return
+		}
+		res := swiftnet.Default().MemAppend(fact, cluster, keywords)
+		if res.Err != "" {
+			fmt.Printf("⚠️ 记忆写入失败: %s\n", res.Err)
+			return
+		}
+		h.sessionStore.SetCompressIndex(sessionID, totalMessages)
+		if res.MergedID != "" {
+			fmt.Printf("✅ 长期记忆已合并进 SwiftNet %s (session=%s)\n", res.MergedID, sessionID)
+		} else {
+			fmt.Printf("✅ 长期记忆已存入 SwiftNet %s (session=%s)\n", res.ID, sessionID)
 		}
 	}()
+}
+
+// compressToFact 用 LLM 把若干对话轮次压缩成一条值得长期记住的事实。
+// 返回 keep=false 表示模型判定无长期价值（闲聊/一次性操作）。
+func compressToFact(turnsText string) (fact, cluster, keywords string, keep bool, err error) {
+	prompt := fmt.Sprintf(`以下是若干轮对话。判断其中是否有值得跨会话长期记住的信息（用户的稳定事实/偏好/项目决策）。
+闲聊、一次性操作、过程性内容不值得记。
+
+%s
+
+只输出一个 JSON 对象，不要解释不要代码块：
+{"keep":true或false,"cluster":"UserBase或CodeWork或Decisions","keywords":"同义改述关键词，斜杠分隔（如 风险偏好/风险厌恶/risk）","fact":"一句话事实，keep为false时留空"}`,
+		truncateChars(turnsText, 4000))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	content, _, err := routeChatOnce(ctx, resolveBackends("default", ""), []map[string]any{{"role": "user", "content": prompt}}, nil)
+	if err != nil {
+		return "", "", "", false, err
+	}
+
+	content = strings.TrimSpace(content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+
+	var parsed struct {
+		Keep     bool   `json:"keep"`
+		Cluster  string `json:"cluster"`
+		Keywords string `json:"keywords"`
+		Fact     string `json:"fact"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &parsed); err != nil {
+		return "", "", "", false, fmt.Errorf("压缩结果解析失败: %w", err)
+	}
+	if !parsed.Keep || strings.TrimSpace(parsed.Fact) == "" {
+		return "", "", "", false, nil
+	}
+	return parsed.Fact, parsed.Cluster, parsed.Keywords, true, nil
 }
 
 // ========== 引擎调度 ==========

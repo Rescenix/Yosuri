@@ -1,7 +1,9 @@
 <template>
   <div class="msg-group">
-    <!-- 第一部分：头部自然语言（开始等描述），排除最后一段总结 -->
-    <div v-for="(para, idx) in startNarratives" :key="'s' + idx" class="group-narrative">{{ para }}</div>
+    <!-- 第一部分：头部自然语言（开始等描述），排除最后一段总结
+         之前这里是纯 {{ para }} 文本插值，没有 markdown/LaTeX/代码块高亮——跟聊天气泡
+         共用 markdownRenderer.js 同一条渲染管线，补齐这块缺失的格式化 -->
+    <div v-for="(para, idx) in startNarratives" :key="'s' + idx" class="group-narrative markdown-body" v-html="renderMarkdown(para, true)"></div>
     
     <!-- 加载中占位符（只在没有任何文字且没有工具时显示） -->
     <div v-if="showLoadingPlaceholder && startNarratives.length === 0" class="group-narrative group-narrative-loading">正在处理...</div>
@@ -19,7 +21,7 @@
     </template>
 
     <!-- 第三部分：尾部自然语言总结（如“已经成功将...”）放在白卡片下方 -->
-    <div v-if="endNarrative" class="group-narrative">{{ endNarrative }}</div>
+    <div v-if="endNarrative" class="group-narrative markdown-body" v-html="renderMarkdown(endNarrative, true)"></div>
   </div>
 </template>
 
@@ -27,6 +29,7 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import ToolActionRow from './ToolActionRow.vue'
+import { renderMarkdown } from './markdownRenderer.js'
 
 const props = defineProps({
   group: { type: Object, required: true }
@@ -122,6 +125,9 @@ const statusColor = computed(() => {
   word-break: break-word;
 }
 .group-narrative-loading { color: #8a8a8a; font-weight: 400; font-size: 13px; }
+/* markdown-body 渲染的是真正的块级 HTML（p/ul/pre...），不再是纯文本——
+   pre-wrap 只在"正在处理..."那种纯文本占位符上还有意义，这里改回正常排版 */
+.group-narrative.markdown-body { white-space: normal; }
 
 .agent-group-summary {
   display: inline-flex;

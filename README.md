@@ -1,8 +1,25 @@
-# Re0 — 杉汐数字生命平台
+# Re0 — Aurora 数字生命平台
 
-一个全栈个人 AI 平台，核心角色「杉汐」是一个具有长期记忆、代码工具能力和人格化交互的数字生命。
+一个全栈个人 AI 平台，核心角色「Aurora」是一个具有长期记忆、代码工具能力和人格化交互的数字生命。
 
-## 架构
+## 目录
+
+- [系统架构](#系统架构)
+- [组件](#组件)
+  - [main-backend — Go 后端服务](#main-backend--go-后端服务)
+  - [main-frontend — Astro + Vue 3 前端](#main-frontend--astro--vue-3-前端)
+  - [PrismD — 数字海马体记忆服务](#prismd--数字海马体记忆服务)
+- [仓库结构](#仓库结构)
+- [快速开始](#快速开始)
+  - [前置依赖](#前置依赖)
+  - [后端 main-backend](#后端-main-backend)
+  - [前端 main-frontend](#前端-main-frontend)
+  - [记忆服务 PrismD](#记忆服务-prismd)
+- [环境变量](#环境变量)
+- [依赖](#依赖)
+- [许可证](#许可证)
+
+## 系统架构
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -69,6 +86,8 @@
 
 **API 端点：**
 
+_聊天与记忆_
+
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | POST | `/api/chat/stream` | 流式聊天（SSE） |
@@ -76,6 +95,12 @@
 | POST | `/api/memory/save` | 保存记忆 |
 | GET | `/api/memory/recall` | 回忆记忆 |
 | GET | `/api/memory/welcome` | 欢迎语 |
+| GET | `/api/sessions` | 会话列表 |
+
+_内容管理（博客 / 阅读 / 图床）_
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
 | POST | `/api/posts` | 创建文章 |
 | GET | `/api/posts` | 文章列表 |
 | POST | `/api/book/upload` | 上传书籍 |
@@ -83,9 +108,13 @@
 | POST | `/api/upload` | 上传图片 |
 | GET | `/api/images` | 图片列表 |
 | POST | `/api/image/generate` | AI 生图 |
+
+_工具与系统_
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
 | POST | `/api/tts` | 语音合成 |
 | POST | `/api/login` | 登录获取 JWT |
-| GET | `/api/sessions` | 会话列表 |
 | POST | `/api/prismql` | PrismQL 查询 |
 | POST | `/api/git/commit` | Git 提交 |
 | POST | `/api/tool/execute` | 工具执行 |
@@ -99,11 +128,11 @@
 | 页面 | 路径 | 功能 |
 |------|------|------|
 | 首页 | `/` | 粒子背景、每日一图 |
-| 聊天 | `/chat` | 杉汐对话界面 |
+| 聊天 | `/chat` | Aurora 对话界面 |
 | 博客 | `/blog` | 文章列表与详情 |
 | 阅读 | `/read` | 电子书阅读器（翻页效果） |
 | 阅读小屋 | `/reading-hut` | 阅读空间 |
-| 杉汐小屋 | `/shanxi-hut` | 杉汐的个人空间 |
+| Aurora 小屋 | `/shanxi-hut` | Aurora 的个人空间 |
 | 时间线 | `/timeline` | 时间轴展示 |
 | 图床 | `/image-bed` | 图片管理与画廊 |
 
@@ -120,9 +149,34 @@
 - **夜间整理：** 自动合并重复、丢弃无价值记忆
 - **能量衰减：** 用进废退，模拟人类遗忘曲线
 
+## 仓库结构
+
+```
+re0/
+├── main-backend/          # Go 后端服务 (:8080)
+│   ├── cmd/server/
+│   ├── internal/handler/
+│   └── skills/
+├── main-frontend/
+│   └── beneficial-belt/   # Astro + Vue 3 前端 (:4321)
+├── Prism/                 # PrismD 记忆服务 + C API
+│   ├── prismd-visual/
+│   └── prism/
+└── docs/                  # 文档
+```
+
 ## 快速开始
 
-### 后端
+### 前置依赖
+
+- Go ≥ 1.26
+- Node.js ≥ 22
+- Ollama（本地 LLM，可选）
+- Docker（代码沙箱，可选）
+- MySQL（可选）
+- Redis（可选）
+
+### 后端 main-backend
 
 ```bash
 cd main-backend
@@ -130,7 +184,7 @@ cd main-backend
 go run cmd/server/main.go
 ```
 
-### 前端
+### 前端 main-frontend
 
 ```bash
 cd main-frontend/beneficial-belt
@@ -138,7 +192,7 @@ npm install
 npm run dev    # http://localhost:4321
 ```
 
-### PrismD
+### 记忆服务 PrismD
 
 ```bash
 cd Prism

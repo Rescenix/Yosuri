@@ -25,6 +25,9 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		c.Next()
 	})
 	r.GET("/api/git-status", gin.WrapH(http.HandlerFunc(GitStatusHandler)))
+	// git 工作树全量 diff（Diff 面板）
+	r.GET("/api/git/working-diff", HandleGitWorkingDiff)
+	r.GET("/api/git/working-diff/file", HandleGitWorkingDiffFile)
 	chatHandler := NewChatHandler(memoryStore, sessionStore)
 	go chatHandler.warmUpLocalModel() // 显式异步，不阻塞注册
 	core.RegisterCleanFunc(func() {
@@ -33,6 +36,13 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 
 	r.GET("/api/file-tree", gin.WrapH(http.HandlerFunc(FileTreeHandler)))
 	r.GET("/api/file", gin.WrapH(http.HandlerFunc(FileReadHandler)))
+	// agent 实际工具执行的工作目录：GET 读当前值，POST 真正切换 + 落盘持久化
+	r.GET("/api/workdir", GetWorkdir)
+	r.POST("/api/workdir", SetWorkdir)
+	// 真实交互式终端：SSE 输出 + POST 写 stdin，会话按 id 常驻（详见 terminal_handler.go）
+	r.GET("/api/terminal/stream", HandleTerminalStream)
+	r.POST("/api/terminal/input", HandleTerminalInput)
+	r.POST("/api/terminal/close", HandleTerminalClose)
 	r.POST("/api/git/add-all", GitAddAll)
 	r.POST("/api/git/commit", GitCommit)
 	r.POST("/api/git/push", GitPush)
@@ -45,6 +55,10 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	workflowRunner := NewWorkflowRunner(chatHandler)
 	r.POST("/api/workflow/run", workflowRunner.HandleWorkflowRun)
 	r.GET("/api/workflows", workflowRunner.HandleListWorkflows)
+	// 四态机 Code 工作流（思考/意图/操作/结果，EventSource 直连）
+	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
+	// 预览浏览器：本地开发服务器探测
+	r.GET("/api/preview/servers", HandlePreviewServers)
 
 	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
 	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)

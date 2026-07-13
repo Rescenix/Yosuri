@@ -53,7 +53,10 @@ func GitStatusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var modified, untracked []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	// 不能对整段输出 TrimSpace：porcelain 首列可能是空格（" M path"），
+	// 会吃掉第一行的状态位（同 git_diff_handler.go 的坑）
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimRight(line, "\r")
 		if len(line) < 3 {
 			continue
 		}

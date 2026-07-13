@@ -458,6 +458,12 @@
 .chat-input {
   width: 100%;
   box-sizing: border-box;
+  resize: none;            /* 禁用手柄，避免用户拖拽导致高度不可控 */
+  line-height: 1.5;        /* 固定行高，防止行高跳动引起光标位置漂移 */
+  overflow-y: auto;        /* 超高内容内部滚动，而非无限撑高整个输入框 */
+  max-height: 220px;       /* 弹性上限：超过则内部滚动，避免 flex 容器被撑动导致光标乱飘 */
+  font-family: inherit;
+  font-size: 15px;
 }
 
 .chat-messages {
@@ -486,14 +492,19 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 4px 0;
 }
 .message-row.user {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .message-bubble.user {
-  max-width: 88% !important;
-  background: #e8e6e1;
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
+  color: #1a1a1a;
+  border: 1px solid #e5e7eb;
   padding: 10px 16px;
-  border-radius: 18px 18px 4px 18px;
+  border-radius: 10px;
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 .chat-input-area {
   padding: 12px 0 16px !important;

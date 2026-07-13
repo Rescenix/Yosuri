@@ -20,12 +20,12 @@
 
       <!-- 每条任务只是标题/状态/耗时/Token 的轻量摘要；步骤明细已下沉进消息流里的
            MessageStepGroup，这里点击一条 = 跳转+展开消息流里对应的那个 group -->
-      <div v-for="t in tasks" :key="t.id" class="bgtask-card" @click="$emit('select-task', t.id)">
+      <div v-for="t in tasks" :key="t.key || t.id" class="bgtask-card" @click="$emit('select-task', t.id)">
         <Icon :icon="statusIcon(t.status)" :color="statusColor(t.status)" :spin="t.status === 'running'" width="16" class="bgtask-status-icon" />
         <div class="bgtask-summary-body">
           <div class="bgtask-desc">{{ t.description }}</div>
           <div class="bgtask-meta-row">
-            <span>Agent</span>
+            <span>{{ t.agentLabel || 'Agent' }}</span>
             <span class="bgtask-dot">·</span>
             <span :class="'bgtask-status-' + t.status">{{ statusLabel(t.status) }}</span>
             <span class="bgtask-dot">·</span>

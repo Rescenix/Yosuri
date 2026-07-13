@@ -1,0 +1,305 @@
+package handler
+
+// MCP（Model Context Protocol）stdio 客户端 —— 仿 Hermes 的 MCP 工具生态接入。
+//
+// 手写的极简实现（newline-delimited JSON-RPC 2.0 over stdio），不引入新依赖：
+// initialize → notifications/initialized → tools/list → tools/call。
+//
+// 配置文件：MCP_CONFIG 环境变量指定路径，默认 ./mcp.json（相对 server 工作目录）：
+//   {"servers": {"fs": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Pro2026"]}}}
+//
+// 每个 server 的工具注册为 mcp__<server>__<tool>，随四态机工作流的 tools 参数
+// 一起给到模型；配置文件不存在时整个模块静默为空，零开销。
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"os/exec"
+	"strings"
+	"sync"
+	"time"
+
+	"backend/internal/ai/core"
+)
+
+type mcpServerConfig struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	Env     []string `json:"env"`
+}
+
+type mcpConfig struct {
+	Servers map[string]mcpServerConfig `json:"servers"`
+}
+
+type mcpConn struct {
+	name    string
+	stdin   io.WriteCloser
+	mu      sync.Mutex // 串行化写入与 id 分配
+	nextID  int64
+	pending map[int64]chan json.RawMessage
+	pmu     sync.Mutex
+}
+
+var (
+	mcpOnce     sync.Once
+	mcpToolDefs []core.ToolDefinition
+	mcpRoutes   = map[string]*mcpConn{} // 完整工具名 -> 所属连接
+	mcpRealName = map[string]string{}   // 完整工具名 -> server 内的原始工具名
+)
+
+func mcpConfigPath() string {
+	if p := os.Getenv("MCP_CONFIG"); p != "" {
+		return p
+	}
+	return "./mcp.json"
+}
+
+// loadMCPToolDefs 懒初始化：读配置、拉起各 server 进程、收集工具定义。
+// 无配置文件时返回空，MCP 生态完全不参与。
+func loadMCPToolDefs() []core.ToolDefinition {
+	mcpOnce.Do(initMCPServers)
+	return mcpToolDefs
+}
+
+func initMCPServers() {
+	data, err := os.ReadFile(mcpConfigPath())
+	if err != nil {
+		return // 没有配置，静默跳过
+	}
+	var cfg mcpConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		log.Printf("⚠️ MCP 配置解析失败(%s): %v", mcpConfigPath(), err)
+		return
+	}
+
+	for name, sc := range cfg.Servers {
+		conn, tools, err := startMCPServer(name, sc)
+		if err != nil {
+			log.Printf("⚠️ MCP server %q 启动失败: %v", name, err)
+			continue
+		}
+		for _, t := range tools {
+			fullName := fmt.Sprintf("mcp__%s__%s", name, t.Function.Name)
+			realName := t.Function.Name
+			t.Function.Name = fullName
+			mcpToolDefs = append(mcpToolDefs, t)
+			mcpRoutes[fullName] = conn
+			mcpRealName[fullName] = realName
+		}
+		log.Printf("🔌 MCP server %q 已接入，%d 个工具", name, len(tools))
+	}
+}
+
+func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefinition, error) {
+	cmd := exec.Command(sc.Command, sc.Args...)
+	cmd.Env = append(os.Environ(), sc.Env...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	cmd.Stderr = nil // MCP server 的 stderr 直接丢弃，避免刷屏
+	if err := cmd.Start(); err != nil {
+		return nil, nil, err
+	}
+
+	conn := &mcpConn{
+		name:    name,
+		stdin:   stdin,
+		pending: map[int64]chan json.RawMessage{},
+	}
+
+	// 读循环：按行读 JSON-RPC 响应，按 id 派发给等待方
+	go func() {
+		reader := bufio.NewReaderSize(stdout, 1024*1024)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return // 进程退出
+			}
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var msg struct {
+				ID     *int64          `json:"id"`
+				Result json.RawMessage `json:"result"`
+				Error  json.RawMessage `json:"error"`
+			}
+			if json.Unmarshal([]byte(line), &msg) != nil || msg.ID == nil {
+				continue // 通知或无法解析的行
+			}
+			payload := msg.Result
+			if payload == nil && msg.Error != nil {
+				payload, _ = json.Marshal(map[string]json.RawMessage{"__mcp_error": msg.Error})
+			}
+			conn.pmu.Lock()
+			ch, ok := conn.pending[*msg.ID]
+			delete(conn.pending, *msg.ID)
+			conn.pmu.Unlock()
+			if ok {
+				ch <- payload
+			}
+		}
+	}()
+
+	// 握手
+	initParams := map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "aurora-backend", "version": "1.0.0"},
+	}
+	if _, err := conn.request("initialize", initParams, 15*time.Second); err != nil {
+		return nil, nil, fmt.Errorf("initialize 失败: %w", err)
+	}
+	conn.notify("notifications/initialized", map[string]any{})
+
+	// 工具清单
+	raw, err := conn.request("tools/list", map[string]any{}, 15*time.Second)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tools/list 失败: %w", err)
+	}
+	var listResult struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			InputSchema struct {
+				Type       string                    `json:"type"`
+				Properties map[string]map[string]any `json:"properties"`
+				Required   []string                  `json:"required"`
+			} `json:"inputSchema"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(raw, &listResult); err != nil {
+		return nil, nil, fmt.Errorf("tools/list 结果解析失败: %w", err)
+	}
+
+	var defs []core.ToolDefinition
+	for _, t := range listResult.Tools {
+		props := map[string]core.ToolProperty{}
+		for propName, schema := range t.InputSchema.Properties {
+			p := core.ToolProperty{}
+			if typ, ok := schema["type"].(string); ok {
+				p.Type = typ
+			}
+			if desc, ok := schema["description"].(string); ok {
+				p.Description = desc
+			}
+			props[propName] = p
+		}
+		required := t.InputSchema.Required
+		if required == nil {
+			required = []string{}
+		}
+		defs = append(defs, core.ToolDefinition{
+			Type: "function",
+			Function: core.ToolFunctionDetail{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters: core.ToolParameters{
+					Type:       "object",
+					Properties: props,
+					Required:   required,
+				},
+			},
+		})
+	}
+	return conn, defs, nil
+}
+
+// request 发送一个 JSON-RPC 请求并等待响应（带超时）。
+func (c *mcpConn) request(method string, params any, timeout time.Duration) (json.RawMessage, error) {
+	c.mu.Lock()
+	c.nextID++
+	id := c.nextID
+	c.mu.Unlock()
+
+	ch := make(chan json.RawMessage, 1)
+	c.pmu.Lock()
+	c.pending[id] = ch
+	c.pmu.Unlock()
+
+	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
+	c.mu.Lock()
+	_, err := c.stdin.Write(append(req, '\n'))
+	c.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+
+	select {
+	case payload := <-ch:
+		var errCheck map[string]json.RawMessage
+		if json.Unmarshal(payload, &errCheck) == nil {
+			if rpcErr, ok := errCheck["__mcp_error"]; ok {
+				return nil, fmt.Errorf("MCP 错误: %s", string(rpcErr))
+			}
+		}
+		return payload, nil
+	case <-time.After(timeout):
+		c.pmu.Lock()
+		delete(c.pending, id)
+		c.pmu.Unlock()
+		return nil, fmt.Errorf("MCP %s 超时(%s)", method, timeout)
+	}
+}
+
+// notify 发送不需要响应的通知。
+func (c *mcpConn) notify(method string, params any) {
+	msg, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
+	c.mu.Lock()
+	c.stdin.Write(append(msg, '\n'))
+	c.mu.Unlock()
+}
+
+// callMCPTool 执行 mcp__server__tool 形式的工具调用，返回文本结果。
+func callMCPTool(fullName, argsJSON string) (string, error) {
+	conn, ok := mcpRoutes[fullName]
+	if !ok {
+		return "", fmt.Errorf("未知的 MCP 工具: %s", fullName)
+	}
+	var args map[string]any
+	if argsJSON != "" {
+		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+			return "", fmt.Errorf("MCP 工具参数解析失败: %w", err)
+		}
+	}
+
+	raw, err := conn.request("tools/call", map[string]any{
+		"name": mcpRealName[fullName], "arguments": args,
+	}, 60*time.Second)
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return "", fmt.Errorf("MCP 结果解析失败: %w", err)
+	}
+
+	var sb strings.Builder
+	for _, item := range result.Content {
+		if item.Type == "text" {
+			sb.WriteString(item.Text)
+		}
+	}
+	text := truncateChars(sb.String(), codeResultMaxChars)
+	if result.IsError {
+		return "", fmt.Errorf("%s", text)
+	}
+	return text, nil
+}

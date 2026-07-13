@@ -110,7 +110,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #fafafa;
+  background: #ffffff;
   min-height: 0;
   overflow: hidden;
 }
@@ -165,8 +165,11 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.session-row:hover { background: #f0f0f0; }
-.session-row.active { background: #ececec; }
+.session-row:hover { background: #f7f7f7; }
+.session-row.active {
+  background: #f3f3f3;
+  box-shadow: inset 0 0 0 1px #e8e8e8;
+}
 
 .session-name {
   flex: 1;

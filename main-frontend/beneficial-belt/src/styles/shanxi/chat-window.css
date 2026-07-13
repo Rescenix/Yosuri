@@ -114,7 +114,7 @@
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
   margin-left: auto;
 }
 
@@ -198,7 +198,7 @@ overflow-y: visible;
 }
 
 .message-row.user {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .message-row.bot {
@@ -516,16 +516,18 @@ min-height: 90px !important;
   border-radius: 18px;
 }
 
-/* 用户气泡 */
-/* 用户气泡（右对齐，灰色背景） */
+/* 用户气泡（仿 Hermes：满宽居左、白底、细边框小圆角） */
 .message-bubble.user {
-
-  background: #e8e6e1;
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
   color: #1a1a1a;
+  border: 1px solid #e5e7eb;
   padding: 10px 16px;
-  border-radius: 18px 18px 4px 18px;
+  border-radius: 10px;
   line-height: 1.6;
-  align-self: flex-end;
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 
 /* 助手气泡 — 羊皮纸质感 */
@@ -548,7 +550,7 @@ min-height: 90px !important;
 
 /* 消息行（保持 flex 对齐） */
 .message-row.user {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 .message-row.bot {
   justify-content: flex-start;
@@ -563,7 +565,7 @@ min-height: 90px !important;
 }
 
 .message-row.user {
-  justify-content: flex-end;   /* 用户气泡推到容器右侧 */
+  justify-content: flex-start;
 }
 
 .message-row.bot {
@@ -580,14 +582,18 @@ min-height: 90px !important;
   line-height: 1.75;
 }
 
-/* 用户气泡：固定最大宽度，右对齐 */
+/* 用户气泡：满宽居左，白底细边框小圆角（仿 Hermes） */
 .message-bubble.user {
-
-  background: #e8e6e1;
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
   color: #1a1a1a;
+  border: 1px solid #e5e7eb;
   padding: 10px 16px;
-  border-radius: 18px 18px 4px 18px;
+  border-radius: 10px;
   line-height: 1.6;
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 
 .chat-window.expanded .header-name {
@@ -621,7 +627,7 @@ min-height: 90px !important;
 }
 
 .chat-window .message-row.user {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .chat-window .message.bot {
@@ -836,7 +842,7 @@ min-height: 90px !important;
 }
 
 .message-bubble.user {
-  font-family: 'Georgia', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', '宋体', serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .recalling-text {
@@ -866,7 +872,7 @@ min-height: 90px !important;
 }
 
 .message-bubble.user {
-  font-family: 'Georgia', 'Noto Serif SC', 'Source Han Serif SC', serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 /* ==================== 侧边栏面板 ==================== */
@@ -1684,7 +1690,7 @@ min-height: 90px !important;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: #fafafa;
+  background: #ffffff;
 }
 .chat-window.expanded .tool-panel-meta {
   font-size: 10.5px;
@@ -1934,96 +1940,13 @@ min-height: 90px !important;
 }
 .scroll-to-bottom-btn:hover { background: #f4f2ec; transform: scale(1.05); opacity: 1; }
 
-/* 全局工作流审计状态栏 */
-.global-audit-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  margin-top: 14px;
-  padding: 6px 0 2px;
-}
-.audit-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.audit-status-text {
-  font-size: 11.5px;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #8a7f72;
-}
-
-.audit-stats {
-  font-size: 11.5px;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #a39c8f;
-}
 /* ★ 修复 3：右侧工具面板，直接删掉无用的 Tabs 按钮 ★ */
-.tool-panel { flex: 0 0 320px; /* 稍微缩窄一点面板宽度 */ border-left: 1px solid #e5e5e5; background: #fafafa; display: flex; flex-direction: column; overflow: hidden; position: relative;}
-.tool-panel-header { height: 40px; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; border-bottom: 1px solid #e5e5e5; background: #fafafa; flex-shrink: 0; }
+.tool-panel { flex: 0 0 320px; /* 稍微缩窄一点面板宽度 */ border-left: 1px solid #e5e5e5; background: #ffffff; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.tool-panel-header { height: 40px; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; border-bottom: 1px solid #e5e5e5; background: #ffffff; flex-shrink: 0; }
 .tool-panel-meta { font-size: 11px; color: #a3a3a3; font-family: "JetBrains Mono", monospace; }
 .tool-panel-terminal { border-radius: 0; flex: 1; border: none; }
 .tool-panel-preview-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #a3a3a3; font-size: 13px; gap: 8px; }
 
-
-/* 全局工作流审计状态栏：左右分治布局 */
-.global-audit-bar {
-  display: flex;
-  justify-content: space-between; /* 左侧组和右侧组分别贴紧各自的边缘 */
-  align-items: center;
-  margin-top: 1px;
-  padding: 6px 0 2px;
-}
-
-.audit-left, .audit-right {
-  display: flex;
-  align-items: center;
-  gap: 8px; /* 组内元素之间的间距（左：图标与文字；右：无多余元素） */
-}
-
-
-/* ===== 彻底修复：颜色还原 + Idle 完全静止 + 3D 运行翻转 ===== */
-
-/* 1. 基本状态：取消所有灰色，直接使用主题橙，默认静止 */
-.audit-star-icon {
-  color: #c96442;
-  transform-origin: center;
-  /* 默认没有任何动画，连呼吸都没有 */
-  animation: none;
-  transform: scale(1) rotate(0deg);
-  opacity: 1;
-}
-
-/* 2. Idle 状态下：锁定静止（不做任何动作） */
-.audit-star-icon.idle {
-  animation: none !important;
-  transform: scale(1) !important;
-  opacity: 1 !important;
-}
-
-/* 3. Processing 运行状态：唤醒 3D 空间旋转 */
-.audit-star-icon.processing {
-  perspective: 500px;
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
-  animation: spin-3d 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@keyframes spin-3d {
-  0% { transform: perspective(500px) rotateY(0deg); }
-  100% { transform: perspective(500px) rotateY(360deg); }
-}
-
-/* 4. 完成状态：单次弹性回弹 */
-.audit-star-icon.commit {
-  animation: commit-bounce 0.15s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-}
-@keyframes commit-bounce {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1) skewX(-5deg); }
-  100% { transform: scale(1); }
-}
 
 /* ==================== 阶段3：右侧多面板停靠（dockPanels/dockRatios/dockWidth） ==================== */
 /* 旧版 .tool-panel{flex:0 0 320px} 显式设置了 flex-basis，flexbox 里 flex-basis
@@ -2033,6 +1956,9 @@ min-height: 90px !important;
 .chat-window.expanded .tool-panel {
   position: relative;
   flex: 0 0 auto;
+  gap: 8px;
+  padding: 8px;
+  box-sizing: border-box;
 }
 .tool-dock-resize-handle {
   position: absolute;
@@ -2052,6 +1978,10 @@ min-height: 90px !important;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(20, 20, 20, 0.03);
 }
 .tool-dock-pane-header {
   height: 36px;
@@ -2060,8 +1990,9 @@ min-height: 90px !important;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  border-bottom: 1px solid #e5e5e5;
-  background: #fafafa;
+  border-bottom: 1px solid #eeeeee;
+  background: #ffffff;
+  border-radius: 10px 10px 0 0;
 }
 .tool-dock-pane-title {
   font-size: 12px;
@@ -2098,9 +2029,11 @@ min-height: 90px !important;
   overflow: auto;
   display: flex;
   flex-direction: column;
+  background: #ffffff;
+  border-radius: 0 0 10px 10px;
 }
 .tool-dock-split-handle {
-  height: 5px;
+  height: 8px;
   flex-shrink: 0;
   cursor: row-resize;
   background: transparent;
@@ -2126,7 +2059,7 @@ min-height: 90px !important;
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid #e5e5e5;
-  background: #fafafa;
+  background: #ffffff;
 }
 .session-pin-resize-handle {
   position: absolute;

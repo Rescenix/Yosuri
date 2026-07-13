@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"backend/internal/swiftnet"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -147,17 +149,14 @@ func (h *ChatHandler) resolveDSBrowserConversation(
 		Model:     "ds_browser",
 	})
 
-	// 保存到 PrismD（Atri 域）—— 保留原有逻辑
-	engramBody := fmt.Sprintf("ENGRAM Atri域 %s", fullContent)
+	// 保存到 SwiftNet 事实库（写侧防重会自动合并同义内容）
 	go func() {
-		resp, err := http.Post("http://localhost:5666", "text/plain", strings.NewReader(engramBody))
-		if err != nil {
-			fmt.Printf("[Atri] 写入 PrismD 失败: %v\n", err)
+		res := swiftnet.Default().MemAppend(fullContent, "Atri", "")
+		if res.Err != "" {
+			fmt.Printf("[Atri] 写入 SwiftNet 失败: %s\n", res.Err)
 			return
 		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("[Atri] 已写入 PrismD: %s\n", string(body))
+		fmt.Printf("[Atri] 已写入 SwiftNet: %s%s\n", res.ID, res.MergedID)
 	}()
 	return fullContent, "", 0, nil
 }

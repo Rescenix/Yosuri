@@ -3,7 +3,7 @@
 package handler
 
 import (
-	"backend/internal/database"
+	"backend/internal/swiftnet"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,10 +68,13 @@ func (m *MemoryStore) sendPrimQL(ql string) (string, error) {
 	return string(body), nil
 }
 
-// SmartAppend 不再生成向量，直接写入 PrismD（如果可用），否则回退 JSON
+// SmartAppend 写入 SwiftNet 单文件事实库（probe-before-append 自动防重）
 func (m *MemoryStore) SmartAppend(role, content string) error {
-	_, err := database.PrismDB.Exec("ENGRAM " + role + " " + content)
-	return err
+	res := swiftnet.Default().MemAppend(content, role, "")
+	if res.Err != "" {
+		return fmt.Errorf("%s", res.Err)
+	}
+	return nil
 }
 
 // SearchSimilar 不再调用 BGE/LOOM，返回空

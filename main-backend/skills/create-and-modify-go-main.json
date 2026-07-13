@@ -1,0 +1,8 @@
+{
+  "name": "create-and-modify-go-main",
+  "description": "在指定路径创建包含main函数的Go源文件，并替换字符串内容",
+  "steps": [
+    "尝试读取目标文件，若不存在则使用write_file创建包含占位字符串（如\"hello\"）的Go main函数文件",
+    "使用edit_file将占位字符串替换为所需的目标字符串（如\"hello aurora\"）"
+  ]
+}

@@ -127,6 +127,27 @@ var BaseTools = []ToolDefinition{
 	{
 		Type: "function",
 		Function: ToolFunctionDetail{
+			Name:        "list_dir",
+			Description: "列出目录下的文件和子目录（只读）。比 execute_command 跑 dir/ls 更省 token：输出紧凑、自动跳过 node_modules/.git 等噪声目录。",
+			Parameters: ToolParameters{
+				Type: "object",
+				Properties: map[string]ToolProperty{
+					"path": {
+						Type:        "string",
+						Description: "目录路径，相对项目根目录或绝对路径（如 'main-backend/internal'）",
+					},
+					"recursive": {
+						Type:        "boolean",
+						Description: "可选，true 递归列出子目录内容（默认 false 只列一层）",
+					},
+				},
+				Required: []string{"path"},
+			},
+		},
+	},
+	{
+		Type: "function",
+		Function: ToolFunctionDetail{
 			Name:        "execute_command",
 			Description: "在项目根目录执行一条安全的白名单 shell 命令。需要用户确认。",
 			Parameters: ToolParameters{
@@ -159,8 +180,8 @@ var BaseTools = []ToolDefinition{
 						Enum:        []string{"summary", "detail"},
 					},
 					"id": {
-						Type:        "integer",
-						Description: "detail 模式下要展开的记忆 ID。summary 模式下忽略此参数。",
+						Type:        "string",
+						Description: "detail 模式下要展开的记忆 ID（summary 结果里 0x 开头的十六进制串，如 \"0x1a2b\"）。summary 模式下忽略此参数。",
 					},
 				},
 				Required: []string{},
@@ -268,8 +289,16 @@ func ExtractToolArgs(marker string) (string, map[string]string, error) {
 		}
 		i++ // 跳过开始的引号
 
-		// 找到闭合引号（最后一个引号）
-		endQuote := strings.LastIndex(remainder[i:], `"`)
+		// 找到闭合引号：下一个未被反斜杠转义的引号。
+		// 之前用 LastIndex 找"最后一个引号"，单参数时碰巧工作，
+		// 多参数 marker（如 mode="detail" id="0x1a"）会把后续参数整段吞进第一个值里
+		endQuote := -1
+		for j := i; j < len(remainder); j++ {
+			if remainder[j] == '"' && (j == i || remainder[j-1] != '\\') {
+				endQuote = j - i
+				break
+			}
+		}
 		if endQuote == -1 {
 			return "", nil, fmt.Errorf("unclosed quote")
 		}
