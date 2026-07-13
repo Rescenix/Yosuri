@@ -5,6 +5,7 @@ package handler
 // 对标 OpenCode 的"思考→意图→操作→结果"极简交互流，通过 SSE 推送：
 //
 //   workflow_start  {workflow_id, task}
+//   model_info      {name, vision, context_window, reasoning}  // 本轮实际承接的 backend 能力元数据，每个工作流只发一次
 //   thinking        {content}   // 模型 reasoning_content 增量（模型支持时才有）
 //   intent          {content}   // 叙述文本增量（工具调用前的意图说明 / 最终回答）
 //   action          {id, name, args}         // args 是真实 JSON 字符串
@@ -72,9 +73,11 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "task 参数必填"})
 		return
 	}
+	sessionID := c.Query("session_id")
 
-	// 模型路由链：用户配置 > env DeepSeek > 免费池 > 本地兜底（本地恒在，链永不为空）
-	backends := resolveBackends(c.Query("openid"), "")
+	// 模型路由链：前端选了具体模型就精确路由到那一个；否则走用户配置>env DeepSeek>
+	// 免费池>本地兜底的全链（本地恒在，链永不为空）
+	backends := resolveBackends(c.Query("openid"), c.Query("model"))
 
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -95,24 +98,42 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	}
 	tools := buildCodeWorkflowTools()
 
-	msgs := []map[string]any{
-		{"role": "system", "content": systemPrompt},
-		{"role": "user", "content": task},
+	// 之前这里每次都是只有 system+当前 task 的白板，session_id 传了但从没读过——
+	// LLM 完全不知道上一条消息说了什么。跟 chat_stream 那条老路径一样，从
+	// sessionStore 捞这个会话的历史（截断到最近 maxHistoryMessages 条）拼进去，
+	// 工作流结束后再把这一轮的 user/assistant 写回去，下一条消息才能接上下文。
+	history := r.chatHandler.sessionStore.Get(sessionID)
+	history = truncateHistory(history, maxHistoryMessages)
+	built := buildChatMessages(systemPrompt, history, task)
+	msgs := make([]map[string]any, len(built))
+	historyChars := 0
+	for i, m := range built {
+		msgs[i] = map[string]any{"role": m["role"], "content": m["content"]}
+		historyChars += len(m["content"])
 	}
 
 	var transcript []string // 动作摘要，供技能生成
-	inputTokens := len(systemPrompt+task) / 4
+	inputTokens := historyChars / 4
 	outputTokens := 0
 	callSeq := 0
+	modelInfoSent := false
 
 	for round := 0; round < codeWorkflowMaxRounds; round++ {
 		if c.Request.Context().Err() != nil {
 			return // 客户端断开
 		}
 
-		content, calls, outTok, backendName, err := r.streamRouterRound(c, backends, msgs, tools)
+		content, calls, outTok, usedBackend, err := r.streamRouterRound(c, backends, msgs, tools)
 		outputTokens += outTok
-		_ = backendName
+		// 只在第一轮实际承接请求后发一次——同一个工作流后续轮次不会换 backend，
+		// 前端只需要知道"这次对话用的是哪个模型、它能不能识图/支持多大上下文"一次就够
+		if usedBackend != nil && !modelInfoSent {
+			modelInfoSent = true
+			writeCodeSSE(c, "model_info", map[string]any{
+				"name": usedBackend.Name, "vision": usedBackend.Vision,
+				"context_window": usedBackend.ContextWindow, "reasoning": usedBackend.Reasoning,
+			})
+		}
 		if err != nil {
 			writeCodeSSE(c, "flow_error", map[string]any{"message": err.Error()})
 			writeCodeSSE(c, "workflow_done", map[string]any{
@@ -128,6 +149,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"status": "completed", "final_output": content,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 			})
+			if sessionID != "" {
+				r.chatHandler.sessionStore.Append(sessionID, DSMessage{Role: "user", Content: task})
+				r.chatHandler.sessionStore.Append(sessionID, DSMessage{Role: "assistant", Content: content})
+			}
 			go generateSkillAsync(task, transcript)
 			return
 		}

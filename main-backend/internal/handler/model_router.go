@@ -59,6 +59,13 @@ type FreeModelDef struct {
 	Vision        bool `json:"vision"`
 	ContextWindow int  `json:"context_window"`
 	Reasoning     bool `json:"reasoning"`
+	// Local=true 表示走本地 Ollama（localhost:11434/v1，OpenAI 兼容）路由到云端模型，
+	// 不需要 API Key，复用现有 OpenAI 兼容链；与 localLLMBackend() 兜底共享同一 base。
+	Local bool `json:"local"`
+	// CloudNative=true 表示走 Ollama 官方云端 API（https://ollama.com/api/chat，Ollama 原生
+	// 格式，非 OpenAI 兼容），用 CLOUD_API_KEY；实测 gpt-oss:120b / qwen3-coder:480b-cloud
+	// 可跑且原生支持 tool_calls（function calling）。
+	CloudNative bool `json:"cloud_native"`
 }
 
 // 参数规模是公开估计值；未知者写 0，排序时排免费池末段，绝不伪造。
@@ -88,6 +95,11 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_nim_sarvamai_sarvam_m", Vendor: "NVIDIA NIM", Name: "Sarvam-M", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "sarvamai/sarvam-m", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
 	{ID: "free_nim_stockmark_stockmark_2_100b_instruct", Vendor: "NVIDIA NIM", Name: "Stockmark-2-100B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "stockmark/stockmark-2-100b-instruct", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 100, Note: "NIM 免费试用档"},
 	{ID: "free_nim_z_ai_glm_5_2", Vendor: "NVIDIA NIM", Name: "GLM-5.2 (NIM)", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "z-ai/glm-5.2", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
+
+	// —— Ollama Cloud（官方云端 API，ollama.com/api/chat 原生格式，带 CLOUD_API_KEY；
+	// 实测 gpt-oss:120b / qwen3-coder:480b-cloud 可跑且原生支持 tool_calls）——
+	{ID: "free_ollama_cloud_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B", Endpoint: "https://ollama.com/api/chat", Model: "gpt-oss:120b", KeyEnv: "CLOUD_API_KEY", ParamsB: 120, CloudNative: true, Note: "Ollama 官方云端 API（免费额度，原生 tool_calls）", ContextWindow: 128000, Reasoning: true},
+	{ID: "free_ollama_cloud_qwen3_coder_480b", Vendor: "Ollama Cloud", Name: "Qwen3-Coder 480B", Endpoint: "https://ollama.com/api/chat", Model: "qwen3-coder:480b-cloud", KeyEnv: "CLOUD_API_KEY", ParamsB: 480, CloudNative: true, Note: "Ollama 官方云端 API（免费额度，原生 tool_calls）", ContextWindow: 128000, Reasoning: true},
 
 	// —— Cerebras 免费档（api.cerebras.ai）——
 	{ID: "free_cerebras_gpt_oss_120b", Vendor: "Cerebras", Name: "gpt-oss-120b", Endpoint: "https://api.cerebras.ai/v1", Model: "gpt-oss-120b", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 120, Note: "Cerebras 免费档"},
@@ -168,7 +180,7 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 		}
 	}
 
-	// 3. 免费池：Key 来源 = 用户保存的同 ID 条目 > 环境变量；没 Key 的源直接不进链
+	// 3. 免费池：Key 来源 = 用户保存的同 ID 条目 > 环境变量；没 Key 的源（Local/Ollama Cloud 走本地路由）直接不进链
 	for _, f := range freeModelCatalog {
 		key := ""
 		isDefault := false
@@ -177,15 +189,24 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 			isDefault = e.IsDefault
 		}
 		if key == "" {
-			key = os.Getenv(f.KeyEnv)
+			if f.CloudNative {
+				key = os.Getenv("CLOUD_API_KEY")
+			} else if !f.Local {
+				key = os.Getenv(f.KeyEnv)
+			}
 		}
-		if key == "" {
+		if key == "" && !f.Local && !f.CloudNative {
 			continue
+		}
+		source := "free"
+		if f.CloudNative {
+			source = "ollama-cloud"
 		}
 		b := RouterBackend{
 			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
-			APIKey: key, ParamsB: f.ParamsB, Timeout: 90 * time.Second, Source: "free",
+			APIKey: key, ParamsB: f.ParamsB, Timeout: 90 * time.Second, Source: source,
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
+			IsLocal: f.Local,
 		}
 		if isDefault {
 			// 用户显式把某个免费模型设为默认 → 提到链头
@@ -240,19 +261,28 @@ func resolveExact(userKey string, model string) *RouterBackend {
 			continue
 		}
 		key := ""
-		if e, ok := entryByID[f.ID]; ok {
-			key = e.APIKey
+		if f.CloudNative {
+			key = os.Getenv("CLOUD_API_KEY")
+		} else if !f.Local {
+			if e, ok := entryByID[f.ID]; ok {
+				key = e.APIKey
+			}
+			if key == "" {
+				key = os.Getenv(f.KeyEnv)
+			}
 		}
-		if key == "" {
-			key = os.Getenv(f.KeyEnv)
-		}
-		if key == "" {
+		if key == "" && !f.Local && !f.CloudNative {
 			return nil
+		}
+		source := "free"
+		if f.CloudNative {
+			source = "ollama-cloud"
 		}
 		return &RouterBackend{
 			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
-			APIKey: key, ParamsB: f.ParamsB, Timeout: 90 * time.Second, Source: "free",
+			APIKey: key, ParamsB: f.ParamsB, Timeout: 90 * time.Second, Source: source,
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
+			IsLocal: f.Local,
 		}
 	}
 	// 用户自定义配置
@@ -372,11 +402,17 @@ func routeChatOnce(ctx context.Context, backends []RouterBackend, msgs []map[str
 // streamRouterRound 沿路由链做流式调用。failover 只发生在拿到 200 响应之前
 // （连接失败/非200 秒切下一个）；流一旦开始就不再切换源。
 // 实时把 reasoning_content/content 增量写成 thinking/intent SSE 事件。
-func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any) (string, []core.ToolCall, int, string, error) {
+// 返回值里带上实际承接这轮请求的 backend（而不只是个名字字符串），前端要靠它
+// 拿到 vision/context_window/reasoning 这些能力元数据，决定要不要开放识图之类的功能。
+func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any) (string, []core.ToolCall, int, *RouterBackend, error) {
 	var tried []string
 	for _, b := range backends {
 		if c.Request.Context().Err() != nil {
-			return "", nil, 0, "", c.Request.Context().Err()
+			return "", nil, 0, nil, c.Request.Context().Err()
+		}
+		// Ollama 官方云端 API 是原生格式（非 OpenAI 兼容），单独走流式分支
+		if b.Source == "ollama-cloud" {
+			return r.ollamaCloudStreamRound(c, b, msgs, tools)
 		}
 		reqBody := map[string]any{
 			"model": b.Model, "messages": msgs, "stream": true,
@@ -416,9 +452,130 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		}
 		content, calls, outTok, err := drainChatStream(c, resp)
 		resp.Body.Close()
-		return content, calls, outTok, b.Name, err
+		usedBackend := b
+		return content, calls, outTok, &usedBackend, err
 	}
-	return "", nil, 0, "", fmt.Errorf("所有模型源不可用：%s", strings.Join(tried, "；"))
+	return "", nil, 0, nil, fmt.Errorf("所有模型源不可用：%s", strings.Join(tried, "；"))
+}
+
+// ollamaCloudStreamRound 走 Ollama 官方云端 API（ollama.com/api/chat，原生格式）。
+// 与 OpenAI 兼容链的区别：请求体同构（model/messages/stream/tools），但响应是
+// 每行一个独立 JSON 对象（非 data: 前缀 SSE），工具调用在 message.tool_calls
+// 顶层、arguments 是对象（需转 JSON 字符串喂给 core.ToolCall）。
+func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend, msgs []map[string]any, tools []map[string]any) (string, []core.ToolCall, int, *RouterBackend, error) {
+	reqBody := map[string]any{
+		"model": b.Model, "messages": msgs, "stream": true,
+		"options": map[string]any{"temperature": 0.2, "top_p": 0.85},
+	}
+	if len(tools) > 0 {
+		reqBody["tools"] = tools
+	}
+	body, _ := json.Marshal(reqBody)
+	httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", b.BaseURL, bytes.NewBuffer(body))
+	if err != nil {
+		return "", nil, 0, nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if b.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
+	}
+	client := &http.Client{Timeout: b.Timeout}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", nil, 0, nil, fmt.Errorf("Ollama Cloud 连接失败: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return "", nil, 0, nil, fmt.Errorf("Ollama Cloud HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
+	}
+	content, calls, outTok, err := drainOllamaCloudStream(c, resp)
+	resp.Body.Close()
+	used := b
+	return content, calls, outTok, &used, err
+}
+
+// drainOllamaCloudStream 读 Ollama 原生流（每行一个 JSON 对象），实时转发
+// thinking/intent 事件，并把原生 tool_calls 聚合成 core.ToolCall 数组。
+func drainOllamaCloudStream(c *gin.Context, resp *http.Response) (string, []core.ToolCall, int, error) {
+	reader := bufio.NewReader(resp.Body)
+	var full strings.Builder
+	charCount := 0
+	callsMap := map[int]*core.ToolCall{}
+
+	for {
+		line, rerr := reader.ReadString('\n')
+		if rerr != nil && rerr != io.EOF {
+			if full.Len() > 0 {
+				break
+			}
+			return "", nil, 0, fmt.Errorf("读取 Ollama Cloud 流失败: %w", rerr)
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if rerr == io.EOF {
+				break
+			}
+			continue
+		}
+		var obj struct {
+			Message struct {
+				Content   string `json:"content"`
+				Thinking  string `json:"thinking"`
+				ToolCalls []struct {
+					ID       string `json:"id"`
+					Function struct {
+						Name      string `json:"name"`
+						Arguments any    `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
+			} `json:"message"`
+			Done bool `json:"done"`
+		}
+		if json.Unmarshal([]byte(line), &obj) != nil {
+			if rerr == io.EOF {
+				break
+			}
+			continue
+		}
+
+		if obj.Message.Thinking != "" {
+			charCount += len(obj.Message.Thinking)
+			writeCodeSSE(c, "thinking", map[string]any{"content": obj.Message.Thinking})
+		}
+		if obj.Message.Content != "" {
+			charCount += len(obj.Message.Content)
+			full.WriteString(obj.Message.Content)
+			writeCodeSSE(c, "intent", map[string]any{"content": obj.Message.Content})
+		}
+		for i, tc := range obj.Message.ToolCalls {
+			ct := &core.ToolCall{Type: "function", ID: tc.ID}
+			ct.Function.Name = tc.Function.Name
+			if tc.Function.Arguments != nil {
+				if s, ok := tc.Function.Arguments.(string); ok {
+					ct.Function.Arguments = s
+				} else if b, err := json.Marshal(tc.Function.Arguments); err == nil {
+					ct.Function.Arguments = string(b)
+				}
+			}
+			callsMap[i] = ct
+		}
+
+		if obj.Done {
+			break
+		}
+		if rerr == io.EOF {
+			break
+		}
+	}
+
+	var calls []core.ToolCall
+	for i := 0; i < len(callsMap); i++ {
+		if tc, ok := callsMap[i]; ok {
+			calls = append(calls, *tc)
+		}
+	}
+	return full.String(), calls, charCount, nil
 }
 
 // drainChatStream 读一条已建立的 SSE 流，实时转发 thinking/intent 事件。
