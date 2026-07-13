@@ -1,8 +1,7 @@
 <template>
   <ul class="nav-links">
-    <li><a href="/shanxi-hut">项目库</a></li>
-    <li><a href="/blog">研习录</a></li>
-    <li><a href="/timeline">生命线</a></li>
+    <li><a href="/blog">博客</a></li>
+    <li><a href="/timeline">更新日志</a></li>
   
   </ul>
 </template>

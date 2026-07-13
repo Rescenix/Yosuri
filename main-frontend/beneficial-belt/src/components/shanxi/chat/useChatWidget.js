@@ -41,15 +41,22 @@ if (!localStorage.getItem('prism_session_id')) {
   const chatInputRef = ref(null)
   const userScrolledUp = ref(false)
 
+  // 两个滚动函数都推到 nextTick 里执行——调用方基本都是紧跟在 messages.value.push(...)
+  // 后面同步调用的，这时候 Vue 还没把新消息patch进 DOM，scrollHeight 量到的是旧高度，
+  // 滚动会停在"上一条消息的底部"而不是真正的新底部，用户直观感觉就是"发消息不自动滚动"
   function forceScrollToBottom() {
-    if (!messagesContainer.value) return
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    userScrolledUp.value = false
+    nextTick(() => {
+      if (!messagesContainer.value) return
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      userScrolledUp.value = false
+    })
   }
 
   function smartScrollToBottom() {
-    if (!messagesContainer.value || userScrolledUp.value) return
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    nextTick(() => {
+      if (!messagesContainer.value || userScrolledUp.value) return
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    })
   }
 
   function smartScrollAndRefresh() {
@@ -76,15 +83,16 @@ if (!localStorage.getItem('prism_session_id')) {
     }
   }
 
- // 替换你的 adjustInputHeight 函数
+ // 自适应高度：内容多了就长高（到 max-height 封顶后内部滚动）。
+ // 关键——绝对不能碰 scrollTop：之前每次输入都强制 scrollTop=0，本意是"复位"，
+ // 实际是把光标所在行滚出可视区，正是"光标乱飘/看不见"的元凶。浏览器天然会让
+ // 光标跟随可见，不去干预它就对了。
 function adjustInputHeight() {
   if (!chatInputRef.value) return;
   const el = chatInputRef.value;
-  // 先恢复默认高度，再获取实际滚动高度（防止缩小不回弹）
+  // 先塌回 auto 量出真实内容高度，再赋值，保证删内容时也能回弹变矮
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
-  // ✅ 强制滚动条复位到顶部，消除光标乱飘的副作用
-  el.scrollTop = 0;
 }
 
   const { sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState } = useChatLogic({
@@ -107,8 +115,10 @@ function adjustInputHeight() {
     onNewMessage: forceScrollToBottom,
     onStreamUpdate: forceScrollToBottom
   })
-  function startCodeWorkflow(task) {
-    startFlow(task)
+  // display 透传给 startFlow——之前这里漏了第二个参数，附件 chip/纯文本气泡的展示信息
+  // 全部在这层被吞掉，气泡又会退回显示拍平后的 task 全文
+  function startCodeWorkflow(task, display) {
+    startFlow(task, display)
     userInput.value = ''
   }
 

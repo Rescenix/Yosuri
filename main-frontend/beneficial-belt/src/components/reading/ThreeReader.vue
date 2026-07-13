@@ -90,6 +90,14 @@ const isMobile = ref(window.innerWidth <= 768)
 const width = ref(550)
 const height = ref(700)
 
+// 桌面端高度跟着书页容器实际可用高度走，而不是拍 innerHeight 系数，
+// 否则分页高度 > 容器高度，底部内容会被 .reader-body 的 overflow:hidden 裁掉。
+function measureAvailableHeight() {
+  const el = flipContainerRef.value?.parentElement
+  if (el && el.clientHeight > 0) return el.clientHeight
+  return 700
+}
+
 function updatePageSize() {
   isMobile.value = window.innerWidth <= 768
   if (isMobile.value) {
@@ -97,7 +105,7 @@ function updatePageSize() {
     height.value = Math.floor(window.innerHeight * 0.85)
   } else {
     width.value = 550
-    height.value = 700
+    height.value = measureAvailableHeight()
   }
 }
 
@@ -302,6 +310,10 @@ onMounted(async () => {
   blockCtx = (e) => e.preventDefault()
   document.addEventListener('contextmenu', blockCtx)
   updatePageSize()
+  // DOM 布局完成后再测一次真实可用高度并重排，避免首帧 wrapper 高度为 0 回退到 700
+  await nextTick()
+  updatePageSize()
+  if (height.value !== 700) reInit()
   startClock()
   await nextTick()
 

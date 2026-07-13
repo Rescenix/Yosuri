@@ -120,6 +120,12 @@ import NotesPanel from './NotesPanel.vue'
 import MarkdownNotes from './MarkdownNotes.vue'
 import ReadingProgress from './ReadingProgress.vue'
 
+// 当作为聊天窗内嵌浮层使用时，由父组件通过 bookId 传入，并监听 close 回到书架。
+const props = defineProps({
+  bookId: { type: String, default: '' }
+})
+const emit = defineEmits(['close'])
+
 const activeMobilePanel = ref(null)
 const reader = useReader()
 const threeReaderRef = ref(null)
@@ -223,27 +229,33 @@ function jumpToChapter(item) {
 }
 
 onMounted(async () => {
-  if ('caches' in window) {
+  if ('caches' in window && !props.bookId) {
     caches.open('shanxi-reader-v5').then(cache => {
       cache.add(window.location.href).catch(() => {})
     })
   }
 
   try {
-    const params = new URLSearchParams(window.location.search)
-    let file = params.get('book')
-    const isLocal = params.get('local') === 'true'
-
+    // 内嵌模式：直接用父组件传入的 bookId，不再读 URL 参数、也不再回退到 /reading-hut
+    let file = props.bookId || ''
+    const isLocal = false
     if (!file) {
-      const lastBook = localStorage.getItem('shanxi_last_book')
-      if (lastBook) {
-        file = lastBook
-        const newUrl = new URL(window.location.href)
-        newUrl.searchParams.set('book', file)
-        window.history.replaceState({}, '', newUrl)
-      } else {
-        window.location.href = '/reading-hut'
-        return
+      const params = new URLSearchParams(window.location.search)
+      file = params.get('book') || ''
+      if (!file) {
+        const lastBook = localStorage.getItem('shanxi_last_book')
+        if (lastBook) {
+          file = lastBook
+          const newUrl = new URL(window.location.href)
+          newUrl.searchParams.set('book', file)
+          window.history.replaceState({}, '', newUrl)
+        } else if (!props.bookId) {
+          window.location.href = '/reading-hut'
+          return
+        } else {
+          emit('close')
+          return
+        }
       }
     }
 
@@ -269,7 +281,11 @@ onMounted(async () => {
       reader.restoreProgress()
     }
   } catch (e) {
-    window.location.href = '/reading-hut'
+    if (props.bookId) {
+      emit('close')
+    } else {
+      window.location.href = '/reading-hut'
+    }
   } finally {
     reader.loading.value = false
   }
@@ -279,8 +295,14 @@ const back = async () => {
   if (threeReaderRef.value?.flipToCoverAnimated) {
     await threeReaderRef.value.flipToCoverAnimated()
   }
-  window.location.href = '/reading-hut'
+  if (props.bookId) {
+    emit('close')
+  } else {
+    window.location.href = '/reading-hut'
+  }
 }
+
+
 </script>
 
 <style scoped>
@@ -324,23 +346,25 @@ const back = async () => {
   flex-shrink: 0;
 }
 
-/* 书页卡片 */
+/* 书页卡片：撑满 .reader-body 的纵向高度，让内部书页 wrapper 能用 100% 拿到真实可用高度 */
 .reader-card {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  width: 550px;
   max-width: 550px;
   min-width: 0;
   margin: 8px 0;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: stretch;
   position: relative;
   z-index: 1;
 }
 
-/* 书页固定尺寸 */
+/* 书页：高度跟随容器可用空间（由 .reader-card 撑满 .reader-body 后获得），
+   不再写死，避免分页高度超出容器被 overflow:hidden 截断 */
 .three-reader-wrapper {
   width: 550px;
-  height: 700px;
+  height: 100%;
   flex-shrink: 0;
   background: #fff;
   border-radius: 12px;

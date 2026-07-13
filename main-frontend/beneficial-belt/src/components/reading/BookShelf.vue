@@ -47,6 +47,7 @@ import UploadModal from './UploadModal.vue'
 import EditBookModal from './EditBookModal.vue'
 import { openDB, STORE_NAME } from './cachePagination.js'
 
+const emit = defineEmits(['open'])
 const books = ref([])
 const uploadModalVisible = ref(false)
 const editModalVisible = ref(false)
@@ -118,12 +119,8 @@ onMounted(async () => {
 })
 
 function openBook(book) {
-  const baseUrl = `/read?book=${encodeURIComponent(book.id)}`
-  if (book.id.startsWith('local_')) {
-    window.location.href = baseUrl + '&local=true'
-  } else {
-    window.location.href = baseUrl
-  }
+  // 内嵌模式下由父组件（ChatWidget 浮层）监听 open 事件接管跳转，不再整页导航
+  emit('open', book)
 }
 
 function onBooksUploaded(newBooks) {

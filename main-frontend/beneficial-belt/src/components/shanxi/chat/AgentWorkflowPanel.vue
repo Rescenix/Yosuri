@@ -10,15 +10,9 @@
         <div v-if="thinkOpen[i]" class="flow-thinking-text">{{ b.text }}</div>
       </div>
 
-      <!-- 意图/最终回答：直接平铺的 markdown -->
-      <div v-else-if="b.type === 'intent'" class="flow-intent-wrap">
-        <div class="flow-intent markdown-body" v-html="renderMarkdown(b.text, true)"></div>
-        <div class="flow-intent-tools">
-          <button class="tool-btn" @click="copyText(b.text)" title="复制">
-            <Icon icon="mdi:content-copy" width="15" />
-          </button>
-        </div>
-      </div>
+      <!-- 意图/最终回答：直接平铺的 markdown，跟 chat 模式的气泡内容一个样式，
+           不带复制按钮这类额外装饰——保持跟 chat 模式一致的简洁 -->
+      <div v-else-if="b.type === 'intent'" class="flow-intent markdown-body" v-html="renderMarkdown(b.text, true)"></div>
 
       <!-- 操作 + 结果：一行卡片，点击展开结果（Diff / 命令输出） -->
       <div v-else-if="b.type === 'tool'" class="flow-tool">
@@ -48,28 +42,14 @@
             :path="b.args.path || ''"
           />
           <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
-          <button v-if="b.name !== 'edit_file' && b.name !== 'write_file'" class="tool-btn flow-output-copy" @click="copyText(toolBodyText(b))" title="复制结果">
-            <Icon icon="mdi:content-copy" width="14" />
-          </button>
         </div>
       </div>
     </template>
-
-    <!-- 状态行 -->
-    <div class="flow-status" :class="flow.status">
-      <template v-if="flow.status === 'running'">
-        <Icon icon="mdi:loading" class="flow-spin" width="13" />
-        执行中 · {{ elapsedText }}
-      </template>
-      <template v-else>
-        {{ statusText }} · {{ elapsedText }} · {{ totalTokens }} tokens
-      </template>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
+import { reactive } from 'vue'
 import { Icon } from '@iconify/vue'
 import DiffViewer from './DiffViewer.vue'
 import { renderMarkdown } from './markdownRenderer.js'
@@ -77,22 +57,6 @@ import { renderMarkdown } from './markdownRenderer.js'
 const props = defineProps({
   flow: { type: Object, required: true }
 })
-
-// ==================== 状态行计时 ====================
-const nowTick = ref(Date.now())
-let timer = null
-onMounted(() => { timer = setInterval(() => { nowTick.value = Date.now() }, 1000) })
-onUnmounted(() => clearInterval(timer))
-
-const elapsedText = computed(() => {
-  const end = props.flow.endTime || nowTick.value
-  const sec = Math.max(0, Math.floor((end - props.flow.startTime) / 1000))
-  return `${Math.floor(sec / 60)}m ${sec % 60}s`
-})
-const totalTokens = computed(() => (props.flow.inputTokens || 0) + (props.flow.outputTokens || 0))
-const statusText = computed(() => ({
-  completed: '✓ 完成', failed: '✗ 失败', stopped: '■ 已停止'
-}[props.flow.status] || props.flow.status))
 
 // ==================== 思考块折叠 ====================
 const thinkOpen = reactive({})
@@ -144,22 +108,6 @@ function toolBodyText(b) {
   if (b.name === 'dispatch_agent') return `任务：${b.args.task || ''}\n\n${out}`
   return out
 }
-
-// 复制文本：优先 clipboard API，失败兜底 execCommand（同 ChatWidget.copyText 行为）
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text || '')
-  } catch (err) {
-    const ta = document.createElement('textarea')
-    ta.value = text || ''
-    ta.style.position = 'fixed'
-    ta.style.opacity = '0'
-    document.body.appendChild(ta)
-    ta.select()
-    try { document.execCommand('copy') } catch (_) {}
-    document.body.removeChild(ta)
-  }
-}
 </script>
 
 <style scoped>
@@ -194,33 +142,18 @@ async function copyText(text) {
   word-break: break-word;
 }
 
-/* ---------- 意图 ---------- */
-.flow-intent-wrap { margin: 6px 0; }
+/* ---------- 意图/最终回答 ---------- */
+/* 合并后普通对话的 bot 回答就渲染在这里。chat-window.css 里把用户气泡
+   和 .assistant-message 都提到了 17px（Claude 风格），但 agentflow 面板是
+   scoped 样式、不吃那条规则，原本硬编码 14px —— 于是合并后 bot 字
+   明显比用户小。这里对齐到 17px，落差消失。 */
 .flow-intent {
-  font-size: 14px;
-  line-height: 1.7;
+  margin: 6px 0;
+  font-size: 17px;
+  line-height: 1.75;
   color: #2d2a26;
   word-break: break-word;
 }
-.flow-intent-tools {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 2px;
-}
-
-/* ---------- 操作 + 结果卡片 ---------- */
-.flow-tool { position: relative; }
-.flow-output-copy {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid #e5e5e5;
-  border-radius: 6px;
-  padding: 3px 5px;
-  cursor: pointer;
-}
-.flow-output-copy:hover { background: #f0f0f0; }
 
 /* ---------- 操作 + 结果卡片 ---------- */
 .flow-tool {
@@ -301,18 +234,6 @@ async function copyText(text) {
   white-space: pre-wrap;
   word-break: break-all;
 }
-
-/* ---------- 状态行 ---------- */
-.flow-status {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: #8a8378;
-}
-.flow-status.completed { color: #12b76a; }
-.flow-status.failed { color: #d94834; }
 
 .flow-spin {
   animation: flow-rotate 0.9s linear infinite;

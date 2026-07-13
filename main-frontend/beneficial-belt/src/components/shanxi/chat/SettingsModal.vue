@@ -9,44 +9,38 @@
           </button>
         </div>
         <div class="settings-modal-body">
-          <div class="settings-section-title">免费模型池</div>
-          <div class="settings-section-desc">内置免费路由池：填了 Key 的源会自动进入调用链（参数规模降序，任一源失败秒切下一个，本地模型永远兜底）。</div>
+          <div class="settings-section-title">免费模型提供商</div>
+          <div class="settings-section-desc">点一个提供商，它的全部模型会直接进聊天下拉框（再点一次移除）。填了 Key 的提供商才会真正进调用链。</div>
 
           <div v-if="loading" class="settings-loading">加载中...</div>
           <template v-else>
             <div v-for="grp in vendorGroups" :key="grp.vendor" class="vendor-group">
-              <div class="vendor-head" @click="toggleVendor(grp.vendor)">
-                <span class="vendor-caret" :class="{ open: !collapsedVendors[grp.vendor] }">▸</span>
+              <div class="vendor-head">
                 <span class="vendor-name">{{ grp.vendor }}</span>
-                <span class="vendor-count">{{ grp.items.length }}</span>
+                <span class="vendor-count">{{ grp.items.length }} 个模型</span>
                 <span class="vendor-keystate" :class="{ on: grp.hasKey }">{{ grp.hasKey ? '已配 Key' : '未配 Key' }}</span>
+                <button
+                  class="model-pick-btn"
+                  :class="{ on: isVendorSelected(grp.vendor) }"
+                  type="button"
+                  @click.stop="toggleVendorModels(grp)"
+                >{{ isVendorSelected(grp.vendor) ? '已选' : '选为可用' }}</button>
                 <button v-if="editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
                 <button v-else class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
               </div>
-              <div v-show="!collapsedVendors[grp.vendor]" class="vendor-body">
-                <!-- 内联填 Key：就地展开在厂商头正下方，不滚到页面底部 -->
-                <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
-                  <input
-                    v-model="vendorKeyDraft"
-                    type="password"
-                    class="vendor-key-input"
-                    :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
-                    @keyup.enter="saveVendorKey(grp)"
-                  />
-                  <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
-                  <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
-                </div>
-                <div v-for="fm in grp.items" :key="fm.id" class="api-config-card free">
-                  <div class="api-config-row">
-                    <span class="api-config-name">{{ fm.name }}</span>
-                    <span class="api-free-badge">免费</span>
-                    <span v-if="fm.is_default" class="api-config-default-badge">默认</span>
-                  </div>
-                  <div class="api-config-meta">
-                    {{ fm.note }} · {{ fm.model }} · {{ fm.api_key_set ? '✓ 已配 Key' : '未配 Key（不进调用链）' }}
-                  </div>
-                </div>
+              <!-- 内联填 Key：就地展开在厂商头正下方 -->
+              <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
+                <input
+                  v-model="vendorKeyDraft"
+                  type="password"
+                  class="vendor-key-input"
+                  :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
+                  @keyup.enter="saveVendorKey(grp)"
+                />
+                <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
+                <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
               </div>
+              <div class="vendor-model-hint">点击「选为可用」将加入：{{ grp.items.map(m => m.name).join('、') }}</div>
             </div>
           </template>
 
@@ -106,15 +100,6 @@
             </div>
           </template>
 
-          <div class="settings-section-title" style="margin-top: 18px;">聊天可用模型</div>
-          <div class="settings-section-desc">勾选的模型会出现在聊天界面的模型切换下拉框里（DeepSeekProxy 已常驻，无需勾选）。本地 Ollama / Cloud 与已配 Key 的免费模型、自定义配置均可选。</div>
-          <div v-if="!loading" class="chat-model-select-list">
-            <label v-for="m in allChatSelectable" :key="m.value" class="chat-model-select-row">
-              <input type="checkbox" :checked="isInChatList(m.value)" @change="toggleChatModel(m)" />
-              <span>{{ m.label }}</span>
-            </label>
-          </div>
-
           <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
         </div>
       </div>
@@ -132,16 +117,15 @@ const props = defineProps({
 })
 const emit = defineEmits(['close'])
 
+// Agnes 挪进了内置免费池（见后端 model_router.go 的 freeModelCatalog），
+// 不再需要用户手动填 Key 走自定义配置——上面"免费模型池"分组里直接能填/改 Key
 const PRESETS = [
-  { name: 'DeepSeek', endpoint: 'https://api.deepseek.com' },
-  { name: 'Agnes', endpoint: 'https://apihub.agnes-ai.com/v1' },
-  { name: '本地 Ollama', endpoint: 'http://localhost:11434' }
+  { name: 'DeepSeek', endpoint: 'https://api.deepseek.com' }
 ]
 const MASKED = '••••••••'
 
 const configs = ref([])
 const freeModels = ref([])
-const collapsedVendors = ref({})   // { vendor: true } 表示该厂商折叠
 const loading = ref(true)
 const errorMsg = ref('')
 const editingConfig = ref(null)
@@ -149,8 +133,7 @@ const editingVendor = ref(null)   // 当前内联编辑 Key 的免费池厂商�
 const vendorKeyDraft = ref('')    // 内联 Key 输入框草稿
 const isNew = ref(false)
 
-// 按厂商折叠分组：同 vendor 归一组，组头显示数量与是否已配 Key。
-// 默认全部折叠（collapsedVendors 初始空对象 → 任意厂商默认折叠）。
+// 按厂商分组：同 vendor 归一组，组头显示数量与是否已配 Key。
 const vendorGroups = computed(() => {
   const map = new Map()
   for (const fm of freeModels.value) {
@@ -163,10 +146,6 @@ const vendorGroups = computed(() => {
   // 保持后端目录顺序（freeModelCatalog 已是参数降序/厂商顺序）
   return Array.from(map.values())
 })
-
-function toggleVendor(vendor) {
-  collapsedVendors.value = { ...collapsedVendors.value, [vendor]: !collapsedVendors.value[vendor] }
-}
 
 function configUrl() {
   return `/api/models/config${props.openid ? '?openid=' + encodeURIComponent(props.openid) : ''}`
@@ -217,8 +196,6 @@ function startEdit(cfg) {
 }
 function startEditVendor(grp) {
   // 免费池按厂商填 Key：内联展开在该厂商头正下方，一次输入扇出到该 vendor 全部模型
-  // 强制展开该厂商，确保内联输入框可见（按钮在厂商头，点击不触发折叠切换）
-  collapsedVendors.value = { ...collapsedVendors.value, [grp.vendor]: false }
   editingVendor.value = grp.vendor
   vendorKeyDraft.value = ''
 }
@@ -316,7 +293,7 @@ async function setDefault(id) {
   }
 }
 
-// —— 聊天可用模型：用户在设置里勾选"加入聊天列表"，写入 localStorage('chatModelList') ——
+// 按提供商批量加入：用户点一个提供商，其下全部模型写进 localStorage('chatModelList')，
 // 下拉框（ChatWidget）动态读取这份列表。常驻的 DeepSeekProxy 不在此列（前端硬编码常驻）。
 const CHAT_LIST_KEY = 'chatModelList'
 const chatList = ref([])
@@ -326,15 +303,26 @@ function loadChatList() {
 function isInChatList(value) {
   return chatList.value.some(m => m.value === value)
 }
-function toggleChatModel(item) {
-  const i = chatList.value.findIndex(m => m.value === item.value)
-  if (i >= 0) chatList.value.splice(i, 1)
-  else chatList.value.push({ label: item.label, value: item.value })
+// 按提供商批量加入：该 vendor 下所有模型一次性进聊天下拉
+function isVendorSelected(vendor) {
+  const items = vendorGroups.value.find(g => g.vendor === vendor)?.items || []
+  if (items.length === 0) return false
+  return items.every(it => isInChatList(it.id))
+}
+function toggleVendorModels(grp) {
+  const entries = grp.items.map(fm => ({ label: fm.name, value: fm.id }))
+  const allIn = entries.every(e => isInChatList(e.value))
+  if (allIn) {
+    const drop = new Set(entries.map(e => e.value))
+    chatList.value = chatList.value.filter(m => !drop.has(m.value))
+  } else {
+    const have = new Set(chatList.value.map(m => m.value))
+    for (const e of entries) if (!have.has(e.value)) chatList.value.push(e)
+  }
   localStorage.setItem(CHAT_LIST_KEY, JSON.stringify(chatList.value))
 }
-// 固定可勾选项（白嫖的本地/Cloud）；免费池与自定义配置从接口数据动态生成
+// 固定可勾选项（白嫖的 Cloud）；免费池与自定义配置从接口数据动态生成
 const fixedChatModels = [
-  { label: '本地 Ollama 7B', value: 'local' },
   { label: 'Cloud 480B', value: 'cloud' }
 ]
 // 合并所有可勾选项：固定 + 免费池(有Key) + 自定义配置
@@ -418,15 +406,25 @@ onUnmounted(() => {
 .settings-section-desc { font-size: 12px; color: #a3a3a3; margin-bottom: 14px; }
 .settings-error { font-size: 12px; color: #d94834; padding: 8px 0; }
 
-.chat-model-select-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.chat-model-select-row {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12.5px; color: #1a1a1a; cursor: pointer; user-select: none;
-  padding: 6px 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fafafa;
+.model-pick-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b6b6b;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
-.chat-model-select-row:hover { background: #f0f0f0; }
-.chat-model-select-row input { width: 15px; height: 15px; cursor: pointer; }
-
+.model-pick-btn:hover { background: #e8e8e8; }
+.model-pick-btn.on {
+  color: #fff;
+  background: #c96442;
+  border-color: #c96442;
+}
 .api-config-card { border: 1px solid #e5e5e5; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fafafa; }
 .api-config-row { display: flex; align-items: center; gap: 8px; }
 .api-config-name { font-size: 13px; font-weight: 600; color: #1a1a1a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -471,23 +469,15 @@ onUnmounted(() => {
 .vendor-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 9px 12px;
   background: #f4f4f5;
   border: 1px solid #e5e5e5;
   border-radius: 10px;
-  cursor: pointer;
   user-select: none;
 }
 .vendor-head:hover { background: #ededee; }
-.vendor-caret {
-  font-size: 10px;
-  color: #9b9b9b;
-  transition: transform 0.15s ease;
-  transform: rotate(0deg);
-  display: inline-block;
-}
-.vendor-caret.open { transform: rotate(90deg); }
 .vendor-name { font-size: 13px; font-weight: 700; color: #1a1a1a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vendor-count {
   font-size: 10.5px;
@@ -507,7 +497,13 @@ onUnmounted(() => {
   padding: 3px 10px; cursor: pointer; flex-shrink: 0;
 }
 .vendor-key-btn:hover { background: #f0f0f0; }
-.vendor-body { padding: 8px 0 2px 12px; border-left: 2px solid #eeeeee; margin-left: 6px; }
+.vendor-model-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #9b9b9b;
+  line-height: 1.5;
+  padding-left: 2px;
+}
 .vendor-key-inline {
   display: flex; align-items: center; gap: 8px;
   background: #ffffff; border: 1px solid #e5e5e5; border-radius: 10px;

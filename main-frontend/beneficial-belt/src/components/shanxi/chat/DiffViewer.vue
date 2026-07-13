@@ -160,8 +160,10 @@ const collapsedRows = computed(() => {
 .dv-code {
   flex: 1;
   min-width: 0;
-  white-space: pre;
-  overflow-x: auto;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;       /* 长行智能换行，不再横滚 */
+  overflow-wrap: anywhere;     /* 超长无空格 token（如长字符串/路径）也能断行 */
+  overflow-x: hidden;          /* 彻底消除横向滚轴 */
   color: #262626;
   background: transparent;
   padding: 0 10px 0 0;

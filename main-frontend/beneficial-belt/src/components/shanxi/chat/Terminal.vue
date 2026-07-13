@@ -140,8 +140,8 @@ onUnmounted(() => {
 .terminal-panel {
   flex-shrink: 0;
   width: 100%;
-  background: #1a1815;
-  border-top: 1px solid #38332c;
+  background: #ffffff;
+  border-top: 1px solid #e4dfd4;
   overflow: hidden;
   transition: height 180ms ease;
   display: flex;
@@ -179,7 +179,7 @@ onUnmounted(() => {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.6;
-  color: #d8d3c8;
+  color: #3d3226;
   display: flex;
   flex-direction: column;
 }
@@ -206,9 +206,9 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   outline: none;
-  color: #d8d3c8;
+  color: #3d3226;
   font: inherit;
   caret-color: #c96442;
 }
-.term-input::placeholder { color: #6b6558; }
+.term-input::placeholder { color: #8b847a; }
 </style>

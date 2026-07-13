@@ -59,7 +59,7 @@
 
 .markdown-body pre {
   position: relative;
-  background: #f7f5f1;
+  background: #ffffff;
   border: 1px solid #e6dfd3;
   border-radius: 14px;
   padding: 14px 16px;
@@ -504,8 +504,9 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 10px 16px;
   border-radius: 10px;
   text-align: left;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow:0 1px 2px rgba(0,0,0,0.04);
 }
+.message-bubble.user .attach-chip-row { margin-bottom: 8px; }
 .chat-input-area {
   padding: 12px 0 16px !important;
   position: relative;

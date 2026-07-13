@@ -13,17 +13,17 @@
           <Icon icon="majesticons:shooting-star-line" width="20" />
         </h4>
 
-        <a href="/shanxi-hut" @click="menuOpen = false">
-          <Icon icon="mdi:archive-outline" width="16" style="margin-right:8px" />
-          项目库
-        </a>
         <a href="/blog" @click="menuOpen = false">
           <Icon icon="mdi:book-open-outline" width="16" style="margin-right:8px" />
-          研习录
+          博客
         </a>
         <a href="/timeline" @click="menuOpen = false">
           <Icon icon="mdi:timeline-clock-outline" width="16" style="margin-right:8px" />
-          生命线
+          更新日志
+        </a>
+        <a href="#" @click.prevent="openReader">
+          <Icon icon="mdi:book-open-page-outline" width="16" style="margin-right:8px" />
+          阅读器
         </a>
         <a href="https://github.com/3478556810" target="_blank" rel="noopener" @click="menuOpen = false">
           <Icon icon="mdi:github" width="16" style="margin-right:8px" />
@@ -32,8 +32,20 @@
 
         <div class="drawer-divider"></div>
 
-      
       </aside>
+
+      <!-- ★ 阅读器全屏浮层：把阅读小屋嵌进聊天窗，替代独立的 /reading-hut 项目库页 -->
+      <Teleport to="body">
+        <div v-if="showReader" class="reader-overlay">
+          <button v-if="!readerBookId" class="reader-overlay-close" @click="closeReader" aria-label="关闭阅读器">
+            <Icon icon="mdi:close" width="20" color="#6b6b6b" />
+          </button>
+          <div class="reader-overlay-body">
+            <BookShelf v-if="!readerBookId" @open="openReaderBook" />
+            <ReaderView v-else :book-id="readerBookId" @close="closeReaderBook" />
+          </div>
+        </div>
+      </Teleport>
 
       <!-- ★ 主内容区（随菜单推开） -->
       <div class="chat-main" :class="{ shifted: menuOpen }">
@@ -66,16 +78,16 @@
           <div class="header-right">
             <div class="header-tools-group" v-if="inputTopBarMode === 'git'">
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
-                <Icon icon="mdi:console" width="17" color="#6b6b6b" />
+                <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
               </button>
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
-                <Icon icon="mdi:file-compare" width="17" color="#6b6b6b" />
+                <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
               </button>
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" title="预览">
-                <Icon icon="mdi:play-circle-outline" width="17" color="#6b6b6b" />
+                <Icon icon="mage:preview" width="17" color="#6b6b6b" />
               </button>
               <button class="header-icon-btn" :class="{ active: showBackgroundTasks }" @click.stop="showBackgroundTasks = !showBackgroundTasks" title="后台任务">
-                <Icon icon="mdi:clipboard-list-outline" width="17" color="#6b6b6b" />
+                <Icon icon="mdi:task-minus" width="17" color="#6b6b6b" />
               </button>
               <div class="header-more-wrap">
                 <button class="header-icon-btn" @click.stop="showMoreMenu = !showMoreMenu" title="更多">
@@ -100,14 +112,10 @@
             <SessionMenuContent
               :sessions="sessionList"
               :active-session="activeSession"
-              :active-chat-mode="activeChatMode"
-              :workflow-active="workflowState.active"
               @select-session="onFloatingSelectSession"
               @new-session="onFloatingNewSession"
               @rename-session="renameSession"
               @delete-session="deleteSession"
-              @trigger-chat="triggerChat"
-              @trigger-code="triggerWorkflow()"
               @open-settings="showSettings = true"
             />
           </div>
@@ -122,14 +130,10 @@
             fill
             :sessions="sessionList"
             :active-session="activeSession"
-            :active-chat-mode="activeChatMode"
-            :workflow-active="workflowState.active"
             @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
             @delete-session="deleteSession"
-            @trigger-chat="triggerChat"
-            @trigger-code="triggerWorkflow()"
             @open-settings="showSettings = true"
           />
         </aside>
@@ -156,7 +160,8 @@
                       <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
                     </div>
                     <div v-else-if="item.sender === 'user'" class="message-bubble user">
-                      {{ item.content }}
+                      <AttachmentChipRow v-if="item.attachments?.length" :attachments="item.attachments" />
+                      <div v-if="item.content">{{ item.content }}</div>
                     </div>
                     <MessageStepGroup
                       v-else-if="item.kind === 'group'"
@@ -270,7 +275,7 @@
                 </button>
               </div>
 
-              <div v-else-if="inputTopBarMode === 'git'" class="input-git-bar">
+              <div v-else-if="inputTopBarMode === 'git' && showGitBar" class="input-git-bar">
                 <div class="input-git-left">
                   <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
                   <span class="input-git-branch">{{ gitStatus.branch || activeSessionObj?.branch || 'main' }}</span>
@@ -343,24 +348,7 @@
 
                 <!-- 附件预览：图片缩略图 / 文件与文件夹占位卡，横向排在输入文字上方，
                      真正的文字内容只在发送那一刻才拼进正文（buildOutgoingMessage） -->
-                <div v-if="attachments.length" class="attach-chip-row">
-                  <div v-for="att in attachments" :key="att.id" class="attach-chip" :class="[att.kind, att.status]">
-                    <img v-if="att.kind === 'image'" :src="att.previewUrl" class="attach-chip-thumb" />
-                    <div v-else class="attach-chip-icon">
-                      <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#8a8378" />
-                      <span v-else>{{ att.ext }}</span>
-                    </div>
-                    <div class="attach-chip-meta">
-                      <span class="attach-chip-name" :title="att.name">{{ att.name }}</span>
-                      <span v-if="att.status === 'analyzing'" class="attach-chip-status">分析中…</span>
-                      <span v-else-if="att.status === 'error'" class="attach-chip-status error">{{ att.errorMsg }}</span>
-                      <span v-else-if="att.kind === 'folder'" class="attach-chip-status">{{ att.fileCount }} 个文件</span>
-                    </div>
-                    <button class="attach-chip-remove" type="button" @click="removeAttachment(att.id)" title="移除">
-                      <Icon icon="mdi:close" width="11" />
-                    </button>
-                  </div>
-                </div>
+                <AttachmentChipRow :attachments="attachments" removable @remove="removeAttachment" />
 
                 <div class="input-row">
                   <!-- 渐变动画的浮动占位符 -->
@@ -376,7 +364,7 @@
                   <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
                   <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
 
-                  <button v-if="workflowState.active || flowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="flowState.active ? stopCodeWorkflow() : stopWorkflow()" title="停止工作流（已生成内容会保留）">
+                  <button v-if="flowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
                     <Icon icon="mdi:stop" width="16" color="#fff" />
                   </button>
                   <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
@@ -419,6 +407,16 @@
                       </div>
                     </div>
                   </div>
+                  <!-- git 工具栏开关：点亮时上方展开分支/PR 状态条，只在有会话时出现 -->
+                  <button
+                    v-if="inputTopBarMode === 'git'"
+                    class="toolbar-icon-pill-btn"
+                    :class="{ active: showGitBar }"
+                    @click.stop="toggleGitBar"
+                    title="Git 工具栏"
+                  >
+                    <Icon icon="mdi:source-branch" width="15" />
+                  </button>
                 </div>
                 <div class="input-toolbar-right">
                   <!-- 模型切换器 -->
@@ -471,13 +469,9 @@
             <div class="tool-dock-resize-handle" @mousedown="startDockWidthDrag"></div>
             <template v-for="(panelKey, panelIdx) in dockPanels" :key="panelKey">
               <div class="tool-dock-pane" :style="{ flex: (dockRatios[panelKey] || 0) + ' 1 0%' }">
-                <div class="tool-dock-pane-header">
-                  <span class="tool-dock-pane-title">{{ dockPanelLabel(panelKey) }}</span>
-                  <span class="tool-dock-pane-meta">{{ { diff: '', terminal: 'node', preview: '' }[panelKey] }}</span>
-                  <button class="tool-dock-pane-close" @click="closeDockPanel(panelKey)" title="关闭">
-                    <Icon icon="mdi:close" width="14" color="#a3a3a3" />
-                  </button>
-                </div>
+                <button class="tool-dock-pane-close" @click="closeDockPanel(panelKey)" title="关闭">
+                  <Icon icon="mdi:close" width="14" color="#a3a3a3" />
+                </button>
                 <div class="tool-dock-pane-body">
                   <DiffPanel v-if="panelKey === 'diff'" />
                   <Terminal v-else-if="panelKey === 'terminal'" class="tool-panel-terminal" :open="true" :embedded="true" />
@@ -555,8 +549,11 @@ import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import AuroraStatusIcon from './AuroraStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
 import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
+import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
+import BookShelf from '../../reading/BookShelf.vue'
+import ReaderView from '../../reading/ReaderView.vue'
 
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
@@ -798,13 +795,19 @@ async function runGitCommit() {
   }
 }
 
-// 输入框上方工具栏三态：首页/新会话(无消息)显示工作目录条；Code 模式(有消息)
-// 显示 git 状态条；普通 Chat 模式(有消息)整个区域不显示
+// 输入框上方工具栏两态：首页/新会话(无消息)显示工作目录条；一旦开始对话
+// 就进入 git 态——但 git 状态条不再默认铺开，改成由底部工具栏的 git 按钮
+// 手动开关（showGitBar），默认收起，需要看分支/提交时才点开
 const inputTopBarMode = computed(() => {
   if (messages.value.length === 0) return 'dir'
-  if (activeChatMode.value === 'code') return 'git'
-  return 'none'
+  return 'git'
 })
+// git 状态条的显隐开关，默认收起
+const showGitBar = ref(false)
+function toggleGitBar() {
+  showGitBar.value = !showGitBar.value
+  if (showGitBar.value) fetchGitStatus()
+}
 
 // ==================== 项目数据 ====================
 // 定义占位符池子（老王主题风格）
@@ -846,11 +849,13 @@ async function copyText(text) {
 }
 
 // ==================== 模型选择 ====================
-// ==================== 模型选择 ====================
-// 聊天下拉框只常驻白嫖的 DeepSeekProxy；其余模型（本地 Ollama / Cloud / 免费池已配 Key 的 /
+// 聊天下拉框常驻 Agnes（免费池默认模型，value 直接是后端 freeModelCatalog 的精确
+// 路由 ID）和白嫖的 DeepSeekProxy；其余模型（本地 Ollama / Cloud / 免费池已配 Key 的 /
 // 自定义免费配置）全部由用户在设置面板勾选"加入聊天列表"，写入 localStorage('chatModelList')，
-// 这里动态拼进去。custom 分支已取消——Agnes 等免费模型走免费池，不再有独立 custom 选项。
+// 这里动态拼进去。value 会原样透传给 /api/code/workflow 的 model 参数做精确路由
+// （见 useAgentWorkflow.js），选哪个就真的用哪个，不再是摆设。
 const CHAT_LIST_KEY = 'chatModelList'
+const DEFAULT_MODEL = 'ds_browser'
 function loadChatModelList() {
   try { return JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]') } catch (e) { return [] }
 }
@@ -859,14 +864,17 @@ const modelOptions = computed(() => {
   const extra = loadChatModelList()
   return [...base, ...extra]
 })
-const selectedModel = ref(localStorage.getItem('selectedModel') || 'ds_browser')
+const selectedModel = ref(localStorage.getItem('selectedModel') || DEFAULT_MODEL)
+// 首次加载（localStorage 还没这个 key）时立刻落盘——useAgentWorkflow.js 是单独的
+// composable，直接读 localStorage 拿 model 传给后端做精确路由，不共享这个 ref，
+// 不落盘的话它读到的永远是空字符串，选择器显示 Agnes 但实际请求走的是全量兜底链
 const showModelMenu = ref(false)
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
 // 防止历史 localStorage 里残留已删除的硬编码项（local/cloud/ds/custom）导致下拉框显示空白
 if (!modelOptions.value.some(m => m.value === selectedModel.value)) {
-  selectedModel.value = 'ds_browser'
-  localStorage.setItem('selectedModel', 'ds_browser')
+  selectedModel.value = DEFAULT_MODEL
 }
+localStorage.setItem('selectedModel', selectedModel.value)
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
@@ -932,6 +940,27 @@ const showParams = ref(false)
 const showMoreMenu = ref(false)
 const showBackgroundTasks = ref(false)
 
+// ==================== 阅读器全屏浮层 ====================
+// 把阅读小屋（BookShelf + ReaderView）嵌进聊天窗，替代独立的 /reading-hut 项目库页。
+// 组件自包含（自己拉书架/书本），零 props 改写即可内嵌。
+const showReader = ref(false)
+const readerBookId = ref('')
+function openReader() {
+  showReader.value = true
+  readerBookId.value = ''
+  menuOpen.value = false
+}
+function closeReader() {
+  showReader.value = false
+  readerBookId.value = ''
+}
+function openReaderBook(book) {
+  readerBookId.value = book.id
+}
+function closeReaderBook() {
+  readerBookId.value = ''
+}
+
 // ==================== 左侧会话/模式面板：钉住 vs 悬停轻量预览 ====================
 const menuPinned = ref(false)
 const menuHovering = ref(false)
@@ -966,29 +995,19 @@ function jumpToGroup(id) {
   })
 }
 
-// ==================== 模式及悬浮菜单 ====================
-const activeChatMode = ref(null)
-function triggerChat() {
-  if (workflowState.active || flowState.active) return
-  activeChatMode.value = activeChatMode.value === 'chat' ? null : 'chat'
-  chatInputRef.value?.focus()
-}
-function triggerWorkflow() {
-  if (workflowState.active || flowState.active) return
-  activeChatMode.value = activeChatMode.value === 'code' ? null : 'code'
-  chatInputRef.value?.focus()
-}
+// ==================== 发送：聊天/代码只有一条链路了 ====================
+// 之前 Chat/Code 是两个模式两条路——Chat 走轻量流式，Code 走四态机能调工具。
+// 合并成一条：永远走四态机（startCodeWorkflow），模型自己判断要不要调工具，
+// 不需要工具时就是普通对话回复，agent 两件事都能干，用户不用先选模式。
 function handleSend() {
   if (hasPendingAttachments.value) return
   const combined = buildOutgoingMessage()
   if (!combined) return
-  userInput.value = combined
+  const displayText = userInput.value.trim()
+  const displayAttachments = attachments.value.filter(a => a.status === 'ready').map(a => ({ ...a }))
   clearAttachments()
-  if (activeChatMode.value === 'code') {
-    startCodeWorkflow(userInput.value.trim())
-  } else {
-    sendMessage()
-  }
+  userInput.value = ''
+  startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments })
 }
 function onFloatingSelectSession(id) { selectSession(id); menuHovering.value = false }
 function onFloatingNewSession() { newSession(); menuHovering.value = false }
@@ -1017,6 +1036,9 @@ function fileToBase64(file) {
     reader.readAsDataURL(file)
   })
 }
+// 粘贴图片跟"+"菜单选图走同一条路：先当附件加进 attachments（复用 attachImageFile
+// 的分析逻辑），分析完直接自动发送——保留"粘贴即发"的原有习惯，但气泡里现在是
+// 一张缩略图 chip + 用户自己敲的话，不再是整段 Gemini 分析原文糊在消息正文里
 async function handlePaste(e) {
   const items = e.clipboardData?.items
   if (!items) return
@@ -1026,25 +1048,9 @@ async function handlePaste(e) {
   }
   if (!imageFile) return
   e.preventDefault()
-  if (workflowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
-  clearTimeout(visionStatusTimer); visionStatus.value = 'analyzing'
-  try {
-    const base64 = await fileToBase64(imageFile)
-    const res = await fetch('/api/aether/vision-preprocess', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_base64: base64, mime_type: imageFile.type || 'image/png' })
-    })
-    if (!res.ok) throw new Error(`请求失败 (${res.status})`)
-    const data = await res.json()
-    if (!data.text) throw new Error('未返回分析文本')
-    visionStatus.value = ''
-    const existing = userInput.value
-    const assembledTask = `[用户上传了一张图片，Gemini分析结果如下]\n${data.text}\n基于以上信息，请完成以下任务：` + (existing ? `\n${existing}` : '')
-    userInput.value = assembledTask
-    adjustInputHeight()
-    sendWorkflow('code', assembledTask)
-  } catch (err) { showVisionError('图片分析失败') }
+  if (flowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
+  await attachImageFile(imageFile)
+  handleSend()
 }
 
 // ==================== "+" 附加菜单：添加文件/照片、添加文件夹 ====================

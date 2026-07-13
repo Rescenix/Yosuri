@@ -10,6 +10,11 @@
   --chat-text-soft: #8b847a;
   --chat-accent: #c96442;
   --chat-accent-hover: #b85737;
+  /* 统一蓝色调：输入框聚焦光流、发送按钮、会话运行指示灯都用这套蓝 */
+  --chat-blue: #3b82f6;
+  --chat-blue-strong: #2563eb;
+  --chat-blue-glow: #60a5fa;
+  --chat-blue-soft: rgba(59, 130, 246, 0.18);
   --chat-user-bg: #ece6dc;
   --chat-user-text: #1f1b16;
   --chat-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
@@ -748,7 +753,7 @@ min-height: 90px !important;
   left: 0;
   bottom: 0;
   width: 240px;
-  background: #fbfaf7;
+  background: #ffffff;
   border-right: 1px solid #e4dfd4;
   box-shadow: 8px 0 24px rgba(0, 0, 0, 0.06);
   transform: translateX(-102%);
@@ -882,7 +887,7 @@ min-height: 90px !important;
   left: 0;
   bottom: 0;
   width: 260px;
-  background: #fbfaf7;
+  background: #ffffff;
   border-right: 1px solid #e4dfd4;
   box-shadow: 8px 0 24px rgba(0, 0, 0, 0.04);
   transform: translateX(-100%);
@@ -987,6 +992,48 @@ min-height: 90px !important;
   height: 1px;
   background: #e4dfd4;
   margin: 12px 16px;
+}
+
+/* ==================== 阅读器全屏浮层 ==================== */
+.reader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  background: #f3f1ec;
+  display: flex;
+  flex-direction: column;
+}
+.reader-overlay-close {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.reader-overlay-close:hover {
+  background: #f2ede3;
+}
+.reader-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+/* BookShelf 在浮层里需要撑满高度并留白 */
+.reader-overlay-body .shelf-root {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  box-sizing: border-box;
 }
 
 /* ==================== 新建对话按钮 ==================== */
@@ -1715,7 +1762,7 @@ min-height: 90px !important;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 10.5px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: 5px;
   border: 1px solid #e4dfd4;
   color: #696259;
   background: #f4f2ec;
@@ -1774,7 +1821,7 @@ min-height: 90px !important;
 .header-session-name { font-size: 13.5px; font-weight: 700; color: #1a1a1a; margin-left: 4px; }
 .sch-branch {
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10.5px; padding: 2px 9px; border-radius: 999px; border: 1px solid #e5e5e5;
+  font-size: 10.5px; padding: 2px 9px; border-radius: 5px; border: 1px solid #e5e5e5;
   color: #6b6b6b; background: #f5f5f5; margin-left: 8px;
 }
 .sch-status { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: #6b6b6b; margin-left: 8px; }
@@ -1837,54 +1884,55 @@ min-height: 90px !important;
   box-shadow: 0 6px 24px rgba(27, 26, 24, 0.08);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.input-wrapper:focus-within { border-color: #c96442; box-shadow: 0 8px 28px rgba(201, 100, 66, 0.14); }
+/* 聚焦：蓝色边框 + 柔和蓝光晕（就算下面的流光动画降级，静态态也是蓝的不会露红） */
+.input-wrapper:focus-within { border-color: var(--chat-blue); box-shadow: 0 8px 28px var(--chat-blue-soft); }
+
+/* 流光边框：一圈旋转的锥形渐变，用 mask 抠成只剩描边的环，聚焦时淡入并转起来。
+   --ring-angle 借助 @property 声明成 <angle> 类型，浏览器才能对它做连续插值动画，
+   否则自定义属性只能离散跳变、转不起来 */
+@property --ring-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.input-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--ring-angle),
+    transparent 0deg, transparent 190deg,
+    var(--chat-blue-glow) 250deg, var(--chat-blue) 300deg,
+    var(--chat-blue-glow) 340deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 2;
+}
+.input-wrapper:focus-within::before {
+  opacity: 1;
+  animation: input-border-flow 2.6s linear infinite;
+}
+@keyframes input-border-flow {
+  to { --ring-angle: 360deg; }
+}
 .input-row { display: flex; align-items: flex-end; gap: 4px; padding: 0 12px 0 16px; }
 
-/* 附件预览条：图片缩略图/文件文件夹占位卡，横向滚动，不挤压下面的输入行 */
-.attach-chip-row {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px 0;
-  overflow-x: auto;
-}
-.attach-chip {
-  position: relative;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 168px;
-  padding: 6px 22px 6px 6px;
-  border: 1px solid #e5e5e5;
-  border-radius: 10px;
-  background: #fafafa;
-  box-sizing: border-box;
-}
-.attach-chip.error { border-color: #f3c9c2; background: #fff5f3; }
-.attach-chip.analyzing { opacity: 0.7; }
-.attach-chip-thumb { width: 36px; height: 36px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
-.attach-chip-icon {
-  width: 36px; height: 36px; border-radius: 7px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: #ececec; color: #6b6b6b; font-size: 10px; font-weight: 700;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-}
-.attach-chip-meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.attach-chip-name { font-size: 12px; color: #262626; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attach-chip-status { font-size: 10.5px; color: #a3a3a3; }
-.attach-chip-status.error { color: #d94834; }
-.attach-chip-remove {
-  position: absolute; top: -5px; right: -5px;
-  width: 16px; height: 16px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: #404040; color: #fff; border: 1.5px solid #fff;
-  cursor: pointer; padding: 0;
-}
-.attach-chip-remove:hover { background: #1a1a1a; }
+/* 附件 chip 行本体样式挪进 AttachmentChipRow.vue（输入框上方/用户气泡两处共用）；
+   这里只留输入框场景专属的外边距——chip 行离输入行要留一点上边距，气泡里不需要 */
+.input-wrapper .attach-chip-row { padding: 10px 12px 0; }
 
 /* min-height 必须 !important——历史遗留的 .chat-input{min-height:90px !important}
-   靠 !important 直接碾过任何后写的普通规则，不加 !important 这里改了也没用 */
-.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 9px 0 !important; resize: none; min-height: 40px !important; max-height: 150px; line-height: 22px; font-size: 15px; color: #1b1a18; font-family: inherit; box-sizing: border-box; overflow-y: hidden; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
+   靠 !important 直接碾过任何后写的普通规则，不加 !important 这里改了也没用。
+   overflow-y 改回 auto：hidden 时内容超过 max-height(150px) 会把光标那行裁掉、
+   看不见输入，配合上面拿掉 scrollTop=0，光标现在能正常跟随滚动。
+   line-height 提到 24px，让光标（高度=行高）更饱满，不再显得"太矮"。 */
+.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 8px 0 !important; resize: none; min-height: 40px !important; max-height: 150px; line-height: 24px; font-size: 15px; color: #1b1a18; font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
 .chat-input::-webkit-scrollbar { display: none; }
 .chat-input::placeholder { color: #a9a9a9; font-style: italic; }
 
@@ -1919,11 +1967,12 @@ min-height: 90px !important;
 .vision-status-toast { position: absolute; bottom: calc(100% + 12px); right: 0px; z-index: 6; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); border: 1px solid #e4dfd4; font-size: 11px; color: #8a7f72; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .vision-status-toast.error { color: #d94834; border-color: #f3c9c2; background: rgba(255, 245, 243, 0.95); }
 
-/* 回到底部：紧贴输入框卡片正上方（相对 .chat-input-area 定位，不受消息区高度影响） */
+/* 回到底部：悬浮在输入框卡片正中间上方（相对 .chat-input-area 定位） */
 .scroll-to-bottom-btn {
   position: absolute;
   bottom: 100%;
-  right: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 10;
   border: 1px solid #e4dfd4;
   background: #ffffff;
@@ -1938,7 +1987,7 @@ min-height: 90px !important;
   transition: all 0.2s ease;
   opacity: 0.9;
 }
-.scroll-to-bottom-btn:hover { background: #f4f2ec; transform: scale(1.05); opacity: 1; }
+.scroll-to-bottom-btn:hover { background: #f4f2ec; transform: translateX(-50%) scale(1.05); opacity: 1; }
 
 /* ★ 修复 3：右侧工具面板，直接删掉无用的 Tabs 按钮 ★ */
 .tool-panel { flex: 0 0 320px; /* 稍微缩窄一点面板宽度 */ border-left: 1px solid #e5e5e5; background: #ffffff; display: flex; flex-direction: column; overflow: hidden; position: relative; }
@@ -1974,6 +2023,7 @@ min-height: 90px !important;
   background: rgba(201, 100, 66, 0.25);
 }
 .tool-dock-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1983,37 +2033,14 @@ min-height: 90px !important;
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(20, 20, 20, 0.03);
 }
-.tool-dock-pane-header {
-  height: 36px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border-bottom: 1px solid #eeeeee;
-  background: #ffffff;
-  border-radius: 10px 10px 0 0;
-}
-.tool-dock-pane-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #262626;
-  flex-shrink: 0;
-}
-.tool-dock-pane-meta {
-  font-size: 10.5px;
-  color: #a3a3a3;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .tool-dock-pane-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
   flex-shrink: 0;
   border: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.9);
   cursor: pointer;
   display: flex;
   align-items: center;

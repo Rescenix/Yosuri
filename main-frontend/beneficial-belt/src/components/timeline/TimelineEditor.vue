@@ -3,7 +3,7 @@
     <div class="editor-panel">
       <!-- 顶部操作栏 -->
       <div class="editor-header">
-        <h3>编辑生命线</h3>
+        <h3>编辑更新日志</h3>
         <div class="header-actions">
           <button class="add-btn" @click="openAddDialog">+ 新增节点</button>
           <button class="save-btn" @click="saveAll">保存</button>

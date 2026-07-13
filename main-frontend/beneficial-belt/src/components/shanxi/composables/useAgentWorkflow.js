@@ -18,7 +18,10 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         onStreamUpdate?.()
     }
 
-    function startCodeWorkflow(task) {
+    // display 可选：{ text, attachments } —— 气泡展示用的"用户实际打的字 + 附件 chip"，
+    // 跟真正发给模型的 task（附件内容已经拍平拼接）分开，不然气泡里会把图片解析原文/
+    // 文件全文都摊开显示，等于把输入框背后的东西又倒回来给用户看一遍
+    function startCodeWorkflow(task, display) {
         task = (task || '').trim()
         if (!task || flowState.active) return
         flowState.active = true
@@ -26,7 +29,8 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         messages.value.push({
             id: `afu_${Date.now()}_${msgSeq++}`,
             sender: 'user',
-            content: `[工作流: code] ${task}`,
+            content: display?.text ?? task,
+            attachments: display?.attachments ?? [],
             timestamp: new Date()
         })
 
@@ -42,6 +46,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             endTime: null,
             inputTokens: 0,
             outputTokens: 0,
+            // 实际承接这次请求的 backend 能力元数据（是否识图/上下文窗口/是否支持思考强度），
+            // 由后端 model_info 事件回填，工作流开始时是 null
+            modelInfo: null,
             timestamp: new Date()
         })
         currentFlow = flow
@@ -49,7 +56,10 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         onNewMessage?.()
 
         const sid = localStorage.getItem('prism_session_id') || ''
-        es = new EventSource(`/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}`)
+        // model 直接透传前端选好的模型 ID，命中 freeModelCatalog 就精确路由到那一个
+        // （见 model_router.go resolveBackends），不再是"选了也白选"
+        const model = localStorage.getItem('selectedModel') || ''
+        es = new EventSource(`/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}`)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
         const appendText = (type, text) => {
@@ -60,6 +70,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             onStreamUpdate?.()
         }
 
+        es.addEventListener('model_info', e => { flow.modelInfo = JSON.parse(e.data) })
         es.addEventListener('thinking', e => appendText('thinking', JSON.parse(e.data).content))
         es.addEventListener('intent', e => appendText('intent', JSON.parse(e.data).content))
 
