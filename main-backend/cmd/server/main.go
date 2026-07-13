@@ -24,7 +24,6 @@ func main() {
 
 	// 初始化数据库连接
 	database.InitDB()
-	database.InitPrismDB()
 
 	// 初始化代码搜索索引（保留原有功能）
 	log.Println("🔄 正在初始化本地代码索引...")
@@ -42,18 +41,11 @@ func main() {
 		AllowCredentials: false,
 	}))
 
-	// 初始化 PrismD 记忆存储
-	memoryStore := handler.NewMemoryStore("")
-	if err := memoryStore.ConnectPrism("localhost:5666"); err != nil {
-		log.Printf("⚠️ PrismD 连接失败: %v，回退到 JSON 存储", err)
-		memoryPath := getMemoryPath()
-		memoryStore = handler.NewMemoryStore(memoryPath)
-	} else {
-		log.Println("⚡ PrismD 数字海马体已连接")
-	}
+	// 初始化记忆存储（本地 JSON 落盘；实际记忆检索走 SwiftNet，见 internal/swiftnet）
+	memoryStore := handler.NewMemoryStore(getMemoryPath())
 
-	// 初始化会话存储：按用途分域落在 PrismD 里（chat_sessions / code_sessions 各自独立 bolt 文件），
-	// 每次 Append/SetCompressIndex 都会异步落盘，不再需要定时整份重写
+	// 初始化会话存储：按用途分域落本地 JSON 文件（chat_sessions / code_sessions 各自独立），
+	// 每次 Append/SetCompressIndex 都会异步整份重写
 	sessionStore := handler.NewSessionStore(handler.ChatSessionsDomain)
 
 	// 自动拉起 DS 浏览器代理

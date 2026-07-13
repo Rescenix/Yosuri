@@ -29,8 +29,6 @@ var previewCandidates = []previewServerCandidate{
 	{Name: "Vite 默认", Port: 5173},
 	{Name: "main-backend API", Port: 8080},
 	{Name: "DS 浏览器代理", Port: 3000},
-	{Name: "PrismD", Port: 5666},
-	{Name: "Ollama", Port: 11434},
 }
 
 // HandlePreviewServers GET /api/preview/servers — 返回当前存活的本地服务

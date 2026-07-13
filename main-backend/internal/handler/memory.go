@@ -1,4 +1,4 @@
-// handler/memory.go — 极简记忆存储，不依赖 BGE
+// handler/memory.go — 极简记忆存储，不依赖 BGE / PrismD
 
 package handler
 
@@ -6,11 +6,9 @@ import (
 	"backend/internal/swiftnet"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,9 +22,8 @@ type MemoryRecord struct {
 }
 
 type MemoryStore struct {
-	filePath  string
-	records   []MemoryRecord
-	prismAddr string
+	filePath string
+	records  []MemoryRecord
 }
 
 func NewMemoryStore(path string) *MemoryStore {
@@ -47,40 +44,12 @@ func NewMemoryStore(path string) *MemoryStore {
 	return store
 }
 
-func (m *MemoryStore) ConnectPrism(addr string) error {
-	resp, err := http.Get("http://" + addr)
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-	m.prismAddr = addr
-	return nil
-}
-
-func (m *MemoryStore) sendPrimQL(ql string) (string, error) {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Post("http://"+m.prismAddr, "text/plain", strings.NewReader(ql))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	return string(body), nil
-}
-
 // SmartAppend 写入 SwiftNet 单文件事实库（probe-before-append 自动防重）
 func (m *MemoryStore) SmartAppend(role, content string) error {
 	res := swiftnet.Default().MemAppend(content, role, "")
 	if res.Err != "" {
 		return fmt.Errorf("%s", res.Err)
 	}
-	return nil
-}
-
-// SearchSimilar 不再调用 BGE/LOOM，返回空
-func (m *MemoryStore) SearchSimilar(query string, topK int) []MemoryRecord {
-	// 暂时停用外部检索
-	fmt.Println("⚠️ SearchSimilar 已停用，返回空")
 	return nil
 }
 
@@ -96,13 +65,5 @@ func (m *MemoryStore) SaveMemoryHandler(c *gin.Context) {
 }
 
 func (m *MemoryStore) RecallMemoryHandler(c *gin.Context) {
-	query := c.Query("q")
-	topK := 20
-	if query != "" {
-		records := m.SearchSimilar(query, topK)
-		c.JSON(http.StatusOK, records)
-		return
-	}
-	records := m.GetRecent(topK)
-	c.JSON(http.StatusOK, records)
+	c.JSON(http.StatusOK, m.GetRecent(20))
 }

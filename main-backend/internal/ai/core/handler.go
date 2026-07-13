@@ -18,11 +18,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"backend/internal/prismd"
 	"backend/internal/swiftnet"
 )
-
-var prismdClient = prismd.NewClient("localhost:5666")
 
 type ToolCall struct {
 	ID       string       `json:"id"`

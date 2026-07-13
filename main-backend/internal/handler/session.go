@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,27 +10,27 @@ import (
 	"time"
 
 	"backend/internal/ai/core"
-	"backend/internal/prismd"
 
 	"github.com/gin-gonic/gin"
 )
 
-// 会话按用途分域存储，对应 PrismD 里两个独立的 bolt 文件——
-// 物理隔离，互不干扰，也方便以后分别做压缩/清理策略。
+// 会话按用途分域存储（各自一个本地 JSON 文件），物理隔离，互不干扰，
+// 也方便以后分别做压缩/清理策略。
 const (
 	ChatSessionsDomain = "chat_sessions"
 	CodeSessionsDomain = "code_sessions"
 )
 
 // SessionStore 维护所有会话的对话历史与压缩游标。
-// 每个会话是 PrismD 对应域下的一个 KV 条目（key=sessionID），
-// 内存里的 map 是权威状态，PrismD 只是异步持久化的落地点。
+// 内存里的 map 是权威状态；每次写操作后异步整份重写对应域的本地 JSON 文件——
+// 个人使用场景数据量小，简单粗暴地整份重写比增量更新更不容易出 bug。
 type SessionStore struct {
 	mu                  sync.RWMutex
 	sessions            map[string][]DSMessage
 	lastCompressIndexes map[string]int // 每个 session 上次压缩的消息数量
 	domain              string
-	kv                  *prismd.Client
+
+	fileMu sync.Mutex // 串行化本地文件写入，避免并发重写互相踩踏
 }
 
 // persistedMessage 是 DSMessage 面向持久化的镜像。
@@ -47,8 +46,8 @@ type persistedMessage struct {
 	Model            string          `json:"model,omitempty"`
 }
 
-// sessionRecord 是单个会话在 PrismD KV 里的完整存储形态：
-// 消息列表和压缩游标绑在一起，一次写入原子生效。
+// sessionRecord 是单个会话在本地文件里的完整存储形态：
+// 消息列表和压缩游标绑在一起。
 type sessionRecord struct {
 	Messages      []persistedMessage `json:"messages"`
 	CompressIndex int                `json:"compress_index"`
@@ -86,23 +85,23 @@ func fromPersistedMessages(msgs []persistedMessage) []DSMessage {
 	return out
 }
 
-// 旧版本地 JSON 落盘格式，仅用于一次性迁移旧数据
+// 旧版本地 JSON 落盘格式（PrismD 之前、多域拆分之前），仅用于一次性迁移旧数据
 type legacySessionFileData struct {
 	Sessions            map[string][]persistedMessage `json:"sessions"`
 	LastCompressIndexes map[string]int                `json:"last_compress_indexes"`
 }
 
-// NewSessionStore 创建一个绑定到指定 PrismD 域（如 ChatSessionsDomain）的会话存储。
-// 启动时从该域加载已有会话；如果域是空的且发现旧版本地 JSON 文件，会做一次性迁移。
+// NewSessionStore 创建一个绑定到指定域（如 ChatSessionsDomain）的会话存储。
+// 启动时从该域对应的本地文件加载已有会话；如果该文件不存在且发现更早期的
+// 单文件旧版格式（sessions.json，PrismD 迁移前遗留），会做一次性迁移。
 func NewSessionStore(domain string) *SessionStore {
 	store := &SessionStore{
 		sessions:            make(map[string][]DSMessage),
 		lastCompressIndexes: make(map[string]int),
 		domain:              domain,
-		kv:                  prismd.NewClient(prismdAddr()),
 	}
-	if err := store.loadFromPrismD(); err != nil {
-		log.Printf("⚠️ 从 PrismD 加载会话失败（域=%s）：%v，本次以空会话启动", domain, err)
+	if err := store.loadFromFile(); err != nil {
+		log.Printf("⚠️ 加载本地会话文件失败（域=%s）：%v，本次以空会话启动", domain, err)
 	}
 	if len(store.sessions) == 0 {
 		store.migrateLegacyJSONFile()
@@ -110,41 +109,48 @@ func NewSessionStore(domain string) *SessionStore {
 	return store
 }
 
-// prismdAddr 返回 PrismD 地址，支持通过环境变量覆盖（测试/多实例场景），默认本机 5666
-func prismdAddr() string {
-	if addr := os.Getenv("PRISMD_ADDR"); addr != "" {
-		return addr
+// sessionsFilePath 返回该域对应的本地会话文件路径，支持
+// SHANXI_DATA_DIR 环境变量覆盖（测试/多实例场景）。
+func sessionsFilePath(domain string) string {
+	dataDir := os.Getenv("SHANXI_DATA_DIR")
+	if dataDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			homeDir = "."
+		}
+		dataDir = filepath.Join(homeDir, "shanxi_data")
 	}
-	return "localhost:5666"
+	return filepath.Join(dataDir, "sessions_"+domain+".json")
 }
 
-// loadFromPrismD 从当前域加载所有会话到内存
-func (s *SessionStore) loadFromPrismD() error {
-	keys, err := s.kv.KVKeys(s.domain, "")
+// loadFromFile 从本地文件加载该域的全部会话到内存
+func (s *SessionStore) loadFromFile() error {
+	path := sessionsFilePath(s.domain)
+	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // 首次运行，正常情况
+		}
+		return err
+	}
+
+	var records map[string]sessionRecord
+	if err := json.Unmarshal(data, &records); err != nil {
 		return err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, sid := range keys {
-		raw, ok, err := s.kv.KVGet(s.domain, sid)
-		if err != nil || !ok {
-			continue
-		}
-		var rec sessionRecord
-		if err := json.Unmarshal(raw, &rec); err != nil {
-			log.Printf("⚠️ 会话 %s 解析失败，跳过: %v", sid, err)
-			continue
-		}
+	for sid, rec := range records {
 		s.sessions[sid] = fromPersistedMessages(rec.Messages)
 		s.lastCompressIndexes[sid] = rec.CompressIndex
 	}
 	return nil
 }
 
-// migrateLegacyJSONFile 是一次性的历史数据搬家：老版本把所有会话攒在本地一个 JSON 文件里，
-// 现在改成按 sessionID 存进 PrismD 域。仅在该域首次为空时触发。
+// migrateLegacyJSONFile 是一次性的历史数据搬家：更早期版本把所有会话攒在
+// 本地一个 sessions.json 文件里（PrismD 迁移之前），现在改成按域各自一个文件。
+// 仅在当前域的文件首次为空时触发。
 func (s *SessionStore) migrateLegacyJSONFile() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -165,7 +171,7 @@ func (s *SessionStore) migrateLegacyJSONFile() {
 		return
 	}
 
-	log.Printf("🔄 检测到旧版本地会话文件（%d 个会话），迁移到 PrismD 域 '%s'...", len(legacy.Sessions), s.domain)
+	log.Printf("🔄 检测到旧版本地会话文件（%d 个会话），迁移到域 '%s'...", len(legacy.Sessions), s.domain)
 
 	s.mu.Lock()
 	for sid, msgs := range legacy.Sessions {
@@ -174,31 +180,44 @@ func (s *SessionStore) migrateLegacyJSONFile() {
 	}
 	s.mu.Unlock()
 
-	for sid := range legacy.Sessions {
-		if err := s.persistSession(sid); err != nil {
-			log.Printf("⚠️ 迁移会话 %s 到 PrismD 失败: %v", sid, err)
-		}
+	if err := s.persistAll(); err != nil {
+		log.Printf("⚠️ 迁移会话到本地文件失败: %v", err)
+		return
 	}
 	log.Printf("✅ 会话迁移完成")
 }
 
-// persistSession 把内存中某个会话的当前完整状态写入 PrismD
-func (s *SessionStore) persistSession(sessionID string) error {
+// persistAll 把内存中该域的全部会话整份写入本地文件（原子替换，避免半写损坏）
+func (s *SessionStore) persistAll() error {
 	s.mu.RLock()
-	rec := sessionRecord{
-		Messages:      toPersistedMessages(s.sessions[sessionID]),
-		CompressIndex: s.lastCompressIndexes[sessionID],
+	records := make(map[string]sessionRecord, len(s.sessions))
+	for sid, msgs := range s.sessions {
+		records[sid] = sessionRecord{
+			Messages:      toPersistedMessages(msgs),
+			CompressIndex: s.lastCompressIndexes[sid],
+		}
 	}
 	s.mu.RUnlock()
 
-	data, err := json.Marshal(rec)
+	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
 		return err
 	}
-	return s.kv.KVPut(s.domain, sessionID, data)
+
+	path := sessionsFilePath(s.domain)
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
-// Append 追加消息，自动补时间戳，异步持久化到 PrismD
+// Append 追加消息，自动补时间戳，异步持久化到本地文件
 func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	s.mu.Lock()
 	if msg.Timestamp.IsZero() {
@@ -208,8 +227,8 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	s.mu.Unlock()
 
 	go func() {
-		if err := s.persistSession(sessionID); err != nil {
-			log.Printf("⚠️ 保存会话到 PrismD 失败: %v", err)
+		if err := s.persistAll(); err != nil {
+			log.Printf("⚠️ 保存会话到本地文件失败: %v", err)
 		}
 	}()
 }
@@ -234,15 +253,15 @@ func (s *SessionStore) GetCompressIndex(sessionID string) int {
 	return s.lastCompressIndexes[sessionID]
 }
 
-// SetCompressIndex 更新压缩游标（通常在成功压缩后调用），异步持久化到 PrismD
+// SetCompressIndex 更新压缩游标（通常在成功压缩后调用），异步持久化到本地文件
 func (s *SessionStore) SetCompressIndex(sessionID string, index int) {
 	s.mu.Lock()
 	s.lastCompressIndexes[sessionID] = index
 	s.mu.Unlock()
 
 	go func() {
-		if err := s.persistSession(sessionID); err != nil {
-			log.Printf("⚠️ 保存压缩游标到 PrismD 失败: %v", err)
+		if err := s.persistAll(); err != nil {
+			log.Printf("⚠️ 保存压缩游标到本地文件失败: %v", err)
 		}
 	}()
 }
@@ -303,7 +322,7 @@ type AllMessage struct {
 func GetAllMessagesHandler(store *SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if store == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "session store not initialized"})
+			c.JSON(500, gin.H{"error": "session store not initialized"})
 			return
 		}
 		store.mu.RLock()
@@ -322,6 +341,6 @@ func GetAllMessagesHandler(store *SessionStore) gin.HandlerFunc {
 		sort.Slice(all, func(i, j int) bool {
 			return all[i].Timestamp.Before(all[j].Timestamp)
 		})
-		c.JSON(http.StatusOK, all)
+		c.JSON(200, all)
 	}
 }

@@ -12,7 +12,6 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
-	r.POST("/api/prismql", PrimQLHandler(memoryStore))
 	// 全局 CORS 处理
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -29,7 +28,6 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/git/working-diff", HandleGitWorkingDiff)
 	r.GET("/api/git/working-diff/file", HandleGitWorkingDiffFile)
 	chatHandler := NewChatHandler(memoryStore, sessionStore)
-	go chatHandler.warmUpLocalModel() // 显式异步，不阻塞注册
 	core.RegisterCleanFunc(func() {
 		memoryStore.CleanMemories()
 	})
@@ -70,11 +68,6 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		history := sessionStore.Get(id)
 		c.JSON(200, history)
 	})
-	// 会话 v2（基于 PrismD Session 簇）
-	r.POST("/api/v2/sessions", CreateSession)
-	r.GET("/api/v2/sessions", ListSessions)
-	r.PATCH("/api/v2/sessions/:id", RenameSession)
-	r.DELETE("/api/v2/sessions/:id", DeleteSession)
 	r.GET("/api/all-messages", GetAllMessagesHandler(sessionStore))
 
 	// 统计仪表盘（数据完全来自 SessionStore，不依赖 PrismD）
