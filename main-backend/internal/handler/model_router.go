@@ -63,16 +63,18 @@ type FreeModelDef struct {
 	// 不需要 API Key，复用现有 OpenAI 兼容链；与 localLLMBackend() 兜底共享同一 base。
 	Local bool `json:"local"`
 	// CloudNative=true 表示走 Ollama 官方云端 API（https://ollama.com/api/chat，Ollama 原生
-	// 格式，非 OpenAI 兼容），用 CLOUD_API_KEY；实测 gpt-oss:120b / qwen3-coder:480b-cloud
-	// 可跑且原生支持 tool_calls（function calling）。
+	// 格式，非 OpenAI 兼容），用 CLOUD_API_KEY；实测 gpt-oss:120b 可跑且原生支持 tool_calls。
 	CloudNative bool `json:"cloud_native"`
+	// Disabled=true 表示该模型被运行时探测判定为不可用（如提供方退役/下架），
+	// 路由链与精确解析均跳过；由 nimRefresh 每日探测后动态置位。
+	Disabled bool `json:"disabled"`
 }
 
 // 参数规模是公开估计值；未知者写 0，排序时排免费池末段，绝不伪造。
 // Vendor 字段用于前端按厂商折叠分组（仿 Hermes 提供方分类）。
 var freeModelCatalog = []FreeModelDef{
-	// —— 原有核心免费档 ——
-	{ID: "free_openrouter", Vendor: "OpenRouter", Name: "OpenRouter 免费档", Endpoint: "https://openrouter.ai/api/v1", Model: "deepseek/deepseek-chat-v3.1:free", KeyEnv: "OPENROUTER_API_KEY", ParamsB: 0, Note: "一个 Key 数百模型 — 免费档网关（注：免费档常 429，路由会自动秒切）"},
+	// —— OpenRouter 已整体移除：免费档全部 slug 限流 429（连 llama-3.3-70b/405b 都 429），
+	// 无专属免费模型，作为网关接入价值为零，徒增链尾失败噪声。2026-07-15 实测确认。
 
 	// —— Google AI Studio 免费档（Gemini flash，实测 2026-07-12 通过；几百B MoE）——
 	{ID: "free_google_gemini_2_5_flash", Vendor: "Google", Name: "Gemini 2.5 Flash", Endpoint: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-2.5-flash", KeyEnv: "GOOGLE_API_KEY", ParamsB: 0, Note: "Google AI Studio 免费档（每日限流，路由自动 failover）", Vision: true, ContextWindow: 1048576, Reasoning: true},
@@ -85,21 +87,20 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_nim_deepseek_ai_deepseek_v4_pro", Vendor: "NVIDIA NIM", Name: "DeepSeek-V4-Pro", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "deepseek-ai/deepseek-v4-pro", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
 	{ID: "free_nim_meta_llama_3_1_70b_instruct", Vendor: "NVIDIA NIM", Name: "Llama-3.1-70B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "meta/llama-3.1-70b-instruct", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 70, Note: "NIM 免费试用档"},
 	{ID: "free_nim_meta_llama_3_3_70b_instruct", Vendor: "NVIDIA NIM", Name: "Llama-3.3-70B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "meta/llama-3.3-70b-instruct", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 70, Note: "NIM 免费试用档"},
-	{ID: "free_nim_microsoft_phi_4_mini_instruct", Vendor: "NVIDIA NIM", Name: "Phi-4-mini", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "microsoft/phi-4-mini-instruct", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
-	{ID: "free_nim_minimaxai_minimax_m3", Vendor: "NVIDIA NIM", Name: "MiniMax-M3", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "minimaxai/minimax-m3", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
+	// Phi-4-mini 移除：2026-07-15 实测 HTTP 410 Gone（NIM 已永久下架）。
+	// Stockmark-2-100B 移除：2026-07-15 实测 HTTP 410 Gone（NIM 已永久下架）。
+	// MiniMax-M3 移除：2026-07-15 实测 HTTP 400（函数 id 在你额度/区域不可用）。
 	{ID: "free_nim_mistralai_mistral_large_3_675b_instruct_2512", Vendor: "NVIDIA NIM", Name: "Mistral-Large-3-675B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "mistralai/mistral-large-3-675b-instruct-2512", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 675, Note: "NIM 免费试用档"},
 	{ID: "free_nim_mistralai_mistral_nemotron", Vendor: "NVIDIA NIM", Name: "Mistral-Nemotron", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "mistralai/mistral-nemotron", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
 	{ID: "free_nim_mistralai_mistral_small_4_119b_2603", Vendor: "NVIDIA NIM", Name: "Mistral-Small-4-119B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "mistralai/mistral-small-4-119b-2603", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 119, Note: "NIM 免费试用档"},
 	{ID: "free_nim_nvidia_nemotron_3_ultra_550b_a55b", Vendor: "NVIDIA NIM", Name: "Nemotron-3-Ultra-550B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "nvidia/nemotron-3-ultra-550b-a55b", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 550, Note: "NIM 免费试用档"},
 	{ID: "free_nim_qwen_qwen3_5_397b_a17b", Vendor: "NVIDIA NIM", Name: "Qwen3.5-397B-A17B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "qwen/qwen3.5-397b-a17b", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 397, Note: "NIM 免费试用档"},
 	{ID: "free_nim_sarvamai_sarvam_m", Vendor: "NVIDIA NIM", Name: "Sarvam-M", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "sarvamai/sarvam-m", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
-	{ID: "free_nim_stockmark_stockmark_2_100b_instruct", Vendor: "NVIDIA NIM", Name: "Stockmark-2-100B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "stockmark/stockmark-2-100b-instruct", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 100, Note: "NIM 免费试用档"},
 	{ID: "free_nim_z_ai_glm_5_2", Vendor: "NVIDIA NIM", Name: "GLM-5.2 (NIM)", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "z-ai/glm-5.2", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
 
 	// —— Ollama Cloud（官方云端 API，ollama.com/api/chat 原生格式，带 CLOUD_API_KEY；
-	// 实测 gpt-oss:120b / qwen3-coder:480b-cloud 可跑且原生支持 tool_calls）——
+	// 实测 gpt-oss:120b 可跑且原生支持 tool_calls）——
 	{ID: "free_ollama_cloud_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B", Endpoint: "https://ollama.com/api/chat", Model: "gpt-oss:120b", KeyEnv: "CLOUD_API_KEY", ParamsB: 120, CloudNative: true, Note: "Ollama 官方云端 API（免费额度，原生 tool_calls）", ContextWindow: 128000, Reasoning: true},
-	{ID: "free_ollama_cloud_qwen3_coder_480b", Vendor: "Ollama Cloud", Name: "Qwen3-Coder 480B", Endpoint: "https://ollama.com/api/chat", Model: "qwen3-coder:480b-cloud", KeyEnv: "CLOUD_API_KEY", ParamsB: 480, CloudNative: true, Note: "Ollama 官方云端 API（免费额度，原生 tool_calls）", ContextWindow: 128000, Reasoning: true},
 
 	// —— Cerebras 免费档（api.cerebras.ai）——
 	{ID: "free_cerebras_gpt_oss_120b", Vendor: "Cerebras", Name: "gpt-oss-120b", Endpoint: "https://api.cerebras.ai/v1", Model: "gpt-oss-120b", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 120, Note: "Cerebras 免费档"},
@@ -182,6 +183,9 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 
 	// 3. 免费池：Key 来源 = 用户保存的同 ID 条目 > 环境变量；没 Key 的源（Local/Ollama Cloud 走本地路由）直接不进链
 	for _, f := range freeModelCatalog {
+		if f.Disabled {
+			continue
+		}
 		key := ""
 		isDefault := false
 		if e, ok := entryByID[f.ID]; ok {
@@ -204,7 +208,7 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 		}
 		b := RouterBackend{
 			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
-			APIKey: key, ParamsB: f.ParamsB, Timeout: 90 * time.Second, Source: source,
+			APIKey: key, ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: source,
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
 			IsLocal: f.Local,
 		}
@@ -257,6 +261,9 @@ func resolveExact(userKey string, model string) *RouterBackend {
 	}
 	// 免费池
 	for _, f := range freeModelCatalog {
+		if f.Disabled {
+			continue
+		}
 		if f.ID != model {
 			continue
 		}
@@ -280,7 +287,7 @@ func resolveExact(userKey string, model string) *RouterBackend {
 		}
 		return &RouterBackend{
 			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
-			APIKey: key, ParamsB: f.ParamsB, Timeout: 90 * time.Second, Source: source,
+			APIKey: key, ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: source,
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
 			IsLocal: f.Local,
 		}
@@ -339,6 +346,10 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
+		// 400/401/403 是确定性不可用（模型下架/额度/鉴权），当场标记，后续不再选
+		if resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 {
+			disableFreeModel(b.Model)
+		}
 		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 	}
 
@@ -447,6 +458,10 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		if resp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
+			// 400/401/403 确定性不可用，当场标记
+			if resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 {
+				disableFreeModel(b.Model)
+			}
 			tried = append(tried, fmt.Sprintf("%s: HTTP %d", b.Name, resp.StatusCode))
 			fmt.Printf("🔀 [路由] %s HTTP %d，秒切下一个: %s\n", b.Name, resp.StatusCode, truncateChars(string(raw), 120))
 			continue
