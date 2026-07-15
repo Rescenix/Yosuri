@@ -1525,9 +1525,9 @@ min-height: 90px !important;
 .input-stop-btn {
   width: 20px;
   height: 20px;
-  background: #64748b;
+  background: #1a1a1a;
 }
-.input-stop-btn:hover { background: #475569; }
+.input-stop-btn:hover { background: #000000; }
 
 .chat-input {
   flex: 1;
@@ -2029,8 +2029,8 @@ min-height: 90px !important;
 .input-inner-btn:hover { background: rgba(0, 0, 0, 0.05); }
 .input-send-btn { width: 28px; height: 28px; background: #3b82f6; color: #fff; }
 .input-send-btn:hover { background: #2563eb; }
-.input-stop-btn { width: 28px; height: 28px; background: #64748b; }
-.input-stop-btn:hover { background: #475569; }
+.input-stop-btn { width: 28px; height: 28px; background: #1a1a1a; }
+.input-stop-btn:hover { background: #000000; }
 
 /* Context window 用量常驻横条本体样式在上面 .context-bar-widget 那组里；
    这里只剩点开横条后的输入/输出 token 细分弹窗 */

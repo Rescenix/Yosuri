@@ -1,5 +1,4 @@
 {
-  "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -8,13 +7,10 @@
     "isolatedModules": true,
     "strict": true,
     "jsx": "preserve",
-    "jsxImportSource": "astro",
-    "types": ["astro/client", "vite/client"],
+    "types": ["vite/client"],
     "paths": {
       "@/*": ["./src/*"],
       "@components/*": ["./src/components/*"],
-      "@layouts/*": ["./src/layouts/*"],
-      "@pages/*": ["./src/pages/*"],
       "@styles/*": ["./src/styles/*"],
       "@utils/*": ["./src/utils/*"]
     },
@@ -25,13 +21,10 @@
     "outDir": "./dist"
   },
   "include": [
-    "src/**/*",
-    ".astro/types.d.ts"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    ".astro",
-    "**/*.astro"
+    "dist"
   ]
 }

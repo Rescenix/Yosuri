@@ -52,3 +52,6 @@ Prism/prism/prismd_memory.dat
 
 # Go 构建缓存
 .gocache/
+
+# agent 工具目录（Hermes/Claude 等的工作产物，不进项目仓库）
+.hermes/

@@ -113,7 +113,8 @@ function adjustInputHeight() {
   const { flowState, startCodeWorkflow: startFlow, stopCodeWorkflow } = useAgentWorkflow({
     messages,
     onNewMessage: forceScrollToBottom,
-    onStreamUpdate: forceScrollToBottom
+    // 流式增量用 smartScrollAndRefresh：尊重 userScrolledUp，用户上滑时不再被强制拉回底部
+    onStreamUpdate: smartScrollAndRefresh
   })
   // display 透传给 startFlow——之前这里漏了第二个参数，附件 chip/纯文本气泡的展示信息
   // 全部在这层被吞掉，气泡又会退回显示拍平后的 task 全文
@@ -355,21 +356,28 @@ async function switchSession(id) {
     isLoggedIn.value = true
     await loadAllHistory()
     fetchBalance()
-    if (messagesContainer.value) {
-      messagesContainer.value.addEventListener('scroll', () => {
-        const el = messagesContainer.value
-        const currentScrollTop = el.scrollTop
-        const maxScroll = el.scrollHeight - el.clientHeight
-        const isAtBottom = Math.abs(currentScrollTop - maxScroll) < 10
-        if (isAtBottom) {
-          userScrolledUp.value = false
-        } else if (currentScrollTop < lastScrollTop) {
-          userScrolledUp.value = true
-        }
-        lastScrollTop = currentScrollTop
-      })
-    }
   })
+
+  // 滚动监听挂在 messagesContainer ref 上（watch 而非 onMounted）：
+  // 该容器是 v-else 条件渲染，仅 messages 非空时才创建 DOM。onMounted 时若首屏
+  // 无消息，ref 为 null，监听会静默失败（按钮首屏不出现、上滑无法打断置底），
+  // 刷新后因时机巧合才偶尔正常。watch ref 一旦绑定上 DOM 就挂，彻底规避时序问题。
+  watch(messagesContainer, (el) => {
+    if (!el) return
+    lastScrollTop = el.scrollTop
+    el.addEventListener('scroll', () => {
+      const cur = el.scrollTop
+      const maxScroll = el.scrollHeight - el.clientHeight
+      const isAtBottom = Math.abs(cur - maxScroll) < 10
+      if (isAtBottom) {
+        userScrolledUp.value = false
+      } else if (cur < lastScrollTop) {
+        // 仅上滑（用户主动往上翻）时打断自动置底；流式下拉不算
+        userScrolledUp.value = true
+      }
+      lastScrollTop = cur
+    }, { passive: true })
+  }, { immediate: true })
 
   function shouldShowTime(prevMsg, currentMsg) {
     if (!prevMsg) return true

@@ -4,7 +4,7 @@
     {
       "name": "beneficial-belt",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["astro", "dev", "--host", "0.0.0.0", "--port", "4322"],
+      "runtimeArgs": ["vite", "--host", "0.0.0.0", "--port", "4322"],
       "cwd": "beneficial-belt",
       "port": 4322
     }
