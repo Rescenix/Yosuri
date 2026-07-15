@@ -964,25 +964,10 @@ async function copyText(text) {
 // （见 useAgentWorkflow.js），选哪个就真的用哪个，不再是摆设。
 const CHAT_LIST_KEY = 'chatModelList'
 const DEFAULT_MODEL = 'ds_browser'
-// 早期硬编码、现已从后端 catalog 移除的 id：这些才需要在启动时清掉重置为默认，
-// 否则下拉框会显示一个永远路由不到的死项。合法的持久化选择一律不动。
-const LEGACY_DEAD_MODELS = new Set(['local', 'cloud', 'ds', 'custom'])
 function loadChatModelList() {
-  try {
-    const list = JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]')
-    // 过滤掉已废弃的硬编码死项（如 'cloud' 曾由 SettingsModal 写死喂入，
-    // 与 LEGACY_DEAD_MODELS 打架导致永远清不掉），避免下拉残留过期项。
-    return list.filter(m => m && !LEGACY_DEAD_MODELS.has(m.value))
-  } catch (e) { return [] }
+  try { return JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]') } catch (e) { return [] }
 }
 const selectedModel = ref(localStorage.getItem('selectedModel') || DEFAULT_MODEL)
-// 只清理已废弃的老硬编码项；其余持久化选择原样保留。
-// 关键修复：绝不在启动时因"当前不在列表里"就把选择重置并覆盖落盘——之前那样会
-// 让任何没进 chatModelList 的模型（配置好的免费池模型 / 后端 catalog 变动前选的）
-// 每次重启都被静默清成 DeepSeekProxy。
-if (LEGACY_DEAD_MODELS.has(selectedModel.value)) {
-  selectedModel.value = DEFAULT_MODEL
-}
 // useAgentWorkflow.js 是单独 composable，直接读 localStorage('selectedModel') 传给
 // 后端做精确路由，不共享这个 ref——所以这里要把（可能刚重置的）值落盘一次。
 localStorage.setItem('selectedModel', selectedModel.value)
@@ -993,34 +978,14 @@ const chatModelList = ref(loadChatModelList())
 function refreshChatModelList() { chatModelList.value = loadChatModelList() }
 window.addEventListener('storage', (e) => { if (e.key === CHAT_LIST_KEY) refreshChatModelList() })
 const modelOptions = computed(() => {
-  // 剪枝：只保留仍存在于后端（免费池 catalog 或用户自定义配置）的 id。
-  // 运行期删掉的自定义模型（如淘汰的 Qwen3-Coder 480B）只残留在 localStorage，
-  // 后端已无对应条目，modelLabels 里查不到 → 直接丢弃，不再污染下拉。
-  const validIds = new Set(['ds_browser', ...Object.keys(modelLabels.value)])
-  const extra = chatModelList.value.filter(m => m && validIds.has(m.value))
+  // 下拉 = 常驻 DeepSeekProxy + 设置面板勾选的模型（选中厂商即把该厂商全部模型加入列表）
+  const extra = chatModelList.value
   const merged = []
-  // DeepSeekProxy 常驻，但若用户已把它勾进聊天列表（extra 里已有）则不重复添加
   const hasBase = extra.some(m => m.value === 'ds_browser')
   if (!hasBase) merged.push({ label: 'DeepSeekProxy', value: 'ds_browser' })
   merged.push(...extra)
-  // 当前选中的模型若仍合法（仍在后端列表里），确保它出现在下拉中（标签从 catalog 复原）
-  const sel = selectedModel.value
-  if (sel && validIds.has(sel) && !merged.some(m => m.value === sel)) {
-    merged.push({ label: modelLabels.value[sel] || sel, value: sel })
-  }
   return merged
 })
-// 选中模型若已不在新列表（被淘汰/后端移除），自动覆盖回默认模型，
-// 定位到新列表里仍存在的项，而不是死守一个路由不到的死模型。
-watch([modelLabels, chatModelList], () => {
-  const ids = Object.keys(modelLabels.value)
-  if (ids.length === 0) return // 后端能力元数据尚未到达，先不判断
-  const valid = new Set(['ds_browser', ...ids])
-  if (!valid.has(selectedModel.value)) {
-    selectedModel.value = DEFAULT_MODEL
-    localStorage.setItem('selectedModel', DEFAULT_MODEL)
-  }
-}, { deep: true })
 const showModelMenu = ref(false)
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
 
