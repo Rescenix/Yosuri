@@ -68,6 +68,10 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		history := sessionStore.Get(id)
 		c.JSON(200, history)
 	})
+	r.DELETE("/api/sessions/:id", func(c *gin.Context) {
+		sessionStore.Delete(c.Param("id"))
+		c.JSON(200, gin.H{"status": "ok"})
+	})
 	r.GET("/api/all-messages", GetAllMessagesHandler(sessionStore))
 
 	// 统计仪表盘（数据完全来自 SessionStore，不依赖 PrismD）

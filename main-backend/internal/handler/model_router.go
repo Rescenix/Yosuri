@@ -404,7 +404,7 @@ func routeChatOnce(ctx context.Context, backends []RouterBackend, msgs []map[str
 // 实时把 reasoning_content/content 增量写成 thinking/intent SSE 事件。
 // 返回值里带上实际承接这轮请求的 backend（而不只是个名字字符串），前端要靠它
 // 拿到 vision/context_window/reasoning 这些能力元数据，决定要不要开放识图之类的功能。
-func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any) (string, []core.ToolCall, int, *RouterBackend, error) {
+func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, *RouterBackend, error) {
 	var tried []string
 	for _, b := range backends {
 		if c.Request.Context().Err() != nil {
@@ -412,11 +412,16 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		}
 		// Ollama 官方云端 API 是原生格式（非 OpenAI 兼容），单独走流式分支
 		if b.Source == "ollama-cloud" {
-			return r.ollamaCloudStreamRound(c, b, msgs, tools)
+			return r.ollamaCloudStreamRound(c, b, msgs, tools, effort)
 		}
 		reqBody := map[string]any{
 			"model": b.Model, "messages": msgs, "stream": true,
 			"temperature": 0.2, "top_p": 0.85, "max_tokens": 4096,
+		}
+		// 只有前端选的这个 backend 真支持思考强度时才带这个字段——不支持的源
+		// 收到未知字段大概率报错，而不是安静忽略，不能无脑塞给所有 backend
+		if effort != "" && b.Reasoning {
+			reqBody["reasoning_effort"] = effort
 		}
 		if len(tools) > 0 {
 			reqBody["tools"] = tools
@@ -462,10 +467,15 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 // 与 OpenAI 兼容链的区别：请求体同构（model/messages/stream/tools），但响应是
 // 每行一个独立 JSON 对象（非 data: 前缀 SSE），工具调用在 message.tool_calls
 // 顶层、arguments 是对象（需转 JSON 字符串喂给 core.ToolCall）。
-func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend, msgs []map[string]any, tools []map[string]any) (string, []core.ToolCall, int, *RouterBackend, error) {
+func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, *RouterBackend, error) {
 	reqBody := map[string]any{
 		"model": b.Model, "messages": msgs, "stream": true,
 		"options": map[string]any{"temperature": 0.2, "top_p": 0.85},
+	}
+	// Ollama 原生 API 用 "think" 字段控制推理强度（bool 或 "low"/"medium"/"high"，
+	// 取决于模型是否支持分级——直接透传字符串，模型不支持就当无效字段忽略）
+	if effort != "" && b.Reasoning {
+		reqBody["think"] = effort
 	}
 	if len(tools) > 0 {
 		reqBody["tools"] = tools

@@ -78,6 +78,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 模型路由链：前端选了具体模型就精确路由到那一个；否则走用户配置>env DeepSeek>
 	// 免费池>本地兜底的全链（本地恒在，链永不为空）
 	backends := resolveBackends(c.Query("openid"), c.Query("model"))
+	effort := c.Query("effort") // "low"/"medium"/"high"，只有 backend.Reasoning=true 时才真的生效
 
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -123,7 +124,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			return // 客户端断开
 		}
 
-		content, calls, outTok, usedBackend, err := r.streamRouterRound(c, backends, msgs, tools)
+		content, calls, outTok, usedBackend, err := r.streamRouterRound(c, backends, msgs, tools, effort)
 		outputTokens += outTok
 		// 只在第一轮实际承接请求后发一次——同一个工作流后续轮次不会换 backend，
 		// 前端只需要知道"这次对话用的是哪个模型、它能不能识图/支持多大上下文"一次就够

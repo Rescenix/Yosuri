@@ -233,6 +233,18 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	}()
 }
 
+// Delete 删除指定会话（内存 + 本地文件），供 DELETE /api/sessions/:id 使用
+func (s *SessionStore) Delete(sessionID string) {
+	s.mu.Lock()
+	delete(s.sessions, sessionID)
+	delete(s.lastCompressIndexes, sessionID)
+	s.mu.Unlock()
+
+	if err := s.persistAll(); err != nil {
+		log.Printf("⚠️ 删除会话后保存本地文件失败: %v", err)
+	}
+}
+
 // Get 返回指定会话的消息切片（副本）
 func (s *SessionStore) Get(sessionID string) []DSMessage {
 	s.mu.RLock()
@@ -301,6 +313,8 @@ func (s *SessionStore) List() []SessionInfo {
 			UpdatedAt: msgs[len(msgs)-1].Timestamp,
 		})
 	}
+	// map 遍历顺序随机，"最近会话"列表不排序的话每次刷新顺序都在跳——按更新时间降序
+	sort.Slice(infos, func(i, j int) bool { return infos[i].UpdatedAt.After(infos[j].UpdatedAt) })
 	return infos
 }
 
