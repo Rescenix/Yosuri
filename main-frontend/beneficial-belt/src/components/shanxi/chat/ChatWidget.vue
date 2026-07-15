@@ -1003,14 +1003,24 @@ const modelOptions = computed(() => {
   const hasBase = extra.some(m => m.value === 'ds_browser')
   if (!hasBase) merged.push({ label: 'DeepSeekProxy', value: 'ds_browser' })
   merged.push(...extra)
-  // 保证当前选中的模型始终在下拉里：这样重启后既能正确显示（标签从后端 catalog
-  // 复原，catalog 异步到达后 computed 自动重算），又不需要那段破坏性的重置逻辑。
+  // 当前选中的模型若仍合法（仍在后端列表里），确保它出现在下拉中（标签从 catalog 复原）
   const sel = selectedModel.value
-  if (sel && !LEGACY_DEAD_MODELS.has(sel) && validIds.has(sel) && !merged.some(m => m.value === sel)) {
+  if (sel && validIds.has(sel) && !merged.some(m => m.value === sel)) {
     merged.push({ label: modelLabels.value[sel] || sel, value: sel })
   }
   return merged
 })
+// 选中模型若已不在新列表（被淘汰/后端移除），自动覆盖回默认模型，
+// 定位到新列表里仍存在的项，而不是死守一个路由不到的死模型。
+watch([modelLabels, chatModelList], () => {
+  const ids = Object.keys(modelLabels.value)
+  if (ids.length === 0) return // 后端能力元数据尚未到达，先不判断
+  const valid = new Set(['ds_browser', ...ids])
+  if (!valid.has(selectedModel.value)) {
+    selectedModel.value = DEFAULT_MODEL
+    localStorage.setItem('selectedModel', DEFAULT_MODEL)
+  }
+}, { deep: true })
 const showModelMenu = ref(false)
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
 
