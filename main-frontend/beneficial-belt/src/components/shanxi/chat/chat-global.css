@@ -2,7 +2,7 @@
   word-break: break-word;
   line-height: 1.68;
   color: #26221d;
-  font-family: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .markdown-body p {
@@ -19,7 +19,7 @@
   font-weight: 600;
   color: #1b1a18;
   line-height: 1.28;
-  font-family: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .markdown-body a {
@@ -44,8 +44,8 @@
 .markdown-body blockquote {
   margin: 0.8em 0;
   padding: 0.2em 0 0.2em 1em;
-  border-left: 3px solid #d7d0c5;
-  color: #696259;
+  border-left: 3px solid #e2e8f0;
+  color: #64748b;
 }
 
 .markdown-body code {
@@ -82,7 +82,7 @@
   width: 100%;
   margin: 10px 0;
   font-size: 13px;
-  border: 1px solid #d8d3c8;
+  border: 1px solid #d1d5db;
   border-radius: 10px;
   overflow: hidden;
   word-break: break-word;
@@ -363,9 +363,9 @@
 
 .markdown-body pre .code-btn-group button {
   font-size: 12px;
-  border: 1px solid #e4dfd4;
+  border: 1px solid #e5e5e5;
   background: rgba(255, 255, 255, 0.92);
-  color: #696259;
+  color: #64748b;
   border-radius: 8px;
   padding: 4px 10px;
   cursor: pointer;
@@ -389,7 +389,7 @@
   left: 12px;
   font-size: 16px;
   line-height: 1;
-  color: #8b847a;
+  color: #94a3b8;
   
 
   padding: 3px 8px;
@@ -579,9 +579,9 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   white-space: nowrap;
 }
 .workflow-btn:hover {
-  background: #e8e0d6;
-  border-color: #c4b8aa;
-  color: #3d3226;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #334155;
 }
 .workflow-btn:disabled {
   opacity: 0.5;
@@ -626,7 +626,7 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 }
 .workflow-progress-fill {
   height: 100%;
-  background: #8a7f72;
+  background: #64748b;
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -646,9 +646,9 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 
 .agent-step-card {
   width: 100%;
-  border: 1px solid #e8e0d6;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
-  background: #fbfaf8;
+  background: #ffffff;
   margin-bottom: 4px;
   overflow: hidden;
 }
@@ -676,12 +676,12 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .step-agent-name {
   font-size: 12.5px;
   font-weight: 600;
-  color: #3d3226;
+  color: #334155;
   flex-shrink: 0;
 }
 .step-summary {
   font-size: 12px;
-  color: #8a7f72;
+  color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -690,13 +690,13 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 }
 .step-token-badge {
   font-size: 10.5px;
-  color: #a39c8f;
+  color: #94a3b8;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   flex-shrink: 0;
 }
 .step-chev {
   flex-shrink: 0;
-  color: #a39c8f;
+  color: #94a3b8;
   transition: transform 0.15s ease;
 }
 .step-chev.open {
@@ -716,9 +716,9 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 3px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #e4dfd4;
+  border: 1px solid #e5e5e5;
   font-size: 11px;
-  color: #8a7f72;
+  color: #64748b;
   white-space: nowrap;
   display: flex;
   align-items: center;
@@ -744,10 +744,10 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 3px 9px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.85);
-  border: 1px solid #e4dfd4;
+  border: 1px solid #e5e5e5;
   font-size: 10.5px;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #8a7f72;
+  color: #64748b;
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -765,7 +765,7 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   left: auto;
   width: 220px;
   background: #fff;
-  border: 1px solid #e4dfd4;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
   padding: 12px 14px;
@@ -778,11 +778,11 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   font-size: 12px;
   padding: 3px 0;
 }
-.tup-label { color: #8a7f72; }
+.tup-label { color: #64748b; }
 .tup-value {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-weight: 600;
-  color: #3d3226;
+  color: #334155;
 }
 .tup-bar {
   width: 100%;
@@ -801,7 +801,7 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .tup-note {
   margin-top: 6px;
   font-size: 10px;
-  color: #a39c8f;
+  color: #94a3b8;
 }
 /* ==================== 按钮高亮状态（模式化高亮） ==================== */
 .workflow-btn.active,

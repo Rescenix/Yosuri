@@ -14,7 +14,7 @@ export function useMobileReader(flipContainerRef, reader, statusMsg, progressPer
 
   function createCoverHTML(title) {
     const safe = escapeHtml(title)
-    return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a,#2c3e50);display:flex;flex-direction:column;justify-content:center;align-items:center;color:#e8d5b7;font-family:Georgia,serif;"><h1>${safe}</h1><p>杉汐注</p></div>`
+    return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a,#2c3e50);display:flex;flex-direction:column;justify-content:center;align-items:center;color:#e8d5b7;font-family:'Inter',system-ui,sans-serif;"><h1>${safe}</h1><p>杉汐注</p></div>`
   }
 
   function createBackHTML() {

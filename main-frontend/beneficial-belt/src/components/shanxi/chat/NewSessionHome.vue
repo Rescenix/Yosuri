@@ -273,7 +273,7 @@ const heatmapCaption = computed(() => {
 .home-stats-card {
   border: 1px solid #e5e5e5;
   border-radius: 14px;
-  background: #fafafa;
+  background: #f8fafc;
   padding: 14px 18px;
   
   /* ✅ 核心修复：固定卡片的最小高度 */
@@ -301,7 +301,7 @@ const heatmapCaption = computed(() => {
 .home-range-group {
   display: flex;
   gap: 2px;
-  background: #f5f5f5;
+  background: #f8fafc;
   border: 1px solid #e5e5e5;
   border-radius: 8px;
   padding: 2px;
@@ -366,7 +366,7 @@ const heatmapCaption = computed(() => {
 .home-model-bar-track {
   height: 6px;
   border-radius: 3px;
-  background: #f5f5f5;
+  background: #f8fafc;
   overflow: hidden;
 }
 .home-model-bar-fill {

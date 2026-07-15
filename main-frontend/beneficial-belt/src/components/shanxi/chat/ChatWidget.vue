@@ -22,11 +22,11 @@
           更新日志
         </a>
         <a href="#" @click.prevent="openReader">
-          <Icon icon="mdi:book-open-page-outline" width="16" style="margin-right:8px" />
+          <Icon icon="ic:outline-book" width="16" style="margin-right:8px" />
           阅读器
         </a>
         <a href="https://github.com/3478556810" target="_blank" rel="noopener" @click="menuOpen = false">
-          <Icon icon="mdi:github" width="16" style="margin-right:8px" />
+          <Icon icon="iconoir:github" width="16" style="margin-right:8px" />
           GitHub
         </a>
 
@@ -112,6 +112,7 @@
             <SessionMenuContent
               :sessions="sessionList"
               :active-session="activeSession"
+              :running-session="runningSession"
               @select-session="onFloatingSelectSession"
               @new-session="onFloatingNewSession"
               @rename-session="renameSession"
@@ -130,6 +131,7 @@
             fill
             :sessions="sessionList"
             :active-session="activeSession"
+            :running-session="runningSession"
             @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
@@ -358,7 +360,7 @@
                     </span>
                   </transition>
 
-                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keypress.enter="handleSend" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
+                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
 
                   <!-- "+" 附加菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
                   <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
@@ -392,6 +394,15 @@
                       >{{ opt }}</div>
                     </div>
                   </div>
+                  <!-- git 工具栏开关：点亮时上方展开分支/PR 状态条，只在有会话时出现 -->
+                  <button
+                    v-if="inputTopBarMode === 'git'"
+                    class="toolbar-icon-pill-btn"
+                    @click.stop="toggleGitBar"
+                    title="Git 工具栏"
+                  >
+                    <Icon icon="mdi:source-branch" width="15" />
+                  </button>
                   <div class="toolbar-dropdown-wrap">
                     <button class="toolbar-icon-pill-btn" @click.stop="showAddMenu = !showAddMenu" title="添加">
                       <Icon icon="mdi:plus" width="16" />
@@ -407,22 +418,11 @@
                       </div>
                     </div>
                   </div>
-                  <!-- git 工具栏开关：点亮时上方展开分支/PR 状态条，只在有会话时出现 -->
-                  <button
-                    v-if="inputTopBarMode === 'git'"
-                    class="toolbar-icon-pill-btn"
-                    :class="{ active: showGitBar }"
-                    @click.stop="toggleGitBar"
-                    title="Git 工具栏"
-                  >
-                    <Icon icon="mdi:source-branch" width="15" />
-                  </button>
                 </div>
                 <div class="input-toolbar-right">
-                  <!-- 模型切换器 -->
+                  <!-- 模型切换器：不加粗、不带折叠箭头——整块本来就可点开 -->
                   <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
                     <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || '模型' }}</span>
-                    <span class="sch-caret">▾</span>
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
                       <div
                         v-for="m in modelOptions"
@@ -431,31 +431,40 @@
                         :class="{ active: selectedModel === m.value }"
                         @click="selectModel(m.value)"
                       >
-                       
                         {{ m.label }}
                       </div>
                     </div>
                   </div>
 
-                  <!-- 纯圆环 Token 进度 -->
-                  <div class="token-ring-widget" @click.stop="toggleTokenPanel" title="Token 用量">
-                    <svg class="ctx-ring" width="16" height="16" viewBox="0 0 36 36">
-                      <path class="ring-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#e5e5e5" stroke-width="4" />
-                      <path class="ring-fg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#c96442" stroke-width="4" stroke-linecap="round" :style="{ strokeDasharray: '100, 100', strokeDashoffset: 100 - (tokenStats.contextPct || 0) }" />
-                    </svg>
+                  <!-- 思考强度：只有当前模型确认支持 reasoning 时才出现 -->
+                  <div v-if="currentCapability.reasoning" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
+                    <span class="effort-label">Effort</span>
+                    <span class="effort-value">{{ effortLabel }}</span>
+                    <div v-if="showEffortPanel" class="effort-panel" @click.stop>
+                      <div class="effort-panel-title">
+                        Effort <b>{{ modelOptions.find(m => m.value === selectedModel)?.label || '' }}</b>
+                      </div>
+                      <div class="effort-slider-row">
+                        <span class="effort-end">Faster</span>
+                        <input type="range" min="0" max="2" step="1" v-model.number="effortLevel" class="effort-slider" @click.stop @input="onEffortChange" />
+                        <span class="effort-end">Smarter</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Context window 用量：常驻横条（不用点开才看得到） -->
+                  <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
+                    <span class="ctx-bar-text">{{ formatTok(liveContextStats.used) }}/{{ formatTok(liveContextStats.contextWindow) }}</span>
+                    <div class="ctx-bar-track"><div class="ctx-bar-fill" :style="{ width: liveContextStats.pct + '%' }"></div></div>
+                    <span class="ctx-bar-pct">{{ liveContextStats.pct.toFixed(0) }}%</span>
                     <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
                       <div class="tup-row">
-                        <span class="tup-label">Context window（估算）</span>
-                        <span class="tup-value">{{ formatTok(tokenStats.inputTokens + tokenStats.outputTokens) }} / {{ formatTok(tokenStats.contextWindow) }} ({{ tokenStats.contextPct.toFixed(0) }}%)</span>
-                      </div>
-                      <div class="tup-bar"><div class="tup-bar-fill" :style="{ width: Math.min(tokenStats.contextPct, 100) + '%' }"></div></div>
-                      <div class="tup-row">
                         <span class="tup-label">输入 Tokens</span>
-                        <span class="tup-value">{{ formatTok(tokenStats.inputTokens) }}</span>
+                        <span class="tup-value">{{ formatTok(liveContextStats.inputTokens) }}</span>
                       </div>
                       <div class="tup-row">
                         <span class="tup-label">输出 Tokens</span>
-                        <span class="tup-value">{{ formatTok(tokenStats.outputTokens) }}</span>
+                        <span class="tup-value">{{ formatTok(liveContextStats.outputTokens) }}</span>
                       </div>
                     </div>
                   </div>
@@ -561,40 +570,131 @@ const props = defineProps({
 })
 
 // ==================== 会话与数据状态 ====================
-const sessionList = ref([
-  { id: 'aether', name: 'Aether', desc: '上下文注入层缓存优化', branch: 're0', status: 'running', time: '刚刚' },
-  { id: 'prism', name: 'Prism', desc: '文件树懒加载与固定标签', branch: 'main', status: 'done', time: '2 小时前' },
-  { id: 'nebula', name: 'Nebula', desc: '终端输出流式渲染', branch: 'dev', status: 'idle', time: '昨天' }
-])
-const activeSession = ref('aether')
+// 会话列表曾经是硬编码假数据（Aether/Prism/Nebula 占位），新增/删除/重命名只改
+// 这个本地假列表，从不碰后端——聊天内容其实一直在存（sessionStore），但侧栏
+// 完全反映不出来，重启后除了"当前"那一个会话，其它全部无从找起。
+// 现在改成真从 /api/sessions 拉取，activeSession 直接绑定真实 sessionId（不再是
+// 独立的、可能和实际加载的会话对不上的本地状态）。
+const sessionList = ref([])
+const activeSession = computed(() => sessionId.value)
 const activeSessionObj = computed(
   () => sessionList.value.find(s => s.id === activeSession.value) || sessionList.value[0] || null
 )
+// 当前正在跑 agent 的会话 id：工作流活跃时就是当前选中的会话，否则为空。
+// 会话列表据此在对应会话左侧点亮蓝色指示灯。
+const runningSession = computed(() => (flowState.active ? activeSession.value : ''))
+
+function shortTitle(title) {
+  title = (title || '新对话').trim()
+  return title.length > 24 ? title.slice(0, 24) + '…' : title
+}
+
+async function loadSessionList() {
+  try {
+    const res = await fetch('/api/sessions')
+    const data = await res.json()
+    const real = (data || []).map(s => ({ id: s.id, name: shortTitle(s.title) }))
+    // 当前会话哪怕还一条消息都没有（刚新建/刚打开应用）也要出现在列表里，
+    // 不然侧栏在"发第一条消息之前"会看不到自己正在哪个会话上
+    if (!real.some(s => s.id === sessionId.value)) {
+      real.unshift({ id: sessionId.value, name: '新对话' })
+    }
+    sessionList.value = real
+  } catch (e) {
+    console.warn('加载会话列表失败', e)
+  }
+}
+onMounted(loadSessionList)
+
 function selectSession(id) {
-  activeSession.value = id
   switchSession(id)
+  loadSessionList()
 }
 function newSession() {
   const id = 'sess_' + Date.now().toString(36)
-  sessionList.value = [{ id, name: '未命名会话', desc: '等待第一条指令…', branch: 'main', status: 'idle', time: '刚刚' }, ...sessionList.value]
-  activeSession.value = id
+  sessionList.value = [{ id, name: '新对话' }, ...sessionList.value]
   switchSession(id)
 }
+// 重命名目前只改侧栏显示，不持久化到后端——SessionStore 的标题是从首条用户消息
+// 派生的，没有独立的标题字段可写；要做到重启后记得住改过的名字，需要后端加一个
+// 显式的标题存储字段，这轮先不做（这轮只被明确问到"新增/删除/聊天记录"）。
 function renameSession({ id, name }) {
   const target = sessionList.value.find(s => s.id === id)
   if (target) target.name = name
 }
-function deleteSession(id) {
-  const idx = sessionList.value.findIndex(s => s.id === id)
-  if (idx === -1) return
+async function deleteSession(id) {
+  try {
+    await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
+  } catch (e) {
+    console.warn('删除会话失败', e)
+  }
   sessionList.value = sessionList.value.filter(s => s.id !== id)
   if (activeSession.value === id) {
-    activeSession.value = sessionList.value[0]?.id || ''
+    const next = sessionList.value[0]?.id || ('sess_' + Date.now().toString(36))
+    switchSession(next)
   }
 }
 const toggleTokenPanel = () => {
   showTokenPanel.value = !showTokenPanel.value
 }
+
+// ==================== 模型能力（识图 / 上下文窗口 / 是否支持思考强度） ====================
+// 免费池模型的能力元数据是静态已知的（后端 freeModelCatalog），开工前就能查到；
+// DeepSeekProxy / Cloud / 自定义配置这些没有静态元数据，退回最近一次真实工作流
+// 的 model_info 回填——第一次用之前不知道，用过一次就记住了。
+const modelCapabilities = ref({}) // { [modelId]: {vision, context_window, reasoning} }
+async function loadModelCapabilities() {
+  try {
+    const res = await fetch('/api/models/config')
+    const data = await res.json()
+    const map = {}
+    for (const fm of (data.free_models || [])) {
+      map[fm.id] = { vision: fm.vision, context_window: fm.context_window, reasoning: fm.reasoning }
+    }
+    modelCapabilities.value = map
+  } catch (e) {
+    console.warn('加载模型能力失败', e)
+  }
+}
+onMounted(loadModelCapabilities)
+
+const lastAgentFlow = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].kind === 'agentflow') return messages.value[i]
+  }
+  return null
+})
+const currentCapability = computed(() => {
+  return modelCapabilities.value[selectedModel.value]
+    || lastAgentFlow.value?.modelInfo
+    || { vision: false, context_window: 0, reasoning: false }
+})
+
+// ==================== Context window 用量：优先用当前/最近一次 code 工作流的真实数据 ====================
+// 旧的 tokenStats 只从 /api/chat/stream 与 /api/workflow/run 两条老路径回填，
+// 四态机（Code 模式真正在用的那条）从来没接过——纯聊天/旧工作流之外，这里都是 0。
+// 有 agentflow 就用它的真实 modelInfo.context_window + 本轮 token 数，没有才退回旧值。
+const liveContextStats = computed(() => {
+  const flow = lastAgentFlow.value
+  if (flow && flow.modelInfo) {
+    const inputTokens = flow.inputTokens || 0
+    const outputTokens = flow.outputTokens || 0
+    const used = inputTokens + outputTokens
+    const contextWindow = flow.modelInfo.context_window || 0
+    return {
+      used, contextWindow, inputTokens, outputTokens,
+      pct: contextWindow > 0 ? Math.min((used / contextWindow) * 100, 100) : 0
+    }
+  }
+  return {
+    used: tokenStats.inputTokens + tokenStats.outputTokens,
+    contextWindow: tokenStats.contextWindow,
+    inputTokens: tokenStats.inputTokens,
+    outputTokens: tokenStats.outputTokens,
+    pct: Math.min(tokenStats.contextPct || 0, 100)
+  }
+})
+
 // ==================== 右侧工具面板（多面板停靠） ====================
 const dockPanels = ref([])
 const dockWidth = ref(380)
@@ -934,6 +1034,21 @@ const {
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
 
+// ==================== 思考强度（Effort）：Faster(low) ↔ Smarter(high) ====================
+// 注意：debugReasoning 来自上面的 useChatWidget 解构，本段必须放在解构之后，
+// 否则 setup 阶段会命中暂时性死区（TDZ）报 "Cannot access before initialization"。
+const EFFORT_LEVELS = ['low', 'medium', 'high']
+const EFFORT_UI_LABELS = { low: 'Faster', medium: 'Balanced', high: 'Smarter' }
+const showEffortPanel = ref(false)
+const initialEffortIdx = EFFORT_LEVELS.indexOf(debugReasoning.value)
+const effortLevel = ref(initialEffortIdx >= 0 ? initialEffortIdx : 1)
+const effortLabel = computed(() => EFFORT_UI_LABELS[EFFORT_LEVELS[effortLevel.value]])
+function onEffortChange() {
+  debugReasoning.value = EFFORT_LEVELS[effortLevel.value]
+  localStorage.setItem('debugReasoning', debugReasoning.value)
+}
+if (!debugReasoning.value) onEffortChange() // 首次没设置过时落一个默认值，跟滑块初始位置对齐
+
 // ==================== UI 状态 ====================
 const menuOpen = ref(false)
 const showParams = ref(false)
@@ -1007,6 +1122,9 @@ function handleSend() {
   const displayAttachments = attachments.value.filter(a => a.status === 'ready').map(a => ({ ...a }))
   clearAttachments()
   userInput.value = ''
+  // 发送后内容必空，直接把高度交回 CSS（min-height:40px 兜底成单行），
+  // 不依赖 adjustInputHeight 的 scrollHeight 测量——它会在 v-model 未同步时量到旧高度而卡两行
+  nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
   startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments })
 }
 function onFloatingSelectSession(id) { selectSession(id); menuHovering.value = false }
@@ -1163,6 +1281,11 @@ const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.
 watch(messages, () => { nextTick(() => { highlightAllCodeBlocks() }) }, { deep: true })
 // 切进 git 状态条可见的 Code 模式时刷新一次，避免面板上的 +N/-N 停留在挂载时的旧快照
 watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
+// 工作流（四态机）结束时，停止按钮消失，立刻把输入框高度塌回单行——
+// 直接交回 CSS（auto + min-height 兜底），不靠 scrollHeight 测量
+watch(() => flowState.active, (active, wasActive) => {
+  if (wasActive && !active) nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
+})
 
 // ==================== 初始化 ====================
 onMounted(() => {

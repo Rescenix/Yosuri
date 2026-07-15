@@ -137,7 +137,7 @@ function actionLabel(tc) {
 function actionBadge(tc) {
   if (tc.name === 'read_file') return { letter: 'R', color: '#5b8def' }
   if (tc.name === 'write_file' || tc.name === 'edit_file') return { letter: 'W', color: '#c96442' }
-  if (tc.name === 'execute_command') return { letter: '>', color: '#8a8378' }
+  if (tc.name === 'execute_command') return { letter: '>', color: '#94a3b8' }
   return { letter: '·', color: '#a3a3a3' }
 }
 </script>

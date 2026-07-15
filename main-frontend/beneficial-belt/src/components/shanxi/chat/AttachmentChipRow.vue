@@ -3,7 +3,7 @@
     <div v-for="att in attachments" :key="att.id" class="attach-chip" :class="[att.kind, att.status]">
       <img v-if="att.kind === 'image'" :src="att.previewUrl" class="attach-chip-thumb" />
       <div v-else class="attach-chip-icon">
-        <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#8a8378" />
+        <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#94a3b8" />
         <span v-else>{{ att.ext }}</span>
       </div>
       <div class="attach-chip-meta">

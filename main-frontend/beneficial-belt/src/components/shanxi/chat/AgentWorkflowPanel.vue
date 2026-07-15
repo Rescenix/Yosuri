@@ -21,7 +21,7 @@
           <span class="flow-tool-label">{{ toolLabel(b.name) }}</span>
           <span class="flow-tool-param">{{ keyParam(b) }}</span>
           <span class="flow-tool-state">
-            <Icon v-if="b.status === 'running'" icon="mdi:loading" class="flow-spin" width="14" color="#8a8378" />
+            <Icon v-if="b.status === 'running'" icon="mdi:loading" class="flow-spin" width="14" color="#94a3b8" />
             <Icon v-else-if="b.status === 'ok'" icon="mdi:check" width="14" color="#12b76a" />
             <Icon v-else icon="mdi:close" width="14" color="#d94834" />
           </span>
@@ -83,7 +83,7 @@ function toolLabel(name) {
 function badge(name) {
   if (name === 'read_file') return { ch: 'R', bg: '#5b8def' }
   if (name === 'write_file' || name === 'edit_file') return { ch: 'W', bg: '#c96442' }
-  if (name === 'execute_command') return { ch: '>', bg: '#8a8378' }
+  if (name === 'execute_command') return { ch: '>', bg: '#94a3b8' }
   if (name === 'dispatch_agent') return { ch: '◆', bg: '#8b5cf6' }
   if (name.startsWith('mcp__')) return { ch: 'M', bg: '#0d9488' }
   return { ch: '·', bg: '#a3a3a3' }
@@ -134,9 +134,9 @@ function toolBodyText(b) {
   padding: 8px 10px;
   font-size: 12.5px;
   line-height: 1.65;
-  color: #8a8378;
-  background: #faf9f5;
-  border-left: 2px solid #e4dfd4;
+  color: #94a3b8;
+  background: #f8fafc;
+  border-left: 2px solid #e5e5e5;
   border-radius: 0 6px 6px 0;
   white-space: pre-wrap;
   word-break: break-word;
@@ -151,7 +151,7 @@ function toolBodyText(b) {
   margin: 6px 0;
   font-size: 17px;
   line-height: 1.75;
-  color: #2d2a26;
+  color: #1e293b;
   word-break: break-word;
 }
 
@@ -190,14 +190,14 @@ function toolBodyText(b) {
 .flow-tool-label {
   flex-shrink: 0;
   font-size: 13px;
-  color: #2d2a26;
+  color: #1e293b;
   font-weight: 500;
 }
 .flow-tool-param {
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  color: #8a8378;
+  color: #94a3b8;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -219,9 +219,9 @@ function toolBodyText(b) {
   transform: rotate(90deg);
 }
 .flow-tool-body {
-  border-top: 1px solid #f0efe9;
+  border-top: 1px solid #ececec;
   padding: 8px 12px;
-  background: #fcfcfa;
+  background: #f8fafc;
 }
 .flow-output {
   margin: 0;

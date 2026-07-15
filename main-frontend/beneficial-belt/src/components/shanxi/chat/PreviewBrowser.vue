@@ -161,7 +161,7 @@ function openExternal() {
   align-items: center;
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid #f0efe9;
+  border-bottom: 1px solid #ececec;
   flex-shrink: 0;
 }
 .pb-icon-btn {
@@ -178,15 +178,15 @@ function openExternal() {
   flex-shrink: 0;
 }
 .pb-icon-btn:hover:not(:disabled) { background: #f0f0f0; }
-.pb-icon-btn:disabled { color: #d4d0c8; cursor: default; }
-.pb-icon-btn.active { background: #ece9e2; color: #2d2a26; }
+.pb-icon-btn:disabled { color: #e5e5e5; cursor: default; }
+.pb-icon-btn.active { background: #f5f5f5; color: #1e293b; }
 .pb-url-wrap {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 5px;
-  background: #f7f6f2;
+  background: #fff;
   border: 1px solid #e5e5e5;
   border-radius: 999px;
   padding: 3px 10px;
@@ -198,7 +198,7 @@ function openExternal() {
   outline: none;
   background: transparent;
   font-size: 12px;
-  color: #2d2a26;
+  color: #1e293b;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 
@@ -241,14 +241,14 @@ function openExternal() {
   flex: 1;
   min-width: 0;
   font-size: 13px;
-  color: #2d2a26;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .pb-server-port {
   font-size: 12px;
-  color: #8a8378;
+  color: #94a3b8;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 .pb-server-play {
@@ -268,14 +268,14 @@ function openExternal() {
   gap: 4px;
   margin-top: 6px;
   font-size: 11.5px;
-  color: #8a8378;
+  color: #94a3b8;
   background: transparent;
   border: 1px solid #e5e5e5;
   border-radius: 999px;
   padding: 4px 10px;
   cursor: pointer;
 }
-.pb-rescan:hover { background: #f7f6f2; }
+.pb-rescan:hover { background: #f5f5f5; }
 
 /* ---------- 浏览视图 ---------- */
 .pb-viewport {
@@ -287,7 +287,7 @@ function openExternal() {
   background: #fff;
 }
 .pb-viewport.mobile {
-  background: #f0efe9;
+  background: #f5f5f5;
   padding: 10px 0;
 }
 .pb-frame {
@@ -297,7 +297,7 @@ function openExternal() {
 }
 .pb-viewport.mobile .pb-frame {
   width: 375px;
-  border: 1px solid #d4d0c8;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
   background: #fff;
 }

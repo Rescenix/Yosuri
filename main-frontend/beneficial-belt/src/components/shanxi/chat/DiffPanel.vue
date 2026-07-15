@@ -3,7 +3,7 @@
     <!-- 顶部：分支 → working tree + 搜索 + 刷新 -->
     <div class="diff-toolbar">
       <div class="diff-branch-row">
-        <Icon icon="mdi:source-branch" width="13" color="#8a8378" />
+        <Icon icon="mdi:source-branch" width="13" color="#94a3b8" />
         <span class="diff-branch">{{ branch || '...' }}</span>
         <Icon icon="mdi:arrow-right-thin" width="14" color="#a3a3a3" />
         <span class="diff-worktree">working tree</span>
@@ -137,7 +137,7 @@ async function toggleFile(df) {
 .diff-toolbar {
   flex-shrink: 0;
   padding: 8px 10px 6px;
-  border-bottom: 1px solid #f0efe9;
+  border-bottom: 1px solid #ececec;
 }
 .diff-branch-row {
   display: flex;
@@ -148,17 +148,17 @@ async function toggleFile(df) {
 .diff-branch, .diff-worktree {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 12px;
-  color: #2d2a26;
+  color: #1e293b;
   font-weight: 600;
 }
-.diff-worktree { color: #8a8378; font-weight: 500; }
+.diff-worktree { color: #94a3b8; font-weight: 500; }
 .diff-totals { flex: 1; text-align: right; display: flex; gap: 6px; justify-content: flex-end; }
 .diff-refresh-btn {
   display: inline-flex;
   align-items: center;
   border: none;
   background: transparent;
-  color: #8a8378;
+  color: #94a3b8;
   cursor: pointer;
   border-radius: 5px;
   padding: 2px;
@@ -171,7 +171,7 @@ async function toggleFile(df) {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: #f7f6f2;
+  background: #fff;
   border: 1px solid #e5e5e5;
   border-radius: 7px;
   padding: 4px 8px;
@@ -183,7 +183,7 @@ async function toggleFile(df) {
   outline: none;
   background: transparent;
   font-size: 12px;
-  color: #2d2a26;
+  color: #1e293b;
 }
 .diff-search-clear {
   display: inline-flex;
@@ -226,7 +226,7 @@ async function toggleFile(df) {
   gap: 7px;
   padding: 7px 12px;
   cursor: pointer;
-  background: #f5f5f5;
+  background: #f8fafc;
 }
 .diff-chev {
   display: inline-block;

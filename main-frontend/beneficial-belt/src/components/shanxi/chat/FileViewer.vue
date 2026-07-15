@@ -39,8 +39,8 @@ watch([() => props.content, () => props.file], async () => {
 
 <style scoped>
 .file-viewer {
-  border: 1px solid #e4dfd4;
-  background: #faf9f6;
+  border: 1px solid #e5e5e5;
+  background: #f8fafc;
   display: flex;
   flex-direction: column;
   max-height: 40%;
@@ -53,8 +53,8 @@ watch([() => props.content, () => props.file], async () => {
   align-items: center;
   padding: 4px 12px;
   font-size: 12px;
-  background: #f0ede5;
-  border-bottom: 1px solid #e4dfd4;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e5e5e5;
 }
 .file-viewer-body {
   overflow: auto;

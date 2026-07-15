@@ -127,13 +127,13 @@ function onEditorMount(editor) {
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border-left: 1px solid #e4dfd4;
+  border-left: 1px solid #e5e5e5;
 }
 
 .editor-tabs {
   display: flex;
   background: #f3f3f3;
-  border-bottom: 1px solid #e4dfd4;
+  border-bottom: 1px solid #e5e5e5;
   overflow-x: auto;
   flex-shrink: 0;
 }
@@ -145,7 +145,7 @@ function onEditorMount(editor) {
   font-size: 12px;
   color: #333;
   cursor: pointer;
-  border-right: 1px solid #e4dfd4;
+  border-right: 1px solid #e5e5e5;
   gap: 8px;
 }
 
@@ -171,7 +171,7 @@ function onEditorMount(editor) {
   position: fixed;
   z-index: 9999;
   background: #fff;
-  border: 1px solid #d4cfc4;
+  border: 1px solid #e5e5e5;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   display: flex;
@@ -186,10 +186,10 @@ function onEditorMount(editor) {
   background: none;
   font-size: 12px;
   cursor: pointer;
-  color: #4a4540;
+  color: #475569;
 }
 .tab-context-menu button:hover {
-  background: #f0ede3;
+  background: #f5f5f5;
 }
 
 .editor-container {

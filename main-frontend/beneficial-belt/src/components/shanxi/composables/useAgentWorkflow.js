@@ -59,7 +59,10 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         // model 直接透传前端选好的模型 ID，命中 freeModelCatalog 就精确路由到那一个
         // （见 model_router.go resolveBackends），不再是"选了也白选"
         const model = localStorage.getItem('selectedModel') || ''
-        es = new EventSource(`/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}`)
+        // effort 只有当前 backend 真支持 reasoning 时后端才会真的采用（否则安静忽略），
+        // 前端不需要自己先判断"这个模型支不支持"再决定发不发
+        const effort = localStorage.getItem('debugReasoning') || ''
+        es = new EventSource(`/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}`)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
         const appendText = (type, text) => {

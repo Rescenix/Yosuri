@@ -253,8 +253,8 @@ onUnmounted(() => {
 .sidebar-panel {
   width: 240px;
   height: 100%;
-  border-right: 1px solid #e4dfd4;
-  background: #faf9f6;
+  border-right: 1px solid #e5e5e5;
+  background: #f8fafc;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -276,16 +276,16 @@ onUnmounted(() => {
   cursor: pointer;
   user-select: none;
 }
-.section-header:hover { background: #f0ede5; }
+.section-header:hover { background: #f1f5f9; }
 
-.chevron { transition: transform 180ms ease; flex-shrink: 0; color: #8b847a; }
+.chevron { transition: transform 180ms ease; flex-shrink: 0; color: #94a3b8; }
 .chevron.rotated { transform: rotate(90deg); }
 
 .section-label {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
-  color: #696259;
+  color: #64748b;
   flex: 1;
 }
 
@@ -302,14 +302,14 @@ onUnmounted(() => {
 .section-more-btn {
   border: none;
   background: transparent;
-  color: #8b847a;
+  color: #94a3b8;
   cursor: pointer;
   display: flex;
   align-items: center;
   border-radius: 4px;
   padding: 2px;
 }
-.section-more-btn:hover { background: #e8e3d8; }
+.section-more-btn:hover { background: #e2e8f0; }
 
 /* Smooth accordion: grid-rows 0fr -> 1fr, no display:none jump */
 .section-body-wrap {
@@ -333,9 +333,9 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  color: #4a473f;
+  color: #475569;
 }
-.root-row:hover { background: #f0ede5; }
+.root-row:hover { background: #f1f5f9; }
 .tree-body { padding: 2px 0 6px; }
 
 /* ========== Git ========== */
@@ -370,7 +370,7 @@ onUnmounted(() => {
   width: 100%;
   padding: 6px 30px 6px 8px;
   font-size: 12px;
-  border: 1px solid #d4cfc4;
+  border: 1px solid #e5e5e5;
   border-radius: 6px;
   resize: vertical;
   font-family: inherit;
@@ -381,13 +381,13 @@ onUnmounted(() => {
   position: absolute; top: 4px; right: 4px;
   width: 24px; height: 24px; border: none; background: transparent;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; color: #6a665e;
+  border-radius: 4px; color: #64748b;
 }
-.commit-more-btn:hover { background: #e8e3d8; }
+.commit-more-btn:hover { background: #e2e8f0; }
 
 .floating-menu {
   position: absolute; top: -70px; right: -10px; z-index: 10;
-  background: #fff; border: 1px solid #d4cfc4; border-radius: 6px;
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 4px;
   display: flex; flex-direction: column; gap: 2px; min-width: 100px;
 }
@@ -395,19 +395,19 @@ onUnmounted(() => {
   display: block; width: 100%; padding: 6px 10px; font-size: 12px;
   border: none; background: #fff; cursor: pointer; text-align: left; border-radius: 4px;
 }
-.floating-menu .git-btn:hover { background: #f0ede5; }
+.floating-menu .git-btn:hover { background: #f1f5f9; }
 
 .commit-main-btn, .action-feedback {
   display: block; width: 100%; padding: 6px 0; font-size: 12px;
-  border: 1px solid #d4cfc4; border-radius: 6px; text-align: center;
+  border: 1px solid #e5e5e5; border-radius: 6px; text-align: center;
   box-sizing: border-box; line-height: 1.4; cursor: pointer;
   background: #fff; color: inherit; transition: background 0.15s, border-color 0.15s;
 }
-.commit-main-btn:hover { background: #f0ede5; }
+.commit-main-btn:hover { background: #f1f5f9; }
 .commit-main-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .action-feedback.success { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
 .action-feedback.error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-.action-feedback.loading { background: #f0ede5; color: #6a665e; border-color: #d4cfc4; }
+.action-feedback.loading { background: #f1f5f9; color: #64748b; border-color: #e5e5e5; }
 .action-feedback.loading::after { content: '...'; animation: loading-dots 1.5s infinite; }
 @keyframes loading-dots {
   0% { content: '.'; } 33% { content: '..'; } 66% { content: '...'; }
@@ -418,13 +418,13 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 6px;
   padding: 4px 10px; font-size: 12px; cursor: default;
 }
-.pinned-row:hover { background: #f0ede5; }
+.pinned-row:hover { background: #f1f5f9; }
 .pinned-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .unpin-btn {
-  border: none; background: transparent; color: #8b847a; cursor: pointer;
+  border: none; background: transparent; color: #94a3b8; cursor: pointer;
   display: flex; align-items: center; border-radius: 3px; flex-shrink: 0;
 }
-.unpin-btn:hover { background: #e0dcd0; color: #4a473f; }
+.unpin-btn:hover { background: #e2e8f0; color: #475569; }
 
 .file-badge {
   flex-shrink: 0; width: 16px; height: 16px; border-radius: 4px;

@@ -133,11 +133,11 @@ onUnmounted(() => {
 <style scoped>
 .tree-node {
   display: flex; align-items: center; padding: 4px 8px;
-  cursor: pointer; font-size: 12px; color: #4a4540;
+  cursor: pointer; font-size: 12px; color: #475569;
   border-radius: 4px; margin: 0 4px;
 }
-.tree-node:hover { background: #f2ede3; }
-.tree-node.active { background: #e8e3d8; font-weight: 600; }
+.tree-node:hover { background: #e2e8f0; }
+.tree-node.active { background: #e2e8f0; font-weight: 600; }
 .node-icon { margin-right: 6px; flex-shrink: 0; }
 .file-badge {
   flex-shrink: 0;
@@ -157,7 +157,7 @@ onUnmounted(() => {
   position: fixed;
   z-index: 9999;
   background: #fff;
-  border: 1px solid #d4cfc4;
+  border: 1px solid #e5e5e5;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   display: flex;
@@ -172,9 +172,9 @@ onUnmounted(() => {
   background: none;
   font-size: 12px;
   cursor: pointer;
-  color: #4a4540;
+  color: #475569;
 }
 .file-context-menu button:hover {
-  background: #f0ede3;
+  background: #f1f5f9;
 }
 </style>

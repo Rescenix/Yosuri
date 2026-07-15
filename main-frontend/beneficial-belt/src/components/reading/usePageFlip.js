@@ -22,7 +22,7 @@ export function usePageFlip(flipContainerRef, reader, width, height, statusMsg, 
   }
 
   function createBackHTML() {
-    return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a 0%,#2c3e50 100%);display:flex;flex-direction:column;justify-content:center;align-items:center;box-shadow:inset 0 0 40px rgba(0,0,0,0.3);border-radius:4px;"><div style="width:60px;height:60px;border:1px solid rgba(200,160,80,0.4);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;"><span style="color:rgba(200,160,80,0.6);font-size:0.8rem;font-family:'Georgia',serif;">S</span></div><p style="color:rgba(200,160,80,0.6);font-size:0.85rem;letter-spacing:2px;">脂砚斋风 · 活态传承</p><p style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-top:2rem;">阅读小屋 · 杉汐</p></div>`
+    return `<div style="width:100%;height:100%;background:linear-gradient(135deg,#1e2a3a 0%,#2c3e50 100%);display:flex;flex-direction:column;justify-content:center;align-items:center;box-shadow:inset 0 0 40px rgba(0,0,0,0.3);border-radius:4px;"><div style="width:60px;height:60px;border:1px solid rgba(200,160,80,0.4);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;"><span style="color:rgba(200,160,80,0.6);font-size:0.8rem;font-family:'Inter',system-ui,sans-serif;">S</span></div><p style="color:rgba(200,160,80,0.6);font-size:0.85rem;letter-spacing:2px;">脂砚斋风 · 活态传承</p><p style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-top:2rem;">阅读小屋 · 杉汐</p></div>`
   }
 
   function destroyFlip() {
