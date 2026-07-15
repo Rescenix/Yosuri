@@ -420,6 +420,23 @@
                   </div>
                 </div>
                 <div class="input-toolbar-right">
+                  <!-- Context window 用量：常驻横条（放在模型左边，一眼可见） -->
+                  <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
+                    <span class="ctx-bar-text">{{ formatTok(liveContextStats.used) }}/{{ formatTok(liveContextStats.contextWindow) }}</span>
+                    <div class="ctx-bar-track"><div class="ctx-bar-fill" :style="{ width: liveContextStats.pct + '%' }"></div></div>
+                    <span class="ctx-bar-pct">{{ liveContextStats.pct.toFixed(0) }}%</span>
+                    <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
+                      <div class="tup-row">
+                        <span class="tup-label">输入 Tokens</span>
+                        <span class="tup-value">{{ formatTok(liveContextStats.inputTokens) }}</span>
+                      </div>
+                      <div class="tup-row">
+                        <span class="tup-label">输出 Tokens</span>
+                        <span class="tup-value">{{ formatTok(liveContextStats.outputTokens) }}</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <!-- 模型切换器：不加粗、不带折叠箭头——整块本来就可点开 -->
                   <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
                     <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || '模型' }}</span>
@@ -436,7 +453,7 @@
                     </div>
                   </div>
 
-                  <!-- 思考强度：只有当前模型确认支持 reasoning 时才出现 -->
+                  <!-- 思考强度：只有当前模型确认支持 reasoning 时才出现（放在模型右边） -->
                   <div v-if="currentCapability.reasoning" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
                     <span class="effort-label">Effort</span>
                     <span class="effort-value">{{ effortLabel }}</span>
@@ -448,23 +465,6 @@
                         <span class="effort-end">Faster</span>
                         <input type="range" min="0" max="2" step="1" v-model.number="effortLevel" class="effort-slider" @click.stop @input="onEffortChange" />
                         <span class="effort-end">Smarter</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Context window 用量：常驻横条（不用点开才看得到） -->
-                  <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
-                    <span class="ctx-bar-text">{{ formatTok(liveContextStats.used) }}/{{ formatTok(liveContextStats.contextWindow) }}</span>
-                    <div class="ctx-bar-track"><div class="ctx-bar-fill" :style="{ width: liveContextStats.pct + '%' }"></div></div>
-                    <span class="ctx-bar-pct">{{ liveContextStats.pct.toFixed(0) }}%</span>
-                    <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
-                      <div class="tup-row">
-                        <span class="tup-label">输入 Tokens</span>
-                        <span class="tup-value">{{ formatTok(liveContextStats.inputTokens) }}</span>
-                      </div>
-                      <div class="tup-row">
-                        <span class="tup-label">输出 Tokens</span>
-                        <span class="tup-value">{{ formatTok(liveContextStats.outputTokens) }}</span>
                       </div>
                     </div>
                   </div>
