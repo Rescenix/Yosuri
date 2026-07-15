@@ -307,25 +307,27 @@ function adjustInputHeight() {
   const apiBase = import.meta.env.VITE_API_BASE || ''
 
  async function loadAllHistory() {
-  try {
-    const res = await fetch(`${apiBase}/api/sessions/${sessionId.value}`)
-    if (res.ok) {
-      const history = await res.json()
-      messages.value = history.map((item, idx) => ({
-        id: idx,
-        content: cleanContent(item.content),
-        sender: item.role === 'assistant' ? 'bot' : item.role,
-        timestamp: item.timestamp || new Date(),
-        isStreaming: false,
-        reasoning: ''
-      }))
-      await nextTick()
-      forceScrollToBottom()
-    }
-  } catch (e) {
-    console.error('加载历史失败', e)
-  }
-}
+   try {
+     const res = await fetch(`${apiBase}/api/sessions/${sessionId.value}`)
+     if (res.ok) {
+       const history = await res.json()
+       // 后端对不存在/空的会话返回 null 或空 body，这里兜底成数组，避免 null.map 崩溃
+       const list = Array.isArray(history) ? history : []
+       messages.value = list.map((item, idx) => ({
+         id: idx,
+         content: cleanContent(item?.content ?? ''),
+         sender: item?.role === 'assistant' ? 'bot' : (item?.role ?? 'user'),
+         timestamp: item?.timestamp || new Date(),
+         isStreaming: false,
+         reasoning: ''
+       }))
+       await nextTick()
+       forceScrollToBottom()
+     }
+   } catch (e) {
+     console.error('加载历史失败', e)
+   }
+ }
 
 // 真正切换到另一个后端会话（不只是改左侧列表的高亮）：立即清空当前消息，
 // 避免切换瞬间残留上一个会话的内容，再按新 id 去加载历史——新会话/没有
