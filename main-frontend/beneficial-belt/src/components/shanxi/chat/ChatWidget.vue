@@ -439,8 +439,9 @@
 
                   <!-- 模型切换器：不加粗、不带折叠箭头——整块本来就可点开 -->
                   <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
-                    <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || '模型' }}</span>
+                    <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || (hasModels ? '模型' : '无可用模型') }}</span>
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
+                      <div v-if="!hasModels" class="model-menu-empty">无可用模型，请在设置面板添加</div>
                       <div
                         v-for="m in modelOptions"
                         :key="m.value"
@@ -957,35 +958,28 @@ async function copyText(text) {
 }
 
 // ==================== 模型选择 ====================
-// 聊天下拉框常驻 Agnes（免费池默认模型，value 直接是后端 freeModelCatalog 的精确
-// 路由 ID）和白嫖的 DeepSeekProxy；其余模型（本地 Ollama / Cloud / 免费池已配 Key 的 /
-// 自定义免费配置）全部由用户在设置面板勾选"加入聊天列表"，写入 localStorage('chatModelList')，
-// 这里动态拼进去。value 会原样透传给 /api/code/workflow 的 model 参数做精确路由
-// （见 useAgentWorkflow.js），选哪个就真的用哪个，不再是摆设。
-const CHAT_LIST_KEY = 'chatModelList'
-const DEFAULT_MODEL = 'ds_browser'
-function loadChatModelList() {
-  try { return JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]') } catch (e) { return [] }
-}
-const selectedModel = ref(localStorage.getItem('selectedModel') || DEFAULT_MODEL)
-// useAgentWorkflow.js 是单独 composable，直接读 localStorage('selectedModel') 传给
-// 后端做精确路由，不共享这个 ref——所以这里要把（可能刚重置的）值落盘一次。
-localStorage.setItem('selectedModel', selectedModel.value)
-
-// 响应式持有聊天下拉可选项：初值从 localStorage 读，设置面板改动（写入同 key）后
-// 通过 storage 事件 + 设置关闭时重读自动刷新，无需手动刷新页面。
-const chatModelList = ref(loadChatModelList())
-function refreshChatModelList() { chatModelList.value = loadChatModelList() }
-window.addEventListener('storage', (e) => { if (e.key === CHAT_LIST_KEY) refreshChatModelList() })
-const modelOptions = computed(() => {
-  // 下拉 = 常驻 DeepSeekProxy + 设置面板勾选的模型（选中厂商即把该厂商全部模型加入列表）
-  const extra = chatModelList.value
-  const merged = []
-  const hasBase = extra.some(m => m.value === 'ds_browser')
-  if (!hasBase) merged.push({ label: 'DeepSeekProxy', value: 'ds_browser' })
-  merged.push(...extra)
-  return merged
+// 下拉直接读后端真实模型列表（modelLabels：免费池+自定义配置），不依赖 localStorage。
+const selectedModel = ref(localStorage.getItem('selectedModel') || '')
+// 后端真实模型列表到达后：若当前选中不在列表里（首次/旧 localStorage 残留如 ds_browser），
+// 自动定位到第一个真实模型；models 为空则保持空（UI 显示"无可用模型"）。
+watch(modelLabels, (labels) => {
+  const ids = Object.keys(labels)
+  if (ids.length === 0) return
+  if (!ids.includes(selectedModel.value)) {
+    selectedModel.value = ids[0]
+    localStorage.setItem('selectedModel', ids[0])
+  }
 })
+// useAgentWorkflow.js 是单独 composable，直接读 localStorage('selectedModel') 传给
+// 后端做精确路由，不共享这个 ref——所以这里要把（可能刚定位的）值落盘一次。
+localStorage.setItem('selectedModel', selectedModel.value)
+const modelOptions = computed(() => {
+  // 下拉直接读后端真实模型列表（modelLabels：免费池+自定义配置），
+  // 不依赖 localStorage 勾选列表——避免勾选过的旧模型（如 Qwen3-Coder 480B）成幽灵残留。
+  // 后端没有就显示空。
+  return Object.entries(modelLabels.value).map(([id, label]) => ({ label, value: id }))
+})
+const hasModels = computed(() => modelOptions.value.length > 0)
 const showModelMenu = ref(false)
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
 
@@ -993,9 +987,8 @@ function selectModel(value) { selectedModel.value = value; localStorage.setItem(
 const showSettings = ref(false)
 function onSettingsClosed() {
   showSettings.value = false
-  // 设置面板改动会写入 localStorage('chatModelList')，同标签页内 storage 事件不冒泡，
-  // 这里显式重读，让模型下拉立即反映勾选变化，无需刷新页面。
-  refreshChatModelList()
+  // 设置面板改动（填 key/加配置）后重载后端模型列表，下拉立即反映真实模型，无需刷新页面。
+  loadModelCapabilities()
 }
 
 // ==================== 底部工具条：Auto 模式 + "+" 附加菜单 ====================
