@@ -1742,6 +1742,8 @@ min-height: 90px !important;
   overflow: hidden;
   /* 透明：右侧不再有白色大矩形，只有里面每个 dock-pane 卡片浮在白底上 */
   background: transparent;
+  /* 去掉基础规则 .tool-panel 的 border-left——否则透明面板上残留一条贯穿上下的竖线 */
+  border-left: none;
 }
 .chat-window.expanded .tool-panel-meta {
   font-size: 10.5px;

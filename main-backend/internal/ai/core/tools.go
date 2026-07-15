@@ -166,22 +166,35 @@ var BaseTools = []ToolDefinition{
 		Type: "function",
 		Function: ToolFunctionDetail{
 			Name:        "search_memory",
-			Description: "检索长期记忆，分两阶段使用：默认 summary 模式，传 query 按语义检索，返回相关记忆的摘要列表（含 ID），不含完整正文，用来判断哪些值得深挖；需要看某条记忆完整内容时，用摘要里给出的 ID 再调用一次，传 mode=\"detail\" 和 id=<那个ID>。不要跳过 summary 直接用 detail 盲猜 ID。",
+			Description: "检索历史内容，分两种作用域(scope)：scope=\"sessions\" 在全部历史会话消息里正则/子串检索（默认，最常用，能找回任何聊过的事）；scope=\"memory\" 检索长期记忆卡片(MEMORY.md)。sessions 模式下 query 作为正则表达式匹配（非法正则自动退化为子串匹配），返回命中片段含 session_id/时间/角色/上下文；可加 mode=\"detail\" 配合 session_id 拉该会话更多上下文，或传 id 在 memory 模式下展开记忆卡片。",
 			Parameters: ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
 					"query": {
 						Type:        "string",
-						Description: "summary 模式下的检索词或语义描述（如 '用户的技术偏好'）。detail 模式下忽略此参数。",
+						Description: "检索式：sessions 模式下为正则表达式（如 'mcp|MCP'、'读取流失败'），memory 模式下为记忆检索词。",
+					},
+					"scope": {
+						Type:        "string",
+						Description: "检索作用域：sessions=全部历史会话消息（默认、最常用）；memory=长期记忆卡片(MEMORY.md)。",
+						Enum:        []string{"sessions", "memory"},
 					},
 					"mode": {
 						Type:        "string",
-						Description: "检索模式：summary 返回摘要列表（默认，不传时按 summary 处理），detail 按 id 返回完整内容",
+						Description: "memory 模式专用：summary 返回摘要列表（默认），detail 按 id 返回完整内容。sessions 模式忽略。",
 						Enum:        []string{"summary", "detail"},
 					},
 					"id": {
 						Type:        "string",
-						Description: "detail 模式下要展开的记忆 ID（summary 结果里 0x 开头的十六进制串，如 \"0x1a2b\"）。summary 模式下忽略此参数。",
+						Description: "memory 模式 detail 下要展开的记忆 ID（0x 开头的十六进制串）。",
+					},
+					"session_id": {
+						Type:        "string",
+						Description: "可选：限定只在某个会话里检索（sessions 模式）。不传则搜全部会话。",
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "可选：返回的最大命中条数（默认 20）。",
 					},
 				},
 				Required: []string{},

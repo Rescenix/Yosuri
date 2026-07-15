@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -252,6 +253,7 @@ func (r *WorkflowRunner) executeCodeCalls(ctx context.Context, backends []Router
 		}
 	}
 
+	// 主循环：顺序执行非 dispatch_agent 的工具调用
 	for i, tc := range calls {
 		name := tc.Function.Name
 		if name == "dispatch_agent" {
@@ -266,6 +268,11 @@ func (r *WorkflowRunner) executeCodeCalls(ctx context.Context, backends []Router
 			}
 			continue
 		}
+		if name == "search_memory" {
+			out, failed := r.searchMemory(tc.Function.Arguments)
+			results[i] = codeExecResult{output: out, failed: failed}
+			continue
+		}
 		res, err := core.ExecuteToolCall(tc)
 		if err != nil {
 			results[i] = codeExecResult{output: err.Error(), failed: true}
@@ -274,15 +281,126 @@ func (r *WorkflowRunner) executeCodeCalls(ctx context.Context, backends []Router
 		results[i] = codeExecResult{output: res.Content, failed: res.Failed}
 	}
 
+
+
 	wg.Wait()
 	return results
 }
 
+// searchMemory 实现 search_memory 工具：在 workflow 链里优先在全部历史会话里做
+// 正则检索（scope=sessions，默认），找不到或显式 scope=memory 时退回 SwiftNet 记忆卡片。
+// 只拦截 workflow 这条链；chat 链仍走 core.ExecuteToolCall 里的原 memory 逻辑。
+func (r *WorkflowRunner) searchMemory(argsJSON string) (string, bool) {
+	var args struct {
+		Query     string `json:"query"`
+		Scope     string `json:"scope"`
+		Mode      string `json:"mode"`
+		ID        string `json:"id"`
+		SessionID string `json:"session_id"`
+		Limit     int    `json:"limit"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return "search_memory 参数解析失败: " + err.Error(), true
+	}
+	if args.Scope == "" {
+		args.Scope = "sessions"
+	}
+	if args.Limit <= 0 {
+		args.Limit = 20
+	}
+
+	if args.Scope == "memory" {
+		// 退回 SwiftNet 长期记忆卡片
+		res, err := core.ExecuteToolCall(core.ToolCall{
+			Function: core.ToolCallFunc{Name: "search_memory", Arguments: argsJSON},
+		})
+		if err != nil {
+			return err.Error(), true
+		}
+		return res.Content, res.Failed
+	}
+
+	// scope == "sessions"：全量检索历史会话消息
+	if args.Query == "" {
+		return "sessions 检索需要提供 query（正则表达式）", true
+	}
+	// 编译正则；失败则退化为大小写不敏感子串匹配
+	re, err := regexp.Compile(args.Query)
+	if err != nil {
+		re = regexp.MustCompile(regexp.QuoteMeta(args.Query))
+	}
+
+	store := r.chatHandler.sessionStore
+	all := store.AllSessions()
+	var hits []string
+	seen := 0
+	for sid, msgs := range all {
+		if args.SessionID != "" && sid != args.SessionID {
+			continue
+		}
+		for _, m := range msgs {
+			text := m.Content
+			if text == "" {
+				text = m.ReasoningContent
+			}
+			if text == "" {
+				continue
+			}
+			idx := re.FindStringIndex(text)
+			if idx == nil {
+				continue
+			}
+			// 命中片段：前后各 60 rune 上下文
+			r0, r1 := idx[0], idx[1]
+			lo, hi := r0-60, r1+60
+			runes := []rune(text)
+			if lo < 0 {
+				lo = 0
+			}
+			if hi > len(runes) {
+				hi = len(runes)
+			}
+			snippet := string(runes[lo:hi])
+			ts := m.Timestamp.Format("2006-01-02 15:04")
+			hits = append(hits, fmt.Sprintf("• [%s] %s/%s: …%s…", sid, m.Role, ts, snippet))
+			seen++
+			if seen >= args.Limit {
+				break
+			}
+		}
+		if seen >= args.Limit {
+			break
+		}
+	}
+
+	if len(hits) == 0 {
+		return fmt.Sprintf("未在历史会话中找到匹配 %q 的内容", args.Query), false
+	}
+	return fmt.Sprintf("在全部会话中正则匹配 %q，命中 %d 处（session_id 可传给 scope=sessions 的 session_id 或 memory 检索）：\n%s",
+		args.Query, len(hits), strings.Join(hits, "\n")), false
+}
+// hardcodeFileTools 是已被 MCP filesystem 取代、从工作流 agent 工具集移除的
+// 内置文件操作工具。agent 改用 mcp__fs__*，避免两套实现并存。
+var hardcodeFileTools = map[string]bool{
+	"read_file":       true,
+	"write_file":      true,
+	"edit_file":       true,
+	"list_dir":        true,
+	"execute_command": true,
+}
+
 // buildCodeWorkflowTools 组装本工作流可用的完整工具集：
-// 内置工具 + dispatch_agent + MCP 生态工具，序列化成 DS 的 tools 参数格式。
+// 内置语义/记忆工具 + dispatch_agent + MCP 生态工具，序列化成 DS 的 tools 参数格式。
+// 内置文件类工具（read/write/edit/list_dir/execute_command）已由 MCP filesystem
+// 取代，故在此过滤掉，只让 MCP 提供文件能力。
 func buildCodeWorkflowTools() []map[string]any {
 	defs := make([]core.ToolDefinition, 0, len(core.ChatTools)+8)
-	defs = append(defs, core.ChatTools...)
+	for _, t := range core.ChatTools {
+		if hardcodeFileTools[t.Function.Name] {
+			continue
+		}
+		defs = append(defs, t)
+	}
 	defs = append(defs, dispatchAgentToolDef)
 	defs = append(defs, loadMCPToolDefs()...)
 

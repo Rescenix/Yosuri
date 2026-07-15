@@ -100,6 +100,44 @@
             </div>
           </template>
 
+          <!-- 流式渐变：AI 消息逐字瀑布淡入 -->
+          <div class="settings-section-title" style="margin-top: 18px;">流式渐变</div>
+          <div class="settings-section-desc">AI 回复逐字级联淡入的"瀑布"效果（仿 ChatGPT/Gemini）。改动即时生效并自动保存。</div>
+
+          <div class="param-row">
+            <span class="param-label">流式渐变</span>
+            <label class="param-switch">
+              <input type="checkbox" v-model="streamFadeConfig.enabled" />
+              <span class="param-switch-track"></span>
+            </label>
+          </div>
+
+          <template v-if="streamFadeConfig.enabled">
+            <div class="param-row">
+              <span class="param-label">淡入时长</span>
+              <input class="param-range" type="range" min="150" max="1500" step="50" v-model.number="streamFadeConfig.fadeMs" />
+              <span class="param-value">{{ streamFadeConfig.fadeMs }} ms</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">级联间隔</span>
+              <input class="param-range" type="range" min="0" max="40" step="2" v-model.number="streamFadeConfig.staggerMs" />
+              <span class="param-value">{{ streamFadeConfig.staggerMs }} ms/字</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">模糊强度</span>
+              <input class="param-range" type="range" min="0" max="6" step="0.5" v-model.number="streamFadeConfig.blurPx" />
+              <span class="param-value">{{ streamFadeConfig.blurPx }} px</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">大块扫过上限</span>
+              <input class="param-range" type="range" min="100" max="1000" step="50" v-model.number="streamFadeConfig.maxSweepMs" />
+              <span class="param-value">{{ streamFadeConfig.maxSweepMs }} ms</span>
+            </div>
+          </template>
+          <div class="param-reset-row">
+            <button class="param-reset-btn" type="button" @click="resetStreamFadeConfig">恢复默认</button>
+          </div>
+
           <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
         </div>
       </div>
@@ -111,6 +149,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
+import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 
 const props = defineProps({
   // QQ 登录接入前先留空，后端会落到固定的 "default" 用户文件
@@ -551,4 +590,65 @@ onUnmounted(() => {
 .api-form-btn.save:hover { background: #333333; }
 
 .settings-error { margin-top: 10px; font-size: 12px; color: #d94834; }
+
+/* ---------- 流式渐变参数控件 ---------- */
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+}
+.param-label { flex-shrink: 0; width: 92px; font-size: 12.5px; color: #1a1a1a; }
+.param-range {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  accent-color: #c96442;
+  cursor: pointer;
+}
+.param-value {
+  flex-shrink: 0;
+  width: 72px;
+  text-align: right;
+  font-size: 12px;
+  color: #6b6b6b;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+.param-switch { position: relative; display: inline-block; margin-left: auto; cursor: pointer; }
+.param-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.param-switch-track {
+  display: block;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #d5d5d5;
+  transition: background 0.15s ease;
+  position: relative;
+}
+.param-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease;
+}
+.param-switch input:checked + .param-switch-track { background: #c96442; }
+.param-switch input:checked + .param-switch-track::after { transform: translateX(16px); }
+.param-reset-row { display: flex; justify-content: flex-end; margin-top: 6px; }
+.param-reset-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  color: #6b6b6b;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.param-reset-btn:hover { background: #e8e8e8; }
 </style>

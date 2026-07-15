@@ -559,6 +559,7 @@ import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
 import 'katex/dist/katex.min.css'
 import { renderMarkdown } from './markdownRenderer.js'
+import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth, useResizableSplit } from './useResizable.js'
 import SessionList from './SessionList.vue'
@@ -1082,6 +1083,87 @@ function highlightAllCodeBlocks() {
   })
 }
 
+// ==================== AI 消息流式瀑布渐变 ====================
+// 仿主流 AI（ChatGPT/Gemini）流式输出：新到的字符按先后顺序级联淡入
+// （透明度 0→1 + 轻微 blur 消散），形成"瀑布"式的渐变尾巴。
+// 难点：正文是 v-html 整段重渲染的，每个 chunk 都会把上一轮包的 span 冲掉。
+// 解法：为每个消息元素记录"已见文本长度 + 各批次到达时间"，每次重渲染后
+// 重新包 span，并用负的 animation-delay 恢复各字符已播进度，视觉上无缝。
+// 参数集中在 ../composables/streamFadeConfig.js（reactive + localStorage 持久化），
+// 设置面板直接读写 streamFadeConfig 即可。
+const STREAM_SEG_CHARS = 2 // 每个 span 包几个字符（性能/细腻度折中）
+const streamFadeState = new WeakMap() // el -> { len, pending: [{start, bornAt}] }
+
+function collectStreamTextNodes(root) {
+  const nodes = []
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      const p = n.parentElement
+      // 代码块/公式由 hljs/katex 接管 DOM，不要往里插 span
+      if (p && p.closest('pre, code, .katex, .code-btn-group')) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    }
+  })
+  let n
+  while ((n = walker.nextNode())) nodes.push(n)
+  return nodes
+}
+
+function applyStreamFade(el) {
+  const { fadeMs, staggerMs, maxSweepMs, blurPx } = streamFadeConfig
+  let st = streamFadeState.get(el)
+  if (!st) { st = { len: 0, pending: [] }; streamFadeState.set(el, st) }
+  const now = performance.now()
+  const nodes = collectStreamTextNodes(el)
+  const total = nodes.reduce((s, n) => s + n.nodeValue.length, 0)
+  if (total < st.len) { st.len = total; st.pending = []; return } // 切会话/markdown 回缩，重置
+  if (total > st.len) { st.pending.push({ start: st.len, bornAt: now }); st.len = total }
+  // 每批的实际级联间隔：字符太多时压缩，保证 MAX_SWEEP 内铺完
+  let ranges = st.pending.map((r, i) => ({ ...r, end: st.pending[i + 1]?.start ?? st.len }))
+  ranges = ranges.filter(r => {
+    const stag = Math.min(staggerMs, maxSweepMs / Math.max(1, r.end - r.start))
+    return now - r.bornAt < (r.end - r.start) * stag + fadeMs
+  })
+  st.pending = ranges.map(r => ({ start: r.start, bornAt: r.bornAt }))
+  if (!ranges.length) return
+  const fadeFrom = ranges[0].start
+  let offset = 0
+  for (const node of nodes) {
+    const nodeStart = offset
+    const text = node.nodeValue
+    offset += text.length
+    if (offset <= fadeFrom) continue
+    // 上一轮已包好的 span，动画还在跑，别动它
+    if (node.parentElement && node.parentElement.closest('.stream-fade-seg')) continue
+    const frag = document.createDocumentFragment()
+    const plainEnd = Math.max(0, fadeFrom - nodeStart)
+    if (plainEnd > 0) frag.appendChild(document.createTextNode(text.slice(0, plainEnd)))
+    for (let i = plainEnd; i < text.length; i += STREAM_SEG_CHARS) {
+      const seg = text.slice(i, i + STREAM_SEG_CHARS)
+      const pos = nodeStart + i
+      let range = ranges[0]
+      for (const r of ranges) { if (r.start <= pos) range = r; else break }
+      const stag = Math.min(staggerMs, maxSweepMs / Math.max(1, range.end - range.start))
+      const delay = (pos - range.start) * stag - (now - range.bornAt)
+      if (delay <= -fadeMs) { frag.appendChild(document.createTextNode(seg)); continue }
+      const span = document.createElement('span')
+      span.className = 'stream-fade-seg'
+      span.style.animationDuration = fadeMs + 'ms'
+      span.style.animationDelay = delay.toFixed(1) + 'ms'
+      span.style.setProperty('--sf-blur', blurPx + 'px')
+      span.textContent = seg
+      frag.appendChild(span)
+    }
+    node.parentNode.replaceChild(frag, node)
+  }
+}
+
+function streamFadePass() {
+  if (!streamFadeConfig.enabled) return
+  document.querySelectorAll('.chat-messages .assistant-message .markdown-body, .chat-messages .reasoning-text')
+    .forEach(applyStreamFade)
+}
+
 // ==================== useChatWidget ====================
 const {
   isOpen, isExpanded, userInput, messages, sessionId,
@@ -1339,7 +1421,7 @@ function buildOutgoingMessage() {
 
 const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.value })
 
-watch(messages, () => { nextTick(() => { highlightAllCodeBlocks() }) }, { deep: true })
+watch(messages, () => { nextTick(() => { streamFadePass(); highlightAllCodeBlocks() }) }, { deep: true })
 // 切进 git 状态条可见的 Code 模式时刷新一次，避免面板上的 +N/-N 停留在挂载时的旧快照
 watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
 // 工作流（四态机）结束时，停止按钮消失，立刻把输入框高度塌回单行——
@@ -1408,4 +1490,15 @@ onMounted(() => {
 
 <style>
 @import './chat-global.css';
+
+/* ==================== AI 流式瀑布渐变 ==================== */
+/* 时长/间隔的权威值在 streamFadeConfig（JS 会内联覆盖这里的 .5s 与 --sf-blur） */
+@keyframes om-stream-fade {
+  from { opacity: 0; filter: blur(var(--sf-blur, 2px)); }
+  to   { opacity: 1; filter: blur(0); }
+}
+.stream-fade-seg {
+  animation: om-stream-fade .5s ease-out both;
+  will-change: opacity, filter;
+}
 </style>
