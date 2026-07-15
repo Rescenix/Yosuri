@@ -188,7 +188,7 @@ async function handleDeleteBook() {
   padding: 8px 16px; border-radius: 8px; color: var(--text-primary, #0f172a);
   font-size: 0.9rem; cursor: pointer; transition: background 0.2s, box-shadow 0.2s;
 }
-.upload-btn:hover { background: #f8fafc; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+.upload-btn:hover { background: #f1f5f9; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
 .empty-shelf { text-align: center; color: var(--text-secondary, #64748b); padding: 40px; font-size: 0.95rem; }
 .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
 
@@ -219,7 +219,7 @@ async function handleDeleteBook() {
 
 .book-cover-placeholder {
   width: 100%; aspect-ratio: 2/3;
-  background: #f8fafc;
+  background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   display: flex; align-items: center; justify-content: center;

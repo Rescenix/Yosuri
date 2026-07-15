@@ -116,7 +116,7 @@
 /* -------- 书页内部样式 (原 ThreeReader.css) -------- */
 .flip-page {
   overflow: hidden;
-  background: #fafafa;
+  background: #ffffff;
 }
 
 .status-overlay {
@@ -174,7 +174,7 @@
   margin: 0 auto;
   border-radius: 12px;
   overflow: visible;
-  background: #fafafa;
+  background: #ffffff;
 }
 
 /* ---------- 书签图标（矩形 + 双三角） ---------- */
@@ -186,8 +186,8 @@
   cursor: pointer;
   width: 20px;
   height: 50px;
-  background: linear-gradient(135deg, #ee5c08 0%, #e7d2b5 100%);
-  border: 1px solid #b8977a;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 2px 6px 2px 2px;
   box-shadow: 1px 2px 4px rgba(0,0,0,0.15);
   transition: transform 0.2s ease;
@@ -200,7 +200,7 @@
   transform: translateX(-50%);
   font-size: 10px;
   color: #8b5e3c;
-  font-family: 'KaiTi', '楷体', 'Noto Serif SC', serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-weight: bold;
   z-index: 1;
   line-height: 1;
@@ -422,7 +422,7 @@
     margin: 0 !important;
     padding: 0 !important;
     border-radius: 0 !important;
-    background: #fafafa;
+    background: #ffffff;
     position: relative;
   }
 

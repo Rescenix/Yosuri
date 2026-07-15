@@ -12,11 +12,14 @@
         v-for="s in sessions"
         :key="s.id"
         class="session-row"
-        :class="{ active: s.id === activeSession }"
+        :class="{ active: s.id === activeSession, running: s.id === runningSession }"
         @mouseenter="hoveredId = s.id"
         @mouseleave="onRowLeave(s.id)"
         @click="onRowClick(s)"
       >
+        <!-- 运行指示灯：跑 agent 的会话蓝色呼吸，其余灰色常亮 -->
+        <span class="session-dot" :class="{ on: s.id === runningSession }"></span>
+
         <input
           v-if="editingId === s.id"
           ref="renameInputRef"
@@ -49,7 +52,9 @@ import { Icon } from '@iconify/vue'
 
 defineProps({
   sessions: { type: Array, default: () => [] },
-  activeSession: { type: String, default: '' }
+  activeSession: { type: String, default: '' },
+  // 正在跑 agent 的会话 id：该会话左侧指示灯变蓝呼吸、整行蓝边高亮
+  runningSession: { type: String, default: '' }
 })
 const emit = defineEmits(['select', 'new-session', 'rename', 'delete'])
 
@@ -170,12 +175,35 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   background: #f3f3f3;
   box-shadow: inset 0 0 0 1px #e8e8e8;
 }
+/* 运行中会话：整行蓝边高亮，跟输入框聚焦光流同一套蓝 */
+.session-row.running {
+  background: rgba(59, 130, 246, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.5);
+}
+
+/* 运行指示灯：默认灰色小点常亮；.on 时变蓝并呼吸+外扩光环 */
+.session-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c4c4c4;
+  transition: background 0.2s ease;
+}
+.session-dot.on {
+  background: #3b82f6;
+  animation: session-dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes session-dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55); }
+  50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0); }
+}
 
 .session-name {
   flex: 1;
   min-width: 0;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -185,11 +213,11 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   flex: 1;
   min-width: 0;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   color: #1a1a1a;
   font-family: inherit;
   background: #ffffff;
-  border: 1px solid #c96442;
+  border: 1px solid #3b82f6;
   border-radius: 6px;
   padding: 2px 6px;
   outline: none;
