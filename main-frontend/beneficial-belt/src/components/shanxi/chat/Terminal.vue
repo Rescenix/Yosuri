@@ -17,6 +17,21 @@
         <Icon icon="mdi:chevron-down" width="16" class="collapse-chevron" :class="{ rotated: !open }" @click="$emit('update:open', !open)" />
       </div>
     </div>
+
+    <!-- 嵌入模式（右侧工具面板）：顶部单标签页头，像独立终端窗口 -->
+    <div v-if="embedded" class="terminal-tabbar">
+      <div class="terminal-tab active">
+        <Icon icon="ri:terminal-line" width="13" class="terminal-tab-icon" />
+        <span class="terminal-tab-label">powershell</span>
+      </div>
+      <Icon
+        icon="mdi:stop-circle-outline"
+        width="14"
+        class="term-action-icon term-tab-interrupt"
+        title="Ctrl+C 中断当前命令"
+        @click="sendInterrupt"
+      />
+    </div>
     <div class="terminal-body" ref="bodyRef" v-show="open || embedded">
       <pre class="term-output">{{ output }}</pre>
       <div class="term-input-row">
@@ -167,6 +182,30 @@ onUnmounted(() => {
 .terminal-titlebar-actions { display: flex; align-items: center; gap: 8px; }
 .term-action-icon { cursor: pointer; opacity: 0.75; }
 .term-action-icon:hover { opacity: 1; color: #c96442; }
+
+/* 嵌入模式顶部单标签页头：白底融入卡片，底部一条细边框，标签左对齐 */
+.terminal-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  background: #ffffff;
+  border-bottom: 1px solid #ececec;
+  border-radius: 12px 12px 0 0;
+  flex-shrink: 0;
+}
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #1e293b;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+.terminal-tab.active { font-weight: 500; }
+.terminal-tab-icon { flex-shrink: 0; color: #6b6b6b; }
+.term-tab-interrupt { margin-left: auto; }
 
 .collapse-chevron { transition: transform 180ms ease; cursor: pointer; }
 .collapse-chevron.rotated { transform: rotate(180deg); }

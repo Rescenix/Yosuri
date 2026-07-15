@@ -415,11 +415,11 @@ func routeChatOnce(ctx context.Context, backends []RouterBackend, msgs []map[str
 // 实时把 reasoning_content/content 增量写成 thinking/intent SSE 事件。
 // 返回值里带上实际承接这轮请求的 backend（而不只是个名字字符串），前端要靠它
 // 拿到 vision/context_window/reasoning 这些能力元数据，决定要不要开放识图之类的功能。
-func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, *RouterBackend, error) {
+func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, int, *RouterBackend, error) {
 	var tried []string
 	for _, b := range backends {
 		if c.Request.Context().Err() != nil {
-			return "", nil, 0, nil, c.Request.Context().Err()
+			return "", nil, 0, 0, nil, c.Request.Context().Err()
 		}
 		// Ollama 官方云端 API 是原生格式（非 OpenAI 兼容），单独走流式分支
 		if b.Source == "ollama-cloud" {
@@ -428,6 +428,9 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		reqBody := map[string]any{
 			"model": b.Model, "messages": msgs, "stream": true,
 			"temperature": 0.2, "top_p": 0.85, "max_tokens": 4096,
+			// 请求上游回传 usage（prompt/completion tokens）——绝大多数 OpenAI 兼容免费源支持，
+			// 不影响计费，仅让前端 context 横条显示真实值而非纯字符/4 估算。
+			"stream_options": map[string]any{"include_usage": true},
 		}
 		// 只有前端选的这个 backend 真支持思考强度时才带这个字段——不支持的源
 		// 收到未知字段大概率报错，而不是安静忽略，不能无脑塞给所有 backend
@@ -470,19 +473,19 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		if len(tried) > 0 {
 			fmt.Printf("🔀 [路由] 流式请求由 %s 承接（此前 %d 个源失败）\n", b.Name, len(tried))
 		}
-		content, calls, outTok, err := drainChatStream(c, resp)
+		content, calls, inTok, outTok, err := drainChatStream(c, resp)
 		resp.Body.Close()
 		usedBackend := b
-		return content, calls, outTok, &usedBackend, err
+		return content, calls, inTok, outTok, &usedBackend, err
 	}
-	return "", nil, 0, nil, fmt.Errorf("所有模型源不可用：%s", strings.Join(tried, "；"))
+	return "", nil, 0, 0, nil, fmt.Errorf("所有模型源不可用：%s", strings.Join(tried, "；"))
 }
 
 // ollamaCloudStreamRound 走 Ollama 官方云端 API（ollama.com/api/chat，原生格式）。
 // 与 OpenAI 兼容链的区别：请求体同构（model/messages/stream/tools），但响应是
 // 每行一个独立 JSON 对象（非 data: 前缀 SSE），工具调用在 message.tool_calls
 // 顶层、arguments 是对象（需转 JSON 字符串喂给 core.ToolCall）。
-func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, *RouterBackend, error) {
+func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, int, *RouterBackend, error) {
 	reqBody := map[string]any{
 		"model": b.Model, "messages": msgs, "stream": true,
 		"options": map[string]any{"temperature": 0.2, "top_p": 0.85},
@@ -498,7 +501,7 @@ func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend,
 	body, _ := json.Marshal(reqBody)
 	httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", b.BaseURL, bytes.NewBuffer(body))
 	if err != nil {
-		return "", nil, 0, nil, err
+		return "", nil, 0, 0, nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if b.APIKey != "" {
@@ -507,17 +510,17 @@ func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend,
 	client := &http.Client{Timeout: b.Timeout}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return "", nil, 0, nil, fmt.Errorf("Ollama Cloud 连接失败: %w", err)
+		return "", nil, 0, 0, nil, fmt.Errorf("Ollama Cloud 连接失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return "", nil, 0, nil, fmt.Errorf("Ollama Cloud HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
+		return "", nil, 0, 0, nil, fmt.Errorf("Ollama Cloud HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 	}
 	content, calls, outTok, err := drainOllamaCloudStream(c, resp)
 	resp.Body.Close()
 	used := b
-	return content, calls, outTok, &used, err
+	return content, calls, 0, outTok, &used, err
 }
 
 // drainOllamaCloudStream 读 Ollama 原生流（每行一个 JSON 对象），实时转发
@@ -604,11 +607,16 @@ func drainOllamaCloudStream(c *gin.Context, resp *http.Response) (string, []core
 }
 
 // drainChatStream 读一条已建立的 SSE 流，实时转发 thinking/intent 事件。
-func drainChatStream(c *gin.Context, resp *http.Response) (string, []core.ToolCall, int, error) {
+// 返回真实拆分的 inputTokens/outputTokens：优先取上游 usage.prompt_tokens/completion_tokens，
+// 上游不回传时退化为字符/4 估算（与四态机历史口径一致）。
+func drainChatStream(c *gin.Context, resp *http.Response) (string, []core.ToolCall, int, int, error) {
 	reader := bufio.NewReader(resp.Body)
 	var full strings.Builder
 	charCount := 0
 	callsMap := map[int]*core.ToolCall{}
+	// 真实 usage：上游在最后一个空 choices chunk 里回传（stream_options.include_usage）
+	var inTok, outTok int
+	gotUsage := false
 
 	for {
 		line, rerr := reader.ReadString('\n')
@@ -616,7 +624,7 @@ func drainChatStream(c *gin.Context, resp *http.Response) (string, []core.ToolCa
 			if rerr == io.EOF {
 				break
 			}
-			return "", nil, 0, fmt.Errorf("读取流失败: %w", rerr)
+			return "", nil, 0, 0, fmt.Errorf("读取流失败: %w", rerr)
 		}
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "data: ") {
@@ -633,6 +641,16 @@ func drainChatStream(c *gin.Context, resp *http.Response) (string, []core.ToolCa
 		}
 		choices, _ := ev["choices"].([]any)
 		if len(choices) == 0 {
+			// 无 choices：可能是 usage chunk（stream_options.include_usage）
+			if usage, ok := ev["usage"].(map[string]any); ok {
+				if pt, ok := usage["prompt_tokens"].(float64); ok {
+					inTok = int(pt)
+				}
+				if ct, ok := usage["completion_tokens"].(float64); ok {
+					outTok = int(ct)
+				}
+				gotUsage = true
+			}
 			continue
 		}
 		choice, _ := choices[0].(map[string]any)
@@ -683,5 +701,9 @@ func drainChatStream(c *gin.Context, resp *http.Response) (string, []core.ToolCa
 			calls = append(calls, *tc)
 		}
 	}
-	return full.String(), calls, charCount / 4, nil
+	// 上游没回传 usage：用字符/4 估算兜底（与四态机 input 估算口径同源）
+	if !gotUsage {
+		outTok = charCount / 4
+	}
+	return full.String(), calls, inTok, outTok, nil
 }

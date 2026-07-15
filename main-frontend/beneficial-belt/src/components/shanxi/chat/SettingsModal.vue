@@ -110,6 +110,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 
 const props = defineProps({
   // QQ 登录接入前先留空，后端会落到固定的 "default" 用户文件
@@ -293,12 +294,11 @@ async function setDefault(id) {
   }
 }
 
-// 按提供商批量加入：用户点一个提供商，其下全部模型写进 localStorage('chatModelList')，
-// 下拉框（ChatWidget）动态读取这份列表。常驻的 DeepSeekProxy 不在此列（前端硬编码常驻）。
-const CHAT_LIST_KEY = 'chatModelList'
-const chatList = ref([])
+// 按提供商批量加入：用户点一个提供商，其下全部模型写进共享的 chatModelList，
+// 下拉框（ChatWidget）直接读这份列表。常驻的 DeepSeekProxy 不在此列（前端硬编码常驻）。
+const chatList = chatModelList
 function loadChatList() {
-  try { chatList.value = JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]') } catch (e) { chatList.value = [] }
+  syncChatModelList()
 }
 function isInChatList(value) {
   return chatList.value.some(m => m.value === value)
@@ -312,14 +312,16 @@ function isVendorSelected(vendor) {
 function toggleVendorModels(grp) {
   const entries = grp.items.map(fm => ({ label: fm.name, value: fm.id }))
   const allIn = entries.every(e => isInChatList(e.value))
+  let next
   if (allIn) {
     const drop = new Set(entries.map(e => e.value))
-    chatList.value = chatList.value.filter(m => !drop.has(m.value))
+    next = chatList.value.filter(m => !drop.has(m.value))
   } else {
     const have = new Set(chatList.value.map(m => m.value))
-    for (const e of entries) if (!have.has(e.value)) chatList.value.push(e)
+    next = [...chatList.value]
+    for (const e of entries) if (!have.has(e.value)) next.push(e)
   }
-  localStorage.setItem(CHAT_LIST_KEY, JSON.stringify(chatList.value))
+  setChatModelList(next)
 }
 // 可勾选项完全由接口数据动态生成：免费池(有Key) + 自定义配置。
 // 不再硬编码“Cloud 480B”（实为 Ollama Cloud gpt-oss:120b，标签过期且冗余，

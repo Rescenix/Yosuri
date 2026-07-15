@@ -6,6 +6,7 @@ import { useChatLogic } from '../composables/useChatLogic.js'
 import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
 import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
+import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 
 export function useChatWidget(props) {
   const isOpen = ref(false)
@@ -337,6 +338,8 @@ async function switchSession(id) {
   if (!id || id === sessionId.value) return
   sessionId.value = id
   localStorage.setItem('prism_session_id', id)
+  // 切会话时同步恢复该会话持久化的真实 token（横条绑定会话，刷新/切换都不丢）
+  sessionTokenStats.value = loadSessionTokenStats(id)
   messages.value = []
   await loadAllHistory()
 }
@@ -356,6 +359,8 @@ async function switchSession(id) {
     isLoggedIn.value = true
     await loadAllHistory()
     fetchBalance()
+    // 初始化时恢复当前会话持久化的真实 token（横条绑定会话，刷新不丢）
+    sessionTokenStats.value = loadSessionTokenStats(sessionId.value)
   })
 
   // 滚动监听挂在 messagesContainer ref 上（watch 而非 onMounted）：

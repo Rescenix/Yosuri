@@ -1565,6 +1565,8 @@ min-height: 90px !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 6px 0;
   min-width: 140px;
+  max-height: 320px;
+  overflow-y: auto;
   z-index: 9999;
 }
 .model-menu-item {
@@ -1720,13 +1722,15 @@ min-height: 90px !important;
   font-size: 12.5px;
 }
 
-/* ==================== AIStudio 工作区三栏布局 ==================== */
+/* ==================== AIStudio 工作区三栏布局 ====================
+   悬浮卡片风（对齐 Claude Code）：整体白底，仅左侧栏与右侧 dock 面板靠边框+阴影
+   做出悬浮卡片效果；中间聊天区保持无边框、与白底融为一体，不做成卡片（否则头部/
+   输入区会被圆角框割裂成上下两截）。 */
 .chat-window.expanded .chat-body.studio .chat-content {
   flex: 1 !important;
   width: auto !important;
   max-width: none !important;
   min-width: 0;
-  border-right: 1px solid #e5e5e5;
   background: #ffffff;
 }
 .chat-window.expanded .tool-panel {
@@ -1736,7 +1740,8 @@ min-height: 90px !important;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: #ffffff;
+  /* 透明：右侧不再有白色大矩形，只有里面每个 dock-pane 卡片浮在白底上 */
+  background: transparent;
 }
 .chat-window.expanded .tool-panel-meta {
   font-size: 10.5px;
@@ -1842,7 +1847,7 @@ min-height: 90px !important;
 
 /* 不加粗、不带折叠箭头——模型名本身就是可点开的（去掉视觉上的"这是个下拉框"提示） */
 .sch-model { position: relative; display: flex; align-items: center; gap: 4px; background: #ffffff; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 400; cursor: pointer; color: #1a1a1a; }
-.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; z-index: 9999; }
+.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
 .model-menu-item:hover { background: #f5f5f5; }
 .model-menu-item.active { background: #ececec; font-weight: 500; }
@@ -2081,7 +2086,8 @@ min-height: 90px !important;
   position: relative;
   flex: 0 0 auto;
   gap: 8px;
-  padding: 8px;
+  /* 不再自带内边距——栏间距由 chat-body-row 的 gap/padding 统一给，避免右侧比别处宽 8px */
+  padding: 0;
   box-sizing: border-box;
 }
 .tool-dock-resize-handle {
@@ -2105,8 +2111,8 @@ min-height: 90px !important;
   overflow: hidden;
   background: #ffffff;
   border: 1px solid #e8e8e8;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(20, 20, 20, 0.03);
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(20, 20, 20, 0.06);
 }
 .tool-dock-pane-close {
   position: absolute;
@@ -2154,6 +2160,20 @@ min-height: 90px !important;
   min-width: 0;
   overflow: hidden;
 }
+/* 展开态下 chat-body-row 是三栏工作区容器：整体白底 + 内边距 + 栏间距。
+   间隙是白色（与中间聊天区同色）不会割裂视觉，左右卡片靠自身边框+阴影浮起来。
+   非展开的小窗气泡不受影响。 */
+.chat-window.expanded .chat-body-row {
+  background: #ffffff;
+  padding: 8px;
+  gap: 8px;
+  box-sizing: border-box;
+}
+/* studio 是「中栏 + 右侧工具栏」的 flex 容器，补一个栏间距 */
+.chat-window.expanded .chat-body.studio {
+  gap: 8px;
+  background: transparent;
+}
 .session-pin-panel {
   position: relative;
   flex-shrink: 0;
@@ -2161,6 +2181,13 @@ min-height: 90px !important;
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid #e5e5e5;
+  background: #ffffff;
+}
+/* 左侧栏在展开态变成圆角悬浮卡片 */
+.chat-window.expanded .session-pin-panel {
+  border: 1px solid #e8e8e8;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(20, 20, 20, 0.04);
   background: #ffffff;
 }
 .session-pin-resize-handle {

@@ -72,7 +72,7 @@ func (r *WorkflowRunner) callLLMOnce(c *gin.Context, systemPrompt string, messag
 	}
 	model := os.Getenv("CLOUD_MODEL")
 	if model == "" {
-		model = "qwen3-coder:480b-cloud"
+		model = "gpt-oss:120b"
 	}
 
 	// 构建完整消息：system + 对话历史

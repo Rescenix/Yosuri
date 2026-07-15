@@ -76,4 +76,5 @@ func min(a, b int) int {
 func init() {
 	core.RegisterBlogFunc(generateBlogPost)
 	core.RegisterSearchFunc(WebSearch)
+	startNIMDailyRefresh()
 }

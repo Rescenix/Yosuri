@@ -426,13 +426,25 @@
                     <div class="ctx-bar-track"><div class="ctx-bar-fill" :style="{ width: liveContextStats.pct + '%' }"></div></div>
                     <span class="ctx-bar-pct">{{ liveContextStats.pct.toFixed(0) }}%</span>
                     <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
-                      <div class="tup-row">
-                        <span class="tup-label">输入 Tokens</span>
-                        <span class="tup-value">{{ formatTok(liveContextStats.inputTokens) }}</span>
+                      <div class="tup-header">
+                        <span class="tup-title">上下文用量</span>
+                        <span class="tup-total">~{{ formatTok(ctxTotalUsed) }}/{{ formatTok(ctxWindow) }} Tokens</span>
                       </div>
-                      <div class="tup-row">
-                        <span class="tup-label">输出 Tokens</span>
-                        <span class="tup-value">{{ formatTok(liveContextStats.outputTokens) }}</span>
+                      <div class="tup-pct">{{ ctxPct.toFixed(0) }}%</div>
+                      <div class="tup-bar">
+                        <div
+                          v-for="r in ctxRows"
+                          :key="r.key"
+                          class="tup-bar-seg"
+                          :style="{ width: (ctxWindow > 0 ? (r.tokens / ctxWindow) * 100 : 0) + '%', background: r.color }"
+                        ></div>
+                      </div>
+                      <div class="tup-list">
+                        <div v-for="r in ctxRows" :key="r.key" class="tup-item">
+                          <span class="tup-dot" :style="{ background: r.color }"></span>
+                          <span class="tup-label">{{ r.label }}</span>
+                          <span class="tup-value">{{ formatTok(r.tokens) }}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -441,7 +453,7 @@
                   <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
                     <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || (hasModels ? '模型' : '无可用模型') }}</span>
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
-                      <div v-if="!hasModels" class="model-menu-empty">无可用模型，请在设置面板添加</div>
+                      <div v-if="!hasModels" class="model-menu-empty"></div>
                       <div
                         v-for="m in modelOptions"
                         :key="m.value"
@@ -564,6 +576,9 @@ import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
 import BookShelf from '../../reading/BookShelf.vue'
 import ReaderView from '../../reading/ReaderView.vue'
+import { chatModelList } from '../composables/chatModelList.js'
+import { contextBreakdown, loadContextBreakdown } from '../composables/contextBreakdown.js'
+import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
@@ -638,6 +653,23 @@ async function deleteSession(id) {
 const toggleTokenPanel = () => {
   showTokenPanel.value = !showTokenPanel.value
 }
+// 仿图：上下文分类明细（6 类）。数据来自后端真实估算（字符/4，与四态机口径一致），
+// 从 contextBreakdown store 读，刷新不丢。
+const CTX_CATEGORIES = [
+  { key: 'system',    label: '系统提示词', color: '#98a2b3' },
+  { key: 'tools',     label: '工具定义',   color: '#a78bfa' },
+  { key: 'skill',     label: '技能',       color: '#d97706' },
+  { key: 'subagent',  label: '子代理定义', color: '#3b82f6' },
+  { key: 'memory',    label: '记忆',       color: '#fb923c' },
+  { key: 'conversation', label: '对话',    color: '#0f766e' },
+]
+const ctxRows = computed(() => {
+  const cb = contextBreakdown.value
+  return CTX_CATEGORIES.map(c => ({ ...c, tokens: cb[c.key] || 0 }))
+})
+const ctxTotalUsed = computed(() => ctxRows.value.reduce((s, r) => s + r.tokens, 0))
+const ctxWindow = computed(() => contextBreakdown.value.contextWindow || 0)
+const ctxPct = computed(() => ctxWindow.value > 0 ? Math.min((ctxTotalUsed.value / ctxWindow.value) * 100, 100) : 0)
 
 // ==================== 模型能力（识图 / 上下文窗口 / 是否支持思考强度） ====================
 // 免费池模型的能力元数据是静态已知的（后端 freeModelCatalog），开工前就能查到；
@@ -666,6 +698,10 @@ async function loadModelCapabilities() {
   }
 }
 onMounted(loadModelCapabilities)
+// 刷新时从 localStorage 恢复当前会话的上下文分类占用（不丢）
+loadContextBreakdown(localStorage.getItem('prism_session_id') || '')
+// 刷新时恢复当前会话的真实 input/output token（不丢，横条靠它显示实际值）
+sessionTokenStats.value = loadSessionTokenStats(localStorage.getItem('prism_session_id') || '')
 
 const lastAgentFlow = computed(() => {
   for (let i = messages.value.length - 1; i >= 0; i--) {
@@ -682,7 +718,8 @@ const currentCapability = computed(() => {
 // ==================== Context window 用量：优先用当前/最近一次 code 工作流的真实数据 ====================
 // 旧的 tokenStats 只从 /api/chat/stream 与 /api/workflow/run 两条老路径回填，
 // 四态机（Code 模式真正在用的那条）从来没接过——纯聊天/旧工作流之外，这里都是 0。
-// 有 agentflow 就用它的真实 modelInfo.context_window + 本轮 token 数，没有才退回旧值。
+// 有 agentflow 就用它的真实 modelInfo.context_window + 本轮 token 数；没有则退回持久化的
+// 会话级真实 token（sessionTokenStats，刷新不丢）；都没有才退回旧的内存 tokenStats。
 const liveContextStats = computed(() => {
   const flow = lastAgentFlow.value
   if (flow && flow.modelInfo) {
@@ -693,6 +730,19 @@ const liveContextStats = computed(() => {
     return {
       used, contextWindow, inputTokens, outputTokens,
       pct: contextWindow > 0 ? Math.min((used / contextWindow) * 100, 100) : 0
+    }
+  }
+  // 刷新后 agentflow 不在内存：用持久化的会话 token（绑定会话、刷新不丢），
+  // 不回退到恒为 0 的内存 tokenStats。
+  const persisted = sessionTokenStats.value
+  if (persisted && (persisted.inputTokens || persisted.outputTokens || persisted.contextWindow)) {
+    const used = (persisted.inputTokens || 0) + (persisted.outputTokens || 0)
+    const contextWindow = persisted.contextWindow || 0
+    return {
+      used, contextWindow,
+      inputTokens: persisted.inputTokens || 0,
+      outputTokens: persisted.outputTokens || 0,
+      pct: contextWindow > 0 ? Math.min((used / contextWindow) * 100, 100) : (persisted.contextPct || 0)
     }
   }
   return {
@@ -958,26 +1008,29 @@ async function copyText(text) {
 }
 
 // ==================== 模型选择 ====================
-// 下拉直接读后端真实模型列表（modelLabels：免费池+自定义配置），不依赖 localStorage。
+// 下拉只显示用户在设置面板「选为可用」加入的模型——读共享的 chatModelList store，
+// 这是 SettingsModal.toggleVendorModels 写入的权威列表。设置里没勾选 → 这里就是空。
+// modelLabels 仅用于把持久化的裸 id 还原成显示名（后端返回 name）。
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
-// 后端真实模型列表到达后：若当前选中不在列表里（首次/旧 localStorage 残留如 ds_browser），
-// 自动定位到第一个真实模型；models 为空则保持空（UI 显示"无可用模型"）。
-watch(modelLabels, (labels) => {
-  const ids = Object.keys(labels)
+// 列表为空（用户设置里没选任何模型）时，下拉无选项；选中项若不在真实列表里则定位到第一个。
+// 只用后端真实存在的 id 定位，跳过 localStorage 残留的幽灵 id（如 'cloud'/480B）。
+watch(chatModelList, (list) => {
+  const ids = (list || []).filter(m => m.value in modelLabels.value).map(m => m.value)
   if (ids.length === 0) return
   if (!ids.includes(selectedModel.value)) {
     selectedModel.value = ids[0]
     localStorage.setItem('selectedModel', ids[0])
   }
-})
-// useAgentWorkflow.js 是单独 composable，直接读 localStorage('selectedModel') 传给
-// 后端做精确路由，不共享这个 ref——所以这里要把（可能刚定位的）值落盘一次。
-localStorage.setItem('selectedModel', selectedModel.value)
+}, { deep: true })
 const modelOptions = computed(() => {
-  // 下拉直接读后端真实模型列表（modelLabels：免费池+自定义配置），
-  // 不依赖 localStorage 勾选列表——避免勾选过的旧模型（如 Qwen3-Coder 480B）成幽灵残留。
-  // 后端没有就显示空。
-  return Object.entries(modelLabels.value).map(([id, label]) => ({ label, value: id }))
+  // 仅展示用户在设置面板选为可用的模型，且必须是后端真实存在的（modelLabels 有记录）。
+  // 过滤掉 localStorage 残留的幽灵 id（如过期的 'cloud'/480B），它们不在后端 freeModelCatalog 里。
+  return chatModelList.value
+    .filter(m => m.value in modelLabels.value)
+    .map(m => ({
+      label: modelLabels.value[m.value] || m.label || m.value,
+      value: m.value
+    }))
 })
 const hasModels = computed(() => modelOptions.value.length > 0)
 const showModelMenu = ref(false)

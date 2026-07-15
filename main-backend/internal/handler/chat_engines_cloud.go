@@ -26,11 +26,11 @@ func (h *ChatHandler) resolveCloudConversation(
 ) (string, string, int, error) {
 	apiKey := os.Getenv("CLOUD_API_KEY")
 	if apiKey == "" {
-		return "", "", 0, fmt.Errorf("缺少 Cloud API Key (CLOUD_API_KEY)")
+	return "", "", 0, fmt.Errorf("缺少 Cloud API Key (CLOUD_API_KEY)")
 	}
 	model := os.Getenv("CLOUD_MODEL")
 	if model == "" {
-		model = "qwen3-coder:480b-cloud"
+		model = "gpt-oss:120b"
 	}
 
 	history := h.sessionStore.Get(sessionID)
@@ -76,9 +76,9 @@ func (h *ChatHandler) resolveCloudConversation(
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			return "", "", 0, fmt.Errorf("Cloud API 返回错误 %d: %s", resp.StatusCode, string(bodyBytes))
-		}
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", "", 0, fmt.Errorf("Cloud API 返回错误 %d: %s", resp.StatusCode, string(bodyBytes))
+	}
 
 		// 流式读取并实时推送
 		reader := bufio.NewReader(resp.Body)

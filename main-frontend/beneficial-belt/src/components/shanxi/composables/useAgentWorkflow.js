@@ -1,4 +1,6 @@
 import { reactive } from 'vue'
+import { contextBreakdown, setContextBreakdownFromBackend, setConversationTokens } from './contextBreakdown.js'
+import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from './sessionTokenStats.js'
 
 // 四态机 Code 工作流的前端传输层。
 // 直接用原生 EventSource 连 GET /api/code/workflow，事件契约见后端
@@ -73,7 +75,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             onStreamUpdate?.()
         }
 
-        es.addEventListener('model_info', e => { flow.modelInfo = JSON.parse(e.data) })
+        es.addEventListener('model_info', e => {
+            flow.modelInfo = JSON.parse(e.data)
+            // 后端回传的分类上下文占用（system/subagent/skill/memory/tools），落盘持久化
+            setContextBreakdownFromBackend(flow.modelInfo.context_breakdown, flow.modelInfo.context_window)
+        })
         es.addEventListener('thinking', e => appendText('thinking', JSON.parse(e.data).content))
         es.addEventListener('intent', e => appendText('intent', JSON.parse(e.data).content))
 
@@ -138,6 +144,17 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             flow.endTime = Date.now()
             flow.inputTokens = d.input_tokens || 0
             flow.outputTokens = d.output_tokens || 0
+            // 对话类 token 用后端 input_tokens（历史字符/4，与分类口径一致），按 sessionId 持久化
+            setConversationTokens(d.input_tokens || 0, localStorage.getItem('prism_session_id') || '')
+            // 把本轮 agentflow 的真实 input/output token 按 sessionId 持久化，
+            // 这样刷新后底部 context 横条（liveContextStats）仍能显示实际值，不归零。
+            persistSessionTokens({
+                inputTokens: d.input_tokens || 0,
+                outputTokens: d.output_tokens || 0,
+                contextWindow: flow.modelInfo?.context_window || 0,
+                contextPct: flow.modelInfo?.context_window ? Math.min(((d.input_tokens + d.output_tokens) / flow.modelInfo.context_window) * 100, 100) : 0,
+                latencyMs: 0
+            }, localStorage.getItem('prism_session_id') || '')
             currentFlow = null
             closeStream()
         })

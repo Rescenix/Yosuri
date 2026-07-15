@@ -17,18 +17,20 @@ import (
 )
 
 type previewServerCandidate struct {
-	Name string `json:"name"`
-	Port int    `json:"port"`
-	URL  string `json:"url"`
+	Name     string `json:"name"`
+	Port     int    `json:"port"`
+	URL      string `json:"url"`
+	Category string `json:"category"` // frontend | backend | other —— 前端筛选用
 }
 
 // 候选清单按本项目的真实拓扑写死；将来要动态配置再抽到文件里（简单优先）
 var previewCandidates = []previewServerCandidate{
-	{Name: "beneficial-belt (Astro)", Port: 4322},
-	{Name: "Astro 默认", Port: 4321},
-	{Name: "Vite 默认", Port: 5173},
-	{Name: "main-backend API", Port: 8080},
-	{Name: "DS 浏览器代理", Port: 3000},
+	{Name: "beneficial-belt (前端)", Port: 4322, Category: "frontend"},
+	{Name: "Vite 默认", Port: 5173, Category: "frontend"},
+	{Name: "Astro 默认", Port: 4321, Category: "frontend"},
+	{Name: "main-backend API", Port: 8080, Category: "backend"},
+	{Name: "Harness (:8001)", Port: 8001, Category: "backend"},
+	{Name: "DS 浏览器代理", Port: 3000, Category: "other"},
 }
 
 // HandlePreviewServers GET /api/preview/servers — 返回当前存活的本地服务

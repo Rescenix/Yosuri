@@ -81,8 +81,6 @@ func (h *ChatHandler) resolveDSBrowserConversation(
 	if err := sendToDSBrowser(fullMessage); err != nil {
 		return "", "", 0, fmt.Errorf("发送消息到 DS 失败: %w", err)
 	}
-
-	// 等待 DS 开始回复（最多等 15 秒）
 	ready := false
 	for i := 0; i < 30; i++ {
 		time.Sleep(500 * time.Millisecond)

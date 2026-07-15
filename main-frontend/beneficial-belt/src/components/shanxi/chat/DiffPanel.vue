@@ -1,20 +1,7 @@
 <template>
   <div class="diff-panel">
-    <!-- 顶部：分支 → working tree + 搜索 + 刷新 -->
+    <!-- 顶部：搜索框占据左上角（取代原 branch → working tree 标签），右侧保留增删统计 + 刷新 -->
     <div class="diff-toolbar">
-      <div class="diff-branch-row">
-        <Icon icon="mdi:source-branch" width="13" color="#94a3b8" />
-        <span class="diff-branch">{{ branch || '...' }}</span>
-        <Icon icon="mdi:arrow-right-thin" width="14" color="#a3a3a3" />
-        <span class="diff-worktree">working tree</span>
-        <span class="diff-totals">
-          <span class="diff-adds">+{{ totals.add }}</span>
-          <span class="diff-dels">−{{ totals.del }}</span>
-        </span>
-        <button class="diff-refresh-btn" @click="fetchList" title="刷新">
-          <Icon icon="mdi:refresh" width="14" :class="{ 'diff-spin': listLoading }" />
-        </button>
-      </div>
       <div class="diff-search-wrap">
         <Icon icon="mdi:magnify" width="13" color="#a3a3a3" />
         <input
@@ -28,6 +15,13 @@
           <Icon icon="mdi:close" width="12" />
         </button>
       </div>
+      <span class="diff-totals">
+        <span class="diff-adds">+{{ totals.add }}</span>
+        <span class="diff-dels">−{{ totals.del }}</span>
+      </span>
+      <button class="diff-refresh-btn" @click="fetchList" title="刷新">
+        <Icon icon="mdi:refresh" width="14" :class="{ 'diff-spin': listLoading }" />
+      </button>
     </div>
 
     <div v-if="!listLoading && filteredFiles.length === 0" class="diff-empty">
@@ -37,12 +31,16 @@
 
     <div v-else class="diff-body">
       <div class="diff-file-card" v-for="df in filteredFiles" :key="df.path">
-        <div class="diff-file-head" @click="toggleFile(df)">
+        <div
+          class="diff-file-head"
+          :class="{ 'is-open': !!expanded[df.path] }"
+          @click="toggleFile(df)"
+          @contextmenu.prevent="openCtxMenu($event, df)"
+        >
           <span class="diff-chev" :class="{ open: !!expanded[df.path] }">›</span>
           <span class="diff-status-badge" :class="'st-' + df.status">{{ df.status }}</span>
-          <span class="diff-file-name" :title="df.path">
-            <span class="diff-file-dir" v-if="fileDir(df.path)">{{ fileDir(df.path) }}/</span>{{ fileBaseName(df.path) }}
-          </span>
+          <!-- 只显示文件名（basename），完整路径走右键菜单复制 -->
+          <span class="diff-file-name" :title="df.path">{{ fileBaseName(df.path) }}</span>
           <span class="diff-adds">+{{ df.additions }}</span>
           <span class="diff-dels">−{{ df.deletions }}</span>
         </div>
@@ -59,11 +57,26 @@
         </div>
       </div>
     </div>
+
+    <!-- 右键悬浮菜单：复制完整路径 -->
+    <Teleport to="body">
+      <div v-if="ctxMenu.show" class="diff-ctx-backdrop" @click="closeCtxMenu" @contextmenu.prevent="closeCtxMenu"></div>
+      <div
+        v-if="ctxMenu.show"
+        class="diff-ctx-menu"
+        :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+      >
+        <div class="diff-ctx-item" @click="copyFullPath">
+          <Icon icon="mdi:content-copy" width="14" />
+          <span>{{ ctxCopied ? '已复制' : '复制完整路径' }}</span>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { fileBaseName } from './toolArgs.js'
 import DiffViewer from './DiffViewer.vue'
@@ -95,7 +108,8 @@ onMounted(fetchList)
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return files.value
-  return files.value.filter(f => f.path.toLowerCase().includes(q))
+  // 按文件名（basename）搜索，不匹配完整路径
+  return files.value.filter(f => fileBaseName(f.path).toLowerCase().includes(q))
 })
 
 const totals = computed(() => {
@@ -104,10 +118,34 @@ const totals = computed(() => {
   return { add, del }
 })
 
-function fileDir(path) {
-  const i = path.lastIndexOf('/')
-  return i > 0 ? path.slice(0, i) : ''
+// ---- 右键复制完整路径 ----
+const ctxMenu = reactive({ show: false, x: 0, y: 0, path: '' })
+const ctxCopied = ref(false)
+function openCtxMenu(e, df) {
+  ctxCopied.value = false
+  // 贴边处理：菜单宽约 180px、高约 40px，靠右/靠下时向内翻折，避免溢出视口
+  const mw = 180, mh = 40
+  ctxMenu.x = Math.min(e.clientX, window.innerWidth - mw - 8)
+  ctxMenu.y = Math.min(e.clientY, window.innerHeight - mh - 8)
+  ctxMenu.path = df.path
+  ctxMenu.show = true
 }
+function closeCtxMenu() { ctxMenu.show = false }
+async function copyFullPath() {
+  const text = ctxMenu.path
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+  }
+  ctxCopied.value = true
+  setTimeout(closeCtxMenu, 700)
+}
+function onEscClose(e) { if (e.key === 'Escape') closeCtxMenu() }
+onMounted(() => document.addEventListener('keydown', onEscClose))
+onUnmounted(() => document.removeEventListener('keydown', onEscClose))
 
 async function toggleFile(df) {
   expanded[df.path] = !expanded[df.path]
@@ -133,26 +171,16 @@ async function toggleFile(df) {
   overflow: hidden;
 }
 
-/* ---------- 顶部工具栏 ---------- */
+/* ---------- 顶部工具栏：搜索框占左、统计+刷新靠右，单行 ---------- */
 .diff-toolbar {
   flex-shrink: 0;
-  padding: 8px 10px 6px;
-  border-bottom: 1px solid #ececec;
-}
-.diff-branch-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 7px;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ececec;
 }
-.diff-branch, .diff-worktree {
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  font-size: 12px;
-  color: #1e293b;
-  font-weight: 600;
-}
-.diff-worktree { color: #94a3b8; font-weight: 500; }
-.diff-totals { flex: 1; text-align: right; display: flex; gap: 6px; justify-content: flex-end; }
+.diff-totals { display: flex; gap: 6px; flex-shrink: 0; }
 .diff-refresh-btn {
   display: inline-flex;
   align-items: center;
@@ -168,6 +196,8 @@ async function toggleFile(df) {
 @keyframes diff-rotate { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 .diff-search-wrap {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -210,23 +240,30 @@ async function toggleFile(df) {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
-  padding: 10px 10px 14px;
+  padding: 0 0 12px;
 }
 
+/* 仿 VS Code / Claude Code：紧密矩形行列表，不是带间距的圆角卡片 */
 .diff-file-card {
-  border: 1px solid #e5e5e5;
-  border-radius: 10px;
-  margin-bottom: 8px;
-  overflow: hidden;
-  background: #ffffff;
+  background: transparent;
+  /* 不能用 overflow:hidden——它会成为 sticky 的滚动容器、令下面的吸顶失效 */
 }
 .diff-file-head {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 12px;
+  padding: 5px 12px;
   cursor: pointer;
-  background: #f8fafc;
+  background: #ffffff;
+  /* 展开后滚动时，当前文件的文件名 + 增删栏吸附到滚动区顶部 */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.diff-file-head:hover { background: #f6f7f9; }
+.diff-file-head.is-open {
+  background: #f4f6f8;
+  border-bottom: 1px solid #ececec;
 }
 .diff-chev {
   display: inline-block;
@@ -258,13 +295,11 @@ async function toggleFile(df) {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 12px;
   font-weight: 600;
+  color: #1e293b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;      /* 路径太长时优先保住文件名尾部 */
-  text-align: left;
 }
-.diff-file-dir { color: #a3a3a3; font-weight: 400; }
 .diff-adds, .diff-dels {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 12px;
@@ -274,10 +309,39 @@ async function toggleFile(df) {
 .diff-adds { color: #12b76a; }
 .diff-dels { color: #d94834; }
 
-.diff-rows { border-top: 1px solid #e5e5e5; }
+.diff-rows { border-top: 1px solid #f0f0f0; }
 .diff-file-hint {
   padding: 12px;
   font-size: 12px;
   color: #a3a3a3;
 }
+
+/* ---------- 右键复制完整路径悬浮菜单 ---------- */
+.diff-ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+}
+.diff-ctx-menu {
+  position: fixed;
+  z-index: 30001;
+  min-width: 160px;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  padding: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.diff-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  font-size: 12.5px;
+  color: #1e293b;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.diff-ctx-item:hover { background: #f1f5f9; color: #2563eb; }
 </style>

@@ -317,34 +317,19 @@
 
 
 
+/* KaTeX 0.17 自带 katex.min.css 已精确处理所有排版（分数/上下标/根号靠每个
+   span 的 vertical-align 与 strut 高度堆叠）。这里只做无害的外观微调，绝不覆盖
+   line-height / vertical-align —— 之前那批给远古 katex 0.6 写的 !important hack
+   （尤其 .katex * { vertical-align: inherit }）会把 0.17 的定位彻底打散。 */
 .markdown-body .katex {
-  font-size: 1.08em !important;
-  line-height: 1 !important;
-  vertical-align: -0.08em !important;
-  display: inline-block !important;
-  position: relative;
-}
-
-.markdown-body .katex-html {
-  line-height: 1 !important;
+  font-size: 1.05em;
 }
 
 .markdown-body .katex-display {
   margin: 1em 0;
-  text-align: center;
-}
-
-.markdown-body .katex .mord {
-  vertical-align: baseline;
-}
-
-.markdown-body .katex .mfrac {
-  position: relative;
-  top: -0.02em;
-}
-
-.markdown-body .katex * {
-  vertical-align: inherit;
+  /* 超宽公式（长数值代入式）在自己的容器里横向滚动，不撑破页面 */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .markdown-body pre {
@@ -803,11 +788,15 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   font-size: 10px;
   color: #94a3b8;
 }
-/* ==================== 按钮高亮状态（模式化高亮） ==================== */
-.workflow-btn.active,
-.workflow-btn-code.active {
-  background: #c96442 !important;
-  color: #ffffff !important;
-  border-color: #c96442 !important;
-  box-shadow: 0 2px 8px rgba(201, 100, 66, 0.25);
-}
+/* ==================== 上下文用量分类明细卡（仿 Claude） ==================== */
+.tup-header { display: flex; align-items: baseline; justify-content: space-between; }
+.tup-title { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.tup-total { font-size: 11px; color: #94a3b8; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.tup-pct { font-size: 12px; color: #64748b; margin-top: 2px; }
+.tup-bar { display: flex; width: 100%; height: 6px; border-radius: 3px; background: #f0f0f0; margin: 6px 0 10px; overflow: hidden; }
+.tup-bar-seg { height: 100%; }
+.tup-list { display: flex; flex-direction: column; gap: 4px; }
+.tup-item { display: flex; align-items: center; font-size: 12px; padding: 1px 0; }
+.tup-dot { width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; flex-shrink: 0; }
+.tup-item .tup-label { color: #475569; flex: 1; }
+.tup-item .tup-value { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-weight: 600; color: #334155; }

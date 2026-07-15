@@ -36,7 +36,6 @@
     "jquery": "^4.0.0",
     "katex": "^0.17.0",
     "markdown-it": "^14.2.0",
-    "markdown-it-katex": "^2.0.3",
     "marked": "^18.0.5",
     "marked-katex-extension": "^5.1.10",
     "monaco-editor": "^0.55.1",

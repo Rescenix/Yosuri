@@ -91,6 +91,11 @@ func (h *ChatHandler) resolveDSConversation(
 			"stream":      true,
 			"temperature": temperature,
 			"top_p":       topP,
+			// 请求上游在最后一个 chunk 附带 usage（含 prompt_tokens/completion_tokens），
+			// 否则前端 token 计量恒为 0。注意 this 不产生额外计费，仅开启 usage 回传。
+			"stream_options": map[string]interface{}{
+				"include_usage": true,
+			},
 		}
 		if maxTokens > 0 && maxTokens <= 2000 {
 			reqBody["max_tokens"] = maxTokens
@@ -124,6 +129,8 @@ func (h *ChatHandler) resolveDSConversation(
 		reader := bufio.NewReader(resp.Body)
 		var fullContent strings.Builder
 		toolCallsMap := make(map[int]*core.ToolCall)
+		// 跨轮工具循环的累计 token 用量（每轮上游都会回传一次 usage）
+		var totalInputTokens, totalOutputTokens int
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -149,6 +156,16 @@ func (h *ChatHandler) resolveDSConversation(
 			}
 			choices, ok := event["choices"].([]interface{})
 			if !ok || len(choices) == 0 {
+				// 该 chunk 没有 choices：可能是 usage chunk（stream_options.include_usage）。
+				// 它携带 prompt_tokens/completion_tokens，必须在此捕获，否则前端 token 恒为 0。
+				if usage, hasUsage := event["usage"].(map[string]interface{}); hasUsage {
+					if pt, ok := usage["prompt_tokens"].(float64); ok {
+						totalInputTokens += int(pt)
+					}
+					if ct, ok := usage["completion_tokens"].(float64); ok {
+						totalOutputTokens += int(ct)
+					}
+				}
 				continue
 			}
 			choice, ok := choices[0].(map[string]interface{})
@@ -217,7 +234,7 @@ func (h *ChatHandler) resolveDSConversation(
 		}
 
 		if len(completeCalls) == 0 {
-			return fullContent.String(), "", 0, nil
+			return fullContent.String(), "", totalInputTokens + totalOutputTokens, nil
 		}
 
 		var toolResults []string

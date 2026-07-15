@@ -1,5 +1,13 @@
 <template>
   <div class="pb-root">
+    <!-- 顶部单标签页头：像独立浏览器窗口 -->
+    <div class="pb-tabbar">
+      <div class="pb-tab active">
+        <Icon icon="mdi:web" width="13" class="pb-tab-icon" />
+        <span class="pb-tab-label">{{ tabLabel }}</span>
+      </div>
+    </div>
+
     <!-- 工具栏：后退/前进/刷新 + URL 栏 + 视口切换 + 外部打开 -->
     <div class="pb-toolbar">
       <button class="pb-icon-btn" :disabled="historyIndex <= 0" @click="goBack" title="后退">
@@ -35,13 +43,15 @@
       <div class="pb-empty-title">本地服务</div>
       <div v-if="serversLoading" class="pb-empty-hint">探测本地端口中…</div>
       <template v-else>
-        <div v-for="s in servers" :key="s.port" class="pb-server-card" @click="navigateTo(s.url)">
+        <div v-for="s in filteredServers" :key="s.port" class="pb-server-card" @click="navigateTo(s.url)">
           <Icon icon="mdi:server-outline" width="15" color="#6b6b6b" />
           <span class="pb-server-name">{{ s.name }}</span>
           <span class="pb-server-port">:{{ s.port }}</span>
           <span class="pb-server-play"><Icon icon="mdi:play" width="15" /></span>
         </div>
-        <div v-if="!servers.length" class="pb-empty-hint">没有探测到运行中的本地服务</div>
+        <div v-if="!filteredServers.length" class="pb-empty-hint">
+          {{ servers.length ? '没有探测到前端服务' : '没有探测到运行中的本地服务' }}
+        </div>
         <button class="pb-rescan" @click="fetchServers">
           <Icon icon="mdi:refresh" width="13" /> 重新探测
         </button>
@@ -63,11 +73,24 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const servers = ref([])
 const serversLoading = ref(true)
+
+// 本地服务只显示前端。后端返回 category 时用它；老后端没这字段则按端口兜底推断。
+function isFrontend(s) {
+  if (s.category) return s.category === 'frontend'
+  return [4322, 4321, 5173, 3001].includes(s.port)
+}
+const filteredServers = computed(() => servers.value.filter(isFrontend))
+
+// ---- 顶部标签页标题：当前页 host，空标签页时占位 ----
+const tabLabel = computed(() => {
+  if (!currentUrl.value) return '新标签页'
+  try { return new URL(currentUrl.value).host } catch { return currentUrl.value }
+})
 
 // 自维护导航栈：iframe 跨源后退/前进不可控（SecurityError），
 // 这里只记录通过 URL 栏 / 服务器卡片发起的导航，iframe 内部的点击跳转仍是原生行为
@@ -153,6 +176,35 @@ function openExternal() {
   height: 100%;
   min-height: 0;
   background: #fff;
+}
+
+/* ---------- 顶部单标签页头：白底融入卡片，底部一条细边框，标签左对齐 ---------- */
+.pb-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  background: #ffffff;
+  border-bottom: 1px solid #ececec;
+  border-radius: 12px 12px 0 0;
+  flex-shrink: 0;
+}
+.pb-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  font-size: 12px;
+  color: #1e293b;
+}
+.pb-tab.active { font-weight: 500; }
+.pb-tab-icon { flex-shrink: 0; color: #6b6b6b; }
+.pb-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- 工具栏 ---------- */
