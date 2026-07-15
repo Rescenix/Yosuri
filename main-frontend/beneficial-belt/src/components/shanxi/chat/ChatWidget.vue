@@ -643,15 +643,23 @@ const toggleTokenPanel = () => {
 // DeepSeekProxy / Cloud / 自定义配置这些没有静态元数据，退回最近一次真实工作流
 // 的 model_info 回填——第一次用之前不知道，用过一次就记住了。
 const modelCapabilities = ref({}) // { [modelId]: {vision, context_window, reasoning} }
+// 后端 catalog 的 id→显示名映射，供下拉框在只有裸 id（持久化的选择）时复原标签
+const modelLabels = ref({}) // { [modelId]: 显示名 }
 async function loadModelCapabilities() {
   try {
     const res = await fetch('/api/models/config')
     const data = await res.json()
     const map = {}
+    const labels = {}
     for (const fm of (data.free_models || [])) {
       map[fm.id] = { vision: fm.vision, context_window: fm.context_window, reasoning: fm.reasoning }
+      labels[fm.id] = fm.name
+    }
+    for (const c of (data.configs || [])) {
+      labels[c.id] = c.name || '自定义配置'
     }
     modelCapabilities.value = map
+    modelLabels.value = labels
   } catch (e) {
     console.warn('加载模型能力失败', e)
   }
@@ -956,31 +964,56 @@ async function copyText(text) {
 // （见 useAgentWorkflow.js），选哪个就真的用哪个，不再是摆设。
 const CHAT_LIST_KEY = 'chatModelList'
 const DEFAULT_MODEL = 'ds_browser'
+// 早期硬编码、现已从后端 catalog 移除的 id：这些才需要在启动时清掉重置为默认，
+// 否则下拉框会显示一个永远路由不到的死项。合法的持久化选择一律不动。
+const LEGACY_DEAD_MODELS = new Set(['local', 'cloud', 'ds', 'custom'])
 function loadChatModelList() {
-  try { return JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]') } catch (e) { return [] }
+  try {
+    const list = JSON.parse(localStorage.getItem(CHAT_LIST_KEY) || '[]')
+    // 过滤掉已废弃的硬编码死项（如 'cloud' 曾由 SettingsModal 写死喂入，
+    // 与 LEGACY_DEAD_MODELS 打架导致永远清不掉），避免下拉残留过期项。
+    return list.filter(m => m && !LEGACY_DEAD_MODELS.has(m.value))
+  } catch (e) { return [] }
 }
-const modelOptions = computed(() => {
-  const base = [{ label: 'DeepSeekProxy', value: 'ds_browser' }]
-  const extra = loadChatModelList()
-  return [...base, ...extra]
-})
 const selectedModel = ref(localStorage.getItem('selectedModel') || DEFAULT_MODEL)
-// 首次加载（localStorage 还没这个 key）时立刻落盘——useAgentWorkflow.js 是单独的
-// composable，直接读 localStorage 拿 model 传给后端做精确路由，不共享这个 ref，
-// 不落盘的话它读到的永远是空字符串，选择器显示 Agnes 但实际请求走的是全量兜底链
-const showModelMenu = ref(false)
-function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
-// 防止历史 localStorage 里残留已删除的硬编码项（local/cloud/ds/custom）导致下拉框显示空白
-if (!modelOptions.value.some(m => m.value === selectedModel.value)) {
+// 只清理已废弃的老硬编码项；其余持久化选择原样保留。
+// 关键修复：绝不在启动时因"当前不在列表里"就把选择重置并覆盖落盘——之前那样会
+// 让任何没进 chatModelList 的模型（配置好的免费池模型 / 后端 catalog 变动前选的）
+// 每次重启都被静默清成 DeepSeekProxy。
+if (LEGACY_DEAD_MODELS.has(selectedModel.value)) {
   selectedModel.value = DEFAULT_MODEL
 }
+// useAgentWorkflow.js 是单独 composable，直接读 localStorage('selectedModel') 传给
+// 后端做精确路由，不共享这个 ref——所以这里要把（可能刚重置的）值落盘一次。
 localStorage.setItem('selectedModel', selectedModel.value)
+
+// 响应式持有聊天下拉可选项：初值从 localStorage 读，设置面板改动（写入同 key）后
+// 通过 storage 事件 + 设置关闭时重读自动刷新，无需手动刷新页面。
+const chatModelList = ref(loadChatModelList())
+function refreshChatModelList() { chatModelList.value = loadChatModelList() }
+window.addEventListener('storage', (e) => { if (e.key === CHAT_LIST_KEY) refreshChatModelList() })
+const modelOptions = computed(() => {
+  const base = [{ label: 'DeepSeekProxy', value: 'ds_browser' }]
+  const extra = chatModelList.value
+  const merged = [...base, ...extra]
+  // 保证当前选中的模型始终在下拉里：这样重启后既能正确显示（标签从后端 catalog
+  // 复原，catalog 异步到达后 computed 自动重算），又不需要那段破坏性的重置逻辑。
+  const sel = selectedModel.value
+  if (sel && !LEGACY_DEAD_MODELS.has(sel) && !merged.some(m => m.value === sel)) {
+    merged.push({ label: modelLabels.value[sel] || sel, value: sel })
+  }
+  return merged
+})
+const showModelMenu = ref(false)
+function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
 function onSettingsClosed() {
   showSettings.value = false
-  // modelOptions 是 computed，自动从 localStorage('chatModelList') 重算，无需手动刷新
+  // 设置面板改动会写入 localStorage('chatModelList')，同标签页内 storage 事件不冒泡，
+  // 这里显式重读，让模型下拉立即反映勾选变化，无需刷新页面。
+  refreshChatModelList()
 }
 
 // ==================== 底部工具条：Auto 模式 + "+" 附加菜单 ====================
