@@ -993,13 +993,20 @@ const chatModelList = ref(loadChatModelList())
 function refreshChatModelList() { chatModelList.value = loadChatModelList() }
 window.addEventListener('storage', (e) => { if (e.key === CHAT_LIST_KEY) refreshChatModelList() })
 const modelOptions = computed(() => {
-  const base = [{ label: 'DeepSeekProxy', value: 'ds_browser' }]
-  const extra = chatModelList.value
-  const merged = [...base, ...extra]
+  // 剪枝：只保留仍存在于后端（免费池 catalog 或用户自定义配置）的 id。
+  // 运行期删掉的自定义模型（如淘汰的 Qwen3-Coder 480B）只残留在 localStorage，
+  // 后端已无对应条目，modelLabels 里查不到 → 直接丢弃，不再污染下拉。
+  const validIds = new Set(['ds_browser', ...Object.keys(modelLabels.value)])
+  const extra = chatModelList.value.filter(m => m && validIds.has(m.value))
+  const merged = []
+  // DeepSeekProxy 常驻，但若用户已把它勾进聊天列表（extra 里已有）则不重复添加
+  const hasBase = extra.some(m => m.value === 'ds_browser')
+  if (!hasBase) merged.push({ label: 'DeepSeekProxy', value: 'ds_browser' })
+  merged.push(...extra)
   // 保证当前选中的模型始终在下拉里：这样重启后既能正确显示（标签从后端 catalog
   // 复原，catalog 异步到达后 computed 自动重算），又不需要那段破坏性的重置逻辑。
   const sel = selectedModel.value
-  if (sel && !LEGACY_DEAD_MODELS.has(sel) && !merged.some(m => m.value === sel)) {
+  if (sel && !LEGACY_DEAD_MODELS.has(sel) && validIds.has(sel) && !merged.some(m => m.value === sel)) {
     merged.push({ label: modelLabels.value[sel] || sel, value: sel })
   }
   return merged
