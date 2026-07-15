@@ -321,13 +321,12 @@ function toggleVendorModels(grp) {
   }
   localStorage.setItem(CHAT_LIST_KEY, JSON.stringify(chatList.value))
 }
-// 固定可勾选项（白嫖的 Cloud）；免费池与自定义配置从接口数据动态生成
-const fixedChatModels = [
-  { label: 'Cloud 480B', value: 'cloud' }
-]
-// 合并所有可勾选项：固定 + 免费池(有Key) + 自定义配置
+// 可勾选项完全由接口数据动态生成：免费池(有Key) + 自定义配置。
+// 不再硬编码“Cloud 480B”（实为 Ollama Cloud gpt-oss:120b，标签过期且冗余，
+// 已由免费池 free_ollama_cloud_gpt_oss_120b 覆盖；且 value='cloud' 被 ChatWidget
+// 的 LEGACY_DEAD_MODELS 列为废弃项，两处打架导致永远清不掉）。
 const allChatSelectable = computed(() => {
-  const list = [...fixedChatModels]
+  const list = []
   for (const fm of freeModels.value) {
     if (fm.api_key_set) list.push({ label: fm.name, value: fm.id })
   }
