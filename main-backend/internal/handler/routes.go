@@ -57,6 +57,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
 	// 预览浏览器：本地开发服务器探测
 	r.GET("/api/preview/servers", HandlePreviewServers)
+	// Python Harness (:8001) 集成示例：转发 /run_task
+	r.GET("/api/harness/demo", HandleHarnessDemo)
 
 	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
 	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)
