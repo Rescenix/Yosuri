@@ -1,43 +1,40 @@
 <template>
   <div class="smc-root" :class="{ fill }">
-    <!-- 新对话入口（顶部） -->
-    <button class="smc-new-btn" @click="$emit('new-session')">
-      <Icon icon="mdi:plus" width="16" />
-      <span>新对话</span>
-    </button>
-
-    <!-- 项目 -->
-    <div class="smc-group">
-      <div class="smc-group-label">
-        <Icon icon="mdi:folder-outline" width="15" color="#4a4a4a" />
+    <!-- 顶部功能项（仿 Gemini：图标 + 文字行） -->
+    <div class="smc-nav">
+      <button class="smc-nav-item" @click="$emit('new-session')">
+        <Icon icon="mdi:pencil-plus-outline" width="18" />
+        <span>发起新对话</span>
+      </button>
+      <button class="smc-nav-item" :class="{ on: showSearch }" @click="toggleSearch">
+        <Icon icon="mdi:magnify" width="18" />
+        <span>搜索对话内容</span>
+      </button>
+      <div v-if="showSearch" class="smc-search-wrap">
+        <Icon icon="mdi:magnify" width="15" color="#9a9a9a" />
+        <input
+          ref="searchInput"
+          v-model="q"
+          class="smc-search-input"
+          type="text"
+          placeholder="搜索会话..."
+        />
+      </div>
+      <button class="smc-nav-item" @click="$emit('open-projects')">
+        <Icon icon="mdi:folder-outline" width="18" />
         <span>项目</span>
-      </div>
+      </button>
+      <button class="smc-nav-item" @click="$emit('open-attachments')">
+        <Icon icon="hugeicons:file-attachment" width="18" />
+        <span>附件</span>
+      </button>
     </div>
 
-    <!-- 产物 -->
-    <div class="smc-group">
-      <div class="smc-group-label">
-        <Icon icon="ph:stack-fill" width="14" color="#4a4a4a" />
-        <span>产物</span>
-      </div>
-    </div>
-
-    <!-- 搜索对话框 -->
-    <div class="smc-search-wrap">
-      <Icon icon="mdi:magnify" width="15" color="#9a9a9a" />
-      <input
-        v-model="q"
-        class="smc-search-input"
-        type="text"
-        placeholder="搜索会话..."
-      />
-    </div>
-
-    <!-- 置顶列表 -->
+    <!-- 笔记本 = 置顶会话 -->
     <div v-if="pinnedSessions.length" class="smc-section">
       <div class="smc-section-label">
-        <Icon icon="mdi:pin" width="13" color="#4a4a4a" />
-        <span>置顶</span>
+        <Icon icon="lucide:notebook" width="14" color="#4a4a4a" />
+        <span>笔记本</span>
       </div>
       <div class="smc-session-area">
       <div
@@ -63,8 +60,7 @@
     <!-- 最近会话 -->
     <div class="smc-section">
       <div class="smc-section-label">
-        <Icon icon="mdi:chat-outline" width="13" color="#4a4a4a" />
-        <span>最近会话</span>
+        <span>最近</span>
         <span class="smc-count">{{ recentSessions.length }}/{{ sessions.length }}</span>
       </div>
       <div class="smc-session-area">
@@ -131,8 +127,18 @@ const props = defineProps({
   fill: { type: Boolean, default: false }
 })
 const emit = defineEmits([
-  'select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings'
+  'select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings',
+  'open-projects', 'open-attachments'
 ])
+
+// 搜索：点"搜索对话内容"才展开输入框（仿 Gemini 的行式入口）
+const showSearch = ref(false)
+const searchInput = ref(null)
+function toggleSearch() {
+  showSearch.value = !showSearch.value
+  if (showSearch.value) nextTick(() => searchInput.value?.focus())
+  else q.value = ''
+}
 
 // 置顶 id 集合：localStorage 持久化，不碰后端
 const pinnedIds = ref([])
@@ -224,44 +230,35 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 .smc-root.fill .smc-session-area { flex: 1; max-height: none; }
 
 /* 新对话入口（顶部） */
-.smc-new-btn {
+/* 顶部功能项（仿 Gemini：图标 + 文字行，胶囊 hover） */
+.smc-nav { flex-shrink: 0; padding: 10px 8px 6px; display: flex; flex-direction: column; gap: 2px; }
+.smc-nav-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 12px 14px 14px;
-  padding: 10px 14px;
-  border: 1px solid #d0d5dd;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #1a1a1a;
-  font-size: 13px;
-  font-weight: 600;
+  gap: 12px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #1f1f1f;
+  font-size: 13.5px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  text-align: left;
+  transition: background 0.12s ease;
 }
-.smc-new-btn:hover { background: #f5f5f5; border-color: #b8bdc7; }
-.smc-new-btn:active { background: #eee; }
-
-.smc-group { padding: 10px 16px 4px; flex-shrink: 0; }
-.smc-group-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #2a2a2a;
-}
+.smc-nav-item:hover { background: rgba(0, 0, 0, 0.06); }
+.smc-nav-item.on { background: rgba(0, 0, 0, 0.08); }
 
 .smc-search-wrap {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 8px 12px;
+  margin: 2px 10px 6px;
   padding: 7px 10px;
   background: #ffffff;
   border: 1px solid #e3e3e3;
-  border-radius: 8px;
+  border-radius: 10px;
   flex-shrink: 0;
 }
 .smc-search-input {
@@ -312,8 +309,9 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.smc-session-row:hover { background: #f7f7f7; }
-.smc-session-row.active { background: #f3f3f3; box-shadow: inset 0 0 0 1px #e8e8e8; }
+/* 侧栏底色是 Gemini 灰（#f4f6f8），hover/active 用半透明黑才看得见 */
+.smc-session-row:hover { background: rgba(0, 0, 0, 0.05); }
+.smc-session-row.active { background: rgba(0, 0, 0, 0.08); }
 .smc-session-row.running { background: rgba(59,130,246,0.06); box-shadow: inset 0 0 0 1px rgba(59,130,246,0.5); }
 
 .smc-dot {

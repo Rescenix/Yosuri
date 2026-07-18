@@ -4,8 +4,8 @@
       <!-- 思考：折叠的暗色文本块 -->
       <div v-if="b.type === 'thinking'" class="flow-thinking">
         <div class="flow-thinking-label" @click="toggleThink(i)">
+          <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考完成' }}</span>
           <span class="flow-chevron" :class="{ open: thinkOpen[i] }">›</span>
-          思考
         </div>
         <div v-if="thinkOpen[i]" class="flow-thinking-text">{{ b.text }}</div>
       </div>
@@ -125,9 +125,21 @@ function toolBodyText(b) {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #9c958a;
   cursor: pointer;
   user-select: none;
+}
+/* 白光字体表面扫描：只挂在文字 span 上，chevron 留在 clip 外避免被裁重叠 */
+.flow-thinking-text-label {
+  color: var(--app-accent);
+  background: linear-gradient(100deg, var(--app-accent) 40%, #ffffff 50%, var(--app-accent) 60%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: reasonShimmer 5s linear infinite;
+}
+.agent-flow:not(.streaming) .flow-thinking-text-label {
+  animation: none;
 }
 .flow-thinking-text {
   margin-top: 4px;
@@ -214,6 +226,7 @@ function toolBodyText(b) {
   font-size: 14px;
   transition: transform 0.15s;
   display: inline-block;
+  /* 折叠朝右▸，展开向下▾ */
 }
 .flow-chevron.open {
   transform: rotate(90deg);

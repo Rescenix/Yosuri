@@ -50,33 +50,87 @@
       <!-- ★ 主内容区（随菜单推开） -->
       <div class="chat-main" :class="{ shifted: menuOpen }">
 
-        <!-- ★★★ 合并后的一体化顶部栏 ★★★ -->
-        <div class="chat-header">
-          <div class="header-left">
-            <button class="header-icon-btn" @click="menuOpen = !menuOpen" title="展开导航" aria-label="展开导航">
-              <Icon icon="mdi:menu" width="18" color="#6b6b6b" />
+        <!-- 顶部横条已删除：会话切换在左侧 Gemini 风侧栏，工具组浮在聊天区右上角 -->
+        <div class="chat-body-row">
+        <!-- ★ Gemini 风侧栏：展开=平铺会话面板，折叠=竖向图标条（带会话横条） -->
+        <aside v-if="isExpanded" class="gem-sidebar" :class="{ collapsed: !sidebarOpen }">
+          <!-- 顶部：展开态 汉堡+折叠toggle；折叠态只有 toggle -->
+          <div class="gem-top">
+            <button v-if="sidebarOpen" class="gem-icon-btn" @click="menuOpen = !menuOpen" title="导航">
+              <Icon icon="mdi:menu" width="18" />
             </button>
-            <button
-              class="header-icon-btn"
-              :class="{ active: menuPinned }"
-              @click.stop="toggleMenuPinned"
-              @mouseenter="onSessionMenuEnter"
-              @mouseleave="onSessionMenuLeave"
-              title="会话与模式"
-              aria-label="会话与模式"
-            >
-              <Icon icon="lucide:sidebar" width="18" color="#6b6b6b" />
+            <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠侧栏' : '展开侧栏'">
+              <Icon icon="lucide:sidebar" width="18" />
             </button>
-            <span class="header-session-name">{{ activeSessionObj?.name || '未命名会话' }}</span>
-            <span class="sch-branch">{{ activeSessionObj?.branch || 'main' }}</span>
-           
           </div>
 
-          <!-- 右侧功能区（工具图标；模型切换器搬去了输入区底部工具条）
-               这一整组只在 Code 模式下才有意义（终端/Diff/预览/后台任务都是代码工作流的产物），
-               Chat 模式和首页状态直接不渲染，不是隐藏 -->
-          <div class="header-right">
-            <div class="header-tools-group" v-if="inputTopBarMode === 'git'">
+          <!-- 展开态：复用会话面板（新对话/搜索/置顶/最近/底部账号+设置） -->
+          <SessionMenuContent
+            v-if="sidebarOpen"
+            fill
+            :sessions="sessionList"
+            :active-session="activeSession"
+            :running-session="runningSession"
+            @select-session="selectSession"
+            @new-session="newSession"
+            @rename-session="renameSession"
+            @delete-session="deleteSession"
+            @open-settings="showSettings = true"
+          />
+
+          <!-- 折叠态：竖向图标条 -->
+          <template v-else>
+            <button class="gem-icon-btn" @click="newSession" title="发起新对话">
+              <Icon icon="mdi:pencil-plus-outline" width="18" />
+            </button>
+            <button class="gem-icon-btn" @click="toggleSidebar" title="搜索对话内容">
+              <Icon icon="mdi:magnify" width="18" />
+            </button>
+            <button class="gem-icon-btn" @click="toggleSidebar" title="项目">
+              <Icon icon="mdi:folder-outline" width="18" />
+            </button>
+            <button class="gem-icon-btn" @click="toggleSidebar" title="附件">
+              <Icon icon="hugeicons:file-attachment" width="18" />
+            </button>
+            <!-- 会话横条：点击切换，悬浮显示会话名。笔记本(置顶)与最近分区 -->
+            <div class="gem-rail-sessions">
+              <template v-if="railPinned.length">
+                <button
+                  v-for="s in railPinned"
+                  :key="s.id"
+                  class="gem-rail-bar pinned"
+                  :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+                  :title="'📔 ' + s.name"
+                  @click="selectSession(s.id)"
+                ></button>
+                <div class="gem-rail-divider"></div>
+              </template>
+              <button
+                v-for="s in railRecent"
+                :key="s.id"
+                class="gem-rail-bar"
+                :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+                :title="s.name"
+                @click="selectSession(s.id)"
+              ></button>
+            </div>
+            <div class="gem-rail-bottom">
+              <button class="gem-icon-btn" @click="showSettings = true" title="设置">
+                <Icon icon="mdi:cog-outline" width="18" />
+              </button>
+              <div class="gem-rail-avatar" title="Prometheus · Pro">P</div>
+            </div>
+          </template>
+        </aside>
+
+               <div class="chat-body studio">
+          <!-- 共享聊天列 -->
+          <div class="chat-content studio">
+
+            <!-- 右上角工具组：顶部横条删除后浮在聊天区右上（Code 模式才有意义）。
+                 工具窗口（终端/Diff/预览）打开后丝滑变成竖条贴靠面板边缘，DOM 顺序不变，
+                 更多(三点)本来就排最后，变竖条后自然落在底部。 -->
+            <div class="floating-tools" :class="{ vertical: dockPanels.length > 0 }" v-if="inputTopBarMode === 'git'">
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
                 <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
               </button>
@@ -98,51 +152,9 @@
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- 悬停轻量预览：不钉住时鼠标停留在侧边栏图标上短暂展示，不占布局，
-               鼠标移开即消失（不用 backdrop 拦截点击，纯浮层） -->
-          <div
-            v-if="menuHovering && !menuPinned"
-            class="floating-menu-panel"
-            @click.stop
-            @mouseenter="onSessionMenuEnter"
-            @mouseleave="onSessionMenuLeave"
-          >
-            <SessionMenuContent
-              :sessions="sessionList"
-              :active-session="activeSession"
-              :running-session="runningSession"
-              @select-session="onFloatingSelectSession"
-              @new-session="onFloatingNewSession"
-              @rename-session="renameSession"
-              @delete-session="deleteSession"
-              @open-settings="showSettings = true"
-            />
-          </div>
-        </div>
-
-        <!-- ★ 左侧钉住面板：点击图标钉住后是 chat-body.studio 的真实 flex 兄弟节点（占真实布局宽度，
-             在顶部栏下方），跟上面 drawer-panel 那种 transform 覆盖层是两套独立机制，互不干扰 -->
-        <div class="chat-body-row">
-        <aside v-if="menuPinned" class="session-pin-panel" :style="{ width: sessionPinWidth + 'px' }">
-          <div class="session-pin-resize-handle" @mousedown="startSessionPinDrag"></div>
-          <SessionMenuContent
-            fill
-            :sessions="sessionList"
-            :active-session="activeSession"
-            :running-session="runningSession"
-            @select-session="selectSession"
-            @new-session="newSession"
-            @rename-session="renameSession"
-            @delete-session="deleteSession"
-            @open-settings="showSettings = true"
-          />
-        </aside>
-
-               <div class="chat-body studio">
-          <!-- 共享聊天列 -->
-          <div class="chat-content studio">
+            <!-- 聊天内容上下边缘 blur（仿 Gemini：内容从模糊里滑入/滑出） -->
+            <div v-if="messages.length" class="msg-edge-blur top"></div>
 
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
                  当 `messages` 为空时，它独占整个 Flex 空间，把输入区推到最底部。 -->
@@ -179,8 +191,7 @@
                     <div v-else class="assistant-message" :class="{ streaming: item.isStreaming }">
                       <div v-if="item.reasoning" class="reasoning-stream">
                         <div class="reasoning-label">
-                          <Icon icon="la:atom" width="14" color="#6b7280" />
-                          思考中...
+                          正在思考
                         </div>
                         <div class="reasoning-text" v-html="renderMarkdown(item.reasoning, true)"></div>
                       </div>
@@ -202,6 +213,8 @@
                   </div>
                 </template>
               </div>
+              <!-- 底部边缘 blur：sticky 吸在滚动视口底边，正好压在输入区上沿 -->
+              <div class="msg-edge-blur bottom"></div>
             </div>
 
             <div v-if="copiedVisible" class="copy-toast">✓ 已复制</div>
@@ -1236,26 +1249,34 @@ function closeReaderBook() {
   readerBookId.value = ''
 }
 
-// ==================== 左侧会话/模式面板：钉住 vs 悬停轻量预览 ====================
-const menuPinned = ref(false)
-const menuHovering = ref(false)
-let menuHoverCloseTimer = null
-function onSessionMenuEnter() {
-  if (menuPinned.value) return
-  clearTimeout(menuHoverCloseTimer)
-  menuHovering.value = true
+// ==================== 左侧 Gemini 风侧栏：展开 vs 折叠竖条 ====================
+const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+  localStorage.setItem('sidebarOpen', sidebarOpen.value ? '1' : '0')
+  if (!sidebarOpen.value) refreshPinnedRail() // 进折叠态时同步最新置顶分区
 }
-function onSessionMenuLeave() {
-  if (menuPinned.value) return
-  // 留一点缓冲时间，避免鼠标从图标移到预览面板中途正好穿过图标外的空隙时闪烁关闭
-  menuHoverCloseTimer = setTimeout(() => { menuHovering.value = false }, 150)
+// 折叠态会话横条：笔记本(置顶) 与 最近 分两区，悬浮 title 显示会话名。
+// 置顶 id 由 SessionMenuContent 写在 localStorage('pinnedSessions')，这里读来分区，
+// 折叠切换时刷新一次（置顶操作只发生在展开态，折叠时读到的就是最新的）。
+const pinnedIdsRail = ref([])
+function refreshPinnedRail() {
+  try { pinnedIdsRail.value = JSON.parse(localStorage.getItem('pinnedSessions') || '[]') } catch { pinnedIdsRail.value = [] }
 }
-function toggleMenuPinned() {
-  menuPinned.value = !menuPinned.value
-  if (menuPinned.value) menuHovering.value = false
-}
-const sessionPinWidth = ref(300)
-const { startDrag: startSessionPinDrag } = useResizableWidth(sessionPinWidth, { min: 240, max: 480, edge: 'right', persistKey: 'sessionPinWidth' })
+onMounted(refreshPinnedRail)
+const railPinned = computed(() => sessionList.value.filter(s => pinnedIdsRail.value.includes(s.id)))
+const railRecent = computed(() => sessionList.value.filter(s => !pinnedIdsRail.value.includes(s.id)).slice(0, 10))
+
+// ==================== 工具面板状态绑定会话 ====================
+// dockPanels（终端/Diff/预览）是会话的工作现场：切会话/新会话时各自恢复各自的，
+// 修掉"新会话回到首页还挂着上个会话工具弹窗"的 bug。仅内存级（刷新清零）。
+const dockPanelsBySession = {}
+watch(() => sessionId.value, (nid, oid) => {
+  if (oid) dockPanelsBySession[oid] = [...dockPanels.value]
+  dockPanels.value = [...(dockPanelsBySession[nid] || [])]
+  showBackgroundTasks.value = false
+  showMoreMenu.value = false
+})
 
 // 消息流里每个 kind:'group' 的组件实例，供后台任务清单点击跳转+展开用
 const groupRefs = {}
@@ -1287,9 +1308,6 @@ function handleSend() {
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
   startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments })
 }
-function onFloatingSelectSession(id) { selectSession(id); menuHovering.value = false }
-function onFloatingNewSession() { newSession(); menuHovering.value = false }
-
 // Token 环状进度条
 const showTokenPanel = ref(false)
 function formatTok(n) {
@@ -1453,7 +1471,7 @@ onMounted(() => {
   loadWorkDirState()
   syncWorkDirFromBackend()
   document.addEventListener('click', () => {
-    showModelMenu.value = false; showTokenPanel.value = false; menuHovering.value = false; showMoreMenu.value = false
+    showModelMenu.value = false; showTokenPanel.value = false; showMoreMenu.value = false
     showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false
   })
 

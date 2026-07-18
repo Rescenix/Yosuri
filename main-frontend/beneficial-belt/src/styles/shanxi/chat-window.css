@@ -1,22 +1,7 @@
+/* 聊天窗主题：颜色全部引用 <html> inline style 注入的 --app-*（由 useTheme.js 运行时写入），
+   跟随多主题色板×明暗。不再在此定义 --chat-*（scoped 下 :root 取不到 <html> 值）。
+   仅保留纯几何变量。 */
 :root {
-  --chat-bg: #ffffff;
-  --chat-surface: rgba(255, 255, 255, 0.9);
-  --chat-surface-strong: #ffffff;
-  --chat-header-bg: rgba(255, 255, 255, 0.96);
-  --chat-border: #e5e5e5;
-  --chat-border-strong: #d1d5db;
-  --chat-text: #1b1a18;
-  --chat-text-muted: #64748b;
-  --chat-text-soft: #94a3b8;
-  --chat-accent: #c96442;
-  --chat-accent-hover: #b85737;
-  /* 注意：本文件通过 <style scoped> 的 @import 引入，:root 会被 Vue 作用域化成
-     :root[data-v-xxx] 而匹配不到 <html>，所以这里定义的自定义属性在本文件里其实
-     取不到值——统一蓝色调（#3b82f6 系）在下面各规则里直接写死十六进制，跟本文件
-     既有做法（#c96442 等）一致，不走变量 */
-  --chat-user-bg: #f1f5f9;
-  --chat-user-text: #1f1b16;
-  --chat-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
   --chat-radius-xl: 22px;
   --chat-radius-lg: 18px;
   --chat-radius-md: 14px;
@@ -39,7 +24,7 @@
   flex-direction: column;
   overflow: hidden;
   color: var(--chat-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -150,7 +135,7 @@
 .chat-messages {
   flex: 1;
  position: relative;
-overflow-y: visible;
+overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -282,7 +267,7 @@ min-height: 90px !important;
   color: var(--chat-text);
   outline: none;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--app-font);
 }
 
 .chat-input:focus {
@@ -539,7 +524,7 @@ min-height: 90px !important;
   background: #ffffff;
   color: #334155;
   border: 1px solid #e5e5e5;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font);
 }
 
 /* AI 消息：全宽文章区块，无背景无边框 */
@@ -846,7 +831,7 @@ min-height: 90px !important;
 }
 
 .message-bubble.user {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font);
 }
 
 .recalling-text {
@@ -876,7 +861,7 @@ min-height: 90px !important;
 }
 
 .message-bubble.user {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font);
 }
 
 /* ==================== 侧边栏面板 ==================== */
@@ -2176,34 +2161,198 @@ min-height: 90px !important;
   gap: 8px;
   background: transparent;
 }
-.session-pin-panel {
-  position: relative;
+/* ==================== Gemini 风侧栏（平铺，不做悬浮卡片） ==================== */
+.gem-sidebar {
+  flex-shrink: 0;
+  width: 272px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--app-surface);   /* 白色面（暗色自动跟随主题） */
+  border-radius: 14px;
+  transition: width 0.18s ease;
+}
+.gem-sidebar.collapsed {
+  width: 56px;
+  align-items: center;
+  padding-bottom: 10px;
+}
+.gem-top {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.gem-sidebar.collapsed .gem-top { justify-content: center; padding: 10px 0 4px; }
+.gem-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.gem-icon-btn:hover { background: var(--app-accent-soft); color: var(--app-accent); }
+
+/* 折叠态：会话横条列表 */
+.gem-rail-sessions {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  width: 100%;
+  scrollbar-width: none;
+}
+.gem-rail-sessions::-webkit-scrollbar { display: none; }
+.gem-rail-bar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 5px;
+  border: none;
+  border-radius: 999px;
+  background: var(--app-border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.gem-rail-bar:hover { background: var(--app-text-faint); width: 30px; }
+.gem-rail-bar.active { background: var(--app-accent); width: 30px; }
+.gem-rail-bar.running { box-shadow: 0 0 0 3px var(--app-accent-soft); }
+/* 笔记本(置顶)横条：与最近会话同为横条，用主题强调色区分 */
+.gem-rail-bar.pinned {
+  background: var(--app-accent);
+}
+.gem-rail-bar.pinned:hover { width: 30px; background: var(--app-accent-hover); }
+.gem-rail-bar.pinned.active { background: var(--app-accent); }
+.gem-rail-divider {
+  flex-shrink: 0;
+  width: 24px;
+  height: 2px;
+  background: var(--app-text-faint);   /* 置顶/最近分区分隔，明显可见 */
+  margin: 4px 0;
+  border-radius: 999px;
+}
+
+/* 折叠态底部：汉堡在设置上方，最下面是头像 */
+.gem-rail-bottom {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border-right: 1px solid #e5e5e5;
-  background: #ffffff;
+  align-items: center;
+  gap: 8px;
 }
-/* 左侧栏在展开态变成圆角悬浮卡片 */
-.chat-window.expanded .session-pin-panel {
-  border: 1px solid #e8e8e8;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(20, 20, 20, 0.04);
-  background: #ffffff;
+.gem-rail-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--app-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
 }
-.session-pin-resize-handle {
+
+/* ==================== 顶部横条删除后的浮动工具组 + 边缘 blur ==================== */
+/* chat-content 是浮动工具组/顶部 blur 的定位上下文 */
+.chat-window.expanded .chat-body.studio .chat-content { position: relative; }
+.floating-tools {
   position: absolute;
-  right: -2px;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  cursor: col-resize;
-  z-index: 5;
+  top: 10px;
+  right: 14px;
+  z-index: 6;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  /* flex-direction 本身不能过渡，但按钮都是等大方块，配合 padding/gap/圆角的
+     同步过渡，横条→竖条的重排在 250ms 内观感依然是"丝滑变形"而不是硬切。 */
+  transition: padding 0.25s ease, gap 0.25s ease, border-radius 0.25s ease, box-shadow 0.25s ease;
 }
-.session-pin-resize-handle:hover,
-.session-pin-resize-handle:active {
-  background: rgba(201, 100, 66, 0.25);
+/* 工具窗口（终端/Diff/预览）打开后：横向胶囊变竖向胶囊，贴在聊天区右上、
+   紧邻工具面板的边缘——DOM 顺序不变，"更多"按钮本来排最后，转竖排后自然落底部。 */
+.floating-tools.vertical {
+  flex-direction: column;
+  padding: 6px 3px;
+  gap: 3px;
+  /* 竖条态贴在 tool-panel 左缘（距右 8px）；聊天区右侧用 padding-right 把滚轴整体
+     内缩到 pill 左边，二者在 x/y 上完全分离，顶部也不再重叠挡轴 */
+  right: 40px;
+  top: 10px;
+}
+.floating-tools.vertical .header-more-wrap { margin-top: 2px; }
+/* 竖条状态下，更多菜单在按钮左侧展开——按钮已贴着工具面板右边界，
+   原来朝右下弹出的下拉会被工具面板遮住/溢出。 */
+.floating-tools.vertical .more-menu-dropdown {
+  top: 0;
+  right: calc(100% + 8px);
+}
+
+/* 聊天内容上下边缘 blur（仿 Gemini）：
+   顶部盖在 chat-content 上沿（消息从模糊里滑出）；
+   底部 sticky 吸在滚动视口底边，正好压在输入区上沿。 */
+.msg-edge-blur {
+  pointer-events: none;
+}
+.msg-edge-blur.top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  z-index: 5;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+  -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent);
+  mask-image: linear-gradient(to bottom, black 30%, transparent);
+}
+/* sticky 元素被限制在父容器 content box 内：把 chat-messages 的底部 padding
+   移交给 inner，让 blur 条能贴到真正的滚动视口底边（否则悬空 18px） */
+.chat-window.expanded .chat-body.studio .chat-messages { padding-bottom: 0;
+  /* 竖条工具组贴在右上时，把滚动区右侧让出 56px（>pill 宽+滚轴宽），滚轴整体内缩到
+     pill 左边，不再重叠挡轴。必须 box-sizing:border-box，否则 width:100%+padding
+     会撑破父级 overflow:hidden 把滚动条裁没 */
+  padding-right: 56px;
+  box-sizing: border-box;
+}
+/* 顶部模糊条让开右侧滚轴区（否则会糊住滚轴顶端一段） */
+.chat-window.expanded .chat-body.studio .msg-edge-blur.top { right: 56px; }
+.chat-window.expanded .chat-body.studio .chat-messages .chat-messages-inner { padding-bottom: 18px; }
+.msg-edge-blur.bottom {
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 40px;
+  flex-shrink: 0;   /* chat-messages 是 flex 列容器，不加会被内容压成 0 高 */
+  margin-top: -40px;
+  z-index: 5;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+  -webkit-mask-image: linear-gradient(to top, black 30%, transparent);
+  mask-image: linear-gradient(to top, black 30%, transparent);
 }
 
 /* ==================== 阶段3：输入区三段重排（工作目录条 / 输入框 / 底部工具条） ====================
@@ -2215,9 +2364,11 @@ min-height: 90px !important;
   justify-content: space-between;
   padding: 7px 14px;
   margin-bottom: 8px;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  /* 微渐变底（替代死白）+ 暖灰清晰边框 + 双层柔阴影 → 悬浮卡片质感 */
+  background: linear-gradient(180deg, #ffffff 0%, #f7f6f4 100%);
+  border: 1px solid #e3e0db;
   border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05), 0 2px 6px rgba(28, 25, 23, 0.06);
   font-size: 12px;
 }
 .input-dir-left {
@@ -2238,7 +2389,7 @@ min-height: 90px !important;
 }
 .input-dir-divider { width: 1px; height: 12px; background: #d4d4d4; flex-shrink: 0; }
 .input-dir-worktree {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font);
   font-size: 11px;
   color: #a3a3a3;
 }
@@ -2257,6 +2408,12 @@ min-height: 90px !important;
   transition: background 0.15s ease;
 }
 .input-dir-add-btn:hover { background: #f0f0f0; }
+/* 悬浮卡片交互反馈：hover 时阴影加深，强化"浮起来"的感觉 */
+.input-dir-bar:hover,
+.input-git-bar:hover {
+  border-color: #d8d4ce;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.08), 0 4px 12px rgba(28, 25, 23, 0.10);
+}
 
 .input-dir-menu-wrap { min-width: 0; }
 .input-dir-clickable { cursor: pointer; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; transition: background 0.15s ease; }
@@ -2294,9 +2451,11 @@ min-height: 90px !important;
   justify-content: space-between;
   padding: 7px 14px;
   margin-bottom: 8px;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  /* 微渐变底（替代死白）+ 暖灰清晰边框 + 双层柔阴影 → 悬浮卡片质感 */
+  background: linear-gradient(180deg, #ffffff 0%, #f7f6f4 100%);
+  border: 1px solid #e3e0db;
   border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05), 0 2px 6px rgba(28, 25, 23, 0.06);
   font-size: 12px;
 }
 .input-git-left {

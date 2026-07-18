@@ -161,9 +161,21 @@
   margin-bottom: 4px;
   font-weight: 500;
   font-size: 11px;
-  color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  /* 白光字体表面扫描：白色高光横扫过字形 */
+  color: var(--app-accent);
+  background: linear-gradient(100deg, var(--app-accent) 40%, #ffffff 50%, var(--app-accent) 60%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: reasonShimmer 5s linear infinite;
+}
+/* 白光掠过字形的扫描动画（全局，供 reasoning / flow-thinking 共用） */
+@keyframes reasonShimmer {
+  0% { background-position: 250% 0; }
+  100% { background-position: -250% 0; }
 }
 
 .tool-call-indicator {

@@ -4,22 +4,8 @@
 
 /* 全局变量 */
 :root {
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-glow: rgba(37, 99, 235, 0.15);
-  --bg-main: #ffffff;
-  --bg-card: #ffffff;
-  --text-primary: #0f172a;
-  --text-secondary: #475467;
-  --border: #e2e8f0;
-}
-
-/* ========================================
-   主题变量（统一色调）—— data-theme 由 useTheme.js 打在 <html> 上。
-   强调色收敛到品牌陶土橙 #c96442。组件用 var(--app-*) 即可跟随主题。
-   ======================================== */
-:root,
-:root[data-theme='light'] {
+  /* 主题变量由 useTheme.js 运行时注入 <html> inline style（支持多套色板×明暗），
+     此处仅保留兜底默认值（橙 + 亮色），避免 JS 未加载时白屏无样式。 */
   --app-bg: #ffffff;
   --app-surface: #ffffff;
   --app-surface-2: #fafafa;
@@ -32,32 +18,16 @@
   --app-accent: #c96442;
   --app-accent-hover: #b85737;
   --app-accent-soft: rgba(201, 100, 66, 0.12);
+  --app-font: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --app-code-bg: #f7f7f8;
   --app-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
 }
-:root[data-theme='dark'] {
-  --app-bg: #1e1e20;
-  --app-surface: #26262a;
-  --app-surface-2: #2b2b30;
-  --app-surface-3: #313136;
-  --app-text: #ececec;
-  --app-text-soft: #a8a8b0;
-  --app-text-faint: #76767e;
-  --app-border: #3a3a40;
-  --app-border-soft: #34343a;
-  --app-accent: #e08a68;
-  --app-accent-hover: #eb9b7b;
-  --app-accent-soft: rgba(224, 138, 104, 0.16);
-  --app-code-bg: #17171a;
-  --app-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
-}
-
 /* 全局背景与字体 */
 body {
   margin: 0;
   padding: 0;
-  background: #ffffff;
-  color: var(--text-primary);
+  background: var(--app-bg);
+  color: var(--app-text);
   font-family: 'Inter', system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
@@ -81,7 +51,7 @@ body {
 .hero h1 {
   font-size: 56px;
   font-weight: 700;
-  background: linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa);
+  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 16px;
@@ -131,12 +101,12 @@ body {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #2563eb, #60a5fa, transparent);
+  background: linear-gradient(90deg, var(--app-accent), var(--app-accent-hover), transparent);
 }
 
 .island-card:hover {
-  border-color: rgba(37, 99, 235, 0.3);
-  box-shadow: 0 8px 32px rgba(37, 99, 235, 0.08);
+  border-color: var(--app-accent-soft);
+  box-shadow: 0 8px 32px var(--app-accent-soft);
   transform: translateY(-4px);
 }
 
@@ -164,9 +134,9 @@ body {
 
 .skill-tag {
   display: inline-block;
-  background: rgba(37, 99, 235, 0.06);
-  border: 1px solid rgba(37, 99, 235, 0.2);
-  color: #2563eb;
+  background: var(--app-accent-soft);
+  border: 1px solid var(--app-accent-soft);
+  color: var(--app-accent);
   padding: 6px 16px;
   margin: 5px;
   border-radius: 20px;
@@ -176,9 +146,10 @@ body {
 }
 
 .skill-tag:hover {
-  background: rgba(37, 99, 235, 0.12);
-  border-color: rgba(37, 99, 235, 0.4);
-  box-shadow: 0 0 12px rgba(37, 99, 235, 0.15);
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+  color: #fff;
+  box-shadow: 0 0 12px var(--app-accent-soft);
 }
 
 /* 博客页面 */
@@ -196,7 +167,7 @@ body {
 .blog-header h1 {
   font-size: 48px;
   font-weight: 700;
-  background: linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa);
+  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 12px;
@@ -233,12 +204,12 @@ body {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #2563eb, #60a5fa, transparent);
+  background: linear-gradient(90deg, var(--app-accent), var(--app-accent-hover), transparent);
 }
 
 .post-card:hover {
-  border-color: rgba(37, 99, 235, 0.3);
-  box-shadow: 0 8px 32px rgba(37, 99, 235, 0.08);
+  border-color: var(--app-accent-soft);
+  box-shadow: 0 8px 32px var(--app-accent-soft);
   transform: translateY(-2px);
 }
 
@@ -298,7 +269,7 @@ body {
 }
 
 .post-not-found a {
-  color: var(--primary);
+  color: var(--app-accent);
   text-decoration: none;
   font-size: 16px;
 }

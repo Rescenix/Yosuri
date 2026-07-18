@@ -116,17 +116,35 @@
             <!-- ========== 外观 ========== -->
             <div v-show="activeTab === 'appearance'" class="settings-panel">
               <div class="settings-section-title">主题</div>
-              <div class="settings-section-desc">统一整体色调。切换即时生效并自动保存。</div>
+              <div class="settings-section-desc">选择配色皮肤，切换即时生效并自动保存。</div>
+              <div class="param-row" style="align-items: flex-start;">
+                <span class="param-label">配色</span>
+                <div class="theme-swatches">
+                  <button
+                    v-for="(p, key) in THEME_PRESETS"
+                    :key="key"
+                    class="theme-swatch"
+                    :class="{ on: theme === key }"
+                    type="button"
+                    :title="p.label"
+                    @click="theme = key"
+                  >
+                    <span class="theme-swatch-dot" :style="{ background: p.accent }"></span>
+                    <span class="theme-swatch-label">{{ p.label }}</span>
+                  </button>
+                </div>
+              </div>
+
               <div class="param-row">
-                <span class="param-label">配色主题</span>
+                <span class="param-label">亮度</span>
                 <div class="seg-control">
                   <button
-                    v-for="opt in THEME_OPTIONS"
+                    v-for="opt in MODE_OPTIONS"
                     :key="opt.value"
                     class="seg-btn"
-                    :class="{ on: theme === opt.value }"
+                    :class="{ on: mode === opt.value }"
                     type="button"
-                    @click="theme = opt.value"
+                    @click="mode = opt.value"
                   >{{ opt.label }}</button>
                 </div>
               </div>
@@ -268,7 +286,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
-import { theme, THEME_OPTIONS } from '../composables/useTheme.js'
+import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
 import { renderMarkdown } from './markdownRenderer.js'
 
 // 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
@@ -832,6 +850,19 @@ onUnmounted(() => {
 .seg-control { margin-left: auto; display: inline-flex; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 2px; }
 .seg-btn { border: none; background: transparent; color: var(--app-text-soft); font-size: 12.5px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: all 0.12s; }
 .seg-btn.on { background: var(--app-surface); color: var(--app-text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; }
+
+/* 配色皮肤色卡网格 */
+.theme-swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; max-width: 460px; }
+.theme-swatch {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px 6px 8px; border-radius: 999px; cursor: pointer;
+  background: var(--app-surface-2); border: 1.5px solid var(--app-border);
+  color: var(--app-text-soft); font-size: 12.5px; transition: all 0.12s;
+}
+.theme-swatch:hover { border-color: var(--app-accent-soft); color: var(--app-text); }
+.theme-swatch.on { border-color: var(--app-accent); color: var(--app-text); background: var(--app-accent-soft); font-weight: 600; }
+.theme-swatch-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
+.theme-swatch-label { line-height: 1; }
 
 /* MCP / Skills 实体卡片 */
 .entity-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; background: var(--app-surface-2); }
