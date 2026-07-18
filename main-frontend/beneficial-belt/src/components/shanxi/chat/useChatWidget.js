@@ -5,7 +5,6 @@ import { useWelcome } from '../composables/useWelcome.js'
 import { useChatLogic } from '../composables/useChatLogic.js'
 import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
 import { useVoicePlay } from '../composables/useVoicePlay.js'
-import { demoMode, DEMO_THINKING, DEMO_INTENT } from '../composables/useDemoMode.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 
@@ -123,63 +122,6 @@ function adjustInputHeight() {
   function startCodeWorkflow(task, display) {
     startFlow(task, display)
     userInput.value = ''
-  }
-
-  // ==================== 演示模式：零 token 本地流式沙盒 ====================
-  // 开启 demoMode 后，发任何消息都走这里而非联网。复用 agentflow 消息形状，
-  // 思考/回答按字符级联追加，触发刚接上的 streamFade 瀑布渐变，专供肉眼验收。
-  // 不触网、不调后端、不花 token。
-  let demoMsgSeq = 0
-  async function startDemoFlow(task) {
-    task = (task || '').trim()
-    if (!task) return
-
-    messages.value.push({
-      id: `demou_${Date.now()}_${demoMsgSeq++}`,
-      sender: 'user',
-      content: task,
-      timestamp: new Date()
-    })
-
-    const flow = reactive({
-      id: `demof_${Date.now()}_${demoMsgSeq++}`,
-      kind: 'agentflow',
-      sender: 'bot',
-      status: 'running',
-      task,
-      blocks: [],
-      subagents: [],
-      startTime: Date.now(),
-      endTime: null,
-      inputTokens: 0,
-      outputTokens: 0,
-      modelInfo: null,
-      timestamp: new Date()
-    })
-    messages.value.push(flow)
-    forceScrollToBottom()
-
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms))
-    // 思考块先铺，再铺回答块——两块都走 markdown/文本容器，瀑布选择器会命中
-    const thinkBlock = { type: 'thinking', text: '' }
-    flow.blocks.push(thinkBlock)
-    for (const ch of DEMO_THINKING) {
-      thinkBlock.text += ch
-      await sleep(8)
-      smartScrollAndRefresh()
-    }
-
-    const intentBlock = { type: 'intent', text: '' }
-    flow.blocks.push(intentBlock)
-    for (const ch of DEMO_INTENT) {
-      intentBlock.text += ch
-      await sleep(14) // 比思考慢，让瀑布尾巴更明显
-      smartScrollAndRefresh()
-    }
-
-    flow.status = 'completed'
-    flow.endTime = Date.now()
-    smartScrollAndRefresh()
   }
 
   // ==================== 图片上传逻辑（整合进 useChatWidget） ====================
@@ -521,8 +463,8 @@ async function switchSession(id) {
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
-    flowState, startCodeWorkflow, stopCodeWorkflow, demoMode, startDemoFlow,
-    toggleExpand, toggleChat, updateParams, fetchBalance,
+    flowState, startCodeWorkflow, stopCodeWorkflow,
+    toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime
   }
 }

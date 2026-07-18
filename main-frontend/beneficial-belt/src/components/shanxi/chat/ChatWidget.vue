@@ -420,7 +420,6 @@
                   </div>
                 </div>
                 <div class="input-toolbar-right">
-                  <span v-if="demoMode.enabled" class="demo-badge" title="演示模式：发消息只本地渲染，不花 token">演示</span>
                   <!-- Context window 用量：常驻横条（放在模型左边，一眼可见） -->
                   <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
                     <span class="ctx-bar-text">{{ formatTok(liveContextStats.used) }}/{{ formatTok(liveContextStats.contextWindow) }}</span>
@@ -973,10 +972,7 @@ function toggleGitBar() {
 // ==================== 项目数据 ====================
 // 定义占位符池子（老王主题风格）
 const placeholders = [
-  "今天我们要创造什么？",
-  "请告诉我你的想法，我会帮你实现",
-  "有什么问题需要解答吗？",
-  "我可以帮你写代码、写文章、做计划……",
+  "今天我们要创造什么？"
 
 ]
 
@@ -1194,7 +1190,6 @@ const {
   forceScrollToBottom, adjustInputHeight, switchSession,
   sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
   flowState, startCodeWorkflow, stopCodeWorkflow,
-  demoMode, startDemoFlow,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
@@ -1284,13 +1279,6 @@ function handleSend() {
   const combined = buildOutgoingMessage()
   if (!combined) return
   const displayText = userInput.value.trim()
-  // 演示模式：零 token 本地沙盒，直接渲染预置长对话验收瀑布渐变，不触网
-  if (demoMode.enabled) {
-    userInput.value = ''
-    nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-    startDemoFlow(displayText)
-    return
-  }
   const displayAttachments = attachments.value.filter(a => a.status === 'ready').map(a => ({ ...a }))
   clearAttachments()
   userInput.value = ''
@@ -1511,22 +1499,6 @@ onMounted(() => {
 .fade-placeholder-leave-from {
   opacity: 1;
   transform: translateY(0);
-}
-
-/* 演示模式角标：发送按钮旁的零 token 沙盒提示 */
-.demo-badge {
-  flex-shrink: 0;
-  align-self: center;
-  margin-left: 4px;
-  padding: 2px 7px;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.4;
-  color: #fff;
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
-  border-radius: 6px;
-  cursor: default;
-  user-select: none;
 }
 
 
