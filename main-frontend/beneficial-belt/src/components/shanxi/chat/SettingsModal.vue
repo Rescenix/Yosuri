@@ -138,6 +138,18 @@
             <button class="param-reset-btn" type="button" @click="resetStreamFadeConfig">恢复默认</button>
           </div>
 
+          <!-- 演示模式：零 token 本地流式沙盒 -->
+          <div class="settings-section-title" style="margin-top: 18px;">演示模式（零 token 验收）</div>
+          <div class="settings-section-desc">开启后，聊天发任何消息都只本地渲染一段预置长对话（思考 + 富 markdown 回答），不调后端、不花 token，专供肉眼验收流式瀑布渐变。改动即时生效。</div>
+
+          <div class="param-row">
+            <span class="param-label">演示模式</span>
+            <label class="param-switch">
+              <input type="checkbox" v-model="demoMode.enabled" />
+              <span class="param-switch-track"></span>
+            </label>
+          </div>
+
           <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
         </div>
       </div>
@@ -150,6 +162,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
+import { demoMode } from '../composables/useDemoMode.js'
 
 const props = defineProps({
   // QQ 登录接入前先留空，后端会落到固定的 "default" 用户文件

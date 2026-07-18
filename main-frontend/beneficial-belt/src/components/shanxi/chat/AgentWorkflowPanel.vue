@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-flow">
+  <div class="agent-flow" :class="{ streaming: flow.status === 'running' }">
     <template v-for="(b, i) in flow.blocks" :key="i">
       <!-- 思考：折叠的暗色文本块 -->
       <div v-if="b.type === 'thinking'" class="flow-thinking">

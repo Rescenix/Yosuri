@@ -372,6 +372,7 @@
                   <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
                     <Icon icon="fluent-mdl2:up" width="18" color="#fff" />
                   </button>
+                  <span v-if="demoMode.enabled" class="demo-badge" title="演示模式：发消息只本地渲染，不花 token">演示</span>
                 </div>
               </div>
 
@@ -1099,8 +1100,10 @@ function collectStreamTextNodes(root) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(n) {
       const p = n.parentElement
-      // 代码块/公式由 hljs/katex 接管 DOM，不要往里插 span
-      if (p && p.closest('pre, code, .katex, .code-btn-group')) return NodeFilter.FILTER_REJECT
+      // 代码块/公式/表格由 hljs/katex/markdown 接管 DOM，不要往里插 span——
+      // 否则表格边吐边重排列宽会抖、代码块随每次 chunk 整段重渲染会变慢。
+      // 这类整块直接跳出现（仿 ChatGPT），只让思考块与普通正文段落保留瀑布级联。
+      if (p && p.closest('pre, code, table, .katex, .code-btn-group')) return NodeFilter.FILTER_REJECT
       return NodeFilter.FILTER_ACCEPT
     }
   })
@@ -1169,8 +1172,17 @@ function streamFadePass() {
   // 只处理带 .streaming 的助手消息（isStreaming=true，即正在 SSE 输出的那条）。
   // 历史消息（切会话加载、刷新恢复）一律不做渐变：既没必要，还会因为整段包 span
   // 让含表格的消息反复触发列宽重算——就是"切会话时表格抖动"的来源。
-  document.querySelectorAll('.chat-messages .assistant-message.streaming .markdown-body, .chat-messages .assistant-message.streaming .reasoning-text')
-    .forEach(applyStreamFade)
+  // 主聊天现已走四态机 agentflow（/api/code/workflow），回答渲染在
+  // AgentWorkflowPanel 的 .agent-flow 里：意图块 .flow-intent.markdown-body、
+  // 思考块 .flow-thinking-text。它们没有 .assistant-message.streaming 外层，
+  // 故原选择器命中不了——补充命中，并用 .agent-flow.streaming（running 时挂）
+  // 作为"正在流式"的标识，让瀑布渐变接到主链路。
+  document.querySelectorAll(
+    '.chat-messages .assistant-message.streaming .markdown-body, ' +
+    '.chat-messages .assistant-message.streaming .reasoning-text, ' +
+    '.agent-flow.streaming .flow-intent.markdown-body, ' +
+    '.agent-flow.streaming .flow-thinking-text'
+  ).forEach(applyStreamFade)
 }
 
 // ==================== useChatWidget ====================
@@ -1182,6 +1194,7 @@ const {
   forceScrollToBottom, adjustInputHeight, switchSession,
   sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
   flowState, startCodeWorkflow, stopCodeWorkflow,
+  demoMode, startDemoFlow,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
@@ -1271,6 +1284,13 @@ function handleSend() {
   const combined = buildOutgoingMessage()
   if (!combined) return
   const displayText = userInput.value.trim()
+  // 演示模式：零 token 本地沙盒，直接渲染预置长对话验收瀑布渐变，不触网
+  if (demoMode.enabled) {
+    userInput.value = ''
+    nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
+    startDemoFlow(displayText)
+    return
+  }
   const displayAttachments = attachments.value.filter(a => a.status === 'ready').map(a => ({ ...a }))
   clearAttachments()
   userInput.value = ''
@@ -1491,6 +1511,22 @@ onMounted(() => {
 .fade-placeholder-leave-from {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* 演示模式角标：发送按钮旁的零 token 沙盒提示 */
+.demo-badge {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  border-radius: 6px;
+  cursor: default;
+  user-select: none;
 }
 
 
