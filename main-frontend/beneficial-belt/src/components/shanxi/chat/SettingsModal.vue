@@ -9,6 +9,9 @@
           </button>
         </div>
         <div class="settings-modal-body">
+          <!-- 左右两栏：左侧设置，右侧实时预览（仿 Appearance 预览，渐变参数一拖即时可见） -->
+          <div class="settings-cols">
+            <div class="settings-col-main">
           <div class="settings-section-title">免费模型提供商</div>
           <div class="settings-section-desc">点一个提供商，它的全部模型会直接进聊天下拉框（再点一次移除）。填了 Key 的提供商才会真正进调用链。</div>
 
@@ -151,6 +154,19 @@
           </div>
 
           <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
+            </div><!-- /settings-col-main -->
+
+            <!-- 右侧：流式渐变实时预览（不花 token，参数一拖即时可见） -->
+            <div class="settings-col-preview">
+              <div class="preview-title">渐变预览</div>
+              <div class="preview-desc">调左侧参数，下方文字会按当前配置实时重播淡入。</div>
+              <div class="preview-stage" ref="previewStage">
+                <div class="preview-bubble markdown-body" ref="previewBubble"></div>
+              </div>
+              <button class="preview-replay" type="button" @click="replayPreview">▶ 重播预览</button>
+              <div class="preview-hint" v-if="demoMode.enabled">演示模式已开：回到聊天发任意消息即可零 token 看完整对话。</div>
+            </div>
+          </div><!-- /settings-cols -->
         </div>
       </div>
     </div>
@@ -158,7 +174,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
@@ -169,6 +185,34 @@ const props = defineProps({
   openid: { type: String, default: '' }
 })
 const emit = defineEmits(['close'])
+
+// ============ 流式渐变实时预览（不花 token，复用全局 .stream-fade-seg + om-stream-fade） ============
+const previewBubble = ref(null)
+const PREVIEW_TEXT = '这是一段**流式渐变**预览：调整左侧参数，下方文字会按当前配置的淡入时长、级联间隔与模糊强度实时重播逐字淡入。'
+
+// 把示例文本逐字包成 span.stream-fade-seg，按当前 streamFadeConfig 设 animationDuration / delay，
+// 触发全局 om-stream-fade 关键帧，从而“即时重播”瀑布淡入（与聊天里 streamFadePass 同源动画）。
+function replayPreview() {
+  const el = previewBubble.value
+  if (!el) return
+  el.innerHTML = ''
+  const { fadeMs, staggerMs, maxSweepMs, blurPx } = streamFadeConfig
+  const text = PREVIEW_TEXT
+  const frag = document.createDocumentFragment()
+  let i = 0
+  // 段间用真实渲染间隔会让长文拖太久，这里压缩：每字 stagger，超时则按 maxSweepMs 收口
+  for (const ch of text) {
+    const span = document.createElement('span')
+    span.className = 'stream-fade-seg'
+    span.textContent = ch
+    span.style.animationDuration = fadeMs + 'ms'
+    span.style.animationDelay = (i * staggerMs) + 'ms'
+    span.style.setProperty('--sf-blur', blurPx + 'px')
+    frag.appendChild(span)
+    i++
+  }
+  el.appendChild(frag)
+}
 
 // Agnes 挪进了内置免费池（见后端 model_router.go 的 freeModelCatalog），
 // 不再需要用户手动填 Key 走自定义配置——上面"免费模型池"分组里直接能填/改 Key
@@ -398,6 +442,7 @@ onMounted(() => {
   loadConfigs()
   loadChatList()
   document.addEventListener('keydown', handleEsc)
+  nextTick(replayPreview)
 })
 onUnmounted(() => {
   document.removeEventListener('keydown', handleEsc)
@@ -421,7 +466,7 @@ onUnmounted(() => {
   justify-content: center;
 }
 .settings-modal-card {
-  width: 560px;
+  width: 760px;
   max-width: calc(100vw - 48px);
   max-height: calc(100vh - 96px);
   background: #ffffff;
@@ -453,7 +498,48 @@ onUnmounted(() => {
   color: #6b6b6b;
 }
 .settings-modal-close:hover { background: #f5f5f5; }
-.settings-modal-body { padding: 18px 20px 22px; overflow-y: auto; }
+.settings-modal-body { padding: 18px 20px 22px; overflow-y: auto; display: flex; flex-direction: column; }
+.settings-cols { display: flex; gap: 20px; align-items: flex-start; }
+.settings-col-main { flex: 1 1 58%; min-width: 0; }
+.settings-col-preview {
+  flex: 1 1 42%;
+  min-width: 0;
+  align-self: stretch;
+  background: #fafafa;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 14px;
+  position: sticky;
+  top: 0;
+}
+.preview-title { font-size: 13.5px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+.preview-desc { font-size: 11.5px; color: #a3a3a3; margin-bottom: 12px; line-height: 1.5; }
+.preview-stage {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 160px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #1e293b;
+}
+.preview-bubble { white-space: pre-wrap; word-break: break-word; }
+.preview-replay {
+  margin-top: 10px;
+  width: 100%;
+  padding: 7px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1a1a1a;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.preview-replay:hover { background: #e8e8e8; }
+.preview-hint { margin-top: 10px; font-size: 11px; color: #c96442; line-height: 1.5; }
 
 .settings-section-title { font-size: 13.5px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
 .settings-section-desc { font-size: 12px; color: #a3a3a3; margin-bottom: 14px; }

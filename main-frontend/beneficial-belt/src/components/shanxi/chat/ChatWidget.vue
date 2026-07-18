@@ -372,7 +372,6 @@
                   <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
                     <Icon icon="fluent-mdl2:up" width="18" color="#fff" />
                   </button>
-                  <span v-if="demoMode.enabled" class="demo-badge" title="演示模式：发消息只本地渲染，不花 token">演示</span>
                 </div>
               </div>
 
@@ -421,6 +420,7 @@
                   </div>
                 </div>
                 <div class="input-toolbar-right">
+                  <span v-if="demoMode.enabled" class="demo-badge" title="演示模式：发消息只本地渲染，不花 token">演示</span>
                   <!-- Context window 用量：常驻横条（放在模型左边，一眼可见） -->
                   <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
                     <span class="ctx-bar-text">{{ formatTok(liveContextStats.used) }}/{{ formatTok(liveContextStats.contextWindow) }}</span>
