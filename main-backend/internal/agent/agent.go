@@ -123,7 +123,10 @@ func MainAgentConfig() MainAgent {
 // tools 字段拿到结构化工具定义，再要求它额外输出文本 JSON 只会造成干扰。
 func MainAgentConfigNative() MainAgent {
 	return MainAgent{
-		SystemPrompt: `你是Aurora的主工程师Agent。你的核心工作方式是：
+		// 身份层不在此写死：AI 自称/用户昵称/用户身份由前端 profile 经
+		// userInstructionsPrompt() 注入（见 settings_handlers.go）。这里只保留
+		// 与身份无关的工作方式与工具协议，避免后端硬编码覆盖前端设置。
+		SystemPrompt: `你是一个乐于助人的 AI 助手。你的核心工作方式是：
 通过工具调用完成任务，而不是在回复里写 bash 命令。
 
 ` + SoulTemplateCodeProtocol + `

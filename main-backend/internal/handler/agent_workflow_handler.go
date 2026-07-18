@@ -101,6 +101,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if memoryInject != "" {
 		systemPrompt += "\n\n# 长期记忆（无条件注入，身份/工作态/收件箱）\n" + memoryInject
 	}
+	// 用户在「我的」tab 填的称呼/职业/自定义指令，必须注入主链路系统提示词。
+	// 之前只挂在废弃的 /api/chat/stream（buildSystemPrompt）里，四态机收不到——
+	// 清理旧路径时这行若不先落过来，自定义指令功能会随 chat_stream 一起被删没。
+	systemPrompt += userInstructionsPrompt()
 	tools := buildCodeWorkflowTools()
 	// 分类上下文占用（token 估算口径与四态机一致：字符数/4），随 model_info 回传前端展示。
 	toolsJSON, _ := json.Marshal(tools)

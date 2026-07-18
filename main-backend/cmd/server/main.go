@@ -48,10 +48,8 @@ func main() {
 	// 每次 Append/SetCompressIndex 都会异步整份重写
 	sessionStore := handler.NewSessionStore(handler.ChatSessionsDomain)
 
-	// 自动拉起 DS 浏览器代理
-	if err := handler.EnsureDSNodeServer(); err != nil {
-		log.Printf("⚠️ DS 代理启动失败: %v，将在首次对话时重试", err)
-	}
+	// DS 浏览器代理（crack/server.js）已随 crack/ 目录封存废弃：主链路走 /api/code/workflow，
+	// 不再需要 localhost:3000 代理，故不再自动拉起——避免 crack 删除后启动被 node 缺失阻塞。
 	handler.RegisterRoutes(r, memoryStore, sessionStore)
 
 	log.Println("🚀 Aurora 引擎已启动，监听端口 :8080")

@@ -42,6 +42,8 @@ func (h *ChatHandler) buildSystemPrompt(req ChatRequest, c *gin.Context, modelTy
 			}
 		}
 	}
+	// 用户在设置面板填的称呼/职业/自定义指令，无条件注入（见 settings_handlers.go）
+	soul += userInstructionsPrompt()
 	return soul
 }
 

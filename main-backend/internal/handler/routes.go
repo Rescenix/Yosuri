@@ -60,6 +60,12 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	// Python Harness (:8001) 集成示例：转发 /run_task
 	r.GET("/api/harness/demo", HandleHarnessDemo)
 
+	// 设置面板：技能库 / MCP 生态 / 用户档案（含自定义指令）
+	r.GET("/api/skills", HandleListSkills)
+	r.GET("/api/mcp", HandleMCPStatus)
+	r.GET("/api/profile", HandleGetProfile)
+	r.POST("/api/profile", HandleSaveProfile)
+
 	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
 	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)
 

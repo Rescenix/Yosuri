@@ -9,10 +9,13 @@
           </button>
         </div>
         <div class="settings-modal-body">
-          <!-- 左侧边栏：两个 tab -->
+          <!-- 左侧边栏 -->
           <div class="settings-sidebar">
-            <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'">提供方</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">外观</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'"><Icon icon="mdi:account-circle-outline" width="16" />我的</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'"><Icon icon="mdi:server-network-outline" width="16" />提供方</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'"><Icon icon="mdi:palette-outline" width="16" />外观</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()"><Icon icon="mdi:connection" width="16" />MCP</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()"><Icon icon="mdi:school-outline" width="16" />Skills</button>
           </div>
 
           <!-- 右侧内容区 -->
@@ -112,7 +115,23 @@
 
             <!-- ========== 外观 ========== -->
             <div v-show="activeTab === 'appearance'" class="settings-panel">
-              <div class="settings-section-title">流式渐变</div>
+              <div class="settings-section-title">主题</div>
+              <div class="settings-section-desc">统一整体色调。切换即时生效并自动保存。</div>
+              <div class="param-row">
+                <span class="param-label">配色主题</span>
+                <div class="seg-control">
+                  <button
+                    v-for="opt in THEME_OPTIONS"
+                    :key="opt.value"
+                    class="seg-btn"
+                    :class="{ on: theme === opt.value }"
+                    type="button"
+                    @click="theme = opt.value"
+                  >{{ opt.label }}</button>
+                </div>
+              </div>
+
+              <div class="settings-section-title" style="margin-top: 18px;">流式渐变</div>
               <div class="settings-section-desc">AI 回复逐字级联淡入的"瀑布"效果（仿 ChatGPT/Gemini）。改动即时生效并自动保存。</div>
 
               <div class="param-row">
@@ -149,11 +168,90 @@
                 <button class="param-reset-btn" type="button" @click="resetStreamFadeConfig">恢复默认</button>
               </div>
 
-              <!-- 无限循环全格式预览（纯前端，不花 token） -->
+              <!-- 精简预览：专注 Markdown / 公式 / 表格，跟随主题，无滚动条 -->
               <div class="settings-section-title" style="margin-top: 18px;">实时预览</div>
-              <div class="settings-section-desc">下方按当前配置无限循环重播淡入，覆盖标题/列表/代码/表格/公式等全部格式。调参即时生效。</div>
-              <div class="preview-stage" ref="previewStage">
-                <div class="preview-bubble markdown-body" ref="previewBubble" v-html="previewHtml"></div>
+              <div class="settings-section-desc">按当前主题与渐变配置循环重播，专注排版 / 公式 / 表格。</div>
+              <div class="preview-stage">
+                <div class="preview-bubble markdown-body" ref="previewBubble"></div>
+              </div>
+            </div>
+
+            <!-- ========== MCP ========== -->
+            <div v-show="activeTab === 'mcp'" class="settings-panel">
+              <div class="settings-section-title">
+                MCP 生态
+                <button class="inline-refresh" type="button" @click="loadMCP" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: mcpLoading }" /></button>
+              </div>
+              <div class="settings-section-desc">项目已接入的 MCP server（读自 <code>{{ mcpConfigPath || 'mcp.json' }}</code>）与运行时注册的工具。</div>
+              <div v-if="mcpLoading" class="settings-loading">加载中...</div>
+              <template v-else>
+                <div v-if="!mcpServers.length" class="settings-empty">未配置 MCP server（项目根目录放 mcp.json 即可接入）。</div>
+                <div v-for="s in mcpServers" :key="s.name" class="entity-card">
+                  <div class="entity-head">
+                    <Icon icon="mdi:connection" width="15" />
+                    <span class="entity-name">{{ s.name }}</span>
+                    <span class="entity-badge">{{ s.tools.length }} 工具</span>
+                  </div>
+                  <div class="entity-meta">{{ s.command }} {{ (s.args || []).join(' ') }}</div>
+                  <div v-if="s.tools.length" class="entity-tags">
+                    <span v-for="t in s.tools" :key="t" class="entity-tag">{{ t.replace('mcp__' + s.name + '__', '') }}</span>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- ========== Skills ========== -->
+            <div v-show="activeTab === 'skills'" class="settings-panel">
+              <div class="settings-section-title">
+                已学技能
+                <button class="inline-refresh" type="button" @click="loadSkills" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
+              </div>
+              <div class="settings-section-desc">工作流成功后自动沉淀的可复用技能（读自 <code>{{ skillsDir || './skills' }}</code>），实时刷新。</div>
+              <div v-if="skillsLoading" class="settings-loading">加载中...</div>
+              <template v-else>
+                <div v-if="!skills.length" class="settings-empty">还没有学到技能。完成几次 Code 工作流后会自动沉淀。</div>
+                <div v-for="sk in skills" :key="sk.name" class="entity-card">
+                  <div class="entity-head" @click="toggleSkill(sk.name)" style="cursor:pointer">
+                    <Icon icon="mdi:school-outline" width="15" />
+                    <span class="entity-name">{{ sk.name }}</span>
+                    <span class="entity-badge">{{ (sk.steps || []).length }} 步</span>
+                    <Icon :icon="expandedSkill === sk.name ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="16" style="margin-left:auto" />
+                  </div>
+                  <div class="entity-meta">{{ sk.description }}</div>
+                  <ol v-if="expandedSkill === sk.name && sk.steps && sk.steps.length" class="skill-steps">
+                    <li v-for="(st, i) in sk.steps" :key="i">{{ st }}</li>
+                  </ol>
+                </div>
+              </template>
+            </div>
+
+            <!-- ========== 我的（Profile + 自定义指令，仿 Claude Profile） ========== -->
+            <div v-show="activeTab === 'profile'" class="settings-panel">
+              <div class="settings-section-title">个人资料</div>
+              <div class="profile-row">
+                <span class="profile-label">头像</span>
+                <div class="profile-avatar">{{ (profile.full_name || 'A').trim().charAt(0).toUpperCase() }}</div>
+              </div>
+              <div class="profile-row">
+                <span class="profile-label">昵称</span>
+                <input class="profile-input" v-model="profile.full_name" type="text" placeholder="你的名字" />
+              </div>
+              <div class="profile-row">
+                <span class="profile-label">希望 AI 怎么称呼你</span>
+                <input class="profile-input" v-model="profile.call_name" type="text" placeholder="比如 Prometheus" />
+              </div>
+              <div class="profile-row">
+                <span class="profile-label">你的职业 / 身份</span>
+                <input class="profile-input" v-model="profile.work" type="text" placeholder="比如 软件工程师" />
+              </div>
+
+              <div class="settings-section-title" style="margin-top: 18px;">给 AI 的自定义指令</div>
+              <div class="settings-section-desc">这些会跨对话注入系统提示词，影响 AI 的语气与行为。</div>
+              <textarea class="profile-instructions" v-model="profile.instructions" rows="6" placeholder="例如：用温柔、清晰的语气；理性稳重，不要过度共情。"></textarea>
+
+              <div class="profile-actions">
+                <span v-if="profileSaved" class="profile-saved">已保存</span>
+                <button class="api-form-btn save" type="button" @click="saveProfile" :disabled="profileSaving">{{ profileSaving ? '保存中…' : '保存' }}</button>
               </div>
             </div>
           </div>
@@ -170,8 +268,24 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
-import { PREVIEW_MARKDOWN } from '../composables/useDemoMode.js'
+import { theme, THEME_OPTIONS } from '../composables/useTheme.js'
 import { renderMarkdown } from './markdownRenderer.js'
+
+// 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
+const PREVIEW_MD =
+`## 排版预览
+
+正文段落、**加粗**、行内代码 \`renderMarkdown\`、行内公式 $E = mc^2$。
+
+$$
+x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
+$$
+
+| 参数 | 含义 | 建议值 |
+| --- | --- | --- |
+| fadeMs | 单字淡入 | 500ms |
+| staggerMs | 字间级联 | 14ms |
+| blurPx | 起始模糊 | 2px |`
 
 const props = defineProps({
   openid: { type: String, default: '' }
@@ -193,8 +307,8 @@ function renderPreviewFrame() {
   const el = previewBubble.value
   if (!el) return
   const { fadeMs, staggerMs, blurPx } = streamFadeConfig
-  const html = renderMarkdown(PREVIEW_MARKDOWN, true)
-  const text = PREVIEW_MARKDOWN
+  const html = renderMarkdown(PREVIEW_MD, true)
+  const text = PREVIEW_MD
   // 用一段“打字机”窗口：每帧多露几个字 + 给新露出的字加淡入动画
   const spanAll = (fullHtml) => {
     // 简单地整段插 span 会破坏标签，这里对纯文本快照逐字动画不合适；
@@ -234,7 +348,7 @@ function startPreviewLoop() {
   stopPreviewLoop()
   renderPreviewFrame()
   // 整段淡入播完（按字符数估算时长）后从头循环
-  const total = PREVIEW_MARKDOWN.length
+  const total = PREVIEW_MD.length
   const { fadeMs, staggerMs } = streamFadeConfig
   const oneRound = total * staggerMs + fadeMs + 800
   previewTimer = setInterval(() => {
@@ -442,6 +556,85 @@ function toggleVendorModels(grp) {
   setChatModelList(next)
 }
 
+// ============ MCP ============
+const mcpServers = ref([])
+const mcpLoading = ref(false)
+const mcpConfigPath = ref('')
+let mcpLoaded = false
+async function loadMCP(force = false) {
+  if (mcpLoaded && !force) return
+  mcpLoaded = true
+  mcpLoading.value = true
+  try {
+    const res = await fetch('/api/mcp')
+    const data = await res.json()
+    mcpServers.value = data.servers || []
+    mcpConfigPath.value = data.config_path || ''
+  } catch (e) {
+    mcpServers.value = []
+  } finally {
+    mcpLoading.value = false
+  }
+}
+
+// ============ Skills ============
+const skills = ref([])
+const skillsLoading = ref(false)
+const skillsDir = ref('')
+const expandedSkill = ref(null)
+let skillsLoaded = false
+function toggleSkill(name) { expandedSkill.value = expandedSkill.value === name ? null : name }
+async function loadSkills(force = false) {
+  if (skillsLoaded && !force) return
+  skillsLoaded = true
+  skillsLoading.value = true
+  try {
+    const res = await fetch('/api/skills')
+    const data = await res.json()
+    skills.value = data.skills || []
+    skillsDir.value = data.dir || ''
+  } catch (e) {
+    skills.value = []
+  } finally {
+    skillsLoading.value = false
+  }
+}
+// ============ Profile ============
+const profile = ref({ full_name: '', call_name: '', work: '', instructions: '' })
+const profileSaving = ref(false)
+const profileSaved = ref(false)
+async function loadProfile() {
+  try {
+    const res = await fetch('/api/profile')
+    if (res.ok) {
+      const data = await res.json()
+      profile.value = {
+        full_name: data.full_name || '',
+        call_name: data.call_name || '',
+        work: data.work || '',
+        instructions: data.instructions || ''
+      }
+    }
+  } catch (e) {}
+}
+async function saveProfile() {
+  profileSaving.value = true
+  profileSaved.value = false
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile.value)
+    })
+    if (res.ok) {
+      profileSaved.value = true
+      setTimeout(() => { profileSaved.value = false }, 2000)
+    }
+  } catch (e) {} finally {
+    profileSaving.value = false
+  }
+}
+
 function handleEsc(e) {
   if (e.key === 'Escape') emit('close')
 }
@@ -449,6 +642,7 @@ function handleEsc(e) {
 onMounted(() => {
   loadConfigs()
   loadChatList()
+  loadProfile()
   document.addEventListener('keydown', handleEsc)
   nextTick(startPreviewLoop)
 })
@@ -471,12 +665,12 @@ onUnmounted(() => {
   justify-content: center;
 }
 .settings-modal-card {
-  width: 820px;
+  width: 900px;
   max-width: calc(100vw - 48px);
   max-height: calc(100vh - 96px);
-  background: #ffffff;
+  background: var(--app-surface);
   border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--app-shadow);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -486,16 +680,16 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
 }
-.settings-modal-title { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+.settings-modal-title { font-size: 15px; font-weight: 700; color: var(--app-text); }
 .settings-modal-close {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border-radius: 6px; border: none;
-  background: transparent; cursor: pointer; color: #6b6b6b;
+  background: transparent; cursor: pointer; color: var(--app-text-soft);
 }
-.settings-modal-close:hover { background: #f5f5f5; }
+.settings-modal-close:hover { background: var(--app-surface-3); }
 .settings-modal-body {
   display: flex;
   flex: 1;
@@ -504,43 +698,54 @@ onUnmounted(() => {
 }
 /* 左侧边栏 */
 .settings-sidebar {
-  width: 160px;
+  width: 168px;
   flex-shrink: 0;
-  border-right: 1px solid #ececec;
+  border-right: 1px solid var(--app-border-soft);
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: #fafafa;
+  background: var(--app-surface-2);
   overflow-y: auto;
 }
 .settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   padding: 9px 14px;
   font-size: 13.5px;
   font-weight: 600;
-  color: #6b6b6b;
+  color: var(--app-text-soft);
   background: transparent;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.settings-tab:hover { background: #f0f0f0; }
-.settings-tab.on { color: #fff; background: #c96442; }
+.settings-tab:hover { background: var(--app-surface-3); }
+.settings-tab.on { color: #fff; background: var(--app-accent); }
 /* 右侧内容 */
 .settings-content {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
   padding: 18px 22px 22px;
+  background: var(--app-surface);
+  color: var(--app-text);
 }
 .settings-panel { display: block; }
 
-.settings-section-title { font-size: 13.5px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
-.settings-section-desc { font-size: 12px; color: #a3a3a3; margin-bottom: 14px; line-height: 1.5; }
+.settings-section-title { font-size: 13.5px; font-weight: 700; color: var(--app-text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.settings-section-desc { font-size: 12px; color: var(--app-text-faint); margin-bottom: 14px; line-height: 1.5; }
+.settings-section-desc code { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; background: var(--app-code-bg); padding: 1px 5px; border-radius: 4px; }
 .settings-error { font-size: 12px; color: #d94834; padding: 8px 0; }
-.settings-loading { font-size: 12.5px; color: #a3a3a3; padding: 8px 0; }
+.settings-loading { font-size: 12.5px; color: var(--app-text-faint); padding: 8px 0; }
+.settings-empty { font-size: 12.5px; color: var(--app-text-faint); padding: 20px 0; text-align: center; }
+.inline-refresh { margin-left: auto; border: none; background: transparent; color: var(--app-text-faint); cursor: pointer; display: inline-flex; padding: 2px; border-radius: 5px; }
+.inline-refresh:hover { background: var(--app-surface-3); }
+.spin { animation: sm-spin 0.9s linear infinite; }
+@keyframes sm-spin { to { transform: rotate(360deg); } }
 
 .model-pick-btn {
   flex-shrink: 0; margin-left: auto; padding: 3px 12px; font-size: 12px; font-weight: 600;
@@ -610,31 +815,63 @@ onUnmounted(() => {
 
 /* 流式渐变参数控件 */
 .param-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; }
-.param-label { flex-shrink: 0; width: 92px; font-size: 12.5px; color: #1a1a1a; }
-.param-range { flex: 1; min-width: 0; height: 4px; accent-color: #c96442; cursor: pointer; }
-.param-value { flex-shrink: 0; width: 72px; text-align: right; font-size: 12px; color: #6b6b6b; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.param-label { flex-shrink: 0; width: 96px; font-size: 12.5px; color: var(--app-text); }
+.param-range { flex: 1; min-width: 0; height: 4px; accent-color: var(--app-accent); cursor: pointer; }
+.param-value { flex-shrink: 0; width: 72px; text-align: right; font-size: 12px; color: var(--app-text-soft); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
 .param-switch { position: relative; display: inline-block; margin-left: auto; cursor: pointer; }
 .param-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
-.param-switch-track { display: block; width: 38px; height: 22px; border-radius: 999px; background: #d5d5d5; transition: background 0.15s ease; position: relative; }
+.param-switch-track { display: block; width: 38px; height: 22px; border-radius: 999px; background: var(--app-border); transition: background 0.15s ease; position: relative; }
 .param-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.15s ease; }
-.param-switch input:checked + .param-switch-track { background: #c96442; }
+.param-switch input:checked + .param-switch-track { background: var(--app-accent); }
 .param-switch input:checked + .param-switch-track::after { transform: translateX(16px); }
 .param-reset-row { display: flex; justify-content: flex-end; margin-top: 6px; }
-.param-reset-btn { padding: 4px 14px; font-size: 12px; color: #6b6b6b; background: #f0f0f0; border: 1px solid #ddd; border-radius: 999px; cursor: pointer; transition: background 0.15s ease; }
-.param-reset-btn:hover { background: #e8e8e8; }
+.param-reset-btn { padding: 4px 14px; font-size: 12px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 999px; cursor: pointer; transition: background 0.15s ease; }
+.param-reset-btn:hover { background: var(--app-border); }
 
-/* 实时预览 */
+/* 主题分段控件（仿图1 的 Small/Medium/Large 分段） */
+.seg-control { margin-left: auto; display: inline-flex; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 2px; }
+.seg-btn { border: none; background: transparent; color: var(--app-text-soft); font-size: 12.5px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: all 0.12s; }
+.seg-btn.on { background: var(--app-surface); color: var(--app-text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; }
+
+/* MCP / Skills 实体卡片 */
+.entity-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; background: var(--app-surface-2); }
+.entity-head { display: flex; align-items: center; gap: 8px; color: var(--app-text); }
+.entity-name { font-size: 13px; font-weight: 700; }
+.entity-badge { font-size: 10.5px; font-weight: 600; color: var(--app-accent); background: var(--app-accent-soft); padding: 1px 8px; border-radius: 999px; }
+.entity-meta { margin-top: 5px; font-size: 11.5px; color: var(--app-text-faint); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; line-height: 1.5; word-break: break-all; }
+.entity-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.entity-tag { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 7px; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.skill-steps { margin: 8px 0 2px; padding-left: 20px; font-size: 12px; color: var(--app-text-soft); line-height: 1.7; }
+
+/* Profile（仿图2） */
+.profile-row { display: flex; align-items: center; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--app-border-soft); }
+.profile-label { flex-shrink: 0; width: 180px; font-size: 13px; color: var(--app-text); }
+.profile-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--app-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; }
+.profile-input { flex: 1; min-width: 0; font-size: 13px; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 12px; }
+.profile-input:focus { outline: none; border-color: var(--app-accent); }
+.profile-instructions { width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.6; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; resize: vertical; font-family: inherit; }
+.profile-instructions:focus { outline: none; border-color: var(--app-accent); }
+.profile-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 14px; }
+.profile-saved { font-size: 12px; color: #12b76a; }
+
+/* 实时预览（受主题影响，无内部滚动条：内容已精简到一屏内） */
 .preview-stage {
-  background: #fff;
-  border: 1px solid #eee;
+  background: var(--app-bg);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  padding: 14px;
-  min-height: 280px;
-  max-height: 360px;
-  overflow-y: auto;
+  padding: 14px 16px;
+  overflow: hidden;
   font-size: 14px;
   line-height: 1.75;
-  color: #1e293b;
+  color: var(--app-text);
 }
-.preview-bubble { white-space: pre-wrap; word-break: break-word; }
+.preview-bubble { word-break: break-word; }
+.preview-bubble :deep(h2) { color: var(--app-text); font-size: 1.15rem; margin: 0 0 0.5em; }
+.preview-bubble :deep(p) { color: var(--app-text); margin: 0.4em 0; }
+.preview-bubble :deep(code) { background: var(--app-code-bg); color: var(--app-accent); padding: 1px 5px; border-radius: 4px; }
+.preview-bubble :deep(table) { border-collapse: collapse; margin: 0.6em 0; font-size: 0.9em; }
+.preview-bubble :deep(th), .preview-bubble :deep(td) { border: 1px solid var(--app-border); padding: 4px 10px; color: var(--app-text); }
+.preview-bubble :deep(th) { background: var(--app-surface-3); }
+.preview-bubble :deep(.katex) { color: var(--app-text); }
+.api-form-btn.save:disabled { opacity: 0.6; cursor: default; }
 </style>

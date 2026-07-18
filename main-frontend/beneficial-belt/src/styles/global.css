@@ -14,6 +14,44 @@
   --border: #e2e8f0;
 }
 
+/* ========================================
+   主题变量（统一色调）—— data-theme 由 useTheme.js 打在 <html> 上。
+   强调色收敛到品牌陶土橙 #c96442。组件用 var(--app-*) 即可跟随主题。
+   ======================================== */
+:root,
+:root[data-theme='light'] {
+  --app-bg: #ffffff;
+  --app-surface: #ffffff;
+  --app-surface-2: #fafafa;
+  --app-surface-3: #f4f4f5;
+  --app-text: #1a1a1a;
+  --app-text-soft: #6b6b6b;
+  --app-text-faint: #a3a3a3;
+  --app-border: #e5e5e5;
+  --app-border-soft: #ececec;
+  --app-accent: #c96442;
+  --app-accent-hover: #b85737;
+  --app-accent-soft: rgba(201, 100, 66, 0.12);
+  --app-code-bg: #f7f7f8;
+  --app-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
+}
+:root[data-theme='dark'] {
+  --app-bg: #1e1e20;
+  --app-surface: #26262a;
+  --app-surface-2: #2b2b30;
+  --app-surface-3: #313136;
+  --app-text: #ececec;
+  --app-text-soft: #a8a8b0;
+  --app-text-faint: #76767e;
+  --app-border: #3a3a40;
+  --app-border-soft: #34343a;
+  --app-accent: #e08a68;
+  --app-accent-hover: #eb9b7b;
+  --app-accent-soft: rgba(224, 138, 104, 0.16);
+  --app-code-bg: #17171a;
+  --app-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
 /* 全局背景与字体 */
 body {
   margin: 0;
