@@ -176,7 +176,7 @@
                       :id="'group-' + item.id"
                       :flow="item"
                     />
-                    <div v-else class="assistant-message">
+                    <div v-else class="assistant-message" :class="{ streaming: item.isStreaming }">
                       <div v-if="item.reasoning" class="reasoning-stream">
                         <div class="reasoning-label">
                           <Icon icon="la:atom" width="14" color="#6b7280" />
@@ -1152,6 +1152,12 @@ function applyStreamFade(el) {
       span.style.animationDelay = delay.toFixed(1) + 'ms'
       span.style.setProperty('--sf-blur', blurPx + 'px')
       span.textContent = seg
+      // 动画一跑完就把 span 拆回纯文本节点：否则成千上万个带 will-change 的 span
+      // 会永久堆在已完成的消息里，滚动时全量重合成 → 果冻抖动。拆回后零图层零开销。
+      span.addEventListener('animationend', () => {
+        const p = span.parentNode
+        if (p) p.replaceChild(document.createTextNode(span.textContent), span)
+      }, { once: true })
       frag.appendChild(span)
     }
     node.parentNode.replaceChild(frag, node)
@@ -1160,7 +1166,10 @@ function applyStreamFade(el) {
 
 function streamFadePass() {
   if (!streamFadeConfig.enabled) return
-  document.querySelectorAll('.chat-messages .assistant-message .markdown-body, .chat-messages .reasoning-text')
+  // 只处理带 .streaming 的助手消息（isStreaming=true，即正在 SSE 输出的那条）。
+  // 历史消息（切会话加载、刷新恢复）一律不做渐变：既没必要，还会因为整段包 span
+  // 让含表格的消息反复触发列宽重算——就是"切会话时表格抖动"的来源。
+  document.querySelectorAll('.chat-messages .assistant-message.streaming .markdown-body, .chat-messages .assistant-message.streaming .reasoning-text')
     .forEach(applyStreamFade)
 }
 

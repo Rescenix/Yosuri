@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -346,8 +347,8 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
-		// 400/401/403 是确定性不可用（模型下架/额度/鉴权），当场标记，后续不再选
-		if resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 {
+		// 仅 401(鉴权)/403(额度) 确定性不可用才标记禁用；400 属请求格式/上游解析 bug，不禁用
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			disableFreeModel(b.Model)
 		}
 		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
@@ -410,6 +411,29 @@ func routeChatOnce(ctx context.Context, backends []RouterBackend, msgs []map[str
 
 // ==================== 流式：首包前 failover ====================
 
+// streamHTTPClient 返回用于流式请求的 *http.Client。
+// 关键：流式响应不能用 Client.Timeout 整体计时——Go 的 Timeout 把"读取整个响应体"也算进窗口，
+// 免费档/慢源一次生成常常 > 45s，会被 Client.Timeout 在流读到一半时砍断，报
+// "context deadline exceeded (Client.Timeout or context cancellation while reading body)"。
+// 故流式 client Timeout 置 0，只由 Transport 卡"连接 + 首字节"(ResponseHeaderTimeout)，
+// 真正的取消交给请求上下文 c.Request.Context()（浏览器断开即取消）。
+func streamHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 0,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   15 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ResponseHeaderTimeout: 30 * time.Second,
+			TLSHandshakeTimeout:   15 * time.Second,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+		},
+	}
+}
+
 // streamRouterRound 沿路由链做流式调用。failover 只发生在拿到 200 响应之前
 // （连接失败/非200 秒切下一个）；流一旦开始就不再切换源。
 // 实时把 reasoning_content/content 增量写成 thinking/intent SSE 事件。
@@ -451,7 +475,7 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 			httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 		}
 
-		client := &http.Client{Timeout: b.Timeout}
+		client := streamHTTPClient()
 		resp, err := client.Do(httpReq)
 		if err != nil {
 			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
@@ -461,8 +485,10 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		if resp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			// 400/401/403 确定性不可用，当场标记
-			if resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 {
+			// 仅 401(鉴权)/403(额度) 是确定性不可用，当场标记禁用；
+			// 400 是请求格式/Ollama 服务端解析 bug（如 tool_calls 嵌套），属客户端问题，
+			// 不该永久禁用模型，否则一棍子打死整个免费档。
+			if resp.StatusCode == 401 || resp.StatusCode == 403 {
 				disableFreeModel(b.Model)
 			}
 			tried = append(tried, fmt.Sprintf("%s: HTTP %d", b.Name, resp.StatusCode))
@@ -486,8 +512,23 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 // 每行一个独立 JSON 对象（非 data: 前缀 SSE），工具调用在 message.tool_calls
 // 顶层、arguments 是对象（需转 JSON 字符串喂给 core.ToolCall）。
 func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, int, *RouterBackend, error) {
+	// Ollama 云端 /api/chat 的 JSON 解析器对 assistant 消息里的 tool_calls 嵌套对象有 bug，
+	// 只要历史里带 tool_calls 就报 "Value looks like object, but can't find closing '}'" (HTTP 400)，
+	// 整个免费档都跑不了带 tool_calls 的请求（实测复现：剥掉 tool_calls 即 200）。
+	// Ollama 原生流自己会回传 tool_calls，历史里不需要带，故发送前剥离。
+	safeMsgs := make([]map[string]any, 0, len(msgs))
+	for _, m := range msgs {
+		cp := map[string]any{}
+		for k, v := range m {
+			cp[k] = v
+		}
+		if cp["role"] == "assistant" {
+			delete(cp, "tool_calls")
+		}
+		safeMsgs = append(safeMsgs, cp)
+	}
 	reqBody := map[string]any{
-		"model": b.Model, "messages": msgs, "stream": true,
+		"model": b.Model, "messages": safeMsgs, "stream": true,
 		"options": map[string]any{"temperature": 0.2, "top_p": 0.85},
 	}
 	// Ollama 原生 API 用 "think" 字段控制推理强度（bool 或 "low"/"medium"/"high"，
@@ -507,7 +548,7 @@ func (r *WorkflowRunner) ollamaCloudStreamRound(c *gin.Context, b RouterBackend,
 	if b.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
-	client := &http.Client{Timeout: b.Timeout}
+	client := streamHTTPClient()
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return "", nil, 0, 0, nil, fmt.Errorf("Ollama Cloud 连接失败: %w", err)

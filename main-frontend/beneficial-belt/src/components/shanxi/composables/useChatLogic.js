@@ -202,25 +202,10 @@ export function useChatLogic({
         const headers = { 'Content-Type': 'application/json' }
         if (token) headers['Authorization'] = `Bearer ${token}`
 
-        let charQueue = []
-        let typingTimer = null
-
-        const processCharQueue = () => {
-            if (charQueue.length === 0) { typingTimer = null; return }
-            const { type, char } = charQueue.shift()
-            if (type === 'reasoning') botMsg.reasoning += char
-            else if (type === 'content') botMsg.content += char
-            if (onStreamUpdate) onStreamUpdate()
-            typingTimer = setTimeout(processCharQueue, 20)
-        }
-
-        const enqueueChars = (type, text) => {
-            if (!text) return
-            const chars = [...text]
-            chars.forEach(c => charQueue.push({ type, char: c }))
-            if (!typingTimer) processCharQueue()
-        }
-
+        // 曾经这里有个人工打字机：把 SSE chunk 拆成单字符队列、每 20ms 放 1 个字。
+        // 模型吐字快于 50 字/秒时队列越积越长、显示远远落后，且每个字符都触发一次
+        // 全文 markdown 重解析（v-html），就是"卡顿打字机"的来源。现在 chunk 直接
+        // 整批追加，平滑的逐字观感交给 ChatWidget 的流式瀑布渐变（CSS 动画，零重解析）。
         try {
             const response = await fetch('/api/chat/stream', {
                 method: 'POST',
@@ -247,36 +232,30 @@ export function useChatLogic({
                             const payload = JSON.parse(data)
                             if (payload.type === 'reasoning') {
                                 botMsg.recalling = false
-                                enqueueChars('reasoning', payload.content)
+                                botMsg.reasoning += payload.content || ''
+                                if (onStreamUpdate) onStreamUpdate()
                             } else if (payload.type === 'content') {
                                 botMsg.recalling = false
-                                enqueueChars('content', payload.content)
+                                botMsg.content += payload.content || ''
+                                if (onStreamUpdate) onStreamUpdate()
                             } else if (payload.type === 'done') {
-                                const waitForQueue = () => {
-                                    if (charQueue.length > 0 || typingTimer) {
-                                        setTimeout(waitForQueue, 100)
-                                    } else {
-                                        botMsg.content = payload.content || botMsg.content
-                                        botMsg.isStreaming = false
-                                        botMsg.recalling = false
-                                        if (payload.token_usage !== undefined) {
-                                            const total = parseInt(payload.token_usage) || 0
-                                            tokenStats.inputTokens = 0
-                                            tokenStats.outputTokens = total
-                                            tokenStats.contextWindow = CHAT_ESTIMATED_CONTEXT_WINDOW
-                                            tokenStats.contextPct = (total / CHAT_ESTIMATED_CONTEXT_WINDOW) * 100
-                                        }
-                                        chatState.active = false
-                                        if (saveMemory) {
-                                            saveMemory('leader', question)
-                                            saveMemory('shanshi', botMsg.content)
-                                        }
-                                        if (onStreamUpdate) onStreamUpdate()
-                                    }
+                                botMsg.content = payload.content || botMsg.content
+                                botMsg.isStreaming = false
+                                botMsg.recalling = false
+                                if (payload.token_usage !== undefined) {
+                                    const total = parseInt(payload.token_usage) || 0
+                                    tokenStats.inputTokens = 0
+                                    tokenStats.outputTokens = total
+                                    tokenStats.contextWindow = CHAT_ESTIMATED_CONTEXT_WINDOW
+                                    tokenStats.contextPct = (total / CHAT_ESTIMATED_CONTEXT_WINDOW) * 100
                                 }
-                                waitForQueue()
+                                chatState.active = false
+                                if (saveMemory) {
+                                    saveMemory('leader', question)
+                                    saveMemory('shanshi', botMsg.content)
+                                }
+                                if (onStreamUpdate) onStreamUpdate()
                             } else if (payload.type === 'error') {
-                                if (typingTimer) clearTimeout(typingTimer)
                                 botMsg.content = `杉汐：抱歉，流式传输失败：${payload.message || '未知错误'}`
                                 botMsg.isStreaming = false
                                 botMsg.recalling = false
@@ -288,7 +267,6 @@ export function useChatLogic({
                 }
             }
         } catch (e) {
-            if (typingTimer) clearTimeout(typingTimer)
             botMsg.content = '杉汐：抱歉，我的灵魂好像被风吹散了…稍等片刻可好？'
             botMsg.isStreaming = false
             chatState.active = false
@@ -296,6 +274,9 @@ export function useChatLogic({
         }
     }
 
+    /* ==================== DS 浏览器代理路径（已废弃，保留存档） ====================
+       曾经通过 localhost:3000 的 DS 网页代理轮询取回复。模型路由（model_router.go）
+       接管后不再使用；sendMessage 已不路由到这里。整段注释掉防止误用。
     const sendDSBrowserMessage = async () => {
         const question = userInput.value.trim()
         if (!question) return
@@ -386,14 +367,12 @@ export function useChatLogic({
             chatState.active = false
         }
     }
+    ==================== DS 浏览器代理路径注释结束 ==================== */
 
+    // 所有模型统一走 /api/chat/stream（后端 model_router 精确路由），选中 ds_browser
+    // 也一样——它作为 model 参数透传，由后端决定怎么兜底。
     const sendMessage = async () => {
-        const selectedModel = localStorage.getItem('selectedModel') || 'local'
-        if (selectedModel === 'ds_browser') {
-            await sendDSBrowserMessage()
-        } else {
-            await sendStandardMessage()
-        }
+        await sendStandardMessage()
     }
 
     // ==================== 工作流编排 ====================

@@ -309,10 +309,15 @@ function adjustInputHeight() {
   const apiBase = import.meta.env.VITE_API_BASE || ''
 
  async function loadAllHistory() {
+   const id = sessionId.value
    try {
-     const res = await fetch(`${apiBase}/api/sessions/${sessionId.value}`)
+     const res = await fetch(`${apiBase}/api/sessions/${id}`)
+     // 竞态守卫：请求在途时用户又切了会话，这份结果已过期，直接丢弃，
+     // 否则后返回的旧会话历史会覆盖新会话的内容
+     if (sessionId.value !== id) return
      if (res.ok) {
        const history = await res.json()
+       if (sessionId.value !== id) return
        // 后端对不存在/空的会话返回 null 或空 body，这里兜底成数组，避免 null.map 崩溃
        const list = Array.isArray(history) ? history : []
        messages.value = list.map((item, idx) => ({
@@ -328,19 +333,21 @@ function adjustInputHeight() {
      }
    } catch (e) {
      console.error('加载历史失败', e)
+     // 加载失败时别把上一个会话的内容留在屏幕上冒充新会话
+     if (sessionId.value === id) messages.value = []
    }
  }
 
-// 真正切换到另一个后端会话（不只是改左侧列表的高亮）：立即清空当前消息，
-// 避免切换瞬间残留上一个会话的内容，再按新 id 去加载历史——新会话/没有
-// 历史记录的会话会得到空数组，messages.length===0 时首页视图自然显示
+// 真正切换到另一个后端会话（不只是改左侧列表的高亮）。
+// 不预先清空 messages：清空会让 messages.length===0 的首页视图闪一下再跳到
+// 新会话（"闪烁 bug"）。改为等新历史拿到后一次性替换——期间短暂显示旧会话
+// 内容，比闪首页顺眼；竞态由 loadAllHistory 里的 id 守卫兜住。
 async function switchSession(id) {
   if (!id || id === sessionId.value) return
   sessionId.value = id
   localStorage.setItem('prism_session_id', id)
   // 切会话时同步恢复该会话持久化的真实 token（横条绑定会话，刷新/切换都不丢）
   sessionTokenStats.value = loadSessionTokenStats(id)
-  messages.value = []
   await loadAllHistory()
 }
 

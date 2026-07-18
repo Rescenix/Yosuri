@@ -1,0 +1,8 @@
+{
+  "name": "query-session-history",
+  "description": "在当前会话中多次检索用户之前的提问记录",
+  "steps": [
+    "使用正则表达式作为query参数调用search_memory检索当前会话记录",
+    "重复检索直到获取所需历史信息"
+  ]
+}
