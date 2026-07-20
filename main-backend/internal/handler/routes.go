@@ -51,7 +51,6 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 
 	// Agent 工作流编排
 	workflowRunner := NewWorkflowRunner(chatHandler)
-	r.POST("/api/workflow/run", workflowRunner.HandleWorkflowRun)
 	r.GET("/api/workflows", workflowRunner.HandleListWorkflows)
 	// 四态机 Code 工作流（思考/意图/操作/结果，EventSource 直连）
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
