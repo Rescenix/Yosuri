@@ -14,9 +14,27 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     let es = null
     let currentFlow = null
 
+    // 审批弹窗状态：Ask/Plan 模式下后端推 approval_request 时压入；用户点允许/拒绝后弹窗消失。
+    // 同一次工作流可能连续多个危险工具待批，所以用数组挂多个。
+    const approvalState = reactive({ pending: [] })
+
+    function respondApproval(item, allow) {
+        const idx = approvalState.pending.indexOf(item)
+        if (idx >= 0) approvalState.pending.splice(idx, 1)
+        const sid = localStorage.getItem('prism_session_id') || ''
+        // remember: 仅允许时勾选「不再询问」才生效，把工具签名写进会话规则
+        const body = { id: item.id, allow, remember: allow && !!item.remember, tool: item.tool }
+        fetch('/api/code/workflow/approve?session_id=' + encodeURIComponent(sid), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        }).catch(err => console.error('approve 请求失败', err))
+    }
+
     function closeStream() {
         if (es) { es.close(); es = null }
         flowState.active = false
+        approvalState.pending.length = 0 // 流结束清掉残留审批弹窗
         onStreamUpdate?.()
     }
 
@@ -64,7 +82,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         // effort 只有当前 backend 真支持 reasoning 时后端才会真的采用（否则安静忽略），
         // 前端不需要自己先判断"这个模型支不支持"再决定发不发
         const effort = localStorage.getItem('debugReasoning') || ''
-        es = new EventSource(`/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}`)
+        // mode: yolo(全自动) / ask(危险工具每步问) / plan(执行前必问)，由底部工具条选出
+        const mode = localStorage.getItem('agentMode') || 'yolo'
+        es = new EventSource(`/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
         const appendText = (type, text) => {
@@ -99,6 +119,20 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
                 t.status = d.ok ? 'ok' : 'error'
                 t.output = d.output || ''
             }
+            onStreamUpdate?.()
+        })
+
+        // 工具审批请求（Ask/Plan 模式）：后端在执行危险工具前推来，前端弹批准条等人点。
+        // 把整条请求（含 id/tool/args）压入 approvalState.pending，弹窗据此渲染。
+        es.addEventListener('approval_request', e => {
+            const d = JSON.parse(e.data)
+            approvalState.pending.push({
+                id: d.id,
+                tool: d.tool,
+                args: d.args || '',
+                mode: d.mode || 'ask',
+                remember: false // 默认不勾选「不再询问」
+            })
             onStreamUpdate?.()
         })
 
@@ -192,5 +226,5 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         closeStream()
     }
 
-    return { flowState, startCodeWorkflow, stopCodeWorkflow }
+    return { flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow }
 }

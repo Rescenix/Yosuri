@@ -111,7 +111,7 @@ function adjustInputHeight() {
   // 四态机 Code 工作流（GET /api/code/workflow，EventSource）
   // 流式期间用 forceScrollToBottom：长工作流流式中持续跟底，无视用户是否上滑，
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
-  const { flowState, startCodeWorkflow: startFlow, stopCodeWorkflow } = useAgentWorkflow({
+  const { flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow } = useAgentWorkflow({
     messages,
     onNewMessage: forceScrollToBottom,
     // 流式增量用 smartScrollAndRefresh：尊重 userScrolledUp，用户上滑时不再被强制拉回底部
@@ -463,7 +463,7 @@ async function switchSession(id) {
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
-    flowState, startCodeWorkflow, stopCodeWorkflow,
+    flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime
   }

@@ -1,0 +1,9 @@
+{
+  "name": "write-file-to-allowed-path",
+  "description": "在允许访问的目录下写入文件，自动验证路径合法性",
+  "steps": [
+    "调用 mcp__fs__list_allowed_directories 获取允许目录列表",
+    "确认目标路径在允许目录范围内",
+    "调用 mcp__fs__write_file 写入指定内容"
+  ]
+}

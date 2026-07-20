@@ -54,7 +54,7 @@ const sidebarOpen = ref(false)
   z-index: 100;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(0, 102, 204, 0.1);
+  border-bottom: 1px solid color-mix(in srgb, var(--app-accent) 12%, transparent);
   box-sizing: border-box;
 }
 
@@ -71,7 +71,7 @@ const sidebarOpen = ref(false)
 .nav-brand a {
   font-size: 1.3rem;
   font-weight: 600;
-  color: #0066cc;
+  color: var(--app-accent);
   text-decoration: none;
   letter-spacing: -0.3px;
 }
@@ -95,7 +95,7 @@ const sidebarOpen = ref(false)
 .bar {
   width: 22px;
   height: 2px;
-  background: #334155;
+  background: var(--app-text-soft);
   border-radius: 1px;
 }
 
@@ -105,8 +105,8 @@ const sidebarOpen = ref(false)
   right: -280px;
   width: 260px;
   height: 100vh;
-  background: #ffffff;
-  box-shadow: -2px 0 12px rgba(0,0,0,0.1);
+  background: var(--app-surface);
+  box-shadow: -2px 0 12px var(--app-shadow);
   z-index: 200;
   transition: right 0.3s ease;
   display: flex;
@@ -129,7 +129,7 @@ const sidebarOpen = ref(false)
 .sidebar-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-text);
 }
 
 .sidebar-close {
@@ -137,7 +137,7 @@ const sidebarOpen = ref(false)
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #64748b;
+  color: var(--app-text-faint);
   padding: 4px;
 }
 

@@ -163,10 +163,10 @@ function formatTokens(n) {
 }
 
 function heatmapLevelColor(level) {
-  if (level === 3) return '#c96442'
-  if (level === 2) return 'rgba(201, 100, 66, 0.6)'
-  if (level === 1) return 'rgba(201, 100, 66, 0.3)'
-  return '#ececec'
+  if (level === 3) return 'var(--app-accent)'
+  if (level === 2) return 'color-mix(in srgb, var(--app-accent) 60%, transparent)'
+  if (level === 1) return 'color-mix(in srgb, var(--app-accent) 30%, transparent)'
+  return 'var(--app-surface-3)'
 }
 
 // 当前所选时间窗口（总共 / 30 天 / 7 天）对应的后端聚合数据
@@ -372,7 +372,7 @@ const heatmapCaption = computed(() => {
 .home-model-bar-fill {
   height: 100%;
   border-radius: 3px;
-  background: #c96442;
+  background: var(--app-accent);
 }
 
 /* ================== 新加入的炫酷入场动画 ================== */
@@ -390,9 +390,9 @@ const heatmapCaption = computed(() => {
   opacity: 0;
 }
 
-/* 2. 图标：默认状态锁定颜色防止变黑 */
+/* 2. 图标：默认跟随主题色，不再强制硬编码 */
 .greeting-icon {
-  color: #c96442 !important; /* 强制指定橘红色，绝不再黑 */
+  color: var(--app-accent);
   transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.4s ease;
   transform-origin: center;
 }
@@ -401,6 +401,6 @@ const heatmapCaption = computed(() => {
 .greeting-icon.active {
   transform: rotate(15deg) scale(1.1);
   /* 纯粹的发光阴影，不会覆盖或改变图标原来的颜色 */
-  filter: drop-shadow(0 0 6px rgba(201, 100, 66, 0.5));
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--app-accent) 50%, transparent));
 }
 </style>

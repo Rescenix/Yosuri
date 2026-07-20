@@ -53,7 +53,11 @@ func main() {
 	handler.RegisterRoutes(r, memoryStore, sessionStore)
 
 	log.Println("🚀 Aurora 引擎已启动，监听端口 :8080")
-	if err := r.Run(":8080"); err != nil {
+	addr := os.Getenv("PORT")
+	if addr == "" {
+		addr = "8080"
+	}
+	if err := r.Run(":" + addr); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
 }

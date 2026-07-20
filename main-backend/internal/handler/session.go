@@ -28,6 +28,7 @@ type SessionStore struct {
 	mu                  sync.RWMutex
 	sessions            map[string][]DSMessage
 	lastCompressIndexes map[string]int // 每个 session 上次压缩的消息数量
+	approvalRules       map[string]map[string]bool // sessionID → (ruleKey → true)
 	domain              string
 
 	fileMu sync.Mutex // 串行化本地文件写入，避免并发重写互相踩踏
@@ -51,6 +52,9 @@ type persistedMessage struct {
 type sessionRecord struct {
 	Messages      []persistedMessage `json:"messages"`
 	CompressIndex int                `json:"compress_index"`
+	// ApprovalRules 是「don't ask again」常设规则：key=approve:<tool>，value=true 表示
+	// 该会话对这款危险工具免审批（抄 agent-framework-go toolapproval 常设规则思路）
+	ApprovalRules map[string]bool `json:"approval_rules,omitempty"`
 }
 
 func toPersistedMessages(msgs []DSMessage) []persistedMessage {
@@ -98,6 +102,7 @@ func NewSessionStore(domain string) *SessionStore {
 	store := &SessionStore{
 		sessions:            make(map[string][]DSMessage),
 		lastCompressIndexes: make(map[string]int),
+		approvalRules:       make(map[string]map[string]bool),
 		domain:              domain,
 	}
 	if err := store.loadFromFile(); err != nil {
@@ -144,6 +149,9 @@ func (s *SessionStore) loadFromFile() error {
 	for sid, rec := range records {
 		s.sessions[sid] = fromPersistedMessages(rec.Messages)
 		s.lastCompressIndexes[sid] = rec.CompressIndex
+		if len(rec.ApprovalRules) > 0 {
+			s.approvalRules[sid] = rec.ApprovalRules
+		}
 	}
 	return nil
 }
@@ -195,6 +203,7 @@ func (s *SessionStore) persistAll() error {
 		records[sid] = sessionRecord{
 			Messages:      toPersistedMessages(msgs),
 			CompressIndex: s.lastCompressIndexes[sid],
+			ApprovalRules: s.approvalRules[sid],
 		}
 	}
 	s.mu.RUnlock()
@@ -238,11 +247,40 @@ func (s *SessionStore) Delete(sessionID string) {
 	s.mu.Lock()
 	delete(s.sessions, sessionID)
 	delete(s.lastCompressIndexes, sessionID)
+	delete(s.approvalRules, sessionID)
 	s.mu.Unlock()
 
 	if err := s.persistAll(); err != nil {
 		log.Printf("⚠️ 删除会话后保存本地文件失败: %v", err)
 	}
+}
+
+// GetApprovalRule 读取该会话对某工具签名的「don't ask again」规则。
+func (s *SessionStore) GetApprovalRule(sessionID, ruleKey string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rules := s.approvalRules[sessionID]
+	return rules != nil && rules[ruleKey]
+}
+
+// SetApprovalRule 写入（或清除）该会话对某工具签名的「don't ask again」规则，异步落盘。
+func (s *SessionStore) SetApprovalRule(sessionID, ruleKey string, val bool) {
+	s.mu.Lock()
+	if s.approvalRules[sessionID] == nil {
+		s.approvalRules[sessionID] = make(map[string]bool)
+	}
+	if val {
+		s.approvalRules[sessionID][ruleKey] = true
+	} else {
+		delete(s.approvalRules[sessionID], ruleKey)
+	}
+	s.mu.Unlock()
+
+	go func() {
+		if err := s.persistAll(); err != nil {
+			log.Printf("⚠️ 保存审批规则到本地文件失败: %v", err)
+		}
+	}()
 }
 
 // Get 返回指定会话的消息切片（副本）

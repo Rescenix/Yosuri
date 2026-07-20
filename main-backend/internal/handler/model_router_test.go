@@ -52,20 +52,14 @@ func TestRouteChatOnceAllFail(t *testing.T) {
 	}
 }
 
-func TestResolveBackendsAlwaysHasLocalTail(t *testing.T) {
+func TestResolveBackendsAlwaysNonEmpty(t *testing.T) {
 	backends := resolveBackends("nonexistent_user_for_test", "")
 	if len(backends) == 0 {
 		t.Fatal("链不应为空")
 	}
 	last := backends[len(backends)-1]
-	if !last.IsLocal {
-		t.Fatalf("本地兜底应恒排最后, got %+v", last)
-	}
-	// 本地源之前不允许再出现 local（恒最后的约束）
-	for _, b := range backends[:len(backends)-1] {
-		if b.IsLocal {
-			t.Fatalf("local 出现在链中段: %+v", b)
-		}
+	if last.Name == "" || last.BaseURL == "" {
+		t.Fatalf("链尾 backend 不应为空, got %+v", last)
 	}
 }
 

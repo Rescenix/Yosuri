@@ -17,13 +17,13 @@ package handler
 // args 用真实 JSON，前端由 AgentWorkflowPanel.vue + useAgentWorkflow.js 消费。
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"backend/internal/agent"
 	"backend/internal/ai/core"
@@ -75,6 +75,11 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		return
 	}
 	sessionID := c.Query("session_id")
+	// mode: yolo(全自动,默认) / ask(危险工具每步问)。不传或非法值(含旧 plan)按 yolo 处理。
+	mode := strings.ToLower(c.Query("mode"))
+	if mode != "ask" {
+		mode = "yolo"
+	}
 
 	// 模型路由链：前端选了具体模型就精确路由到那一个；否则走用户配置>env DeepSeek>
 	// 免费池>本地兜底的全链（本地恒在，链永不为空）
@@ -87,7 +92,13 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	c.Header("Access-Control-Allow-Origin", "*")
 
 	workflowID := agent.NewWorkflowID()
-	writeCodeSSE(c, "workflow_start", map[string]any{"workflow_id": workflowID, "task": task})
+	writeCodeSSE(c, "workflow_start", map[string]any{"workflow_id": workflowID, "task": task, "mode": mode})
+
+	// 审批等待器：整个工作流生命周期共用一个（channel 按 approval id 区分，不会跨轮串）。
+	// 注册进全局 registry，供独立的 POST /api/code/workflow/approve 跨请求唤醒。
+	waiter := newApprovalWaiter()
+	registerApprovalWaiter(workflowID, waiter)
+	defer unregisterApprovalWaiter(workflowID)
 
 	// SwiftNet 三区里 pinned(身份)/handoff(工作态)/inbox 按设计就该"无条件注入"——
 	// 预算压在 <500 tok 就是为了能无条件塞，不用等模型自己想起来调 search_memory 才有。
@@ -198,7 +209,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				writeCodeSSE(c, event, data)
 			}
 		}
-		results := r.executeCodeCalls(c.Request.Context(), backends, calls, emit)
+		// 审批等待器：仅 ask 模式需要；yolo 模式下 executeCodeCalls 内部会直接跳过拦截。
+		// 使用整个 workflow 共用的 waiter（按 approval id 区分），不每轮新建。
+		results := r.executeCodeCalls(c, backends, calls, emit, mode, waiter, sessionID, workflowID)
 
 		// 对话历史追加 assistant(tool_calls)
 		var dsCalls []map[string]any
@@ -238,16 +251,48 @@ type codeExecResult struct {
 // executeCodeCalls 执行一轮里的所有工具调用。
 // dispatch_agent（雨燕子代理）用 goroutine 并行跑，其余工具在当前 goroutine 顺序执行，
 // 全部完成后按原始顺序返回，保证 result 事件和 tool 消息的顺序稳定。
-func (r *WorkflowRunner) executeCodeCalls(ctx context.Context, backends []RouterBackend, calls []core.ToolCall, emit func(string, map[string]any)) []codeExecResult {
+//
+// 审批：mode=ask 且工具属于危险类（写盘/执行命令/MCP 文件写删）时，执行前通过 SSE 推
+// approval_request 并阻塞等批准；yolo 模式或工具不危险则直接执行。会话已设 don't-ask-again
+// 的同款工具也直接执行。
+func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBackend, calls []core.ToolCall, emit func(string, map[string]any), mode string, waiter *approvalWaiter, sessionID string, workflowID string) []codeExecResult {
 	results := make([]codeExecResult, len(calls))
 	var wg sync.WaitGroup
+
+	// maybeRequestApproval 在 ask 模式下对危险工具发起审批拦截；返回是否允许执行。
+	// 非危险工具 / yolo 模式 / 已设 don't-ask-again → 直接返回 true（放行）。
+	maybeRequestApproval := func(tc core.ToolCall) bool {
+		if mode == "yolo" || !isDangerousTool(tc.Function.Name) {
+			return true
+		}
+		if r.shouldAutoApprove(sessionID, tc.Function.Name) {
+			return true
+		}
+		// 登记 + 推 SSE 事件 + 阻塞等批准。approval id 编码 workflowID::callID，
+		// 让独立的 approve 端点能反解出 waiter。
+		id := tc.ID
+		if id == "" {
+			id = fmt.Sprintf("approval_%d", time.Now().UnixNano())
+		}
+		approvalID := workflowID + "::" + id
+		waiter.expect(approvalID)
+		writeCodeSSE(c, "approval_request", map[string]any{
+			"id":   approvalID,
+			"tool": tc.Function.Name,
+			"args": tc.Function.Arguments,
+			"mode": mode,
+		})
+		// 客户端断开则中止执行
+		allowed := waiter.wait(approvalID, c.Request.Context().Done())
+		return allowed
+	}
 
 	for i, tc := range calls {
 		if tc.Function.Name == "dispatch_agent" {
 			wg.Add(1)
 			go func(i int, tc core.ToolCall) {
 				defer wg.Done()
-				out, err := runSubAgent(ctx, backends, tc.ID, tc.Function.Arguments, emit)
+				out, err := runSubAgent(c.Request.Context(), backends, tc.ID, tc.Function.Arguments, emit)
 				if err != nil {
 					results[i] = codeExecResult{output: "子代理执行失败: " + err.Error(), failed: true}
 					return
@@ -261,6 +306,10 @@ func (r *WorkflowRunner) executeCodeCalls(ctx context.Context, backends []Router
 	for i, tc := range calls {
 		name := tc.Function.Name
 		if name == "dispatch_agent" {
+			continue
+		}
+		if !maybeRequestApproval(tc) {
+			results[i] = codeExecResult{output: "用户未批准执行 " + name + "，已跳过", failed: true}
 			continue
 		}
 		if strings.HasPrefix(name, "mcp__") {

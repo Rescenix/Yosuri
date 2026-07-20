@@ -952,7 +952,7 @@ min-height: 90px !important;
   border-bottom: 1px solid #e5e5e5;
 }
 .site-icon svg {
-  color: #c96442;
+  color: var(--app-accent);
   animation: starFloat 3.5s ease-in-out infinite;
   transform-origin: center;
   transition: transform 0.25s ease, color 0.25s ease;
@@ -1852,8 +1852,8 @@ min-height: 90px !important;
   cursor: pointer;
   color: #1a1a1a;
 }
-.effort-label { color: #64748b; }
-.effort-value { font-weight: 600; color: #7c3aed; }
+.effort-label { color: var(--app-text-soft); }
+.effort-value { font-weight: 600; color: var(--app-accent); }
 .effort-panel {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -1866,16 +1866,16 @@ min-height: 90px !important;
   padding: 12px 14px;
   z-index: 30;
 }
-.effort-panel-title { font-size: 12px; color: #334155; margin-bottom: 10px; }
-.effort-panel-title b { color: #7c3aed; font-weight: 600; }
+.effort-panel-title { font-size: 12px; color: var(--app-text); margin-bottom: 10px; }
+.effort-panel-title b { color: var(--app-accent); font-weight: 600; }
 .effort-slider-row { display: flex; align-items: center; gap: 8px; }
-.effort-end { font-size: 10px; color: #94a3b8; flex-shrink: 0; white-space: nowrap; }
+.effort-end { font-size: 10px; color: var(--app-text-faint); flex-shrink: 0; white-space: nowrap; }
 .effort-slider {
   flex: 1;
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(90deg, #e5e5e5, #7c3aed);
+  background: linear-gradient(90deg, var(--app-border-soft), var(--app-accent));
   outline: none;
   cursor: pointer;
 }
@@ -1884,7 +1884,7 @@ min-height: 90px !important;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #7c3aed;
+  background: var(--app-accent);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -1893,7 +1893,7 @@ min-height: 90px !important;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #7c3aed;
+  background: var(--app-accent);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -1909,9 +1909,9 @@ min-height: 90px !important;
   border-radius: 999px;
   background: #ffffff;
   cursor: pointer;
-  font-size: 11px;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #64748b;
+  font-size: 12px;
+  font-family: var(--app-font);
+  color: var(--app-text-soft);
 }
 .ctx-bar-text { white-space: nowrap; }
 .ctx-bar-track {
@@ -1923,11 +1923,11 @@ min-height: 90px !important;
 }
 .ctx-bar-fill {
   height: 100%;
-  background: #7c3aed;
+  background: var(--app-accent);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
-.ctx-bar-pct { white-space: nowrap; color: #334155; font-weight: 600; }
+.ctx-bar-pct { white-space: nowrap; color: var(--app-text); font-weight: 600; font-family: var(--app-font); }
 
 /* ==================== 仿 Claude 折叠栏悬浮菜单 ==================== */
 .floating-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
@@ -1966,7 +1966,7 @@ min-height: 90px !important;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 /* 聚焦：蓝色边框 + 柔和蓝光晕（就算下面的流光动画降级，静态态也是蓝的不会露红） */
-.input-wrapper:focus-within { border-color: #3b82f6; box-shadow: 0 8px 28px rgba(59, 130, 246, 0.18); }
+.input-wrapper:focus-within { border-color: var(--app-accent); box-shadow: 0 8px 28px color-mix(in srgb, var(--app-accent) 18%, transparent); }
 
 /* 流光边框：一圈旋转的锥形渐变，用 mask 抠成只剩描边的环，聚焦时淡入并转起来。
    --ring-angle 借助 @property 声明成 <angle> 类型，浏览器才能对它做连续插值动画，
@@ -1984,8 +1984,8 @@ min-height: 90px !important;
   padding: 1.5px;
   background: conic-gradient(from var(--ring-angle),
     transparent 0deg, transparent 190deg,
-    #60a5fa 250deg, #3b82f6 300deg,
-    #60a5fa 340deg, transparent 360deg);
+    var(--app-accent-soft) 250deg, var(--app-accent) 300deg,
+    var(--app-accent-soft) 340deg, transparent 360deg);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -2019,8 +2019,8 @@ min-height: 90px !important;
 
 .input-inner-btn { display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; flex-shrink: 0; width: 28px; height: 28px; padding: 0; color: #888; border-radius: 50%; transition: background 0.2s; z-index: 10; }
 .input-inner-btn:hover { background: rgba(0, 0, 0, 0.05); }
-.input-send-btn { width: 28px; height: 28px; background: #3b82f6; color: #fff; }
-.input-send-btn:hover { background: #2563eb; }
+.input-send-btn { width: 28px; height: 28px; background: var(--app-accent); color: #fff; }
+.input-send-btn:hover { background: var(--app-accent-hover); }
 .input-stop-btn { width: 28px; height: 28px; background: #1a1a1a; }
 .input-stop-btn:hover { background: #000000; }
 
@@ -2029,7 +2029,7 @@ min-height: 90px !important;
 .token-usage-panel { position: absolute; top: calc(100% - 46px); right: -220px; width: 240px; background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14); padding: 12px 14px; z-index: 30; }
 .tup-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; padding: 2px 0; }
 .tup-label { color: #64748b; }
-.tup-value { font-family: "JetBrains Mono", monospace; font-weight: 600; color: #334155; }
+.tup-value { font-family: var(--app-font); font-weight: 600; color: var(--app-text); }
 
 .vision-status-toast { position: absolute; bottom: calc(100% + 12px); right: 0px; z-index: 6; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); border: 1px solid #e5e5e5; font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .vision-status-toast.error { color: #d94834; border-color: #f3c9c2; background: rgba(255, 245, 243, 0.95); }
@@ -2059,7 +2059,7 @@ min-height: 90px !important;
 /* ★ 修复 3：右侧工具面板，直接删掉无用的 Tabs 按钮 ★ */
 .tool-panel { flex: 0 0 320px; /* 稍微缩窄一点面板宽度 */ border-left: 1px solid #e5e5e5; background: #ffffff; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .tool-panel-header { height: 40px; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; border-bottom: 1px solid #e5e5e5; background: #ffffff; flex-shrink: 0; }
-.tool-panel-meta { font-size: 11px; color: #a3a3a3; font-family: "JetBrains Mono", monospace; }
+.tool-panel-meta { font-size: 11px; color: var(--app-text-faint); font-family: var(--app-font); }
 .tool-panel-terminal { border-radius: 0; flex: 1; border: none; }
 .tool-panel-preview-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #a3a3a3; font-size: 13px; gap: 8px; }
 
@@ -2254,12 +2254,12 @@ min-height: 90px !important;
   gap: 8px;
 }
 .gem-rail-avatar {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: var(--app-accent);
   color: #fff;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -2670,6 +2670,74 @@ min-height: 90px !important;
 .auto-menu-item { padding: 7px 14px; font-size: 12.5px; color: #6b6b6b; cursor: pointer; }
 .auto-menu-item:hover { background: #f5f5f5; }
 .auto-menu-item.active { background: #ececec; color: #1a1a1a; font-weight: 600; }
+
+/* ===== Yolo 模式按钮：开启走主题色脉冲/流光动画，关闭变灰停动画 ===== */
+.toolbar-pill-btn.mode-pill { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
+.toolbar-pill-btn.mode-pill.mode-yolo {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
+  box-shadow: 0 0 0 0 var(--app-accent-soft);
+  animation: yolo-pulse 1.8s ease-in-out infinite;
+}
+.toolbar-pill-btn.mode-pill.mode-yolo:hover { filter: brightness(1.05); }
+.toolbar-pill-btn.mode-pill.mode-idle {
+  color: #9a9a9a;
+  border-color: #e5e5e5;
+  background: #fafafa;
+  animation: none;
+  box-shadow: none;
+}
+@keyframes yolo-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--app-accent-soft); }
+  70%  { box-shadow: 0 0 0 7px rgba(201, 100, 66, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(201, 100, 66, 0); }
+}
+
+/* ===== 工具审批弹窗（Ask/Plan 模式） ===== */
+.approval-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}
+.approval-card {
+  width: min(440px, 92vw);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+  padding: 18px 20px;
+  animation: approval-in 0.18s ease-out;
+}
+@keyframes approval-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.approval-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.approval-badge {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  color: #fff; background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
+  padding: 3px 9px; border-radius: 6px;
+}
+.approval-tool { font-size: 13.5px; font-weight: 600; color: var(--app-text); font-family: var(--app-code-font, monospace); }
+.approval-args {
+  margin: 0 0 12px; padding: 10px 12px;
+  background: var(--app-surface-3); border: 1px solid var(--app-border-soft);
+  border-radius: 8px; max-height: 180px; overflow: auto;
+  font-size: 12px; line-height: 1.5; color: var(--app-text-soft);
+  font-family: var(--app-code-font, monospace); white-space: pre-wrap; word-break: break-all;
+}
+.approval-remember { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--app-text-soft); margin-bottom: 14px; cursor: pointer; }
+.approval-remember input { accent-color: var(--app-accent); }
+.approval-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.approval-btn {
+  padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid transparent; transition: filter 0.15s ease, background 0.15s ease;
+}
+.approval-btn.approval-allow {
+  color: #fff; background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
+}
+.approval-btn.approval-allow:hover { filter: brightness(1.06); }
+.approval-btn.approval-deny { color: #6b6b6b; background: #f4f4f5; border-color: #e5e5e5; }
+.approval-btn.approval-deny:hover { background: #ececec; }
 .add-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
 .add-menu-item:hover { background: #f5f5f5; }
 .add-menu-item.disabled { color: #a3a3a3; cursor: not-allowed; }

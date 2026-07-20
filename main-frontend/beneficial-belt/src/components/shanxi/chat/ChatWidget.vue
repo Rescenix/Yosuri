@@ -392,7 +392,11 @@
               <div class="input-bottom-toolbar">
                 <div class="input-toolbar-left">
                   <div class="toolbar-dropdown-wrap">
-                    <button class="toolbar-pill-btn" @click.stop="showAutoMenu = !showAutoMenu">
+                    <button
+                      class="toolbar-pill-btn mode-pill"
+                      :class="{ 'mode-yolo': agentModeIsYolo, 'mode-idle': !agentModeIsYolo }"
+                      @click.stop="showAutoMenu = !showAutoMenu"
+                    >
                       <Icon icon="mdi:creation" width="13" />
                       <span>{{ autoMode }}</span>
                       <span class="sch-caret">▾</span>
@@ -561,6 +565,27 @@
           </div>
         </div>
       </div>
+
+      <!-- ========== 工具审批弹窗（Ask/Plan 模式） ========== -->
+      <Teleport to="body">
+        <div v-if="approvalState.pending.length" class="approval-overlay">
+          <div class="approval-card" v-for="item in approvalState.pending" :key="item.id">
+            <div class="approval-head">
+              <span class="approval-badge">工具审批</span>
+              <span class="approval-tool">{{ item.tool }}</span>
+            </div>
+            <pre class="approval-args">{{ prettyApprovalArgs(item.args) }}</pre>
+            <label class="approval-remember">
+              <input type="checkbox" v-model="item.remember" />
+              <span>本次会话内不再询问此工具</span>
+            </label>
+            <div class="approval-actions">
+              <button class="approval-btn approval-deny" @click="respondApproval(item, false)">拒绝</button>
+              <button class="approval-btn approval-allow" @click="respondApproval(item, true)">允许执行</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -1055,12 +1080,33 @@ function onSettingsClosed() {
   loadModelCapabilities()
 }
 
-// ==================== 底部工具条：Auto 模式 + "+" 附加菜单 ====================
-const autoModeOptions = ['Auto', 'Ask', 'Plan']
-const autoMode = ref('Auto')
+// ==================== 底部工具条：Yolo 模式 + "+" 附加菜单 ====================
+// 模式三态：Yolo（全自动批准）/ Ask（危险工具每步问）/ Plan（执行前必问）。
+// 选了就写 localStorage('agentMode')，四态机发起工作流时透传给后端；
+// 同时回显到 autoMode 变量驱动按钮文案与主题色动画。
+const autoModeOptions = ['Yolo', 'Ask']
+const autoMode = ref(localStorage.getItem('agentMode') === 'ask' ? 'Ask' : 'Yolo')
 const showAutoMenu = ref(false)
 const showAddMenu = ref(false)
-function selectAutoMode(opt) { autoMode.value = opt; showAutoMenu.value = false }
+const agentModeIsYolo = computed(() => autoMode.value === 'Yolo')
+function selectAutoMode(opt) {
+  autoMode.value = opt
+  showAutoMenu.value = false
+  // 只有两态：Yolo(全自动批准) / Ask(危险工具每步问)
+  const mode = opt === 'Yolo' ? 'yolo' : 'ask'
+  localStorage.setItem('agentMode', mode)
+}
+
+// 审批弹窗里把工具参数 JSON 美化显示；解析失败就原样展示字符串。
+function prettyApprovalArgs(args) {
+  if (!args) return ''
+  if (typeof args === 'object') return JSON.stringify(args, null, 2)
+  try {
+    return JSON.stringify(JSON.parse(args), null, 2)
+  } catch {
+    return String(args)
+  }
+}
 
 // ==================== Markdown 渲染 ====================
 // renderMarkdown 挪进了 markdownRenderer.js，跟 MessageStepGroup 共用同一套
@@ -1202,7 +1248,7 @@ const {
   messagesContainer, chatInputRef, userScrolledUp,
   forceScrollToBottom, adjustInputHeight, switchSession,
   sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
-  flowState, startCodeWorkflow, stopCodeWorkflow,
+  flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })

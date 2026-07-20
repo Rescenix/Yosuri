@@ -4,9 +4,7 @@ package handler
 //
 // 路由链（按优先级）：
 //  1. 用户自定义配置（设置面板填的 Key，默认条目排最前）—— ~/.Aurora/user_configs/{openid}.json
-//  2. DEEPSEEK_API_KEY 环境变量（旧部署兼容，付费档）
-//  3. 免费模型池（参数规模降序，未知参数量排末，绝不伪造数字）
-//  4. 本地 Ollama 兜底（离线 $0，傻但永不掉线）
+//  2. 免费模型池（参数规模降序，未知参数量排末，绝不伪造数字）
 //
 // 秒切 failover：任一源连不上 / 非 200 / 空响应，立刻切下一个，绝不重试当前源；
 // 所有源都失败才报错，tried 轨迹完整可观测。
@@ -61,7 +59,7 @@ type FreeModelDef struct {
 	ContextWindow int  `json:"context_window"`
 	Reasoning     bool `json:"reasoning"`
 	// Local=true 表示走本地 Ollama（localhost:11434/v1，OpenAI 兼容）路由到云端模型，
-	// 不需要 API Key，复用现有 OpenAI 兼容链；与 localLLMBackend() 兜底共享同一 base。
+	// 不需要 API Key，复用现有 OpenAI 兼容链。
 	Local bool `json:"local"`
 	// CloudNative=true 表示走 Ollama 官方云端 API（https://ollama.com/api/chat，Ollama 原生
 	// 格式，非 OpenAI 兼容），用 CLOUD_API_KEY；实测 gpt-oss:120b 可跑且原生支持 tool_calls。
@@ -132,18 +130,6 @@ func isFreeCatalogID(id string) bool {
 		}
 	}
 	return false
-}
-
-func localLLMBackend() RouterBackend {
-	base := os.Getenv("LOCAL_OPENAI_BASE")
-	if base == "" {
-		base = "http://localhost:11434/v1"
-	}
-	model := os.Getenv("LOCAL_MODEL")
-	if model == "" {
-		model = "qwen2.5-coder:7b"
-	}
-	return RouterBackend{Name: "本地 " + model, BaseURL: base, Model: model, IsLocal: true, Timeout: 3 * time.Minute, Source: "local"}
 }
 
 // resolveBackends 组装本次请求可用的路由链。
@@ -233,22 +219,7 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 	})
 
 	out := userChain
-
-	// 2. 旧部署兼容：环境变量里的 DeepSeek（付费档，排在用户配置之后、免费池之前）
-	if k := os.Getenv("DEEPSEEK_API_KEY"); k != "" {
-		model := os.Getenv("DEEPSEEK_MODEL")
-		if model == "" {
-			model = "deepseek-v4-flash"
-		}
-		out = append(out, RouterBackend{
-			Name: "DeepSeek(env)", BaseURL: "https://api.deepseek.com", Model: model,
-			APIKey: k, ParamsB: 236, Timeout: 5 * time.Minute, Source: "env",
-		})
-	}
-
 	out = append(out, freeChain...)
-	// 4. 本地兜底恒排最后（不被参数数字欺骗）
-	out = append(out, localLLMBackend())
 	return out
 }
 

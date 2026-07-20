@@ -55,6 +55,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/workflows", workflowRunner.HandleListWorkflows)
 	// 四态机 Code 工作流（思考/意图/操作/结果，EventSource 直连）
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
+	// 工具审批回调：Ask 模式下前端批准条「允许/拒绝」写回，恢复四态机执行
+	r.POST("/api/code/workflow/approve", workflowRunner.HandleCodeWorkflowApprove)
 	// 预览浏览器：本地开发服务器探测
 	r.GET("/api/preview/servers", HandlePreviewServers)
 	// Python Harness (:8001) 集成示例：转发 /run_task
