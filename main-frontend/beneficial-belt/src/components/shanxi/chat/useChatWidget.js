@@ -96,7 +96,7 @@ function adjustInputHeight() {
   el.style.height = el.scrollHeight + 'px';
 }
 
-  const { sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState } = useChatLogic({
+  const { sendMessage, stopWorkflow, workflowState, tokenStats, chatState } = useChatLogic({
     messages, userInput, sessionId,
     saveMemory, lastTokenUsage, lastLatency,
     onNewMessage: () => {
@@ -462,7 +462,7 @@ async function switchSession(id) {
     welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
-    sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
+    sendMessage, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime

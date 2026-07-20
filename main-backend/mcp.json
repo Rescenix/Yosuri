@@ -2,7 +2,12 @@
   "servers": {
     "fs": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Pro2026"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Pro2026\\re0"]
+    },
+    "grep": {
+      "command": "python",
+      "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\grep_server.py"],
+      "env": []
     }
   }
 }

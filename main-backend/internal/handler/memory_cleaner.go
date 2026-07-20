@@ -48,7 +48,7 @@ func (m *MemoryStore) CleanMemories() {
 		))
 	}
 
-	systemPrompt := `你是杉汐，正在整理自己的记忆库。请分析以下记忆，对每条记忆标记操作建议：
+	systemPrompt := `你是Aurora，正在整理自己的记忆库。请分析以下记忆，对每条记忆标记操作建议：
 - KEEP: 有实质内容的对话
 - MERGE: 与另一条高度重复，建议合并（需指定 target_id）
 - DISCARD: 纯寒暄无信息量

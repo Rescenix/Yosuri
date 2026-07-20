@@ -65,6 +65,11 @@
                     <span class="api-config-name">{{ cfg.name || '未命名配置' }}</span>
                     <span v-if="cfg.is_default" class="api-config-default-badge">默认</span>
                     <div class="api-config-actions">
+                      <button
+                        class="api-config-action-btn"
+                        :class="{ on: isInChatList(cfg.id) }"
+                        @click="toggleConfigModel(cfg)"
+                      >{{ isInChatList(cfg.id) ? '已选' : '选为可用' }}</button>
                       <button v-if="!cfg.is_default" class="api-config-action-btn" @click="setDefault(cfg.id)">设为默认</button>
                       <button class="api-config-action-btn" @click="startEdit(cfg)">编辑</button>
                       <button class="api-config-action-btn danger" @click="removeConfig(cfg.id)">删除</button>
@@ -252,11 +257,7 @@
               </div>
               <div class="profile-row">
                 <span class="profile-label">昵称</span>
-                <input class="profile-input" v-model="profile.full_name" type="text" placeholder="你的名字" />
-              </div>
-              <div class="profile-row">
-                <span class="profile-label">希望 AI 怎么称呼你</span>
-                <input class="profile-input" v-model="profile.call_name" type="text" placeholder="比如 Prometheus" />
+                <input class="profile-input" v-model="profile.full_name" type="text" placeholder="你的名字，AI 会用它称呼你" />
               </div>
               <div class="profile-row">
                 <span class="profile-label">你的职业 / 身份</span>
@@ -573,6 +574,19 @@ function toggleVendorModels(grp) {
   }
   setChatModelList(next)
 }
+// 自定义 API 配置（DS 等）的「选为可用」：把它作为一个模型条目写进共享的 chatModelList，
+// 聊天下拉 modelOptions 只读 chatModelList，没进这里就永远不显示。value 用配置 id（后端
+// resolveExact 按 id 精确路由到用户自定义配置），label 用配置名。
+function toggleConfigModel(cfg) {
+  const value = cfg.id
+  let next
+  if (isInChatList(value)) {
+    next = chatList.value.filter(m => m.value !== value)
+  } else {
+    next = [...chatList.value, { label: cfg.name || '未命名配置', value }]
+  }
+  setChatModelList(next)
+}
 
 // ============ MCP ============
 const mcpServers = ref([])
@@ -618,7 +632,7 @@ async function loadSkills(force = false) {
   }
 }
 // ============ Profile ============
-const profile = ref({ full_name: '', call_name: '', work: '', instructions: '' })
+const profile = ref({ full_name: '', work: '', instructions: '' })
 const profileSaving = ref(false)
 const profileSaved = ref(false)
 async function loadProfile() {
@@ -628,7 +642,6 @@ async function loadProfile() {
       const data = await res.json()
       profile.value = {
         full_name: data.full_name || '',
-        call_name: data.call_name || '',
         work: data.work || '',
         instructions: data.instructions || ''
       }
@@ -780,6 +793,7 @@ onUnmounted(() => {
 .api-config-action-btn { font-size: 11.5px; color: #6b6b6b; background: transparent; border: 1px solid #e5e5e5; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
 .api-config-action-btn:hover { background: #f0f0f0; }
 .api-config-action-btn.danger { color: #d94834; border-color: #f3c9c2; }
+.api-config-action-btn.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
 .api-config-meta { margin-top: 5px; font-size: 11px; color: #a3a3a3; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .api-config-add-btn {

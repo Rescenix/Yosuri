@@ -84,7 +84,6 @@ func HandleMCPStatus(c *gin.Context) {
 
 type UserProfile struct {
 	FullName     string `json:"full_name"`
-	CallName     string `json:"call_name"`
 	Work         string `json:"work"`
 	Instructions string `json:"instructions"`
 }
@@ -148,17 +147,15 @@ func HandleSaveProfile(c *gin.Context) {
 }
 
 // userInstructionsPrompt 把用户档案整理成系统提示词片段；空字段不产出文本。
-// 昵称(full_name)与身份(work)由后端注入系统提示词，AI 对用户的称呼(call_name)
+// 昵称(full_name)即用户对 AI 的自我身份表达（AI 用它称呼用户），身份(work)
 // 与自定义指令(instructions)一并注入。所有字段空则整体返回空串。
-// 该片段在 chat_stream（已废弃）与四态机主链路 HandleCodeWorkflow 都注入。
+// 该片段在四态机主链路 HandleCodeWorkflow 与 chat_stream（已废弃）都注入；
+// 后端 SoulTemplateBase 只给中性助手基底，身份完全由此处 profile 驱动。
 func userInstructionsPrompt() string {
 	p := loadUserProfile()
 	var b strings.Builder
 	if s := strings.TrimSpace(p.FullName); s != "" {
-		b.WriteString("\n用户的昵称是：" + s + "。")
-	}
-	if s := strings.TrimSpace(p.CallName); s != "" {
-		b.WriteString("\n用户希望你称呼他为：" + s + "。")
+		b.WriteString("\n用户的昵称是：" + s + "，请用这个称呼他/她。")
 	}
 	if s := strings.TrimSpace(p.Work); s != "" {
 		b.WriteString("\n用户的职业/身份：" + s + "。")

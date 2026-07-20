@@ -112,7 +112,7 @@ const collapsedRows = computed(() => {
 
 <style scoped>
 .diffviewer {
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 11.5px;
   border: 1px solid #e5e5e5;
   border-radius: 8px;
@@ -160,7 +160,7 @@ const collapsedRows = computed(() => {
 .dv-code {
   flex: 1;
   min-width: 0;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;       /* 长行智能换行，不再横滚 */
   overflow-wrap: anywhere;     /* 超长无空格 token（如长字符串/路径）也能断行 */
   overflow-x: hidden;          /* 彻底消除横向滚轴 */

@@ -34,23 +34,6 @@ var BaseTools = []ToolDefinition{
 	{
 		Type: "function",
 		Function: ToolFunctionDetail{
-			Name:        "search_codebase",
-			Description: "语义搜索代码库，返回与查询最相关的函数、模块和代码片段。",
-			Parameters: ToolParameters{
-				Type: "object",
-				Properties: map[string]ToolProperty{
-					"query": {
-						Type:        "string",
-						Description: "搜索查询，例如 '用户登录逻辑' 或 '向量检索实现'",
-					},
-				},
-				Required: []string{"query"},
-			},
-		},
-	},
-	{
-		Type: "function",
-		Function: ToolFunctionDetail{
 			Name:        "read_file",
 			Description: "读取项目中的指定文件。默认返回完整文本；可选 start_line/end_line 只读某段行（1-indexed 闭区间），或 mode=\"outline\" 只看函数/类/导出的签名骨架（不含函数体，每行带行号）。建议先用 outline 看结构、再用行范围拉正文，避免整文件塞入上下文。行范围与 outline 互斥。",
 			Parameters: ToolParameters{
@@ -149,7 +132,7 @@ var BaseTools = []ToolDefinition{
 		Type: "function",
 		Function: ToolFunctionDetail{
 			Name:        "execute_command",
-			Description: "在项目根目录执行一条安全的白名单 shell 命令。需要用户确认。",
+			Description: "在项目根目录执行一条安全的白名单 shell 命令。需要用户确认。代码内容检索统一用 rg（ripgrep）：例如 rg -n \"func MainAgent\" . 搜当前项目所有匹配行（带行号），rg -n --type go \"TODO\" 限定语言，rg -l \"pattern\" . 只列命中文件。cwd 已是当前项目根，命令里用相对路径或 . 即可。",
 			Parameters: ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolProperty{
@@ -215,37 +198,11 @@ var BaseTools = []ToolDefinition{
 	},
 }
 
-// WindowsTools 是 Windows 电脑端专有的工具
-var WindowsTools = []ToolDefinition{
-	{
-		Type: "function",
-		Function: ToolFunctionDetail{
-			Name:        "codegraph_query",
-			Description: "使用 CodeGraph 查询代码库的结构信息（如 callers, callees, impact, context 等）",
-			Parameters: ToolParameters{
-				Type: "object",
-				Properties: map[string]ToolProperty{
-					"subcommand": {
-						Type:        "string",
-						Description: "CodeGraph 子命令（callers, callees, impact, context, search, status 等）",
-					},
-					"symbol": {
-						Type:        "string",
-						Description: "要查询的符号名称（如函数名、类名）",
-					},
-				},
-				Required: []string{"subcommand", "symbol"},
-			},
-		},
-	},
-}
-
 // ChatTools 默认是 Windows 全量工具
 var ChatTools []ToolDefinition
 
 func init() {
 	ChatTools = append(ChatTools, BaseTools...)
-	ChatTools = append(ChatTools, WindowsTools...)
 }
 
 // unescapeToolMarker 还原 DS 浏览器返回的转义字符

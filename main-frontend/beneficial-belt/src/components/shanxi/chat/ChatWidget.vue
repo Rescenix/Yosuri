@@ -755,8 +755,7 @@ const currentCapability = computed(() => {
 })
 
 // ==================== Context window 用量：优先用当前/最近一次 code 工作流的真实数据 ====================
-// 旧的 tokenStats 只从 /api/chat/stream 与 /api/workflow/run 两条老路径回填，
-// 四态机（Code 模式真正在用的那条）从来没接过——纯聊天/旧工作流之外，这里都是 0。
+// tokenStats 由四态机（Code 模式真正在用的那条 /api/code/workflow）回填，
 // 有 agentflow 就用它的真实 modelInfo.context_window + 本轮 token 数；没有则退回持久化的
 // 会话级真实 token（sessionTokenStats，刷新不丢）；都没有才退回旧的内存 tokenStats。
 const liveContextStats = computed(() => {
@@ -1247,7 +1246,7 @@ const {
   currentStatus, statusDotColor,
   messagesContainer, chatInputRef, userScrolledUp,
   forceScrollToBottom, adjustInputHeight, switchSession,
-  sendMessage, sendWorkflow, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
+  sendMessage, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
@@ -1397,7 +1396,7 @@ async function handlePaste(e) {
 
 // ==================== "+" 附加菜单：添加文件/照片、添加文件夹 ====================
 // 跟粘贴图片（handlePaste）共用同一套 vision-preprocess 接口和状态提示，但这里是
-// "先附加、用户自己决定何时发送"，不像粘贴那样识别完直接 sendWorkflow
+// "先附加、用户自己决定何时发送"
 const attachFileInputRef = ref(null)
 const attachFolderInputRef = ref(null)
 
@@ -1450,16 +1449,9 @@ async function attachImageFile(file) {
 
 async function attachTextFile(file) {
   const id = ++attachmentSeq
-  attachments.value.push({ id, kind: 'file', name: file.name, ext: extOf(file.name), status: 'analyzing' })
-  try {
-    const text = await file.text()
-    const truncated = text.length > 4000 ? text.slice(0, 4000) + '\n…（已截断）' : text
-    const item = attachments.value.find(a => a.id === id)
-    if (item) { item.status = 'ready'; item.content = truncated }
-  } catch (err) {
-    const item = attachments.value.find(a => a.id === id)
-    if (item) { item.status = 'error'; item.errorMsg = '读取失败' }
-  }
+  // 只登记文件名，不读全文——发送时只把文件名带进消息，agent 在工作目录里自己 read_file。
+  // 浏览器安全沙箱也拿不到真实磁盘路径，塞全文既撑爆上下文又无意义。
+  attachments.value.push({ id, kind: 'file', name: file.name, ext: extOf(file.name), status: 'ready' })
 }
 
 function onAttachFilesSelected(e) {
@@ -1486,15 +1478,17 @@ function onAttachFolderSelected(e) {
   })
 }
 
-// 发送那一刻才把附件序列化进正文：图片用 vision 分析结果、文本文件用代码块、
-// 文件夹用清单——顺序固定放在用户自己敲的文字前面，读起来像"这是材料，这是我的问题"
+// 发送那一刻才把附件序列化进正文：图片用 vision 分析结果、文件夹用清单、
+// 文本文件只给文件名（不塞全文——agent 在后端工作目录里自己 read_file 读取，
+// 把整份源码怼进消息既撑爆上下文又没必要）。顺序固定放在用户文字前面。
 function buildOutgoingMessage() {
   const blocks = attachments.value
     .filter(a => a.status === 'ready')
     .map(a => {
       if (a.kind === 'image') return `[图片: ${a.name}]\n${a.analysisText || ''}`
       if (a.kind === 'folder') return `[文件夹: ${a.name}，共 ${a.fileCount} 个文件]\n${a.manifest}`
-      return `[文件: ${a.name}]\n\`\`\`\n${a.content || ''}\n\`\`\``
+      // 文本/代码文件：只给文件名，让 agent 自行 read_file，不把内容塞进消息
+      return `[文件: ${a.name}]`
     })
   const typed = userInput.value.trim()
   return [...blocks, typed].filter(Boolean).join('\n')

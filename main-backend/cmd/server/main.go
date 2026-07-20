@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"backend/internal/ai/core"
 	"backend/internal/database"
 	"backend/internal/handler"
 
@@ -24,14 +23,6 @@ func main() {
 
 	// 初始化数据库连接
 	database.InitDB()
-
-	// 初始化代码搜索索引（保留原有功能）
-	log.Println("🔄 正在初始化本地代码索引...")
-	if err := core.InitCodebaseIndex(); err != nil {
-		log.Printf("⚠️ 代码索引初始化失败: %v，search_codebase 将不可用", err)
-	} else {
-		log.Println("✅ 本地代码索引已就绪")
-	}
 
 	// CORS 配置
 	r.Use(cors.New(cors.Config{

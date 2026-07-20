@@ -5,9 +5,9 @@
       <div v-if="b.type === 'thinking'" class="flow-thinking">
         <div class="flow-thinking-label" @click="toggleThink(i)">
           <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考完成' }}</span>
-          <span class="flow-chevron" :class="{ open: thinkOpen[i] }">›</span>
+          <span class="flow-chevron" :class="{ open: thinkOpen[i] ?? true }">›</span>
         </div>
-        <div v-if="thinkOpen[i]" class="flow-thinking-text">{{ b.text }}</div>
+        <div v-if="thinkOpen[i] ?? true" class="flow-thinking-text">{{ b.text }}</div>
       </div>
 
       <!-- 意图/最终回答：直接平铺的 markdown，跟 chat 模式的气泡内容一个样式，
@@ -28,18 +28,19 @@
           <span class="flow-chevron" :class="{ open: b.expanded }">›</span>
         </div>
         <div v-if="b.expanded" class="flow-tool-body">
+          <!-- 内置 edit_file / MCP 的 mcp__fs__edit_file 都走 diff 视图 -->
           <DiffViewer
-            v-if="b.name === 'edit_file'"
-            :old-content="b.args.old_string || ''"
-            :new-content="b.args.new_string || ''"
-            :path="b.args.path || ''"
+            v-if="b.name === 'edit_file' || b.name === 'mcp__fs__edit_file'"
+            :old-content="editOld(b) || ''"
+            :new-content="editNew(b) || ''"
+            :path="filePath(b) || ''"
             :start-line="editStartLine(b)"
           />
           <DiffViewer
-            v-else-if="b.name === 'write_file'"
+            v-else-if="b.name === 'write_file' || b.name === 'mcp__fs__write_file'"
             old-content=""
-            :new-content="b.args.content || ''"
-            :path="b.args.path || ''"
+            :new-content="fileContent(b) || ''"
+            :path="filePath(b) || ''"
           />
           <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
         </div>
@@ -59,8 +60,10 @@ const props = defineProps({
 })
 
 // ==================== 思考块折叠 ====================
+// 思考块默认展开（模板用 thinkOpen[i] ?? true），toggle 基于"当前是否可见"取反：
+// 默认未点过视为展开，点一下收起，再点展开。
 const thinkOpen = reactive({})
-function toggleThink(i) { thinkOpen[i] = !thinkOpen[i] }
+function toggleThink(i) { thinkOpen[i] = !(thinkOpen[i] ?? true) }
 
 // ==================== 工具卡片 ====================
 const TOOL_LABELS = {
@@ -81,8 +84,8 @@ function toolLabel(name) {
 }
 
 function badge(name) {
-  if (name === 'read_file') return { ch: 'R', bg: '#5b8def' }
-  if (name === 'write_file' || name === 'edit_file') return { ch: 'W', bg: '#c96442' }
+  if (name === 'read_file' || name === 'mcp__fs__read_file') return { ch: 'R', bg: '#5b8def' }
+  if (name === 'write_file' || name === 'edit_file' || name === 'mcp__fs__write_file' || name === 'mcp__fs__edit_file' || name === 'mcp__fs__create_file') return { ch: 'W', bg: '#c96442' }
   if (name === 'execute_command') return { ch: '>', bg: '#94a3b8' }
   if (name === 'dispatch_agent') return { ch: '◆', bg: '#8b5cf6' }
   if (name.startsWith('mcp__')) return { ch: 'M', bg: '#0d9488' }
@@ -95,6 +98,26 @@ function keyParam(b) {
   const s = String(v)
   return s.length > 60 ? s.slice(0, 60) + '…' : s
 }
+
+// MCP filesystem 的 edit_file 真实 schema：{ path, edits: [{oldText, newText}] }（数组，
+// 每项一对 oldText/newText）。内置 edit_file 是 { path, old_string, new_string }（单数）。
+// 两者都要兼容。write_file 内容字段内置/MCP 都是 content，path 都是 path。
+function editOld(b) {
+  const a = b.args || {}
+  if (a.old_string) return a.old_string
+  if (a.oldText) return a.oldText
+  if (Array.isArray(a.edits) && a.edits[0]) return a.edits[0].oldText || ''
+  return ''
+}
+function editNew(b) {
+  const a = b.args || {}
+  if (a.new_string) return a.new_string
+  if (a.newText) return a.newText
+  if (Array.isArray(a.edits) && a.edits[0]) return a.edits[0].newText || ''
+  return ''
+}
+function fileContent(b) { const a = b.args || {}; return a.content || '' }
+function filePath(b) { const a = b.args || {}; return a.path || '' }
 
 // edit_file 结果里带 "第 N 行"，用来给 Diff 做行号偏移
 function editStartLine(b) {
@@ -197,7 +220,7 @@ function toolBodyText(b) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 .flow-tool-label {
   flex-shrink: 0;
@@ -210,7 +233,7 @@ function toolBodyText(b) {
   min-width: 0;
   font-size: 12px;
   color: #94a3b8;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -243,7 +266,7 @@ function toolBodyText(b) {
   font-size: 12px;
   line-height: 1.6;
   color: #4b4741;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
   word-break: break-all;
 }

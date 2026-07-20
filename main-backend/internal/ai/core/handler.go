@@ -111,9 +111,6 @@ func SetProjectRoot(path string) error {
 		return fmt.Errorf("不是目录: %s", path)
 	}
 	projectRootAtomic.Store(path)
-	// 代码搜索索引存的是相对当前工作目录的路径；目录切换后必须丢弃旧索引。
-	// 新索引在下一次 search_codebase / 文件变更时按需创建，避免阻塞切换接口。
-	ResetCodebaseIndex()
 	stateFile := workdirStateFile()
 	if err := os.MkdirAll(filepath.Dir(stateFile), 0755); err != nil {
 		return fmt.Errorf("持久化工作目录失败: %w", err)
@@ -212,25 +209,6 @@ func mapButtonToKeycode(button string) string {
 	default:
 		return "KEYCODE_HOME"
 	}
-}
-func executeCodebaseQuery(query string) string {
-	// 直接调用 Python 内置 sqlite3，零依赖，零故障
-	pythonScript := fmt.Sprintf(
-		"import sqlite3; conn=sqlite3.connect(r'C:\\Users\\undercurrent\\.cache\\codebase-memory-mcp\\C-Pro2026-re0.db'); cursor=conn.execute(\"SELECT name, file_path FROM nodes WHERE name = ? LIMIT 10\", [%q]); results=[f'{row[0]} -> {row[1]}' for row in cursor]; conn.close(); print('\\n'.join(results) if results else '在代码知识图谱中未找到匹配的代码实体。')",
-		query,
-	)
-
-	cmd := exec.Command("python", "-c", pythonScript)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Sprintf("[错误] 代码知识图谱查询失败: %v\n%s", err, string(output))
-	}
-
-	result := strings.TrimSpace(string(output))
-	if result == "" {
-		return fmt.Sprintf("在代码知识图谱中未找到与 '%s' 匹配的代码实体。", query)
-	}
-	return result
 }
 
 // ----- 核心执行器 -----
@@ -332,38 +310,6 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		resultContent = listing
 		fmt.Printf("📁 工具调用: 列目录 - %s (recursive=%v)\n", dirPath, recursive)
 
-	case "codegraph_query":
-		subcommand, _ := args["subcommand"].(string)
-		symbol, _ := args["symbol"].(string)
-		cmd := exec.Command("codegraph", subcommand, symbol)
-		cmd.Dir = GetProjectRoot()
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			resultContent = fmt.Sprintf("CodeGraph 查询失败: %v\n%s", err, string(output))
-			failed = true
-		} else {
-			resultContent = string(output)
-		}
-		fmt.Printf("📊 工具调用: CodeGraph %s - %s\n", subcommand, symbol)
-
-	case "search_codebase":
-		query, _ := args["query"].(string)
-		result, err := SearchLocalCodebase(query, 5)
-		if err != nil {
-			resultContent = fmt.Sprintf("搜索代码库失败: %v", err)
-			failed = true
-		} else {
-			resultContent = result
-		}
-		fmt.Printf("🔎 工具调用: 搜索代码库 - %s\n", query)
-	case "codebase_query":
-		query, _ := args["query"].(string)
-		resultContent = executeCodebaseQuery(query)
-		// 关键：如果查询函数返回了错误信息，必须将工具标记为失败！
-		if strings.HasPrefix(resultContent, "[错误]") || strings.HasPrefix(resultContent, "[警告]") {
-			failed = true
-		}
-		fmt.Printf("🧬 工具调用: 代码知识图谱 - %s (失败: %v)\n", query, failed)
 	case "read_file":
 		filePath, _ := args["path"].(string)
 		mode, _ := args["mode"].(string)
@@ -390,11 +336,6 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			fullPath = filepath.Clean(filePath)
 		} else {
 			fullPath = filepath.Join(GetProjectRoot(), filePath)
-		}
-
-		// 实时同步索引
-		if err := UpdateCodeIndex(fullPath); err != nil {
-			fmt.Printf("⚠️ 更新索引失败: %v\n", err)
 		}
 
 		if !isPathAllowed(fullPath) {
@@ -470,9 +411,6 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 		f.Close()
 
 		if !failed {
-			if updateErr := UpdateCodeIndex(fullPath); updateErr != nil {
-				fmt.Printf("⚠️ 更新索引失败: %v\n", updateErr)
-			}
 			resultContent = fmt.Sprintf("SUCCESS: 已在指定路径 %s 成功创建文件。", fullPath)
 			fmt.Printf("📝 文件写入完成，实际写入 %d 字节\n", len(content))
 		}
@@ -532,10 +470,6 @@ func ExecuteToolCall(call ToolCall) (*ToolResult, error) {
 			break
 		}
 
-		// 更新代码索引
-		if updateErr := UpdateCodeIndex(fullPath); updateErr != nil {
-			fmt.Printf("⚠️ 更新索引失败: %v\n", updateErr)
-		}
 		resultContent = fmt.Sprintf("SUCCESS: 已在 %s 第 %d 行精确替换 1 处内容", filePath, startLine)
 		fmt.Printf("✏️ 工具调用: 编辑文件 - %s (old: %q -> new: %q)\n", filePath, oldStr, newStr)
 	case "execute_command":

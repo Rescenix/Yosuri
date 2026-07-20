@@ -9,7 +9,7 @@
     <div v-if="expanded" class="bgstep-action-detail">
       <!-- write_file：全新写入，没有 before 快照，DiffViewer 里 oldContent 传空
            字符串，jsdiff 会正确地把所有内容展示成新增行 -->
-      <template v-if="tc.name === 'write_file' && readArgs(tc).path">
+      <template v-if="isFileWrite(tc) && readArgs(tc).path">
         <div class="bgdiff-card">
           <div class="bgdiff-head">
             <Icon icon="mdi:file-outline" width="13" color="#a3a3a3" />
@@ -20,8 +20,8 @@
         </div>
       </template>
 
-      <!-- edit_file：old_string → new_string，是真正意义上的前后对比 -->
-      <template v-else-if="tc.name === 'edit_file' && readArgs(tc).path">
+      <!-- edit_file / mcp__fs__edit_file：old → new，真正意义上的前后对比 -->
+      <template v-else-if="isFileEdit(tc) && readArgs(tc).path">
         <div class="bgdiff-card">
           <div class="bgdiff-head">
             <Icon icon="mdi:file-outline" width="13" color="#a3a3a3" />
@@ -30,8 +30,8 @@
             <span class="bgdiff-del-count">−{{ diffStats(tc).removed }}</span>
           </div>
           <DiffViewer
-            :old-content="readArgs(tc).old_string || ''"
-            :new-content="readArgs(tc).new_string || ''"
+            :old-content="editOldStr(tc) || ''"
+            :new-content="editNewStr(tc) || ''"
             :path="readArgs(tc).path"
             :start-line="editStartLine(tc)"
           />
@@ -82,6 +82,28 @@ function readArgs(tc) {
   return parseToolArgs(tc.args)
 }
 
+// 文件写/编辑类工具：内置 write_file/edit_file，以及 MCP filesystem 的
+// mcp__fs__write_file / mcp__fs__edit_file。参数名：内置用 old_string/new_string，
+// MCP 用 oldText/newText（见 main-backend/skills/file-edit-with-retry.json）。
+function isFileWrite(tc) { return tc.name === 'write_file' || tc.name === 'mcp__fs__write_file' || tc.name === 'mcp__fs__create_file' }
+function isFileEdit(tc) { return tc.name === 'edit_file' || tc.name === 'mcp__fs__edit_file' }
+// MCP filesystem 的 edit_file 真实 schema：{ path, edits:[{oldText,newText}] }（数组）。
+// 内置 edit_file 是 { path, old_string, new_string }（单数）。两者都兼容。
+function editOldStr(tc) {
+  const a = readArgs(tc)
+  if (a.old_string) return a.old_string
+  if (a.oldText) return a.oldText
+  if (Array.isArray(a.edits) && a.edits[0]) return a.edits[0].oldText || ''
+  return ''
+}
+function editNewStr(tc) {
+  const a = readArgs(tc)
+  if (a.new_string) return a.new_string
+  if (a.newText) return a.newText
+  if (Array.isArray(a.edits) && a.edits[0]) return a.edits[0].newText || ''
+  return ''
+}
+
 function truncateText(text, limit) {
   if (!text) return ''
   return text.length > limit ? text.slice(0, limit) + '\n⋯（已截断）' : text
@@ -98,8 +120,8 @@ function editStartLine(tc) {
 // 轻量统计增删行数，只给折叠摘要/标题栏用——真正的逐行渲染在 DiffViewer 里
 function diffStats(tc) {
   const args = readArgs(tc)
-  const oldStr = tc.name === 'edit_file' ? (args.old_string || '') : ''
-  const newStr = tc.name === 'edit_file' ? (args.new_string || '') : (args.content || '')
+  const oldStr = isFileEdit(tc) ? editOldStr(tc) : ''
+  const newStr = isFileEdit(tc) ? editNewStr(tc) : (args.content || '')
   const parts = diffLines(oldStr, newStr)
   let added = 0, removed = 0
   for (const p of parts) {
@@ -112,11 +134,11 @@ function diffStats(tc) {
 }
 
 function actionLabel(tc) {
-  if (tc.name === 'write_file') {
+  if (isFileWrite(tc)) {
     const args = readArgs(tc)
     return `编辑了 ${fileBaseName(args.path)} +${diffStats(tc).added}`
   }
-  if (tc.name === 'edit_file') {
+  if (isFileEdit(tc)) {
     const args = readArgs(tc)
     const { added, removed } = diffStats(tc)
     return `编辑了 ${fileBaseName(args.path)} +${added} −${removed}`
@@ -135,8 +157,8 @@ function actionLabel(tc) {
 // 设计稿要求的 16x16 圆角色块字母徽章：R 读取(蓝) / W 编辑(强调色，write_file 和
 // edit_file 共用，都是"改文件"这个语义) / > 执行命令(灰) / · 说明性文字(弱色)
 function actionBadge(tc) {
-  if (tc.name === 'read_file') return { letter: 'R', color: '#5b8def' }
-  if (tc.name === 'write_file' || tc.name === 'edit_file') return { letter: 'W', color: '#c96442' }
+  if (tc.name === 'read_file' || tc.name === 'mcp__fs__read_file') return { letter: 'R', color: '#5b8def' }
+  if (isFileWrite(tc) || isFileEdit(tc)) return { letter: 'W', color: '#c96442' }
   if (tc.name === 'execute_command') return { letter: '>', color: '#94a3b8' }
   return { letter: '·', color: '#a3a3a3' }
 }

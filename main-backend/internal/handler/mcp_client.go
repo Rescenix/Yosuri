@@ -6,7 +6,12 @@ package handler
 // initialize → notifications/initialized → tools/list → tools/call。
 //
 // 配置文件：MCP_CONFIG 环境变量指定路径，默认 ./mcp.json（相对 server 工作目录）：
-//   {"servers": {"fs": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Pro2026"]}}}
+//   {"servers": {"fs": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Pro2026\\re0"]}}}
+//
+// ★ allowed directory 不要写死成某个具体项目——它会与「主页动态选项目」的工作目录
+// 脱节，导致所有 mcp__fs__* 读写报 "path outside allowed directories"。initMCPServers
+// 在建连接前会把配置里的 C:\Pro2026\re0 这类占位根替换成 core.GetProjectRoot()（即
+// 主页当前选中的项目目录），切换项目时再重建连接。
 //
 // 每个 server 的工具注册为 mcp__<server>__<tool>，随四态机工作流的 tools 参数
 // 一起给到模型；配置文件不存在时整个模块静默为空，零开销。
@@ -19,6 +24,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -46,10 +52,12 @@ type mcpConn struct {
 }
 
 var (
-	mcpOnce     sync.Once
-	mcpToolDefs []core.ToolDefinition
-	mcpRoutes   = map[string]*mcpConn{} // 完整工具名 -> 所属连接
-	mcpRealName = map[string]string{}   // 完整工具名 -> server 内的原始工具名
+	mcpInitMu    sync.Mutex
+	mcpInited    bool
+	mcpToolDefs  []core.ToolDefinition
+	mcpRoutes    = map[string]*mcpConn{} // 完整工具名 -> 所属连接
+	mcpRealName  = map[string]string{}   // 完整工具名 -> server 内的原始工具名
+	mcpConns     = map[string]*mcpConn{} // server 名 -> 连接，重建时统一关闭
 )
 
 func mcpConfigPath() string {
@@ -62,8 +70,47 @@ func mcpConfigPath() string {
 // loadMCPToolDefs 懒初始化：读配置、拉起各 server 进程、收集工具定义。
 // 无配置文件时返回空，MCP 生态完全不参与。
 func loadMCPToolDefs() []core.ToolDefinition {
-	mcpOnce.Do(initMCPServers)
+	mcpInitMu.Lock()
+	if !mcpInited {
+		mcpInited = true
+		initMCPServers()
+	}
+	mcpInitMu.Unlock()
 	return mcpToolDefs
+}
+
+// ReinitMCP 关闭旧连接并基于当前 core.GetProjectRoot() 重建所有 MCP server。
+// 供 /api/workdir 切换项目后调用，使 filesystem server 的 allowed directory
+// 跟随主页选中的项目移动，避免读写越界。
+func ReinitMCP() {
+	mcpInitMu.Lock()
+	defer mcpInitMu.Unlock()
+	for _, c := range mcpConns {
+		if c != nil {
+			c.close()
+		}
+	}
+	mcpConns = map[string]*mcpConn{}
+	mcpRoutes = map[string]*mcpConn{}
+	mcpRealName = map[string]string{}
+	mcpToolDefs = nil
+	initMCPServers()
+}
+
+// resolveAllowedDir 把配置里写死的占位根（默认 C:\Pro2026\re0）替换为当前
+// 主页选中的项目目录 core.GetProjectRoot()，使 MCP filesystem 的 allowed
+// directory 始终等于 agent 的实际工作目录。
+func resolveAllowedDir(raw string) string {
+	root := core.GetProjectRoot()
+	if raw == "" {
+		return root
+	}
+	// 只替换明显是占位符的那一项（等于默认 fallback 或就是字面 re0 根），
+	// 其余按字面保留，避免误伤用户自定义目录。
+	if raw == `C:\Pro2026\re0` || raw == filepath.Clean(`C:\Pro2026\re0`) {
+		return root
+	}
+	return raw
 }
 
 func initMCPServers() {
@@ -77,13 +124,29 @@ func initMCPServers() {
 		return
 	}
 
+	root := core.GetProjectRoot()
 	for name, sc := range cfg.Servers {
-		conn, tools, err := startMCPServer(name, sc)
+	// args 里若含占位根，替换为当前项目目录
+	args := make([]string, len(sc.Args))
+	for i, a := range sc.Args {
+		args[i] = resolveAllowedDir(a)
+	}
+	// 每个 MCP server 都注入当前项目根（MCP_ROOT），自研 server 据此做动态检索；
+	// filesystem server 用自身 args 的 allowed dir，不受此变量影响。
+	env := append([]string{}, sc.Env...)
+	env = append(env, "MCP_ROOT="+root)
+	conn, tools, err := startMCPServer(name, mcpServerConfig{Command: sc.Command, Args: args, Env: env})
 		if err != nil {
 			log.Printf("⚠️ MCP server %q 启动失败: %v", name, err)
 			continue
 		}
+		mcpConns[name] = conn
 		for _, t := range tools {
+			// 不向 agent 暴露 search_files：它依赖 MCP server 内部的 glob 搜索，
+			// 实际使用中容易卡死/转圈，代码检索统一走 rg（execute_command）。
+			if t.Function.Name == "search_files" {
+				continue
+			}
 			fullName := fmt.Sprintf("mcp__%s__%s", name, t.Function.Name)
 			realName := t.Function.Name
 			t.Function.Name = fullName
@@ -91,7 +154,7 @@ func initMCPServers() {
 			mcpRoutes[fullName] = conn
 			mcpRealName[fullName] = realName
 		}
-		log.Printf("🔌 MCP server %q 已接入，%d 个工具", name, len(tools))
+		log.Printf("🔌 MCP server %q 已接入（allowed root=%s），%d 个工具", name, root, len(mcpToolDefs))
 	}
 }
 
@@ -302,4 +365,12 @@ func callMCPTool(fullName, argsJSON string) (string, error) {
 		return "", fmt.Errorf("%s", text)
 	}
 	return text, nil
+}
+
+// close 终止 MCP server 子进程，切换项目重建连接前调用。
+func (c *mcpConn) close() {
+	if c == nil || c.stdin == nil {
+		return
+	}
+	_ = c.stdin.Close()
 }

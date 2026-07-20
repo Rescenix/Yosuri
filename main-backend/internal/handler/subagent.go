@@ -52,8 +52,6 @@ var dispatchAgentToolDef = core.ToolDefinition{
 var subAgentToolNames = map[string]bool{
 	"read_file":       true,
 	"list_dir":        true, // 调研任务几乎都从看目录结构开始，没有它统计类任务必然不收敛
-	"search_codebase": true,
-	"codegraph_query": true,
 	"search_memory":   true,
 }
 

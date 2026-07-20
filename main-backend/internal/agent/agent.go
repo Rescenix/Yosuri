@@ -93,10 +93,10 @@ type MainAgent struct {
 	TopP         float64
 }
 
-// MainAgentConfig 返回主Agent的配置
+// MainAgentConfig 返回主Agent的配置（已废弃，四态机改用 MainAgentConfigNative）
 func MainAgentConfig() MainAgent {
 	return MainAgent{
-		SystemPrompt: `你是Aurora的主工程师Agent。你的核心工作方式是：
+		SystemPrompt: `你是一个乐于助人的 AI 助手。你的核心工作方式是：
 通过工具调用完成任务，而不是在回复里写 bash 命令。
 
 ` + ToolCallFormatInstruction + `
@@ -105,9 +105,7 @@ func MainAgentConfig() MainAgent {
 - read_file —— 读取文件
 - write_file —— 创建或覆盖文件
 - edit_file —— 精确编辑（old_string → new_string）
-- execute_command —— 执行 shell 命令
-- search_codebase —— 语义搜索代码
-- codegraph_query —— 查询代码结构（callers/callees/impact）
+- execute_command —— 执行 shell 命令（代码内容检索用 rg，例如 rg -n func MainAgent .）
 - search_memory —— 检索长期记忆
 
 ` + SoulTemplateCodeProtocol + `
