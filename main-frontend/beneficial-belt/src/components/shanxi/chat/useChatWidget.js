@@ -7,6 +7,7 @@ import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
 import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
+import { loadContextBreakdown } from '../composables/contextBreakdown.js'
 
 export function useChatWidget(props) {
   const isOpen = ref(false)
@@ -348,6 +349,9 @@ async function switchSession(id) {
   localStorage.setItem('prism_session_id', id)
   // 切会话时同步恢复该会话持久化的真实 token（横条绑定会话，刷新/切换都不丢）
   sessionTokenStats.value = loadSessionTokenStats(id)
+  // 上下文分类明细同样要跟着会话走。之前只在 ChatWidget setup 时 load 过一次，
+  // 切会话不重载 —— 结果面板一直显示上一个会话的分类，只有刷新页面才纠正。
+  loadContextBreakdown(id)
   await loadAllHistory()
 }
 

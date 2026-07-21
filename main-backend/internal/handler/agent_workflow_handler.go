@@ -37,6 +37,36 @@ const (
 	codeResultMaxChars    = 10000
 )
 
+// historyLimitFor 按模型上下文能力自适应历史窗口。
+// 原来所有链路共用 maxHistoryMessages=10——那是给 8K 小模型的保守值，
+// 对 100 万上下文的 Gemini 等于白白把对话记忆砍掉；前端"上下文占用不随对话增长"
+// 的观感也源于此（聊到第 10 条 prompt 就到顶了）。
+func historyLimitFor(contextWindow int) int {
+	switch {
+	case contextWindow >= 200000:
+		return 60
+	case contextWindow >= 100000:
+		return 40
+	case contextWindow >= 32000:
+		return 24
+	case contextWindow > 0:
+		return 12
+	default:
+		return maxHistoryMessages
+	}
+}
+
+// conversationTokens 把真实 prompt_tokens 里属于"对话"的部分摘出来。
+// input_tokens 是上游返回的 usage.prompt_tokens——它已经包含系统提示词/工具定义/
+// 记忆/技能/子代理定义。前端面板若再把这些静态分类加一遍就是双重计算，
+// 所以这里减掉静态部分后再下发，保证 分类之和 ≈ 真实 prompt_tokens。
+func conversationTokens(inputTokens, staticSum int) int {
+	if n := inputTokens - staticSum; n > 0 {
+		return n
+	}
+	return 0
+}
+
 // codeSSEMu 串行化 SSE 写入：子代理 goroutine 会并发发出 subagent_* 事件，
 // gin 的 ResponseWriter 不是并发安全的。全局锁跨请求也会串行，但每次写都是
 // 微秒级 buffer 操作，不构成瓶颈——比 per-request 锁结构简单得多。
@@ -126,13 +156,24 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		"memory":   estimateTokenCount(memoryInject),
 		"tools":    estimateTokenCount(string(toolsJSON)),
 	}
+	// 静态部分之和：下发 conversation_tokens 时要从真实 prompt_tokens 里减掉它，
+	// 否则前端面板把静态分类加一遍就成了双重计算。
+	staticSum := 0
+	for _, v := range contextBreakdown {
+		staticSum += v
+	}
 
 	// 之前这里每次都是只有 system+当前 task 的白板，session_id 传了但从没读过——
 	// LLM 完全不知道上一条消息说了什么。跟 chat_stream 那条老路径一样，从
-	// sessionStore 捞这个会话的历史（截断到最近 maxHistoryMessages 条）拼进去，
+	// sessionStore 捞这个会话的历史拼进去（窗口按模型上下文能力自适应，
+	// 见 historyLimitFor——固定 10 条会让大上下文模型的对话记忆被白白砍掉），
 	// 工作流结束后再把这一轮的 user/assistant 写回去，下一条消息才能接上下文。
+	histLimit := maxHistoryMessages
+	if len(backends) > 0 {
+		histLimit = historyLimitFor(backends[0].ContextWindow)
+	}
 	history := r.chatHandler.sessionStore.Get(sessionID)
-	history = truncateHistory(history, maxHistoryMessages)
+	history = truncateHistory(history, histLimit)
 	built := buildChatMessages(systemPrompt, history, task)
 	msgs := make([]map[string]any, len(built))
 	historyChars := 0
@@ -173,6 +214,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "failed", "final_output": "任务执行失败: " + err.Error(),
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
+				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 			})
 			return
 		}
@@ -182,6 +224,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "completed", "final_output": content,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
+				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 			})
 			if sessionID != "" {
 				r.chatHandler.sessionStore.Append(sessionID, DSMessage{Role: "user", Content: task})
@@ -240,6 +283,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	writeCodeSSE(c, "workflow_done", map[string]any{
 		"status": "failed", "final_output": fmt.Sprintf("超过最大迭代轮数(%d)，任务中止", codeWorkflowMaxRounds),
 		"input_tokens": inputTokens, "output_tokens": outputTokens,
+		"conversation_tokens": conversationTokens(inputTokens, staticSum),
 	})
 }
 

@@ -7,6 +7,10 @@
 *.so
 *.dll
 *.dylib
+advisor
+main-backend/advisor
+main-backend/server
+main-backend/shanxi-server
 
 # 构建目录
 /build/

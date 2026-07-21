@@ -92,15 +92,19 @@
             <button class="gem-icon-btn" @click="toggleSidebar" title="附件">
               <Icon icon="hugeicons:file-attachment" width="18" />
             </button>
-            <!-- 会话横条：点击切换，悬浮显示会话名。笔记本(置顶)与最近分区 -->
-            <div class="gem-rail-sessions">
+            <!-- 会话横条：鼠标悬停立刻弹出可点击的会话卡片（不再用原生 title 提示）。
+                 笔记本(置顶)与最近分区。 -->
+            <div
+              class="gem-rail-sessions"
+              @mouseenter="openRailCard"
+              @mouseleave="closeRailCardDelayed"
+            >
               <template v-if="railPinned.length">
                 <button
                   v-for="s in railPinned"
                   :key="s.id"
                   class="gem-rail-bar pinned"
                   :class="{ active: s.id === activeSession, running: s.id === runningSession }"
-                  :title="'📔 ' + s.name"
                   @click="selectSession(s.id)"
                 ></button>
                 <div class="gem-rail-divider"></div>
@@ -110,7 +114,6 @@
                 :key="s.id"
                 class="gem-rail-bar"
                 :class="{ active: s.id === activeSession, running: s.id === runningSession }"
-                :title="s.name"
                 @click="selectSession(s.id)"
               ></button>
             </div>
@@ -120,6 +123,43 @@
               </button>
               <div class="gem-rail-avatar" title="Prometheus · Pro">P</div>
             </div>
+
+            <!-- 悬停会话卡片：贴着折叠栏右侧弹出，整行可点击切换会话。
+                 Teleport 到 body，避免被侧栏的 overflow/宽度裁切。 -->
+            <Teleport to="body">
+              <div
+                v-if="railCardOpen"
+                class="rail-card"
+                :style="railCardStyle"
+                @mouseenter="openRailCard"
+                @mouseleave="closeRailCardDelayed"
+              >
+                <template v-if="railPinned.length">
+                  <div class="rail-card-label">笔记本</div>
+                  <button
+                    v-for="s in railPinned"
+                    :key="s.id"
+                    class="rail-card-row"
+                    :class="{ active: s.id === activeSession }"
+                    @click="onRailCardSelect(s.id)"
+                  >
+                    <span class="rail-card-mark pinned" :class="{ running: s.id === runningSession }"></span>
+                    <span class="rail-card-name">{{ s.name }}</span>
+                  </button>
+                </template>
+                <div class="rail-card-label">最近</div>
+                <button
+                  v-for="s in railRecent"
+                  :key="s.id"
+                  class="rail-card-row"
+                  :class="{ active: s.id === activeSession }"
+                  @click="onRailCardSelect(s.id)"
+                >
+                  <span class="rail-card-mark" :class="{ running: s.id === runningSession }"></span>
+                  <span class="rail-card-name">{{ s.name }}</span>
+                </button>
+              </div>
+            </Teleport>
           </template>
         </aside>
 
@@ -439,9 +479,9 @@
                 <div class="input-toolbar-right">
                   <!-- Context window 用量：常驻横条（放在模型左边，一眼可见） -->
                   <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
-                    <span class="ctx-bar-text">{{ formatTok(liveContextStats.used) }}/{{ formatTok(liveContextStats.contextWindow) }}</span>
-                    <div class="ctx-bar-track"><div class="ctx-bar-fill" :style="{ width: liveContextStats.pct + '%' }"></div></div>
-                    <span class="ctx-bar-pct">{{ liveContextStats.pct.toFixed(0) }}%</span>
+                    <span class="ctx-bar-text">{{ formatTok(ctxTotalUsed) }}/{{ formatTok(ctxWindow) }}</span>
+                    <div class="ctx-bar-track"><div class="ctx-bar-fill" :style="{ width: ctxPct + '%' }"></div></div>
+                    <span class="ctx-bar-pct">{{ ctxPct.toFixed(0) }}%</span>
                     <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
                       <div class="tup-header">
                         <span class="tup-title">上下文用量</span>
@@ -706,8 +746,17 @@ const ctxRows = computed(() => {
   const cb = contextBreakdown.value
   return CTX_CATEGORIES.map(c => ({ ...c, tokens: cb[c.key] || 0 }))
 })
-const ctxTotalUsed = computed(() => ctxRows.value.reduce((s, r) => s + r.tokens, 0))
-const ctxWindow = computed(() => contextBreakdown.value.contextWindow || 0)
+// 底部横条与展开面板共用这一个口径（分类之和 ≈ 真实 prompt_tokens）。
+// 之前横条用的是 input+output、面板用分类之和，两套口径必然对不上。
+const ctxTotalUsed = computed(() => {
+  const sum = ctxRows.value.reduce((s, r) => s + r.tokens, 0)
+  if (sum > 0) return sum
+  // 没有分类明细的老会话（早于 context_breakdown 上线）：退回持久化的会话级 token，
+  // 否则横条会从"有数"变成 0/0
+  const p = sessionTokenStats.value
+  return (p?.inputTokens || 0) + (p?.outputTokens || 0)
+})
+const ctxWindow = computed(() => contextBreakdown.value.contextWindow || sessionTokenStats.value?.contextWindow || 0)
 const ctxPct = computed(() => ctxWindow.value > 0 ? Math.min((ctxTotalUsed.value / ctxWindow.value) * 100, 100) : 0)
 
 // ==================== 模型能力（识图 / 上下文窗口 / 是否支持思考强度） ====================
@@ -754,43 +803,9 @@ const currentCapability = computed(() => {
     || { vision: false, context_window: 0, reasoning: false }
 })
 
-// ==================== Context window 用量：优先用当前/最近一次 code 工作流的真实数据 ====================
-// tokenStats 由四态机（Code 模式真正在用的那条 /api/code/workflow）回填，
-// 有 agentflow 就用它的真实 modelInfo.context_window + 本轮 token 数；没有则退回持久化的
-// 会话级真实 token（sessionTokenStats，刷新不丢）；都没有才退回旧的内存 tokenStats。
-const liveContextStats = computed(() => {
-  const flow = lastAgentFlow.value
-  if (flow && flow.modelInfo) {
-    const inputTokens = flow.inputTokens || 0
-    const outputTokens = flow.outputTokens || 0
-    const used = inputTokens + outputTokens
-    const contextWindow = flow.modelInfo.context_window || 0
-    return {
-      used, contextWindow, inputTokens, outputTokens,
-      pct: contextWindow > 0 ? Math.min((used / contextWindow) * 100, 100) : 0
-    }
-  }
-  // 刷新后 agentflow 不在内存：用持久化的会话 token（绑定会话、刷新不丢），
-  // 不回退到恒为 0 的内存 tokenStats。
-  const persisted = sessionTokenStats.value
-  if (persisted && (persisted.inputTokens || persisted.outputTokens || persisted.contextWindow)) {
-    const used = (persisted.inputTokens || 0) + (persisted.outputTokens || 0)
-    const contextWindow = persisted.contextWindow || 0
-    return {
-      used, contextWindow,
-      inputTokens: persisted.inputTokens || 0,
-      outputTokens: persisted.outputTokens || 0,
-      pct: contextWindow > 0 ? Math.min((used / contextWindow) * 100, 100) : (persisted.contextPct || 0)
-    }
-  }
-  return {
-    used: tokenStats.inputTokens + tokenStats.outputTokens,
-    contextWindow: tokenStats.contextWindow,
-    inputTokens: tokenStats.inputTokens,
-    outputTokens: tokenStats.outputTokens,
-    pct: Math.min(tokenStats.contextPct || 0, 100)
-  }
-})
+// 注：原来这里还有个 liveContextStats（input+output 口径）专供底部横条，
+// 跟面板的分类之和是两套对不上的口径。现已统一到 ctxTotalUsed / ctxWindow / ctxPct，
+// 该 computed 随之删除。
 
 // ==================== 右侧工具面板（多面板停靠） ====================
 const dockPanels = ref([])
@@ -1311,6 +1326,35 @@ function refreshPinnedRail() {
 onMounted(refreshPinnedRail)
 const railPinned = computed(() => sessionList.value.filter(s => pinnedIdsRail.value.includes(s.id)))
 const railRecent = computed(() => sessionList.value.filter(s => !pinnedIdsRail.value.includes(s.id)).slice(0, 10))
+
+// 悬停横条弹出的会话卡片：立刻打开（无延迟），移开留 160ms 缓冲，
+// 让鼠标能从横条平移到卡片上而不闪断。卡片自身也挂同一对进入/离开处理。
+const railCardOpen = ref(false)
+const railCardStyle = ref({})
+let railCardCloseTimer = null
+function openRailCard(e) {
+  clearTimeout(railCardCloseTimer)
+  // 只在从横条区进入时重算位置；从卡片自身进入时保持原位
+  const railEl = e?.currentTarget?.classList?.contains('gem-rail-sessions') ? e.currentTarget : null
+  if (railEl) {
+    const r = railEl.getBoundingClientRect()
+    const maxH = Math.min(420, window.innerHeight - 32)
+    // 竖直方向以横条区顶部为锚，超出视口下沿时上推
+    let top = r.top
+    if (top + maxH > window.innerHeight - 16) top = Math.max(16, window.innerHeight - 16 - maxH)
+    railCardStyle.value = { left: (r.right + 10) + 'px', top: top + 'px', maxHeight: maxH + 'px' }
+  }
+  railCardOpen.value = true
+}
+function closeRailCardDelayed() {
+  clearTimeout(railCardCloseTimer)
+  railCardCloseTimer = setTimeout(() => { railCardOpen.value = false }, 160)
+}
+function onRailCardSelect(id) {
+  clearTimeout(railCardCloseTimer)
+  railCardOpen.value = false
+  selectSession(id)
+}
 
 // ==================== 工具面板状态绑定会话 ====================
 // dockPanels（终端/Diff/预览）是会话的工作现场：切会话/新会话时各自恢复各自的，

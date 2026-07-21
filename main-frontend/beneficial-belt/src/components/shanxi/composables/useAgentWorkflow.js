@@ -178,8 +178,16 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             flow.endTime = Date.now()
             flow.inputTokens = d.input_tokens || 0
             flow.outputTokens = d.output_tokens || 0
-            // 对话类 token 用后端 input_tokens（历史字符/4，与分类口径一致），按 sessionId 持久化
-            setConversationTokens(d.input_tokens || 0, localStorage.getItem('prism_session_id') || '')
+            // 对话类 token：用后端已扣除静态部分的 conversation_tokens。
+            // 绝不能再用 input_tokens——它是上游真实 prompt_tokens，本身已包含
+            // system/tools/skill/subagent/memory，面板再加一遍静态分类就是双重计算
+            // （这正是"外显和点开总量对不上"的根因）。老后端没这个字段时前端自己减。
+            const cb = contextBreakdown.value
+            const statics = (cb.system || 0) + (cb.subagent || 0) + (cb.skill || 0) + (cb.memory || 0) + (cb.tools || 0)
+            const conv = d.conversation_tokens != null
+                ? d.conversation_tokens
+                : Math.max(0, (d.input_tokens || 0) - statics)
+            setConversationTokens(conv, localStorage.getItem('prism_session_id') || '')
             // 把本轮 agentflow 的真实 input/output token 按 sessionId 持久化，
             // 这样刷新后底部 context 横条（liveContextStats）仍能显示实际值，不归零。
             persistSessionTokens({
