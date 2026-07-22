@@ -70,5 +70,8 @@ crack/chrome_temp/
 # Misc
 re1/
 public/
+DESIGN_COLOR_SYSTEM.md
+THIRD_PARTY_NOTICES.md
+.gitignore_global
 
 test.c
