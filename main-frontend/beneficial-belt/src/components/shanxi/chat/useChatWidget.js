@@ -1,8 +1,6 @@
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 
-import { useMemory } from '../composables/useMemory.js'
 import { useWelcome } from '../composables/useWelcome.js'
-import { useChatLogic } from '../composables/useChatLogic.js'
 import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
 import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
@@ -30,12 +28,9 @@ if (!localStorage.getItem('prism_session_id')) {
   const debugTemp = ref(localStorage.getItem('debugTemp') ? parseFloat(localStorage.getItem('debugTemp')) : 0.7)
   const debugTopP = ref(localStorage.getItem('debugTopP') ? parseFloat(localStorage.getItem('debugTopP')) : 0.9)
   const debugReasoning = ref(localStorage.getItem('debugReasoning') || '')
-  const lastTokenUsage = ref('')
-  const lastLatency = ref('')
   const debugMaxTokens = ref(localStorage.getItem('debugMaxTokens') ? parseInt(localStorage.getItem('debugMaxTokens')) : 2000)
   const balance = ref('')
 
-  const { saveMemory } = useMemory()
   const { welcomeMessage, welcomeLoading } = useWelcome()
   const { currentStatus } = useStatusPolling()
 
@@ -97,18 +92,6 @@ function adjustInputHeight() {
   el.style.height = el.scrollHeight + 'px';
 }
 
-  const { sendMessage, stopWorkflow, workflowState, tokenStats, chatState } = useChatLogic({
-    messages, userInput, sessionId,
-    saveMemory, lastTokenUsage, lastLatency,
-    onNewMessage: () => {
-      forceScrollToBottom()
-      nextTick(() => {
-        if (chatInputRef.value) chatInputRef.value.style.height = 'auto'
-      })
-    },
-    onStreamUpdate: smartScrollAndRefresh
-  })
-
   // 四态机 Code 工作流（GET /api/code/workflow，EventSource）
   // 流式期间用 forceScrollToBottom：长工作流流式中持续跟底，无视用户是否上滑，
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
@@ -127,149 +110,6 @@ function adjustInputHeight() {
     startFlow(task, display)
     userInput.value = ''
   }
-
-  // ==================== 图片上传逻辑（整合进 useChatWidget） ====================
-  const imageInput = ref(null)
-  let msgId = 0
-
-  async function handleImageUpload(e) {
-    const file = e.target.files[0]
-    if (!file) return
-
-    // 1. 显示用户图片
-    messages.value.push({
-      id: msgId++,
-      type: 'image',
-      image: URL.createObjectURL(file),
-      sender: 'user',
-      timestamp: new Date()
-    })
-
-    // 2. 创建杉汐占位消息
-    const botMsg = {
-      id: msgId++,
-      content: '',
-      reasoning: '',
-      recalling: true,
-      toolCallName: null,
-      toolCallDetail: '',
-      sender: 'bot',
-      isStreaming: true,
-      timestamp: new Date()
-    }
-    messages.value.push(botMsg)
-    forceScrollToBottom()
-
-    // 3. 图片转 Base64
-    const reader = new FileReader()
-    reader.onload = async (loadEvent) => {
-      const base64 = loadEvent.target.result.split(',')[1]
-
-      const requestBody = {
-        message: '帮我看看这张图片',
-        sessionId: sessionId.value,
-        image: base64,
-        temperature: parseFloat(localStorage.getItem('debugTemp') || 0.7),
-        top_p: parseFloat(localStorage.getItem('debugTopP') || 0.9),
-        max_tokens: parseInt(localStorage.getItem('debugMaxTokens') || 2000),
-        reasoning_effort: localStorage.getItem('debugReasoning') || undefined
-      }
-
-      const token = localStorage.getItem('token')
-      const headers = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      try {
-        const response = await fetch('/api/chat/stream', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(requestBody)
-        })
-
-        if (!response.ok) throw new Error('网络错误')
-
-        const streamReader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let partialLine = ''
-
-        while (true) {
-          const { done, value } = await streamReader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = (partialLine + chunk).split('\n')
-          partialLine = lines.pop() || ''
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            const dataStr = line.slice(6)
-            if (!dataStr) continue
-
-            try {
-              const payload = JSON.parse(dataStr)
-                 console.log('[SSE event]', payload.type, payload); 
-              switch (payload.type) {
-               case 'reasoning':
-  // 将推理内容追加到当前 bot 消息的 reasoning 字段上
-  const botMsg = messages.value[messages.value.length - 1];
-  if (botMsg && botMsg.sender === 'bot') {
-    botMsg.reasoning = (botMsg.reasoning || '') + (payload.content || '');
-    botMsg.recalling = false;
-  }
-  break;
-                case 'content':
-                  botMsg.recalling = false
-                  botMsg.content += payload.content || ''
-                  break
-                case 'tool_call_start':
-                  botMsg.toolCallName = payload.name || ''
-                  botMsg.toolCallDetail = payload.args || ''
-                  break
-                case 'tool_call_result':
-                case 'tool_call_error':
-                  botMsg.toolCallName = null
-                  botMsg.toolCallDetail = ''
-                  if (payload.type === 'tool_call_error') {
-                    botMsg.content += `\n[工具调用失败: ${payload.error}]\n`
-                  }
-                  break
-                case 'done':
-                  botMsg.content = payload.content || botMsg.content
-                  botMsg.reasoning = payload.reasoning || botMsg.reasoning
-                  botMsg.isStreaming = false
-                  botMsg.recalling = false
-                  botMsg.toolCallName = null
-                   if (payload.token_usage) lastTokenUsage.value = payload.token_usage
-    if (payload.latency) lastLatency.value = payload.latency
-                  botMsg.toolCallDetail = ''
-                  if (saveMemory) {
-                    saveMemory('leader', requestBody.message)
-                    saveMemory('shanshi', botMsg.content)
-                  }
-                  break
-                case 'error':
-                  botMsg.content = `杉汐：抱歉，图片分析失败：${payload.message || '未知错误'}`
-                  botMsg.isStreaming = false
-                  botMsg.recalling = false
-                  break
-              }
-              smartScrollAndRefresh()
-            } catch (e) {}
-          }
-        }
-        botMsg.isStreaming = false
-        botMsg.recalling = false
-        smartScrollAndRefresh()
-      } catch (err) {
-        botMsg.content = '杉汐：抱歉，我的灵魂好像被风吹散了…稍等片刻可好？'
-        botMsg.isStreaming = false
-        botMsg.recalling = false
-        smartScrollAndRefresh()
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-  // ==================== 图片上传逻辑结束 ====================
 
   const { playVoice } = useVoicePlay()
 
@@ -539,11 +379,11 @@ async function switchSession(id) {
 
   return {
     isOpen, isExpanded, userInput, messages, sessionId,
-    isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
+    isLoggedIn, debugTemp, debugTopP, debugReasoning, debugMaxTokens, balance,
     welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
-    sendMessage, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
+    backgroundTaskList, playVoice,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     resumeState, resumeCodeWorkflow, dismissResumable,
     toggleExpand, toggleChat, updateParams,

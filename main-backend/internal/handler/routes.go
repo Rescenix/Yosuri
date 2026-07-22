@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"backend/internal/ai/core"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,9 +26,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/git/working-diff", HandleGitWorkingDiff)
 	r.GET("/api/git/working-diff/file", HandleGitWorkingDiffFile)
 	chatHandler := NewChatHandler(memoryStore, sessionStore)
-	core.RegisterCleanFunc(func() {
-		memoryStore.CleanMemories()
-	})
+	// 记忆清理只保留 HTTP 入口（/api/admin/clean-memories，见下方）直接调 CleanMemories()；
+	// 内置 clean_memories 工具已随 core.ExecuteToolCall 退役（原本就标注"禁止主动调用"）。
 
 	r.GET("/api/file-tree", gin.WrapH(http.HandlerFunc(FileTreeHandler)))
 	r.GET("/api/file", gin.WrapH(http.HandlerFunc(FileReadHandler)))
@@ -44,14 +41,9 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.POST("/api/git/add-all", GitAddAll)
 	r.POST("/api/git/commit", GitCommit)
 	r.POST("/api/git/push", GitPush)
-	r.POST("/api/tool/execute", HandleToolExecute)
-	// 根据平台注册不同的聊天处理器
-	r.POST("/api/execute-marker", HandleExecuteMarker)
-	r.POST("/api/chat/stream", chatHandler.StreamChat)
 
 	// Agent 工作流编排
 	workflowRunner := NewWorkflowRunner(chatHandler)
-	r.GET("/api/workflows", workflowRunner.HandleListWorkflows)
 	// 四态机 Code 工作流（思考/意图/操作/结果，EventSource 直连）
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
 	// 工具审批回调：Ask 模式下前端批准条「允许/拒绝」写回，恢复四态机执行
@@ -84,6 +76,18 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	})
 	r.DELETE("/api/sessions/:id", func(c *gin.Context) {
 		sessionStore.Delete(c.Param("id"))
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+	// 编辑并重发历史消息：把该消息及之后的对话截掉（keep=保留的消息条数），前端随后重发
+	r.POST("/api/sessions/:id/truncate", func(c *gin.Context) {
+		var body struct {
+			Keep int `json:"keep"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+			return
+		}
+		sessionStore.Truncate(c.Param("id"), body.Keep)
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 	r.GET("/api/all-messages", GetAllMessagesHandler(sessionStore))

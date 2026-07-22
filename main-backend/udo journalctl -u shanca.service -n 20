@@ -1,8 +1,0 @@
-● shanca.service - Shanca Backend Service
-   Loaded: loaded (/etc/systemd/system/shanca.service; enabled; vendor preset: disabled)
-   Active: activating (auto-restart) (Result: exit-code) since Mon 2026-05-18 11:04:20 CST; 257ms ago
-  Process: 3390 ExecStart=/var/www/shanca/backend/server [0;1;31m(code=exited, status=2)[0m
- Main PID: 3390 (code=exited, status=2)
-
-May 18 11:04:20 iZj6cbtxso4zjqwik67zz8Z systemd[1]: [0;1;39m[0;1;31m[0;1;39mshanca.service: Main process exited, code=exited, status=2/INVALIDARGUMENT[0m
-May 18 11:04:20 iZj6cbtxso4zjqwik67zz8Z systemd[1]: [0;1;39m[0;1;31m[0;1;39mshanca.service: Failed with result 'exit-code'.[0m

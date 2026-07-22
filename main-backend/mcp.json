@@ -8,6 +8,10 @@
       "command": "python",
       "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\grep_server.py"]
     },
+    "shell": {
+      "command": "python",
+      "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\shell_server.py"]
+    },
     "http": {
       "command": "npx",
       "args": ["-y", "@paretools/http"]

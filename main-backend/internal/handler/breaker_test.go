@@ -38,7 +38,7 @@ func TestShouldBlockRepeatDistinctArgs(t *testing.T) {
 		t.Error("不同参数是不同签名，第一次不该被拦")
 	}
 	// 工具名不同也是不同签名
-	if shouldBlockRepeat(counts, "write_file", `{"path":"a.go"}`, codeRepeatCallLimit) {
+	if shouldBlockRepeat(counts, "mcp__fs__write_file", `{"path":"a.go"}`, codeRepeatCallLimit) {
 		t.Error("不同工具名是不同签名，第一次不该被拦")
 	}
 }

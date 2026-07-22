@@ -213,9 +213,40 @@
                     <div v-if="item.type === 'image'" class="image-card">
                       <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
                     </div>
-                    <div v-else-if="item.sender === 'user'" class="message-bubble user">
+                    <div v-else-if="item.sender === 'user'" class="message-bubble user" :class="{ editing: editingMsgId === item.id }">
                       <AttachmentChipRow v-if="item.attachments?.length" :attachments="item.attachments" />
-                      <div v-if="item.content">{{ item.content }}</div>
+                      <!-- 编辑态：消息框本身变成输入框，就地改，不去下面的输入框 -->
+                      <textarea
+                        v-if="editingMsgId === item.id"
+                        class="msg-edit-input"
+                        v-model="editDraft"
+                        rows="1"
+                        @keydown.enter.exact.prevent="confirmEdit(item)"
+                        @keydown.esc.prevent="cancelEdit"
+                        @input="autoGrowEdit"
+                        @blur="onEditBlur"
+                      ></textarea>
+                      <div v-else-if="item.content">{{ item.content }}</div>
+                      <!-- 编辑态右下角按钮变「发送」，否则是悬浮出现的「编辑」。
+                           mousedown.prevent：点发送时不让 textarea 失焦，否则会先触发 @blur 复原、
+                           把编辑态撤掉导致这一下点了个寂寞。 -->
+                      <button
+                        v-if="editingMsgId === item.id"
+                        class="msg-edit-btn confirm"
+                        title="发送（Enter），Esc 取消"
+                        @mousedown.prevent
+                        @click="confirmEdit(item)"
+                      >
+                        <Icon icon="mdi:arrow-up" width="16" />
+                      </button>
+                      <button
+                        v-else-if="item.content"
+                        class="msg-edit-btn"
+                        title="编辑并重新发送"
+                        @click="editUserMessage(item)"
+                      >
+                        <Icon icon="mdi:pencil-outline" width="15" />
+                      </button>
                     </div>
                     <MessageStepGroup
                       v-else-if="item.kind === 'group'"
@@ -520,11 +551,19 @@
                   </div>
                 </div>
                 <div class="input-toolbar-right">
-                  <!-- Context window 用量：常驻横条（放在模型左边，一眼可见） -->
+                  <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
                   <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
-                    <span class="ctx-bar-text">{{ formatTok(ctxTotalUsed) }}/{{ formatTok(ctxWindow) }}</span>
-                    <div class="ctx-bar-track"><div class="ctx-bar-fill" :style="{ width: ctxPct + '%' }"></div></div>
-                    <span class="ctx-bar-pct">{{ ctxPct.toFixed(0) }}%</span>
+                    <span class="ctx-bar-text" style="display:none">{{ formatTok(ctxTotalUsed) }}/{{ formatTok(ctxWindow) }}</span>
+                    <svg class="ctx-ring" viewBox="0 0 18 18" width="14" height="14" aria-hidden="true">
+                      <circle class="ctx-ring-track" cx="9" cy="9" r="7" fill="none" />
+                      <circle
+                        class="ctx-ring-fill"
+                        cx="9" cy="9" r="7" fill="none"
+                        :stroke-dasharray="ctxRingC"
+                        :stroke-dashoffset="ctxRingC * (1 - ctxPct / 100)"
+                      />
+                    </svg>
+                    <span class="ctx-bar-pct" style="display:none">{{ ctxPct.toFixed(0) }}%</span>
                     <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
                       <div class="tup-header">
                         <span class="tup-title">上下文用量</span>
@@ -549,7 +588,7 @@
                     </div>
                   </div>
 
-                  <!-- 模型切换器：不加粗、不带折叠箭头——整块本来就可点开 -->
+                  <!-- 模型名 pill -->
                   <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
                     <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || (hasModels ? '模型' : '无可用模型') }}</span>
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
@@ -560,15 +599,12 @@
                         class="model-menu-item"
                         :class="{ active: selectedModel === m.value }"
                         @click="selectModel(m.value)"
-                      >
-                        {{ m.label }}
-                      </div>
+                      >{{ m.label }}</div>
                     </div>
                   </div>
 
-                  <!-- 思考强度：只有当前模型确认支持 reasoning 时才出现（放在模型右边） -->
+                  <!-- 模式 pill（effort） -->
                   <div v-if="currentCapability.reasoning" ref="effortWidgetRef" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
-                    <span class="effort-label">Effort</span>
                     <span class="effort-value">{{ effortLabel }}</span>
                   </div>
                   <Teleport to="body">
@@ -784,6 +820,8 @@ const ctxTotalUsed = computed(() => {
 })
 const ctxWindow = computed(() => contextBreakdown.value.contextWindow || sessionTokenStats.value?.contextWindow || currentCapability.value.context_window || 0)
 const ctxPct = computed(() => ctxWindow.value > 0 ? Math.min((ctxTotalUsed.value / ctxWindow.value) * 100, 100) : 0)
+// 用量圆环的周长：半径 r=7（与模板里的 <circle r="7"> 对应），dasharray/offset 都按它算
+const ctxRingC = 2 * Math.PI * 7
 
 // ==================== 模型能力（识图 / 上下文窗口 / 是否支持思考强度） ====================
 // 免费池模型的能力元数据是静态已知的（后端 freeModelCatalog），开工前就能查到；
@@ -1070,6 +1108,80 @@ onMounted(() => {
 // ==================== 工具函数 ====================
 function cleanContent(content) { return content ? content.replace(/\[(action|emotion):[^\]]*\]/g, '') : '' }
 
+// ==================== 就地编辑 + 替换式重发 ====================
+// 点编辑：用户消息框本身变成输入框（不是去下面那个输入框）；右上角编辑按钮变发送按钮。
+// 确认后是「替换式」：把这条消息及其之后的对话全部截掉（前端 + 后端会话存档），
+// 再用新文本从这个点重新发起工作流——等价于 ChatGPT 的编辑消息=从这里重来。
+const editingMsgId = ref(null)
+const editDraft = ref('')
+
+// 编辑中的 textarea 直接按 class 取——它在 v-for 里，用模板 ref 会被 Vue 收集成数组，
+// .value.focus() 打空；而全场同一时刻只有一个 .msg-edit-input（v-if 保证），querySelector 稳。
+function editTextareaEl() { return document.querySelector('.msg-edit-input') }
+
+function editUserMessage(item) {
+  if (flowState.active) return // 工作流进行中不打断
+  editingMsgId.value = item.id
+  editDraft.value = item.content || ''
+  nextTick(() => {
+    const el = editTextareaEl()
+    if (!el) return
+    el.focus()
+    const len = el.value.length
+    el.setSelectionRange(len, len) // 光标移末尾
+    autoGrowEdit()
+  })
+}
+
+function cancelEdit() {
+  editingMsgId.value = null
+  editDraft.value = ''
+}
+
+// 失焦即复原到普通无按钮态（丢弃这次编辑）。点发送按钮不会走到这里——
+// 发送按钮用了 @mousedown.prevent 保住 textarea 焦点，@blur 不触发。
+function onEditBlur() {
+  cancelEdit()
+}
+
+function autoGrowEdit() {
+  const el = editTextareaEl()
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
+function confirmEdit(item) {
+  if (flowState.active) return
+  const text = editDraft.value.trim()
+  if (!text) return
+  const i = messages.value.findIndex(m => m.id === item.id)
+  if (i < 0) { cancelEdit(); return }
+
+  // 后端会话存档只在"往返完成"时按 user+assistant 成对落盘（失败的不落）。
+  // 所以要保留的条数 = 被编辑消息之前「已完成的 agentflow 数」× 2，这样能正确跳过
+  // 中途失败、没进存档的往返，不会算多。
+  let completed = 0
+  for (let k = 0; k < i; k++) {
+    const m = messages.value[k]
+    if (m.kind === 'agentflow' && m.status === 'completed') completed++
+  }
+  const keep = completed * 2
+  const sid = sessionId.value || localStorage.getItem('prism_session_id') || ''
+  if (sid) {
+    fetch(`/api/sessions/${encodeURIComponent(sid)}/truncate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep })
+    }).catch(err => console.error('截断会话失败', err))
+  }
+
+  // 前端：把被编辑消息及其之后的一切移除，再重发（startCodeWorkflow 会重新 push 用户气泡）
+  messages.value.splice(i)
+  cancelEdit()
+  startCodeWorkflow(text)
+}
+
 const copiedVisible = ref(false)
 async function copyText(text) {
   try {
@@ -1293,11 +1405,11 @@ function streamFadePass() {
 // ==================== useChatWidget ====================
 const {
   isOpen, isExpanded, userInput, messages, sessionId,
-  isLoggedIn, debugTemp, debugTopP, debugReasoning, lastTokenUsage, lastLatency, debugMaxTokens, balance,
+  isLoggedIn, debugTemp, debugTopP, debugReasoning, debugMaxTokens, balance,
   currentStatus, statusDotColor,
   messagesContainer, chatInputRef, userScrolledUp,
   forceScrollToBottom, adjustInputHeight, switchSession,
-  sendMessage, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
+  backgroundTaskList, playVoice,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   resumeState, resumeCodeWorkflow, dismissResumable,
   toggleChat, updateParams,
@@ -1320,8 +1432,8 @@ const effortPanelStyle = computed(() => {
   return {
     position: 'fixed',
     top: (rect.top - 8) + 'px',
-    left: rect.left + 'px',
-    transform: 'translateY(-100%)',
+    left: (rect.left + rect.width / 2) + 'px',
+    transform: 'translate(-50%, -100%)',
     zIndex: 9999
   }
 })

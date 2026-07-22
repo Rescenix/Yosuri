@@ -7,26 +7,6 @@ import (
 
 // ========== 结构体定义 ==========
 
-type ChatRequest struct {
-	Message         string  `json:"message"`
-	SessionID       string  `json:"sessionId"`
-	Temperature     float64 `json:"temperature,omitempty"`
-	TopP            float64 `json:"top_p,omitempty"`
-	MaxTokens       int     `json:"max_tokens,omitempty"`
-	ReasoningEffort string  `json:"reasoning_effort,omitempty"`
-	Image           string  `json:"image,omitempty"`
-	Model           string  `json:"model"`
-	ApiKey          string  `json:"api_key"`
-	DsModel         string  `json:"ds_model"`
-}
-
-type ChatResponse struct {
-	Reply      string `json:"reply"`
-	Emotion    string `json:"emotion,omitempty"`
-	TokenUsage int    `json:"token_usage,omitempty"`
-	Latency    int64  `json:"latency,omitempty"`
-}
-
 type DSMessage struct {
 	Role             string          `json:"role"`
 	Content          string          `json:"content,omitempty"`
@@ -78,19 +58,9 @@ type DSResp struct {
 	} `json:"usage"`
 }
 
-// ========== 辅助函数 ==========
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // ========== 核心处理函数 ==========
 
 func init() {
 	core.RegisterBlogFunc(generateBlogPost)
-	core.RegisterSearchFunc(WebSearch)
 	startNIMDailyRefresh()
 }

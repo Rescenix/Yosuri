@@ -245,6 +245,34 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	}()
 }
 
+// Truncate 只保留会话的前 keep 条消息，丢弃其余——用于"编辑并重发某条历史消息"：
+// 把被编辑的那条及其之后的全部对话截掉，再由新工作流从这个点接着写。
+// keep 由前端按"被编辑消息之前已完成的往返对数 × 2"算好传来（每对 = user+assistant）。
+func (s *SessionStore) Truncate(sessionID string, keep int) {
+	if keep < 0 {
+		keep = 0
+	}
+	s.mu.Lock()
+	msgs := s.sessions[sessionID]
+	if keep < len(msgs) {
+		// 复制而非切片别名，避免底层数组残留被后续 append 覆写读到脏数据
+		kept := make([]DSMessage, keep)
+		copy(kept, msgs[:keep])
+		s.sessions[sessionID] = kept
+		// 压缩位点不能指向已被截掉的位置，跟着回退
+		if s.lastCompressIndexes[sessionID] > keep {
+			s.lastCompressIndexes[sessionID] = keep
+		}
+	}
+	s.mu.Unlock()
+
+	go func() {
+		if err := s.persistAll(); err != nil {
+			log.Printf("⚠️ 截断会话后保存本地文件失败: %v", err)
+		}
+	}()
+}
+
 // Delete 删除指定会话（内存 + 本地文件），供 DELETE /api/sessions/:id 使用
 func (s *SessionStore) Delete(sessionID string) {
 	s.mu.Lock()

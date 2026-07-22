@@ -7,6 +7,8 @@
 *.so
 *.dll
 *.dylib
+*.pyc
+*.lnk
 advisor
 main-backend/advisor
 main-backend/server
@@ -28,39 +30,40 @@ main-backend/shanxi-server
 # 系统文件
 .DS_Store
 Thumbs.db
-.onnx
+*.onnx
+
 # 依赖目录
 /node_modules/
 /vendor/
 /AAP/
+
 # 环境配置
 .env
 .env.local
-bfg.jar
-# 日志
+.npmrc
+.bfg-report/
 ..bfg-report/
+bfg.jar
+
+# 日志
 *.log
 /logs/
-node_modules
-/opencode/
-*.onnx
-*.tar.gz
-*.gguf
-Prism/prism/prismd_memory.dat
-Prism/prism/prismd_v3.cpp
-bfg.jar
-.bfg-report/
-crack/chrome_temp/
 
-Prism/prism/prismd_memory.dat
+# Python 缓存
+__pycache__/
+
+# agent / AI 工具配置（不进仓库）
+.claude/
+.mimocode/
+.hermes/
+
+# 工具输出
+.aurora/
+opencode/
+crack/chrome_temp/
 
 # Go 构建缓存
 .gocache/
 
-# agent 工具目录（Hermes/Claude 等的工作产物，不进项目仓库）
-.hermes/
-
+# Misc
 re1/
-
-# 工具输出溢出文件（超长结果全文落盘，供 agent 回查；任务收尾自动清理）
-.aurora/

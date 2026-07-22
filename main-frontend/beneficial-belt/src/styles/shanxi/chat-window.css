@@ -505,42 +505,100 @@ min-height: 90px !important;
   border-radius: 18px;
 }
 
-/* 用户气泡（仿 Hermes：满宽居左、白底、细边框小圆角） */
+/* 用户气泡 — 主题色渐变边框 + 入场动画 */
 .message-bubble.user {
+  --_accent: var(--app-accent);
   width: 100%;
   max-width: 100%;
-  background: #ffffff;
   color: #1a1a1a;
-  border: 1px solid #e5e7eb;
-  padding: 10px 16px;
-  border-radius: 10px;
+  border: none;
+  padding: 11px 17px;
+  border-radius: 12px;
   line-height: 1.6;
   text-align: left;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   position: relative;
-  animation: userMsgIn 0.28s ease-out both;
-}
-.message-bubble.user::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--app-accent);
-  border-radius: 999px;
-  transform: scaleY(0);
-  transform-origin: top;
-  animation: accentBarGrow 0.26s ease-out 0.06s both;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg,
+      var(--_accent) 0%,
+      color-mix(in srgb, var(--_accent) 25%, transparent) 50%,
+      var(--_accent) 100%) border-box;
+  border: 2px solid transparent;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.04),
+    0 0 0 1px color-mix(in srgb, var(--_accent) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--_accent) 6%, transparent);
+  animation: userMsgIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes userMsgIn {
-  from { opacity: 0; transform: translateX(-6px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes accentBarGrow {
-  to { transform: scaleY(1); }
+/* 用户气泡右上角的「编辑并重新发送」按钮：默认隐藏，悬浮气泡才淡入。
+   贴在右上角、带浅底，避免压在正文上看不清。 */
+.message-bubble.user .msg-edit-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 10%, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
+  pointer-events: none;
+}
+.message-bubble.user:hover .msg-edit-btn {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.message-bubble.user .msg-edit-btn:hover {
+  background: color-mix(in srgb, var(--app-accent) 20%, #fff);
+}
+/* 触屏没有 hover，常驻一个弱化态，保证也能点到 */
+@media (hover: none) {
+  .message-bubble.user .msg-edit-btn { opacity: 0.5; pointer-events: auto; transform: none; }
+}
+
+/* 编辑态：消息框就地变输入框 */
+.message-bubble.user .msg-edit-input {
+  display: block;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  padding-right: 30px;        /* 给右上角发送按钮让位，文字不钻到按钮底下 */
+  font: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+/* 编辑态右上角按钮变「发送」：实心主题色、常驻可见（不靠 hover） */
+.message-bubble.user .msg-edit-btn.confirm {
+  color: #fff;
+  background: var(--app-accent);
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.message-bubble.user .msg-edit-btn.confirm:hover {
+  background: var(--app-accent);
+  filter: brightness(1.06);
 }
 
 /* 助手气泡 — 羊皮纸质感 */
@@ -595,19 +653,7 @@ min-height: 90px !important;
   line-height: 1.75;
 }
 
-/* 用户气泡：满宽居左，白底细边框小圆角（仿 Hermes） */
-.message-bubble.user {
-  width: 100%;
-  max-width: 100%;
-  background: #ffffff;
-  color: #1a1a1a;
-  border: 1px solid #e5e7eb;
-  padding: 10px 16px;
-  border-radius: 10px;
-  line-height: 1.6;
-  text-align: left;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-}
+/* 用户气泡（保留首处定义的动画样式） */
 
 .chat-window.expanded .header-name {
   letter-spacing: 0;
@@ -1919,33 +1965,119 @@ min-height: 90px !important;
   cursor: pointer;
 }
 
-/* ---------- Context window 用量：常驻横条 ---------- */
+/* ---------- Context window 用量：常驻横条（紧凑模式，保留圆环） ---------- */
 .context-bar-widget {
   position: relative;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 4px 6px;
   border-radius: 999px;
-  background: #ffffff;
+  background: transparent;
   cursor: pointer;
   font-size: 12px;
   font-family: var(--app-font);
   color: var(--app-text-soft);
 }
-.ctx-bar-text { white-space: nowrap; }
+.ctx-bar-text,
+.ctx-bar-pct { display: none; }
 .ctx-bar-track {
-  width: 56px;
+  width: 16px;
+  height: 16px;
+}
+.ctx-ring {
+  display: block;
+  width: 20px;
+  height: 20px;
+  transform: rotate(-90deg);
+  flex-shrink: 0;
+}
+.ctx-ring-track {
+  stroke: #e5e5e5;
+  stroke-width: 3;
+}
+.ctx-ring-fill {
+  stroke: var(--app-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+/* 模型 pill：紧凑、浅底、无粗体 */
+.sch-model {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--app-surface-3);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--app-text);
+  white-space: nowrap;
+}
+.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
+.model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+.model-menu-item:hover { background: #f5f5f5; }
+.model-menu-item.active { background: #ececec; font-weight: 500; }
+
+/* 模式 pill：浅底 + 主题色字 */
+.effort-widget {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--app-accent-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--app-accent);
+  white-space: nowrap;
+}
+.effort-value { font-weight: 600; color: var(--app-accent); }
+.effort-panel {
+  width: 220px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+  padding: 10px 12px;
+}
+.effort-panel-title { font-size: 11px; color: var(--app-text); margin-bottom: 8px; word-break: break-word; }
+.effort-panel-title b { color: var(--app-accent); font-weight: 600; }
+.effort-slider-row { display: flex; align-items: center; gap: 8px; }
+.effort-end { font-size: 10px; color: var(--app-text-faint); flex-shrink: 0; white-space: nowrap; }
+.effort-slider {
+  flex: 1;
+  appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: #eee7da;
-  overflow: hidden;
+  background: linear-gradient(90deg, var(--app-border-soft), var(--app-accent));
+  outline: none;
+  cursor: pointer;
 }
-.ctx-bar-fill {
-  height: 100%;
+.effort-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
   background: var(--app-accent);
-  border-radius: 2px;
-  transition: width 0.3s ease;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.effort-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--app-accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
 }
 .ctx-bar-pct { white-space: nowrap; color: var(--app-text); font-weight: 600; font-family: var(--app-font); }
 
@@ -2250,6 +2382,24 @@ min-height: 90px !important;
 .gem-rail-bar:hover { background: var(--app-text-faint); width: 30px; }
 .gem-rail-bar.active { background: var(--app-accent); width: 30px; }
 .gem-rail-bar.running { box-shadow: 0 0 0 3px var(--app-accent-soft); }
+/* 折叠态会话横条入场动画：随主题强调色展开+淡入，带错开时序 */
+@keyframes railBarIn {
+  from { opacity: 0; transform: scaleX(0.3); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+.gem-sidebar.collapsed .gem-rail-bar {
+  animation: railBarIn 0.24s ease-out both;
+}
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(1) { animation-delay: 0.02s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(2) { animation-delay: 0.06s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(3) { animation-delay: 0.10s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(4) { animation-delay: 0.14s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(5) { animation-delay: 0.18s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(6) { animation-delay: 0.22s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(7) { animation-delay: 0.26s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(8) { animation-delay: 0.30s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(9) { animation-delay: 0.34s; }
+.gem-sidebar.collapsed .gem-rail-bar:nth-child(10) { animation-delay: 0.38s; }
 /* 笔记本(置顶)横条：与最近会话同为横条，用主题强调色区分 */
 .gem-rail-bar.pinned {
   background: var(--app-accent);
@@ -2411,15 +2561,17 @@ min-height: 90px !important;
 }
 /* sticky 元素被限制在父容器 content box 内：把 chat-messages 的底部 padding
    移交给 inner，让 blur 条能贴到真正的滚动视口底边（否则悬空 18px） */
-.chat-window.expanded .chat-body.studio .chat-messages { padding-bottom: 0;
-  /* 竖条工具组贴在右上时，把滚动区右侧让出 56px（>pill 宽+滚轴宽），滚轴整体内缩到
-     pill 左边，不再重叠挡轴。必须 box-sizing:border-box，否则 width:100%+padding
-     会撑破父级 overflow:hidden 把滚动条裁没 */
-  padding-right: 56px;
+.chat-window.expanded .chat-body.studio .chat-messages {
+  padding-bottom: 0;
   box-sizing: border-box;
+  /* 不再用 padding-right 把整块内容往左挤——那会让居中的 .chat-mess-inner 偏出
+     真正的中线，跟居中的输入框对不齐（用户反馈的"内容偏左、宽度不对齐"）。
+     竖条工具组在 right:40px、滚轴在最右 ~6px，二者本就横向不重叠；改用
+     scrollbar-gutter 预留滚轴槽，内容保持居中、与输入框同一条中线。 */
+  scrollbar-gutter: stable both-edges;
 }
-/* 顶部模糊条让开右侧滚轴区（否则会糊住滚轴顶端一段） */
-.chat-window.expanded .chat-body.studio .msg-edge-blur.top { right: 56px; }
+/* 顶部模糊条铺满（内容已不再右缩，无需再让开 56px） */
+.chat-window.expanded .chat-body.studio .msg-edge-blur.top { right: 0; }
 .chat-window.expanded .chat-body.studio .chat-messages .chat-messages-inner { padding-bottom: 18px; }
 .msg-edge-blur.bottom {
   position: sticky;

@@ -22,10 +22,6 @@ import (
 // 危险工具分级：这些工具在 Ask 模式必须等人批准；其余（read_file /
 // search_memory / dispatch_agent / 只读 MCP）任何模式都直过，不烦人。
 var dangerousToolSet = map[string]bool{
-	// 内置（虽然工作流链里已被 MCP 取代，仍兜底拦截，防止模型直接调内置）
-	"write_file":      true,
-	"edit_file":       true,
-	"execute_command": true,
 	// MCP filesystem 写删类：mcp__fs__write / edit / delete_file / move_file / create_directory
 	"mcp__fs__write_file":       true,
 	"mcp__fs__edit_file":        true,
@@ -34,8 +30,8 @@ var dangerousToolSet = map[string]bool{
 	"mcp__fs__move_file":        true,
 	"mcp__fs__create_directory": true,
 	"mcp__fs__create_file":      true,
-	// 浏览器等外部副作用类（若接了 mcp 浏览器，按下不表，先留口）
-	"mcp__playwright__*": false, // 占位，下面用前缀匹配处理
+	// MCP shell：执行任意命令，副作用最大，必拦
+	"mcp__shell__run": true,
 }
 
 // isDangerousTool 判定一个工具名是否需要审批拦截。

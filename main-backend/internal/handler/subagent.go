@@ -49,48 +49,38 @@ var dispatchAgentToolDef = core.ToolDefinition{
 	},
 }
 
-// 子代理只读工具白名单（内置工具）
-var subAgentToolNames = map[string]bool{
-	"read_file":     true,
-	"list_dir":      true, // 调研任务几乎都从看目录结构开始，没有它统计类任务必然不收敛
-	"search_memory": true,
-}
-
-// 子代理可用的 MCP 工具：按「server 名」白名单放行整个 server，而不是逐个工具名——
-// grep/glob 都在 grep server 下、只读；web_fetch/view_image 也天然只读、无副作用。
-// 不放行 fs（写删类）和 generate_image（有副作用/耗时），子代理管不了这些。
+// 子代理可用的 MCP server 白名单：整个 server 放行（都是只读/无副作用）。
+// fs 不在这里——它有写删类工具，单独在 isSubagentMCPToolAllowed 里按只读过滤。
 var subAgentMCPServers = map[string]bool{
-	"grep":       true,
-	"web_fetch":  true,
-	"view_image": true,
+	"grep":       true, // grep 全文检索 + read_range 按行读
+	"web_fetch":  true, // 抓网页
+	"view_image": true, // 看图
 }
 
-// isSubagentMCPToolAllowed 判定一个 mcp__<server>__<tool> 形式的工具名是否放行给子代理。
+// isSubagentMCPToolAllowed 判定一个 mcp__<server>__<tool> 是否放行给子代理。
+// 子代理是只读调研代理，读文件/列目录也统一走 MCP（fs 的只读子集），
+// 不再依赖任何内置工具——core.ChatTools 的文件工具已随之退役。
 func isSubagentMCPToolAllowed(name string) bool {
 	if !strings.HasPrefix(name, "mcp__") {
 		return false
 	}
 	parts := strings.SplitN(strings.TrimPrefix(name, "mcp__"), "__", 2)
-	return len(parts) == 2 && subAgentMCPServers[parts[0]]
+	if len(parts) != 2 {
+		return false
+	}
+	server := parts[0]
+	// fs 只放只读工具（read/list/get/directory_tree），写删类由 isDangerousTool 挡掉
+	if server == "fs" {
+		return !isDangerousTool(name)
+	}
+	return subAgentMCPServers[server]
 }
 
 func subAgentToolsWire() []map[string]any {
 	var out []map[string]any
-	for _, t := range core.ChatTools {
-		if !subAgentToolNames[t.Function.Name] {
-			continue
-		}
-		out = append(out, map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name":        t.Function.Name,
-				"description": t.Function.Description,
-				"parameters":  t.Function.Parameters,
-			},
-		})
-	}
-	// MCP 工具懒加载，第一次调用时才真正拉起各 server 子进程；idempotent，
-	// 主 Agent 那边通常已经初始化过，这里只是确保子代理独立运行时也不会拿到空表。
+	// 子代理工具全部来自 MCP（fs 只读 + grep + web_fetch + view_image）。
+	// MCP 工具懒加载，第一次调用时才拉起各 server 子进程；主 Agent 通常已初始化过，
+	// 这里只是确保子代理独立运行时也不会拿到空表。
 	for _, t := range loadMCPToolDefs() {
 		if !isSubagentMCPToolAllowed(t.Function.Name) {
 			continue
@@ -133,7 +123,8 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 	msgs := []map[string]any{
 		{"role": "system", "content": fmt.Sprintf(`你是雨燕子代理，负责独立完成一个只读调研子任务。
 用最少的工具调用拿到答案，然后输出简明结论（要点式，不要铺陈）——你的输出会直接回给主 Agent 当调研结果用，token 是成本。
-你只有只读工具，不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
+你只有只读工具：读文件用 mcp__fs__read_text_file（大文件配 head/tail）或 mcp__grep__read_range 按行读，
+列目录用 mcp__fs__list_directory，全文检索用 mcp__grep__grep。不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
 		{"role": "user", "content": userMsg},
 	}
 	tools := subAgentToolsWire()
@@ -173,20 +164,13 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 
 		for _, tc := range calls {
 			var out string
-			switch {
-			case subAgentToolNames[tc.Function.Name]:
-				if res, err := core.ExecuteToolCall(tc); err != nil {
-					out = "工具执行失败: " + err.Error()
-				} else {
-					out = res.Content
-				}
-			case isSubagentMCPToolAllowed(tc.Function.Name):
+			if isSubagentMCPToolAllowed(tc.Function.Name) {
 				if res, err := callMCPTool(tc.Function.Name, tc.Function.Arguments); err != nil {
 					out = "工具执行失败: " + err.Error()
 				} else {
 					out = res
 				}
-			default:
+			} else {
 				out = fmt.Sprintf("工具 %s 对子代理不可用（只读白名单）", tc.Function.Name)
 			}
 			msgs = append(msgs, map[string]any{

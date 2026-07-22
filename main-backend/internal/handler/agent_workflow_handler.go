@@ -22,7 +22,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -573,128 +572,22 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			}
 			continue
 		}
-		if name == "search_memory" {
-			out, failed := r.searchMemory(tc.Function.Arguments)
-			results[i] = codeExecResult{output: out, failed: failed}
-			continue
+		// 到这里说明是个既非 MCP、也非编排类（dispatch_agent/load_tools 已在上层处理）
+		// 的工具名——内置工具已整体退役，模型多半是幻觉出了个不存在的名字。
+		results[i] = codeExecResult{
+			output: fmt.Sprintf("未知工具 %s：文件/命令/检索类工具都在 MCP 里，先用 load_tools 加载再调用。", name),
+			failed: true,
 		}
-		res, err := core.ExecuteToolCall(tc)
-		if err != nil {
-			results[i] = codeExecResult{output: err.Error(), failed: true}
-			continue
-		}
-		results[i] = codeExecResult{output: res.Content, failed: res.Failed}
 	}
 
 	wg.Wait()
 	return results
 }
 
-// searchMemory 实现 search_memory 工具：在 workflow 链里优先在全部历史会话里做
-// 正则检索（scope=sessions，默认），找不到或显式 scope=memory 时退回 SwiftNet 记忆卡片。
-// 只拦截 workflow 这条链；chat 链仍走 core.ExecuteToolCall 里的原 memory 逻辑。
-func (r *WorkflowRunner) searchMemory(argsJSON string) (string, bool) {
-	var args struct {
-		Query     string `json:"query"`
-		Scope     string `json:"scope"`
-		Mode      string `json:"mode"`
-		ID        string `json:"id"`
-		SessionID string `json:"session_id"`
-		Limit     int    `json:"limit"`
-	}
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "search_memory 参数解析失败: " + err.Error(), true
-	}
-	if args.Scope == "" {
-		args.Scope = "sessions"
-	}
-	if args.Limit <= 0 {
-		args.Limit = 20
-	}
-
-	if args.Scope == "memory" {
-		// 退回 SwiftNet 长期记忆卡片
-		res, err := core.ExecuteToolCall(core.ToolCall{
-			Function: core.ToolCallFunc{Name: "search_memory", Arguments: argsJSON},
-		})
-		if err != nil {
-			return err.Error(), true
-		}
-		return res.Content, res.Failed
-	}
-
-	// scope == "sessions"：全量检索历史会话消息
-	if args.Query == "" {
-		return "sessions 检索需要提供 query（正则表达式）", true
-	}
-	// 编译正则；失败则退化为大小写不敏感子串匹配
-	re, err := regexp.Compile(args.Query)
-	if err != nil {
-		re = regexp.MustCompile(regexp.QuoteMeta(args.Query))
-	}
-
-	store := r.chatHandler.sessionStore
-	all := store.AllSessions()
-	var hits []string
-	seen := 0
-	for sid, msgs := range all {
-		if args.SessionID != "" && sid != args.SessionID {
-			continue
-		}
-		for _, m := range msgs {
-			text := m.Content
-			if text == "" {
-				text = m.ReasoningContent
-			}
-			if text == "" {
-				continue
-			}
-			idx := re.FindStringIndex(text)
-			if idx == nil {
-				continue
-			}
-			// 命中片段：前后各 60 rune 上下文
-			r0, r1 := idx[0], idx[1]
-			lo, hi := r0-60, r1+60
-			runes := []rune(text)
-			if lo < 0 {
-				lo = 0
-			}
-			if hi > len(runes) {
-				hi = len(runes)
-			}
-			snippet := string(runes[lo:hi])
-			ts := m.Timestamp.Format("2006-01-02 15:04")
-			hits = append(hits, fmt.Sprintf("• [%s] %s/%s: …%s…", sid, m.Role, ts, snippet))
-			seen++
-			if seen >= args.Limit {
-				break
-			}
-		}
-		if seen >= args.Limit {
-			break
-		}
-	}
-
-	if len(hits) == 0 {
-		return fmt.Sprintf("未在历史会话中找到匹配 %q 的内容", args.Query), false
-	}
-	return fmt.Sprintf("在全部会话中正则匹配 %q，命中 %d 处（session_id 可传给 scope=sessions 的 session_id 或 memory 检索）：\n%s",
-		args.Query, len(hits), strings.Join(hits, "\n")), false
-}
-
-// hardcodeFileTools 是已被 MCP filesystem 取代、从工作流 agent 工具集移除的
-// 内置文件操作工具。agent 改用 mcp__fs__*，避免两套实现并存。
-var hardcodeFileTools = map[string]bool{
-	"read_file":       true,
-	"write_file":      true,
-	"edit_file":       true,
-	"list_dir":        true,
-	"execute_command": true,
-}
-
 // buildCodeWorkflowTools 已挪到 tool_ondemand.go：MCP 工具改为按需加载，
 // 不再无条件全量塞进每一轮请求（实测省 6000+ tok/轮）。
+// search_memory 内置工具已随 core.ExecuteToolCall 一并退役：SwiftNet 的无条件记忆
+// 注入已把身份/工作态/收件箱塞进每轮系统提示词，显式再搜一遍实测收益甚微。
 
 // calcEditStartLine 在 MCP edit_file 执行前读文件，计算 oldText 的起始行号。
 func (r *WorkflowRunner) calcEditStartLine(argsJSON string) int {
@@ -703,8 +596,8 @@ func (r *WorkflowRunner) calcEditStartLine(argsJSON string) int {
 		Edits []struct {
 			OldText string `json:"oldText"`
 		} `json:"edits"`
-		OldText  string `json:"oldText"`
-		OldStr   string `json:"old_string"` // 模型偶尔把这个工具当内置 edit_file 的扁平 schema 调，见 normalizeMCPEditArgs
+		OldText string `json:"oldText"`
+		OldStr  string `json:"old_string"` // 模型偶尔把这个工具当内置 edit_file 的扁平 schema 调，见 normalizeMCPEditArgs
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return 0
