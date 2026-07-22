@@ -285,6 +285,10 @@ func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefin
 var slowMCPTools = map[string]bool{
 	"mcp__screenshot__screenshot": true,
 	"mcp__screenshot__page_check": true,
+	// browser_open 要等 networkidle，browser_snapshot 还要再跑一次视觉模型；
+	// 其余交互动作（click/fill/eval）很快，走默认 60s 就够。
+	"mcp__screenshot__browser_open":     true,
+	"mcp__screenshot__browser_snapshot": true,
 }
 
 func mcpCallTimeout(fullName string) time.Duration {
