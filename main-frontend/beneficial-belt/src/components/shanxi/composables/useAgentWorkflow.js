@@ -14,45 +14,117 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     let es = null
     let currentFlow = null
 
-    // 审批弹窗状态：Ask/Plan 模式下后端推 approval_request 时压入；用户点允许/拒绝后弹窗消失。
+    // 审批状态：Ask 模式下后端推 approval_request 时压入；用户点允许/拒绝后该条消失。
     // 同一次工作流可能连续多个危险工具待批，所以用数组挂多个。
+    // UI 是输入框上方的轻量条（不是打断式弹窗），每条带 60s 倒计时，到点自动同意。
     const approvalState = reactive({ pending: [] })
+    const APPROVAL_TIMEOUT_SEC = 60
+    const approvalTimers = new Map() // id -> intervalId
 
-    function respondApproval(item, allow) {
+    // 断点续跑：后端每轮把进行中的工作流落盘（workflow_checkpoint.go），
+    // 后端重启/SSE 断线后这里查得到，输入框上方出一条「上次任务跑到第 N 轮」。
+    // Yolo 全自动跑长任务时最要紧——否则一断就得从头重发，工具全再跑一遍。
+    const resumeState = reactive({ pending: null })
+
+    async function refreshResumable() {
+        const sid = localStorage.getItem('prism_session_id') || ''
+        if (!sid) { resumeState.pending = null; return }
+        try {
+            const res = await fetch('/api/code/workflow/checkpoints?session_id=' + encodeURIComponent(sid))
+            const data = await res.json()
+            // 只提示最近的那一个：同一会话堆着多个中断任务时，逐条问反而是噪音
+            resumeState.pending = (data.checkpoints || [])[0] || null
+        } catch {
+            resumeState.pending = null // 查不到就当没有，不打扰用户
+        }
+        onStreamUpdate?.()
+    }
+
+    function dismissResumable() {
+        const cp = resumeState.pending
+        resumeState.pending = null
+        onStreamUpdate?.()
+        if (!cp) return
+        fetch('/api/code/workflow/checkpoints/' + encodeURIComponent(cp.workflow_id), { method: 'DELETE' })
+            .catch(err => console.error('删除检查点失败', err))
+    }
+
+    function resumeCodeWorkflow() {
+        const cp = resumeState.pending
+        if (!cp || flowState.active) return
+        resumeState.pending = null
+        // task 走检查点里的原文，model/mode/effort 后端也从检查点取，这里不用带
+        startCodeWorkflow(cp.task, null, { resumeId: cp.workflow_id, resumedRound: cp.round })
+    }
+
+    function clearApprovalTimer(id) {
+        const t = approvalTimers.get(id)
+        if (t) { clearInterval(t); approvalTimers.delete(id) }
+    }
+
+    // auto=true 表示倒计时归零自动同意（不是用户点的），用于区分埋点/文案
+    function respondApproval(item, allow, auto = false) {
+        clearApprovalTimer(item.id)
         const idx = approvalState.pending.indexOf(item)
         if (idx >= 0) approvalState.pending.splice(idx, 1)
         const sid = localStorage.getItem('prism_session_id') || ''
-        // remember: 仅允许时勾选「不再询问」才生效，把工具签名写进会话规则
-        const body = { id: item.id, allow, remember: allow && !!item.remember, tool: item.tool }
+        // remember: 仅允许时勾选「不再询问」才生效，把工具签名写进会话规则。
+        // 自动同意不写 remember —— 用户没表态，不该给它留常设放行规则。
+        const body = { id: item.id, allow, remember: allow && !auto && !!item.remember, tool: item.tool }
         fetch('/api/code/workflow/approve?session_id=' + encodeURIComponent(sid), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         }).catch(err => console.error('approve 请求失败', err))
+        onStreamUpdate?.()
+    }
+
+    // 启动某条审批的 60s 倒计时；归零自动同意（后端也有 65s 兜底，防前端整个挂掉）
+    function startApprovalCountdown(item) {
+        clearApprovalTimer(item.id)
+        const timer = setInterval(() => {
+            item.remain -= 1
+            if (item.remain <= 0) {
+                respondApproval(item, true, true)
+                return
+            }
+            onStreamUpdate?.()
+        }, 1000)
+        approvalTimers.set(item.id, timer)
+    }
+
+    function clearAllApprovals() {
+        for (const t of approvalTimers.values()) clearInterval(t)
+        approvalTimers.clear()
+        approvalState.pending.length = 0
     }
 
     function closeStream() {
         if (es) { es.close(); es = null }
         flowState.active = false
-        approvalState.pending.length = 0 // 流结束清掉残留审批弹窗
+        clearAllApprovals() // 流结束清掉残留审批条与倒计时
         onStreamUpdate?.()
     }
 
     // display 可选：{ text, attachments } —— 气泡展示用的"用户实际打的字 + 附件 chip"，
     // 跟真正发给模型的 task（附件内容已经拍平拼接）分开，不然气泡里会把图片解析原文/
     // 文件全文都摊开显示，等于把输入框背后的东西又倒回来给用户看一遍
-    function startCodeWorkflow(task, display) {
+    // opts.resumeId：从后端检查点续跑（见 resumeCodeWorkflow）。续跑时这条任务的
+    // 用户消息上次已经上过屏、也已在后端历史里，不再重复插入用户气泡。
+    function startCodeWorkflow(task, display, opts = {}) {
         task = (task || '').trim()
         if (!task || flowState.active) return
         flowState.active = true
 
-        messages.value.push({
-            id: `afu_${Date.now()}_${msgSeq++}`,
-            sender: 'user',
-            content: display?.text ?? task,
-            attachments: display?.attachments ?? [],
-            timestamp: new Date()
-        })
+        if (!opts.resumeId) {
+            messages.value.push({
+                id: `afu_${Date.now()}_${msgSeq++}`,
+                sender: 'user',
+                content: display?.text ?? task,
+                attachments: display?.attachments ?? [],
+                timestamp: new Date()
+            })
+        }
 
         const flow = reactive({
             id: `af_${Date.now()}_${msgSeq++}`,
@@ -60,6 +132,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             sender: 'bot',
             status: 'running', // running | completed | failed | stopped
             task,
+            resumedFrom: opts.resumeId ? (opts.resumedRound || 0) : 0, // >0 时卡片头显示「从第 N 轮续跑」
             blocks: [],
             subagents: [], // 雨燕子代理生命周期（后台任务面板的数据源）
             startTime: Date.now(),
@@ -84,7 +157,12 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         const effort = localStorage.getItem('debugReasoning') || ''
         // mode: yolo(全自动) / ask(危险工具每步问) / plan(执行前必问)，由底部工具条选出
         const mode = localStorage.getItem('agentMode') || 'yolo'
-        es = new EventSource(`/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`)
+        // 续跑：只带 resume=<workflow_id>，task/model/mode/effort 后端全从检查点取，
+        // 免得前端此刻的模型选择跟中断前不一致（换模型会让已有 tool_calls 历史串味）
+        const url = opts.resumeId
+            ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}`
+            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`
+        es = new EventSource(url)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
         const appendText = (type, text) => {
@@ -102,6 +180,19 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         })
         es.addEventListener('thinking', e => appendText('thinking', JSON.parse(e.data).content))
         es.addEventListener('intent', e => appendText('intent', JSON.parse(e.data).content))
+
+        // 上下文压缩：后端在上下文超窗口 80% 时把早期轮次折叠成摘要，插一个轻量块
+        // 让用户知道"这里发生了压缩、省了多少"，而不是默默改写历史。
+        es.addEventListener('context_compressed', e => {
+            const d = JSON.parse(e.data)
+            flow.blocks.push({
+                type: 'compressed',
+                foldedMessages: d.folded_messages || 0,
+                beforeChars: d.before_chars || 0,
+                afterChars: d.after_chars || 0
+            })
+            onStreamUpdate?.()
+        })
 
         es.addEventListener('action', e => {
             const d = JSON.parse(e.data)
@@ -126,13 +217,17 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         // 把整条请求（含 id/tool/args）压入 approvalState.pending，弹窗据此渲染。
         es.addEventListener('approval_request', e => {
             const d = JSON.parse(e.data)
-            approvalState.pending.push({
+            const item = reactive({
                 id: d.id,
                 tool: d.tool,
                 args: d.args || '',
                 mode: d.mode || 'ask',
-                remember: false // 默认不勾选「不再询问」
+                remember: false,              // 默认不勾选「不再询问」
+                remain: APPROVAL_TIMEOUT_SEC, // 60s 倒计时，归零自动同意
+                total: APPROVAL_TIMEOUT_SEC
             })
+            approvalState.pending.push(item)
+            startApprovalCountdown(item)
             onStreamUpdate?.()
         })
 
@@ -199,6 +294,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             }, localStorage.getItem('prism_session_id') || '')
             currentFlow = null
             closeStream()
+            // 上游报错时后端留了检查点（workflow_done.resumable），拉出来给续跑条用；
+            // 正常完成则检查点已被后端删掉，这次查询自然返回空。
+            if (d.resumable) refreshResumable()
         })
 
         // 服务端正常结束响应也会触发 onerror（EventSource 会尝试重连），
@@ -209,6 +307,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
                 currentFlow.endTime = Date.now()
                 settleSubagents(currentFlow, 'failed')
                 currentFlow = null
+                // 断在半路（后端被重启 / 网络断）—— 这正是检查点存在的意义，
+                // 查一下断点，输入框上方出续跑条。
+                refreshResumable()
             }
             closeStream()
         }
@@ -234,5 +335,8 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         closeStream()
     }
 
-    return { flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow }
+    return {
+        flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow,
+        resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable
+    }
 }

@@ -74,8 +74,9 @@ type geminiInteractionError struct {
 // mimeType:    图片的 MIME 类型，如 "image/png"、"image/jpeg"
 // instruction: 给模型的具体指令；传空字符串则用默认的通用视觉预处理指令
 // previousInteractionID: 上一次调用返回的 interaction id；传入即可让服务端
-//                         沿用之前的会话状态，命中隐式缓存，降低后续 token 消耗；
-//                         传空字符串代表开启一条全新的会话链
+//
+//	沿用之前的会话状态，命中隐式缓存，降低后续 token 消耗；
+//	传空字符串代表开启一条全新的会话链
 //
 // 返回：模型输出的中文分析文本、这次调用的 interaction id、错误
 func analyzeImageWithGemini(

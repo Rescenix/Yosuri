@@ -359,7 +359,7 @@ function openExternal() {
   left: 0;
   height: 2px;
   width: 100%;
-  background: linear-gradient(90deg, transparent, #c96442, transparent);
+  background: linear-gradient(90deg, transparent, var(--app-accent), transparent);
   background-size: 50% 100%;
   background-repeat: no-repeat;
   animation: pb-slide 1s linear infinite;

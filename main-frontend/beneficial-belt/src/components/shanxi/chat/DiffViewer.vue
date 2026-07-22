@@ -2,7 +2,9 @@
   <div class="diffviewer">
     <div v-if="collapsedRows.length === 0" class="dv-empty">无内容变化</div>
     <template v-for="(row, i) in collapsedRows" :key="i">
-      <div v-if="row.type === 'gap'" class="dv-gap">⋯ {{ row.count }} 行未变化 ⋯</div>
+      <div v-if="row.type === 'fold'" class="dv-fold" @click="expandAll">
+        <span class="dv-fold-text">{{ row.count }} unchanged lines</span>
+      </div>
       <div v-else class="dv-line" :class="'dv-' + row.type">
         <span class="dv-lineno">{{ (row.type === 'del' ? row.oldNo : row.newNo) ?? '' }}</span>
         <span class="dv-sign">{{ row.type === 'add' ? '+' : row.type === 'del' ? '−' : '' }}</span>
@@ -13,17 +15,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { diffLines } from 'diff'
 import hljs from 'highlight.js'
 
 const props = defineProps({
   oldContent: { type: String, default: '' },
   newContent: { type: String, default: '' },
-  // 可选：用来猜语言做语法高亮，猜不出来就原样展示不高亮
   path: { type: String, default: '' },
-  // edit_file 传入的 old_string/new_string 只是文件片段，行号永远从 1 开始；
-  // 后端会算出这段片段在真实文件里的起始行号，传进来做偏移，不然显示的行号和文件对不上
   startLine: { type: Number, default: 1 }
 })
 
@@ -53,16 +52,14 @@ function highlightLine(text) {
     }
     return hljs.highlightAuto(text).value
   } catch (e) {
-    // 高亮失败就退回纯文本，diff 本身不能因为高亮出错而挂掉
     return escapeHtml(text)
   }
 }
+
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-// jsdiff 输出的是"连续同类型片段"（一段纯新增/纯删除/纯不变），这里拆成逐行、
-// 并分别累加旧/新两侧的行号——展示的时候左右各一列行号，跟真实 diff 工具一致
 const flatRows = computed(() => {
   const parts = diffLines(props.oldContent || '', props.newContent || '')
   const rows = []
@@ -72,39 +69,58 @@ const flatRows = computed(() => {
     const lines = part.value.split('\n')
     if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
     for (const text of lines) {
-      if (part.added) {
-        rows.push({ type: 'add', oldNo: null, newNo: newNo++, text })
-      } else if (part.removed) {
-        rows.push({ type: 'del', oldNo: oldNo++, newNo: null, text })
-      } else {
-        rows.push({ type: 'ctx', oldNo: oldNo++, newNo: newNo++, text })
-      }
+      if (part.added) rows.push({ type: 'add', oldNo: null, newNo: newNo++, text })
+      else if (part.removed) rows.push({ type: 'del', oldNo: oldNo++, newNo: null, text })
+      else rows.push({ type: 'ctx', oldNo: oldNo++, newNo: newNo++, text })
     }
   }
   return rows
 })
 
-// 长段未变化的上下文折叠成一行提示，只在增删行附近保留几行上下文，
-// 避免一个小改动却要把整个文件都摊平展示
 const CONTEXT_RADIUS = 3
-const COLLAPSE_THRESHOLD = CONTEXT_RADIUS * 2 + 2
+const expanded = ref(false)
+
+function expandAll() {
+  expanded.value = true
+}
+
 const collapsedRows = computed(() => {
   const rows = flatRows.value
-  const out = []
-  let i = 0
-  while (i < rows.length) {
-    if (rows[i].type !== 'ctx') { out.push(rows[i]); i++; continue }
-    let j = i
-    while (j < rows.length && rows[j].type === 'ctx') j++
-    const run = rows.slice(i, j)
-    if (run.length > COLLAPSE_THRESHOLD) {
-      out.push(...run.slice(0, CONTEXT_RADIUS))
-      out.push({ type: 'gap', count: run.length - CONTEXT_RADIUS * 2 })
-      out.push(...run.slice(-CONTEXT_RADIUS))
-    } else {
-      out.push(...run)
+  if (!rows.length) return []
+
+  if (expanded.value) return rows
+
+  const keep = new Array(rows.length).fill(false)
+  const source = new Array(rows.length).fill(false)
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].type !== 'ctx') keep[i] = source[i] = true
+  }
+  for (let i = 0; i < rows.length; i++) {
+    if (!source[i]) continue
+    for (let d = 1; d <= CONTEXT_RADIUS; d++) {
+      const p = i - d
+      const q = i + d
+      if (p >= 0 && rows[p].type === 'ctx' && !keep[p]) keep[p] = true
+      if (q < rows.length && rows[q].type === 'ctx' && !keep[q]) keep[q] = true
     }
-    i = j
+  }
+
+  const out = []
+  let foldCount = 0
+
+  for (let i = 0; i < rows.length; i++) {
+    if (keep[i]) {
+      if (foldCount > 0) {
+        out.push({ type: 'fold', count: foldCount })
+        foldCount = 0
+      }
+      out.push(rows[i])
+    } else {
+      foldCount++
+    }
+  }
+  if (foldCount > 0) {
+    out.push({ type: 'fold', count: foldCount })
   }
   return out
 })
@@ -124,15 +140,6 @@ const collapsedRows = computed(() => {
   color: #a3a3a3;
   font-size: 11.5px;
   text-align: center;
-}
-.dv-gap {
-  padding: 4px 10px;
-  font-size: 10.5px;
-  color: #a3a3a3;
-  text-align: center;
-  background: #f5f5f5;
-  border-top: 1px solid #ececec;
-  border-bottom: 1px solid #ececec;
 }
 .dv-line {
   display: flex;
@@ -189,4 +196,23 @@ const collapsedRows = computed(() => {
 .dv-code :deep(.hljs-variable),
 .dv-code :deep(.hljs-params) { color: #262626; }
 .dv-code :deep(.hljs-tag) { color: #e45649; }
+.dv-fold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f8f9fa;
+  border-top: 1px solid #e5e5e5;
+  border-bottom: 1px solid #e5e5e5;
+  color: #6b7280;
+  font-size: 12px;
+  user-select: none;
+  cursor: pointer;
+}
+.dv-fold:hover {
+  background: #f0f1f3;
+}
+.dv-fold-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
 </style>

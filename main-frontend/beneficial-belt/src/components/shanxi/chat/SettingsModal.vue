@@ -11,11 +11,16 @@
         <div class="settings-modal-body">
           <!-- 左侧边栏 -->
           <div class="settings-sidebar">
-            <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'"><Icon icon="mdi:account-circle-outline" width="16" />我的</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'"><Icon icon="mdi:server-network-outline" width="16" />提供方</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'"><Icon icon="mdi:palette-outline" width="16" />外观</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()"><Icon icon="mdi:connection" width="16" />MCP</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()"><Icon icon="mdi:school-outline" width="16" />Skills</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'">
+              <Icon icon="mdi:server-network-outline" width="16" />提供方</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
+              <Icon icon="mdi:palette-outline" width="16" />外观</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()">
+              <Icon icon="mdi:connection" width="16" />MCP</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()">
+              <Icon icon="mdi:school-outline" width="16" />Skills</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
+              <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
           </div>
 
           <!-- 右侧内容区 -->
@@ -784,7 +789,7 @@ onUnmounted(() => {
   transition: all 0.15s ease;
 }
 .model-pick-btn:hover { background: #e8e8e8; }
-.model-pick-btn.on { color: #fff; background: #c96442; border-color: #c96442; }
+.model-pick-btn.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
 .api-config-card { border: 1px solid #e5e5e5; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fafafa; }
 .api-config-row { display: flex; align-items: center; gap: 8px; }
 .api-config-name { font-size: 13px; font-weight: 600; color: #1a1a1a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

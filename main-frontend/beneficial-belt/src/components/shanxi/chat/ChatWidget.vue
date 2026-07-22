@@ -265,6 +265,49 @@
                 <Icon icon="mdi:chevron-down" width="20" color="#555" />
               </button>
 
+              <!-- ===== 工具审批轻量条（Ask 模式）=====
+                   贴在输入框正上方，不打断视线；每条 60s 倒计时，归零自动同意
+                   （后端另有 65s 兜底，防前端整个挂掉时工作流永久阻塞）。 -->
+              <div
+                v-for="item in approvalState.pending"
+                :key="item.id"
+                class="approval-bar"
+              >
+                <span class="approval-bar-countdown" :title="item.remain + ' 秒后自动同意'">{{ item.remain }}</span>
+                <div class="approval-bar-main">
+                  <div class="approval-bar-line">
+                    <span class="approval-bar-tool">{{ item.tool }}</span>
+                    <span class="approval-bar-args">{{ approvalArgsPreview(item.args) }}</span>
+                  </div>
+                  <div class="approval-bar-progress">
+                    <div class="approval-bar-progress-fill" :style="{ width: (item.remain / item.total * 100) + '%' }"></div>
+                  </div>
+                </div>
+                <label class="approval-bar-remember" title="本次会话内不再询问此工具">
+                  <input type="checkbox" v-model="item.remember" />
+                  <span>不再问</span>
+                </label>
+                <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
+                <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
+              </div>
+
+              <!-- ===== 断点续跑条 =====
+                   后端每轮落盘检查点，重启/断线后这里显示上次没跑完的任务。
+                   续跑复用原 workflow_id 和原模型，从断点那一轮接着问，
+                   已经跑完的工具不会重跑。 -->
+              <div v-if="resumeState.pending && !flowState.active" class="resume-bar">
+                <Icon icon="mdi:history" width="15" class="resume-bar-icon" />
+                <div class="resume-bar-main">
+                  <div class="resume-bar-line">
+                    <span class="resume-bar-label">上次任务未跑完</span>
+                    <span class="resume-bar-round">第 {{ resumeState.pending.round }} 轮中断</span>
+                  </div>
+                  <div class="resume-bar-task" :title="resumeState.pending.task">{{ resumeState.pending.task }}</div>
+                </div>
+                <button class="resume-bar-btn ghost" @click="dismissResumable">放弃</button>
+                <button class="resume-bar-btn primary" @click="resumeCodeWorkflow">续跑</button>
+              </div>
+
               <!-- 输入框上方工具栏三态切换 -->
               <div v-if="inputTopBarMode === 'dir'" class="input-dir-bar">
                 <div class="toolbar-dropdown-wrap input-dir-menu-wrap">
@@ -524,10 +567,12 @@
                   </div>
 
                   <!-- 思考强度：只有当前模型确认支持 reasoning 时才出现（放在模型右边） -->
-                  <div v-if="currentCapability.reasoning" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
+                  <div v-if="currentCapability.reasoning" ref="effortWidgetRef" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
                     <span class="effort-label">Effort</span>
                     <span class="effort-value">{{ effortLabel }}</span>
-                    <div v-if="showEffortPanel" class="effort-panel" @click.stop>
+                  </div>
+                  <Teleport to="body">
+                    <div v-if="showEffortPanel" class="effort-panel" :style="effortPanelStyle" @click.stop>
                       <div class="effort-panel-title">
                         Effort <b>{{ modelOptions.find(m => m.value === selectedModel)?.label || '' }}</b>
                       </div>
@@ -537,7 +582,7 @@
                         <span class="effort-end">Smarter</span>
                       </div>
                     </div>
-                  </div>
+                  </Teleport>
                 </div>
               </div>
             </div>
@@ -606,26 +651,7 @@
         </div>
       </div>
 
-      <!-- ========== 工具审批弹窗（Ask/Plan 模式） ========== -->
-      <Teleport to="body">
-        <div v-if="approvalState.pending.length" class="approval-overlay">
-          <div class="approval-card" v-for="item in approvalState.pending" :key="item.id">
-            <div class="approval-head">
-              <span class="approval-badge">工具审批</span>
-              <span class="approval-tool">{{ item.tool }}</span>
-            </div>
-            <pre class="approval-args">{{ prettyApprovalArgs(item.args) }}</pre>
-            <label class="approval-remember">
-              <input type="checkbox" v-model="item.remember" />
-              <span>本次会话内不再询问此工具</span>
-            </label>
-            <div class="approval-actions">
-              <button class="approval-btn approval-deny" @click="respondApproval(item, false)">拒绝</button>
-              <button class="approval-btn approval-allow" @click="respondApproval(item, true)">允许执行</button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
+      <!-- 工具审批已改成输入框上方的轻量条（见 .approval-bar），不再用打断式弹窗 -->
     </div>
   </div>
 </template>
@@ -756,7 +782,7 @@ const ctxTotalUsed = computed(() => {
   const p = sessionTokenStats.value
   return (p?.inputTokens || 0) + (p?.outputTokens || 0)
 })
-const ctxWindow = computed(() => contextBreakdown.value.contextWindow || sessionTokenStats.value?.contextWindow || 0)
+const ctxWindow = computed(() => contextBreakdown.value.contextWindow || sessionTokenStats.value?.contextWindow || currentCapability.value.context_window || 0)
 const ctxPct = computed(() => ctxWindow.value > 0 ? Math.min((ctxTotalUsed.value / ctxWindow.value) * 100, 100) : 0)
 
 // ==================== 模型能力（识图 / 上下文窗口 / 是否支持思考强度） ====================
@@ -1112,14 +1138,24 @@ function selectAutoMode(opt) {
 }
 
 // 审批弹窗里把工具参数 JSON 美化显示；解析失败就原样展示字符串。
-function prettyApprovalArgs(args) {
+// 审批条是单行轻量展示，不能像原来的弹窗那样摊开整段 JSON。
+// 优先挑出最能说明"要动什么"的字段（路径/命令），否则压成一行并截断。
+function approvalArgsPreview(args) {
   if (!args) return ''
-  if (typeof args === 'object') return JSON.stringify(args, null, 2)
-  try {
-    return JSON.stringify(JSON.parse(args), null, 2)
-  } catch {
-    return String(args)
+  let obj = args
+  if (typeof args === 'string') {
+    try { obj = JSON.parse(args) } catch { return truncateOneLine(String(args), 90) }
   }
+  if (obj && typeof obj === 'object') {
+    const key = ['command', 'path', 'file_path', 'source', 'destination'].find(k => obj[k])
+    if (key) return truncateOneLine(String(obj[key]), 90)
+    return truncateOneLine(JSON.stringify(obj), 90)
+  }
+  return truncateOneLine(String(obj), 90)
+}
+function truncateOneLine(s, max) {
+  s = s.replace(/\s+/g, ' ').trim()
+  return s.length > max ? s.slice(0, max) + '…' : s
 }
 
 // ==================== Markdown 渲染 ====================
@@ -1263,6 +1299,7 @@ const {
   forceScrollToBottom, adjustInputHeight, switchSession,
   sendMessage, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
+  resumeState, resumeCodeWorkflow, dismissResumable,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
@@ -1273,9 +1310,21 @@ const {
 const EFFORT_LEVELS = ['low', 'medium', 'high']
 const EFFORT_UI_LABELS = { low: 'Faster', medium: 'Balanced', high: 'Smarter' }
 const showEffortPanel = ref(false)
+const effortWidgetRef = ref(null)
 const initialEffortIdx = EFFORT_LEVELS.indexOf(debugReasoning.value)
 const effortLevel = ref(initialEffortIdx >= 0 ? initialEffortIdx : 1)
 const effortLabel = computed(() => EFFORT_UI_LABELS[EFFORT_LEVELS[effortLevel.value]])
+const effortPanelStyle = computed(() => {
+  if (!effortWidgetRef.value) return {}
+  const rect = effortWidgetRef.value.getBoundingClientRect()
+  return {
+    position: 'fixed',
+    top: (rect.top - 8) + 'px',
+    left: rect.left + 'px',
+    transform: 'translateY(-100%)',
+    zIndex: 9999
+  }
+})
 function onEffortChange() {
   debugReasoning.value = EFFORT_LEVELS[effortLevel.value]
   localStorage.setItem('debugReasoning', debugReasoning.value)

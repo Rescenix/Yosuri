@@ -283,7 +283,7 @@ async function toggleFile(df) {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: var(--app-font);
 }
 .st-M { background: #d99c2b; }
 .st-A, .st-U { background: #12b76a; }
@@ -292,7 +292,7 @@ async function toggleFile(df) {
 .diff-file-name {
   flex: 1;
   min-width: 0;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: var(--app-font);
   font-size: 12px;
   font-weight: 600;
   color: #1e293b;
@@ -301,7 +301,7 @@ async function toggleFile(df) {
   white-space: nowrap;
 }
 .diff-adds, .diff-dels {
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: var(--app-font);
   font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;

@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"backend/internal/ai/core"
 )
@@ -21,9 +22,9 @@ const subAgentResultMaxChars = 8000
 const subAgentUsagePrompt = `
 ━━━ 子代理（雨燕） ━━━
 遇到需要大量阅读/检索的复杂任务，可用 dispatch_agent 把独立的只读调研子任务
-（读代码、搜索、分析结构）派发给子代理，一轮内多个 dispatch_agent 会并行执行。
-子代理只有只读工具，无法修改文件——所有修改类操作必须由你自己完成。
-简单任务不要派发子代理，直接做，避免浪费 token。
+（读代码、搜索、分析结构、抓取网页、看图）派发给子代理，一轮内多个 dispatch_agent 会并行执行。
+子代理只有只读工具（含 grep 全文检索、web_fetch 抓网页、view_image 看图），无法修改文件——
+所有修改类操作必须由你自己完成。简单任务不要派发子代理，直接做，避免浪费 token。
 `
 
 var dispatchAgentToolDef = core.ToolDefinition{
@@ -48,17 +49,50 @@ var dispatchAgentToolDef = core.ToolDefinition{
 	},
 }
 
-// 子代理只读工具白名单
+// 子代理只读工具白名单（内置工具）
 var subAgentToolNames = map[string]bool{
-	"read_file":       true,
-	"list_dir":        true, // 调研任务几乎都从看目录结构开始，没有它统计类任务必然不收敛
-	"search_memory":   true,
+	"read_file":     true,
+	"list_dir":      true, // 调研任务几乎都从看目录结构开始，没有它统计类任务必然不收敛
+	"search_memory": true,
+}
+
+// 子代理可用的 MCP 工具：按「server 名」白名单放行整个 server，而不是逐个工具名——
+// grep/glob 都在 grep server 下、只读；web_fetch/view_image 也天然只读、无副作用。
+// 不放行 fs（写删类）和 generate_image（有副作用/耗时），子代理管不了这些。
+var subAgentMCPServers = map[string]bool{
+	"grep":       true,
+	"web_fetch":  true,
+	"view_image": true,
+}
+
+// isSubagentMCPToolAllowed 判定一个 mcp__<server>__<tool> 形式的工具名是否放行给子代理。
+func isSubagentMCPToolAllowed(name string) bool {
+	if !strings.HasPrefix(name, "mcp__") {
+		return false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(name, "mcp__"), "__", 2)
+	return len(parts) == 2 && subAgentMCPServers[parts[0]]
 }
 
 func subAgentToolsWire() []map[string]any {
 	var out []map[string]any
 	for _, t := range core.ChatTools {
 		if !subAgentToolNames[t.Function.Name] {
+			continue
+		}
+		out = append(out, map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        t.Function.Name,
+				"description": t.Function.Description,
+				"parameters":  t.Function.Parameters,
+			},
+		})
+	}
+	// MCP 工具懒加载，第一次调用时才真正拉起各 server 子进程；idempotent，
+	// 主 Agent 那边通常已经初始化过，这里只是确保子代理独立运行时也不会拿到空表。
+	for _, t := range loadMCPToolDefs() {
+		if !isSubagentMCPToolAllowed(t.Function.Name) {
 			continue
 		}
 		out = append(out, map[string]any{
@@ -139,12 +173,21 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 
 		for _, tc := range calls {
 			var out string
-			if !subAgentToolNames[tc.Function.Name] {
+			switch {
+			case subAgentToolNames[tc.Function.Name]:
+				if res, err := core.ExecuteToolCall(tc); err != nil {
+					out = "工具执行失败: " + err.Error()
+				} else {
+					out = res.Content
+				}
+			case isSubagentMCPToolAllowed(tc.Function.Name):
+				if res, err := callMCPTool(tc.Function.Name, tc.Function.Arguments); err != nil {
+					out = "工具执行失败: " + err.Error()
+				} else {
+					out = res
+				}
+			default:
 				out = fmt.Sprintf("工具 %s 对子代理不可用（只读白名单）", tc.Function.Name)
-			} else if res, err := core.ExecuteToolCall(tc); err != nil {
-				out = "工具执行失败: " + err.Error()
-			} else {
-				out = res.Content
 			}
 			msgs = append(msgs, map[string]any{
 				"role": "tool", "tool_call_id": tc.ID,

@@ -1,0 +1,8 @@
+{
+  "name": "replace-text-in-file",
+  "description": "替换文件中指定的文本内容，适用于修改单行字符串或简单文本替换",
+  "steps": [
+    "使用 mcp__fs__read_text_file 读取文件内容以确认当前文本",
+    "使用 mcp__fs__edit_file 工具，在 edits 数组中使用 oldText 和 newText 字段进行替换"
+  ]
+}

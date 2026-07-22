@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,13 +27,13 @@ var dangerousToolSet = map[string]bool{
 	"edit_file":       true,
 	"execute_command": true,
 	// MCP filesystem 写删类：mcp__fs__write / edit / delete_file / move_file / create_directory
-	"mcp__fs__write_file":     true,
-	"mcp__fs__edit_file":      true,
-	"mcp__fs__delete_file":    true,
+	"mcp__fs__write_file":       true,
+	"mcp__fs__edit_file":        true,
+	"mcp__fs__delete_file":      true,
 	"mcp__fs__delete_directory": true,
-	"mcp__fs__move_file":      true,
+	"mcp__fs__move_file":        true,
 	"mcp__fs__create_directory": true,
-	"mcp__fs__create_file":    true,
+	"mcp__fs__create_file":      true,
 	// 浏览器等外部副作用类（若接了 mcp 浏览器，按下不表，先留口）
 	"mcp__playwright__*": false, // 占位，下面用前缀匹配处理
 }
@@ -77,7 +78,12 @@ func newApprovalWaiter() *approvalWaiter {
 	}
 }
 
-// wait 阻塞直到该 id 收到批准决定，或 ctx 取消。返回是否允许执行。
+// approvalBackendTimeout 是后端侧的兜底超时：比前端的 60s 倒计时长 5s，
+// 正常情况下前端会先发 approve 请求；只有前端整个挂掉（标签页关了、JS 崩了、
+// 断网）时才由它兜底放行，避免工作流 goroutine 永久阻塞、SSE 连接一直挂着。
+const approvalBackendTimeout = 65 * time.Second
+
+// wait 阻塞直到该 id 收到批准决定 / 超时 / ctx 取消。返回是否允许执行。
 // 调用前务必先 register 好 id（用 expect），否则无法被 approve 唤醒。
 func (w *approvalWaiter) wait(id string, done <-chan struct{}) bool {
 	w.mu.Lock()
@@ -87,9 +93,15 @@ func (w *approvalWaiter) wait(id string, done <-chan struct{}) bool {
 		// 没登记就当允许（不应发生，防御性）
 		return true
 	}
+	timer := time.NewTimer(approvalBackendTimeout)
+	defer timer.Stop()
 	select {
 	case dec := <-ch:
 		return dec.allow
+	case <-timer.C:
+		// 超时默认放行，与前端 60s 自动同意语义保持一致（不是"拒绝"，
+		// 否则用户走开一会儿回来会发现任务被判死，比放行更难受）
+		return true
 	case <-done:
 		return false // 客户端断开，中止执行
 	}

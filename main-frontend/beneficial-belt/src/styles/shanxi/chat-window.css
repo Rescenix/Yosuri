@@ -517,6 +517,30 @@ min-height: 90px !important;
   line-height: 1.6;
   text-align: left;
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  position: relative;
+  animation: userMsgIn 0.28s ease-out both;
+}
+.message-bubble.user::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--app-accent);
+  border-radius: 999px;
+  transform: scaleY(0);
+  transform-origin: top;
+  animation: accentBarGrow 0.26s ease-out 0.06s both;
+}
+
+@keyframes userMsgIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes accentBarGrow {
+  to { transform: scaleY(1); }
 }
 
 /* 助手气泡 — 羊皮纸质感 */
@@ -1855,18 +1879,14 @@ min-height: 90px !important;
 .effort-label { color: var(--app-text-soft); }
 .effort-value { font-weight: 600; color: var(--app-accent); }
 .effort-panel {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  width: 200px;
+  width: 220px;
   background: #fff;
   border: 1px solid #e5e5e5;
   border-radius: 12px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
-  padding: 12px 14px;
-  z-index: 30;
+  padding: 10px 12px;
 }
-.effort-panel-title { font-size: 12px; color: var(--app-text); margin-bottom: 10px; }
+.effort-panel-title { font-size: 11px; color: var(--app-text); margin-bottom: 8px; word-break: break-word; }
 .effort-panel-title b { color: var(--app-accent); font-weight: 600; }
 .effort-slider-row { display: flex; align-items: center; gap: 8px; }
 .effort-end { font-size: 10px; color: var(--app-text-faint); flex-shrink: 0; white-space: nowrap; }
@@ -2245,6 +2265,67 @@ min-height: 90px !important;
   border-radius: 999px;
 }
 
+/* ==================== 折叠栏横条的悬停会话卡片 ==================== */
+/* Teleport 到 body、position:fixed，位置由 openRailCard 按横条区 rect 计算，
+   避免被折叠栏 56px 宽度和 overflow 裁切。 */
+.rail-card {
+  position: fixed;
+  z-index: 9999;
+  min-width: 220px;
+  max-width: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--app-surface, #fff);
+  border: 1px solid var(--app-border, #e5e5e5);
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
+  animation: rail-card-in 0.12s ease-out;
+}
+@keyframes rail-card-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.rail-card-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--app-text-faint);
+}
+.rail-card-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.rail-card-row:hover { background: rgba(0, 0, 0, 0.06); }
+.rail-card-row.active { background: var(--app-accent-soft); }
+/* 左侧标记与折叠栏里的横条一致：最近=扁横条，笔记本=细高竖条 */
+.rail-card-mark {
+  flex-shrink: 0;
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--app-text-faint);
+}
+.rail-card-mark.pinned { width: 5px; height: 14px; background: var(--app-accent); }
+.rail-card-mark.running { box-shadow: 0 0 0 3px var(--app-accent-soft); }
+.rail-card-row.active .rail-card-mark { background: var(--app-accent); }
+.rail-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 折叠态底部：汉堡在设置上方，最下面是头像 */
 .gem-rail-bottom {
   flex-shrink: 0;
@@ -2598,7 +2679,8 @@ min-height: 90px !important;
    面板挤窄到刚好剩 720px 宽时才会“碰巧”对齐，其余情况会跑到视口两侧 */
 .chat-window.expanded .chat-body.studio .chat-content .input-dir-bar,
 .chat-window.expanded .chat-body.studio .chat-content .input-git-bar,
-.chat-window.expanded .chat-body.studio .chat-content .input-bottom-toolbar {
+.chat-window.expanded .chat-body.studio .chat-content .input-bottom-toolbar,
+.chat-window.expanded .chat-body.studio .chat-content .approval-bar {
   /* chat-input-area 是 flex column，光有 margin:auto（cross-axis 自动外边距）
      反而会让 stretch 失效、退化成按内容宽度收缩；显式给 width:100% 保证跟
      input-wrapper 一样占满可用宽度，max-width 再统一封顶到 720px */
@@ -2694,50 +2776,167 @@ min-height: 90px !important;
   100% { box-shadow: 0 0 0 0 rgba(201, 100, 66, 0); }
 }
 
-/* ===== 工具审批弹窗（Ask/Plan 模式） ===== */
-.approval-overlay {
-  position: fixed; inset: 0; z-index: 9999;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(2px);
+/* ===== 工具审批轻量条（Ask 模式）=====
+   原来是全屏遮罩弹窗，太打断；改成贴在输入框正上方的一行窄条：
+   左侧倒计时数字 + 工具名/参数单行预览 + 进度条，右侧「不再问 / 拒绝 / 允许」。
+   60s 归零自动同意（倒计时逻辑在 useAgentWorkflow.js）。 */
+.approval-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 7px 10px 7px 8px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-accent-soft);
+  border-left: 3px solid var(--app-accent);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  animation: approval-bar-in 0.16s ease-out;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
 }
-.approval-card {
-  width: min(440px, 92vw);
+@keyframes approval-bar-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+/* 倒计时数字：主题色圆牌 */
+.approval-bar-countdown {
+  flex-shrink: 0;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.approval-bar-main { flex: 1; min-width: 0; }
+.approval-bar-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.approval-bar-tool {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--app-text);
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+.approval-bar-args {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--app-text-faint);
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+/* 细进度条：随倒计时排空，1s 一跳用线性过渡抹平 */
+.approval-bar-progress {
+  margin-top: 5px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--app-border-soft);
+  overflow: hidden;
+}
+.approval-bar-progress-fill {
+  height: 100%;
+  background: var(--app-accent);
+  transition: width 1s linear;
+}
+.approval-bar-remember {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--app-text-faint);
+  cursor: pointer;
+  user-select: none;
+}
+.approval-bar-remember input { accent-color: var(--app-accent); margin: 0; }
+.approval-bar-btn {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+.approval-bar-btn.allow { color: #fff; background: var(--app-accent); }
+.approval-bar-btn.allow:hover { filter: brightness(1.06); }
+.approval-bar-btn.deny {
+  color: var(--app-text-soft);
+  background: var(--app-surface-3);
+  border-color: var(--app-border);
+}
+.approval-bar-btn.deny:hover { background: var(--app-border-soft); }
+
+/* ===== 断点续跑条 =====
+   与审批条同一套视觉语言（输入框上方轻量条），但用中性描边而非主题色左栏——
+   它是「可以做但不急」的提示，不该抢审批条那种「正等你决定」的注意力权重。 */
+.resume-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 7px 10px;
   background: var(--app-surface);
   border: 1px solid var(--app-border);
-  border-radius: 14px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
-  padding: 18px 20px;
-  animation: approval-in 0.18s ease-out;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  animation: approval-bar-in 0.16s ease-out;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
 }
-@keyframes approval-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
-.approval-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.approval-badge {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
-  color: #fff; background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
-  padding: 3px 9px; border-radius: 6px;
+.resume-bar-icon { flex-shrink: 0; color: var(--app-text-faint); }
+.resume-bar-main { flex: 1; min-width: 0; }
+.resume-bar-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.resume-bar-label { font-size: 12.5px; font-weight: 600; color: var(--app-text); }
+.resume-bar-round {
+  font-size: 11px;
+  color: var(--app-text-faint);
+  font-variant-numeric: tabular-nums;
 }
-.approval-tool { font-size: 13.5px; font-weight: 600; color: var(--app-text); font-family: var(--app-code-font, monospace); }
-.approval-args {
-  margin: 0 0 12px; padding: 10px 12px;
-  background: var(--app-surface-3); border: 1px solid var(--app-border-soft);
-  border-radius: 8px; max-height: 180px; overflow: auto;
-  font-size: 12px; line-height: 1.5; color: var(--app-text-soft);
-  font-family: var(--app-code-font, monospace); white-space: pre-wrap; word-break: break-all;
+/* 任务原文可能很长，单行省略——续跑条只是提醒，不是任务详情面板 */
+.resume-bar-task {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--app-text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.approval-remember { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--app-text-soft); margin-bottom: 14px; cursor: pointer; }
-.approval-remember input { accent-color: var(--app-accent); }
-.approval-actions { display: flex; gap: 10px; justify-content: flex-end; }
-.approval-btn {
-  padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
-  border: 1px solid transparent; transition: filter 0.15s ease, background 0.15s ease;
+.resume-bar-btn {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.15s ease, background 0.15s ease;
 }
-.approval-btn.approval-allow {
-  color: #fff; background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
+.resume-bar-btn.primary { color: #fff; background: var(--app-accent); }
+.resume-bar-btn.primary:hover { filter: brightness(1.06); }
+.resume-bar-btn.ghost {
+  color: var(--app-text-soft);
+  background: var(--app-surface-3);
+  border-color: var(--app-border);
 }
-.approval-btn.approval-allow:hover { filter: brightness(1.06); }
-.approval-btn.approval-deny { color: #6b6b6b; background: #f4f4f5; border-color: #e5e5e5; }
-.approval-btn.approval-deny:hover { background: #ececec; }
+.resume-bar-btn.ghost:hover { background: var(--app-border-soft); }
+
 .add-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
 .add-menu-item:hover { background: #f5f5f5; }
 .add-menu-item.disabled { color: #a3a3a3; cursor: not-allowed; }

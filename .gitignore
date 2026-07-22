@@ -61,3 +61,6 @@ Prism/prism/prismd_memory.dat
 .hermes/
 
 re1/
+
+# 工具输出溢出文件（超长结果全文落盘，供 agent 回查；任务收尾自动清理）
+.aurora/

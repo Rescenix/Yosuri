@@ -163,9 +163,9 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  /* 白光字体表面扫描：白色高光横扫过字形 */
-  color: var(--app-accent);
-  background: linear-gradient(100deg, var(--app-accent) 40%, #ffffff 50%, var(--app-accent) 60%);
+  /* 黑色字体表面扫描：白色高光横扫过字形 */
+  color: #1e293b;
+  background: linear-gradient(100deg, #1e293b 40%, #ffffff 50%, #1e293b 60%);
   background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -323,8 +323,8 @@
 
 
 @keyframes pulse-border {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(201, 100, 66, 0.16); }
-  50% { box-shadow: 0 0 0 6px rgba(201, 100, 66, 0.28); }
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent), transparent 84%); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--app-accent), transparent 72%); }
 }
 
 

@@ -56,6 +56,9 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
 	// 工具审批回调：Ask 模式下前端批准条「允许/拒绝」写回，恢复四态机执行
 	r.POST("/api/code/workflow/approve", workflowRunner.HandleCodeWorkflowApprove)
+	// 断点续跑：列出中断的工作流；续跑本身走 GET /api/code/workflow?resume=<workflow_id>
+	r.GET("/api/code/workflow/checkpoints", workflowRunner.HandleCodeWorkflowCheckpoints)
+	r.DELETE("/api/code/workflow/checkpoints/:id", workflowRunner.HandleCodeWorkflowCheckpointDelete)
 	// 预览浏览器：本地开发服务器探测
 	r.GET("/api/preview/servers", HandlePreviewServers)
 	// Python Harness (:8001) 集成示例：转发 /run_task
@@ -74,8 +77,10 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.DELETE("/api/posts/:id", DeletePost)
 	r.GET("/api/sessions/:id", func(c *gin.Context) {
 		id := c.Param("id")
-		history := sessionStore.Get(id)
-		c.JSON(200, history)
+		// 返回持久化视图而不是 []DSMessage：DSMessage 的 Timestamp/Blocks 打了 json:"-"
+		// （避免混进发给上游的请求体），直接序列化会把工作流轨迹和时间戳丢干净，
+		// 前端就只剩纯文本，刷新后工具调用全没了。
+		c.JSON(200, toPersistedMessages(sessionStore.Get(id)))
 	})
 	r.DELETE("/api/sessions/:id", func(c *gin.Context) {
 		sessionStore.Delete(c.Param("id"))
@@ -168,6 +173,9 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		}
 	})
 	r.POST("/api/image/generate", GenerateImage)
+	// view_image MCP server（main-backend/mcp/view_image_server.py）的转发目标，
+	// Key/视觉模型调用只在这一处，见 HandleVisionAnalyze 头注释。
+	r.POST("/api/vision/analyze", HandleVisionAnalyze)
 	r.POST("/api/book/upload-cover", UploadCover)
 
 	// 用户自定义 API 接入配置（设置面板用，QQ 登录接入前先用固定 "default" 用户）

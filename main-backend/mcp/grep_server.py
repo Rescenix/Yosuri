@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # grep_server.py —— re0 自研 MCP server（stdio / JSON-RPC 2.0）
 #
-# 提供两个工具，对齐 Claude Code 的 Grep / Glob：
-#   - grep : 内容搜索，subprocess 调本机已装的 rg（ripgrep），零二进制依赖
-#   - glob : 文件名/路径模式匹配，标准库 pathlib 实现
+# 提供三个工具，对齐 Claude Code 的 Grep / Glob / Read：
+#   - grep       : 内容搜索，subprocess 调本机已装的 rg（ripgrep），零二进制依赖
+#   - glob       : 文件名/路径模式匹配，标准库 pathlib 实现
+#   - read_range : 按行号区间读文件（第 start-end 行）。MCP filesystem 的
+#                  read_text_file 只有 head/tail（头/尾 N 行），读不了中间任意行段；
+#                  这个工具补上"读第 100-150 行"的能力，避免为看几行而整文件塞进上下文。
 #
 # 工作目录来自环境变量 MCP_ROOT（由 Go 后端在拉起时注入 core.GetProjectRoot()），
 # 因此跟着「主页选项目」动态变化，不写死。
@@ -71,6 +74,70 @@ def do_glob(pattern: str, path: str = "."):
     return tool_result("\n".join(sorted(matches)))
 
 
+# 一次最多返回多少行，防止 read_range 被当成变相"读全文"把上下文撑爆
+READ_RANGE_MAX_LINES = 400
+
+
+def _safe_target(path: str):
+    """把 path 解析成绝对路径并确认它在 ROOT 之内。返回 (Path, err_text)。"""
+    target = (ROOT / path).resolve() if not os.path.isabs(path) else Path(path).resolve()
+    try:
+        target.relative_to(ROOT)
+    except ValueError:
+        return None, f"路径越界: {path}（只能读项目根 {ROOT} 内的文件）"
+    return target, None
+
+
+def _to_int(v, default):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def do_read_range(path: str, start=1, end=None):
+    if not path:
+        return tool_result("read_range 需要 path 参数", is_error=True)
+    target, err = _safe_target(path)
+    if err:
+        return tool_result(err, is_error=True)
+    if not target.is_file():
+        return tool_result(f"文件不存在或不是普通文件: {path}", is_error=True)
+
+    start = _to_int(start, 1)
+    if start < 1:
+        start = 1
+    # end 缺省时默认读一屏（start 起 READ_RANGE_MAX_LINES 行）
+    end = _to_int(end, start + READ_RANGE_MAX_LINES - 1)
+    if end < start:
+        end = start
+    # 硬上限：区间再大也只返回 READ_RANGE_MAX_LINES 行
+    if end - start + 1 > READ_RANGE_MAX_LINES:
+        end = start + READ_RANGE_MAX_LINES - 1
+
+    try:
+        with open(target, encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except OSError as e:
+        return tool_result(f"读取失败: {e}", is_error=True)
+
+    total = len(lines)
+    if start > total:
+        return tool_result(f"起始行 {start} 超出文件范围（{path} 共 {total} 行）", is_error=True)
+
+    real_end = min(end, total)
+    # 行号前缀 "N:内容"，与前端 readRows 的 /^(\d+):(.*)$/ 解析对齐，展开即带真实行号
+    numbered = []
+    for i, ln in enumerate(lines[start - 1:real_end]):
+        numbered.append(f"{start + i}:{ln.rstrip(chr(10)).rstrip(chr(13))}")
+
+    header = f"# {path} 第 {start}-{real_end} 行（共 {total} 行"
+    if real_end < total:
+        header += f"，还有 {total - real_end} 行未显示，续读用 start={real_end + 1}"
+    header += "）"
+    return tool_result(header + "\n" + "\n".join(numbered))
+
+
 TOOLS = [
     {
         "name": "grep",
@@ -97,6 +164,19 @@ TOOLS = [
             "required": ["pattern"],
         },
     },
+    {
+        "name": "read_range",
+        "description": "读取文件的指定行号区间（第 start 到 end 行，1-indexed 闭区间），返回带行号的内容。用于只看大文件的某一段、而不是整文件读进上下文——比 read_text_file 的 head/tail 更精确（能读中间任意段）。一次最多返回 400 行，越界自动裁剪；返回里会提示总行数和是否还有后续。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "文件路径，相对项目根或绝对路径（须在项目根内）"},
+                "start": {"type": "integer", "description": "起始行号（1-indexed，闭区间），默认 1"},
+                "end": {"type": "integer", "description": "结束行号（1-indexed，闭区间），缺省则从 start 起读一屏（最多 400 行）"},
+            },
+            "required": ["path"],
+        },
+    },
 ]
 
 
@@ -106,6 +186,8 @@ def handle_call(name, args):
         return do_grep(args.get("pattern", ""), args.get("path", "."), args.get("type", ""))
     if name == "glob":
         return do_glob(args.get("pattern", ""), args.get("path", "."))
+    if name == "read_range":
+        return do_read_range(args.get("path", ""), args.get("start", 1), args.get("end"))
     return tool_result(f"未知工具: {name}", is_error=True)
 
 

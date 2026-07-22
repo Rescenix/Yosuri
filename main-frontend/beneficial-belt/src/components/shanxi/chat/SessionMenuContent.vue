@@ -312,7 +312,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 /* 侧栏底色是 Gemini 灰（#f4f6f8），hover/active 用半透明黑才看得见 */
 .smc-session-row:hover { background: rgba(0, 0, 0, 0.05); }
 .smc-session-row.active { background: rgba(0, 0, 0, 0.08); }
-.smc-session-row.running { background: rgba(59,130,246,0.06); box-shadow: inset 0 0 0 1px rgba(59,130,246,0.5); }
+.smc-session-row.running { background: color-mix(in srgb, var(--app-accent), transparent 94%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 50%); }
 
 .smc-dot {
   flex-shrink: 0;
@@ -322,10 +322,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   background: #c4c4c4;
   transition: background 0.2s ease;
 }
-.smc-dot.on { background: #3b82f6; animation: smc-dot-pulse 1.4s ease-in-out infinite; }
+.smc-dot.on { background: var(--app-accent); animation: smc-dot-pulse 1.4s ease-in-out infinite; }
 @keyframes smc-dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.55); }
-  50% { box-shadow: 0 0 0 4px rgba(59,130,246,0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent), transparent 45%); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent), transparent 100%); }
 }
 
 .smc-name {

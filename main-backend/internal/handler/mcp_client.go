@@ -52,12 +52,12 @@ type mcpConn struct {
 }
 
 var (
-	mcpInitMu    sync.Mutex
-	mcpInited    bool
-	mcpToolDefs  []core.ToolDefinition
-	mcpRoutes    = map[string]*mcpConn{} // 完整工具名 -> 所属连接
-	mcpRealName  = map[string]string{}   // 完整工具名 -> server 内的原始工具名
-	mcpConns     = map[string]*mcpConn{} // server 名 -> 连接，重建时统一关闭
+	mcpInitMu   sync.Mutex
+	mcpInited   bool
+	mcpToolDefs []core.ToolDefinition
+	mcpRoutes   = map[string]*mcpConn{} // 完整工具名 -> 所属连接
+	mcpRealName = map[string]string{}   // 完整工具名 -> server 内的原始工具名
+	mcpConns    = map[string]*mcpConn{} // server 名 -> 连接，重建时统一关闭
 )
 
 func mcpConfigPath() string {
@@ -126,16 +126,16 @@ func initMCPServers() {
 
 	root := core.GetProjectRoot()
 	for name, sc := range cfg.Servers {
-	// args 里若含占位根，替换为当前项目目录
-	args := make([]string, len(sc.Args))
-	for i, a := range sc.Args {
-		args[i] = resolveAllowedDir(a)
-	}
-	// 每个 MCP server 都注入当前项目根（MCP_ROOT），自研 server 据此做动态检索；
-	// filesystem server 用自身 args 的 allowed dir，不受此变量影响。
-	env := append([]string{}, sc.Env...)
-	env = append(env, "MCP_ROOT="+root)
-	conn, tools, err := startMCPServer(name, mcpServerConfig{Command: sc.Command, Args: args, Env: env})
+		// args 里若含占位根，替换为当前项目目录
+		args := make([]string, len(sc.Args))
+		for i, a := range sc.Args {
+			args[i] = resolveAllowedDir(a)
+		}
+		// 每个 MCP server 都注入当前项目根（MCP_ROOT），自研 server 据此做动态检索；
+		// filesystem server 用自身 args 的 allowed dir，不受此变量影响。
+		env := append([]string{}, sc.Env...)
+		env = append(env, "MCP_ROOT="+root)
+		conn, tools, err := startMCPServer(name, mcpServerConfig{Command: sc.Command, Args: args, Env: env})
 		if err != nil {
 			log.Printf("⚠️ MCP server %q 启动失败: %v", name, err)
 			continue
@@ -335,6 +335,9 @@ func callMCPTool(fullName, argsJSON string) (string, error) {
 			return "", fmt.Errorf("MCP 工具参数解析失败: %w", err)
 		}
 	}
+	if fullName == "mcp__fs__edit_file" {
+		normalizeMCPEditArgs(args)
+	}
 
 	raw, err := conn.request("tools/call", map[string]any{
 		"name": mcpRealName[fullName], "arguments": args,
@@ -365,6 +368,38 @@ func callMCPTool(fullName, argsJSON string) (string, error) {
 		return "", fmt.Errorf("%s", text)
 	}
 	return text, nil
+}
+
+// normalizeMCPEditArgs 兜底纠正模型对 mcp__fs__edit_file 的参数形状混淆。
+// 内置 edit_file 用扁平的 old_string/new_string；MCP filesystem 的 edit_file 实际
+// schema 是 edits:[{oldText,newText}] 数组——两个工具做同一件事但形状不同，模型有
+// 概率把熟悉的扁平写法套到这个工具上，导致 edits 缺失，MCP server 直接报错或空操作。
+// 用户看到的现象是"第一次批准的编辑总失败，模型自己纠正后第二次才成功"——与其等
+// 模型自己在下一轮改口重调（多花一次审批 + 一轮对话），这里在真正发给 MCP server
+// 前把两种写法拉齐，第一次就用对的形状。
+func normalizeMCPEditArgs(args map[string]any) {
+	if args == nil {
+		return
+	}
+	if _, hasEdits := args["edits"]; hasEdits {
+		return
+	}
+	oldStr, hasOld := args["old_string"].(string)
+	if !hasOld {
+		oldStr, hasOld = args["oldText"].(string)
+	}
+	newStr, hasNew := args["new_string"].(string)
+	if !hasNew {
+		newStr, hasNew = args["newText"].(string)
+	}
+	if !hasOld && !hasNew {
+		return
+	}
+	args["edits"] = []map[string]any{{"oldText": oldStr, "newText": newStr}}
+	delete(args, "old_string")
+	delete(args, "new_string")
+	delete(args, "oldText")
+	delete(args, "newText")
 }
 
 // close 终止 MCP server 子进程，切换项目重建连接前调用。

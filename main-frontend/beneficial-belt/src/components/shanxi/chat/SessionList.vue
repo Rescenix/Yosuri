@@ -175,13 +175,13 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   background: #f3f3f3;
   box-shadow: inset 0 0 0 1px #e8e8e8;
 }
-/* 运行中会话：整行蓝边高亮，跟输入框聚焦光流同一套蓝 */
+/* 运行中会话：整行高亮，跟主题色一致 */
 .session-row.running {
-  background: rgba(59, 130, 246, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.5);
+  background: color-mix(in srgb, var(--app-accent), transparent 94%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 50%);
 }
 
-/* 运行指示灯：默认灰色小点常亮；.on 时变蓝并呼吸+外扩光环 */
+/* 运行指示灯：默认灰色小点常亮；.on 时变主题色并呼吸+外扩光环 */
 .session-dot {
   flex-shrink: 0;
   width: 7px;
@@ -191,12 +191,12 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   transition: background 0.2s ease;
 }
 .session-dot.on {
-  background: #3b82f6;
+  background: var(--app-accent);
   animation: session-dot-pulse 1.4s ease-in-out infinite;
 }
 @keyframes session-dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55); }
-  50% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent), transparent 45%); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent), transparent 100%); }
 }
 
 .session-name {

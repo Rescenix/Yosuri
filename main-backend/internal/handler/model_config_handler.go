@@ -22,13 +22,16 @@ import (
 
 // ModelConfigEntry 用户自己配置的一套 API 接入信息
 type ModelConfigEntry struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Endpoint     string `json:"endpoint"`
-	APIKey       string `json:"api_key,omitempty"` // 只在请求体里写入时使用，响应里永远清空
-	APIKeySet    bool   `json:"api_key_set"`       // 响应里用这个告诉前端"已经存了一把 key"
-	DefaultModel string `json:"default_model"`
-	IsDefault    bool   `json:"is_default"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Endpoint      string `json:"endpoint"`
+	APIKey        string `json:"api_key,omitempty"` // 只在请求体里写入时使用，响应里永远清空
+	APIKeySet     bool   `json:"api_key_set"`       // 响应里用这个告诉前端"已经存了一把 key"
+	DefaultModel  string `json:"default_model"`
+	IsDefault     bool   `json:"is_default"`
+	Vision        bool   `json:"vision,omitempty"`
+	ContextWindow int    `json:"context_window,omitempty"`
+	Reasoning     bool   `json:"reasoning,omitempty"`
 }
 
 // 前端在没有修改 Key 的情况下会把这个占位符原样传回来，后端据此判断"不用覆盖旧 key"

@@ -4,8 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func fakeBackend(t *testing.T, status int, body string) *httptest.Server {
@@ -52,14 +55,36 @@ func TestRouteChatOnceAllFail(t *testing.T) {
 	}
 }
 
-func TestResolveBackendsAlwaysNonEmpty(t *testing.T) {
+// 本地兜底路由已在 8186699e 移除，「链永不为空」不再成立：一个 Key 都没配时
+// 链就是空的（这个用例原来能过，只是因为 Ollama Cloud 条目当时允许无 Key 入链，
+// 而那种条目一发请求必然 401——空链伪装成非空，反而掩盖了"没配 Key"这个真实问题）。
+// 现在的契约改成：链里出现的每一个 backend 都必须是可用的（有名字、有地址、有 Key）。
+func TestResolveBackendsChainEntriesAreUsable(t *testing.T) {
 	backends := resolveBackends("nonexistent_user_for_test", "")
 	if len(backends) == 0 {
-		t.Fatal("链不应为空")
+		t.Skip("当前环境没有任何 API Key，空链是预期结果（错误提示由 streamRouterRound 给出）")
 	}
-	last := backends[len(backends)-1]
-	if last.Name == "" || last.BaseURL == "" {
-		t.Fatalf("链尾 backend 不应为空, got %+v", last)
+	for _, b := range backends {
+		if b.Name == "" || b.BaseURL == "" {
+			t.Errorf("链里有残缺 backend: %+v", b)
+		}
+		if b.APIKey == "" && !b.IsLocal {
+			t.Errorf("非本地 backend 无 Key 却入了链，发出去必然 401: %s", b.Name)
+		}
+	}
+}
+
+// 空链必须给出能指导用户的错误，而不是 "所有模型源不可用：" 后面一片空白。
+func TestStreamRouterRoundEmptyChainMessage(t *testing.T) {
+	r := &WorkflowRunner{}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("GET", "/api/code/workflow", nil)
+	_, _, _, _, _, err := r.streamRouterRound(c, nil, nil, nil, "")
+	if err == nil {
+		t.Fatal("空链应报错")
+	}
+	if !strings.Contains(err.Error(), "API Key") {
+		t.Errorf("错误信息应告诉用户去配 Key，实得: %v", err)
 	}
 }
 
@@ -75,9 +100,9 @@ func TestResolveBackendsExactFreeModel(t *testing.T) {
 	if !b.Vision || b.ContextWindow != 1048576 || !b.Reasoning {
 		t.Fatalf("能力元数据应随 backend 透出, got %+v", b)
 	}
-	// 回退路径：未知 model 应回退到含本地尾的全链
+	// 回退路径：未知 model 不该返回空，应回退到全链（本地兜底已移除，故不再断言链尾 IsLocal）
 	fallback := resolveBackends("nonexistent_user_for_test", "nonexistent_id")
-	if len(fallback) == 0 || !fallback[len(fallback)-1].IsLocal {
-		t.Fatalf("未知 model 应回退全链且本地兜底, got %+v", fallback)
+	if len(fallback) == 0 {
+		t.Fatal("未知 model 应回退全链, 实得空链")
 	}
 }

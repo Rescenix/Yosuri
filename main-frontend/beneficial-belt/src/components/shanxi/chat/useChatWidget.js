@@ -112,7 +112,10 @@ function adjustInputHeight() {
   // 四态机 Code 工作流（GET /api/code/workflow，EventSource）
   // 流式期间用 forceScrollToBottom：长工作流流式中持续跟底，无视用户是否上滑，
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
-  const { flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow } = useAgentWorkflow({
+  const {
+    flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow,
+    resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable
+  } = useAgentWorkflow({
     messages,
     onNewMessage: forceScrollToBottom,
     // 流式增量用 smartScrollAndRefresh：尊重 userScrolledUp，用户上滑时不再被强制拉回底部
@@ -303,8 +306,55 @@ function adjustInputHeight() {
     return '#98a2b3'
   })
 
+  // 工具参数在后端一路都是原始 JSON 串（模型吐什么存什么），坏串也不该让整段历史崩掉
+  function parseArgs(raw) {
+    if (!raw) return {}
+    if (typeof raw === 'object') return raw
+    try { return JSON.parse(raw) } catch { return {} }
+  }
+
   function cleanContent(content) {
     return content ? content.replace(/\[(action|emotion):[^\]]*\]/g, '') : ''
+  }
+
+  function extOf(name) {
+    const m = /\.([a-zA-Z0-9]+)$/.exec(name || '')
+    return m ? m[1].toUpperCase() : 'FILE'
+  }
+
+  // 发送时 buildOutgoingMessage() 把附件拍平进正文（"[文件: x.py]"/"[文件夹: x，共 N 个文件]\n<清单>"），
+  // 只在实时会话里才有单独的 attachments 数组渲染成 chip；历史一刷新回来就只剩这段拍平文本，
+  // 于是旧消息显示成一行方括号裸文本，跟当前会话里的附件 chip 长得不一样。
+  // 这里把 buildOutgoingMessage 的拼接逆过来，从正文头部识别出这些标记块，
+  // 还原成 attachments 数组交给 AttachmentChipRow，跟实时发送时的气泡外观对齐。
+  // 只处理 文件/文件夹（单行 或 行数由 fileCount 精确推出，边界无歧义）；
+  // 图片块的分析文本长度不固定，无法安全地和后面用户自己打的字分开，不处理，保留原样。
+  function extractAttachmentsFromContent(content) {
+    const lines = (content ?? '').split('\n')
+    const attachments = []
+    let i = 0
+    let seq = 0
+    while (i < lines.length) {
+      const fileMatch = /^\[文件: (.+)\]$/.exec(lines[i])
+      if (fileMatch) {
+        attachments.push({ id: `hist_${seq++}`, kind: 'file', name: fileMatch[1], ext: extOf(fileMatch[1]), status: 'ready' })
+        i++
+        continue
+      }
+      const folderMatch = /^\[文件夹: (.+)，共 (\d+) 个文件\]$/.exec(lines[i])
+      if (folderMatch) {
+        const fileCount = parseInt(folderMatch[2], 10)
+        attachments.push({ id: `hist_${seq++}`, kind: 'folder', name: folderMatch[1], fileCount, status: 'ready' })
+        i++
+        // 清单正文行数与 onAttachFolderSelected 的截断规则（最多 200 行 + 超限提示行）一致，
+        // 由 fileCount 精确算出要跳过几行，不用猜清单在哪结束
+        i += Math.min(fileCount, 200) + (fileCount > 200 ? 1 : 0)
+        continue
+      }
+      break
+    }
+    if (attachments.length === 0) return null
+    return { attachments, text: lines.slice(i).join('\n').trim() }
   }
 
   const apiBase = import.meta.env.VITE_API_BASE || ''
@@ -321,14 +371,37 @@ function adjustInputHeight() {
        if (sessionId.value !== id) return
        // 后端对不存在/空的会话返回 null 或空 body，这里兜底成数组，避免 null.map 崩溃
        const list = Array.isArray(history) ? history : []
-       messages.value = list.map((item, idx) => ({
-         id: idx,
-         content: cleanContent(item?.content ?? ''),
-         sender: item?.role === 'assistant' ? 'bot' : (item?.role ?? 'user'),
-         timestamp: item?.timestamp || new Date(),
-         isStreaming: false,
-         reasoning: ''
-       }))
+       messages.value = list.map((item, idx) => {
+         // 四态机工作流留下的轨迹（后端 FlowBlock）：还原成一条 agentflow 消息，
+         // AgentWorkflowPanel 照常渲染，工具行和展开的 Diff/输出跟刚跑完时一样。
+         if (item?.blocks?.length) {
+           return {
+             id: idx,
+             kind: 'agentflow',
+             sender: 'bot',
+             status: 'completed',
+             blocks: item.blocks.map(b => ({
+               ...b,
+               // 落盘的是原始 JSON 参数串（跟 SSE action 事件同口径），面板要对象
+               args: parseArgs(b.args),
+               expanded: false
+             })),
+             subagents: [],
+             timestamp: item?.timestamp || new Date()
+           }
+         }
+         const role = item?.role === 'assistant' ? 'bot' : (item?.role ?? 'user')
+         const extracted = role === 'user' ? extractAttachmentsFromContent(item?.content) : null
+         return {
+           id: idx,
+           content: cleanContent(extracted ? extracted.text : (item?.content ?? '')),
+           attachments: extracted ? extracted.attachments : [],
+           sender: role,
+           timestamp: item?.timestamp || new Date(),
+           isStreaming: false,
+           reasoning: ''
+         }
+       })
        await nextTick()
        forceScrollToBottom()
      }
@@ -352,6 +425,8 @@ async function switchSession(id) {
   // 上下文分类明细同样要跟着会话走。之前只在 ChatWidget setup 时 load 过一次，
   // 切会话不重载 —— 结果面板一直显示上一个会话的分类，只有刷新页面才纠正。
   loadContextBreakdown(id)
+  // 新会话里可能躺着上次没跑完的工作流（后端重启/断线留下的检查点）
+  refreshResumable()
   await loadAllHistory()
 }
 
@@ -372,6 +447,8 @@ async function switchSession(id) {
     fetchBalance()
     // 初始化时恢复当前会话持久化的真实 token（横条绑定会话，刷新不丢）
     sessionTokenStats.value = loadSessionTokenStats(sessionId.value)
+    // 关掉页面/后端崩了之后重新打开：把没跑完的工作流捞出来问要不要续跑
+    refreshResumable()
   })
 
   // 滚动监听挂在 messagesContainer ref 上（watch 而非 onMounted）：
@@ -468,6 +545,7 @@ async function switchSession(id) {
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     sendMessage, stopWorkflow, workflowState, tokenStats, chatState, backgroundTaskList, handleImageUpload, playVoice,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
+    resumeState, resumeCodeWorkflow, dismissResumable,
     toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime
   }

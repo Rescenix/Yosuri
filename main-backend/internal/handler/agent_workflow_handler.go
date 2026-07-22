@@ -19,7 +19,9 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -27,7 +29,6 @@ import (
 
 	"backend/internal/agent"
 	"backend/internal/ai/core"
-	"backend/internal/swiftnet"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,6 +36,9 @@ import (
 const (
 	codeWorkflowMaxRounds = 20
 	codeResultMaxChars    = 10000
+	// codeRepeatCallLimit 同一 工具名+参数 在一个工作流里最多真实执行几次；
+	// 超出即熔断（回提示不再真跑），防止模型原地打转烧满轮次。
+	codeRepeatCallLimit = 2
 )
 
 // historyLimitFor 按模型上下文能力自适应历史窗口。
@@ -99,30 +103,70 @@ func truncateChars(s string, max int) string {
 
 // HandleCodeWorkflow GET /api/code/workflow — 四态机 SSE 工作流
 func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
+	// resume=<workflow_id>：从上次落盘的检查点接着跑（后端重启/SSE 断线后的续跑入口）。
+	// 检查点里存了 task/mode/model 等全部启动参数，所以续跑时这些 query 参数可以不带。
+	resumeID := strings.TrimSpace(c.Query("resume"))
+	var resumed *workflowCheckpoint
+	if resumeID != "" {
+		resumed = loadWorkflowCheckpoint(resumeID)
+		if resumed == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "检查点不存在或已过期: " + resumeID})
+			return
+		}
+	}
+
 	task := strings.TrimSpace(c.Query("task"))
+	if resumed != nil && task == "" {
+		task = resumed.Task
+	}
 	if task == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "task 参数必填"})
 		return
 	}
 	sessionID := c.Query("session_id")
+	if resumed != nil && sessionID == "" {
+		sessionID = resumed.SessionID
+	}
 	// mode: yolo(全自动,默认) / ask(危险工具每步问)。不传或非法值(含旧 plan)按 yolo 处理。
 	mode := strings.ToLower(c.Query("mode"))
+	if mode == "" && resumed != nil {
+		mode = resumed.Mode
+	}
 	if mode != "ask" {
 		mode = "yolo"
 	}
 
 	// 模型路由链：前端选了具体模型就精确路由到那一个；否则走用户配置>env DeepSeek>
-	// 免费池>本地兜底的全链（本地恒在，链永不为空）
-	backends := resolveBackends(c.Query("openid"), c.Query("model"))
+	// 免费池的全链。注意本地兜底已移除（8186699e），一个 Key 都没配时链会是空的，
+	// 由 streamRouterRound 给出"去配 Key"的明确报错。
+	openID, model := c.Query("openid"), c.Query("model")
 	effort := c.Query("effort") // "low"/"medium"/"high"，只有 backend.Reasoning=true 时才真的生效
+	if resumed != nil {
+		// 续跑沿用原来的模型：中途换模型会让已有的 tool_calls 历史落到另一套
+		// 工具调用格式上，不如从头跑一遍干净。
+		openID, model, effort = resumed.OpenID, resumed.Model, resumed.Effort
+	}
+	backends := resolveBackends(openID, model)
 
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("Access-Control-Allow-Origin", "*")
 
+	// 续跑复用原 workflow_id：检查点文件跟着它走，反复中断也只有一份。
 	workflowID := agent.NewWorkflowID()
-	writeCodeSSE(c, "workflow_start", map[string]any{"workflow_id": workflowID, "task": task, "mode": mode})
+	if resumed != nil {
+		workflowID = resumed.WorkflowID
+	}
+	writeCodeSSE(c, "workflow_start", map[string]any{
+		"workflow_id": workflowID, "task": task, "mode": mode,
+		"resumed": resumed != nil, "resumed_round": func() int {
+			if resumed != nil {
+				return resumed.Round
+			}
+			return 0
+		}(),
+	})
 
 	// 审批等待器：整个工作流生命周期共用一个（channel 按 approval id 区分，不会跨轮串）。
 	// 注册进全局 registry，供独立的 POST /api/code/workflow/approve 跨请求唤醒。
@@ -130,38 +174,13 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	registerApprovalWaiter(workflowID, waiter)
 	defer unregisterApprovalWaiter(workflowID)
 
-	// SwiftNet 三区里 pinned(身份)/handoff(工作态)/inbox 按设计就该"无条件注入"——
-	// 预算压在 <500 tok 就是为了能无条件塞，不用等模型自己想起来调 search_memory 才有。
-	// 之前只有 /api/chat/stream 的纯聊天路径接了这个（还额外加了个 LLM 判定门槛，
-	// 违背了"无条件"的本意），四态机这条真正在跑 code 任务的主路径完全没接，
-	// agent 每次开工都是失忆状态，只能靠自己想起来查 search_memory 兜底。
-	systemBase := agent.MainAgentConfigNative().SystemPrompt
-	skillPrompt := skillLibraryPrompt()
-	systemPrompt := systemBase + subAgentUsagePrompt + skillPrompt
-	memoryInject := swiftnet.Default().UnconditionalInject()
-	if memoryInject != "" {
-		systemPrompt += "\n\n# 长期记忆（无条件注入，身份/工作态/收件箱）\n" + memoryInject
-	}
-	// 用户在「我的」tab 填的称呼/职业/自定义指令，必须注入主链路系统提示词。
-	// 之前只挂在废弃的 /api/chat/stream（buildSystemPrompt）里，四态机收不到——
-	// 清理旧路径时这行若不先落过来，自定义指令功能会随 chat_stream 一起被删没。
-	systemPrompt += userInstructionsPrompt()
-	tools := buildCodeWorkflowTools()
-	// 分类上下文占用（token 估算口径与四态机一致：字符数/4），随 model_info 回传前端展示。
-	toolsJSON, _ := json.Marshal(tools)
-	contextBreakdown := map[string]int{
-		"system":  estimateTokenCount(systemBase),
-		"subagent": estimateTokenCount(subAgentUsagePrompt),
-		"skill":    estimateTokenCount(skillPrompt),
-		"memory":   estimateTokenCount(memoryInject),
-		"tools":    estimateTokenCount(string(toolsJSON)),
-	}
-	// 静态部分之和：下发 conversation_tokens 时要从真实 prompt_tokens 里减掉它，
-	// 否则前端面板把静态分类加一遍就成了双重计算。
-	staticSum := 0
-	for _, v := range contextBreakdown {
-		staticSum += v
-	}
+	// 上下文装配全部交给 ContextProvider（见 context_provider.go）：
+	// 系统提示词分段声明、稳定段排前面（前缀缓存友好）、分类占用与提示词同源、
+	// 按需加载的工具激活集也归它管。SwiftNet 的无条件记忆注入是其中一段。
+	provider := newWorkflowContextProvider()
+	contextBreakdown := provider.Breakdown()
+	staticSum := provider.StaticSum()
+	tools := provider.Tools()
 
 	// 之前这里每次都是只有 system+当前 task 的白板，session_id 传了但从没读过——
 	// LLM 完全不知道上一条消息说了什么。跟 chat_stream 那条老路径一样，从
@@ -172,25 +191,90 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if len(backends) > 0 {
 		histLimit = historyLimitFor(backends[0].ContextWindow)
 	}
-	history := r.chatHandler.sessionStore.Get(sessionID)
-	history = truncateHistory(history, histLimit)
-	built := buildChatMessages(systemPrompt, history, task)
-	msgs := make([]map[string]any, len(built))
+	history := truncateHistory(r.chatHandler.sessionStore.Get(sessionID), histLimit)
+	msgs := provider.Invoking(history, task)
 	historyChars := 0
-	for i, m := range built {
-		msgs[i] = map[string]any{"role": m["role"], "content": m["content"]}
-		historyChars += len(m["content"])
+	for _, m := range msgs {
+		if s, ok := m["content"].(string); ok {
+			historyChars += len(s)
+		}
 	}
 
 	var transcript []string // 动作摘要，供技能生成
+	// flowBlocks 是这次工作流的可视化轨迹，与推给前端的 intent/action/result 事件同源。
+	// 收尾时挂到 assistant 消息上落盘，刷新页面后聊天记录里工具行和展开详情还在
+	// （之前只存最终那段文本，历史里的工具调用一刷新就蒸发）。
+	var flowBlocks []FlowBlock
+	// 循环熔断：同一 工具名+参数 的调用次数。与具体模型无关的护栏——
+	// 模型抽风（看不见工具结果、或单纯钻牛角尖）时不该白烧满 codeWorkflowMaxRounds 轮。
+	callSignatureCount := map[string]int{}
 	inputTokens := historyChars / 4
 	outputTokens := 0
 	callSeq := 0
+	startRound := 0
 	modelInfoSent := false
 
-	for round := 0; round < codeWorkflowMaxRounds; round++ {
+	// 续跑：整体接管上面刚拼好的白板状态。msgs 用检查点里的完整对话
+	// （含中断前所有 tool_calls 和工具结果），模型醒来就知道自己干到哪了。
+	if resumed != nil {
+		msgs = resumed.Msgs
+		transcript = resumed.Transcript
+		if resumed.CallSigCount != nil {
+			callSignatureCount = resumed.CallSigCount
+		}
+		callSeq = resumed.CallSeq
+		provider.RestoreActivatedTools(resumed.ActivatedTools)
+		tools = provider.Tools() // 带回中断前已加载的工具，免得再 load 一遍白费一轮
+		inputTokens = resumed.InputTokens
+		outputTokens = resumed.OutputTokens
+		startRound = resumed.Round
+		log.Printf("🔁 [续跑] workflow=%s 从第 %d 轮恢复，历史 %d 条消息", workflowID, startRound, len(msgs))
+	}
+
+	// Invoked 钩子：每轮收尾把状态落成检查点。启动参数（task/mode/model…）由这里的
+	// 闭包捕获，轮次内变化的 msgs/transcript/token 由 roundState 传入——
+	// provider 不假装拥有循环的状态，只提供"一轮结束了"这个落点。
+	provider.OnInvoked(func(round int, st roundState) {
+		saveWorkflowCheckpoint(&workflowCheckpoint{
+			WorkflowID: workflowID, SessionID: sessionID, OpenID: openID,
+			Task: task, Mode: mode, Model: model, Effort: effort,
+			Round: round, Msgs: st.msgs, Transcript: st.transcript,
+			CallSigCount: st.callSigCount, CallSeq: st.callSeq,
+			ActivatedTools: provider.ActivatedTools(),
+			InputTokens:    st.inputTokens, OutputTokens: st.outputTokens,
+		})
+	})
+	// checkpoint 收拢 roundState 的组装，免得两个调用点各写一遍。
+	checkpoint := func(round int) {
+		provider.Invoked(round, roundState{
+			msgs: msgs, transcript: transcript, callSigCount: callSignatureCount,
+			callSeq: callSeq, inputTokens: inputTokens, outputTokens: outputTokens,
+		})
+	}
+
+	// 触发压缩用的上下文窗口：优先取模型实报的，取不到用兜底常量
+	ctxWindow := estimatedContextWindow
+	if len(backends) > 0 && backends[0].ContextWindow > 0 {
+		ctxWindow = backends[0].ContextWindow
+	}
+
+	for round := startRound; round < codeWorkflowMaxRounds; round++ {
 		if c.Request.Context().Err() != nil {
 			return // 客户端断开
+		}
+
+		// 上下文感知压缩：真实 prompt_tokens 超窗口 80% 时，把早期轮次折叠成任务相关
+		// 摘要，腾出预算继续跑（见 context_compress.go）。inputTokens 是上一轮上游返回的
+		// 真实 prompt_tokens，比字符估算准。压缩失败会原样返回，不影响主流程。
+		if newMsgs, cr := r.compressContextIfNeeded(c.Request.Context(), backends, msgs, task, inputTokens, ctxWindow); cr.Compressed {
+			msgs = newMsgs
+			writeCodeSSE(c, "context_compressed", map[string]any{
+				"folded_messages": cr.FoldedMsgs,
+				"before_chars":    cr.BeforeChars,
+				"after_chars":     cr.AfterChars,
+			})
+			log.Printf("🗜️ [压缩] workflow=%s 第 %d 轮：折叠 %d 条消息 %d→%d 字符",
+				workflowID, round, cr.FoldedMsgs, cr.BeforeChars, cr.AfterChars)
 		}
 
 		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, msgs, tools, effort)
@@ -210,28 +294,44 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			})
 		}
 		if err != nil {
+			// 上游挂了属于可恢复失败——保留检查点，前端可以带 resume=<id> 原地重试，
+			// 不必把已经跑完的十几轮工具再跑一遍。
+			checkpoint(round)
 			writeCodeSSE(c, "flow_error", map[string]any{"message": err.Error()})
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "failed", "final_output": "任务执行失败: " + err.Error(),
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
+				"resumable":           true, "workflow_id": workflowID,
 			})
 			return
 		}
 
 		// 没有工具调用 → 最终回答，收尾
 		if len(calls) == 0 {
+			deleteWorkflowCheckpoint(workflowID)
+			cleanupToolOutputSpills(workflowID)
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "completed", "final_output": content,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 			})
 			if sessionID != "" {
+				if content != "" {
+					flowBlocks = append(flowBlocks, FlowBlock{Type: "intent", Text: content})
+				}
 				r.chatHandler.sessionStore.Append(sessionID, DSMessage{Role: "user", Content: task})
-				r.chatHandler.sessionStore.Append(sessionID, DSMessage{Role: "assistant", Content: content})
+				r.chatHandler.sessionStore.Append(sessionID, DSMessage{
+					Role: "assistant", Content: content, Blocks: flowBlocks,
+				})
 			}
 			go generateSkillAsync(task, transcript)
 			return
+		}
+
+		// 这一轮模型在调工具之前说的话，也是轨迹的一部分（"我先看看这个文件"）
+		if content != "" {
+			flowBlocks = append(flowBlocks, FlowBlock{Type: "intent", Text: content})
 		}
 
 		// action 事件（args 为真实 JSON）
@@ -252,9 +352,55 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				writeCodeSSE(c, event, data)
 			}
 		}
+		// 熔断判定：同一签名（工具名+参数）第 3 次及以后不再真跑，直接回一条提示当结果。
+		// 结果必然与前两次相同，重跑纯属浪费；把"别再调了"写进历史，给模型一个转向的机会。
+		blocked := make([]bool, len(calls))
+		handled := make([]string, len(calls)) // 非空 = 已在本层处理完，不进 executeCodeCalls
+		toRun := make([]core.ToolCall, 0, len(calls))
+		runIdx := make([]int, 0, len(calls))
+		allBlocked := true
+		for i, tc := range calls {
+			if shouldBlockRepeat(callSignatureCount, tc.Function.Name, tc.Function.Arguments, codeRepeatCallLimit) {
+				blocked[i] = true
+				continue
+			}
+			allBlocked = false
+			// load_tools 是纯上下文操作（取 schema + 激活），没有副作用也不需要审批，
+			// 在这层直接办掉，不进工具执行链。
+			if tc.Function.Name == loadToolsToolName {
+				out, changed := provider.ActivateTools(tc.Function.Arguments)
+				handled[i] = out
+				if changed {
+					// 下一轮的 tools 数组带上刚激活的工具，模型才能真正调它
+					tools = provider.Tools()
+				}
+				continue
+			}
+			toRun = append(toRun, calls[i])
+			runIdx = append(runIdx, i)
+		}
+
 		// 审批等待器：仅 ask 模式需要；yolo 模式下 executeCodeCalls 内部会直接跳过拦截。
 		// 使用整个 workflow 共用的 waiter（按 approval id 区分），不每轮新建。
-		results := r.executeCodeCalls(c, backends, calls, emit, mode, waiter, sessionID, workflowID)
+		results := make([]codeExecResult, len(calls))
+		for i := range results {
+			switch {
+			case blocked[i]:
+				results[i] = codeExecResult{
+					failed: true,
+					output: fmt.Sprintf("已阻止：%s 用完全相同的参数连续调用了 %d 次，结果不会变化。请勿重复调用，改用已有结果作答或换一个思路。",
+						calls[i].Function.Name, codeRepeatCallLimit),
+				}
+			case handled[i] != "":
+				results[i] = codeExecResult{output: handled[i]}
+			}
+		}
+		if len(toRun) > 0 {
+			ran := r.executeCodeCalls(c, backends, toRun, emit, mode, waiter, sessionID, workflowID)
+			for k, idx := range runIdx {
+				results[idx] = ran[k]
+			}
+		}
 
 		// 对话历史追加 assistant(tool_calls)
 		var dsCalls []map[string]any
@@ -268,9 +414,20 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 
 		// result 事件 + tool 消息
 		for i, tc := range calls {
-			out := truncateChars(results[i].output, codeResultMaxChars)
+			// 进上下文的是压缩版（首尾保留 + 全文落盘）；前端 result 事件给完整输出，
+			// 用户看工具卡片时不该被模型的 token 预算限制视野。
+			full := truncateChars(results[i].output, codeResultMaxChars)
+			out := compactToolOutput(workflowID, tc.ID, results[i].output)
 			writeCodeSSE(c, "result", map[string]any{
-				"id": tc.ID, "name": tc.Function.Name, "ok": !results[i].failed, "output": out,
+				"id": tc.ID, "name": tc.Function.Name, "ok": !results[i].failed, "output": full,
+			})
+			status := "ok"
+			if results[i].failed {
+				status = "error"
+			}
+			flowBlocks = append(flowBlocks, FlowBlock{
+				Type: "tool", Name: tc.Function.Name, Args: tc.Function.Arguments,
+				Output: full, Status: status,
 			})
 			msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": tc.ID, "content": out})
 			inputTokens += len(out) / 4
@@ -278,8 +435,28 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				tc.Function.Name, truncateChars(tc.Function.Arguments, 300), truncateChars(results[i].output, 200)))
 		}
 		inputTokens += len(content) / 4
+
+		// 落盘断点：此刻这一轮的工具全部执行完、结果已进 msgs，没有半途状态，
+		// 是唯一安全的恢复边界。后端从这里被杀掉，续跑就从下一轮问模型开始。
+		checkpoint(round + 1)
+
+		// 整轮调用全被熔断 → 模型已经在原地打转，提示也没拉回来，直接收尾，
+		// 而不是陪它空转到 codeWorkflowMaxRounds。
+		if allBlocked {
+			deleteWorkflowCheckpoint(workflowID)
+			cleanupToolOutputSpills(workflowID)
+			writeCodeSSE(c, "workflow_done", map[string]any{
+				"status": "failed", "final_output": "检测到模型重复调用同一工具且无进展，已中止任务。",
+				"input_tokens": inputTokens, "output_tokens": outputTokens,
+				"conversation_tokens": conversationTokens(inputTokens, staticSum),
+			})
+			return
+		}
 	}
 
+	// 轮次耗尽属于终态失败（续跑也只会立刻再撞上限），检查点没有保留价值。
+	deleteWorkflowCheckpoint(workflowID)
+	cleanupToolOutputSpills(workflowID)
 	writeCodeSSE(c, "workflow_done", map[string]any{
 		"status": "failed", "final_output": fmt.Sprintf("超过最大迭代轮数(%d)，任务中止", codeWorkflowMaxRounds),
 		"input_tokens": inputTokens, "output_tokens": outputTokens,
@@ -287,9 +464,32 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	})
 }
 
+// HandleCodeWorkflowCheckpoints GET /api/code/workflow/checkpoints?session_id=
+// 列出可续跑的中断工作流；前端据此显示「上次有个任务没跑完」并带 resume=<id> 重连。
+func (r *WorkflowRunner) HandleCodeWorkflowCheckpoints(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"checkpoints": listWorkflowCheckpoints(c.Query("session_id"))})
+}
+
+// HandleCodeWorkflowCheckpointDelete DELETE /api/code/workflow/checkpoints/:id
+// 用户明确放弃某个中断任务时清掉它（不删也会被 24h TTL 收走）。
+func (r *WorkflowRunner) HandleCodeWorkflowCheckpointDelete(c *gin.Context) {
+	deleteWorkflowCheckpoint(c.Param("id"))
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 type codeExecResult struct {
 	output string
 	failed bool
+}
+
+// shouldBlockRepeat 熔断判定：同一签名（工具名+参数）真实执行次数达到 limit 后，
+// 第 limit+1 次及以后返回 true（本层拦截，不再真跑）。会自增计数。
+// 抽成纯函数是为了能脱离整个 SSE handler 单测——熔断是"模型抽风时的护栏"，
+// 健康模型看得见工具结果就不会重复调，实况里几乎不触发，只能靠单测覆盖。
+func shouldBlockRepeat(counts map[string]int, name, args string, limit int) bool {
+	sig := name + "|" + args
+	counts[sig]++
+	return counts[sig] > limit
 }
 
 // executeCodeCalls 执行一轮里的所有工具调用。
@@ -357,10 +557,18 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			continue
 		}
 		if strings.HasPrefix(name, "mcp__") {
+			// MCP edit_file：执行前读文件记下行号，执行后补到结果里
+			var preEditLine int
+			if name == "mcp__fs__edit_file" {
+				preEditLine = r.calcEditStartLine(tc.Function.Arguments)
+			}
 			out, err := callMCPTool(name, tc.Function.Arguments)
 			if err != nil {
 				results[i] = codeExecResult{output: "MCP 工具失败: " + err.Error(), failed: true}
 			} else {
+				if name == "mcp__fs__edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
+					out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
+				}
 				results[i] = codeExecResult{output: out}
 			}
 			continue
@@ -377,8 +585,6 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 		}
 		results[i] = codeExecResult{output: res.Content, failed: res.Failed}
 	}
-
-
 
 	wg.Wait()
 	return results
@@ -476,6 +682,7 @@ func (r *WorkflowRunner) searchMemory(argsJSON string) (string, bool) {
 	return fmt.Sprintf("在全部会话中正则匹配 %q，命中 %d 处（session_id 可传给 scope=sessions 的 session_id 或 memory 检索）：\n%s",
 		args.Query, len(hits), strings.Join(hits, "\n")), false
 }
+
 // hardcodeFileTools 是已被 MCP filesystem 取代、从工作流 agent 工具集移除的
 // 内置文件操作工具。agent 改用 mcp__fs__*，避免两套实现并存。
 var hardcodeFileTools = map[string]bool{
@@ -486,31 +693,46 @@ var hardcodeFileTools = map[string]bool{
 	"execute_command": true,
 }
 
-// buildCodeWorkflowTools 组装本工作流可用的完整工具集：
-// 内置语义/记忆工具 + dispatch_agent + MCP 生态工具，序列化成 DS 的 tools 参数格式。
-// 内置文件类工具（read/write/edit/list_dir/execute_command）已由 MCP filesystem
-// 取代，故在此过滤掉，只让 MCP 提供文件能力。
-func buildCodeWorkflowTools() []map[string]any {
-	defs := make([]core.ToolDefinition, 0, len(core.ChatTools)+8)
-	for _, t := range core.ChatTools {
-		if hardcodeFileTools[t.Function.Name] {
-			continue
-		}
-		defs = append(defs, t)
-	}
-	defs = append(defs, dispatchAgentToolDef)
-	defs = append(defs, loadMCPToolDefs()...)
+// buildCodeWorkflowTools 已挪到 tool_ondemand.go：MCP 工具改为按需加载，
+// 不再无条件全量塞进每一轮请求（实测省 6000+ tok/轮）。
 
-	out := make([]map[string]any, 0, len(defs))
-	for _, t := range defs {
-		out = append(out, map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name":        t.Function.Name,
-				"description": t.Function.Description,
-				"parameters":  t.Function.Parameters,
-			},
-		})
+// calcEditStartLine 在 MCP edit_file 执行前读文件，计算 oldText 的起始行号。
+func (r *WorkflowRunner) calcEditStartLine(argsJSON string) int {
+	var args struct {
+		Path  string `json:"path"`
+		Edits []struct {
+			OldText string `json:"oldText"`
+		} `json:"edits"`
+		OldText  string `json:"oldText"`
+		OldStr   string `json:"old_string"` // 模型偶尔把这个工具当内置 edit_file 的扁平 schema 调，见 normalizeMCPEditArgs
 	}
-	return out
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return 0
+	}
+	// 取第一个 edit 的 oldText
+	oldStr := args.OldText
+	if oldStr == "" {
+		oldStr = args.OldStr
+	}
+	if len(args.Edits) > 0 && args.Edits[0].OldText != "" {
+		oldStr = args.Edits[0].OldText
+	}
+	if oldStr == "" || args.Path == "" {
+		return 0
+	}
+	// 读文件找行号
+	fullPath := args.Path
+	if !strings.HasPrefix(fullPath, "/") && !strings.Contains(fullPath, ":") {
+		fullPath = core.GetProjectRoot() + "/" + fullPath
+	}
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return 0
+	}
+	content := string(data)
+	idx := strings.Index(content, oldStr)
+	if idx < 0 {
+		return 0
+	}
+	return strings.Count(content[:idx], "\n") + 1
 }

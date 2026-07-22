@@ -2,18 +2,17 @@
   <span class="aurora-icon-wrapper">
     <svg class="aurora-icon" :class="state" viewBox="0 0 32 32" width="15" height="15">
       <!-- 底层：光晕/背景，负责淡入淡出 + 缩放 -->
-      <circle class="aurora-layer aurora-glow" cx="16" cy="16" r="9" fill="#c96442" />
+      <circle class="aurora-layer aurora-glow" cx="16" cy="16" r="9" />
 
       <!-- 外层：拖尾/轨道，负责表现动感（processing 态做类 3D 翻转） -->
       <g class="aurora-layer aurora-trail">
-        <line x1="10" y1="22" x2="3" y2="29" stroke="#c96442" stroke-width="2" stroke-linecap="round" />
-        <line x1="14.5" y1="25.5" x2="9" y2="31" stroke="#c96442" stroke-width="1.4" stroke-linecap="round" />
+        <line x1="10" y1="22" x2="3" y2="29" stroke-width="2" stroke-linecap="round" />
+        <line x1="14.5" y1="25.5" x2="9" y2="31" stroke-width="1.4" stroke-linecap="round" />
       </g>
 
       <!-- 中层：核心星体（四角闪烁星形） -->
       <path
         class="aurora-layer aurora-core"
-        fill="#c96442"
         d="M16 3 C17 10, 22 15, 29 16 C22 17, 17 22, 16 29 C15 22, 10 17, 3 16 C10 15, 15 10, 16 3 Z"
       />
     </svg>
@@ -36,6 +35,9 @@ defineProps({
 }
 .aurora-icon { overflow: visible; }
 .aurora-layer { transform-origin: 16px 16px; transform-box: fill-box; }
+.aurora-glow { fill: var(--app-accent); }
+.aurora-core { fill: var(--app-accent); }
+.aurora-trail { stroke: var(--app-accent); }
 
 /* ==================== idle：静止或极轻微呼吸，不抢视线 ==================== */
 .aurora-icon.idle .aurora-glow {

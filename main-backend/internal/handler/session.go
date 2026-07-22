@@ -27,7 +27,7 @@ const (
 type SessionStore struct {
 	mu                  sync.RWMutex
 	sessions            map[string][]DSMessage
-	lastCompressIndexes map[string]int // 每个 session 上次压缩的消息数量
+	lastCompressIndexes map[string]int             // 每个 session 上次压缩的消息数量
 	approvalRules       map[string]map[string]bool // sessionID → (ruleKey → true)
 	domain              string
 
@@ -45,6 +45,7 @@ type persistedMessage struct {
 	ToolCalls        []core.ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string          `json:"tool_call_id,omitempty"`
 	Model            string          `json:"model,omitempty"`
+	Blocks           []FlowBlock     `json:"blocks,omitempty"`
 }
 
 // sessionRecord 是单个会话在本地文件里的完整存储形态：
@@ -68,6 +69,7 @@ func toPersistedMessages(msgs []DSMessage) []persistedMessage {
 			ToolCalls:        m.ToolCalls,
 			ToolCallID:       m.ToolCallID,
 			Model:            m.Model,
+			Blocks:           m.Blocks,
 		}
 	}
 	return out
@@ -84,6 +86,7 @@ func fromPersistedMessages(msgs []persistedMessage) []DSMessage {
 			ToolCalls:        m.ToolCalls,
 			ToolCallID:       m.ToolCallID,
 			Model:            m.Model,
+			Blocks:           m.Blocks,
 		}
 	}
 	return out
