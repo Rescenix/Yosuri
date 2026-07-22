@@ -1,0 +1,11 @@
+{
+  "name": "frontend-self-check",
+  "description": "改完前端代码后自己在浏览器里验证效果并修掉运行时错误（写完 .vue/.jsx/.css 之后都该走一遍）",
+  "steps": [
+    "先确认前端 dev server 在跑：用 mcp__http 或 mcp__shell__run 发一个 curl 到目标地址，拿到 HTTP 状态码就说明在跑。注意：page_check 返回「MCP 工具失败/超时」不等于服务没起——它要开浏览器还要跑视觉模型，本来就慢，这种情况直接重试一次即可，不要去重启 dev server（服务已经在跑时 npm run dev 会因端口占用失败，白白浪费轮次）",
+    "调 mcp__screenshot__page_check，url 传本地页面地址（本项目是 http://localhost:4322/），question 写清楚你这次想确认的视觉效果，比如「卡片是不是三列网格、悬停有没有位移动效」",
+    "看返回里的【未捕获异常】【控制台错误】【失败请求】三段：只要不是全为「无」，就说明页面有运行时问题，光看【视觉】那段是不够的——JS 报错导致白屏时视觉模型只会说「页面是空白的」，说不出原因",
+    "按报错定位：Cannot read/set properties of null 通常是取 DOM 或响应式数据的时机不对；404 失败请求通常是 import 路径或静态资源路径写错",
+    "改完再调一次 page_check 确认，直到三段错误都是「无」，并且【视觉】那段描述的效果确实符合需求才算做完"
+  ]
+}

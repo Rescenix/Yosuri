@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -32,11 +33,90 @@ type VisionQA struct {
 	A string `json:"a"`
 }
 
-// AnalyzeImage 调用阿里云 qwen-vl-max 分析图片。
+// defaultVisionModelID 默认的视觉模型：硅基流动的 Kimi K2.6（代金券免费额度）。
+// 用 VISION_MODEL_ID 覆盖成同池里任何一个标了 Vision:true 的模型（比如 GLM-5.2）。
+const defaultVisionModelID = "free_sf_pro_moonshotai_kimi_k2_6"
+
+// visionBackends 解析视觉模型的 backend 链。返回 nil 表示"没配好"，
+// 调用方应回退到 DashScope 老路径——这样没配 SILICONFLOW_API_KEY 的环境行为完全不变。
+func visionBackends() []RouterBackend {
+	id := os.Getenv("VISION_MODEL_ID")
+	if id == "" {
+		id = defaultVisionModelID
+	}
+	bs := resolveBackends("", id)
+	// resolveBackends 在精确路由失败时会退化成整条免费池链，那里大多数模型不支持图像，
+	// 把图喂进去只会拿到驴唇不对马嘴的回答。只认第一个真正标了 Vision 的。
+	for _, b := range bs {
+		if b.Vision {
+			return []RouterBackend{b}
+		}
+	}
+	return nil
+}
+
+// analyzeImageViaRouter 用 OpenAI 兼容的视觉格式走通用模型路由（model_router.go）。
+// openAIChatOnce 把 msgs 原样塞进 "messages" 再 Marshal，对 content 不做任何强制转换，
+// 所以这里可以直接给数组型 content —— 视觉调用因此白拿了整套失败切换逻辑。
+func analyzeImageViaRouter(backends []RouterBackend, cleanBase64, question string, history []VisionQA) (string, error) {
+	var msgs []map[string]any
+	for _, h := range history {
+		if h.Q == "" && h.A == "" {
+			continue
+		}
+		// 历史轮只带文字：图已经在下面那条最终 user 消息里，重复携带纯属烧 token
+		msgs = append(msgs,
+			map[string]any{"role": "user", "content": h.Q},
+			map[string]any{"role": "assistant", "content": h.A},
+		)
+	}
+	msgs = append(msgs, map[string]any{
+		"role": "user",
+		"content": []map[string]any{
+			{"type": "text", "text": question},
+			// 截图链路给的是 PNG。老的 DashScope 分支写死 jpeg 也能过，是因为它宽容；
+			// OpenAI 兼容端点会按 data URI 里声明的类型去解，写错就是解码失败。
+			{"type": "image_url", "image_url": map[string]any{
+				"url": "data:image/png;base64," + cleanBase64,
+			}},
+		},
+	})
+
+	// 60s 而不是更长：这一步外面还套着 MCP 的整体超时（见 mcpCallTimeout），
+	// 主模型卡太久会把回退 qwen 的时间也一起吃掉，最后两边都没结果。
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	content, _, err := routeChatOnce(ctx, backends, msgs, nil)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("视觉模型返回空内容")
+	}
+	return content, nil
+}
+
+// AnalyzeImage 分析图片。优先走模型路由（默认硅基流动 Kimi K2.6，见 visionBackends），
+// 没配好时回退到阿里云 qwen-vl-max 的私有多模态格式。
 // history 非空时把之前的问答对铺在图片这一轮前面，支持"先问整体、再问细节"的连续追问——
-// DashScope 的 multimodal-generation 走标准多轮 messages 数组，image 只挂在最后一条
-// user 消息上即可，之前的图不需要重复携带。
+// image 只挂在最后一条 user 消息上即可，之前的图不需要重复携带。
 func AnalyzeImage(imageBase64 string, question string, history []VisionQA) (string, error) {
+	// 前缀清理要在分流之前做：两条路径都只接受裸 base64
+	if backends := visionBackends(); len(backends) > 0 {
+		clean := imageBase64
+		if idx := strings.Index(clean, "base64,"); idx != -1 {
+			clean = clean[idx+7:]
+		}
+		text, err := analyzeImageViaRouter(backends, clean, question, history)
+		if err == nil {
+			fmt.Printf("👁️ [视觉] 由 %s (%s) 完成分析\n", backends[0].Name, backends[0].Model)
+			return text, nil
+		}
+		// 视觉模型挂了不直接判死：DashScope 还配着就让它兜底，
+		// 一次前端自检不该因为免费池抽风就整轮失败。
+		fmt.Printf("⚠️ [视觉] %s 失败，回退 qwen-vl-max: %v\n", backends[0].Name, err)
+	}
+
 	apiKey := os.Getenv("DASHSCOPE_API_KEY")
 
 	// 智能清理可能存在的 base64 前缀

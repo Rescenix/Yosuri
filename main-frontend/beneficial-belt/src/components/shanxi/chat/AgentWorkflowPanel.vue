@@ -74,6 +74,13 @@
         <span class="flow-steer-icon">💬</span>
         <span>已插话：{{ b.text }}</span>
       </div>
+
+      <!-- 自动预览：改到前端文件时后端推 preview_open，右侧面板会自己弹出来。
+           这里留一行说明，否则面板凭空冒出来会让人一头雾水。 -->
+      <div v-else-if="b.type === 'preview'" class="flow-preview">
+        <span class="flow-preview-icon">🖥️</span>
+        <span>检测到前端改动，已打开预览：{{ b.url }}</span>
+      </div>
     </template>
   </div>
 </template>
@@ -321,6 +328,19 @@ function toolBodyText(b) {
   color: var(--app-text-faint, #94a3b8);
 }
 .flow-steer-icon { font-size: 12px; opacity: 0.8; }
+/* 自动预览提示：跟插话提示同款弱化条 */
+.flow-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 3px 0 3px 12px;
+  border-left: 2px solid var(--app-accent, #6366f1);
+  font-size: 12px;
+  color: var(--app-text-faint, #94a3b8);
+  word-break: break-all;
+}
+.flow-preview-icon { font-size: 12px; opacity: 0.8; }
 /* ---------- 卡片行（思考/工具共用）：仿图1 的一行小卡片 ---------- */
 .flow-row-head {
   display: flex;

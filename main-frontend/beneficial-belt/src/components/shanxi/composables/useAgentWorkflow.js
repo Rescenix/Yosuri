@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { requestPreview } from './previewBus.js'
 import { contextBreakdown, setContextBreakdownFromBackend, setConversationTokens } from './contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from './sessionTokenStats.js'
 
@@ -293,6 +294,16 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('steering_injected', e => {
             const d = JSON.parse(e.data)
             flow.blocks.push({ type: 'steer', text: d.message || '' })
+            onStreamUpdate?.()
+        })
+
+        // agent 改了前端文件：自动弹预览面板并导航过去。真正的开面板/导航动作
+        // 分别在 ChatWidget 和 PreviewBrowser 里做，这里只负责把地址广播出去。
+        es.addEventListener('preview_open', e => {
+            const d = JSON.parse(e.data)
+            if (!d.url) return
+            requestPreview(d.url)
+            flow.blocks.push({ type: 'preview', url: d.url })
             onStreamUpdate?.()
         })
 

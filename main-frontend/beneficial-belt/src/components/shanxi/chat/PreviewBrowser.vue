@@ -73,8 +73,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
+import { previewRequest } from '../composables/previewBus.js'
 
 const servers = ref([])
 const serversLoading = ref(true)
@@ -117,7 +118,17 @@ async function fetchServers() {
     serversLoading.value = false
   }
 }
-onMounted(fetchServers)
+onMounted(() => {
+  fetchServers()
+  // 事件先到、面板后挂载是常态（ChatWidget 收到事件才把这个组件塞进 dock），
+  // 所以挂载时要补消费一次当前值，否则第一次自动预览必然打不开。
+  if (previewRequest.url) navigateTo(previewRequest.url)
+})
+
+// 后续的自动预览请求（同一 URL 也要能重新导航，所以 watch 的是 seq 不是 url）
+watch(() => previewRequest.seq, () => {
+  if (previewRequest.url) navigateTo(previewRequest.url)
+})
 
 function normalizeUrl(raw) {
   raw = (raw || '').trim()

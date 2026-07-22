@@ -279,6 +279,21 @@ func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefin
 }
 
 // request 发送一个 JSON-RPC 请求并等待响应（带超时）。
+// slowMCPTools 这些工具要开浏览器 + 等页面 networkidle + 再走一次视觉模型，
+// 天然就是分钟级的。用默认 60s 的话会出现最坑的失败模式：工具其实在正常干活，
+// 却被外层判超时，模型收到"MCP 工具失败"后会误判成"服务没起"，转头去重启 dev server。
+var slowMCPTools = map[string]bool{
+	"mcp__screenshot__screenshot": true,
+	"mcp__screenshot__page_check": true,
+}
+
+func mcpCallTimeout(fullName string) time.Duration {
+	if slowMCPTools[fullName] {
+		return 180 * time.Second
+	}
+	return 60 * time.Second
+}
+
 func (c *mcpConn) request(method string, params any, timeout time.Duration) (json.RawMessage, error) {
 	c.mu.Lock()
 	c.nextID++
@@ -341,7 +356,7 @@ func callMCPTool(fullName, argsJSON string) (string, error) {
 
 	raw, err := conn.request("tools/call", map[string]any{
 		"name": mcpRealName[fullName], "arguments": args,
-	}, 60*time.Second)
+	}, mcpCallTimeout(fullName))
 	if err != nil {
 		return "", err
 	}

@@ -33,8 +33,10 @@ var previewCandidates = []previewServerCandidate{
 	{Name: "DS 浏览器代理", Port: 3000, Category: "other"},
 }
 
-// HandlePreviewServers GET /api/preview/servers — 返回当前存活的本地服务
-func HandlePreviewServers(c *gin.Context) {
+// alivePreviewServers 并发探测候选端口，按候选清单原始顺序返回存活的服务。
+// HTTP handler 和四态机的自动预览（见 agent_workflow_handler.go 的 preview_open）
+// 共用这一份探测逻辑。
+func alivePreviewServers() []previewServerCandidate {
 	alive := make([]previewServerCandidate, 0, len(previewCandidates))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -66,5 +68,21 @@ func HandlePreviewServers(c *gin.Context) {
 			}
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"servers": ordered})
+	return ordered
+}
+
+// aliveFrontendURL 返回第一个存活的前端服务地址，一个都没有就返回空串。
+// 候选清单里前端项是按优先级排的（本项目的 4322 排在通用的 Vite/Astro 默认端口前面）。
+func aliveFrontendURL() string {
+	for _, s := range alivePreviewServers() {
+		if s.Category == "frontend" {
+			return s.URL
+		}
+	}
+	return ""
+}
+
+// HandlePreviewServers GET /api/preview/servers — 返回当前存活的本地服务
+func HandlePreviewServers(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"servers": alivePreviewServers()})
 }

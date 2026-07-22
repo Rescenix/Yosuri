@@ -13,6 +13,7 @@ package handler
 //   workflow_done   {status, final_output, input_tokens, output_tokens}
 //   flow_error      {message}   // 命名避开 EventSource 原生 error 事件
 //   steering_injected {message}   // POST /api/code/workflow/steer 投进来的中途插话已生效
+//   preview_open    {url}       // 检测到前端文件改动，前端据此自动弹出预览面板（每个工作流一次）
 //
 // 与 /api/workflow/run 的旧契约完全独立：这里字段用真实 JSON 类型（bool/number），
 // args 用真实 JSON，前端由 AgentWorkflowPanel.vue + useAgentWorkflow.js 消费。
@@ -256,6 +257,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	callSeq := 0
 	startRound := 0
 	modelInfoSent := false
+	// previewOpened 自动预览只弹一次的哨兵（见下面 isFrontendEdit 那段）。
+	// 不进检查点：续跑时重新弹一次预览是合理的——用户多半已经关掉页面了。
+	previewOpened := false
 
 	// 续跑：整体接管上面刚拼好的白板状态。msgs 用检查点里的完整对话
 	// （含中断前所有 tool_calls 和工具结果），模型醒来就知道自己干到哪了。
@@ -512,6 +516,17 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			inputTokens += len(out) / 4
 			transcript = append(transcript, fmt.Sprintf("%s(%s) => %s",
 				tc.Function.Name, truncateChars(tc.Function.Arguments, 300), truncateChars(results[i].output, 200)))
+
+			// 前端文件被改动 → 自动把预览面板弹出来。整个工作流只弹一次：
+			// 一次任务改十个文件不该弹十次，用户手动关掉后也不该被反复强开。
+			// aliveFrontendURL 有 ~400ms 的端口探测开销，靠这个哨兵保证只付一次。
+			if !previewOpened && !results[i].failed && isFrontendEdit(tc.Function.Name, tc.Function.Arguments) {
+				previewOpened = true
+				if url := aliveFrontendURL(); url != "" {
+					writeCodeSSE(c, "preview_open", map[string]any{"url": url})
+					log.Printf("🖥️ [预览] workflow=%s 检测到前端改动，自动打开 %s", workflowID, url)
+				}
+			}
 		}
 		inputTokens += len(content) / 4
 
@@ -550,6 +565,41 @@ func (r *WorkflowRunner) HandleCodeWorkflowCheckpointDelete(c *gin.Context) {
 type codeExecResult struct {
 	output string
 	failed bool
+}
+
+// frontendEditTools 会真正改动文件内容的 MCP 文件工具。读类工具不算——
+// 光看一眼文件不该弹预览。
+var frontendEditTools = map[string]bool{
+	"mcp__fs__write_file":  true,
+	"mcp__fs__edit_file":   true,
+	"mcp__fs__create_file": true,
+}
+
+// frontendExts 命中即认为这次改动会影响浏览器里的呈现。
+var frontendExts = []string{
+	".vue", ".jsx", ".tsx", ".svelte", ".html", ".css", ".scss", ".less", ".ts", ".js",
+}
+
+// isFrontendEdit 判断一次工具调用是不是"改了前端文件"，用来决定要不要自动弹预览。
+// 抽成纯函数是为了能脱离 SSE handler 单测（同 shouldBlockRepeat / codeWorkflowExhausted）。
+// 参数解析失败一律返回 false：宁可不弹，也不能因为解析问题让主流程出岔子。
+func isFrontendEdit(toolName, argsJSON string) bool {
+	if !frontendEditTools[toolName] {
+		return false
+	}
+	var args struct {
+		Path string `json:"path"`
+	}
+	if json.Unmarshal([]byte(argsJSON), &args) != nil {
+		return false
+	}
+	p := strings.ToLower(args.Path)
+	for _, ext := range frontendExts {
+		if strings.HasSuffix(p, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldBlockRepeat 熔断判定：同一签名（工具名+参数）真实执行次数达到 limit 后，

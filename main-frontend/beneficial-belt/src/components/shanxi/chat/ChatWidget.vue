@@ -735,6 +735,7 @@ import 'highlight.js/styles/atom-one-dark.min.css'
 import 'katex/dist/katex.min.css'
 import { renderMarkdown } from './markdownRenderer.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
+import { previewRequest } from '../composables/previewBus.js'
 import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth, useResizableSplit } from './useResizable.js'
 import SessionList from './SessionList.vue'
@@ -931,6 +932,15 @@ function toggleDockPanel(key) {
 function closeDockPanel(key) {
   dockPanels.value = dockPanels.value.filter(k => k !== key)
 }
+
+// agent 改了前端文件 → 后端推 preview_open → 这里把预览面板挂进 dock。
+// 刻意不用 toggleDockPanel：那是"开关"语义，面板已经开着的时候会被它关掉，
+// 正好跟"自动打开"相反。导航到具体地址由 PreviewBrowser 自己 watch 同一个源。
+watch(() => previewRequest.seq, () => {
+  if (!dockPanels.value.includes('preview')) {
+    dockPanels.value = [...dockPanels.value, 'preview']
+  }
+})
 
 // Diff 面板已改为 git 工作树全量 diff（DiffPanel 自己拉 /api/git/working-diff），
 // 不再从会话工具调用里拼 before/after

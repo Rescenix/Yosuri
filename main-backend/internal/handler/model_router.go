@@ -107,7 +107,7 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_sf_moonshotai_kimi_k2_7_code", Vendor: "硅基流动 SiliconFlow", Name: "Kimi-K2.7-Code", Endpoint: "https://api.siliconflow.cn/v1", Model: "moonshotai/Kimi-K2.7-Code", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
 	// DeepSeek-V4-Pro(SiliconFlow) 移除：2026-07-21 实测 28.6s，agent 场景过慢。
 	// DeepSeek-V4-Flash(SiliconFlow) 移除：2026-07-21 实测 120s 超时。
-	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
+	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000},
 	{ID: "free_sf_pro_zai_org_glm_5_1", Vendor: "硅基流动 SiliconFlow", Name: "Pro/GLM-5.1", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/zai-org/GLM-5.1", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
 	{ID: "free_sf_nex_agi_nex_n2_pro", Vendor: "硅基流动 SiliconFlow", Name: "Nex-N2-Pro", Endpoint: "https://api.siliconflow.cn/v1", Model: "nex-agi/Nex-N2-Pro", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
 	{ID: "free_sf_minimaxai_minimax_m2_5", Vendor: "硅基流动 SiliconFlow", Name: "MiniMax-M2.5", Endpoint: "https://api.siliconflow.cn/v1", Model: "MiniMaxAI/MiniMax-M2.5", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
