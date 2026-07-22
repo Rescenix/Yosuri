@@ -1,10 +1,13 @@
 <template>
   <div class="agent-flow" :class="{ streaming: flow.status === 'running' }">
     <template v-for="(b, i) in flow.blocks" :key="i">
-      <!-- 思考：可折叠的弱化文本，底色同聊天背景，只靠左侧竖线与正文区分 -->
+      <!-- 思考：卡片行（✨ 图标 + 标签 + 收起时的一行预览 + 折叠箭头），展开是弱化正文 -->
       <div v-if="b.type === 'thinking'" class="flow-thinking">
-        <div class="flow-thinking-label" @click="toggleThink(i)">
-          <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考完成' }}</span>
+        <div class="flow-row-head" @click="toggleThink(i)">
+          <Icon icon="mdi:star-four-points" class="flow-row-icon icon-think" width="13" />
+          <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考' }}</span>
+          <span v-if="!(thinkOpen[i] ?? true) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
+          <span v-else class="flow-spacer"></span>
           <span class="flow-chevron" :class="{ open: thinkOpen[i] ?? true }">›</span>
         </div>
         <div v-if="thinkOpen[i] ?? true" class="flow-thinking-text">{{ b.text }}</div>
@@ -17,13 +20,18 @@
       <!-- 操作：默认就是一行与正文同样式的白话（"编辑了 xx.go +11 −6"），没有
            徽章/状态图标/边框；点一下才展开下面那张白卡片看 Diff 或命令输出 -->
       <div v-else-if="b.type === 'tool'" class="flow-tool">
-        <div class="flow-tool-head" @click="b.expanded = !b.expanded">
+        <div class="flow-row-head" @click="b.expanded = !b.expanded">
+          <Icon icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
           <span class="flow-tool-label">{{ actionText(b) }}</span>
           <span v-if="diffCounts(b)" class="flow-tool-counts">
             <span class="flow-add">+{{ diffCounts(b).added }}</span>
             <span v-if="diffCounts(b).removed" class="flow-del">−{{ diffCounts(b).removed }}</span>
           </span>
-          <span v-if="b.status === 'error'" class="flow-tool-failed">失败</span>
+          <span class="flow-spacer"></span>
+          <!-- 状态徽章：完成带耗时(41ms)、进行中带脉冲点、失败标红（图1 那种） -->
+          <span class="flow-tool-badge" :class="'st-' + b.status">
+            <span v-if="b.status === 'running'" class="flow-badge-dot"></span>{{ toolBadge(b) }}
+          </span>
           <span class="flow-chevron" :class="{ open: b.expanded }">›</span>
         </div>
         <div v-if="b.expanded" class="flow-tool-body">
@@ -59,15 +67,41 @@
         <span class="flow-compressed-icon">🗜️</span>
         <span>已压缩早期 {{ b.foldedMessages }} 条执行记录以节省上下文（{{ compactChars(b.beforeChars) }} → {{ compactChars(b.afterChars) }}）</span>
       </div>
+
+      <!-- 中途插话：用户在工作流跑着的时候塞进来的一句话，已被下一轮采纳。
+           跟压缩提示一个视觉重量的弱化条，让用户确认"这句话确实生效了"。 -->
+      <div v-else-if="b.type === 'steer'" class="flow-steer">
+        <span class="flow-steer-icon">💬</span>
+        <span>已插话：{{ b.text }}</span>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup>
 import { reactive } from 'vue'
+import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
 import { renderMarkdown } from './markdownRenderer.js'
+
+// 收起态思考行的一行预览：取首个非空行、压掉空白、截断
+function onelinePreview(text) {
+  const s = (text || '').replace(/\s+/g, ' ').trim()
+  return s.length > 46 ? s.slice(0, 46) + '…' : s
+}
+// 工具耗时格式：<1s 显示 ms，否则显示 s
+function fmtMs(ms) {
+  if (!ms || ms < 0) return ''
+  return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's'
+}
+// 状态徽章文案：完成带耗时、进行中、失败
+function toolBadge(b) {
+  if (b.status === 'running') return '进行中'
+  if (b.status === 'error') return '失败'
+  const t = fmtMs(b.elapsedMs)
+  return t ? '完成 ' + t : '完成'
+}
 
 const props = defineProps({
   flow: { type: Object, required: true }
@@ -247,7 +281,12 @@ function toolBodyText(b) {
 </script>
 
 <style scoped>
+/* .message-row 是 flex 容器，子元素默认按内容宽度收缩（shrink-to-fit）。
+   用户气泡 .message-bubble.user 和纯文本回答 .assistant-message 都显式撑了
+   width:100%，这里漏了同一条，工具卡片那一列就只有文字本身那么宽，跟上下
+   气泡对不齐——width:100% 让它跟其余消息块占满同一条列宽。 */
 .agent-flow {
+  width: 100%;
   max-width: 100%;
   padding: 2px 0;
 }
@@ -269,6 +308,77 @@ function toolBodyText(b) {
   color: var(--app-text-faint, #94a3b8);
 }
 .flow-compressed-icon { font-size: 12px; opacity: 0.8; }
+/* 中途插话提示：跟压缩提示同样"轻"，但左侧竖线用强调色——这是用户自己
+   插的一句话，比系统后台动作稍微值得多看一眼，但依然不该抢正文注意力。 */
+.flow-steer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 3px 0 3px 12px;
+  border-left: 2px solid var(--app-accent, #6366f1);
+  font-size: 12px;
+  color: var(--app-text-faint, #94a3b8);
+}
+.flow-steer-icon { font-size: 12px; opacity: 0.8; }
+/* ---------- 卡片行（思考/工具共用）：仿图1 的一行小卡片 ---------- */
+.flow-row-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border-radius: 9px;
+  background: var(--app-surface-2, #f7f7f8);
+  border: 1px solid var(--app-border-soft, #ededf0);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13.5px;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.flow-row-head:hover {
+  background: #f1f1f3;
+  border-color: #e2e2e6;
+}
+.flow-row-icon { flex-shrink: 0; }
+.icon-think { color: #8b5cf6; }
+.icon-tool { color: #64748b; }
+.flow-row-preview {
+  flex: 1;
+  min-width: 0;
+  color: var(--app-text-faint, #9ca3af);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-spacer { flex: 1; }
+/* 状态徽章：完成(绿)/进行中(灰+脉冲点)/失败(红)，胶囊底 */
+.flow-tool-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 1.5px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.flow-tool-badge.st-ok { color: #12b76a; background: rgba(18, 183, 106, 0.1); }
+.flow-tool-badge.st-error { color: #d94834; background: rgba(217, 72, 52, 0.1); }
+.flow-tool-badge.st-running { color: #64748b; background: rgba(100, 116, 139, 0.1); }
+.flow-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: flowBadgePulse 1.2s ease-in-out infinite;
+}
+@keyframes flowBadgePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
 .flow-thinking-label {
   display: inline-flex;
   align-items: center;
@@ -323,27 +433,15 @@ function toolBodyText(b) {
 .flow-tool {
   margin: 6px 0;
 }
-.flow-tool-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  cursor: pointer;
-  user-select: none;
-  padding: 1px 0;
-}
 .flow-tool-label {
   min-width: 0;
-  font-size: 17px;
-  line-height: 1.75;
-  color: #1e293b;
+  max-width: 60%;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #334155;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.flow-tool-head:hover .flow-tool-label {
-  text-decoration: underline;
-  text-decoration-color: rgba(148, 163, 184, 0.5);
-  text-underline-offset: 3px;
 }
 .flow-tool-counts {
   flex-shrink: 0;

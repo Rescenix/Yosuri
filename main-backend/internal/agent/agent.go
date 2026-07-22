@@ -26,6 +26,7 @@ const SoulTemplateCodeProtocol = `
 - 读大文件别整篇读进来：用 mcp__grep__read_range 读指定行号区间，或 mcp__fs__read_text_file 的 head/tail 只取首尾。
 - 改代码用 mcp__fs__edit_file：先 read_text_file 拿到精确内容，oldText 从中原样照抄（含缩进/空白/换行），不要凭记忆构造——差一个空白就匹配失败要重试。oldText 还要在文件里唯一。
 - 先用 mcp__grep__grep 搜索定位再动手，避免重复劳动。
+- 复杂多步任务:开工前用 update_todo 列出计划清单,每完成一步再调一次更新状态(便签会实时勾选)。简单一两步的任务别调,免得啰嗦。
 `
 
 // MainAgent 主Agent定义

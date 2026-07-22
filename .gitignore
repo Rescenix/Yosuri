@@ -55,7 +55,9 @@ __pycache__/
 # agent / AI 工具配置（不进仓库）
 .claude/
 .mimocode/
+.agents/
 .hermes/
+.clinerules/
 
 # 工具输出
 .aurora/
@@ -67,3 +69,6 @@ crack/chrome_temp/
 
 # Misc
 re1/
+public/
+
+test.c

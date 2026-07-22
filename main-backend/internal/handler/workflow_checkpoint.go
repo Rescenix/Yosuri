@@ -9,8 +9,9 @@ package handler
 // 落盘时机：每轮工具结果都写进 msgs 之后。这个位置是天然的安全边界——
 // 此刻没有任何"已发起未完成"的工具调用，msgs 自洽，恢复后直接进下一轮问模型即可。
 //
-// 生命周期：任务正常收尾（完成/超轮次/熔断）即删；只有异常中断留下的检查点才有意义。
-// 上游报错留档（可续跑重试），过期的由 24h TTL 兜底清掉。
+// 生命周期：任务正常收尾（完成/熔断）即删；只有异常中断留下的检查点才有意义。
+// 上游报错、轮次/token 预算耗尽都留档（可续跑重试，见 codeWorkflowExhausted），
+// 过期的由 24h TTL 兜底清掉。
 
 import (
 	"encoding/json"
@@ -35,7 +36,9 @@ type workflowCheckpoint struct {
 	Mode       string `json:"mode"`
 	Model      string `json:"model"`
 	Effort     string `json:"effort"`
-	// Round 已完成的轮数，续跑从这里接着算，总轮次上限仍是 codeWorkflowMaxRounds。
+	// Round 已完成的轮数，续跑从这里接着算。终止条件是轮次上限（codeWorkflowMaxRounds，
+	// 兜底值）和 token 预算（codeWorkflowTokenBudget）任一先触顶，见 codeWorkflowExhausted；
+	// 两者都可以在单次请求上用 ?max_rounds=/?max_tokens= 覆盖。
 	Round        int              `json:"round"`
 	Msgs         []map[string]any `json:"msgs"`
 	Transcript   []string         `json:"transcript"`

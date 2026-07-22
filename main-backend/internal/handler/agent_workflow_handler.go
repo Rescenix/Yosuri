@@ -12,6 +12,7 @@ package handler
 //   result          {id, name, ok, output}   // 工具执行结果
 //   workflow_done   {status, final_output, input_tokens, output_tokens}
 //   flow_error      {message}   // 命名避开 EventSource 原生 error 事件
+//   steering_injected {message}   // POST /api/code/workflow/steer 投进来的中途插话已生效
 //
 // 与 /api/workflow/run 的旧契约完全独立：这里字段用真实 JSON 类型（bool/number），
 // args 用真实 JSON，前端由 AgentWorkflowPanel.vue + useAgentWorkflow.js 消费。
@@ -22,6 +23,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,12 +35,38 @@ import (
 )
 
 const (
-	codeWorkflowMaxRounds = 20
-	codeResultMaxChars    = 10000
+	// codeWorkflowMaxRounds 现在只是兜底上限——真正约束成本的是下面的 token 预算
+	// （见 codeWorkflowExhausted）。复杂任务经常真实需要几十轮，20 轮硬顶会把没
+	// 跑完的正常任务错杀成"失败"；把它调宽松，让 token 预算做主要限制更贴合实际成本。
+	codeWorkflowMaxRounds = 60
+	// codeWorkflowMaxTokensDefault 单个工作流 input+output token 总量的默认上限；
+	// 可用 CODE_WORKFLOW_MAX_TOKENS 环境变量或单次请求的 ?max_tokens= 覆盖。
+	codeWorkflowMaxTokensDefault = 500000
+	codeResultMaxChars           = 10000
 	// codeRepeatCallLimit 同一 工具名+参数 在一个工作流里最多真实执行几次；
 	// 超出即熔断（回提示不再真跑），防止模型原地打转烧满轮次。
 	codeRepeatCallLimit = 2
 )
+
+// codeWorkflowTokenBudget 读取 token 预算：env 覆盖优先，否则用默认值。
+func codeWorkflowTokenBudget() int {
+	if v, err := strconv.Atoi(os.Getenv("CODE_WORKFLOW_MAX_TOKENS")); err == nil && v > 0 {
+		return v
+	}
+	return codeWorkflowMaxTokensDefault
+}
+
+// codeWorkflowExhausted 判断是否该终止工作流：轮次或 token 预算任一触顶即真。
+// 抽成纯函数是为了能脱离整个 SSE handler 单测（同 shouldBlockRepeat 的理由）。
+func codeWorkflowExhausted(round, inputTokens, outputTokens, maxRounds, tokenBudget int) (bool, string) {
+	if round >= maxRounds {
+		return true, fmt.Sprintf("超过最大迭代轮数(%d)", maxRounds)
+	}
+	if inputTokens+outputTokens >= tokenBudget {
+		return true, fmt.Sprintf("超过 token 预算(%d)", tokenBudget)
+	}
+	return false, ""
+}
 
 // historyLimitFor 按模型上下文能力自适应历史窗口。
 // 原来所有链路共用 maxHistoryMessages=10——那是给 8K 小模型的保守值，
@@ -147,6 +175,17 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	}
 	backends := resolveBackends(openID, model)
 
+	// 允许单次请求覆盖轮次/token 预算（比如撞上限后带着更宽松的值 resume），
+	// 不影响全局默认，也不持久化进检查点。
+	maxRounds := codeWorkflowMaxRounds
+	if v, err := strconv.Atoi(c.Query("max_rounds")); err == nil && v > 0 {
+		maxRounds = v
+	}
+	tokenBudget := codeWorkflowTokenBudget()
+	if v, err := strconv.Atoi(c.Query("max_tokens")); err == nil && v > 0 {
+		tokenBudget = v
+	}
+
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -172,6 +211,11 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	waiter := newApprovalWaiter()
 	registerApprovalWaiter(workflowID, waiter)
 	defer unregisterApprovalWaiter(workflowID)
+
+	// steer 通道：同样按 workflowID 注册进全局 registry，供独立的
+	// POST /api/code/workflow/steer 跨请求把消息塞进这条正在跑的循环。
+	steerCh := registerSteerChannel(workflowID)
+	defer unregisterSteerChannel(workflowID)
 
 	// 上下文装配全部交给 ContextProvider（见 context_provider.go）：
 	// 系统提示词分段声明、稳定段排前面（前缀缓存友好）、分类占用与提示词同源、
@@ -257,9 +301,31 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		ctxWindow = backends[0].ContextWindow
 	}
 
-	for round := startRound; round < codeWorkflowMaxRounds; round++ {
+	for round := startRound; ; round++ {
+		// 轮次/token 预算任一触顶：跟错误路径一样保留检查点，可以带更宽松的
+		// max_rounds/max_tokens resume 接着跑，而不是无条件判死刑。
+		if done, reason := codeWorkflowExhausted(round, inputTokens, outputTokens, maxRounds, tokenBudget); done {
+			checkpoint(round)
+			writeCodeSSE(c, "workflow_done", map[string]any{
+				"status": "failed", "final_output": reason + "，任务中止（可续跑）",
+				"input_tokens": inputTokens, "output_tokens": outputTokens,
+				"conversation_tokens": conversationTokens(inputTokens, staticSum),
+				"resumable":           true, "workflow_id": workflowID,
+			})
+			return
+		}
 		if c.Request.Context().Err() != nil {
 			return // 客户端断开
+		}
+
+		// 非阻塞取一条 steer 消息（如果有）：一轮最多消费一条，多条按发送顺序留在
+		// channel 里排队到下一轮，避免把用户连续几句不同的话糊成一坨塞给模型。
+		// 放在压缩之前，让插入的消息也参与后续的上下文预算核算。
+		select {
+		case steerMsg := <-steerCh:
+			msgs = append(msgs, map[string]any{"role": "user", "content": "[用户中途插话] " + steerMsg})
+			writeCodeSSE(c, "steering_injected", map[string]any{"message": steerMsg})
+		default:
 		}
 
 		// 上下文感知压缩：真实 prompt_tokens 超窗口 80% 时，把早期轮次折叠成任务相关
@@ -375,6 +441,20 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				}
 				continue
 			}
+			// update_todo 是纯 UI 副作用（更新左下角便签），同样在这层办掉、不进执行链
+			if tc.Function.Name == updateTodoToolName {
+				items, ack := handleUpdateTodo(tc.Function.Arguments)
+				handled[i] = ack
+				if len(items) > 0 {
+					writeCodeSSE(c, "todo", map[string]any{"items": items})
+				}
+				continue
+			}
+			// read_skill 是纯查询（取技能库全文），没有 load_tools 那样的激活副作用
+			if tc.Function.Name == readSkillToolName {
+				handled[i] = handleReadSkill(tc.Function.Arguments, loadSkills())
+				continue
+			}
 			toRun = append(toRun, calls[i])
 			runIdx = append(runIdx, i)
 		}
@@ -452,15 +532,6 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			return
 		}
 	}
-
-	// 轮次耗尽属于终态失败（续跑也只会立刻再撞上限），检查点没有保留价值。
-	deleteWorkflowCheckpoint(workflowID)
-	cleanupToolOutputSpills(workflowID)
-	writeCodeSSE(c, "workflow_done", map[string]any{
-		"status": "failed", "final_output": fmt.Sprintf("超过最大迭代轮数(%d)，任务中止", codeWorkflowMaxRounds),
-		"input_tokens": inputTokens, "output_tokens": outputTokens,
-		"conversation_tokens": conversationTokens(inputTokens, staticSum),
-	})
 }
 
 // HandleCodeWorkflowCheckpoints GET /api/code/workflow/checkpoints?session_id=

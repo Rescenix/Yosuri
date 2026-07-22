@@ -151,6 +151,7 @@ const statusColor = computed(() => {
 
 /* 外层白卡片——唯一一张 */
 .agent-group-card {
+  width: 100%;
   margin-top: 8px;
   border: 1px solid #e5e5e5;
   border-radius: 12px;
@@ -158,5 +159,6 @@ const statusColor = computed(() => {
   padding: 10px 12px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
   overflow: hidden;
+  box-sizing: border-box;
 }
 </style>

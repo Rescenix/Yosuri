@@ -174,7 +174,7 @@ onUnmounted(() => {
   cursor: pointer;
   color: #9a958a;
   font-size: 11px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--app-font);
   letter-spacing: 0.3px;
   user-select: none;
 }
@@ -201,7 +201,7 @@ onUnmounted(() => {
   gap: 6px;
   font-size: 12px;
   color: #1e293b;
-  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-family: var(--app-font);
 }
 .terminal-tab.active { font-weight: 500; }
 .terminal-tab-icon { flex-shrink: 0; color: #6b6b6b; }

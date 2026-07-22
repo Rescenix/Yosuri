@@ -44,12 +44,12 @@ var loadToolsToolDef = core.ToolDefinition{
 	},
 }
 
-// nativeWorkflowToolDefs 常驻工具：只有编排类的 dispatch_agent + load_tools。
-// 文件读写/命令/检索/记忆全部走 MCP（按需 load_tools 加载），内置工具已整体退役——
-// 主 Agent 靠 load_tools 拉 MCP 工具，子代理直接用 MCP 只读子集（见 subagent.go）。
-// 这两个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
+// nativeWorkflowToolDefs 常驻工具：编排类的 dispatch_agent + load_tools/read_skill 这类
+// 按需取全文的钥匙 + update_todo。文件读写/命令/检索/记忆全部走 MCP（按需 load_tools 加载），
+// 内置工具已整体退役——主 Agent 靠 load_tools 拉 MCP 工具，子代理直接用 MCP 只读子集（见 subagent.go）。
+// 这几个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
 func nativeWorkflowToolDefs() []core.ToolDefinition {
-	return []core.ToolDefinition{dispatchAgentToolDef, loadToolsToolDef}
+	return []core.ToolDefinition{dispatchAgentToolDef, loadToolsToolDef, updateTodoToolDef, readSkillToolDef}
 }
 
 // firstSentence 取描述的第一句，索引行只要一句话说清用途。

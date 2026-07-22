@@ -80,6 +80,11 @@ func (h *StatsHandler) flattenMessages() []statMessage {
 	sessions := h.sessionStore.AllSessions()
 	out := make([]statMessage, 0)
 	for sid, msgs := range sessions {
+		// 分支会话开头那段是从父会话拷来的，父会话已经统计过一遍了——
+		// 不跳过的话一条会话分叉三次，消息数就凭空翻几倍。
+		if fi := h.sessionStore.ForkIndex(sid); fi > 0 && fi <= len(msgs) {
+			msgs = msgs[fi:]
+		}
 		for _, m := range msgs {
 			out = append(out, statMessage{
 				SessionID: sid,

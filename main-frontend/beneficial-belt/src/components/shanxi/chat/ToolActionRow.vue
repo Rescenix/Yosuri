@@ -165,6 +165,9 @@ function actionBadge(tc) {
 </script>
 
 <style scoped>
+.bgstep-action {
+  width: 100%;
+}
 .bgstep-action-row {
   display: flex;
   align-items: center;
@@ -172,8 +175,10 @@ function actionBadge(tc) {
   padding: 7px 0;
   cursor: pointer;
   font-size: 12.5px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   color: #262626;
   border-bottom: 1px solid #ececec;
+  width: 100%;
 }
 .bgstep-action:last-child .bgstep-action-detail { border-bottom: none; }
 .bgstep-action-row:hover { background: rgba(0, 0, 0, 0.03); }

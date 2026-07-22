@@ -852,8 +852,26 @@ min-height: 90px !important;
   left: 0;
   bottom: 0;
   display: flex;
- 
+}
 
+/* agentflow 一条消息 = 工作流面板 + 底部工具栏，竖着排。
+   .message-row 是 flex-direction:row，不包这一层的话工具栏会被当成第二个
+   flex item 塞到面板右边，还被 align stretch 拉成整条高的窄竖条（看着就像没有）。 */
+.agentflow-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+/* agentflow 回复的朗读/复制栏：跟 .assistant-tools 同一套按钮，但这里走正常文档流
+   （工作流卡片是块级内容，绝对定位会盖在正文上） */
+.flow-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  padding-left: 2px;
+  flex: 0 0 auto;   /* 别被父容器拉高 */
 }
 
 .tool-btn {
@@ -1872,6 +1890,45 @@ min-height: 90px !important;
   margin: 0 auto;
 }
 
+/* 侧栏折叠时:便签 + 看板娘独占三栏工作区的左栏。
+   以前这俩是 position:absolute 的悬浮层(靠拖动躲开聊天内容),结果默认位置就压在
+   聊天列上;现在是真正的 flex 栏,自己占宽度,中间聊天列靠 flex:1 自动让位。 */
+.studio-side-col {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* 便签在上、看板娘沉底,和原来的观感一致 */
+  gap: 10px;
+  min-height: 0;
+  /* flex item 默认 min-width:auto,子元素的 min-content 会把这一栏顶宽
+     (便签是 content-box 的 200px+28padding=228),必须显式清零 */
+  min-width: 0;
+  pointer-events: auto;
+}
+/* 便签自身写死 width:200px 且是 content-box,放进窄栏会溢出——按栏宽走 */
+.studio-side-col .task-sticky { width: 100%; box-sizing: border-box; }
+/* 栏内元素仍可拖动微调(把手=元素自身)。overflow 不设 hidden,
+   否则往栏外拖会被直接裁掉。 */
+.side-drag { cursor: grab; flex-shrink: 0; }
+.side-drag.dragging { cursor: grabbing; user-select: none; position: relative; z-index: 50; }
+/* 看板娘按栏宽缩放,别把 200px 的栏撑爆(组件自身是写死的 240×380)。
+   .live2d-widget 是子组件根元素,会同时带上父组件的 scope id,所以这里选得到。 */
+.studio-side-live2d .live2d-widget { width: 100%; height: 285px; }
+.studio-side-live2d canvas { max-width: 100%; }
+
+/* 左栏会把中间聊天列整体推右,而正文是在聊天列里 margin:0 auto 居中的,
+   于是看起来就"偏右"了。在右侧补一份等宽留白,正文重新落回窗口中线。
+   右侧工具面板(终端/Diff)打开时不补——那时右边本来就有东西撑着。 */
+.chat-body-row:has(.studio-side-col):not(:has(.tool-panel)) .chat-content.studio {
+  padding-right: 188px; /* 左栏 180 + 栏间距 8 */
+  box-sizing: border-box;
+}
+/* 窄屏放不下三栏时先收掉这一栏,聊天内容优先 */
+@media (max-width: 1180px) {
+  .studio-side-col { display: none; }
+  .chat-body-row:has(.studio-side-col):not(:has(.tool-panel)) .chat-content.studio { padding-right: 0; }
+}
+
 /* ==================== 顶部栏扁平化 ==================== */
 .chat-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -2298,6 +2355,7 @@ min-height: 90px !important;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  position: relative; /* 左下角坞(.left-corner-dock)的定位基准 */
 }
 /* 展开态下 chat-body-row 是三栏工作区容器：整体白底 + 内边距 + 栏间距。
    间隙是白色（与中间聊天区同色）不会割裂视觉，左右卡片靠自身边框+阴影浮起来。
@@ -2854,8 +2912,9 @@ min-height: 90px !important;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 0;
 }
-.toolbar-dropdown-wrap { position: relative; }
+.input-toolbar-right { justify-content: flex-end; }
 .toolbar-pill-btn {
   display: flex;
   align-items: center;
@@ -2885,6 +2944,10 @@ min-height: 90px !important;
   transition: background 0.15s ease;
 }
 .toolbar-icon-pill-btn:hover { background: #f5f5f5; }
+
+/* 下拉是 position:absolute + left:0，必须有这个定位基准才会贴在自己的按钮上；
+   少了它就会一路上溯到 .chat-body-row，整个卡片跑到窗口左边去 */
+.toolbar-dropdown-wrap { position: relative; }
 
 /* Auto/+ 下拉都开在工具条上方——工具条贴着窗口底边，往下开会出屏 */
 .auto-menu-dropdown,

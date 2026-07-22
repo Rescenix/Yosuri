@@ -31,56 +31,54 @@
     </div>
 
     <!-- 笔记本 = 置顶会话 -->
-    <div v-if="pinnedSessions.length" class="smc-section">
+    <div v-if="pinnedNodes.length" class="smc-section">
       <div class="smc-section-label">
         <Icon icon="lucide:notebook" width="14" color="#4a4a4a" />
         <span>笔记本</span>
       </div>
       <div class="smc-session-area">
-      <div
-        v-for="s in pinnedSessions"
-        :key="s.id"
-        class="smc-session-row"
-        :class="{ active: s.id === activeSession, running: s.id === runningSession }"
-        @mouseenter="hoveredId = s.id"
-        @mouseleave="onRowLeave(s.id)"
-        @click="onRowClick(s)"
-      >
-        <span class="smc-dot" :class="{ on: s.id === runningSession }"></span>
-        <span class="smc-name">{{ s.name }}</span>
-        <div v-if="hoveredId === s.id || openMenuId === s.id" class="smc-row-menu-wrap">
-          <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
-            <Icon icon="mdi:dots-horizontal" width="16" />
-          </button>
-        </div>
-      </div>
+        <!-- 置顶的若是某条分支，这里平铺一份（不带祖先），它同时仍嵌套在下面的最近区里
+             —— 置顶是快捷方式，不是把分支从血缘里搬走。key 加前缀避免跨区重复 -->
+        <SessionTreeNode
+          v-for="s in pinnedNodes"
+          :key="'pin_' + s.id"
+          :node="s"
+          :active-session="activeSession"
+          :running-session="runningSession"
+          :hovered-id="hoveredId"
+          :open-menu-id="openMenuId"
+          :is-expanded="isExpanded"
+          @select="onRowClick"
+          @toggle="toggleCollapse"
+          @menu="toggleMenu"
+          @hover="hoveredId = $event"
+          @hover-leave="onRowLeave"
+        />
       </div>
     </div>
 
-    <!-- 最近会话 -->
+    <!-- 最近会话（分支嵌套在各自父会话下面） -->
     <div class="smc-section">
       <div class="smc-section-label">
         <span>最近</span>
-        <span class="smc-count">{{ recentSessions.length }}/{{ sessions.length }}</span>
+        <span class="smc-count">{{ rootNodes.length }}/{{ sessions.length }}</span>
       </div>
       <div class="smc-session-area">
-        <div
-          v-for="s in recentSessions"
+        <SessionTreeNode
+          v-for="s in rootNodes"
           :key="s.id"
-          class="smc-session-row"
-          :class="{ active: s.id === activeSession, running: s.id === runningSession }"
-          @mouseenter="hoveredId = s.id"
-          @mouseleave="onRowLeave(s.id)"
-          @click="onRowClick(s)"
-        >
-          <span class="smc-dot" :class="{ on: s.id === runningSession }"></span>
-          <span class="smc-name">{{ s.name }}</span>
-          <div v-if="hoveredId === s.id || openMenuId === s.id" class="smc-row-menu-wrap">
-            <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
-              <Icon icon="mdi:dots-horizontal" width="16" />
-            </button>
-          </div>
-        </div>
+          :node="s"
+          :active-session="activeSession"
+          :running-session="runningSession"
+          :hovered-id="hoveredId"
+          :open-menu-id="openMenuId"
+          :is-expanded="isExpanded"
+          @select="onRowClick"
+          @toggle="toggleCollapse"
+          @menu="toggleMenu"
+          @hover="hoveredId = $event"
+          @hover-leave="onRowLeave"
+        />
       </div>
     </div>
 
@@ -117,6 +115,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import SessionTreeNode from './SessionTreeNode.vue'
 
 const PIN_KEY = 'pinnedSessions'
 
@@ -165,12 +164,74 @@ function match(s) {
   return s.name.toLowerCase().includes(q.value.trim().toLowerCase())
 }
 
-const pinnedSessions = computed(() =>
-  props.sessions.filter(s => isPinned(s.id) && match(s))
-)
-const recentSessions = computed(() =>
-  props.sessions.filter(s => !isPinned(s.id) && match(s))
-)
+// ---- 分支树 ----
+// 折叠态记的是「折叠」而不是「展开」：这样默认全展开，新分叉出来的分支天然可见，
+// 不用每次分叉都记得去把父节点加进展开集合（否则就会有"我的分支没出现"的怪 bug）。
+const COLLAPSE_KEY = 'collapsedSessionBranches'
+const collapsedIds = ref({})
+function loadCollapsed() {
+  try { collapsedIds.value = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') } catch { collapsedIds.value = {} }
+}
+function saveCollapsed() {
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsedIds.value)) } catch {}
+}
+function toggleCollapse(id) {
+  if (collapsedIds.value[id]) delete collapsedIds.value[id]
+  else collapsedIds.value[id] = true
+  saveCollapsed()
+}
+function subtreeHasActive(node) {
+  if (node.id === props.activeSession) return true
+  return node.children.some(subtreeHasActive)
+}
+function isExpanded(node) {
+  if (q.value.trim()) return true                 // 搜索时全展开，免得匹配项藏在折叠节点里
+  if (!collapsedIds.value[node.id]) return true
+  return node.children.some(subtreeHasActive)     // 当前会话在里面就必须展开，否则选中的那条看不见
+}
+
+// 先对全量列表建树，再按置顶分区——这样置顶一个根会连整棵子树一起进笔记本
+const forest = computed(() => {
+  const byId = new Map(props.sessions.map(s => [s.id, { ...s, children: [] }]))
+  const roots = []
+  for (const node of byId.values()) {
+    const parent = node.parentId ? byId.get(node.parentId) : null
+    // 找不到父节点的挂到根：后端删父会话时子分支会被提升为根，
+    // 这里兜住"列表还没刷新"的那一小段竞态，不让分支凭空消失
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  }
+  return { byId, roots }
+})
+
+// 自身匹配 或 任一后代匹配 就保留：扁平过滤会把匹配的子分支连同被过滤掉的父节点
+// 一起弄没，搜索反而找不到东西
+function filterTree(nodes) {
+  const out = []
+  for (const n of nodes) {
+    const kids = filterTree(n.children)
+    if (match(n) || kids.length) out.push({ ...n, children: kids })
+  }
+  return out
+}
+
+// 最近区：没被置顶的根会话，各自带整棵子树（置顶的子分支仍然嵌套在这里，
+// 因为置顶只是加个快捷方式，不该让树谎报血缘）
+const rootNodes = computed(() => filterTree(forest.value.roots.filter(s => !isPinned(s.id))))
+
+// 笔记本区：置顶的根带着整棵子树进来；置顶的是子分支则平铺一份（不带祖先）
+const pinnedNodes = computed(() => {
+  const { byId, roots } = forest.value
+  const rootIds = new Set(roots.map(r => r.id))
+  const picked = []
+  for (const s of props.sessions) {
+    if (!isPinned(s.id)) continue
+    const node = byId.get(s.id)
+    if (!node) continue
+    picked.push(rootIds.has(s.id) ? node : { ...node, children: [] })
+  }
+  return filterTree(picked)
+})
 
 const hoveredId = ref(null)
 const openMenuId = ref(null)
@@ -220,7 +281,7 @@ function onDelete(s) {
   emit('delete-session', s.id)
 }
 function onDocClick() { openMenuId.value = null }
-onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick) })
+onMounted(() => { loadPinned(); loadCollapsed(); document.addEventListener('click', onDocClick) })
 onUnmounted(() => document.removeEventListener('click', onDocClick))
 </script>
 
@@ -298,61 +359,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 .smc-session-area::-webkit-scrollbar-thumb:hover { background: #c0c0c0; }
 .smc-session-area { scrollbar-width: thin; scrollbar-color: #d8d8d8 transparent; }
 
-.smc-session-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 12px;
-  border-radius: 10px;
-  margin: 4px 2px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-/* 侧栏底色是 Gemini 灰（#f4f6f8），hover/active 用半透明黑才看得见 */
-.smc-session-row:hover { background: rgba(0, 0, 0, 0.05); }
-.smc-session-row.active { background: rgba(0, 0, 0, 0.08); }
-.smc-session-row.running { background: color-mix(in srgb, var(--app-accent), transparent 94%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 50%); }
-
-.smc-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #c4c4c4;
-  transition: background 0.2s ease;
-}
-.smc-dot.on { background: var(--app-accent); animation: smc-dot-pulse 1.4s ease-in-out infinite; }
-@keyframes smc-dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent), transparent 45%); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent), transparent 100%); }
-}
-
-.smc-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #1a1a1a;
-}
-
-.smc-row-menu-wrap { position: relative; flex-shrink: 0; }
-.smc-row-menu-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  color: #6b6b6b;
-  cursor: pointer;
-}
-.smc-row-menu-btn:hover { background: rgba(0,0,0,0.06); }
+/* 会话行的样式已随分支树迁到 SessionTreeNode.vue（那边用主题变量，暗色模式也对） */
 
 .smc-row-dropdown {
   background: #ffffff;

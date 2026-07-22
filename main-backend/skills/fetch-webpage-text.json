@@ -1,0 +1,8 @@
+{
+  "name": "fetch-webpage-text",
+  "description": "获取指定网页的纯文本内容，适用于文本为主的页面",
+  "steps": [
+    "加载 web_fetch 工具",
+    "调用 web_fetch 获取目标URL的纯文本内容"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "multi-step-todo-workflow",
+  "description": "适用于需要分步骤执行并实时更新进度的任务，先规划步骤，逐步执行并标记完成，最后总结",
+  "steps": [
+    "使用 update_todo 列出所有计划步骤，初始状态设为 pending",
+    "依次执行每个步骤，每完成一步调用 update_todo 将对应项状态更新为 done",
+    "所有步骤完成后进行总结并更新最终状态"
+  ]
+}

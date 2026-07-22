@@ -48,6 +48,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
 	// 工具审批回调：Ask 模式下前端批准条「允许/拒绝」写回，恢复四态机执行
 	r.POST("/api/code/workflow/approve", workflowRunner.HandleCodeWorkflowApprove)
+	// 中途插话：工作流跑着的时候插一条消息，下一轮当作用户中途发言拼进上下文
+	r.POST("/api/code/workflow/steer", HandleCodeWorkflowSteer)
 	// 断点续跑：列出中断的工作流；续跑本身走 GET /api/code/workflow?resume=<workflow_id>
 	r.GET("/api/code/workflow/checkpoints", workflowRunner.HandleCodeWorkflowCheckpoints)
 	r.DELETE("/api/code/workflow/checkpoints/:id", workflowRunner.HandleCodeWorkflowCheckpointDelete)
@@ -78,8 +80,9 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		sessionStore.Delete(c.Param("id"))
 		c.JSON(200, gin.H{"status": "ok"})
 	})
-	// 编辑并重发历史消息：把该消息及之后的对话截掉（keep=保留的消息条数），前端随后重发
-	r.POST("/api/sessions/:id/truncate", func(c *gin.Context) {
+	// 编辑并重发历史消息：从该消息之前的位置分叉出一条新分支（keep=拷贝的消息条数），
+	// 前端切到新分支再重发。原会话完整保留——以前这里是 truncate，会把后面的对话永久砍掉。
+	r.POST("/api/sessions/:id/fork", func(c *gin.Context) {
 		var body struct {
 			Keep int `json:"keep"`
 		}
@@ -87,8 +90,14 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 			return
 		}
-		sessionStore.Truncate(c.Param("id"), body.Keep)
-		c.JSON(200, gin.H{"status": "ok"})
+		parentID := c.Param("id")
+		newID, ok := sessionStore.Fork(parentID, body.Keep)
+		if !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": "会话不存在或为空"})
+			return
+		}
+		// 回实际生效的分岐点而不是请求里的 keep —— Fork 会做钳制，两者可能不等
+		c.JSON(200, gin.H{"session_id": newID, "parent_id": parentID, "fork_index": sessionStore.ForkIndex(newID)})
 	})
 	r.GET("/api/all-messages", GetAllMessagesHandler(sessionStore))
 

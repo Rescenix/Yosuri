@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"backend/internal/ai/core"
 )
 
 type Skill struct {
@@ -34,14 +36,15 @@ func skillsDir() string {
 	return "./skills"
 }
 
-// skillLibraryPrompt 把技能库整理成系统提示词片段；库为空时返回空串。
-// 只注入名称+描述，正文步骤不进上下文（token 是成本），Agent 需要时靠描述回忆做法。
-func skillLibraryPrompt() string {
+// loadSkills 扫描技能库目录，返回全部合法技能（含完整 steps）。
+// skillLibraryPrompt（索引）和 handleReadSkill（取全文）共用这一份数据源，
+// 就像 mcpToolIndexPrompt 和 handleLoadTools 共用 loadMCPToolDefs 一样。
+func loadSkills() []Skill {
 	entries, err := os.ReadDir(skillsDir())
 	if err != nil {
-		return ""
+		return nil
 	}
-	var lines []string
+	var skills []Skill
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
@@ -54,13 +57,103 @@ func skillLibraryPrompt() string {
 		if json.Unmarshal(data, &s) != nil || s.Name == "" {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("- %s：%s", s.Name, s.Description))
+		skills = append(skills, s)
 	}
-	if len(lines) == 0 {
+	return skills
+}
+
+// skillLibraryPrompt 把技能库整理成系统提示词片段；库为空时返回空串。
+// 只注入名称+描述，正文步骤不进上下文（token 是成本）——需要完整步骤时
+// 模型调 read_skill 按名字取（见 handleReadSkill），不再像过去那样永远拿不到。
+func skillLibraryPrompt() string {
+	skills := loadSkills()
+	if len(skills) == 0 {
 		return ""
 	}
+	lines := make([]string, 0, len(skills))
+	for _, s := range skills {
+		lines = append(lines, fmt.Sprintf("- %s：%s", s.Name, s.Description))
+	}
 	sort.Strings(lines)
-	return "\n━━━ 技能库（以往任务沉淀的成功做法，仅供参考） ━━━\n" + strings.Join(lines, "\n") + "\n"
+	return "\n━━━ 技能库索引（按需加载，用 read_skill 取完整步骤） ━━━\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// readSkillToolName 是取回技能完整步骤的钥匙，跟 load_tools 一样必须常驻工具集。
+const readSkillToolName = "read_skill"
+
+var readSkillToolDef = core.ToolDefinition{
+	Type: "function",
+	Function: core.ToolFunctionDetail{
+		Name: readSkillToolName,
+		Description: "按名字取回技能库里某个技能的完整步骤。系统提示词里的「技能库索引」" +
+			"只给了名字和一句话描述，要看具体怎么做，先用这个把完整 steps 取回来（可一次传多个）。",
+		Parameters: core.ToolParameters{
+			Type: "object",
+			Properties: map[string]core.ToolProperty{
+				"names": {
+					Type:        "array",
+					Description: "要取回的技能名数组，必须与索引里的名字完全一致",
+					Items:       &core.ToolProperty{Type: "string"},
+				},
+			},
+			Required: []string{"names"},
+		},
+	},
+}
+
+// handleReadSkill 处理一次 read_skill 调用：按名字查找技能库，把完整
+// {name, description, steps} 作为工具结果回给模型。纯查询，没有 load_tools
+// 那样的"激活"副作用，不影响 tools 数组。
+//
+// 不存在的名字不是致命错误——回一句"没有这个技能"，让模型对着索引改。
+func handleReadSkill(argsJSON string, skills []Skill) string {
+	var args struct {
+		Names []string `json:"names"`
+		// 容错：模型有时会传单个字符串而不是数组
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return "参数解析失败，names 应为字符串数组，例如 {\"names\":[\"deploy-frontend\"]}"
+	}
+	names := args.Names
+	if len(names) == 0 && args.Name != "" {
+		names = []string{args.Name}
+	}
+	if len(names) == 0 {
+		return "names 为空，请指定要取回的技能名（见系统提示词里的技能库索引）"
+	}
+
+	byName := map[string]Skill{}
+	for _, s := range skills {
+		byName[s.Name] = s
+	}
+
+	var found []map[string]any
+	var missing []string
+	for _, n := range names {
+		s, ok := byName[n]
+		if !ok {
+			missing = append(missing, n)
+			continue
+		}
+		found = append(found, map[string]any{
+			"name": s.Name, "description": s.Description, "steps": s.Steps,
+		})
+	}
+
+	var b strings.Builder
+	if len(found) > 0 {
+		schemas, _ := json.MarshalIndent(found, "", "  ")
+		fmt.Fprintf(&b, "已取回 %d 个技能的完整步骤：\n%s", len(found), schemas)
+	}
+	if len(missing) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "以下技能名在技能库索引里不存在：%s\n请对照系统提示词里的索引核对名字。",
+			strings.Join(missing, "、"))
+	}
+	return b.String()
 }
 
 var skillNameSanitizer = regexp.MustCompile(`[^a-z0-9\-]+`)

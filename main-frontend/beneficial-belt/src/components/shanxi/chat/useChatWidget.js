@@ -97,7 +97,7 @@ function adjustInputHeight() {
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
   const {
     flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow,
-    resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable
+    resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage
   } = useAgentWorkflow({
     messages,
     onNewMessage: forceScrollToBottom,
@@ -385,7 +385,7 @@ async function switchSession(id) {
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     backgroundTaskList, playVoice,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-    resumeState, resumeCodeWorkflow, dismissResumable,
+    resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
     toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime
   }

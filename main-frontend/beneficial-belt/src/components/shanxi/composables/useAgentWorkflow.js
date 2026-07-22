@@ -21,6 +21,10 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     const APPROVAL_TIMEOUT_SEC = 60
     const approvalTimers = new Map() // id -> intervalId
 
+    // 当前任务 TODO：agent 调 update_todo 时后端推 todo 事件,便签(左下角)据此实时勾选。
+    // 全局共享:便签渲染在 app 层(侧栏折叠时),不隶属某条消息。
+    const todoState = reactive({ items: [] })
+
     // 断点续跑：后端每轮把进行中的工作流落盘（workflow_checkpoint.go），
     // 后端重启/SSE 断线后这里查得到，输入框上方出一条「上次任务跑到第 N 轮」。
     // Yolo 全自动跑长任务时最要紧——否则一断就得从头重发，工具全再跑一遍。
@@ -132,6 +136,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             sender: 'bot',
             status: 'running', // running | completed | failed | stopped
             task,
+            // 后端 workflow_start 事件回填的 workflow_id，中途插话（sendSteerMessage）
+            // 靠它把消息投给正确的正在跑的工作流。
+            workflowId: null,
             resumedFrom: opts.resumeId ? (opts.resumedRound || 0) : 0, // >0 时卡片头显示「从第 N 轮续跑」
             blocks: [],
             subagents: [], // 雨燕子代理生命周期（后台任务面板的数据源）
@@ -173,6 +180,12 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             onStreamUpdate?.()
         }
 
+        // 之前这个事件完全没人听——workflow_id 从没进过前端状态，sendSteerMessage
+        // 也就无从知道该往哪个工作流投消息。
+        es.addEventListener('workflow_start', e => {
+            flow.workflowId = JSON.parse(e.data).workflow_id
+        })
+
         es.addEventListener('model_info', e => {
             flow.modelInfo = JSON.parse(e.data)
             // 后端回传的分类上下文占用（system/subagent/skill/memory/tools），落盘持久化
@@ -194,11 +207,18 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             onStreamUpdate?.()
         })
 
+        // 任务 TODO 更新:整份覆盖(后端全量下发)
+        es.addEventListener('todo', e => {
+            try { todoState.items = JSON.parse(e.data).items || [] } catch { /* 忽略坏包 */ }
+            onStreamUpdate?.()
+        })
+
         es.addEventListener('action', e => {
             const d = JSON.parse(e.data)
             let args = {}
             try { args = JSON.parse(d.args || '{}') } catch { /* 参数留空对象，卡片仍可显示工具名 */ }
-            flow.blocks.push({ type: 'tool', id: d.id, name: d.name, args, status: 'running', output: '', expanded: false })
+            // startTime：记下发起时刻，result 到达时算耗时（图1 那种「完成 41ms」徽章）
+            flow.blocks.push({ type: 'tool', id: d.id, name: d.name, args, status: 'running', output: '', expanded: false, startTime: Date.now(), elapsedMs: 0 })
             onStreamUpdate?.()
         })
 
@@ -209,6 +229,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             if (t) {
                 t.status = d.ok ? 'ok' : 'error'
                 t.output = d.output || ''
+                t.elapsedMs = t.startTime ? (Date.now() - t.startTime) : 0
             }
             onStreamUpdate?.()
         })
@@ -265,6 +286,14 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('flow_error', e => {
             const d = JSON.parse(e.data)
             appendText('intent', `\n\n⚠️ ${d.message}`)
+        })
+
+        // 中途插话已被下一轮采纳：插一个轻量块，让用户看到"我刚才那句话生效了"，
+        // 而不是发出去之后什么反馈都没有。
+        es.addEventListener('steering_injected', e => {
+            const d = JSON.parse(e.data)
+            flow.blocks.push({ type: 'steer', text: d.message || '' })
+            onStreamUpdate?.()
         })
 
         es.addEventListener('workflow_done', e => {
@@ -335,8 +364,28 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         closeStream()
     }
 
+    // 中途插话：工作流跑着的时候塞一条消息，不用等它完全停下。
+    // 依赖 currentFlow.workflowId（由 workflow_start 事件回填）定位正在跑的那个工作流；
+    // 还没拿到 workflow_id（第一轮模型响应之前的极短窗口）就直接失败，调用方据此提示重试。
+    async function sendSteerMessage(message) {
+        message = (message || '').trim()
+        const wfId = currentFlow?.workflowId
+        if (!message || !wfId) return false
+        try {
+            const res = await fetch('/api/code/workflow/steer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workflow_id: wfId, message })
+            })
+            return res.ok
+        } catch {
+            return false
+        }
+    }
+
     return {
         flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow,
-        resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable
+        resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable,
+        todoState, sendSteerMessage
     }
 }

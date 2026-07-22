@@ -163,6 +163,29 @@
           </template>
         </aside>
 
+        <!-- 侧栏折叠时:便签 + 看板娘独占一栏（三栏工作区的左栏）。
+             以前它们是 position:absolute 的悬浮层，会直接压在聊天内容上；
+             现在这一栏真实占位，中间聊天列靠 flex:1 让位，互不遮挡。
+             栏内两个元素仍可各自拖动(位置记进 localStorage)，只是不再靠拖动来躲开聊天区。 -->
+        <div v-if="isExpanded && !sidebarOpen" class="studio-side-col">
+          <div
+            class="side-drag"
+            :class="{ dragging: stickyDrag.dragging.value }"
+            :style="{ transform: `translate(${stickyDrag.offset.value.x}px, ${stickyDrag.offset.value.y}px)` }"
+            @mousedown="stickyDrag.onDown"
+          >
+            <TaskTodoSticky :items="todoState.items" />
+          </div>
+          <div
+            class="side-drag studio-side-live2d"
+            :class="{ dragging: live2dDrag.dragging.value }"
+            :style="{ transform: `translate(${live2dDrag.offset.value.x}px, ${live2dDrag.offset.value.y}px)` }"
+            @mousedown="live2dDrag.onDown"
+          >
+            <Live2DWidget />
+          </div>
+        </div>
+
                <div class="chat-body studio">
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
@@ -209,7 +232,7 @@
                   <div v-if="item.type === 'time'" :key="`time-${item.timestamp}`" class="chat-time">
                     {{ formatChatTime(item.timestamp) }}
                   </div>
-                  <div v-else-if="item.type === 'message'" :key="item.id" class="message-row" :class="item.sender">
+                  <div v-else-if="item.type === 'message'" :key="item.id" class="message-row" :class="item.sender" :data-msg-id="item.id">
                     <div v-if="item.type === 'image'" class="image-card">
                       <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
                     </div>
@@ -254,11 +277,22 @@
                       :group="item"
                       :ref="(el) => setGroupRef(item.id, el)"
                     />
-                    <AgentWorkflowPanel
-                      v-else-if="item.kind === 'agentflow'"
-                      :id="'group-' + item.id"
-                      :flow="item"
-                    />
+                    <!-- 必须包一层竖向容器：.message-row 是 flex-direction:row，
+                         面板和工具栏平铺进去的话工具栏会变成"面板右边被拉满高的一竖条" -->
+                    <div v-else-if="item.kind === 'agentflow'" class="agentflow-wrap">
+                      <AgentWorkflowPanel :id="'group-' + item.id" :flow="item" />
+                      <!-- 朗读/复制那一栏：以前只挂在纯文本 assistant 气泡上，而现在所有回复
+                           都走四态机(agentflow)，等于这一栏彻底消失了。跑完再显示，跑的过程中
+                           内容还在变，复制没意义。 -->
+                      <div v-if="item.status === 'completed' && flowFinalText(item)" class="flow-tools">
+                        <button class="tool-btn" @click="playVoice(flowFinalText(item))" title="朗读">
+                          <Icon icon="mdi:volume-high" width="16" />
+                        </button>
+                        <button class="tool-btn" @click="copyText(flowFinalText(item))" title="复制">
+                          <Icon icon="mdi:content-copy" width="16" />
+                        </button>
+                      </div>
+                    </div>
                     <div v-else class="assistant-message" :class="{ streaming: item.isStreaming }">
                       <div v-if="item.reasoning" class="reasoning-stream">
                         <div class="reasoning-label">
@@ -550,6 +584,7 @@
                     </div>
                   </div>
                 </div>
+
                 <div class="input-toolbar-right">
                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
                   <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
@@ -713,6 +748,8 @@ import AuroraStatusIcon from './AuroraStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
 import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
+import TaskTodoSticky from './TaskTodoSticky.vue'
+import Live2DWidget from './Live2DWidget.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
 import BookShelf from '../../reading/BookShelf.vue'
@@ -750,11 +787,17 @@ async function loadSessionList() {
   try {
     const res = await fetch('/api/sessions')
     const data = await res.json()
-    const real = (data || []).map(s => ({ id: s.id, name: shortTitle(s.title) }))
+    // parentId/forkIndex 是侧栏拼分支树用的血缘（后端 SessionInfo 带下来，根会话为空）
+    const real = (data || []).map(s => ({
+      id: s.id, name: shortTitle(s.title),
+      parentId: s.parent_id || '', forkIndex: s.fork_index || 0, updatedAt: s.updated_at
+    }))
     // 当前会话哪怕还一条消息都没有（刚新建/刚打开应用）也要出现在列表里，
-    // 不然侧栏在"发第一条消息之前"会看不到自己正在哪个会话上
+    // 不然侧栏在"发第一条消息之前"会看不到自己正在哪个会话上。
+    // 注意别把刚分叉出来的分支覆盖成无名根——confirmEdit 已经乐观插入过带血缘的条目了
     if (!real.some(s => s.id === sessionId.value)) {
-      real.unshift({ id: sessionId.value, name: '新对话' })
+      const optimistic = sessionList.value.find(s => s.id === sessionId.value)
+      real.unshift(optimistic || { id: sessionId.value, name: '新对话', parentId: '', forkIndex: 0 })
     }
     sessionList.value = real
   } catch (e) {
@@ -769,7 +812,7 @@ function selectSession(id) {
 }
 function newSession() {
   const id = 'sess_' + Date.now().toString(36)
-  sessionList.value = [{ id, name: '新对话' }, ...sessionList.value]
+  sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0 }, ...sessionList.value]
   switchSession(id)
 }
 // 重命名目前只改侧栏显示，不持久化到后端——SessionStore 的标题是从首条用户消息
@@ -785,9 +828,11 @@ async function deleteSession(id) {
   } catch (e) {
     console.warn('删除会话失败', e)
   }
-  sessionList.value = sessionList.value.filter(s => s.id !== id)
+  // 重新拉而不是本地 filter：被删会话的分支在后端会被提升为根会话，
+  // 本地 filter 的话那些分支还挂着指向已删父会话的 parentId，在树里会变成孤儿
+  await loadSessionList()
   if (activeSession.value === id) {
-    const next = sessionList.value[0]?.id || ('sess_' + Date.now().toString(36))
+    const next = sessionList.value.find(s => s.id !== id)?.id || ('sess_' + Date.now().toString(36))
     switchSession(next)
   }
 }
@@ -1105,8 +1150,52 @@ onMounted(() => {
   }, 6000) // 60000毫秒 = 60秒
 })
 
+// ==================== 便签/看板娘 独立拖动 ====================
+// 每个元素一套独立的 translate 偏移,互不影响,分别记进 localStorage(刷新不丢)。
+// 注意:现在它们待在 .studio-side-col 这一栏里,拖动只是微调位置,
+// 不再承担"躲开聊天内容"的职责——那件事已经由栏本身占位解决了。
+function makeDrag(storageKey) {
+  const offset = ref({ x: 0, y: 0 })
+  const dragging = ref(false)
+  let start = null
+  try {
+    const s = JSON.parse(localStorage.getItem(storageKey) || 'null')
+    if (s && typeof s.x === 'number' && typeof s.y === 'number') offset.value = s
+  } catch { /* 无历史位置 */ }
+  function onMove(e) {
+    if (!dragging.value || !start) return
+    offset.value = { x: start.ox + (e.clientX - start.mx), y: start.oy + (e.clientY - start.my) }
+  }
+  function onUp() {
+    dragging.value = false
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+    try { localStorage.setItem(storageKey, JSON.stringify(offset.value)) } catch { /* 忽略 */ }
+  }
+  function onDown(e) {
+    dragging.value = true
+    start = { mx: e.clientX, my: e.clientY, ox: offset.value.x, oy: offset.value.y }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    e.preventDefault()
+  }
+  return { offset, dragging, onDown }
+}
+const stickyDrag = makeDrag('corner_sticky_offset')
+const live2dDrag = makeDrag('corner_live2d_offset')
+
 // ==================== 工具函数 ====================
 function cleanContent(content) { return content ? content.replace(/\[(action|emotion):[^\]]*\]/g, '') : '' }
+
+// 一次工作流的「最终回答」= 最后一个 intent 块（工具调用之间的叙述也是 intent，
+// 但最终答复必然是最后一条）。朗读/复制按钮拿它当内容。
+function flowFinalText(flow) {
+  const blocks = flow?.blocks || []
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i].type === 'intent' && (blocks[i].text || '').trim()) return blocks[i].text
+  }
+  return ''
+}
 
 // ==================== 就地编辑 + 替换式重发 ====================
 // 点编辑：用户消息框本身变成输入框（不是去下面那个输入框）；右上角编辑按钮变发送按钮。
@@ -1151,7 +1240,9 @@ function autoGrowEdit() {
   el.style.height = el.scrollHeight + 'px'
 }
 
-function confirmEdit(item) {
+// 编辑重发 = 开新分支，不再是截断。原来那条线索完整保留在侧栏里，
+// 用户可以在"原来那版"和"改过的这版"之间来回切。
+async function confirmEdit(item) {
   if (flowState.active) return
   const text = editDraft.value.trim()
   if (!text) return
@@ -1168,16 +1259,54 @@ function confirmEdit(item) {
   }
   const keep = completed * 2
   const sid = sessionId.value || localStorage.getItem('prism_session_id') || ''
-  if (sid) {
-    fetch(`/api/sessions/${encodeURIComponent(sid)}/truncate`, {
+
+  // 原地重发兜底：分叉失败绝不能把用户刚打的字吃掉。注意它现在是非破坏性的
+  // （不再调 truncate），最坏只是多出一条重复的尾巴。
+  const resendInPlace = () => {
+    messages.value.splice(i)
+    cancelEdit()
+    startCodeWorkflow(text)
+  }
+  if (!sid) { resendInPlace(); return }
+
+  let newId = ''
+  try {
+    const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/fork`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keep })
-    }).catch(err => console.error('截断会话失败', err))
+    })
+    if (!res.ok) throw new Error(`fork 返回 ${res.status}`)
+    newId = (await res.json()).session_id || ''
+  } catch (err) {
+    console.warn('分叉会话失败，退回原地重发', err)
+    resendInPlace()
+    return
   }
+  if (!newId || newId === sid) { resendInPlace(); return }
 
-  // 前端：把被编辑消息及其之后的一切移除，再重发（startCodeWorkflow 会重新 push 用户气泡）
-  messages.value.splice(i)
+  // 乐观插入：分支立刻带着血缘出现在侧栏。keep===0 时后端那条分支还是空会话，
+  // List() 会跳过它，所以这一步也是那种情况下分支唯一的可见来源。
+  // 名字用用户刚打的字，正好等于后端稍后算出的标题，不会有可见的改名。
+  sessionList.value = [
+    { id: newId, name: shortTitle(text), parentId: sid, forkIndex: keep, justForked: true },
+    ...sessionList.value
+  ]
+  // 高亮一下就撤，让用户一眼看到新分支落在树的哪个位置
+  setTimeout(() => {
+    const n = sessionList.value.find(s => s.id === newId)
+    if (n) n.justForked = false
+  }, 1300)
+
+  // 必须 await：switchSession 内部会 await loadAllHistory()，而后者整体替换
+  // messages.value。放在 startCodeWorkflow 之后的话，刚推的用户气泡和 flow 对象
+  // 会被冲掉，但 useAgentWorkflow 里的 currentFlow 仍持有引用——SSE 继续往一个
+  // 已脱离的对象里流，表现为消息凭空消失、工作流永远转圈。
+  await switchSession(newId)
+
+  // 这里不再 splice：loadAllHistory 已经把服务端权威的前缀加载出来了。
+  // 行为变化：旧 splice 会保留 index 之前未落盘的消息（失败/中断的轮次），
+  // 现在分支只由已落盘状态构建，那些会消失——这是对的，它们本来刷新一下也留不住。
   cancelEdit()
   startCodeWorkflow(text)
 }
@@ -1232,7 +1361,7 @@ function onSettingsClosed() {
   loadModelCapabilities()
 }
 
-// ==================== 底部工具条：Yolo 模式 + "+" 附加菜单 ====================
+// ==================== 底部工具条：Yolo 模式 + "+" 附加菜单 + Command 切换器 ====================
 // 模式三态：Yolo（全自动批准）/ Ask（危险工具每步问）/ Plan（执行前必问）。
 // 选了就写 localStorage('agentMode')，四态机发起工作流时透传给后端；
 // 同时回显到 autoMode 变量驱动按钮文案与主题色动画。
@@ -1411,10 +1540,18 @@ const {
   forceScrollToBottom, adjustInputHeight, switchSession,
   backgroundTaskList, playVoice,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-  resumeState, resumeCodeWorkflow, dismissResumable,
+  resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+
+// 工作流跑完后重新拉一次会话列表：把分叉时乐观插入的分支名跟后端算出的标题对齐，
+// 也顺带修掉"新会话标题要切走再切回才出现"的老毛病（以前只在挂载/切会话时拉）。
+// 必须放在上面的解构之后：watch 的 getter 是立即求值的，写在解构之前会命中 TDZ
+// （同一文件里 runningSession 那个 computed 能放在前面，只是因为 computed 是惰性的）。
+watch(() => flowState.active, (now, was) => {
+  if (was && !now) loadSessionList()
+})
 
 // ==================== 思考强度（Effort）：Faster(low) ↔ Smarter(high) ====================
 // 注意：debugReasoning 来自上面的 useChatWidget 解构，本段必须放在解构之后，
@@ -1547,6 +1684,16 @@ function jumpToGroup(id) {
 // 不需要工具时就是普通对话回复，agent 两件事都能干，用户不用先选模式。
 function handleSend() {
   if (hasPendingAttachments.value) return
+  // 工作流跑着的时候，回车不再是"发一条新消息"（之前会在 startCodeWorkflow 里
+  // 被 flowState.active 静默挡掉），而是把这句话当中途插话塞进正在跑的那个工作流。
+  if (flowState.active) {
+    const steerText = userInput.value.trim()
+    if (!steerText) return
+    userInput.value = ''
+    nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
+    sendSteerMessage(steerText)
+    return
+  }
   const combined = buildOutgoingMessage()
   if (!combined) return
   const displayText = userInput.value.trim()
