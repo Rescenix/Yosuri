@@ -229,10 +229,21 @@ func (s *SessionStore) persistAll() error {
 	records := make(map[string]sessionRecord, len(s.sessions))
 	for sid, msgs := range s.sessions {
 		fm := s.forkMeta[sid]
+		// 审批规则必须在锁内深拷贝。只拷 map 引用的话，下面的 json.Marshal 是在
+		// 释放读锁之后才读这个 map 的，而 SetApprovalRule 会在写锁里改同一个 map——
+		// 两边碰的是同一块内存，-race 能稳定复现（fatal: concurrent map iteration
+		// and map write 在生产里也真的会崩）。nil/空保持不建 map，omitempty 行为不变。
+		var rules map[string]bool
+		if src := s.approvalRules[sid]; len(src) > 0 {
+			rules = make(map[string]bool, len(src))
+			for k, v := range src {
+				rules[k] = v
+			}
+		}
 		records[sid] = sessionRecord{
 			Messages:      toPersistedMessages(msgs),
 			CompressIndex: s.lastCompressIndexes[sid],
-			ApprovalRules: s.approvalRules[sid],
+			ApprovalRules: rules,
 			ParentID:      fm.ParentID,
 			ForkIndex:     fm.ForkIndex,
 		}
