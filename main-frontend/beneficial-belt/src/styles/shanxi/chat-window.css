@@ -1909,7 +1909,11 @@ min-height: 90px !important;
 .studio-side-col .task-sticky { width: 100%; box-sizing: border-box; }
 /* 栏内元素仍可拖动微调(把手=元素自身)。overflow 不设 hidden,
    否则往栏外拖会被直接裁掉。 */
-.side-drag { cursor: grab; flex-shrink: 0; position: relative; }
+/* z-index 是必须的：这一列在 DOM 里排在聊天区之前，两边都是 auto 的话，
+   一旦拖到聊天内容上面就会被聊天区盖住——元素既看不见也点不到，
+   连"双击复位"都无从下手（用户实际遇到的就是这个死循环）。
+   30 高于聊天内容，又低于下拉菜单/审批条那一层(50)。 */
+.side-drag { cursor: grab; flex-shrink: 0; position: relative; z-index: 30; }
 .side-drag.dragging { cursor: grabbing; user-select: none; z-index: 50; }
 /* 只有被挪动过（nudged）才提示可以复位——没挪过的时候提示纯属噪音。
    悬浮才显形，双击处理在元素本身上，所以这里不用做成可点的按钮。 */
