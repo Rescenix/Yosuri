@@ -55,6 +55,15 @@ def do_grep(pattern: str, path: str = ".", ftype: str = "", max_count: int = 200
     return tool_result(lines)
 
 
+def _display(p: Path) -> str:
+    """项目根内的显示成相对路径，根外的照原样给绝对路径。
+    根外路径直接 relative_to(ROOT) 会抛 ValueError —— 越界访问放开后这条路径可达了。"""
+    try:
+        return str(p.relative_to(ROOT))
+    except ValueError:
+        return str(p)
+
+
 def do_glob(pattern: str, path: str = "."):
     from glob import glob as gglob
     target = (ROOT / path).resolve() if not os.path.isabs(path) else Path(path)
@@ -64,11 +73,11 @@ def do_glob(pattern: str, path: str = "."):
     if "**" in pattern:
         for p in target.rglob(pattern.split("**")[-1].lstrip("/")):
             if p.is_file():
-                matches.append(str(p.relative_to(ROOT)))
+                matches.append(_display(p))
     else:
         for m in gglob(os.path.join(base, pattern)):
             if os.path.isfile(m):
-                matches.append(str(Path(m).relative_to(ROOT)))
+                matches.append(_display(Path(m)))
     if not matches:
         return tool_result(f"在 {target} 下未匹配到 '{pattern}'。")
     return tool_result("\n".join(sorted(matches)))
@@ -79,12 +88,13 @@ READ_RANGE_MAX_LINES = 400
 
 
 def _safe_target(path: str):
-    """把 path 解析成绝对路径并确认它在 ROOT 之内。返回 (Path, err_text)。"""
+    """把 path 解析成绝对路径。返回 (Path, err_text)。
+
+    这里不再拦项目根之外的路径：越界与否交给 Go 侧审批闸门判断
+    （main-backend/internal/handler/approval.go 的 toolOutsideRoot）——
+    Ask 模式弹确认、Yolo 模式放行。以前在这层硬报错，批准了也读不到。
+    """
     target = (ROOT / path).resolve() if not os.path.isabs(path) else Path(path).resolve()
-    try:
-        target.relative_to(ROOT)
-    except ValueError:
-        return None, f"路径越界: {path}（只能读项目根 {ROOT} 内的文件）"
     return target, None
 
 

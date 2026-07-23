@@ -2422,6 +2422,38 @@ min-height: 90px !important;
   box-sizing: border-box;
 }
 .gem-sidebar.collapsed .gem-top { justify-content: center; padding: 10px 0 4px; }
+/* 折叠态：顶部默认只露出主题色 logo，hover 才原地换成折叠/展开按钮（仿 Gemini）。
+   两个按钮叠在同一位置做交叉淡入淡出，所以 gem-top 需要定位上下文 + 固定高度。 */
+.gem-sidebar.collapsed .gem-top {
+  position: relative;
+  height: 40px;
+}
+.gem-sidebar.collapsed .gem-home,
+.gem-sidebar.collapsed .gem-collapse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.15s ease, background 0.12s ease, color 0.12s ease;
+}
+.gem-sidebar.collapsed .gem-home {
+  color: var(--app-accent);
+}
+.gem-sidebar.collapsed .gem-home:hover {
+  background: transparent;
+}
+.gem-sidebar.collapsed .gem-top:hover .gem-home {
+  opacity: 0;
+  pointer-events: none;
+}
+.gem-sidebar.collapsed .gem-collapse {
+  opacity: 0;
+  pointer-events: none;
+}
+.gem-sidebar.collapsed .gem-top:hover .gem-collapse {
+  opacity: 1;
+  pointer-events: auto;
+}
 .gem-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -3105,6 +3137,18 @@ min-height: 90px !important;
   font-weight: 600;
   color: var(--app-text);
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+/* 越界访问的角标：与普通危险工具审批区分开 */
+.approval-bar-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--app-accent);
+  background: var(--app-accent-soft);
+  white-space: nowrap;
 }
 .approval-bar-args {
   min-width: 0;

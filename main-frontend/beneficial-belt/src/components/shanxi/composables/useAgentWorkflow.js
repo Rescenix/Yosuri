@@ -244,6 +244,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
                 tool: d.tool,
                 args: d.args || '',
                 mode: d.mode || 'ask',
+                // reason='path_outside_workdir' 表示这次拦截是因为路径在工作目录之外
+                // （不是危险工具本身），批准条据此换文案；path/workdir 用于提示细节
+                reason: d.reason || '',
+                path: d.path || '',
+                workdir: d.workdir || '',
                 remember: false,              // 默认不勾选「不再询问」
                 remain: APPROVAL_TIMEOUT_SEC, // 60s 倒计时，归零自动同意
                 total: APPROVAL_TIMEOUT_SEC

@@ -15,10 +15,10 @@
         <aside v-if="isExpanded" class="gem-sidebar" :class="{ collapsed: !sidebarOpen }">
           <!-- 顶部：展开态 汉堡+折叠toggle；折叠态只有 toggle -->
           <div class="gem-top">
-            <a href="/" class="gem-icon-btn" title="首页">
+            <a href="/" class="gem-icon-btn gem-home" title="首页">
               <Icon icon="majesticons:shooting-star-line" width="18" />
             </a>
-            <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠侧栏' : '展开侧栏'">
+            <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'">
               <Icon icon="lucide:sidebar" width="18" />
             </button>
           </div>
@@ -308,13 +308,24 @@
                 <div class="approval-bar-main">
                   <div class="approval-bar-line">
                     <span class="approval-bar-tool">{{ item.tool }}</span>
+                    <!-- 越界访问单独标一下：不然只看工具名会以为是普通的写盘确认 -->
+                    <span
+                      v-if="item.reason === 'path_outside_workdir'"
+                      class="approval-bar-badge"
+                      :title="'工作目录：' + item.workdir"
+                    >工作目录之外</span>
                     <span class="approval-bar-args">{{ approvalArgsPreview(item.args) }}</span>
                   </div>
                   <div class="approval-bar-progress">
                     <div class="approval-bar-progress-fill" :style="{ width: (item.remain / item.total * 100) + '%' }"></div>
                   </div>
                 </div>
-                <label class="approval-bar-remember" title="本次会话内不再询问此工具">
+                <label
+                  class="approval-bar-remember"
+                  :title="item.reason === 'path_outside_workdir'
+                    ? '本次会话内不再询问该目录下的操作'
+                    : '本次会话内不再询问此工具'"
+                >
                   <input type="checkbox" v-model="item.remember" />
                   <span>不再问</span>
                 </label>

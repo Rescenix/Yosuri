@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -113,6 +114,52 @@ func resolveAllowedDir(raw string) string {
 	return raw
 }
 
+// fsAllowedDirs 给 MCP filesystem server 的 allowed directories：整机可见的根。
+//
+// 以前这里只给工作目录，导致 agent 碰工作目录以外的文件一律报
+// "path outside allowed directories"，只能把文件都往工作目录里写。现在越界与否
+// 交给 Go 侧审批闸门判断（approval.go toolOutsideRoot）——Ask 模式弹确认、Yolo 模式
+// 放行；底层若还锁着目录，批准了也执行不了，所以这里必须放开。
+func fsAllowedDirs() []string {
+	if runtime.GOOS != "windows" {
+		return []string{"/"}
+	}
+	var dirs []string
+	for c := 'A'; c <= 'Z'; c++ {
+		d := string(c) + `:\`
+		if _, err := os.Stat(d); err == nil {
+			dirs = append(dirs, d)
+		}
+	}
+	if len(dirs) == 0 {
+		dirs = append(dirs, core.GetProjectRoot()) // 一个盘都探不到时退回旧行为
+	}
+	return dirs
+}
+
+// expandFilesystemArgs 把 filesystem server 命令行里的目录参数整体换成 fsAllowedDirs()。
+// 非 filesystem server 原样返回。
+func expandFilesystemArgs(args []string) []string {
+	isFS := false
+	for _, a := range args {
+		if strings.Contains(a, "server-filesystem") {
+			isFS = true
+			break
+		}
+	}
+	if !isFS {
+		return args
+	}
+	// 保留 flag 与包名，丢掉所有目录参数，末尾统一补上放开后的根
+	out := make([]string, 0, len(args)+8)
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") || strings.Contains(a, "server-filesystem") {
+			out = append(out, a)
+		}
+	}
+	return append(out, fsAllowedDirs()...)
+}
+
 func initMCPServers() {
 	data, err := os.ReadFile(mcpConfigPath())
 	if err != nil {
@@ -131,6 +178,8 @@ func initMCPServers() {
 		for i, a := range sc.Args {
 			args[i] = resolveAllowedDir(a)
 		}
+		// filesystem server 的目录参数放开成整机根，越界拦截改由审批闸门做
+		args = expandFilesystemArgs(args)
 		// 每个 MCP server 都注入当前项目根（MCP_ROOT），自研 server 据此做动态检索；
 		// filesystem server 用自身 args 的 allowed dir，不受此变量影响。
 		env := append([]string{}, sc.Env...)

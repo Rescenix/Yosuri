@@ -682,13 +682,25 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 	results := make([]codeExecResult, len(calls))
 	var wg sync.WaitGroup
 
-	// maybeRequestApproval 在 ask 模式下对危险工具发起审批拦截；返回是否允许执行。
-	// 非危险工具 / yolo 模式 / 已设 don't-ask-again → 直接返回 true（放行）。
+	// maybeRequestApproval 在 ask 模式下发起审批拦截；返回是否允许执行。
+	// 两类要批：危险工具（写盘/执行命令），以及碰了工作目录之外路径的任何工具
+	// ——后者以前是 MCP 层直接硬报错，agent 只能把文件都往工作目录里塞。
+	// yolo 模式 / 非危险且未越界 / 已设 don't-ask-again → 直接放行。
 	maybeRequestApproval := func(tc core.ToolCall) bool {
-		if mode == "yolo" || !isDangerousTool(tc.Function.Name) {
+		if mode == "yolo" {
+			return true // Yolo 畅通无阻：危险工具与越界访问一律不拦
+		}
+		name := tc.Function.Name
+		outside, outPath := toolOutsideRoot(tc.Function.Arguments)
+		if !isDangerousTool(name) && !outside {
 			return true
 		}
-		if r.shouldAutoApprove(sessionID, tc.Function.Name) {
+		// 越界的 don't-ask-again 按目录记，普通危险工具按工具名记（粒度见 approval.go）
+		key := rememberKey(name)
+		if outside {
+			key = outsideRememberKey(outPath)
+		}
+		if r.shouldAutoApproveKey(sessionID, key) {
 			return true
 		}
 		// 登记 + 推 SSE 事件 + 阻塞等批准。approval id 编码 workflowID::callID，
@@ -698,13 +710,20 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			id = fmt.Sprintf("approval_%d", time.Now().UnixNano())
 		}
 		approvalID := workflowID + "::" + id
-		waiter.expect(approvalID)
-		writeCodeSSE(c, "approval_request", map[string]any{
+		waiter.expect(approvalID, key)
+		payload := map[string]any{
 			"id":   approvalID,
-			"tool": tc.Function.Name,
+			"tool": name,
 			"args": tc.Function.Arguments,
 			"mode": mode,
-		})
+		}
+		if outside {
+			// 前端据此把批准条文案换成「这个路径在工作目录之外」，而不是笼统的危险工具
+			payload["reason"] = "path_outside_workdir"
+			payload["path"] = outPath
+			payload["workdir"] = core.GetProjectRoot()
+		}
+		writeCodeSSE(c, "approval_request", payload)
 		// 客户端断开则中止执行
 		allowed := waiter.wait(approvalID, c.Request.Context().Done())
 		return allowed

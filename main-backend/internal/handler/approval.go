@@ -11,12 +11,17 @@ package handler
 // toolapproval 中间件常设规则思路。
 
 import (
+	"encoding/json"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"backend/internal/ai/core"
 )
 
 // 危险工具分级：这些工具在 Ask 模式必须等人批准；其余（read_file /
@@ -57,11 +62,92 @@ func isDangerousTool(name string) bool {
 	return false
 }
 
+// ---- 工作目录越界判定 ----
+//
+// MCP 各 server 底层已不再锁死目录（见 mcp_client.go fsAllowedDirs / grep_server.py），
+// 「能不能碰工作目录以外的文件」改由这里判断：Ask 模式弹确认，Yolo 模式直接放行。
+// 以前底层硬拦，agent 只能把文件都往工作目录里塞。
+
+// toolPathArgs 从工具参数 JSON 里挑出「看起来是文件路径」的字段值。
+// 覆盖 MCP filesystem 全家（path / source / destination / paths[]）与自研 grep server。
+// mcp__shell__run 的 command 不在此列——它本来就是危险工具，任何路径都要批。
+func toolPathArgs(argsJSON string) []string {
+	if argsJSON == "" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(argsJSON), &m); err != nil {
+		return nil
+	}
+	var out []string
+	add := func(v any) {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			out = append(out, s)
+		}
+	}
+	for _, k := range []string{"path", "source", "destination", "file_path"} {
+		add(m[k])
+	}
+	if arr, ok := m["paths"].([]any); ok {
+		for _, v := range arr {
+			add(v)
+		}
+	}
+	return out
+}
+
+// absAgainstRoot 把路径参数解析成绝对路径；相对路径按工作目录解析
+// （那就是各 MCP server 进程的实际 cwd 语义）。
+func absAgainstRoot(p string) string {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Clean(filepath.Join(core.GetProjectRoot(), p))
+}
+
+// normCase 在 Windows 上抹掉大小写差异，否则 c:\x 与 C:\X 会被判成两个目录。
+func normCase(p string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(p)
+	}
+	return p
+}
+
+// pathOutsideRoot 判定单个路径是否落在 agent 工作目录之外。
+func pathOutsideRoot(p string) bool {
+	root := normCase(filepath.Clean(core.GetProjectRoot()))
+	abs := normCase(absAgainstRoot(p))
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return true // 跨盘符（Windows 上 C: → D:）Rel 直接报错，按越界处理
+	}
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// toolOutsideRoot 返回该次工具调用是否触碰了工作目录之外的路径，以及第一个越界路径。
+func toolOutsideRoot(argsJSON string) (bool, string) {
+	for _, p := range toolPathArgs(argsJSON) {
+		if pathOutsideRoot(p) {
+			return true, p
+		}
+	}
+	return false, ""
+}
+
+// outsideRememberKey 让越界访问的「不再询问」按目录记，而不是按工具记。
+// 否则批准一次越界写盘后，之后任意目录的写都会静默放行——那等于把闸门拆了。
+func outsideRememberKey(p string) string {
+	return "approve:outside:" + normCase(filepath.Dir(absAgainstRoot(p)))
+}
+
 // approvalWaiter 是单次工作流运行期的审批等待器。
 // 每个 workflow 请求 newApprovalWaiter() 一个，随请求生命周期存在。
 type approvalWaiter struct {
 	mu    sync.Mutex
 	chans map[string]chan approvalDecision
+	// keys: approval id → don't-ask-again 规则键。越界访问按目录记、普通危险工具按
+	// 工具名记，两种粒度不同，所以在发起审批时就定好，approve 端点照此落库。
+	keys map[string]string
 }
 
 type approvalDecision struct {
@@ -71,6 +157,7 @@ type approvalDecision struct {
 func newApprovalWaiter() *approvalWaiter {
 	return &approvalWaiter{
 		chans: make(map[string]chan approvalDecision),
+		keys:  make(map[string]string),
 	}
 }
 
@@ -103,13 +190,21 @@ func (w *approvalWaiter) wait(id string, done <-chan struct{}) bool {
 	}
 }
 
-// expect 登记一个待审批 id，返回该 id 的 decision channel。
-func (w *approvalWaiter) expect(id string) chan approvalDecision {
+// expect 登记一个待审批 id（连同它的 don't-ask-again 规则键），返回 decision channel。
+func (w *approvalWaiter) expect(id, rememberKey string) chan approvalDecision {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	ch := make(chan approvalDecision, 1)
 	w.chans[id] = ch
+	w.keys[id] = rememberKey
 	return ch
+}
+
+// rememberKeyFor 取回该审批 id 对应的规则键（approve 端点写 don't-ask-again 时用）。
+func (w *approvalWaiter) rememberKeyFor(id string) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.keys[id]
 }
 
 // resolve 由 approve 端点调用，把决定写回对应 channel。返回是否成功（id 存在）。
@@ -133,20 +228,20 @@ func rememberKey(tool string) string {
 	return "approve:" + tool
 }
 
-// shouldAutoApprove 检查该会话是否已对 tool 设了 don't-ask-again。
-func (r *WorkflowRunner) shouldAutoApprove(sessionID, tool string) bool {
-	if sessionID == "" || r.chatHandler == nil || r.chatHandler.sessionStore == nil {
+// shouldAutoApproveKey 检查该会话是否已对某条规则键设了 don't-ask-again。
+func (r *WorkflowRunner) shouldAutoApproveKey(sessionID, key string) bool {
+	if sessionID == "" || key == "" || r.chatHandler == nil || r.chatHandler.sessionStore == nil {
 		return false
 	}
-	return r.chatHandler.sessionStore.GetApprovalRule(sessionID, rememberKey(tool))
+	return r.chatHandler.sessionStore.GetApprovalRule(sessionID, key)
 }
 
-// setAutoApprove 把 tool 的 don't-ask-again 规则写入会话状态。
-func (r *WorkflowRunner) setAutoApprove(sessionID, tool string) {
-	if sessionID == "" || r.chatHandler == nil || r.chatHandler.sessionStore == nil {
+// setAutoApproveKey 把某条规则键的 don't-ask-again 写入会话状态。
+func (r *WorkflowRunner) setAutoApproveKey(sessionID, key string) {
+	if sessionID == "" || key == "" || r.chatHandler == nil || r.chatHandler.sessionStore == nil {
 		return
 	}
-	r.chatHandler.sessionStore.SetApprovalRule(sessionID, rememberKey(tool), true)
+	r.chatHandler.sessionStore.SetApprovalRule(sessionID, key, true)
 }
 
 // 审批请求载荷（前端 POST 用）
@@ -210,15 +305,19 @@ func (r *WorkflowRunner) HandleCodeWorkflowApprove(c *gin.Context) {
 		return
 	}
 
-	// remember 规则：仅当允许 + 勾选时生效。工具名从原 approval_request 已发出，
-	// 这里从 registry 找不到 tool 名——改为由前端在 remember 时把 tool 也带来。
-	// 为解耦，前端 approve 时若 remember=true 需额外带 tool 字段（见 approvalResponse 扩展）。
-	if req.Allow && req.Remember && req.Tool != "" && r.chatHandler != nil {
+	// remember 规则：仅当允许 + 勾选时生效。规则键在发起审批时就由 waiter 记下了
+	// （越界访问按目录记、普通危险工具按工具名记），这里照取即可；取不到再退回前端
+	// 带来的 tool 名，兼容老前端。
+	if req.Allow && req.Remember && r.chatHandler != nil {
 		sessionID := c.Query("session_id")
 		if sessionID == "" {
 			sessionID = c.GetHeader("X-Session-Id")
 		}
-		r.setAutoApprove(sessionID, req.Tool)
+		key := waiter.rememberKeyFor(req.ID)
+		if key == "" && req.Tool != "" {
+			key = rememberKey(req.Tool)
+		}
+		r.setAutoApproveKey(sessionID, key)
 	}
 
 	// 用完整 id（含 requestID::）去 resolve，waiter 内部按 id 找 channel

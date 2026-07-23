@@ -16,14 +16,6 @@
       "command": "npx",
       "args": ["-y", "@paretools/http"]
     },
-    "sequential-thinking": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
-    },
-    "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory", "--file", "C:\\Pro2026\\re0\\.mcp-memory.json"]
-    },
     "web_fetch": {
       "command": "python",
       "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\web_fetch_server.py"]
@@ -31,10 +23,6 @@
     "view_image": {
       "command": "python",
       "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\view_image_server.py"]
-    },
-    "generate_image": {
-      "command": "python",
-      "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\generate_image_server.py"]
     },
     "screenshot": {
       "command": "python",
