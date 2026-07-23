@@ -243,6 +243,18 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 哪些工具输出被腰斩、压缩折叠了几轮），供 harness_status 自省用。
 	ledger := newContextLedger()
 	ledger.noteHistory(len(history), len(fullHistory), histLimit)
+	// outcome 由各终止分支改写；用 defer 统一落盘，连"客户端断开直接 return"
+	// 这种没有收尾事件的路径也能记上——那恰恰是最需要被统计到的一类中断。
+	outcome := "interrupted"
+	finalRound, finalIn, finalOut := 0, 0, 0
+	defer func() {
+		ledger.persist(ledgerRecord{
+			WorkflowID: workflowID, SessionID: sessionID, Task: task,
+			Outcome: outcome, Rounds: finalRound,
+			InTokens: finalIn, OutTokens: finalOut,
+			ActivatedTools: len(provider.ActivatedTools()),
+		})
+	}()
 	// 归档目录按 TTL 淘汰，在这里扫一次即可（不再是"任务成功就删本次的全文"）
 	go sweepToolOutputArchive()
 	historyChars := 0
@@ -268,6 +280,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// previewOpened 自动预览只弹一次的哨兵（见下面 isFrontendEdit 那段）。
 	// 不进检查点：续跑时重新弹一次预览是合理的——用户多半已经关掉页面了。
 	previewOpened := false
+	// currentTodos agent 自己维护的任务清单的权威副本。每轮重新注入上下文，
+	// 免得它的计划被上下文压缩折叠掉之后只能靠回忆（见 todoContextLine）。
+	var currentTodos []todoItem
 
 	// 续跑：整体接管上面刚拼好的白板状态。msgs 用检查点里的完整对话
 	// （含中断前所有 tool_calls 和工具结果），模型醒来就知道自己干到哪了。
@@ -278,6 +293,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			callSignatureCount = resumed.CallSigCount
 		}
 		callSeq = resumed.CallSeq
+		currentTodos = resumed.Todos // 续跑不丢主线
 		provider.RestoreActivatedTools(resumed.ActivatedTools)
 		tools = provider.Tools() // 带回中断前已加载的工具，免得再 load 一遍白费一轮
 		inputTokens = resumed.InputTokens
@@ -296,6 +312,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			Round: round, Msgs: st.msgs, Transcript: st.transcript,
 			CallSigCount: st.callSigCount, CallSeq: st.callSeq,
 			ActivatedTools: provider.ActivatedTools(),
+			Todos:          st.todos,
 			InputTokens:    st.inputTokens, OutputTokens: st.outputTokens,
 		})
 	})
@@ -304,6 +321,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		provider.Invoked(round, roundState{
 			msgs: msgs, transcript: transcript, callSigCount: callSignatureCount,
 			callSeq: callSeq, inputTokens: inputTokens, outputTokens: outputTokens,
+			todos: currentTodos,
 		})
 	}
 
@@ -317,6 +335,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 轮次/token 预算任一触顶：跟错误路径一样保留检查点，可以带更宽松的
 		// max_rounds/max_tokens resume 接着跑，而不是无条件判死刑。
 		if done, reason := codeWorkflowExhausted(round, inputTokens, outputTokens, maxRounds, tokenBudget); done {
+			outcome = "budget_exhausted"
 			checkpoint(round)
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "failed", "final_output": reason + "，任务中止（可续跑）",
@@ -360,12 +379,24 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				workflowID, round, cr.FoldedMsgs, cr.BeforeChars, cr.AfterChars)
 		}
 
-		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, msgs, tools, effort)
+		// 任务清单每轮重新注入，且刻意放在压缩之后：压缩可能刚把携带计划的那条
+		// assistant(tool_calls) 折叠成摘要，这里补回的是系统持有的权威副本。
+		// 只挂在本轮请求上（roundMsgs），不写回 msgs——否则历史里会攒下一堆
+		// 过时的清单快照，既费 token 又互相矛盾。
+		roundMsgs := msgs
+		if line := todoContextLine(currentTodos); line != "" {
+			roundMsgs = append(append([]map[string]any{}, msgs...),
+				map[string]any{"role": "user", "content": line})
+		}
+
+		finalRound = round // 账本落盘用（defer 里读的是最终值）
+		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, roundMsgs, tools, effort)
 		// inTok 优先用上游真实 prompt_tokens；为 0 时退化为历史字符/4 估算（与四态机口径一致）
 		if inTok > 0 {
 			inputTokens = inTok
 		}
 		outputTokens += outTok
+		finalIn, finalOut = inputTokens, outputTokens
 		// 只在第一轮实际承接请求后发一次——同一个工作流后续轮次不会换 backend，
 		// 前端只需要知道"这次对话用的是哪个模型、它能不能识图/支持多大上下文"一次就够
 		if usedBackend != nil && !modelInfoSent {
@@ -379,6 +410,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		if err != nil {
 			// 上游挂了属于可恢复失败——保留检查点，前端可以带 resume=<id> 原地重试，
 			// 不必把已经跑完的十几轮工具再跑一遍。
+			outcome = "upstream_error"
 			checkpoint(round)
 			writeCodeSSE(c, "flow_error", map[string]any{"message": err.Error()})
 			writeCodeSSE(c, "workflow_done", map[string]any{
@@ -392,6 +424,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 
 		// 没有工具调用 → 最终回答，收尾
 		if len(calls) == 0 {
+			outcome = "completed"
 			deleteWorkflowCheckpoint(workflowID)
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "completed", "final_output": content,
@@ -468,6 +501,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				items, ack := handleUpdateTodo(tc.Function.Arguments)
 				handled[i] = ack
 				if len(items) > 0 {
+					currentTodos = items // 记成权威状态，每轮重新注入（见 todoContextLine）
 					writeCodeSSE(c, "todo", map[string]any{"items": items})
 				}
 				continue
@@ -562,6 +596,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 整轮调用全被熔断 → 模型已经在原地打转，提示也没拉回来，直接收尾，
 		// 而不是陪它空转到 codeWorkflowMaxRounds。
 		if allBlocked {
+			outcome = "repeat_blocked"
 			deleteWorkflowCheckpoint(workflowID)
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "failed", "final_output": "检测到模型重复调用同一工具且无进展，已中止任务。",

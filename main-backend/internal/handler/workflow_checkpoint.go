@@ -48,9 +48,11 @@ type workflowCheckpoint struct {
 	// 只能再 load 一遍——白白浪费一轮。
 	ActivatedTools map[string]bool `json:"activated_tools"`
 	CallSeq        int             `json:"call_seq"`
-	InputTokens    int             `json:"input_tokens"`
-	OutputTokens   int             `json:"output_tokens"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	// Todos 续跑时恢复 agent 的任务清单（见 todoContextLine）
+	Todos        []todoItem `json:"todos,omitempty"`
+	InputTokens  int        `json:"input_tokens"`
+	OutputTokens int        `json:"output_tokens"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // checkpointDir 与会话文件同域：SHANXI_DATA_DIR 覆盖，默认 ~/shanxi_data/workflow_checkpoints。

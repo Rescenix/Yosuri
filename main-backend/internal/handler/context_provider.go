@@ -54,6 +54,9 @@ type roundState struct {
 	callSeq      int
 	inputTokens  int
 	outputTokens int
+	// todos agent 自己维护的任务清单。进检查点是为了续跑不丢主线——
+	// 计划原本只存在于可能被压缩折叠掉的 tool_calls 参数里。
+	todos []todoItem
 }
 
 // newWorkflowContextProvider 组装主 Agent 的上下文。

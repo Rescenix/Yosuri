@@ -73,6 +73,42 @@ func handleUpdateTodo(argsJSON string) ([]todoItem, string) {
 	return out, "已更新 TODO 便签(" + itoa(done) + "/" + itoa(len(out)) + " 完成)"
 }
 
+// todoContextLine 把当前 TODO 渲染成一条注入上下文的系统事实。
+//
+// 为什么必须重注入：update_todo 回给模型的只有一句"已更新(2/5 完成)"，清单内容
+// 从不回传；计划的唯一副本是它当初调用 update_todo 那条 assistant 消息的
+// tool_calls 参数。而上下文压缩折叠的正是这类中间轮次——任务越长越容易触发压缩，
+// 计划就越容易被自己的压缩吃掉，然后开始迷失。
+//
+// 权威状态本来就在系统手里（UI 便签上就显示着），没有理由让模型靠回忆。
+// 每轮几十 token，换的是长任务不丢主线。
+func todoContextLine(items []todoItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	done := 0
+	for _, it := range items {
+		if it.Status == "done" {
+			done++
+		}
+	}
+	b.WriteString("━━━ 当前任务清单（系统维护的权威状态，以此为准）━━━\n")
+	for i, it := range items {
+		mark := "☐"
+		switch it.Status {
+		case "done":
+			mark = "☑"
+		case "doing":
+			mark = "▶"
+		}
+		b.WriteString(mark + " " + itoa(i+1) + ". " + it.Text + "\n")
+	}
+	b.WriteString("进度 " + itoa(done) + "/" + itoa(len(items)) +
+		"。若与你记忆中的计划不一致，以这份为准；继续推进未完成项，别重做已完成项。")
+	return b.String()
+}
+
 func firstString(m map[string]any, keys ...string) string {
 	for _, k := range keys {
 		if v, ok := m[k].(string); ok && v != "" {

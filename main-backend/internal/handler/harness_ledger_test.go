@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -142,5 +143,60 @@ func TestLedgerReportsEmptyHistoryExplicitly(t *testing.T) {
 	}
 	if !strings.Contains(got, "全新会话") {
 		t.Errorf("没说清楚是新会话而不是漏记:\n%s", got)
+	}
+}
+
+// 账本落盘是后续所有优化决策的数据来源，必须真的写下去、且字段能算对。
+func TestLedgerPersistWritesAnalyzableRecord(t *testing.T) {
+	withTempDataDir(t)
+
+	l := newContextLedger()
+	l.noteHistory(24, 100, 24) // 丢了 76 条
+	l.noteCompaction(compactionEvent{Round: 5, FoldedMsgs: 12})
+	l.noteCompaction(compactionEvent{Round: 9, FoldedMsgs: 8})
+	l.noteArchive(&archivedOutput{CallID: "c1", Tool: "mcp__fs__read_text_file", OmittedChars: 9000})
+	l.noteArchive(&archivedOutput{CallID: "c2", Tool: "mcp__shell__run", OmittedChars: 1500})
+
+	l.persist(ledgerRecord{
+		WorkflowID: "wf_x", SessionID: "s1", Task: "写一个技能卡片墙",
+		Outcome: "completed", Rounds: 14, InTokens: 52000, OutTokens: 3000,
+		ActivatedTools: 4,
+	})
+
+	data, err := os.ReadFile(ledgerLogPath())
+	if err != nil {
+		t.Fatalf("账本没落盘: %v", err)
+	}
+	var rec ledgerRecord
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(data))), &rec); err != nil {
+		t.Fatalf("落盘的不是合法 JSONL: %v", err)
+	}
+
+	if rec.HistoryDropped != 76 {
+		t.Errorf("丢弃历史条数应为 76，实得 %d", rec.HistoryDropped)
+	}
+	if rec.Compactions != 2 || rec.FoldedMsgs != 20 {
+		t.Errorf("压缩统计不对: %d 次 / %d 条", rec.Compactions, rec.FoldedMsgs)
+	}
+	if rec.Truncations != 2 || rec.TruncatedChars != 10500 {
+		t.Errorf("截断统计不对: %d 次 / %d 字符", rec.Truncations, rec.TruncatedChars)
+	}
+	if rec.Outcome != "completed" || rec.Rounds != 14 {
+		t.Errorf("结局/轮次丢失: %+v", rec)
+	}
+	if rec.At.IsZero() {
+		t.Error("没有时间戳，无法做趋势分析")
+	}
+}
+
+// 多次落盘必须是追加，不能互相覆盖——否则积累不出数据。
+func TestLedgerPersistAppends(t *testing.T) {
+	withTempDataDir(t)
+	for i := 0; i < 3; i++ {
+		newContextLedger().persist(ledgerRecord{WorkflowID: "wf", Outcome: "completed"})
+	}
+	data, _ := os.ReadFile(ledgerLogPath())
+	if n := len(strings.Split(strings.TrimSpace(string(data)), "\n")); n != 3 {
+		t.Errorf("应有 3 行记录，实得 %d", n)
 	}
 }

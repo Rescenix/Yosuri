@@ -13,9 +13,12 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"backend/internal/ai/core"
 )
@@ -147,6 +150,90 @@ func (l *contextLedger) report(round int, breakdown map[string]int, activated []
 	}
 
 	return b.String()
+}
+
+// ---- 落盘：积累"长任务到底死于什么"的真实数据 ----
+
+// ledgerRecord 一个工作流跑完后留下的一行事实。
+// 刻意做得很窄：只记能回答"退化发生在哪"的字段，不记会话内容（隐私 + 体积）。
+type ledgerRecord struct {
+	At         time.Time `json:"at"`
+	WorkflowID string    `json:"workflow_id"`
+	SessionID  string    `json:"session_id"`
+	Task       string    `json:"task"` // 截断到 120 字，只为人肉回溯时认得出是哪个任务
+	Outcome    string    `json:"outcome"`
+	Rounds     int       `json:"rounds"`
+	InTokens   int       `json:"in_tokens"`
+	OutTokens  int       `json:"out_tokens"`
+
+	// —— 下面这几项就是"优化该往哪使劲"的答案来源 ——
+	HistoryIncluded int `json:"history_included"`
+	HistoryTotal    int `json:"history_total"`
+	HistoryDropped  int `json:"history_dropped"` // >0 说明窗口不够用
+	Compactions     int `json:"compactions"`     // >0 说明上下文压力大
+	FoldedMsgs      int `json:"folded_msgs"`
+	Truncations     int `json:"truncations"`     // 工具输出腰斩次数：前端任务尤其容易高
+	TruncatedChars  int `json:"truncated_chars"` // 累计被截掉多少
+	ActivatedTools  int `json:"activated_tools"`
+}
+
+// ledgerLogPath 与会话/检查点同域，方便一起备份或清理。
+func ledgerLogPath() string {
+	dataDir := os.Getenv("SHANXI_DATA_DIR")
+	if dataDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "."
+		}
+		dataDir = filepath.Join(home, "shanxi_data")
+	}
+	return filepath.Join(dataDir, "harness_ledger.jsonl")
+}
+
+// persist 追加一行 JSONL。
+//
+// 用追加而不是整份重写：这份日志会长期累积，整份重写既慢又有并发覆盖风险
+// （session.go 那个数据竞争就是整份重写踩出来的）。追加天然并发安全——
+// 单次 write 小于 PIPE_BUF 时是原子的，多个工作流并发收尾也不会互相撕裂。
+//
+// 落盘失败只打日志：账本是观测设施，不该让它反过来影响任务成败。
+func (l *contextLedger) persist(rec ledgerRecord) {
+	l.mu.Lock()
+	rec.HistoryIncluded = l.HistoryIncluded
+	rec.HistoryTotal = l.HistorySessionN
+	if d := l.HistorySessionN - l.HistoryIncluded; d > 0 {
+		rec.HistoryDropped = d
+	}
+	rec.Compactions = len(l.compaction)
+	for _, c := range l.compaction {
+		rec.FoldedMsgs += c.FoldedMsgs
+	}
+	rec.Truncations = len(l.archives)
+	for _, a := range l.archives {
+		rec.TruncatedChars += a.OmittedChars
+	}
+	l.mu.Unlock()
+
+	rec.At = time.Now()
+	rec.Task = truncateChars(rec.Task, 120)
+
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return
+	}
+	path := ledgerLogPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		log.Printf("⚠️ 账本落盘失败: %v", err)
+		return
+	}
+	defer f.Close()
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		log.Printf("⚠️ 账本写入失败: %v", err)
+	}
 }
 
 // activatedToolNames 把激活集摊平成名字列表（map 顺序随机，报告里再排序）。
