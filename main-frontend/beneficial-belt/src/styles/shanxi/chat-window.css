@@ -758,7 +758,7 @@ min-height: 90px !important;
   padding: 10px 12px;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-   background: rgba(255, 255, 255, 0.9);  /* 白底半透明 */
+   background: rgba(var(--app-surface-rgb), 0.9);  /* 白底半透明 */
      backdrop-filter: blur(12px) saturate(1.8);
   -webkit-backdrop-filter: blur(12px) saturate(1.8);
   border-bottom: 1px solid rgba(229, 229, 229, 0.7);
@@ -839,7 +839,7 @@ min-height: 90px !important;
 }
 
 .chat-sidebar a:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 .assistant-message {
@@ -982,7 +982,7 @@ min-height: 90px !important;
   transition: background 0.15s ease;
 }
 .drawer-panel a:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 /* ==================== 抽屉遮罩 ==================== */
@@ -1062,7 +1062,7 @@ min-height: 90px !important;
 /* ==================== 分隔线 ==================== */
 .drawer-divider {
   height: 1px;
-  background: #e5e5e5;
+  background: var(--app-surface-3);
   margin: 12px 16px;
 }
 
@@ -1086,13 +1086,13 @@ min-height: 90px !important;
   width: 36px;
   height: 36px;
   border: none;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(var(--app-surface-rgb), 0.85);
   border-radius: 8px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 .reader-overlay-close:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 .reader-overlay-body {
   flex: 1;
@@ -1161,12 +1161,12 @@ min-height: 90px !important;
   position: relative;
 }
 .session-item:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
   transform: translateX(4px);
   box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
 .session-item.active {
-  background: #e2e8f0;
+  background: var(--app-surface-3);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
 }
 .session-main {
@@ -1212,7 +1212,7 @@ min-height: 90px !important;
 /* ★ 三点菜单（固定定位，飞出侧边栏，不被裁剪） */
 .session-menu-dropdown {
   position: fixed;
-  background: rgba(255,255,255,0.75);
+  background: rgba(var(--app-surface-rgb),0.75);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(0,0,0,0.08);
@@ -1240,7 +1240,7 @@ min-height: 90px !important;
   cursor: pointer;
 }
 .session-menu-dropdown button:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 
@@ -1283,11 +1283,11 @@ min-height: 90px !important;
   transition: all 0.2s;
 }
 .btn-cancel {
-  background: #e5e5e5;
+  background: var(--app-surface-3);
   color: var(--app-text);
 }
 .btn-cancel:hover {
-  background: #d1d5db;
+  background: var(--app-surface-3);
 }
 .btn-delete {
   background: #c96442;
@@ -1392,11 +1392,11 @@ min-height: 90px !important;
 }
 
 .project-item:hover, .subtask-item:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 .project-item.active, .subtask-item.active {
-  background: #e2e8f0;
+  background: var(--app-surface-3);
   font-weight: 600;
 }
 
@@ -1428,7 +1428,7 @@ min-height: 90px !important;
 }
 
 .project-breadcrumb:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 .breadcrumb-separator {
@@ -1470,7 +1470,7 @@ min-height: 90px !important;
 }
 
 .dropdown-project-name:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 .dropdown-task {
@@ -1481,11 +1481,11 @@ min-height: 90px !important;
 }
 
 .dropdown-task:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 .dropdown-task.active {
-  background: #e2e8f0;
+  background: var(--app-surface-3);
   font-weight: 600;
 }
 
@@ -1523,11 +1523,11 @@ min-height: 90px !important;
 }
 
 .model-option:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 
 .model-option.active {
-  background: #e2e8f0;
+  background: var(--app-surface-3);
   font-weight: 600;
 }
 .chat-body { display: flex; flex: 1; overflow: hidden; }
@@ -1650,8 +1650,8 @@ min-height: 90px !important;
   cursor: pointer;
   transition: background 0.15s;
 }
-.model-menu-item:hover { background: #f1f5f9; }
-.model-menu-item.active { background: #e2e8f0; font-weight: 500; }
+.model-menu-item:hover { background: var(--app-surface-3); }
+.model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
 
 .header-left {
   flex: 1;
@@ -1679,7 +1679,7 @@ min-height: 90px !important;
   transition: background 0.15s ease;
 }
 .header-icon-btn:hover { background: rgba(0, 0, 0, 0.06); }
-.header-icon-btn.active { background: #e2e8f0; }
+.header-icon-btn.active { background: var(--app-surface-3); }
 
 .header-session-name {
   font-size: 13px;
@@ -1844,7 +1844,7 @@ min-height: 90px !important;
   border-radius: 5px;
   border: 1px solid var(--app-border);
   color: var(--app-text-soft);
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 .chat-window.expanded .studio-chat-header .sch-status {
   display: flex;
@@ -1863,7 +1863,7 @@ min-height: 90px !important;
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #f1f5f9;
+  background: var(--app-surface-3);
   border-radius: 999px;
   padding: 5px 12px;
   font-size: 12px;
@@ -1988,7 +1988,7 @@ min-height: 90px !important;
 .model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
 .model-menu-item:hover { background: var(--app-surface-3); }
-.model-menu-item.active { background: #ececec; font-weight: 500; }
+.model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
 
 /* ---------- 思考强度（Effort）：模型选择器右边的小胶囊 + 点开的 Faster↔Smarter 滑块 ---------- */
 .effort-widget {
@@ -2102,7 +2102,7 @@ min-height: 90px !important;
 .model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
 .model-menu-item:hover { background: var(--app-surface-3); }
-.model-menu-item.active { background: #ececec; font-weight: 500; }
+.model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
 
 /* 模式 pill：浅底 + 主题色字 */
 .effort-widget {
@@ -2264,7 +2264,7 @@ min-height: 90px !important;
 .tup-label { color: var(--app-text-soft); }
 .tup-value { font-family: var(--app-font); font-weight: 600; color: var(--app-text); }
 
-.vision-status-toast { position: absolute; bottom: calc(100% + 12px); right: 0px; z-index: 6; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); border: 1px solid var(--app-border); font-size: 11px; color: var(--app-text-soft); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.vision-status-toast { position: absolute; bottom: calc(100% + 12px); right: 0px; z-index: 6; padding: 3px 10px; border-radius: 999px; background: rgba(var(--app-surface-rgb), 0.9); border: 1px solid var(--app-border); font-size: 11px; color: var(--app-text-soft); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .vision-status-toast.error { color: #d94834; border-color: #f3c9c2; background: rgba(255, 245, 243, 0.95); }
 
 /* 回到底部：悬浮在输入框卡片正中间上方（相对 .chat-input-area 定位） */
@@ -2287,7 +2287,7 @@ min-height: 90px !important;
   transition: all 0.2s ease;
   opacity: 0.9;
 }
-.scroll-to-bottom-btn:hover { background: #f1f5f9; transform: translateX(-50%) scale(1.05); opacity: 1; }
+.scroll-to-bottom-btn:hover { background: var(--app-surface-3); transform: translateX(-50%) scale(1.05); opacity: 1; }
 
 /* ★ 修复 3：右侧工具面板，直接删掉无用的 Tabs 按钮 ★ */
 .tool-panel { flex: 0 0 320px; /* 稍微缩窄一点面板宽度 */ border-left: 1px solid var(--app-border); background: var(--app-surface); display: flex; flex-direction: column; overflow: hidden; position: relative; }
@@ -2341,7 +2341,7 @@ min-height: 90px !important;
   z-index: 6;
   flex-shrink: 0;
   border: none;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(var(--app-surface-rgb), 0.9);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2507,8 +2507,8 @@ min-height: 90px !important;
   max-width: 320px;
   overflow-y: auto;
   padding: 6px;
-  background: var(--app-surface, var(--app-surface));
-  border: 1px solid var(--app-border, var(--app-border));
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
   animation: rail-card-in 0.12s ease-out;
@@ -2593,7 +2593,7 @@ min-height: 90px !important;
   align-items: center;
   gap: 2px;
   padding: 3px 6px;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(var(--app-surface-rgb), 0.78);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(0, 0, 0, 0.05);
@@ -2628,16 +2628,21 @@ min-height: 90px !important;
 .msg-edge-blur {
   pointer-events: none;
 }
+/* blur 条必须跟正文块同宽同中线：.chat-messages-inner 是 max-width:720 + margin:0 auto，
+   而 blur 原来用 left:0/right:0 铺满整个 padding box——我为了居中给 .chat-content 加了
+   padding-right 之后，它就比正文右出一大截（实测 30px），暗色下是一道很显眼的白痕。 */
 .msg-edge-blur.top {
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 720px;
   height: 44px;
   z-index: 5;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+  background: linear-gradient(to bottom, rgba(var(--app-surface-rgb), 0.85), rgba(var(--app-surface-rgb), 0));
   -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent);
   mask-image: linear-gradient(to bottom, black 30%, transparent);
 }
@@ -2653,7 +2658,7 @@ min-height: 90px !important;
   scrollbar-gutter: stable both-edges;
 }
 /* 顶部模糊条铺满（内容已不再右缩，无需再让开 56px） */
-.chat-window.expanded .chat-body.studio .msg-edge-blur.top { right: 0; }
+/* 顶部模糊条已改为按正文宽度居中，不再需要覆盖 right */
 .chat-window.expanded .chat-body.studio .chat-messages .chat-messages-inner { padding-bottom: 18px; }
 .msg-edge-blur.bottom {
   position: sticky;
@@ -2661,11 +2666,13 @@ min-height: 90px !important;
   display: block;
   height: 40px;
   flex-shrink: 0;   /* chat-messages 是 flex 列容器，不加会被内容压成 0 高 */
-  margin-top: -40px;
+  width: 100%;
+  max-width: 720px;      /* 与 .chat-messages-inner 同宽同中线，见上方 top 的说明 */
+  margin: -40px auto 0;
   z-index: 5;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+  background: linear-gradient(to top, rgba(var(--app-surface-rgb), 0.85), rgba(var(--app-surface-rgb), 0));
   -webkit-mask-image: linear-gradient(to top, black 30%, transparent);
   mask-image: linear-gradient(to top, black 30%, transparent);
 }
@@ -2679,11 +2686,14 @@ min-height: 90px !important;
   justify-content: space-between;
   padding: 7px 14px;
   margin-bottom: 8px;
-  /* 微渐变底（替代死白）+ 暖灰清晰边框 + 双层柔阴影 → 悬浮卡片质感 */
-  background: linear-gradient(180deg, var(--app-surface) 0%, #f7f6f4 100%);
-  border: 1px solid #e3e0db;
+  /* 微渐变底 + 清晰边框 + 双层柔阴影 → 悬浮卡片质感。
+     两个色标都要走主题面变量：原来第二段写死暖灰 #f7f6f4，暗色下就成了
+     "深→浅"的刺眼渐变（用户反馈的"git 栏太丑"）。现在亮色是 白→极浅灰、
+     暗色是 面色→更深一档，两边都是同向的微渐变。 */
+  background: linear-gradient(180deg, var(--app-surface) 0%, var(--app-surface-2) 100%);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05), 0 2px 6px rgba(28, 25, 23, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 2px 6px rgba(0, 0, 0, 0.06);
   font-size: 12px;
 }
 .input-dir-left {
@@ -2702,7 +2712,7 @@ min-height: 90px !important;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.input-dir-divider { width: 1px; height: 12px; background: #d4d4d4; flex-shrink: 0; }
+.input-dir-divider { width: 1px; height: 12px; background: var(--app-surface-3); flex-shrink: 0; }
 .input-dir-worktree {
   font-family: var(--app-font);
   font-size: 11px;
@@ -2722,11 +2732,11 @@ min-height: 90px !important;
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
-.input-dir-add-btn:hover { background: #f0f0f0; }
+.input-dir-add-btn:hover { background: var(--app-surface-3); }
 /* 悬浮卡片交互反馈：hover 时阴影加深，强化"浮起来"的感觉 */
 .input-dir-bar:hover,
 .input-git-bar:hover {
-  border-color: #d8d4ce;
+  border-color: var(--app-text-faint);
   box-shadow: 0 1px 3px rgba(28, 25, 23, 0.08), 0 4px 12px rgba(28, 25, 23, 0.10);
 }
 
@@ -2757,7 +2767,7 @@ min-height: 90px !important;
 .workdir-menu-item:hover { background: var(--app-surface-3); }
 .workdir-menu-item.disabled { color: var(--app-text-faint); cursor: default; }
 .workdir-menu-item.disabled:hover { background: transparent; }
-.workdir-menu-divider { height: 1px; background: #ececec; margin: 6px 0; }
+.workdir-menu-divider { height: 1px; background: var(--app-surface-3); margin: 6px 0; }
 
 /* git 状态条：Code 模式下代替工作目录条，同一个位置、同一套卡片外观 */
 .input-git-bar {
@@ -2766,11 +2776,14 @@ min-height: 90px !important;
   justify-content: space-between;
   padding: 7px 14px;
   margin-bottom: 8px;
-  /* 微渐变底（替代死白）+ 暖灰清晰边框 + 双层柔阴影 → 悬浮卡片质感 */
-  background: linear-gradient(180deg, var(--app-surface) 0%, #f7f6f4 100%);
-  border: 1px solid #e3e0db;
+  /* 微渐变底 + 清晰边框 + 双层柔阴影 → 悬浮卡片质感。
+     两个色标都要走主题面变量：原来第二段写死暖灰 #f7f6f4，暗色下就成了
+     "深→浅"的刺眼渐变（用户反馈的"git 栏太丑"）。现在亮色是 白→极浅灰、
+     暗色是 面色→更深一档，两边都是同向的微渐变。 */
+  background: linear-gradient(180deg, var(--app-surface) 0%, var(--app-surface-2) 100%);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05), 0 2px 6px rgba(28, 25, 23, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 2px 6px rgba(0, 0, 0, 0.06);
   font-size: 12px;
 }
 .input-git-left {
@@ -2864,10 +2877,10 @@ min-height: 90px !important;
 }
 .commit-modal-glass {
   width: min(420px, 86vw);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(var(--app-surface-rgb), 0.72);
   backdrop-filter: blur(18px) saturate(180%);
   -webkit-backdrop-filter: blur(18px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(var(--app-surface-rgb), 0.5);
   border-radius: 16px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
   padding: 16px;
@@ -2884,14 +2897,14 @@ min-height: 90px !important;
   max-height: 50vh;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(var(--app-surface-rgb), 0.6);
   padding: 10px 12px;
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--app-text);
   font-family: inherit;
 }
-.commit-modal-textarea:focus { outline: none; border-color: #c96442; background: rgba(255, 255, 255, 0.85); }
+.commit-modal-textarea:focus { outline: none; border-color: #c96442; background: rgba(var(--app-surface-rgb), 0.85); }
 .commit-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .commit-modal-btn {
   padding: 6px 16px;
@@ -3003,7 +3016,7 @@ min-height: 90px !important;
 .add-menu-dropdown { min-width: 170px; }
 .auto-menu-item { padding: 7px 14px; font-size: 12.5px; color: var(--app-text-soft); cursor: pointer; }
 .auto-menu-item:hover { background: var(--app-surface-3); }
-.auto-menu-item.active { background: #ececec; color: var(--app-text); font-weight: 600; }
+.auto-menu-item.active { background: var(--app-surface-3); color: var(--app-text); font-weight: 600; }
 
 /* ===== Yolo 模式按钮：开启走主题色脉冲/流光动画，关闭变灰停动画 ===== */
 .toolbar-pill-btn.mode-pill { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }

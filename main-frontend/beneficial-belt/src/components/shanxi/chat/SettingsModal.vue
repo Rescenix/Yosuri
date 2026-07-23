@@ -785,10 +785,10 @@ onUnmounted(() => {
 
 .model-pick-btn {
   flex-shrink: 0; margin-left: auto; padding: 3px 12px; font-size: 12px; font-weight: 600;
-  color: var(--app-text-soft); background: #f0f0f0; border: 1px solid #ddd; border-radius: 999px; cursor: pointer;
+  color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid #ddd; border-radius: 999px; cursor: pointer;
   transition: all 0.15s ease;
 }
-.model-pick-btn:hover { background: #e8e8e8; }
+.model-pick-btn:hover { background: var(--app-surface-3); }
 .model-pick-btn.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
 .api-config-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--app-surface-2); }
 .api-config-row { display: flex; align-items: center; gap: 8px; }
@@ -796,7 +796,7 @@ onUnmounted(() => {
 .api-config-default-badge { font-size: 10.5px; font-weight: 600; color: #12b76a; background: rgba(18, 183, 106, 0.12); padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
 .api-config-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .api-config-action-btn { font-size: 11.5px; color: var(--app-text-soft); background: transparent; border: 1px solid var(--app-border); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
-.api-config-action-btn:hover { background: #f0f0f0; }
+.api-config-action-btn:hover { background: var(--app-surface-3); }
 .api-config-action-btn.danger { color: #d94834; border-color: #f3c9c2; }
 .api-config-action-btn.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
 .api-config-meta { margin-top: 5px; font-size: 11px; color: var(--app-text-faint); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -809,8 +809,8 @@ onUnmounted(() => {
 .api-config-add-btn:hover { background: var(--app-surface-2); border-color: #c4c4c4; }
 
 .api-config-form { border: 1px solid var(--app-border); border-radius: 10px; padding: 14px; background: var(--app-surface-2); }
-.api-free-badge { font-size: 10px; font-weight: 700; color: #0d9488; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 999px; padding: 1px 7px; }
-.api-config-card.free { background: #fcfffe; }
+.api-free-badge { font-size: 10px; font-weight: 700; color: #0d9488; background: var(--app-surface-2); border: 1px solid #99f6e4; border-radius: 999px; padding: 1px 7px; }
+.api-config-card.free { background: var(--app-surface); }
 .api-config-card.free:first-child { margin-top: 0; }
 
 .vendor-group { margin-bottom: 8px; }
@@ -819,13 +819,13 @@ onUnmounted(() => {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   padding: 9px 12px; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 10px; user-select: none;
 }
-.vendor-head:hover { background: #ededee; }
+.vendor-head:hover { background: var(--app-surface-3); }
 .vendor-name { font-size: 13px; font-weight: 700; color: var(--app-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vendor-count { font-size: 10.5px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 1px 8px; flex-shrink: 0; }
 .vendor-keystate { font-size: 10.5px; font-weight: 600; color: var(--app-text-faint); flex-shrink: 0; }
 .vendor-keystate.on { color: #12b76a; }
 .vendor-key-btn { font-size: 11px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 3px 10px; cursor: pointer; flex-shrink: 0; }
-.vendor-key-btn:hover { background: #f0f0f0; }
+.vendor-key-btn:hover { background: var(--app-surface-3); }
 .vendor-model-hint { margin-top: 6px; font-size: 11px; color: var(--app-text-faint); line-height: 1.5; padding-left: 2px; }
 .vendor-key-inline { display: flex; align-items: center; gap: 8px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
 .vendor-key-input { flex: 1; min-width: 0; font-size: 12.5px; color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 10px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
@@ -833,10 +833,10 @@ onUnmounted(() => {
 .vendor-key-save { font-size: 12px; font-weight: 600; color: #fff; background: #1a1a1a; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-save:hover { background: #333; }
 .vendor-key-cancel { font-size: 12px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
-.vendor-key-cancel:hover { background: #ededee; }
+.vendor-key-cancel:hover { background: var(--app-surface-3); }
 .api-preset-label { font-size: 11.5px; color: var(--app-text-faint); margin-right: 2px; }
 .api-preset-btn { font-size: 11.5px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
-.api-preset-btn:hover { background: #f0f0f0; }
+.api-preset-btn:hover { background: var(--app-surface-3); }
 
 .api-form-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .api-form-field span { font-size: 11.5px; color: var(--app-text-soft); font-weight: 600; }
@@ -846,7 +846,7 @@ onUnmounted(() => {
 .api-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .api-form-btn { font-size: 12.5px; font-weight: 600; padding: 6px 14px; border-radius: 8px; cursor: pointer; border: none; }
 .api-form-btn.cancel { background: transparent; border: 1px solid var(--app-border); color: var(--app-text-soft); }
-.api-form-btn.cancel:hover { background: #f0f0f0; }
+.api-form-btn.cancel:hover { background: var(--app-surface-3); }
 .api-form-btn.save { background: #1a1a1a; color: #fff; }
 .api-form-btn.save:hover { background: #333333; }
 

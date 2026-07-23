@@ -240,7 +240,7 @@ function openExternal() {
   cursor: pointer;
   flex-shrink: 0;
 }
-.pb-icon-btn:hover:not(:disabled) { background: #f0f0f0; }
+.pb-icon-btn:hover:not(:disabled) { background: var(--app-surface-3); }
 .pb-icon-btn:disabled { color: #e5e5e5; cursor: default; }
 .pb-icon-btn.active { background: var(--app-surface-3); color: var(--app-text); }
 .pb-url-wrap {

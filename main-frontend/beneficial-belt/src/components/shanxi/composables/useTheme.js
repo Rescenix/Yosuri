@@ -28,6 +28,10 @@ const NEUTRAL_LIGHT = {
   text: '#1a1a1a', textSoft: '#6b6b6b', textFaint: '#a3a3a3',
   border: '#e5e5e5', borderSoft: '#ececec', codeBg: '#f7f7f8',
   shadow: '0 24px 64px rgba(0,0,0,0.24)',
+  // surfaceRgb 给"毛玻璃"用：工具栏/关闭按钮/下拉/git 栏都是 rgba(面色, 透明度)，
+  // 透明度五花八门(0.5~0.9)，所以不做一堆变量，只给裸 RGB 三元组，
+  // 用法 rgba(var(--app-surface-rgb), 0.78)。
+  surfaceRgb: '255, 255, 255',
   // 便签是刻意的"纸"，不跟 surface 走（跟了就变成普通面板，纸感没了）。
   // 但纯白纸在暗色下极其刺眼，所以纸/墨单独一套，随亮度切换。
   stickyPaper: '#fffdf5', stickyRule: 'rgba(0,0,0,0.03)',
@@ -38,6 +42,7 @@ const NEUTRAL_DARK = {
   text: '#ececec', textSoft: '#a8a8b0', textFaint: '#76767e',
   border: '#3a3a40', borderSoft: '#34343a', codeBg: '#17171a',
   shadow: '0 24px 64px rgba(0,0,0,0.55)',
+  surfaceRgb: '38, 38, 42', // = #26262a，与 surface 同色
   // 暗色下的"牛皮纸"：暖调深色，保留纸感又不刺眼
   stickyPaper: '#332f28', stickyRule: 'rgba(255,255,255,0.04)',
   stickyInk: '#e8e0cf', stickyInkSoft: '#cfc7b5', stickyInkFaint: '#8f8877',
@@ -77,6 +82,7 @@ function applyTheme() {
     '--app-border-soft': n.borderSoft,
     '--app-code-bg': n.codeBg,
     '--app-shadow': n.shadow,
+    '--app-surface-rgb': n.surfaceRgb,
     '--sticky-paper': n.stickyPaper,
     '--sticky-rule': n.stickyRule,
     '--sticky-ink': n.stickyInk,

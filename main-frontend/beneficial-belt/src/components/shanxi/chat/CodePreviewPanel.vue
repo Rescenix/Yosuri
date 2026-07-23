@@ -51,7 +51,7 @@ watch([() => props.fileContent, () => props.loading], async ([content, isLoading
   width: 400px; /* 固定宽度，可调整 */
   height: 100%;
   border-left: 1px solid var(--app-border);
-  background: #f8fafc;
+  background: var(--app-surface-2);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;

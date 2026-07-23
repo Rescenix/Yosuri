@@ -191,7 +191,7 @@ async function toggleFile(df) {
   border-radius: 5px;
   padding: 2px;
 }
-.diff-refresh-btn:hover { background: #f0f0f0; }
+.diff-refresh-btn:hover { background: var(--app-surface-3); }
 .diff-spin { animation: diff-rotate 0.9s linear infinite; }
 @keyframes diff-rotate { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
@@ -260,9 +260,9 @@ async function toggleFile(df) {
   top: 0;
   z-index: 2;
 }
-.diff-file-head:hover { background: #f6f7f9; }
+.diff-file-head:hover { background: var(--app-surface-2); }
 .diff-file-head.is-open {
-  background: #f4f6f8;
+  background: var(--app-surface-2);
   border-bottom: 1px solid var(--app-border-soft);
 }
 .diff-chev {
@@ -343,5 +343,5 @@ async function toggleFile(df) {
   cursor: pointer;
   border-radius: 6px;
 }
-.diff-ctx-item:hover { background: #f1f5f9; color: #2563eb; }
+.diff-ctx-item:hover { background: var(--app-surface-3); color: #2563eb; }
 </style>

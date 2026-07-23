@@ -312,7 +312,7 @@ function toolBodyText(b) {
   padding: 3px 0 3px 12px;
   border-left: 2px solid var(--app-border, #e2e8f0);
   font-size: 12px;
-  color: var(--app-text-faint, var(--app-text-faint));
+  color: var(--app-text-faint);
 }
 .flow-compressed-icon { font-size: 12px; opacity: 0.8; }
 /* 中途插话提示：跟压缩提示同样"轻"，但左侧竖线用强调色——这是用户自己
@@ -325,7 +325,7 @@ function toolBodyText(b) {
   padding: 3px 0 3px 12px;
   border-left: 2px solid var(--app-accent, #6366f1);
   font-size: 12px;
-  color: var(--app-text-faint, var(--app-text-faint));
+  color: var(--app-text-faint);
 }
 .flow-steer-icon { font-size: 12px; opacity: 0.8; }
 /* 自动预览提示：跟插话提示同款弱化条 */
@@ -337,7 +337,7 @@ function toolBodyText(b) {
   padding: 3px 0 3px 12px;
   border-left: 2px solid var(--app-accent, #6366f1);
   font-size: 12px;
-  color: var(--app-text-faint, var(--app-text-faint));
+  color: var(--app-text-faint);
   word-break: break-all;
 }
 .flow-preview-icon { font-size: 12px; opacity: 0.8; }
@@ -356,7 +356,7 @@ function toolBodyText(b) {
   transition: background 0.14s ease, border-color 0.14s ease;
 }
 .flow-row-head:hover {
-  background: #f1f1f3;
+  background: var(--app-surface-3);
   border-color: #e2e2e6;
 }
 .flow-row-icon { flex-shrink: 0; }
@@ -365,7 +365,7 @@ function toolBodyText(b) {
 .flow-row-preview {
   flex: 1;
   min-width: 0;
-  color: var(--app-text-faint, var(--app-text-faint));
+  color: var(--app-text-faint);
   font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;

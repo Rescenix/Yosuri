@@ -201,7 +201,7 @@ const collapsedRows = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #f8f9fa;
+  background: var(--app-surface-2);
   border-top: 1px solid var(--app-border);
   border-bottom: 1px solid var(--app-border);
   color: var(--app-text-soft);
@@ -210,7 +210,7 @@ const collapsedRows = computed(() => {
   cursor: pointer;
 }
 .dv-fold:hover {
-  background: #f0f1f3;
+  background: var(--app-surface-3);
 }
 .dv-fold-text {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;

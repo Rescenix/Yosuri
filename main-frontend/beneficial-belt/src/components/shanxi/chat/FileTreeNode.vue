@@ -136,8 +136,8 @@ onUnmounted(() => {
   cursor: pointer; font-size: 12px; color: var(--app-text);
   border-radius: 4px; margin: 0 4px;
 }
-.tree-node:hover { background: #e2e8f0; }
-.tree-node.active { background: #e2e8f0; font-weight: 600; }
+.tree-node:hover { background: var(--app-surface-3); }
+.tree-node.active { background: var(--app-surface-3); font-weight: 600; }
 .node-icon { margin-right: 6px; flex-shrink: 0; }
 .file-badge {
   flex-shrink: 0;
@@ -175,6 +175,6 @@ onUnmounted(() => {
   color: var(--app-text);
 }
 .file-context-menu button:hover {
-  background: #f1f5f9;
+  background: var(--app-surface-3);
 }
 </style>

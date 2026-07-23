@@ -355,7 +355,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 /* 细滚动条，避免原生粗滚动条破坏呼吸感 */
 .smc-session-area::-webkit-scrollbar { width: 6px; }
 .smc-session-area::-webkit-scrollbar-track { background: transparent; }
-.smc-session-area::-webkit-scrollbar-thumb { background: #d8d8d8; border-radius: 3px; }
+.smc-session-area::-webkit-scrollbar-thumb { background: var(--app-surface-3); border-radius: 3px; }
 .smc-session-area::-webkit-scrollbar-thumb:hover { background: #c0c0c0; }
 .smc-session-area { scrollbar-width: thin; scrollbar-color: #d8d8d8 transparent; }
 

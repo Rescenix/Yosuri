@@ -132,7 +132,7 @@ function onEditorMount(editor) {
 
 .editor-tabs {
   display: flex;
-  background: #f3f3f3;
+  background: var(--app-surface-3);
   border-bottom: 1px solid var(--app-border);
   overflow-x: auto;
   flex-shrink: 0;

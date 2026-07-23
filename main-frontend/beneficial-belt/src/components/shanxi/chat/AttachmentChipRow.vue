@@ -51,7 +51,7 @@ defineEmits(['remove'])
   background: var(--app-surface-2);
   box-sizing: border-box;
 }
-.attach-chip.error { border-color: #f3c9c2; background: #fff5f3; }
+.attach-chip.error { border-color: #f3c9c2; background: var(--app-surface-2); }
 .attach-chip.analyzing { opacity: 0.7; }
 .attach-chip-thumb { width: 36px; height: 36px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
 .attach-chip-icon {

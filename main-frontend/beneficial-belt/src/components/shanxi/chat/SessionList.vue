@@ -138,7 +138,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   font-family: inherit;
   transition: background 0.15s ease;
 }
-.session-new-btn:hover { background: #f0f0f0; }
+.session-new-btn:hover { background: var(--app-surface-3); }
 .session-new-btn .plus { font-size: 14px; line-height: 1; }
 
 .session-recent-label {
@@ -170,9 +170,9 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.session-row:hover { background: #f7f7f7; }
+.session-row:hover { background: var(--app-surface-2); }
 .session-row.active {
-  background: #f3f3f3;
+  background: var(--app-surface-3);
   box-shadow: inset 0 0 0 1px #e8e8e8;
 }
 /* 运行中会话：整行高亮，跟主题色一致 */

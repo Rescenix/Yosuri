@@ -117,18 +117,18 @@ watch(() => items.value.length, async () => {
   align-items: baseline;
   padding: 5px 9px;
   border-radius: 8px;
-  background: var(--app-surface, var(--app-surface));
-  border: 1px solid var(--app-border, var(--app-border));
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
   font-size: 12px;
   line-height: 1.4;
-  color: var(--app-text, var(--app-text));
+  color: var(--app-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;   /* 别挡住下面的圆点，否则鼠标一移上来就闪 */
   z-index: 60;
 }
-.umr-tip-idx { color: var(--app-text-faint, var(--app-text-faint)); flex: 0 0 auto; }
+.umr-tip-idx { color: var(--app-text-faint); flex: 0 0 auto; }
 .umr-tip-text { overflow: hidden; text-overflow: ellipsis; }
 </style>

@@ -6,48 +6,7 @@
 
     <div class="chat-window" :class="{ expanded: isExpanded }" :style="{ display: isOpen ? 'flex' : 'none' }">
 
-      <!-- ★ 左侧折叠菜单（侧边抽屉） —— 项目任务列表 -->
-      <div v-if="menuOpen" class="drawer-backdrop" @click="menuOpen = false"></div>
-      <aside class="drawer-panel" :class="{ open: menuOpen }">
-        <h4 class="site-icon">
-          <Icon icon="majesticons:shooting-star-line" width="20" />
-        </h4>
-
-        <a href="/blog" @click="menuOpen = false">
-          <Icon icon="mdi:book-open-outline" width="16" style="margin-right:8px" />
-          博客
-        </a>
-        <a href="/timeline" @click="menuOpen = false">
-          <Icon icon="mdi:timeline-clock-outline" width="16" style="margin-right:8px" />
-          更新日志
-        </a>
-        <a href="#" @click.prevent="openReader">
-          <Icon icon="ic:outline-book" width="16" style="margin-right:8px" />
-          阅读器
-        </a>
-        <a href="https://github.com/3478556810" target="_blank" rel="noopener" @click="menuOpen = false">
-          <Icon icon="iconoir:github" width="16" style="margin-right:8px" />
-          GitHub
-        </a>
-
-        <div class="drawer-divider"></div>
-
-      </aside>
-
-      <!-- ★ 阅读器全屏浮层：把阅读小屋嵌进聊天窗，替代独立的 /reading-hut 项目库页 -->
-      <Teleport to="body">
-        <div v-if="showReader" class="reader-overlay">
-          <button v-if="!readerBookId" class="reader-overlay-close" @click="closeReader" aria-label="关闭阅读器">
-            <Icon icon="mdi:close" width="20" color="#6b6b6b" />
-          </button>
-          <div class="reader-overlay-body">
-            <BookShelf v-if="!readerBookId" @open="openReaderBook" />
-            <ReaderView v-else :book-id="readerBookId" @close="closeReaderBook" />
-          </div>
-        </div>
-      </Teleport>
-
-      <!-- ★ 主内容区（随菜单推开） -->
+      <!-- ★ 主内容区 -->
       <div class="chat-main" :class="{ shifted: menuOpen }">
 
         <!-- 顶部横条已删除：会话切换在左侧 Gemini 风侧栏，工具组浮在聊天区右上角 -->
@@ -56,9 +15,9 @@
         <aside v-if="isExpanded" class="gem-sidebar" :class="{ collapsed: !sidebarOpen }">
           <!-- 顶部：展开态 汉堡+折叠toggle；折叠态只有 toggle -->
           <div class="gem-top">
-            <button v-if="sidebarOpen" class="gem-icon-btn" @click="menuOpen = !menuOpen" title="导航">
-              <Icon icon="mdi:menu" width="18" />
-            </button>
+            <a href="/" class="gem-icon-btn" title="首页">
+              <Icon icon="majesticons:shooting-star-line" width="18" />
+            </a>
             <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠侧栏' : '展开侧栏'">
               <Icon icon="lucide:sidebar" width="18" />
             </button>

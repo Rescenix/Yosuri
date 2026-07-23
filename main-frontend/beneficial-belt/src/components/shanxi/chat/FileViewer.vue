@@ -40,7 +40,7 @@ watch([() => props.content, () => props.file], async () => {
 <style scoped>
 .file-viewer {
   border: 1px solid var(--app-border);
-  background: #f8fafc;
+  background: var(--app-surface-2);
   display: flex;
   flex-direction: column;
   max-height: 40%;
@@ -53,7 +53,7 @@ watch([() => props.content, () => props.file], async () => {
   align-items: center;
   padding: 4px 12px;
   font-size: 12px;
-  background: #f1f5f9;
+  background: var(--app-surface-3);
   border-bottom: 1px solid var(--app-border);
 }
 .file-viewer-body {

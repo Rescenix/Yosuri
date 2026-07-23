@@ -254,7 +254,7 @@ onUnmounted(() => {
   width: 240px;
   height: 100%;
   border-right: 1px solid var(--app-border);
-  background: #f8fafc;
+  background: var(--app-surface-2);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -276,7 +276,7 @@ onUnmounted(() => {
   cursor: pointer;
   user-select: none;
 }
-.section-header:hover { background: #f1f5f9; }
+.section-header:hover { background: var(--app-surface-3); }
 
 .chevron { transition: transform 180ms ease; flex-shrink: 0; color: var(--app-text-faint); }
 .chevron.rotated { transform: rotate(90deg); }
@@ -309,7 +309,7 @@ onUnmounted(() => {
   border-radius: 4px;
   padding: 2px;
 }
-.section-more-btn:hover { background: #e2e8f0; }
+.section-more-btn:hover { background: var(--app-surface-3); }
 
 /* Smooth accordion: grid-rows 0fr -> 1fr, no display:none jump */
 .section-body-wrap {
@@ -335,7 +335,7 @@ onUnmounted(() => {
   cursor: pointer;
   color: var(--app-text);
 }
-.root-row:hover { background: #f1f5f9; }
+.root-row:hover { background: var(--app-surface-3); }
 .tree-body { padding: 2px 0 6px; }
 
 /* ========== Git ========== */
@@ -383,7 +383,7 @@ onUnmounted(() => {
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   border-radius: 4px; color: var(--app-text-soft);
 }
-.commit-more-btn:hover { background: #e2e8f0; }
+.commit-more-btn:hover { background: var(--app-surface-3); }
 
 .floating-menu {
   position: absolute; top: -70px; right: -10px; z-index: 10;
@@ -395,7 +395,7 @@ onUnmounted(() => {
   display: block; width: 100%; padding: 6px 10px; font-size: 12px;
   border: none; background: var(--app-surface); cursor: pointer; text-align: left; border-radius: 4px;
 }
-.floating-menu .git-btn:hover { background: #f1f5f9; }
+.floating-menu .git-btn:hover { background: var(--app-surface-3); }
 
 .commit-main-btn, .action-feedback {
   display: block; width: 100%; padding: 6px 0; font-size: 12px;
@@ -403,11 +403,11 @@ onUnmounted(() => {
   box-sizing: border-box; line-height: 1.4; cursor: pointer;
   background: var(--app-surface); color: inherit; transition: background 0.15s, border-color 0.15s;
 }
-.commit-main-btn:hover { background: #f1f5f9; }
+.commit-main-btn:hover { background: var(--app-surface-3); }
 .commit-main-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .action-feedback.success { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
 .action-feedback.error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-.action-feedback.loading { background: #f1f5f9; color: var(--app-text-soft); border-color: var(--app-border); }
+.action-feedback.loading { background: var(--app-surface-3); color: var(--app-text-soft); border-color: var(--app-border); }
 .action-feedback.loading::after { content: '...'; animation: loading-dots 1.5s infinite; }
 @keyframes loading-dots {
   0% { content: '.'; } 33% { content: '..'; } 66% { content: '...'; }
@@ -418,13 +418,13 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 6px;
   padding: 4px 10px; font-size: 12px; cursor: default;
 }
-.pinned-row:hover { background: #f1f5f9; }
+.pinned-row:hover { background: var(--app-surface-3); }
 .pinned-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .unpin-btn {
   border: none; background: transparent; color: var(--app-text-faint); cursor: pointer;
   display: flex; align-items: center; border-radius: 3px; flex-shrink: 0;
 }
-.unpin-btn:hover { background: #e2e8f0; color: var(--app-text); }
+.unpin-btn:hover { background: var(--app-surface-3); color: var(--app-text); }
 
 .file-badge {
   flex-shrink: 0; width: 16px; height: 16px; border-radius: 4px;

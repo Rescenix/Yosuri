@@ -229,7 +229,7 @@ function actionBadge(tc) {
   max-height: 220px;
   overflow-y: auto;
 }
-.bgstep-raw-block.error { color: #d94834; border-color: #f3c9c2; background: #fff5f3; }
+.bgstep-raw-block.error { color: #d94834; border-color: #f3c9c2; background: var(--app-surface-2); }
 
 .bgdiff-card { border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; background: var(--app-surface); }
 .bgdiff-head { display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; background: var(--app-surface-3); border-bottom: 1px solid var(--app-border); }
