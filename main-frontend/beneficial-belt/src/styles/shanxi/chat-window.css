@@ -2640,12 +2640,16 @@ min-height: 90px !important;
    sticky 在同一个滚动容器里，自然与 .chat-messages-inner 同宽同中线，两个问题都没有。 */
 .msg-edge-blur.top {
   position: sticky;
-  top: 0;
+  /* -24px 抵消 .chat-messages 的 padding-top:24px —— sticky 是相对父级 content box
+     吸附的，写 0 会让 blur 停在padding 下沿，而内容是穿过 padding 区滚出去的，
+     顶上就留一条 24px 没被淡化的带子。这两个值是绑定的，改 padding 记得同步。 */
+  top: -24px;
   display: block;
   width: 100%;
   max-width: 720px;
   margin: 0 auto -44px;   /* 负外边距：不占布局高度，纯覆盖在内容之上 */
   height: 44px;
+  flex-shrink: 0;         /* 同底部那条：flex 列容器里不写会被内容压成 0 高 */
   z-index: 5;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
