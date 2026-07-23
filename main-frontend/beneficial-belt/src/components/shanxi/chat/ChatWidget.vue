@@ -585,6 +585,9 @@
                   </div>
                 </div>
 
+                <!-- 用户消息导航轴：占据工具栏中间的弹性空间 -->
+                <UserMessageRail :messages="messages" @jump="jumpToMessage" />
+
                 <div class="input-toolbar-right">
                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
                   <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
@@ -736,6 +739,7 @@ import 'katex/dist/katex.min.css'
 import { renderMarkdown } from './markdownRenderer.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
+import UserMessageRail from './UserMessageRail.vue'
 import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth, useResizableSplit } from './useResizable.js'
 import SessionList from './SessionList.vue'
@@ -1164,17 +1168,52 @@ onMounted(() => {
 // 每个元素一套独立的 translate 偏移,互不影响,分别记进 localStorage(刷新不丢)。
 // 注意:现在它们待在 .studio-side-col 这一栏里,拖动只是微调位置,
 // 不再承担"躲开聊天内容"的职责——那件事已经由栏本身占位解决了。
+// 拖动范围限制在工作区（.chat-body-row）内：以前没有边界，一不小心拖到聊天区
+// 后面或者屏幕外，元素就"消失"了，而且因为抓不到它，再也拖不回来。
+const DRAG_BOUNDS_SELECTOR = '.chat-body-row'
+
+const fitRange = (v, lo, hi) => (hi < lo ? lo : Math.min(Math.max(v, lo), hi))
+
+// 算出 offset 的合法范围。appliedOff 必须是「此刻页面上真正生效的偏移」——
+// getBoundingClientRect() 拿到的 rect 已经含了这个 transform，用候选偏移去反推
+// 原始位置会算出完全错误的边界（这正是第一版没夹住的原因）。
+function dragBoundsOf(el, appliedOff) {
+  const box = el?.closest?.(DRAG_BOUNDS_SELECTOR)
+  if (!el || !box) return null
+  const r = el.getBoundingClientRect()
+  const c = box.getBoundingClientRect()
+  if (!r.width || !c.width) return null // 还没布局完
+  const natLeft = r.left - appliedOff.x // 元素在 offset=0 时的位置
+  const natTop = r.top - appliedOff.y
+  return {
+    minX: c.left - natLeft,
+    maxX: c.right - r.width - natLeft,
+    minY: c.top - natTop,
+    maxY: c.bottom - r.height - natTop,
+  }
+}
+
+function clampToBounds(off, b) {
+  if (!b) return off
+  return { x: fitRange(off.x, b.minX, b.maxX), y: fitRange(off.y, b.minY, b.maxY) }
+}
+
 function makeDrag(storageKey) {
   const offset = ref({ x: 0, y: 0 })
   const dragging = ref(false)
   let start = null
+  let el = null
+  let bounds = null
   try {
     const s = JSON.parse(localStorage.getItem(storageKey) || 'null')
     if (s && typeof s.x === 'number' && typeof s.y === 'number') offset.value = s
   } catch { /* 无历史位置 */ }
   function onMove(e) {
     if (!dragging.value || !start) return
-    offset.value = { x: start.ox + (e.clientX - start.mx), y: start.oy + (e.clientY - start.my) }
+    const raw = { x: start.ox + (e.clientX - start.mx), y: start.oy + (e.clientY - start.my) }
+    // 边界在按下时算好，拖动过程中只做纯算术夹取：既不用每帧读 rect（Vue 异步
+    // 渲染下 rect 会滞后于 offset，读出来是上一帧的），也省掉反复触发布局
+    offset.value = clampToBounds(raw, bounds)
   }
   function onUp() {
     dragging.value = false
@@ -1184,15 +1223,70 @@ function makeDrag(storageKey) {
   }
   function onDown(e) {
     dragging.value = true
+    el = e.currentTarget
+    // 此刻 rect 与 offset.value 是一致的（都是当前已渲染状态），是唯一能正确
+    // 反推出元素原始位置的时机
+    bounds = dragBoundsOf(el, offset.value)
     start = { mx: e.clientX, my: e.clientY, ox: offset.value.x, oy: offset.value.y }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     e.preventDefault()
   }
-  return { offset, dragging, onDown }
+  // 把已经存在 localStorage 里的越界位置拉回来。没有这一步的话，
+  // 上一个版本拖丢的元素这次仍然在界外，用户永远够不着它。
+  function rescue(selector) {
+    const node = document.querySelector(selector)
+    if (!node) return
+    // 这里 offset.value 就是页面上生效的偏移，跟 rect 一致，可以直接算边界
+    const fixed = clampToBounds(offset.value, dragBoundsOf(node, offset.value))
+    if (fixed.x !== offset.value.x || fixed.y !== offset.value.y) {
+      offset.value = fixed
+      try { localStorage.setItem(storageKey, JSON.stringify(fixed)) } catch { /* 忽略 */ }
+    }
+  }
+  return { offset, dragging, onDown, rescue }
 }
 const stickyDrag = makeDrag('corner_sticky_offset')
 const live2dDrag = makeDrag('corner_live2d_offset')
+
+// 越界救回的 watch 放在 sidebarOpen 声明之后（见下方 rescueDragged），
+// 不能放这里：watch 会立即求值 getter 建依赖，会撞上 sidebarOpen 的 TDZ。
+function rescueDragged() {
+  nextTick(() => {
+    stickyDrag.rescue('.studio-side-col .side-drag:not(.studio-side-live2d)')
+    live2dDrag.rescue('.studio-side-col .studio-side-live2d')
+  })
+}
+
+// 光在挂载时夹一次不够：看板娘的 canvas 是异步加载的，它撑大之后这一列
+// （justify-content:flex-end）会把便签整体往上顶，刚算好的边界当场失效。
+// 用 ResizeObserver 盯着尺寸变化重新夹，顺带覆盖窗口缩放。
+let sideColRO = null
+function watchSideColResize() {
+  sideColRO?.disconnect()
+  const col = document.querySelector('.studio-side-col')
+  if (!col || typeof ResizeObserver === 'undefined') return
+  let pending = null
+  sideColRO = new ResizeObserver(() => {
+    clearTimeout(pending)              // 合并连续的尺寸抖动，别每帧都夹一次
+    pending = setTimeout(rescueDragged, 120)
+  })
+  sideColRO.observe(col)
+  for (const child of col.children) sideColRO.observe(child)
+}
+onUnmounted(() => sideColRO?.disconnect())
+
+// 点导航轴上的圆点：滚到那条用户消息并高亮一下，否则跳过去了也不知道落在哪。
+// 用 behavior:'auto' 而不是 'smooth'：平滑滚动是可中断的动画，会被聊天区
+// 自动跟底的逻辑在半路打回原位（实测 smooth 跳完 scrollTop 原封不动，
+// 瞬时跳则稳定生效）。跨两千像素找旧消息本来也不需要看动画。
+function jumpToMessage(id) {
+  const el = document.querySelector(`[data-msg-id="${id}"]`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'auto', block: 'center' })
+  el.classList.add('msg-jump-flash')
+  setTimeout(() => el.classList.remove('msg-jump-flash'), 1200)
+}
 
 // ==================== 工具函数 ====================
 function cleanContent(content) { return content ? content.replace(/\[(action|emotion):[^\]]*\]/g, '') : '' }
@@ -1624,6 +1718,22 @@ function toggleSidebar() {
   localStorage.setItem('sidebarOpen', sidebarOpen.value ? '1' : '0')
   if (!sidebarOpen.value) refreshPinnedRail() // 进折叠态时同步最新置顶分区
 }
+
+// 便签/看板娘这一列是 v-if 挂上去的，出现之后才量得到尺寸；此时把上个版本
+// 拖到界外、已经够不着的位置夹回可视范围（见 clampOffset）。
+watch(() => isExpanded.value && !sidebarOpen.value, (shown) => {
+  if (!shown) { sideColRO?.disconnect(); return }
+  rescueDragged()
+  nextTick(watchSideColResize)
+})
+// 首次进入必须走 onMounted：上面这个 watch 如果带 immediate，会在 setup 阶段
+// （DOM 还没挂载）就执行，querySelector 拿不到那一列，观察器根本建不起来。
+onMounted(() => {
+  if (isExpanded.value && !sidebarOpen.value) {
+    rescueDragged()
+    nextTick(watchSideColResize)
+  }
+})
 // 折叠态会话横条：笔记本(置顶) 与 最近 分两区，悬浮 title 显示会话名。
 // 置顶 id 由 SessionMenuContent 写在 localStorage('pinnedSessions')，这里读来分区，
 // 折叠切换时刷新一次（置顶操作只发生在展开态，折叠时读到的就是最新的）。

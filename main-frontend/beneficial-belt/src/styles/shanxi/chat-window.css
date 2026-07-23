@@ -2912,7 +2912,10 @@ min-height: 90px !important;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 0;
+  /* 按内容撑开即可：中间的用户消息导航轴(.umr)要靠 flex:1 吃掉富余空间，
+     这里再写 flex:1 1 0 就会跟它抢，把两侧按钮挤变形。
+     外层是 space-between，所以左右仍然各自贴边。 */
+  flex: 0 0 auto;
 }
 .input-toolbar-right { justify-content: flex-end; }
 .toolbar-pill-btn {
@@ -2948,6 +2951,16 @@ min-height: 90px !important;
 /* 下拉是 position:absolute + left:0，必须有这个定位基准才会贴在自己的按钮上；
    少了它就会一路上溯到 .chat-body-row，整个卡片跑到窗口左边去 */
 .toolbar-dropdown-wrap { position: relative; }
+
+/* 导航轴跳转后的短暂高亮：不闪一下的话，滚过去了也不知道停在哪条 */
+.msg-jump-flash > .message-bubble,
+.msg-jump-flash > .agentflow-wrap {
+  animation: msg-jump-flash 1.2s ease;
+}
+@keyframes msg-jump-flash {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  20%      { box-shadow: 0 0 0 3px var(--app-accent-soft, rgba(99, 102, 241, 0.35)); }
+}
 
 /* Auto/+ 下拉都开在工具条上方——工具条贴着窗口底边，往下开会出屏 */
 .auto-menu-dropdown,
