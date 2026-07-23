@@ -2631,13 +2631,20 @@ min-height: 90px !important;
 /* blur 条必须跟正文块同宽同中线：.chat-messages-inner 是 max-width:720 + margin:0 auto，
    而 blur 原来用 left:0/right:0 铺满整个 padding box——我为了居中给 .chat-content 加了
    padding-right 之后，它就比正文右出一大截（实测 30px），暗色下是一道很显眼的白痕。 */
+/* 改为 sticky 并挪进 .chat-messages（与底部那条完全对称）。
+   两个坑都踩过，记录一下：
+   1) 原来是 .chat-content 的 absolute 子节点，而绝对定位按 padding box 算，
+      .chat-content 的右侧补偿 padding 会把它整体推右，正文左边露空；
+   2) 试过 left:50%+translateX(-50%) 居中，结果 backdrop-filter 与 transform
+      同元素时背景采样取变换前的位置，左边直接露出一条没模糊的原图。
+   sticky 在同一个滚动容器里，自然与 .chat-messages-inner 同宽同中线，两个问题都没有。 */
 .msg-edge-blur.top {
-  position: absolute;
+  position: sticky;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  display: block;
   width: 100%;
   max-width: 720px;
+  margin: 0 auto -44px;   /* 负外边距：不占布局高度，纯覆盖在内容之上 */
   height: 44px;
   z-index: 5;
   backdrop-filter: blur(6px);

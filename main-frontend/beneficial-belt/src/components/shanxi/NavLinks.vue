@@ -1,7 +1,6 @@
 <template>
   <ul class="nav-links">
     <li><a href="/blog">博客</a></li>
-    <li><a href="/timeline">更新日志</a></li>
   
   </ul>
 </template>

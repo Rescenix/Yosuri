@@ -7,7 +7,7 @@
     <div class="chat-window" :class="{ expanded: isExpanded }" :style="{ display: isOpen ? 'flex' : 'none' }">
 
       <!-- ★ 主内容区 -->
-      <div class="chat-main" :class="{ shifted: menuOpen }">
+      <div class="chat-main">
 
         <!-- 顶部横条已删除：会话切换在左侧 Gemini 风侧栏，工具组浮在聊天区右上角 -->
         <div class="chat-body-row">
@@ -179,8 +179,6 @@
               </div>
             </div>
 
-            <!-- 聊天内容上下边缘 blur（仿 Gemini：内容从模糊里滑入/滑出） -->
-            <div v-if="messages.length" class="msg-edge-blur top"></div>
 
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
                  当 `messages` 为空时，它独占整个 Flex 空间，把输入区推到最底部。 -->
@@ -190,6 +188,11 @@
 
             <!-- 普通聊天/工作流模式：当有消息时，滚动容器才接管整个区域 -->
             <div v-else class="chat-messages" ref="messagesContainer">
+              <!-- 顶部边缘 blur（仿 Gemini：内容从模糊里滑入/滑出）。
+                   必须跟底部那条一样待在 .chat-messages 里：原来它是 .chat-content 的
+                   绝对定位子节点，而 .chat-content 有右侧补偿 padding，绝对定位按
+                   padding box 算，blur 就整体右移、正文左侧压根没被盖住。 -->
+              <div class="msg-edge-blur top"></div>
               <div class="chat-messages-inner">
                 <template v-for="item in groupedMessages">
                   <div v-if="item.type === 'time'" :key="`time-${item.timestamp}`" class="chat-time">
@@ -720,8 +723,6 @@ import TaskTodoSticky from './TaskTodoSticky.vue'
 import Live2DWidget from './Live2DWidget.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
-import BookShelf from '../../reading/BookShelf.vue'
-import ReaderView from '../../reading/ReaderView.vue'
 import { chatModelList } from '../composables/chatModelList.js'
 import { contextBreakdown, loadContextBreakdown } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
@@ -1654,31 +1655,9 @@ function onEffortChange() {
 if (!debugReasoning.value) onEffortChange() // 首次没设置过时落一个默认值，跟滑块初始位置对齐
 
 // ==================== UI 状态 ====================
-const menuOpen = ref(false)
 const showParams = ref(false)
 const showMoreMenu = ref(false)
 const showBackgroundTasks = ref(false)
-
-// ==================== 阅读器全屏浮层 ====================
-// 把阅读小屋（BookShelf + ReaderView）嵌进聊天窗，替代独立的 /reading-hut 项目库页。
-// 组件自包含（自己拉书架/书本），零 props 改写即可内嵌。
-const showReader = ref(false)
-const readerBookId = ref('')
-function openReader() {
-  showReader.value = true
-  readerBookId.value = ''
-  menuOpen.value = false
-}
-function closeReader() {
-  showReader.value = false
-  readerBookId.value = ''
-}
-function openReaderBook(book) {
-  readerBookId.value = book.id
-}
-function closeReaderBook() {
-  readerBookId.value = ''
-}
 
 // ==================== 左侧 Gemini 风侧栏：展开 vs 折叠竖条 ====================
 const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
