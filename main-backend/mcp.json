@@ -20,6 +20,10 @@
       "command": "python",
       "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\web_fetch_server.py"]
     },
+    "web_search": {
+      "command": "python",
+      "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\web_search_server.py"]
+    },
     "view_image": {
       "command": "python",
       "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\view_image_server.py"]

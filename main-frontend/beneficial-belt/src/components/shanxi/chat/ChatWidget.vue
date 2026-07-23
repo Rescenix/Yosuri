@@ -12,7 +12,56 @@
         <!-- 顶部横条已删除：会话切换在左侧 Gemini 风侧栏，工具组浮在聊天区右上角 -->
         <div class="chat-body-row">
         <!-- ★ Gemini 风侧栏：展开=平铺会话面板，折叠=竖向图标条（带会话横条） -->
-        <aside v-if="isExpanded" class="gem-sidebar" :class="{ collapsed: !sidebarOpen }">
+        <aside
+          v-if="isExpanded"
+          class="gem-sidebar"
+          :class="{ collapsed: !sidebarOpen }"
+          :style="sidebarOpen ? { width: sidebarWidth + 'px' } : {}"
+        >
+          <!-- 展开态：右侧拖拽条，用于自定义侧栏宽度（仿右侧面板） -->
+          <div v-if="sidebarOpen" class="gem-sidebar-resize-handle" @mousedown="startSidebarWidthDrag"></div>
+
+          <!-- ★ Gemini 风格对话搜索面板：覆盖整个侧栏，与 Gemini 一致 -->
+          <Transition name="search-panel">
+            <div v-if="showSearchPanel" class="gem-search-panel" @click.stop>
+              <div class="gem-search-head">
+                <button class="gem-icon-btn" @click="closeSearchPanel" title="返回">
+                  <Icon icon="mdi:arrow-left" width="18" />
+                </button>
+                <div class="gem-search-input-wrap">
+                  <Icon icon="mdi:magnify" width="16" color="#9a9a9a" />
+                  <input
+                    ref="searchPanelInput"
+                    v-model="searchQuery"
+                    type="text"
+                    class="gem-search-input"
+                    placeholder="搜索对话内容"
+                    @keydown.esc="closeSearchPanel"
+                  />
+                  <button v-if="searchQuery" class="gem-search-clear" @click="searchQuery = ''">
+                    <Icon icon="mdi:close" width="14" />
+                  </button>
+                </div>
+              </div>
+              <div class="gem-search-body">
+                <div class="gem-search-section-label">近期对话</div>
+                <div v-if="filteredSearchSessions.length === 0" class="gem-search-empty">
+                  未找到匹配对话
+                </div>
+                <button
+                  v-for="s in filteredSearchSessions"
+                  :key="s.id"
+                  class="gem-search-row"
+                  :class="{ active: s.id === activeSession }"
+                  @click="onSearchSelect(s.id)"
+                >
+                  <span class="gem-search-row-name">{{ s.name }}</span>
+                  <span class="gem-search-row-date">{{ formatSearchDate(s.updatedAt) }}</span>
+                </button>
+              </div>
+            </div>
+          </Transition>
+
           <!-- 顶部：展开态 汉堡+折叠toggle；折叠态只有 toggle -->
           <div class="gem-top">
             <a href="/" class="gem-icon-btn gem-home" title="首页">
@@ -35,6 +84,7 @@
             @rename-session="renameSession"
             @delete-session="deleteSession"
             @open-settings="showSettings = true"
+            @open-search="openSearchPanel"
           />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
@@ -42,7 +92,7 @@
             <button class="gem-icon-btn" @click="newSession" title="发起新对话">
               <Icon icon="mdi:pencil-plus-outline" width="18" />
             </button>
-            <button class="gem-icon-btn" @click="toggleSidebar" title="搜索对话内容">
+            <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话内容">
               <Icon icon="mdi:magnify" width="18" />
             </button>
             <!-- 会话横条：当前项目下会话在上，其他在下 -->
@@ -1690,9 +1740,59 @@ const showBackgroundTasks = ref(false)
 
 // ==================== 左侧 Gemini 风侧栏：展开 vs 折叠竖条 ====================
 const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
+const sidebarWidth = ref(220)
+const { startDrag: startSidebarWidthDrag } = useResizableWidth(sidebarWidth, {
+  min: 180,
+  max: 400,
+  edge: 'right',
+  persistKey: 'gemSidebarWidth'
+})
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
   localStorage.setItem('sidebarOpen', sidebarOpen.value ? '1' : '0')
+}
+
+// ==================== Gemini 风格对话搜索面板 ====================
+const showSearchPanel = ref(false)
+const searchQuery = ref('')
+const searchPanelInput = ref(null)
+
+const filteredSearchSessions = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  const list = [...sessionList.value].sort((a, b) => {
+    const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
+    const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
+    return tb - ta
+  })
+  if (!q) return list
+  return list.filter(s => (s.name || '').toLowerCase().includes(q))
+})
+
+function openSearchPanel() {
+  sidebarOpen.value = true
+  localStorage.setItem('sidebarOpen', '1')
+  showSearchPanel.value = true
+  nextTick(() => searchPanelInput.value?.focus())
+}
+
+function closeSearchPanel() {
+  showSearchPanel.value = false
+  searchQuery.value = ''
+}
+
+function onSearchSelect(id) {
+  selectSession(id)
+  closeSearchPanel()
+}
+
+function formatSearchDate(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  const now = new Date()
+  const isYesterday = d.getDate() === now.getDate() - 1 && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+  if (isYesterday) return '昨天'
+  if (d.toDateString() === now.toDateString()) return '今天'
+  return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
 // 便签/看板娘这一列是 v-if 挂上去的，出现之后才量得到尺寸；此时把上个版本

@@ -74,6 +74,26 @@ func TestToolOutsideRoot(t *testing.T) {
 	}
 }
 
+// filesystem server 的 allowed dir 参数必须被换成整机根，否则审批通过了底层也执行不了。
+func TestExpandFilesystemArgs(t *testing.T) {
+	roots := fsAllowedDirs()
+	if len(roots) == 0 {
+		t.Fatal("fsAllowedDirs 不该返回空")
+	}
+
+	got := expandFilesystemArgs([]string{"-y", "@modelcontextprotocol/server-filesystem", `C:\Pro2026\re0`})
+	want := append([]string{"-y", "@modelcontextprotocol/server-filesystem"}, roots...)
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("filesystem args 展开错误:\n got=%v\nwant=%v", got, want)
+	}
+
+	// 非 filesystem server 原样不动
+	other := []string{`C:\Pro2026\re0\main-backend\mcp\grep_server.py`}
+	if kept := expandFilesystemArgs(other); strings.Join(kept, "|") != strings.Join(other, "|") {
+		t.Errorf("非 filesystem server 的 args 被误改: %v", kept)
+	}
+}
+
 // 越界的 don't-ask-again 必须按目录记：批准一次不能等于放行所有目录。
 func TestOutsideRememberKeyIsDirScoped(t *testing.T) {
 	a := outsideRememberKey(`C:\SomeDir\a.txt`)

@@ -6,14 +6,10 @@
         <Icon icon="mdi:pencil-plus-outline" width="18" />
         <span>发起新对话</span>
       </button>
-      <button class="smc-nav-item" :class="{ on: showSearch }" @click="toggleSearch">
+      <button class="smc-nav-item" @click="$emit('open-search')">
         <Icon icon="mdi:magnify" width="18" />
         <span>搜索对话内容</span>
       </button>
-      <div v-if="showSearch" class="smc-search-wrap">
-        <Icon icon="mdi:magnify" width="15" color="#9a9a9a" />
-        <input ref="searchInput" v-model="q" class="smc-search-input" type="text" placeholder="搜索会话..." />
-      </div>
     </div>
 
     <!-- 置顶 = 收藏的项目文件夹（可展开） -->
@@ -129,17 +125,7 @@ const props = defineProps({
   runningSession: { type: String, default: '' },
   fill: { type: Boolean, default: false }
 })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings'])
-
-// 搜索
-const showSearch = ref(false)
-const searchInput = ref(null)
-function toggleSearch() {
-  showSearch.value = !showSearch.value
-  if (showSearch.value) nextTick(() => searchInput.value?.focus())
-  else q.value = ''
-}
-const q = ref('')
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search'])
 
 // 置顶项目文件夹
 const pinnedProjectNames = ref([])
@@ -297,15 +283,6 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 }
 .smc-nav-item:hover { background: rgba(0, 0, 0, 0.06); }
 .smc-nav-item.on { background: rgba(0, 0, 0, 0.08); }
-
-.smc-search-wrap {
-  display: flex; align-items: center; gap: 8px; margin: 2px 10px 6px;
-  padding: 7px 10px; background: var(--app-surface);
-  border: 1px solid #e3e3e3; border-radius: 10px; flex-shrink: 0;
-}
-.smc-search-input { flex: 1; min-width: 0; border: none; background: transparent;
-  outline: none; font-size: 12.5px; color: var(--app-text); font-family: inherit; }
-.smc-search-input::placeholder { color: var(--app-text-soft); }
 
 .smc-section { flex-shrink: 0; }
 .smc-section-label {

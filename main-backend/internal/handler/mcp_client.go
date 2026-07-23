@@ -95,6 +95,9 @@ func ReinitMCP() {
 	mcpRoutes = map[string]*mcpConn{}
 	mcpRealName = map[string]string{}
 	mcpToolDefs = nil
+	// 标记已初始化：否则之后第一次 loadMCPToolDefs 会以为还没 init，再跑一遍
+	// initMCPServers（它是 append 语义），把工具定义重复登记一份。
+	mcpInited = true
 	initMCPServers()
 }
 
@@ -137,17 +140,20 @@ func fsAllowedDirs() []string {
 	return dirs
 }
 
+// isFilesystemServer 通过命令行里的包名识别 @modelcontextprotocol/server-filesystem。
+func isFilesystemServer(args []string) bool {
+	for _, a := range args {
+		if strings.Contains(a, "server-filesystem") {
+			return true
+		}
+	}
+	return false
+}
+
 // expandFilesystemArgs 把 filesystem server 命令行里的目录参数整体换成 fsAllowedDirs()。
 // 非 filesystem server 原样返回。
 func expandFilesystemArgs(args []string) []string {
-	isFS := false
-	for _, a := range args {
-		if strings.Contains(a, "server-filesystem") {
-			isFS = true
-			break
-		}
-	}
-	if !isFS {
+	if !isFilesystemServer(args) {
 		return args
 	}
 	// 保留 flag 与包名，丢掉所有目录参数，末尾统一补上放开后的根
@@ -203,7 +209,12 @@ func initMCPServers() {
 			mcpRoutes[fullName] = conn
 			mcpRealName[fullName] = realName
 		}
-		log.Printf("🔌 MCP server %q 已接入（allowed root=%s），%d 个工具", name, root, len(mcpToolDefs))
+		// filesystem server 的可达范围已放开到整机（越界改由审批闸门管），日志如实反映
+		scope := root
+		if isFilesystemServer(args) {
+			scope = strings.Join(fsAllowedDirs(), " ") + "（越界访问走审批）"
+		}
+		log.Printf("🔌 MCP server %q 已接入（allowed=%s），%d 个工具", name, scope, len(mcpToolDefs))
 	}
 }
 

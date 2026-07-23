@@ -74,60 +74,21 @@ var freeModelCatalog = []FreeModelDef{
 
 	// —— Google AI Studio 移除：2026-07-21 实测网络不可达（WinError 10060），大陆无法直连。 ——
 
-	// —— NVIDIA NIM 免费试用档（integrate.api.nvidia.com，实测可完成对话；已剔除 PII/内容安全等非对话模型）——
-	{ID: "free_nim_abacusai_dracarys_llama_3_1_70b_instruct", Vendor: "NVIDIA NIM", Name: "Dracarys-Llama-3.1-70B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "abacusai/dracarys-llama-3.1-70b-instruct", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 70, Note: "NIM 免费试用档"},
-	// DeepSeek-V4-Flash(NIM) 移除：2026-07-21 实测 HTTP 503 ResourceExhausted（额度耗尽）。
-	// DeepSeek-V4-Pro(NIM) 移除：2026-07-21 实测 41.3s，agent 场景过慢。
-	{ID: "free_nim_meta_llama_3_1_70b_instruct", Vendor: "NVIDIA NIM", Name: "Llama-3.1-70B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "meta/llama-3.1-70b-instruct", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 70, Note: "NIM 免费试用档"},
-	// Llama-3.3-70B(NIM) 移除：2026-07-21 实测 42.5s，agent 场景过慢。
-	// Phi-4-mini 移除：2026-07-15 实测 HTTP 410 Gone（NIM 已永久下架）。
-	// Stockmark-2-100B 移除：2026-07-15 实测 HTTP 410 Gone（NIM 已永久下架）。
-	// MiniMax-M3 移除：2026-07-15 实测 HTTP 400（函数 id 在你额度/区域不可用）。
-	// Mistral-Large-675B(NIM) 移除：2026-07-21 实测 30.3s，agent 场景过慢。
-	{ID: "free_nim_mistralai_mistral_nemotron", Vendor: "NVIDIA NIM", Name: "Mistral-Nemotron", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "mistralai/mistral-nemotron", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
-	{ID: "free_nim_mistralai_mistral_small_4_119b_2603", Vendor: "NVIDIA NIM", Name: "Mistral-Small-4-119B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "mistralai/mistral-small-4-119b-2603", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 119, Note: "NIM 免费试用档"},
-	{ID: "free_nim_nvidia_nemotron_3_ultra_550b_a55b", Vendor: "NVIDIA NIM", Name: "Nemotron-3-Ultra-550B", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "nvidia/nemotron-3-ultra-550b-a55b", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 550, Note: "NIM 免费试用档"},
-	// Qwen3.5-397B(NIM) 移除：2026-07-21 实测 120s 超时无响应。
-	{ID: "free_nim_sarvamai_sarvam_m", Vendor: "NVIDIA NIM", Name: "Sarvam-M", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "sarvamai/sarvam-m", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NIM 免费试用档"},
-	// GLM-5.2(NIM) 移除：2026-07-21 实测 40.4s，agent 场景过慢。
+	// —— NVIDIA NIM 免费试用档已整体移除：2026-07-23 实测限流严重，跑 Agent 频繁 429，
+	// 体验不可用。保留 nim_refresh.go 作为运行时探测骨架，目录中不再硬编码 NIM 条目。 ——
 
-	// —— Ollama Cloud（走官方 OpenAI 兼容端点 /v1，带 CLOUD_API_KEY）——
-	// 不走原生 /api/chat：那个端点的 JSON 解析器对 assistant.tool_calls 嵌套对象有 bug，
-	// 历史里一带 tool_calls 就 400（"Value looks like object, but can't find closing '}'"），
-	// 只能剥掉，模型因此看不见自己调用过工具，同一个工具会重复调到轮次上限。
-	// /v1 走标准 OpenAI 解析器，实测同样的带 tool_calls 历史返回 200 且能正确引用工具结果。
-	{ID: "free_ollama_cloud_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B", Endpoint: "https://ollama.com/v1", Model: "gpt-oss:120b", KeyEnv: "CLOUD_API_KEY", ParamsB: 120, Note: "Ollama 官方云端（OpenAI 兼容端点，免费额度）", ContextWindow: 128000, Reasoning: true},
-
-	// —— Cerebras 免费档（api.cerebras.ai）——
-	{ID: "free_cerebras_gpt_oss_120b", Vendor: "Cerebras", Name: "gpt-oss-120b", Endpoint: "https://api.cerebras.ai/v1", Model: "gpt-oss-120b", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 120, Note: "Cerebras 免费档"},
-	{ID: "free_cerebras_zai_glm_4_7", Vendor: "Cerebras", Name: "zai-glm-4.7", Endpoint: "https://api.cerebras.ai/v1", Model: "zai-glm-4.7", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 0, Note: "Cerebras 免费档"},
+	// —— 以下模型保留：明确支持 Vision，可用于前端多模态 Agent 测试 ——
 
 	// —— 阶跃星辰 StepFun（api.stepfun.com）——
 	// 下面这几个都是拿 STEP_API_KEY 实调 /v1/models + /v1/chat/completions 逐个验证过的：
 	// step-2x-large 在该 key 下返回「does not exist or you do not have access」，故未收录。
 	// ContextWindow 一律留 0：/v1/models 只返回 id/created/owned_by，拿不到窗口大小，
 	// 按本目录「未知者留 0，绝不伪造」的规矩不填。
-	{ID: "free_step_3_7_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.7-flash", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰", Reasoning: true},
-	{ID: "free_step_3_5_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.5-flash", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.5-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰", Reasoning: true},
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true},
-	{ID: "free_step_router_v1", Vendor: "阶跃星辰 StepFun", Name: "step-router-v1", Endpoint: "https://api.stepfun.com/v1", Model: "step-router-v1", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（自动选型）"},
 
 	// —— 硅基流动 SiliconFlow（api.siliconflow.cn；代金券余额可用，对终端用户免费）——
 	{ID: "free_sf_zai_org_glm_5_2", Vendor: "硅基流动 SiliconFlow", Name: "GLM-5.2", Endpoint: "https://api.siliconflow.cn/v1", Model: "zai-org/GLM-5.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
-	{ID: "free_sf_moonshotai_kimi_k2_7_code", Vendor: "硅基流动 SiliconFlow", Name: "Kimi-K2.7-Code", Endpoint: "https://api.siliconflow.cn/v1", Model: "moonshotai/Kimi-K2.7-Code", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	// DeepSeek-V4-Pro(SiliconFlow) 移除：2026-07-21 实测 28.6s，agent 场景过慢。
-	// DeepSeek-V4-Flash(SiliconFlow) 移除：2026-07-21 实测 120s 超时。
 	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000},
-	{ID: "free_sf_pro_zai_org_glm_5_1", Vendor: "硅基流动 SiliconFlow", Name: "Pro/GLM-5.1", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/zai-org/GLM-5.1", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_nex_agi_nex_n2_pro", Vendor: "硅基流动 SiliconFlow", Name: "Nex-N2-Pro", Endpoint: "https://api.siliconflow.cn/v1", Model: "nex-agi/Nex-N2-Pro", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_minimaxai_minimax_m2_5", Vendor: "硅基流动 SiliconFlow", Name: "MiniMax-M2.5", Endpoint: "https://api.siliconflow.cn/v1", Model: "MiniMaxAI/MiniMax-M2.5", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_pro_minimaxai_minimax_m2_5", Vendor: "硅基流动 SiliconFlow", Name: "Pro/MiniMax-M2.5", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/MiniMaxAI/MiniMax-M2.5", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_deepseek_ai_deepseek_v3_2", Vendor: "硅基流动 SiliconFlow", Name: "DeepSeek-V3.2", Endpoint: "https://api.siliconflow.cn/v1", Model: "deepseek-ai/DeepSeek-V3.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_pro_deepseek_ai_deepseek_v3_2", Vendor: "硅基流动 SiliconFlow", Name: "Pro/DeepSeek-V3.2", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/deepseek-ai/DeepSeek-V3.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_deepseek_ai_deepseek_v3_1_terminus", Vendor: "硅基流动 SiliconFlow", Name: "DeepSeek-V3.1-Terminus", Endpoint: "https://api.siliconflow.cn/v1", Model: "deepseek-ai/DeepSeek-V3.1-Terminus", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_pro_deepseek_ai_deepseek_v3_1_terminus", Vendor: "硅基流动 SiliconFlow", Name: "Pro/DeepSeek-V3.1-Terminus", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/deepseek-ai/DeepSeek-V3.1-Terminus", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_qwen_qwen3_5_397b_a17b", Vendor: "硅基流动 SiliconFlow", Name: "Qwen3.5-397B-A17B", Endpoint: "https://api.siliconflow.cn/v1", Model: "Qwen/Qwen3.5-397B-A17B", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 397, Note: "硅基流动（代金券）"},
-	{ID: "free_sf_deepseek_ai_deepseek_r1", Vendor: "硅基流动 SiliconFlow", Name: "DeepSeek-R1", Endpoint: "https://api.siliconflow.cn/v1", Model: "deepseek-ai/DeepSeek-R1", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Reasoning: true},
 }
 
 func isFreeCatalogID(id string) bool {

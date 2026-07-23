@@ -138,7 +138,9 @@ const VERBS = {
   codegraph_query: '分析调用链',
   search_memory: '检索记忆',
   dispatch_agent: '派发子代理',
-  web_search: '联网搜索'
+  web_search: '联网搜索',
+  mcp__web_search__web_search: '联网搜索',
+  mcp__web_fetch__web_fetch: '抓取网页'
 }
 
 function baseName(p) {

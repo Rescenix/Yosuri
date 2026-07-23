@@ -23,10 +23,16 @@ import (
 	"backend/internal/ai/core"
 )
 
+// Skill 统一承载两类技能：
+//   - 自研沉淀（Source=learned）：工作流成功后抽象出的 JSON，正文在 Steps。
+//   - 外部导入（Source=external）：Anthropic/Claude 风格的 SKILL.md，正文在 Body。
+// Source 在加载时按来源目录打标，不落盘（磁盘文件保持干净）。
 type Skill struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Steps       []string `json:"steps"`
+	Steps       []string `json:"steps,omitempty"`
+	Body        string   `json:"body,omitempty"`   // 外部 SKILL.md 正文（markdown）
+	Source      string   `json:"source,omitempty"` // learned | external
 }
 
 func skillsDir() string {
@@ -36,10 +42,24 @@ func skillsDir() string {
 	return "./skills"
 }
 
-// loadSkills 扫描技能库目录，返回全部合法技能（含完整 steps）。
+// externalSkillsDir 是外部技能的挂载点：往这里丢 Anthropic/Claude 风格的 SKILL.md
+// 文件夹即可被 agent 加载，与自研沉淀的 ./skills 互不干扰。
+func externalSkillsDir() string {
+	if dir := os.Getenv("AURORA_EXT_SKILLS_DIR"); dir != "" {
+		return dir
+	}
+	return "./skills-ext"
+}
+
+// loadSkills 返回全部可用技能：自研沉淀 + 外部导入。
 // skillLibraryPrompt（索引）和 handleReadSkill（取全文）共用这一份数据源，
 // 就像 mcpToolIndexPrompt 和 handleLoadTools 共用 loadMCPToolDefs 一样。
 func loadSkills() []Skill {
+	return append(loadLearnedSkills(), loadExternalSkills()...)
+}
+
+// loadLearnedSkills 扫描自研技能库目录（./skills/*.json），打 Source=learned。
+func loadLearnedSkills() []Skill {
 	entries, err := os.ReadDir(skillsDir())
 	if err != nil {
 		return nil
@@ -57,9 +77,71 @@ func loadSkills() []Skill {
 		if json.Unmarshal(data, &s) != nil || s.Name == "" {
 			continue
 		}
+		s.Source = "learned"
 		skills = append(skills, s)
 	}
 	return skills
+}
+
+// loadExternalSkills 扫描外部技能目录：每个子目录一个 SKILL.md（Anthropic/Claude 格式），
+// 也兼容平铺的 *.md 文件。frontmatter 取 name/description，围栏后的正文进 Body。
+func loadExternalSkills() []Skill {
+	root := externalSkillsDir()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var skills []Skill
+	add := func(path, fallbackName string) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return
+		}
+		name, desc, body := parseSkillMD(string(data))
+		if name == "" {
+			name = fallbackName
+		}
+		if name == "" {
+			return
+		}
+		skills = append(skills, Skill{Name: name, Description: desc, Body: body, Source: "external"})
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			add(filepath.Join(root, e.Name(), "SKILL.md"), e.Name())
+		} else if strings.EqualFold(filepath.Ext(e.Name()), ".md") {
+			add(filepath.Join(root, e.Name()), strings.TrimSuffix(e.Name(), filepath.Ext(e.Name())))
+		}
+	}
+	return skills
+}
+
+// parseSkillMD 解析 Anthropic/Claude 风格的 SKILL.md：--- 围栏内的 YAML frontmatter
+// 取 name/description，围栏之后为正文。只认这两个字段，不引 YAML 依赖（够用即可）。
+func parseSkillMD(content string) (name, desc, body string) {
+	s := strings.ReplaceAll(content, "\r\n", "\n")
+	if strings.HasPrefix(s, "---\n") {
+		if end := strings.Index(s[4:], "\n---"); end >= 0 {
+			fm := s[4 : 4+end]
+			body = strings.TrimLeft(s[4+end+4:], "\n")
+			for _, line := range strings.Split(fm, "\n") {
+				k, v, ok := strings.Cut(line, ":")
+				if !ok {
+					continue
+				}
+				k = strings.TrimSpace(k)
+				v = strings.Trim(strings.TrimSpace(v), `"'`)
+				switch k {
+				case "name":
+					name = v
+				case "description":
+					desc = v
+				}
+			}
+			return name, desc, body
+		}
+	}
+	return "", "", s // 没有 frontmatter：整篇当正文，名字由调用方兜底
 }
 
 // skillLibraryPrompt 把技能库整理成系统提示词片段；库为空时返回空串。
@@ -72,10 +154,14 @@ func skillLibraryPrompt() string {
 	}
 	lines := make([]string, 0, len(skills))
 	for _, s := range skills {
-		lines = append(lines, fmt.Sprintf("- %s：%s", s.Name, s.Description))
+		tag := ""
+		if s.Source == "external" {
+			tag = "[外部] " // 官方/外部导入的技能，正文是说明文档而非步骤
+		}
+		lines = append(lines, fmt.Sprintf("- %s%s：%s", tag, s.Name, s.Description))
 	}
 	sort.Strings(lines)
-	return "\n━━━ 技能库索引（按需加载，用 read_skill 取完整步骤） ━━━\n" + strings.Join(lines, "\n") + "\n"
+	return "\n━━━ 技能库索引（按需加载，用 read_skill 取完整内容） ━━━\n" + strings.Join(lines, "\n") + "\n"
 }
 
 // readSkillToolName 是取回技能完整步骤的钥匙，跟 load_tools 一样必须常驻工具集。
@@ -85,8 +171,9 @@ var readSkillToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name: readSkillToolName,
-		Description: "按名字取回技能库里某个技能的完整步骤。系统提示词里的「技能库索引」" +
-			"只给了名字和一句话描述，要看具体怎么做，先用这个把完整 steps 取回来（可一次传多个）。",
+		Description: "按名字取回技能库里某个技能的完整内容。系统提示词里的「技能库索引」" +
+			"只给了名字和一句话描述，要看具体怎么做，先用这个取回完整内容（可一次传多个）：" +
+			"自研技能给 steps 步骤，[外部] 技能给 content 说明文档。",
 		Parameters: core.ToolParameters{
 			Type: "object",
 			Properties: map[string]core.ToolProperty{
@@ -136,9 +223,17 @@ func handleReadSkill(argsJSON string, skills []Skill) string {
 			missing = append(missing, n)
 			continue
 		}
-		found = append(found, map[string]any{
-			"name": s.Name, "description": s.Description, "steps": s.Steps,
-		})
+		entry := map[string]any{
+			"name": s.Name, "description": s.Description, "source": s.Source,
+		}
+		// 自研技能给步骤，外部技能给正文文档——两类只会有其一
+		if len(s.Steps) > 0 {
+			entry["steps"] = s.Steps
+		}
+		if s.Body != "" {
+			entry["content"] = s.Body
+		}
+		found = append(found, entry)
 	}
 
 	var b strings.Builder

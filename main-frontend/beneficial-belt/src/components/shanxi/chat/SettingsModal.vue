@@ -231,24 +231,31 @@
             <!-- ========== Skills ========== -->
             <div v-show="activeTab === 'skills'" class="settings-panel">
               <div class="settings-section-title">
-                已学技能
+                技能库
                 <button class="inline-refresh" type="button" @click="loadSkills" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
               </div>
-              <div class="settings-section-desc">工作流成功后自动沉淀的可复用技能（读自 <code>{{ skillsDir || './skills' }}</code>），实时刷新。</div>
+              <div class="settings-section-desc">
+                <strong>自研</strong>：工作流成功后自动沉淀（<code>{{ skillsDir || './skills' }}</code>）。
+                <strong>外部</strong>：把 Anthropic/Claude 风格的 <code>SKILL.md</code> 文件夹丢进 <code>{{ skillsExtDir || './skills-ext' }}</code> 即被加载。两类都会注入到 agent 的技能库索引。
+              </div>
               <div v-if="skillsLoading" class="settings-loading">加载中...</div>
               <template v-else>
-                <div v-if="!skills.length" class="settings-empty">还没有学到技能。完成几次 Code 工作流后会自动沉淀。</div>
-                <div v-for="sk in skills" :key="sk.name" class="entity-card">
+                <div v-if="!skills.length" class="settings-empty">技能库为空。跑几次 Code 工作流会自动沉淀自研技能，或往 <code>./skills-ext</code> 丢外部 SKILL.md。</div>
+                <div v-for="sk in skills" :key="(sk.source || '') + ':' + sk.name" class="entity-card">
                   <div class="entity-head" @click="toggleSkill(sk.name)" style="cursor:pointer">
-                    <Icon icon="mdi:school-outline" width="15" />
+                    <Icon :icon="sk.source === 'external' ? 'mdi:puzzle-outline' : 'mdi:school-outline'" width="15" />
                     <span class="entity-name">{{ sk.name }}</span>
-                    <span class="entity-badge">{{ (sk.steps || []).length }} 步</span>
+                    <span class="entity-badge" :class="sk.source === 'external' ? 'src-ext' : 'src-learned'">
+                      {{ sk.source === 'external' ? '外部' : '自研' }}
+                    </span>
+                    <span v-if="sk.source !== 'external'" class="entity-badge">{{ (sk.steps || []).length }} 步</span>
                     <Icon :icon="expandedSkill === sk.name ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="16" style="margin-left:auto" />
                   </div>
                   <div class="entity-meta">{{ sk.description }}</div>
                   <ol v-if="expandedSkill === sk.name && sk.steps && sk.steps.length" class="skill-steps">
                     <li v-for="(st, i) in sk.steps" :key="i">{{ st }}</li>
                   </ol>
+                  <pre v-else-if="expandedSkill === sk.name && sk.body" class="skill-body">{{ sk.body }}</pre>
                 </div>
               </template>
             </div>
@@ -618,6 +625,7 @@ async function loadMCP(force = false) {
 const skills = ref([])
 const skillsLoading = ref(false)
 const skillsDir = ref('')
+const skillsExtDir = ref('')
 const expandedSkill = ref(null)
 let skillsLoaded = false
 function toggleSkill(name) { expandedSkill.value = expandedSkill.value === name ? null : name }
@@ -630,6 +638,7 @@ async function loadSkills(force = false) {
     const data = await res.json()
     skills.value = data.skills || []
     skillsDir.value = data.dir || ''
+    skillsExtDir.value = data.ext_dir || ''
   } catch (e) {
     skills.value = []
   } finally {
@@ -892,6 +901,11 @@ onUnmounted(() => {
 .entity-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .entity-tag { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 7px; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
 .skill-steps { margin: 8px 0 2px; padding-left: 20px; font-size: 12px; color: var(--app-text-soft); line-height: 1.7; }
+/* 技能来源角标：自研走中性色，外部走强调色，一眼区分 */
+.entity-badge.src-learned { color: var(--app-text-soft); background: var(--app-surface-3); }
+.entity-badge.src-ext { color: var(--app-accent); background: var(--app-accent-soft); }
+/* 外部技能正文（SKILL.md markdown 原文，保留换行/缩进） */
+.skill-body { margin: 8px 0 2px; padding: 10px 12px; font-size: 12px; line-height: 1.65; color: var(--app-text-soft); background: var(--app-surface-3); border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-family: inherit; max-height: 320px; overflow-y: auto; }
 
 /* Profile（仿图2） */
 .profile-row { display: flex; align-items: center; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--app-border-soft); }

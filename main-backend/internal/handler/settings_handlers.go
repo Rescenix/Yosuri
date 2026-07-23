@@ -20,28 +20,19 @@ import (
 
 // ---------------- 技能库 ----------------
 
-// HandleListSkills GET /api/skills —— 实时读技能目录，返回名称/描述/步骤。
+// HandleListSkills GET /api/skills —— 实时读技能库，返回自研沉淀 + 外部导入两类，
+// 每条带 source 字段（learned / external）供前端区分展示。
 func HandleListSkills(c *gin.Context) {
-	entries, err := os.ReadDir(skillsDir())
-	skills := make([]Skill, 0)
-	if err == nil {
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-				continue
-			}
-			data, err := os.ReadFile(filepath.Join(skillsDir(), e.Name()))
-			if err != nil {
-				continue
-			}
-			var s Skill
-			if json.Unmarshal(data, &s) != nil || s.Name == "" {
-				continue
-			}
-			skills = append(skills, s)
-		}
+	skills := loadSkills()
+	if skills == nil {
+		skills = make([]Skill, 0)
 	}
 	sort.Slice(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })
-	c.JSON(http.StatusOK, gin.H{"skills": skills, "dir": skillsDir()})
+	c.JSON(http.StatusOK, gin.H{
+		"skills":  skills,
+		"dir":     skillsDir(),
+		"ext_dir": externalSkillsDir(),
+	})
 }
 
 // ---------------- MCP 生态 ----------------
