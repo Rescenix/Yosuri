@@ -155,8 +155,8 @@ onUnmounted(() => {
 .terminal-panel {
   flex-shrink: 0;
   width: 100%;
-  background: #ffffff;
-  border-top: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border-top: 1px solid var(--app-border);
   overflow: hidden;
   transition: height 180ms ease;
   display: flex;
@@ -172,7 +172,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 0 12px;
   cursor: pointer;
-  color: #9a958a;
+  color: var(--app-text-faint);
   font-size: 11px;
   font-family: var(--app-font);
   letter-spacing: 0.3px;
@@ -190,8 +190,8 @@ onUnmounted(() => {
   gap: 6px;
   height: 34px;
   padding: 0 10px;
-  background: #ffffff;
-  border-bottom: 1px solid #ececec;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border-soft);
   border-radius: 12px 12px 0 0;
   flex-shrink: 0;
 }
@@ -200,11 +200,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #1e293b;
+  color: var(--app-text);
   font-family: var(--app-font);
 }
 .terminal-tab.active { font-weight: 500; }
-.terminal-tab-icon { flex-shrink: 0; color: #6b6b6b; }
+.terminal-tab-icon { flex-shrink: 0; color: var(--app-text-soft); }
 .term-tab-interrupt { margin-left: auto; }
 
 .collapse-chevron { transition: transform 180ms ease; cursor: pointer; }
@@ -218,7 +218,7 @@ onUnmounted(() => {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.6;
-  color: #334155;
+  color: var(--app-text);
   display: flex;
   flex-direction: column;
 }
@@ -245,9 +245,9 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   outline: none;
-  color: #334155;
+  color: var(--app-text);
   font: inherit;
   caret-color: #c96442;
 }
-.term-input::placeholder { color: #94a3b8; }
+.term-input::placeholder { color: var(--app-text-faint); }
 </style>

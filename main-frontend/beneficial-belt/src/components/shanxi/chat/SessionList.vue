@@ -115,7 +115,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--app-surface);
   min-height: 0;
   overflow: hidden;
 }
@@ -130,10 +130,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   padding: 8px 0;
   font-size: 12.5px;
   font-weight: 600;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: #fcfcfc;
-  color: #1a1a1a;
+  background: var(--app-surface-2);
+  color: var(--app-text);
   cursor: pointer;
   font-family: inherit;
   transition: background 0.15s ease;
@@ -147,7 +147,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   flex-shrink: 0;
 }
 
@@ -207,16 +207,16 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #1a1a1a;
+  color: var(--app-text);
 }
 .session-name-input {
   flex: 1;
   min-width: 0;
   font-size: 13px;
   font-weight: 400;
-  color: #1a1a1a;
+  color: var(--app-text);
   font-family: inherit;
-  background: #ffffff;
+  background: var(--app-surface);
   border: 1px solid #3b82f6;
   border-radius: 6px;
   padding: 2px 6px;
@@ -233,7 +233,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   border: none;
   background: transparent;
   border-radius: 6px;
-  color: #6b6b6b;
+  color: var(--app-text-soft);
   cursor: pointer;
 }
 .session-row-menu-btn:hover { background: rgba(0, 0, 0, 0.06); }
@@ -244,8 +244,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   right: 0;
   margin-top: 4px;
   width: 130px;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
   padding: 6px 0;
@@ -255,9 +255,9 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   padding: 7px 14px;
   font-size: 12.5px;
   font-weight: 500;
-  color: #262626;
+  color: var(--app-text);
   cursor: pointer;
 }
-.session-row-dropdown-item:hover { background: #f5f5f5; }
+.session-row-dropdown-item:hover { background: var(--app-surface-3); }
 .session-row-dropdown-item.danger { color: #d94834; }
 </style>

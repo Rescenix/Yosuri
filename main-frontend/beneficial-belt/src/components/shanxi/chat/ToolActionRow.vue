@@ -159,8 +159,8 @@ function actionLabel(tc) {
 function actionBadge(tc) {
   if (tc.name === 'read_file' || tc.name === 'mcp__fs__read_file') return { letter: 'R', color: '#5b8def' }
   if (isFileWrite(tc) || isFileEdit(tc)) return { letter: 'W', color: '#c96442' }
-  if (tc.name === 'execute_command') return { letter: '>', color: '#94a3b8' }
-  return { letter: '·', color: '#a3a3a3' }
+  if (tc.name === 'execute_command') return { letter: '>', color: 'var(--app-text-faint)' }
+  return { letter: '·', color: 'var(--app-text-faint)' }
 }
 </script>
 
@@ -176,8 +176,8 @@ function actionBadge(tc) {
   cursor: pointer;
   font-size: 12.5px;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #262626;
-  border-bottom: 1px solid #ececec;
+  color: var(--app-text);
+  border-bottom: 1px solid var(--app-border-soft);
   width: 100%;
 }
 .bgstep-action:last-child .bgstep-action-detail { border-bottom: none; }
@@ -201,29 +201,29 @@ function actionBadge(tc) {
 .bgstep-action-detail {
   padding: 8px 0 10px;
   background: transparent;
-  border-bottom: 1px solid #ececec;
+  border-bottom: 1px solid var(--app-border-soft);
 }
 .bgstep-code-line {
   display: block;
   padding: 7px 10px;
-  background: #f5f5f5;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface-3);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 11.5px;
-  color: #404040;
+  color: var(--app-text);
   white-space: pre-wrap;
   word-break: break-all;
 }
 .bgstep-raw-block {
   margin-top: 6px;
   padding: 7px 10px;
-  background: #fafafa;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 11px;
-  color: #6b6b6b;
+  color: var(--app-text-soft);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 220px;
@@ -231,10 +231,10 @@ function actionBadge(tc) {
 }
 .bgstep-raw-block.error { color: #d94834; border-color: #f3c9c2; background: #fff5f3; }
 
-.bgdiff-card { border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; background: #fff; }
-.bgdiff-head { display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; background: #f5f5f5; border-bottom: 1px solid #e5e5e5; }
+.bgdiff-card { border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; background: var(--app-surface); }
+.bgdiff-head { display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; background: var(--app-surface-3); border-bottom: 1px solid var(--app-border); }
 .bgdiff-head :deep(svg) { align-self: center; }
-.bgdiff-path { flex: 1; min-width: 0; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: #262626; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bgdiff-path { flex: 1; min-width: 0; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bgdiff-add-count { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 700; color: #12b76a; flex-shrink: 0; }
 .bgdiff-del-count { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 700; color: #d94834; flex-shrink: 0; }
 </style>

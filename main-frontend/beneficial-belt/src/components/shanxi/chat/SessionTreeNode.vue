@@ -85,7 +85,7 @@ const expanded = computed(() => props.isExpanded(props.node))
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
-  color: var(--app-text, #1a1a1a);
+  color: var(--app-text, var(--app-text));
   transition: background 0.15s ease;
 }
 .stn-row:hover { background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 94%); }
@@ -106,7 +106,7 @@ const expanded = computed(() => props.isExpanded(props.node))
   background: none;
   padding: 0;
   cursor: pointer;
-  color: var(--app-text-soft, #6b6b6b);
+  color: var(--app-text-soft, var(--app-text-soft));
   transition: transform 0.18s ease;
 }
 .stn-chevron.open { transform: rotate(90deg); }
@@ -139,7 +139,7 @@ const expanded = computed(() => props.isExpanded(props.node))
   font-size: 11px;
   padding: 0 5px;
   border-radius: 8px;
-  color: var(--app-text-faint, #a3a3a3);
+  color: var(--app-text-faint, var(--app-text-faint));
   background: color-mix(in srgb, var(--app-text-faint, #a3a3a3), transparent 88%);
 }
 
@@ -149,11 +149,11 @@ const expanded = computed(() => props.isExpanded(props.node))
   background: none;
   padding: 0 2px;
   cursor: pointer;
-  color: var(--app-text-soft, #6b6b6b);
+  color: var(--app-text-soft, var(--app-text-soft));
   display: flex;
   align-items: center;
 }
-.stn-menu-btn:hover { color: var(--app-text, #1a1a1a); }
+.stn-menu-btn:hover { color: var(--app-text, var(--app-text)); }
 
 /* 导引线：一条左边框画出整棵子树的血缘 */
 .stn-children {

@@ -130,14 +130,14 @@ const collapsedRows = computed(() => {
 .diffviewer {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 11.5px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--app-surface);
 }
 .dv-empty {
   padding: 10px 12px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   font-size: 11.5px;
   text-align: center;
 }
@@ -153,7 +153,7 @@ const collapsedRows = computed(() => {
   width: 30px;
   text-align: right;
   padding-right: 8px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   user-select: none;
 }
 .dv-sign {
@@ -171,7 +171,7 @@ const collapsedRows = computed(() => {
   white-space: pre-wrap;       /* 长行智能换行，不再横滚 */
   overflow-wrap: anywhere;     /* 超长无空格 token（如长字符串/路径）也能断行 */
   overflow-x: hidden;          /* 彻底消除横向滚轴 */
-  color: #262626;
+  color: var(--app-text);
   background: transparent;
   padding: 0 10px 0 0;
 }
@@ -180,7 +180,7 @@ const collapsedRows = computed(() => {
    直接套用到这里白底上文字会糊成一片——这里自己定义一套浅色 token 配色，
    跟全局深色主题互不干扰（选择器只作用于本组件内的 .dv-code） */
 .dv-code :deep(.hljs-comment),
-.dv-code :deep(.hljs-quote) { color: #9c9284; font-style: italic; }
+.dv-code :deep(.hljs-quote) { color: var(--app-text-faint); font-style: italic; }
 .dv-code :deep(.hljs-keyword),
 .dv-code :deep(.hljs-selector-tag),
 .dv-code :deep(.hljs-literal) { color: #a626a4; }
@@ -194,7 +194,7 @@ const collapsedRows = computed(() => {
 .dv-code :deep(.hljs-built_in),
 .dv-code :deep(.hljs-type) { color: #c18401; }
 .dv-code :deep(.hljs-variable),
-.dv-code :deep(.hljs-params) { color: #262626; }
+.dv-code :deep(.hljs-params) { color: var(--app-text); }
 .dv-code :deep(.hljs-tag) { color: #e45649; }
 .dv-fold {
   display: flex;
@@ -202,9 +202,9 @@ const collapsedRows = computed(() => {
   gap: 6px;
   padding: 6px 12px;
   background: #f8f9fa;
-  border-top: 1px solid #e5e5e5;
-  border-bottom: 1px solid #e5e5e5;
-  color: #6b7280;
+  border-top: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-text-soft);
   font-size: 12px;
   user-select: none;
   cursor: pointer;

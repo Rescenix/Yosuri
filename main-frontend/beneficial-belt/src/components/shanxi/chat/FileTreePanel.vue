@@ -253,7 +253,7 @@ onUnmounted(() => {
 .sidebar-panel {
   width: 240px;
   height: 100%;
-  border-right: 1px solid #e5e5e5;
+  border-right: 1px solid var(--app-border);
   background: #f8fafc;
   display: flex;
   flex-direction: column;
@@ -278,14 +278,14 @@ onUnmounted(() => {
 }
 .section-header:hover { background: #f1f5f9; }
 
-.chevron { transition: transform 180ms ease; flex-shrink: 0; color: #94a3b8; }
+.chevron { transition: transform 180ms ease; flex-shrink: 0; color: var(--app-text-faint); }
 .chevron.rotated { transform: rotate(90deg); }
 
 .section-label {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
-  color: #64748b;
+  color: var(--app-text-soft);
   flex: 1;
 }
 
@@ -302,7 +302,7 @@ onUnmounted(() => {
 .section-more-btn {
   border: none;
   background: transparent;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -333,7 +333,7 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  color: #475569;
+  color: var(--app-text);
 }
 .root-row:hover { background: #f1f5f9; }
 .tree-body { padding: 2px 0 6px; }
@@ -370,44 +370,44 @@ onUnmounted(() => {
   width: 100%;
   padding: 6px 30px 6px 8px;
   font-size: 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 6px;
   resize: vertical;
   font-family: inherit;
   box-sizing: border-box;
-  background: #fff;
+  background: var(--app-surface);
 }
 .commit-more-btn {
   position: absolute; top: 4px; right: 4px;
   width: 24px; height: 24px; border: none; background: transparent;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; color: #64748b;
+  border-radius: 4px; color: var(--app-text-soft);
 }
 .commit-more-btn:hover { background: #e2e8f0; }
 
 .floating-menu {
   position: absolute; top: -70px; right: -10px; z-index: 10;
-  background: #fff; border: 1px solid #e5e5e5; border-radius: 6px;
+  background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 4px;
   display: flex; flex-direction: column; gap: 2px; min-width: 100px;
 }
 .floating-menu .git-btn {
   display: block; width: 100%; padding: 6px 10px; font-size: 12px;
-  border: none; background: #fff; cursor: pointer; text-align: left; border-radius: 4px;
+  border: none; background: var(--app-surface); cursor: pointer; text-align: left; border-radius: 4px;
 }
 .floating-menu .git-btn:hover { background: #f1f5f9; }
 
 .commit-main-btn, .action-feedback {
   display: block; width: 100%; padding: 6px 0; font-size: 12px;
-  border: 1px solid #e5e5e5; border-radius: 6px; text-align: center;
+  border: 1px solid var(--app-border); border-radius: 6px; text-align: center;
   box-sizing: border-box; line-height: 1.4; cursor: pointer;
-  background: #fff; color: inherit; transition: background 0.15s, border-color 0.15s;
+  background: var(--app-surface); color: inherit; transition: background 0.15s, border-color 0.15s;
 }
 .commit-main-btn:hover { background: #f1f5f9; }
 .commit-main-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .action-feedback.success { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
 .action-feedback.error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-.action-feedback.loading { background: #f1f5f9; color: #64748b; border-color: #e5e5e5; }
+.action-feedback.loading { background: #f1f5f9; color: var(--app-text-soft); border-color: var(--app-border); }
 .action-feedback.loading::after { content: '...'; animation: loading-dots 1.5s infinite; }
 @keyframes loading-dots {
   0% { content: '.'; } 33% { content: '..'; } 66% { content: '...'; }
@@ -421,10 +421,10 @@ onUnmounted(() => {
 .pinned-row:hover { background: #f1f5f9; }
 .pinned-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .unpin-btn {
-  border: none; background: transparent; color: #94a3b8; cursor: pointer;
+  border: none; background: transparent; color: var(--app-text-faint); cursor: pointer;
   display: flex; align-items: center; border-radius: 3px; flex-shrink: 0;
 }
-.unpin-btn:hover { background: #e2e8f0; color: #475569; }
+.unpin-btn:hover { background: #e2e8f0; color: var(--app-text); }
 
 .file-badge {
   flex-shrink: 0; width: 16px; height: 16px; border-radius: 4px;

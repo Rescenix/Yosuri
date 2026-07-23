@@ -267,11 +267,11 @@ const heatmapCaption = computed(() => {
 .home-greeting-text {
   font-size: 24px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--app-text);
 }
 
 .home-stats-card {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 14px;
   background: #f8fafc;
   padding: 14px 18px;
@@ -293,16 +293,16 @@ const heatmapCaption = computed(() => {
 .home-tab {
   font-size: 13px;
   font-weight: 500;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   cursor: pointer;
 }
-.home-tab.active { font-weight: 700; color: #1a1a1a; }
+.home-tab.active { font-weight: 700; color: var(--app-text); }
 
 .home-range-group {
   display: flex;
   gap: 2px;
   background: #f8fafc;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   padding: 2px;
 }
@@ -311,10 +311,10 @@ const heatmapCaption = computed(() => {
   border-radius: 6px;
   font-size: 11.5px;
   font-weight: 600;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   cursor: pointer;
 }
-.home-range-btn.active { background: #ffffff; color: #1a1a1a; }
+.home-range-btn.active { background: var(--app-surface); color: var(--app-text); }
 
 .home-stats-grid {
   display: grid;
@@ -322,8 +322,8 @@ const heatmapCaption = computed(() => {
   gap: 12px 16px;
   margin-bottom: 14px;
 }
-.home-stat-label { font-size: 11px; color: #a3a3a3; margin-bottom: 2px; }
-.home-stat-value { font-size: 15.5px; font-weight: 700; color: #1a1a1a; }
+.home-stat-label { font-size: 11px; color: var(--app-text-faint); margin-bottom: 2px; }
+.home-stat-value { font-size: 15.5px; font-weight: 700; color: var(--app-text); }
 
 /* 热力图不再用 aspect-ratio 跟宽度联动——26 列平铺时格子宽度本来就有 ~20px，
    如果高度也跟着变成正方形，整块热力图会偏高，首页超出可视高度出现滚动条。
@@ -341,16 +341,16 @@ const heatmapCaption = computed(() => {
   border-radius: 3px;
   aspect-ratio: 1 / 1; /* 强制每一个格子都是标准正方形 */
 }
-.home-heatmap-caption { font-size: 11px; color: #a3a3a3; }
+.home-heatmap-caption { font-size: 11px; color: var(--app-text-faint); }
 
-.home-model-empty { font-size: 12.5px; color: #a3a3a3; padding: 8px 0; }
+.home-model-empty { font-size: 12.5px; color: var(--app-text-faint); padding: 8px 0; }
 .home-model-list { display: flex; flex-direction: column; gap: 14px; }
 .home-model-row { display: flex; flex-direction: column; gap: 6px; }
 .home-model-top { display: flex; justify-content: space-between; gap: 10px; }
 .home-model-name {
   font-size: 12.5px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--app-text);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -359,7 +359,7 @@ const heatmapCaption = computed(() => {
 .home-model-pct {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 11.5px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   white-space: nowrap;
   flex-shrink: 0;
 }

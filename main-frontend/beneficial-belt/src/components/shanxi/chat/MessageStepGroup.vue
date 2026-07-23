@@ -119,12 +119,12 @@ const statusColor = computed(() => {
 .group-narrative {
   font-weight: 500;
   font-size: 14px;
-  color: #1a1a1a;
+  color: var(--app-text);
   margin: 2px 0 6px 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
-.group-narrative-loading { color: #8a8a8a; font-weight: 400; font-size: 13px; }
+.group-narrative-loading { color: var(--app-text-soft); font-weight: 400; font-size: 13px; }
 /* markdown-body 渲染的是真正的块级 HTML（p/ul/pre...），不再是纯文本——
    pre-wrap 只在"正在处理..."那种纯文本占位符上还有意义，这里改回正常排版 */
 .group-narrative.markdown-body { white-space: normal; }
@@ -135,16 +135,16 @@ const statusColor = computed(() => {
   gap: 7px;
   cursor: pointer;
   font-size: 13px;
-  color: #6b6b6b;
+  color: var(--app-text-soft);
   padding: 2px 0;
   transition: color 0.15s ease;
   user-select: none;
 }
-.agent-group-summary:hover { color: #1a1a1a; }
+.agent-group-summary:hover { color: var(--app-text); }
 .agent-group-chev {
   display: inline-block;
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   transition: transform 0.15s ease;
 }
 .agent-group-chev.open { transform: rotate(90deg); }
@@ -153,9 +153,9 @@ const statusColor = computed(() => {
 .agent-group-card {
   width: 100%;
   margin-top: 8px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--app-surface);
   padding: 10px 12px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
   overflow: hidden;

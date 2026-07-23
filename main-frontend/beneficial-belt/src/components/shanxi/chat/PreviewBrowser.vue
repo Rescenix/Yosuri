@@ -186,7 +186,7 @@ function openExternal() {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: #fff;
+  background: var(--app-surface);
 }
 
 /* ---------- 顶部单标签页头：白底融入卡片，底部一条细边框，标签左对齐 ---------- */
@@ -196,8 +196,8 @@ function openExternal() {
   gap: 6px;
   height: 34px;
   padding: 0 10px;
-  background: #ffffff;
-  border-bottom: 1px solid #ececec;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border-soft);
   border-radius: 12px 12px 0 0;
   flex-shrink: 0;
 }
@@ -207,10 +207,10 @@ function openExternal() {
   gap: 6px;
   max-width: 260px;
   font-size: 12px;
-  color: #1e293b;
+  color: var(--app-text);
 }
 .pb-tab.active { font-weight: 500; }
-.pb-tab-icon { flex-shrink: 0; color: #6b6b6b; }
+.pb-tab-icon { flex-shrink: 0; color: var(--app-text-soft); }
 .pb-tab-label {
   min-width: 0;
   overflow: hidden;
@@ -224,7 +224,7 @@ function openExternal() {
   align-items: center;
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid #ececec;
+  border-bottom: 1px solid var(--app-border-soft);
   flex-shrink: 0;
 }
 .pb-icon-btn {
@@ -236,21 +236,21 @@ function openExternal() {
   border: none;
   background: transparent;
   border-radius: 6px;
-  color: #6b6b6b;
+  color: var(--app-text-soft);
   cursor: pointer;
   flex-shrink: 0;
 }
 .pb-icon-btn:hover:not(:disabled) { background: #f0f0f0; }
 .pb-icon-btn:disabled { color: #e5e5e5; cursor: default; }
-.pb-icon-btn.active { background: #f5f5f5; color: #1e293b; }
+.pb-icon-btn.active { background: var(--app-surface-3); color: var(--app-text); }
 .pb-url-wrap {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 5px;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 999px;
   padding: 3px 10px;
 }
@@ -261,7 +261,7 @@ function openExternal() {
   outline: none;
   background: transparent;
   font-size: 12px;
-  color: #1e293b;
+  color: var(--app-text);
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 
@@ -275,13 +275,13 @@ function openExternal() {
 .pb-empty-title {
   font-size: 11.5px;
   font-weight: 600;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   letter-spacing: 0.05em;
   margin-bottom: 8px;
 }
 .pb-empty-hint {
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   padding: 8px 0;
 }
 .pb-server-card {
@@ -290,28 +290,28 @@ function openExternal() {
   gap: 8px;
   padding: 9px 12px;
   margin-bottom: 6px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--app-surface);
   cursor: pointer;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 .pb-server-card:hover {
-  border-color: #c4bcae;
+  border-color: var(--app-text-faint);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 .pb-server-name {
   flex: 1;
   min-width: 0;
   font-size: 13px;
-  color: #1e293b;
+  color: var(--app-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .pb-server-port {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 .pb-server-play {
@@ -331,14 +331,14 @@ function openExternal() {
   gap: 4px;
   margin-top: 6px;
   font-size: 11.5px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   background: transparent;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 999px;
   padding: 4px 10px;
   cursor: pointer;
 }
-.pb-rescan:hover { background: #f5f5f5; }
+.pb-rescan:hover { background: var(--app-surface-3); }
 
 /* ---------- 浏览视图 ---------- */
 .pb-viewport {
@@ -347,10 +347,10 @@ function openExternal() {
   position: relative;
   display: flex;
   justify-content: center;
-  background: #fff;
+  background: var(--app-surface);
 }
 .pb-viewport.mobile {
-  background: #f5f5f5;
+  background: var(--app-surface-3);
   padding: 10px 0;
 }
 .pb-frame {
@@ -360,9 +360,9 @@ function openExternal() {
 }
 .pb-viewport.mobile .pb-frame {
   width: 375px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--app-surface);
 }
 .pb-loading-bar {
   position: absolute;

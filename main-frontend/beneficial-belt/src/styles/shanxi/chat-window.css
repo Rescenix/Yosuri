@@ -223,7 +223,7 @@ overflow-y: auto;
 
 .message.bot {
   background: transparent;
-  color: #334155;
+  color: var(--app-text);
   align-self: flex-start;
   border: none;
   box-shadow: none;
@@ -263,7 +263,7 @@ min-height: 90px !important;
   line-height: 1.6;
   border: 1px solid var(--chat-border-strong);
   border-radius: 24px;
-  background: #fff;
+  background: var(--app-surface);
   color: var(--chat-text);
   outline: none;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
@@ -273,7 +273,7 @@ min-height: 90px !important;
 .chat-input:focus {
   outline: none;
   border-color: var(--chat-border-strong);
-  background: #fff;
+  background: var(--app-surface);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
@@ -300,7 +300,7 @@ min-height: 90px !important;
   justify-content: center;
   cursor: pointer;
   z-index: 2;
-  background: #fff;
+  background: var(--app-surface);
   transition: all 0.15s ease;
 }
 
@@ -347,9 +347,9 @@ min-height: 90px !important;
 }
 
 .ds-btn:hover {
-  background: #ffffff;
+  background: var(--app-surface);
   color: var(--chat-text);
-  border-color: #e5e5e5;
+  border-color: var(--app-border);
 }
 
 .ds-btn:disabled {
@@ -457,7 +457,7 @@ min-height: 90px !important;
   padding: 4px 8px;
   border: 1px solid var(--chat-border-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--app-surface);
   color: var(--chat-text);
 }
 
@@ -476,7 +476,7 @@ min-height: 90px !important;
   padding: 4px 12px;
   border: 1px solid var(--chat-border-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--app-surface);
   color: var(--chat-text-muted);
   font-size: 12px;
   cursor: pointer;
@@ -485,8 +485,8 @@ min-height: 90px !important;
 }
 
 .debug-refresh-btn:hover {
-  background: #ffffff;
-  border-color: #e5e5e5;
+  background: var(--app-surface);
+  border-color: var(--app-border);
   color: var(--chat-text);
 }
 
@@ -510,7 +510,7 @@ min-height: 90px !important;
   --_accent: var(--app-accent);
   width: 100%;
   max-width: 100%;
-  color: #1a1a1a;
+  color: var(--app-text);
   border: none;
   padding: 11px 17px;
   border-radius: 12px;
@@ -518,7 +518,7 @@ min-height: 90px !important;
   text-align: left;
   position: relative;
   background:
-    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(var(--app-surface), var(--app-surface)) padding-box,
     linear-gradient(135deg,
       var(--_accent) 0%,
       color-mix(in srgb, var(--_accent) 25%, transparent) 50%,
@@ -552,7 +552,7 @@ min-height: 90px !important;
   border-radius: 7px;
   cursor: pointer;
   color: var(--app-accent);
-  background: color-mix(in srgb, var(--app-accent) 10%, #fff);
+  background: color-mix(in srgb, var(--app-accent) 10%, var(--app-surface));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   opacity: 0;
   transform: translateY(2px);
@@ -565,7 +565,7 @@ min-height: 90px !important;
   pointer-events: auto;
 }
 .message-bubble.user .msg-edit-btn:hover {
-  background: color-mix(in srgb, var(--app-accent) 20%, #fff);
+  background: color-mix(in srgb, var(--app-accent) 20%, var(--app-surface));
 }
 /* 触屏没有 hover，常驻一个弱化态，保证也能点到 */
 @media (hover: none) {
@@ -603,9 +603,9 @@ min-height: 90px !important;
 
 /* 助手气泡 — 羊皮纸质感 */
 .message-bubble.bot {
-  background: #ffffff;
-  color: #334155;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  color: var(--app-text);
+  border: 1px solid var(--app-border);
   font-family: var(--app-font);
 }
 
@@ -613,7 +613,7 @@ min-height: 90px !important;
 .assistant-message {
   width: 100%;
   padding: 8px 0;
-  color: #1a1a1a;
+  color: var(--app-text);
   font-size: 16px;
   line-height: 1.75;
   word-wrap: break-word;
@@ -648,7 +648,7 @@ min-height: 90px !important;
   width: 100%;
   text-align: left;
   padding: 8px 0;
-  color: #1a1a1a;
+  color: var(--app-text);
   font-size: 16px;
   line-height: 1.75;
 }
@@ -700,22 +700,22 @@ min-height: 90px !important;
 .chat-window .markdown-body img {
   max-width: 100%;
   border-radius: 14px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
 }
 
 .chat-window .markdown-body hr {
   border: 0;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--app-border);
   margin: 16px 0;
 }
 
 .chat-window .markdown-body strong {
-  color: #1b1a18;
+  color: var(--app-text);
   font-weight: 600;
 }
 
 .chat-window .markdown-body em {
-  color: #4b5563;
+  color: var(--app-text);
 }
 
 .chat-window .markdown-body pre[data-lang]::before {
@@ -725,7 +725,7 @@ min-height: 90px !important;
   left: 1em;
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   pointer-events: none;
@@ -743,7 +743,7 @@ min-height: 90px !important;
 
 .chat-window .relevant-empty-state,
 .chat-window .empty-state {
-  color: #94a3b8;
+  color: var(--app-text-faint);
   font-size: 13px;
 }
 
@@ -753,8 +753,8 @@ min-height: 90px !important;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
   padding: 10px 12px;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -774,20 +774,20 @@ min-height: 90px !important;
 .header-menu-btn {
   width: 30px;
   height: 30px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--app-surface);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #64748b;
+  color: var(--app-text-soft);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .header-menu-btn:hover {
-  background: #ffffff;
-  color: #1b1a18;
+  background: var(--app-surface);
+  color: var(--app-text);
 }
 
 .chat-layout {
@@ -807,8 +807,8 @@ min-height: 90px !important;
   left: 0;
   bottom: 0;
   width: 240px;
-  background: #ffffff;
-  border-right: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border-right: 1px solid var(--app-border);
   box-shadow: 8px 0 24px rgba(0, 0, 0, 0.06);
   transform: translateX(-102%);
   transition: transform 0.18s ease;
@@ -824,7 +824,7 @@ min-height: 90px !important;
   margin: 0;
   padding: 14px 16px 10px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -832,7 +832,7 @@ min-height: 90px !important;
 .chat-sidebar a {
   display: block;
   padding: 10px 16px;
-  color: #1b1a18;
+  color: var(--app-text);
   text-decoration: none;
   border-radius: 10px;
   margin: 4px 10px;
@@ -924,7 +924,7 @@ min-height: 90px !important;
 
 .recalling-text {
   margin-left: 6px;
-  color: #6b7280;
+  color: var(--app-text-soft);
   font-size: 13px;
 }
 
@@ -935,7 +935,7 @@ min-height: 90px !important;
 
 .recalling-dots .dot {
   font-weight: bold;
-  color: #6b7280;
+  color: var(--app-text-soft);
   animation: dotBounce 1.2s infinite ease-in-out;
 }
 
@@ -959,8 +959,8 @@ min-height: 90px !important;
   left: 0;
   bottom: 0;
   width: 260px;
-  background: #ffffff;
-  border-right: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border-right: 1px solid var(--app-border);
   box-shadow: 8px 0 24px rgba(0, 0, 0, 0.04);
   transform: translateX(-100%);
   transition: transform 0.2s ease-out;
@@ -975,7 +975,7 @@ min-height: 90px !important;
   display: flex;
   align-items: center;
   padding: 10px 20px;
-  color: #1b1a18;
+  color: var(--app-text);
   text-decoration: none;
   border-radius: 10px;
   margin: 4px 10px;
@@ -1031,13 +1031,13 @@ min-height: 90px !important;
   padding: 6px 20px 14px 29px;
   margin: 0 0 4px 0;
   cursor: pointer;
-  color: #64748b;
+  color: var(--app-text-soft);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
   user-select: none;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--app-border);
 }
 .site-icon svg {
   color: var(--app-accent);
@@ -1071,7 +1071,7 @@ min-height: 90px !important;
   position: fixed;
   inset: 0;
   z-index: 99990;
-  background: #ffffff;
+  background: var(--app-surface);
   display: flex;
   flex-direction: column;
 }
@@ -1116,15 +1116,15 @@ min-height: 90px !important;
   padding: 10px 16px;
   margin: 0 12px 8px;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--app-surface);
   border: 1px solid rgba(0,0,0,0.06);
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease;
   font-size: 13px;
-  color: #1b1a18;
+  color: var(--app-text);
 }
 .new-session-btn:hover {
-  background: #ffffff;
+  background: var(--app-surface);
   box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
 
@@ -1178,14 +1178,14 @@ min-height: 90px !important;
 }
 .session-title {
   font-size: 13px;
-  color: #1b1a18;
+  color: var(--app-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .session-time {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
 }
 
 /* ==================== 三点按钮 ==================== */
@@ -1235,7 +1235,7 @@ min-height: 90px !important;
   border: none;
   background: transparent;
   font-size: 13px;
-  color: #1b1a18;
+  color: var(--app-text);
   text-align: left;
   cursor: pointer;
 }
@@ -1264,7 +1264,7 @@ min-height: 90px !important;
   text-align: center;
 }
 .confirm-dialog p {
-  color: #1b1a18;
+  color: var(--app-text);
   margin: 0 0 20px;
   font-size: 14px;
   line-height: 1.6;
@@ -1284,7 +1284,7 @@ min-height: 90px !important;
 }
 .btn-cancel {
   background: #e5e5e5;
-  color: #1b1a18;
+  color: var(--app-text);
 }
 .btn-cancel:hover {
   background: #d1d5db;
@@ -1302,11 +1302,11 @@ min-height: 90px !important;
   width: 80%;
   padding: 8px 12px;
   margin: 12px 0;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   font-size: 14px;
   outline: none;
-  background: #fff;
+  background: var(--app-surface);
 }
 .rename-input:focus {
   border-color: #c96442;
@@ -1374,8 +1374,8 @@ min-height: 90px !important;
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
-  border-bottom: 1px solid #e5e5e5;
+  color: var(--app-text-soft);
+  border-bottom: 1px solid var(--app-border);
   margin-bottom: 8px;
 }
 
@@ -1388,7 +1388,7 @@ min-height: 90px !important;
   border-radius: 6px;
   margin: 2px 6px;
   font-size: 13px;
-  color: #1b1a18;
+  color: var(--app-text);
 }
 
 .project-item:hover, .subtask-item:hover {
@@ -1410,7 +1410,7 @@ min-height: 90px !important;
 
 .subtask-item {
   font-size: 12px;
-  color: #475569;
+  color: var(--app-text);
 }
 
 /* 顶部栏项目面包屑 */
@@ -1421,7 +1421,7 @@ min-height: 90px !important;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  color: #1b1a18;
+  color: var(--app-text);
   padding: 4px 8px;
   border-radius: 6px;
   transition: background 0.15s;
@@ -1432,12 +1432,12 @@ min-height: 90px !important;
 }
 
 .breadcrumb-separator {
-  color: #a0a0a0;
+  color: var(--app-text-faint);
   margin: 0 4px;
 }
 
 .task-current {
-  color: #64748b;
+  color: var(--app-text-soft);
   font-weight: 400;
 }
 
@@ -1446,8 +1446,8 @@ min-height: 90px !important;
   position: absolute;
   top: 100%;
   left: 0;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 6px 20px rgba(0,0,0,0.08);
   z-index: 110;
@@ -1465,7 +1465,7 @@ min-height: 90px !important;
   padding: 6px 16px;
   font-size: 13px;
   font-weight: 600;
-  color: #1b1a18;
+  color: var(--app-text);
   cursor: pointer;
 }
 
@@ -1476,7 +1476,7 @@ min-height: 90px !important;
 .dropdown-task {
   padding: 6px 16px 6px 44px;
   font-size: 12px;
-  color: #475569;
+  color: var(--app-text);
   cursor: pointer;
 }
 
@@ -1503,8 +1503,8 @@ min-height: 90px !important;
   position: absolute;
   bottom: 50px;
   left: 44px;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   z-index: 100;
@@ -1518,7 +1518,7 @@ min-height: 90px !important;
   padding: 10px 16px;
   cursor: pointer;
   font-size: 13px;
-  color: #1b1a18;
+  color: var(--app-text);
   transition: background 0.15s;
 }
 
@@ -1557,9 +1557,9 @@ min-height: 90px !important;
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 5px;
-  background: #ffffff;
+  background: var(--app-surface);
   width: 100%;
   box-sizing: border-box;
   position: relative;
@@ -1580,7 +1580,7 @@ min-height: 90px !important;
   width: 20px;
   height: 20px;
   padding: 0;
-  color: #888;
+  color: var(--app-text-soft);
   border-radius: 50%;
   transition: background 0.2s;
   z-index: 10;
@@ -1613,7 +1613,7 @@ min-height: 90px !important;
   max-height: 150px;
   line-height: 24px;
   font-size: 15px;
-  color: #1b1a18;
+  color: var(--app-text);
   font-family: inherit;
   box-sizing: border-box;
   overflow-y: hidden;
@@ -1624,7 +1624,7 @@ min-height: 90px !important;
 }
 .chat-input::-webkit-scrollbar { display: none; }
 .chat-input::placeholder {
-  color: #a9a9a9;
+  color: var(--app-text-faint);
   font-style: italic;
 }
 
@@ -1632,8 +1632,8 @@ min-height: 90px !important;
   position: absolute;
   bottom: 56px;
   left: 6px;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 6px 0;
@@ -1684,7 +1684,7 @@ min-height: 90px !important;
 .header-session-name {
   font-size: 13px;
   font-weight: 400;
-  color: #1b1a18;
+  color: var(--app-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1695,8 +1695,8 @@ min-height: 90px !important;
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   padding: 6px;
@@ -1707,7 +1707,7 @@ min-height: 90px !important;
   padding: 7px 10px;
   font-size: 12.5px;
   border-radius: 7px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   white-space: nowrap;
 }
 .more-menu-item.disabled { cursor: default; }
@@ -1724,8 +1724,8 @@ min-height: 90px !important;
   left: 12px;
   width: 280px;
   max-height: min(560px, calc(100vh - 90px));
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 14px;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.16);
   z-index: 56;
@@ -1738,7 +1738,7 @@ min-height: 90px !important;
   gap: 6px;
   padding: 12px;
   flex-shrink: 0;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--app-border);
 }
 .fm-mode-btn {
   flex: 1;
@@ -1749,10 +1749,10 @@ min-height: 90px !important;
   padding: 6px 0;
   font-size: 12.5px;
   font-weight: 600;
-  border: 1px solid #e5e5e5;
-  background: #fff;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
   border-radius: 8px;
-  color: #475569;
+  color: var(--app-text);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -1760,7 +1760,7 @@ min-height: 90px !important;
 .fm-mode-btn.active {
   background: #1b1a18;
   color: #fff;
-  border-color: #1b1a18;
+  border-color: var(--app-text);
 }
 .fm-mode-btn.fm-mode-code.active {
   background: #c96442;
@@ -1777,10 +1777,10 @@ min-height: 90px !important;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--app-border);
   font-size: 12.5px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--app-text-soft);
   flex-shrink: 0;
 }
 
@@ -1791,7 +1791,7 @@ min-height: 90px !important;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   font-size: 12.5px;
 }
 
@@ -1804,7 +1804,7 @@ min-height: 90px !important;
   width: auto !important;
   max-width: none !important;
   min-width: 0;
-  background: #ffffff;
+  background: var(--app-surface);
 }
 .chat-window.expanded .tool-panel {
   width: 380px;
@@ -1820,7 +1820,7 @@ min-height: 90px !important;
 }
 .chat-window.expanded .tool-panel-meta {
   font-size: 10.5px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 .chat-window.expanded .tool-panel-terminal { border-radius: 0; }
@@ -1833,17 +1833,17 @@ min-height: 90px !important;
   align-items: center;
   gap: 10px;
   padding: 0 18px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--app-border);
   position: relative;
 }
-.chat-window.expanded .studio-chat-header .sch-name { font-size: 13.5px; font-weight: 700; color: #1b1a18; }
+.chat-window.expanded .studio-chat-header .sch-name { font-size: 13.5px; font-weight: 700; color: var(--app-text); }
 .chat-window.expanded .studio-chat-header .sch-branch {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-size: 10.5px;
   padding: 2px 9px;
   border-radius: 5px;
-  border: 1px solid #e5e5e5;
-  color: #64748b;
+  border: 1px solid var(--app-border);
+  color: var(--app-text-soft);
   background: #f1f5f9;
 }
 .chat-window.expanded .studio-chat-header .sch-status {
@@ -1851,7 +1851,7 @@ min-height: 90px !important;
   align-items: center;
   gap: 5px;
   font-size: 11.5px;
-  color: #64748b;
+  color: var(--app-text-soft);
 }
 .chat-window.expanded .studio-chat-header .sch-dot { width: 7px; height: 7px; border-radius: 50%; }
 .chat-window.expanded .studio-chat-header .sch-dot.status-running { background: #c96442; animation: sess-pulse 1.6s ease-in-out infinite; }
@@ -1869,9 +1869,9 @@ min-height: 90px !important;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  color: #1b1a18;
+  color: var(--app-text);
 }
-.chat-window.expanded .studio-chat-header .sch-caret { font-size: 9px; color: #94a3b8; }
+.chat-window.expanded .studio-chat-header .sch-caret { font-size: 9px; color: var(--app-text-faint); }
 .chat-window.expanded .studio-chat-header .sch-model-menu {
   position: absolute;
   top: 100%;
@@ -1956,17 +1956,17 @@ min-height: 90px !important;
 /* ==================== 顶部栏扁平化 ==================== */
 .chat-header {
   display: flex; justify-content: space-between; align-items: center;
-  height: 48px; padding: 0 12px 0 16px; border-bottom: 1px solid #e5e5e5;
-  background: #ffffff; flex-shrink: 0; position: relative; z-index: 20;
+  height: 48px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface); flex-shrink: 0; position: relative; z-index: 20;
 }
 .header-left { display: flex; align-items: center; gap: 4px; }
-.header-session-name { font-size: 13.5px; font-weight: 400; color: #1a1a1a; margin-left: 4px; }
+.header-session-name { font-size: 13.5px; font-weight: 400; color: var(--app-text); margin-left: 4px; }
 .sch-branch {
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10.5px; padding: 2px 9px; border-radius: 5px; border: 1px solid #e5e5e5;
-  color: #6b6b6b; background: #f5f5f5; margin-left: 8px;
+  font-size: 10.5px; padding: 2px 9px; border-radius: 5px; border: 1px solid var(--app-border);
+  color: var(--app-text-soft); background: var(--app-surface-3); margin-left: 8px;
 }
-.sch-status { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: #6b6b6b; margin-left: 8px; }
+.sch-status { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--app-text-soft); margin-left: 8px; }
 .sch-dot { width: 7px; height: 7px; border-radius: 50%; }
 .sch-dot.status-running { background: #c96442; animation: sess-pulse 1.6s ease-in-out infinite; }
 .sch-dot.status-done { background: #12b76a; }
@@ -1975,19 +1975,19 @@ min-height: 90px !important;
 
 .header-right { display: flex; align-items: center; gap: 10px; }
 .header-tools-group { display: flex; align-items: center; gap: 2px; }
-.header-icon-btn { background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: #6b6b6b; transition: background 0.15s ease; }
-.header-icon-btn:hover { background: #f5f5f5; }
-.header-icon-btn.active { background: #f5f5f5; }
+.header-icon-btn { background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: var(--app-text-soft); transition: background 0.15s ease; }
+.header-icon-btn:hover { background: var(--app-surface-3); }
+.header-icon-btn.active { background: var(--app-surface-3); }
 .header-more-wrap { position: relative; }
-.more-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 8px 0; width: 150px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); z-index: 50; }
-.more-menu-item { padding: 6px 16px; font-size: 13px; color: #6b6b6b; }
-.more-menu-item.disabled { color: #a3a3a3; cursor: not-allowed; }
+.more-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 0; width: 150px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); z-index: 50; }
+.more-menu-item { padding: 6px 16px; font-size: 13px; color: var(--app-text-soft); }
+.more-menu-item.disabled { color: var(--app-text-faint); cursor: not-allowed; }
 
 /* 不加粗、不带折叠箭头——模型名本身就是可点开的（去掉视觉上的"这是个下拉框"提示） */
-.sch-model { position: relative; display: flex; align-items: center; gap: 4px; background: #ffffff; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 400; cursor: pointer; color: #1a1a1a; }
-.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
+.sch-model { position: relative; display: flex; align-items: center; gap: 4px; background: var(--app-surface); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 400; cursor: pointer; color: var(--app-text); }
+.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
-.model-menu-item:hover { background: #f5f5f5; }
+.model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: #ececec; font-weight: 500; }
 
 /* ---------- 思考强度（Effort）：模型选择器右边的小胶囊 + 点开的 Faster↔Smarter 滑块 ---------- */
@@ -1996,19 +1996,19 @@ min-height: 90px !important;
   display: flex;
   align-items: center;
   gap: 5px;
-  background: #ffffff;
+  background: var(--app-surface);
   border-radius: 999px;
   padding: 4px 12px;
   font-size: 12px;
   cursor: pointer;
-  color: #1a1a1a;
+  color: var(--app-text);
 }
 .effort-label { color: var(--app-text-soft); }
 .effort-value { font-weight: 600; color: var(--app-accent); }
 .effort-panel {
   width: 220px;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
   padding: 10px 12px;
@@ -2099,9 +2099,9 @@ min-height: 90px !important;
   color: var(--app-text);
   white-space: nowrap;
 }
-.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
+.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
-.model-menu-item:hover { background: #f5f5f5; }
+.model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: #ececec; font-weight: 500; }
 
 /* 模式 pill：浅底 + 主题色字 */
@@ -2122,8 +2122,8 @@ min-height: 90px !important;
 .effort-value { font-weight: 600; color: var(--app-accent); }
 .effort-panel {
   width: 220px;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
   padding: 10px 12px;
@@ -2164,13 +2164,13 @@ min-height: 90px !important;
 
 /* ==================== 仿 Claude 折叠栏悬浮菜单 ==================== */
 .floating-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
-.floating-menu-panel { position: absolute; top: calc(100% + 6px); left: 8px; width: 280px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12); z-index: 50; padding: 8px 0; display: flex; flex-direction: column; gap: 4px; }
-.fm-mode-switch { display: flex; align-items: center; gap: 4px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 8px; padding: 2px; margin: 4px 8px 8px; }
-.fm-mode-btn { flex: 1; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 0; border-radius: 8px; font-size: 12px; font-weight: 500; color: #a3a3a3; background: transparent; border: none; cursor: pointer; transition: all 0.2s ease; }
-.fm-mode-btn.active { background: #ffffff; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.floating-menu-panel { position: absolute; top: calc(100% + 6px); left: 8px; width: 280px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12); z-index: 50; padding: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.fm-mode-switch { display: flex; align-items: center; gap: 4px; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 2px; margin: 4px 8px 8px; }
+.fm-mode-btn { flex: 1; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 0; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--app-text-faint); background: transparent; border: none; cursor: pointer; transition: all 0.2s ease; }
+.fm-mode-btn.active { background: var(--app-surface); color: var(--app-text); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 .fm-mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .fm-session-area { padding: 0 8px; max-height: 400px; overflow-y: auto; }
-.fm-footer { display: flex; align-items: center; gap: 10px; padding: 12px 16px 4px; border-top: 1px solid #ececec; margin-top: 6px; font-size: 13px; color: #1a1a1a; font-weight: 500; }
+.fm-footer { display: flex; align-items: center; gap: 10px; padding: 12px 16px 4px; border-top: 1px solid var(--app-border-soft); margin-top: 6px; font-size: 13px; color: var(--app-text); font-weight: 500; }
 
 /* ==================== 消息滚动区：外层滚动到屏幕边缘，内层居中阅读列 ==================== */
 .chat-content { position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
@@ -2192,9 +2192,9 @@ min-height: 90px !important;
   box-sizing: border-box;
   padding: 0;
   gap: 0;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--app-surface);
   box-shadow: 0 6px 24px rgba(27, 26, 24, 0.08);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -2246,11 +2246,11 @@ min-height: 90px !important;
    overflow-y 改回 auto：hidden 时内容超过 max-height(150px) 会把光标那行裁掉、
    看不见输入，配合上面拿掉 scrollTop=0，光标现在能正常跟随滚动。
    line-height 提到 24px，让光标（高度=行高）更饱满，不再显得"太矮"。 */
-.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 8px 0 !important; resize: none; min-height: 40px !important; max-height: 150px; line-height: 24px; font-size: 15px; color: #1b1a18; font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
+.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 8px 0 !important; resize: none; min-height: 40px !important; max-height: 150px; line-height: 24px; font-size: 15px; color: var(--app-text); font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
 .chat-input::-webkit-scrollbar { display: none; }
-.chat-input::placeholder { color: #a9a9a9; font-style: italic; }
+.chat-input::placeholder { color: var(--app-text-faint); font-style: italic; }
 
-.input-inner-btn { display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; flex-shrink: 0; width: 28px; height: 28px; padding: 0; color: #888; border-radius: 50%; transition: background 0.2s; z-index: 10; }
+.input-inner-btn { display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; flex-shrink: 0; width: 28px; height: 28px; padding: 0; color: var(--app-text-soft); border-radius: 50%; transition: background 0.2s; z-index: 10; }
 .input-inner-btn:hover { background: rgba(0, 0, 0, 0.05); }
 .input-send-btn { width: 28px; height: 28px; background: var(--app-accent); color: #fff; }
 .input-send-btn:hover { background: var(--app-accent-hover); }
@@ -2259,12 +2259,12 @@ min-height: 90px !important;
 
 /* Context window 用量常驻横条本体样式在上面 .context-bar-widget 那组里；
    这里只剩点开横条后的输入/输出 token 细分弹窗 */
-.token-usage-panel { position: absolute; top: calc(100% - 46px); right: -220px; width: 240px; background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14); padding: 12px 14px; z-index: 30; }
+.token-usage-panel { position: absolute; top: calc(100% - 46px); right: -220px; width: 240px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14); padding: 12px 14px; z-index: 30; }
 .tup-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; padding: 2px 0; }
-.tup-label { color: #64748b; }
+.tup-label { color: var(--app-text-soft); }
 .tup-value { font-family: var(--app-font); font-weight: 600; color: var(--app-text); }
 
-.vision-status-toast { position: absolute; bottom: calc(100% + 12px); right: 0px; z-index: 6; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); border: 1px solid #e5e5e5; font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.vision-status-toast { position: absolute; bottom: calc(100% + 12px); right: 0px; z-index: 6; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.9); border: 1px solid var(--app-border); font-size: 11px; color: var(--app-text-soft); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .vision-status-toast.error { color: #d94834; border-color: #f3c9c2; background: rgba(255, 245, 243, 0.95); }
 
 /* 回到底部：悬浮在输入框卡片正中间上方（相对 .chat-input-area 定位） */
@@ -2274,8 +2274,8 @@ min-height: 90px !important;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
-  border: 1px solid #e5e5e5;
-  background: #ffffff;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   width: 32px;
   height: 32px;
@@ -2290,11 +2290,11 @@ min-height: 90px !important;
 .scroll-to-bottom-btn:hover { background: #f1f5f9; transform: translateX(-50%) scale(1.05); opacity: 1; }
 
 /* ★ 修复 3：右侧工具面板，直接删掉无用的 Tabs 按钮 ★ */
-.tool-panel { flex: 0 0 320px; /* 稍微缩窄一点面板宽度 */ border-left: 1px solid #e5e5e5; background: #ffffff; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-.tool-panel-header { height: 40px; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; border-bottom: 1px solid #e5e5e5; background: #ffffff; flex-shrink: 0; }
+.tool-panel { flex: 0 0 320px; /* 稍微缩窄一点面板宽度 */ border-left: 1px solid var(--app-border); background: var(--app-surface); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.tool-panel-header { height: 40px; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; border-bottom: 1px solid var(--app-border); background: var(--app-surface); flex-shrink: 0; }
 .tool-panel-meta { font-size: 11px; color: var(--app-text-faint); font-family: var(--app-font); }
 .tool-panel-terminal { border-radius: 0; flex: 1; border: none; }
-.tool-panel-preview-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #a3a3a3; font-size: 13px; gap: 8px; }
+.tool-panel-preview-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--app-text-faint); font-size: 13px; gap: 8px; }
 
 
 /* ==================== 阶段3：右侧多面板停靠（dockPanels/dockRatios/dockWidth） ==================== */
@@ -2329,7 +2329,7 @@ min-height: 90px !important;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--app-surface);
   border: 1px solid #e8e8e8;
   border-radius: 12px;
   box-shadow: 0 1px 4px rgba(20, 20, 20, 0.06);
@@ -2357,7 +2357,7 @@ min-height: 90px !important;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--app-surface);
   border-radius: 0 0 10px 10px;
 }
 .tool-dock-split-handle {
@@ -2385,7 +2385,7 @@ min-height: 90px !important;
    间隙是白色（与中间聊天区同色）不会割裂视觉，左右卡片靠自身边框+阴影浮起来。
    非展开的小窗气泡不受影响。 */
 .chat-window.expanded .chat-body-row {
-  background: #ffffff;
+  background: var(--app-surface);
   padding: 8px;
   gap: 8px;
   box-sizing: border-box;
@@ -2507,8 +2507,8 @@ min-height: 90px !important;
   max-width: 320px;
   overflow-y: auto;
   padding: 6px;
-  background: var(--app-surface, #fff);
-  border: 1px solid var(--app-border, #e5e5e5);
+  background: var(--app-surface, var(--app-surface));
+  border: 1px solid var(--app-border, var(--app-border));
   border-radius: 12px;
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
   animation: rail-card-in 0.12s ease-out;
@@ -2680,7 +2680,7 @@ min-height: 90px !important;
   padding: 7px 14px;
   margin-bottom: 8px;
   /* 微渐变底（替代死白）+ 暖灰清晰边框 + 双层柔阴影 → 悬浮卡片质感 */
-  background: linear-gradient(180deg, #ffffff 0%, #f7f6f4 100%);
+  background: linear-gradient(180deg, var(--app-surface) 0%, #f7f6f4 100%);
   border: 1px solid #e3e0db;
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05), 0 2px 6px rgba(28, 25, 23, 0.06);
@@ -2697,7 +2697,7 @@ min-height: 90px !important;
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #6b6b6b;
+  color: var(--app-text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2706,7 +2706,7 @@ min-height: 90px !important;
 .input-dir-worktree {
   font-family: var(--app-font);
   font-size: 11px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
 }
 .input-dir-add-btn {
   display: flex;
@@ -2715,9 +2715,9 @@ min-height: 90px !important;
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 1px solid #e5e5e5;
-  background: #ffffff;
-  color: #6b6b6b;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text-soft);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s ease;
@@ -2740,8 +2740,8 @@ min-height: 90px !important;
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 6px 0;
@@ -2750,12 +2750,12 @@ min-height: 90px !important;
   overflow-y: auto;
   z-index: 60;
 }
-.workdir-menu-label { padding: 5px 14px; font-size: 11px; color: #a3a3a3; }
-.workdir-menu-back { display: flex; align-items: center; gap: 2px; cursor: pointer; color: #6b6b6b; }
-.workdir-menu-back:hover { color: #1a1a1a; }
-.workdir-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
-.workdir-menu-item:hover { background: #f5f5f5; }
-.workdir-menu-item.disabled { color: #a3a3a3; cursor: default; }
+.workdir-menu-label { padding: 5px 14px; font-size: 11px; color: var(--app-text-faint); }
+.workdir-menu-back { display: flex; align-items: center; gap: 2px; cursor: pointer; color: var(--app-text-soft); }
+.workdir-menu-back:hover { color: var(--app-text); }
+.workdir-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: var(--app-text); cursor: pointer; }
+.workdir-menu-item:hover { background: var(--app-surface-3); }
+.workdir-menu-item.disabled { color: var(--app-text-faint); cursor: default; }
 .workdir-menu-item.disabled:hover { background: transparent; }
 .workdir-menu-divider { height: 1px; background: #ececec; margin: 6px 0; }
 
@@ -2767,7 +2767,7 @@ min-height: 90px !important;
   padding: 7px 14px;
   margin-bottom: 8px;
   /* 微渐变底（替代死白）+ 暖灰清晰边框 + 双层柔阴影 → 悬浮卡片质感 */
-  background: linear-gradient(180deg, #ffffff 0%, #f7f6f4 100%);
+  background: linear-gradient(180deg, var(--app-surface) 0%, #f7f6f4 100%);
   border: 1px solid #e3e0db;
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05), 0 2px 6px rgba(28, 25, 23, 0.06);
@@ -2781,7 +2781,7 @@ min-height: 90px !important;
 }
 .input-git-branch {
   font-weight: 600;
-  color: #404040;
+  color: var(--app-text);
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2793,9 +2793,9 @@ min-height: 90px !important;
   align-items: center;
   gap: 6px;
   padding: 3px 9px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--app-surface);
 }
 .input-git-add,
 .input-git-remove {
@@ -2825,16 +2825,16 @@ min-height: 90px !important;
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 6px 0;
   min-width: 160px;
   z-index: 60;
 }
-.pr-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
-.pr-menu-item:hover { background: #f5f5f5; }
+.pr-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: var(--app-text); cursor: pointer; }
+.pr-menu-item:hover { background: var(--app-surface-3); }
 
 .git-action-toast {
   position: fixed;
@@ -2872,7 +2872,7 @@ min-height: 90px !important;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
   padding: 16px;
 }
-.commit-modal-title { font-size: 12.5px; font-weight: 600; color: #6b6b6b; margin-bottom: 8px; }
+.commit-modal-title { font-size: 12.5px; font-weight: 600; color: var(--app-text-soft); margin-bottom: 8px; }
 .commit-modal-textarea {
   width: 100%;
   box-sizing: border-box;
@@ -2888,7 +2888,7 @@ min-height: 90px !important;
   padding: 10px 12px;
   font-size: 13.5px;
   line-height: 1.5;
-  color: #1a1a1a;
+  color: var(--app-text);
   font-family: inherit;
 }
 .commit-modal-textarea:focus { outline: none; border-color: #c96442; background: rgba(255, 255, 255, 0.85); }
@@ -2902,7 +2902,7 @@ min-height: 90px !important;
   cursor: pointer;
   transition: background 0.15s ease, opacity 0.15s ease;
 }
-.commit-modal-cancel { background: rgba(0, 0, 0, 0.06); color: #404040; }
+.commit-modal-cancel { background: rgba(0, 0, 0, 0.06); color: var(--app-text); }
 .commit-modal-cancel:hover { background: rgba(0, 0, 0, 0.1); }
 .commit-modal-confirm { background: #1a1a1a; color: #fff; }
 .commit-modal-confirm:hover { background: #333333; }
@@ -2948,15 +2948,15 @@ min-height: 90px !important;
   gap: 4px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid #e5e5e5;
-  background: #ffffff;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
   font-size: 12px;
   font-weight: 500;
-  color: #6b6b6b;
+  color: var(--app-text-soft);
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.toolbar-pill-btn:hover { background: #f5f5f5; }
+.toolbar-pill-btn:hover { background: var(--app-surface-3); }
 .toolbar-icon-pill-btn {
   display: flex;
   align-items: center;
@@ -2964,13 +2964,13 @@ min-height: 90px !important;
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 1px solid #e5e5e5;
-  background: #ffffff;
-  color: #6b6b6b;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text-soft);
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.toolbar-icon-pill-btn:hover { background: #f5f5f5; }
+.toolbar-icon-pill-btn:hover { background: var(--app-surface-3); }
 
 /* 下拉是 position:absolute + left:0，必须有这个定位基准才会贴在自己的按钮上；
    少了它就会一路上溯到 .chat-body-row，整个卡片跑到窗口左边去 */
@@ -2992,8 +2992,8 @@ min-height: 90px !important;
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 6px 0;
@@ -3001,9 +3001,9 @@ min-height: 90px !important;
   z-index: 50;
 }
 .add-menu-dropdown { min-width: 170px; }
-.auto-menu-item { padding: 7px 14px; font-size: 12.5px; color: #6b6b6b; cursor: pointer; }
-.auto-menu-item:hover { background: #f5f5f5; }
-.auto-menu-item.active { background: #ececec; color: #1a1a1a; font-weight: 600; }
+.auto-menu-item { padding: 7px 14px; font-size: 12.5px; color: var(--app-text-soft); cursor: pointer; }
+.auto-menu-item:hover { background: var(--app-surface-3); }
+.auto-menu-item.active { background: #ececec; color: var(--app-text); font-weight: 600; }
 
 /* ===== Yolo 模式按钮：开启走主题色脉冲/流光动画，关闭变灰停动画 ===== */
 .toolbar-pill-btn.mode-pill { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
@@ -3016,9 +3016,9 @@ min-height: 90px !important;
 }
 .toolbar-pill-btn.mode-pill.mode-yolo:hover { filter: brightness(1.05); }
 .toolbar-pill-btn.mode-pill.mode-idle {
-  color: #9a9a9a;
-  border-color: #e5e5e5;
-  background: #fafafa;
+  color: var(--app-text-faint);
+  border-color: var(--app-border);
+  background: var(--app-surface-2);
   animation: none;
   box-shadow: none;
 }
@@ -3189,9 +3189,9 @@ min-height: 90px !important;
 }
 .resume-bar-btn.ghost:hover { background: var(--app-border-soft); }
 
-.add-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: #404040; cursor: pointer; }
-.add-menu-item:hover { background: #f5f5f5; }
-.add-menu-item.disabled { color: #a3a3a3; cursor: not-allowed; }
+.add-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: var(--app-text); cursor: pointer; }
+.add-menu-item:hover { background: var(--app-surface-3); }
+.add-menu-item.disabled { color: var(--app-text-faint); cursor: not-allowed; }
 .add-menu-item.disabled:hover { background: transparent; }
 
 /* 模型切换器/Context window 横条现在都在底部工具条，弹窗必须向上展开，

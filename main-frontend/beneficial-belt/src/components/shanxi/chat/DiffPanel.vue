@@ -178,7 +178,7 @@ async function toggleFile(df) {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-bottom: 1px solid #ececec;
+  border-bottom: 1px solid var(--app-border-soft);
 }
 .diff-totals { display: flex; gap: 6px; flex-shrink: 0; }
 .diff-refresh-btn {
@@ -186,7 +186,7 @@ async function toggleFile(df) {
   align-items: center;
   border: none;
   background: transparent;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   cursor: pointer;
   border-radius: 5px;
   padding: 2px;
@@ -201,8 +201,8 @@ async function toggleFile(df) {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 7px;
   padding: 4px 8px;
 }
@@ -213,13 +213,13 @@ async function toggleFile(df) {
   outline: none;
   background: transparent;
   font-size: 12px;
-  color: #1e293b;
+  color: var(--app-text);
 }
 .diff-search-clear {
   display: inline-flex;
   border: none;
   background: transparent;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   cursor: pointer;
   padding: 1px;
 }
@@ -231,7 +231,7 @@ async function toggleFile(df) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   font-size: 12.5px;
 }
 
@@ -254,7 +254,7 @@ async function toggleFile(df) {
   gap: 7px;
   padding: 5px 12px;
   cursor: pointer;
-  background: #ffffff;
+  background: var(--app-surface);
   /* 展开后滚动时，当前文件的文件名 + 增删栏吸附到滚动区顶部 */
   position: sticky;
   top: 0;
@@ -263,12 +263,12 @@ async function toggleFile(df) {
 .diff-file-head:hover { background: #f6f7f9; }
 .diff-file-head.is-open {
   background: #f4f6f8;
-  border-bottom: 1px solid #ececec;
+  border-bottom: 1px solid var(--app-border-soft);
 }
 .diff-chev {
   display: inline-block;
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   transition: transform 0.15s ease;
 }
 .diff-chev.open { transform: rotate(90deg); }
@@ -295,7 +295,7 @@ async function toggleFile(df) {
   font-family: var(--app-font);
   font-size: 12px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--app-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -309,11 +309,11 @@ async function toggleFile(df) {
 .diff-adds { color: #12b76a; }
 .diff-dels { color: #d94834; }
 
-.diff-rows { border-top: 1px solid #f0f0f0; }
+.diff-rows { border-top: 1px solid var(--app-border-soft); }
 .diff-file-hint {
   padding: 12px;
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
 }
 
 /* ---------- 右键复制完整路径悬浮菜单 ---------- */
@@ -326,8 +326,8 @@ async function toggleFile(df) {
   position: fixed;
   z-index: 30001;
   min-width: 160px;
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
   padding: 4px;
@@ -339,7 +339,7 @@ async function toggleFile(df) {
   gap: 8px;
   padding: 7px 8px;
   font-size: 12.5px;
-  color: #1e293b;
+  color: var(--app-text);
   cursor: pointer;
   border-radius: 6px;
 }

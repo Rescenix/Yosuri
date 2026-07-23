@@ -1,7 +1,7 @@
 .markdown-body {
   word-break: break-word;
   line-height: 1.68;
-  color: #26221d;
+  color: var(--app-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -17,7 +17,7 @@
 .markdown-body h6 {
   margin: 12px 0 6px;
   font-weight: 600;
-  color: #1b1a18;
+  color: var(--app-text);
   line-height: 1.28;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
@@ -45,12 +45,12 @@
   margin: 0.8em 0;
   padding: 0.2em 0 0.2em 1em;
   border-left: 3px solid #e2e8f0;
-  color: #64748b;
+  color: var(--app-text-soft);
 }
 
 .markdown-body code {
   background: rgba(0, 0, 0, 0.04);
-  color: #4b4036;
+  color: var(--app-text);
   padding: 0.15em 0.35em;
   border-radius: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -59,8 +59,8 @@
 
 .markdown-body pre {
   position: relative;
-  background: #ffffff;
-  border: 1px solid #e6dfd3;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 14px;
   padding: 14px 16px;
   margin: 0.9em 0;
@@ -100,11 +100,11 @@
   background: #f9fafb;
   font-weight: 600;
   font-size: 13px;
-  color: #1f2937;
+  color: var(--app-text);
 }
 
 .markdown-body td {
-  background: #fff;
+  background: var(--app-surface);
 }
 
 .markdown-body tr:nth-child(even) td {
@@ -114,7 +114,7 @@
 .chat-time {
   text-align: center;
   font-size: 10px;
-  color: #aaa;
+  color: var(--app-text-faint);
   margin: 8px 0;
   background: none;
 }
@@ -122,7 +122,7 @@
 .reasoning-details {
   margin-top: 8px;
   font-size: 12px;
-  color: #4b5563;
+  color: var(--app-text);
   background: rgba(201, 100, 66, 0.06);
   border-radius: 10px;
   padding: 8px 10px;
@@ -151,7 +151,7 @@
   border-left: 3px solid #c96442;
   border-radius: 0 10px 10px 0;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--app-text);
 }
 
 .reasoning-label {
@@ -164,8 +164,8 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   /* 黑色字体表面扫描：白色高光横扫过字形 */
-  color: #1e293b;
-  background: linear-gradient(100deg, #1e293b 40%, #ffffff 50%, #1e293b 60%);
+  color: var(--app-text);
+  background: linear-gradient(100deg, #1e293b 40%, var(--app-surface) 50%, #1e293b 60%);
   background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -184,7 +184,7 @@
   gap: 4px;
   margin: 6px 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--app-text-soft);
   background: #f3f4f6;
   padding: 4px 8px;
   border-radius: 8px;
@@ -193,7 +193,7 @@
 .tool-call-detail {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
-  color: #666;
+  color: var(--app-text-soft);
   margin-left: 6px;
   background: #f0f0f0;
   padding: 1px 6px;
@@ -219,7 +219,7 @@
 
 .param-label {
   width: 36px;
-  color: #666;
+  color: var(--app-text-soft);
 }
 
 .param-value {
@@ -236,7 +236,7 @@
   border: 1px solid #d0d5dd;
   border-radius: 6px;
   padding: 2px 4px;
-  background: #fff;
+  background: var(--app-surface);
 }
 
 .inline-status-bar {
@@ -247,7 +247,7 @@
   display: flex;
   gap: 12px;
   font-size: 10px;
-  color: #aaa;
+  color: var(--app-text-faint);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   white-space: nowrap;
   pointer-events: none;
@@ -265,7 +265,7 @@
 .code-btn-group button {
   font-size: 12px;
   font-weight: 500;
-  color: #a6adc8;
+  color: var(--app-text-faint);
   background: rgba(255, 255, 255, 0.08);
   border: none;
   border-radius: 6px;
@@ -292,7 +292,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 0;
-  color: #6b7280;
+  color: var(--app-text-soft);
   font-size: 13px;
   opacity: 0.8;
 }
@@ -360,9 +360,9 @@
 
 .markdown-body pre .code-btn-group button {
   font-size: 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   background: rgba(255, 255, 255, 0.92);
-  color: #64748b;
+  color: var(--app-text-soft);
   border-radius: 8px;
   padding: 4px 10px;
   cursor: pointer;
@@ -370,7 +370,7 @@
 
 .markdown-body pre .code-btn-group button:hover {
   background: #f6f2ec;
-  color: #1b1a18;
+  color: var(--app-text);
 }
 
 .markdown-body pre {
@@ -386,7 +386,7 @@
   left: 12px;
   font-size: 16px;
   line-height: 1;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   
 
   padding: 3px 8px;
@@ -495,8 +495,8 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .message-bubble.user {
   width: 100%;
   max-width: 100%;
-  background: #ffffff;
-  color: #1a1a1a;
+  background: var(--app-surface);
+  color: var(--app-text);
   border: 1px solid #e5e7eb;
   padding: 10px 16px;
   border-radius: 10px;
@@ -568,9 +568,9 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 4px 10px;
   font-size: 12px;
   border: 1px solid #ddd6cc;
-  background: #fff;
+  background: var(--app-surface);
   border-radius: 14px;
-  color: #5c4f42;
+  color: var(--app-text);
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
@@ -578,16 +578,16 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .workflow-btn:hover {
   background: #e2e8f0;
   border-color: #cbd5e1;
-  color: #334155;
+  color: var(--app-text);
 }
 .workflow-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .workflow-btn:disabled:hover {
-  background: #fff;
+  background: var(--app-surface);
   border-color: #ddd6cc;
-  color: #5c4f42;
+  color: var(--app-text);
 }
 .workflow-btn:active {
   transform: scale(0.96);
@@ -611,7 +611,7 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   background: #f0ece6;
   border-bottom: 1px solid #e0d8cc;
   font-size: 12px;
-  color: #5c4f42;
+  color: var(--app-text);
 }
 .workflow-progress-bar {
   flex: 1;
@@ -645,12 +645,12 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   width: 100%;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--app-surface);
   margin-bottom: 4px;
   overflow: hidden;
 }
 .agent-step-card.expanded {
-  background: #ffffff;
+  background: var(--app-surface);
 }
 .agent-step-header {
   display: flex;
@@ -673,12 +673,12 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .step-agent-name {
   font-size: 12.5px;
   font-weight: 600;
-  color: #334155;
+  color: var(--app-text);
   flex-shrink: 0;
 }
 .step-summary {
   font-size: 12px;
-  color: #64748b;
+  color: var(--app-text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -687,13 +687,13 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 }
 .step-token-badge {
   font-size: 10.5px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   flex-shrink: 0;
 }
 .step-chev {
   flex-shrink: 0;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   transition: transform 0.15s ease;
 }
 .step-chev.open {
@@ -713,9 +713,9 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 3px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   font-size: 11px;
-  color: #64748b;
+  color: var(--app-text-soft);
   white-space: nowrap;
   display: flex;
   align-items: center;
@@ -741,10 +741,10 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   padding: 3px 9px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.85);
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   font-size: 10.5px;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  color: #64748b;
+  color: var(--app-text-soft);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -761,8 +761,8 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   right: 0;
   left: auto;
   width: 220px;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
   padding: 12px 14px;
@@ -775,11 +775,11 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
   font-size: 12px;
   padding: 3px 0;
 }
-.tup-label { color: #64748b; }
+.tup-label { color: var(--app-text-soft); }
 .tup-value {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
   font-weight: 600;
-  color: #334155;
+  color: var(--app-text);
 }
 .tup-bar {
   width: 100%;
@@ -798,17 +798,17 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .tup-note {
   margin-top: 6px;
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--app-text-faint);
 }
 /* ==================== 上下文用量分类明细卡（仿 Claude） ==================== */
 .tup-header { display: flex; align-items: baseline; justify-content: space-between; }
-.tup-title { font-size: 13px; font-weight: 700; color: #1a1a1a; }
-.tup-total { font-size: 11px; color: #94a3b8; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
-.tup-pct { font-size: 12px; color: #64748b; margin-top: 2px; }
+.tup-title { font-size: 13px; font-weight: 700; color: var(--app-text); }
+.tup-total { font-size: 11px; color: var(--app-text-faint); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.tup-pct { font-size: 12px; color: var(--app-text-soft); margin-top: 2px; }
 .tup-bar { display: flex; width: 100%; height: 6px; border-radius: 3px; background: #f0f0f0; margin: 6px 0 10px; overflow: hidden; }
 .tup-bar-seg { height: 100%; }
 .tup-list { display: flex; flex-direction: column; gap: 4px; }
 .tup-item { display: flex; align-items: center; font-size: 12px; padding: 1px 0; }
 .tup-dot { width: 9px; height: 9px; border-radius: 2px; margin-right: 8px; flex-shrink: 0; }
-.tup-item .tup-label { color: #475569; flex: 1; }
-.tup-item .tup-value { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-weight: 600; color: #334155; }
+.tup-item .tup-label { color: var(--app-text); flex: 1; }
+.tup-item .tup-value { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-weight: 600; color: var(--app-text); }

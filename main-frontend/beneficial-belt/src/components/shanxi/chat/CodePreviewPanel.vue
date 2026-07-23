@@ -50,7 +50,7 @@ watch([() => props.fileContent, () => props.loading], async ([content, isLoading
 .code-preview-panel {
   width: 400px; /* 固定宽度，可调整 */
   height: 100%;
-  border-left: 1px solid #e5e5e5;
+  border-left: 1px solid var(--app-border);
   background: #f8fafc;
   display: flex;
   flex-direction: column;
@@ -63,8 +63,8 @@ watch([() => props.fileContent, () => props.loading], async ([content, isLoading
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
-  border-bottom: 1px solid #e5e5e5;
+  color: var(--app-text-soft);
+  border-bottom: 1px solid var(--app-border);
 }
 .file-name {
   display: flex;
@@ -75,7 +75,7 @@ watch([() => props.fileContent, () => props.loading], async ([content, isLoading
   background: none;
   border: none;
   cursor: pointer;
-  color: #888;
+  color: var(--app-text-soft);
   padding: 2px;
 }
 .panel-body {
@@ -91,7 +91,7 @@ pre {
   line-height: 1.5;
 }
 .loading-state {
-  color: #888;
+  color: var(--app-text-soft);
   font-size: 12px;
   text-align: center;
   padding: 20px;

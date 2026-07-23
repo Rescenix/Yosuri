@@ -2013,7 +2013,7 @@ onMounted(() => {
   left: 16px;             /* 和 input-wrapper 的 padding-left 保持一致 */
   top: 10px;              /* 和 textarea 的 padding-top 保持一致 */
   pointer-events: none;   /* 确保鼠标点击能直接穿透进 textarea */
-  color: #a9a9a9;
+  color: var(--app-text-faint);
   font-size: 15px;
   font-family: inherit;
   z-index: 1;

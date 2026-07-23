@@ -107,8 +107,8 @@ function statusLabel(status) {
   right: 12px;
   width: 380px;
   max-height: min(600px, calc(100vh - 90px));
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 14px;
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.18);
   z-index: 9999;
@@ -121,10 +121,10 @@ function statusLabel(status) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
 }
-.bgpanel-title { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.bgpanel-title { font-size: 14px; font-weight: 700; color: var(--app-text); }
 .bgpanel-close-btn {
   border: none; background: transparent; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
@@ -136,10 +136,10 @@ function statusLabel(status) {
   display: flex;
   align-items: center;
   padding: 8px 14px;
-  border-bottom: 1px solid #ececec;
+  border-bottom: 1px solid var(--app-border-soft);
   flex-shrink: 0;
 }
-.bgpanel-filter { font-size: 12px; color: #a3a3a3; }
+.bgpanel-filter { font-size: 12px; color: var(--app-text-faint); }
 
 .bgpanel-list {
   flex: 1;
@@ -153,7 +153,7 @@ function statusLabel(status) {
   justify-content: center;
   gap: 8px;
   padding: 40px 0;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   font-size: 12.5px;
 }
 
@@ -162,9 +162,9 @@ function statusLabel(status) {
   align-items: flex-start;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 12px;
-  background: #fafafa;
+  background: var(--app-surface-2);
   margin-bottom: 8px;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -175,7 +175,7 @@ function statusLabel(status) {
 .bgtask-desc {
   font-size: 13px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--app-text);
   line-height: 1.4;
   overflow: hidden;
   display: -webkit-box;
@@ -187,14 +187,14 @@ function statusLabel(status) {
   align-items: center;
   gap: 5px;
   font-size: 11.5px;
-  color: #8a8a8a;
+  color: var(--app-text-soft);
   margin-top: 4px;
 }
-.bgtask-meta-row.secondary { color: #a3a3a3; margin-top: 2px; }
+.bgtask-meta-row.secondary { color: var(--app-text-faint); margin-top: 2px; }
 .bgtask-dot { color: #c4c4c4; }
 .bgtask-status-running { color: #c96442; font-weight: 600; }
 .bgtask-status-completed { color: #12b76a; font-weight: 600; }
 .bgtask-status-failed { color: #d94834; font-weight: 600; }
-.bgtask-status-stopped { color: #a3a3a3; font-weight: 600; }
+.bgtask-status-stopped { color: var(--app-text-faint); font-weight: 600; }
 .bgtask-jump-icon { flex-shrink: 0; margin-top: 2px; color: #c4c4c4; }
 </style>

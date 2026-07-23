@@ -126,14 +126,14 @@ function onEditorMount(editor) {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  border-left: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border-left: 1px solid var(--app-border);
 }
 
 .editor-tabs {
   display: flex;
   background: #f3f3f3;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--app-border);
   overflow-x: auto;
   flex-shrink: 0;
 }
@@ -143,21 +143,21 @@ function onEditorMount(editor) {
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
-  color: #333;
+  color: var(--app-text);
   cursor: pointer;
-  border-right: 1px solid #e5e5e5;
+  border-right: 1px solid var(--app-border);
   gap: 8px;
 }
 
 .editor-tab.active {
-  background: #ffffff;
-  color: #000;
+  background: var(--app-surface);
+  color: var(--app-text);
 }
 
 .tab-close {
   background: none;
   border: none;
-  color: #666;
+  color: var(--app-text-soft);
   cursor: pointer;
   padding: 0;
 }
@@ -170,8 +170,8 @@ function onEditorMount(editor) {
 .tab-context-menu {
   position: fixed;
   z-index: 9999;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   display: flex;
@@ -186,10 +186,10 @@ function onEditorMount(editor) {
   background: none;
   font-size: 12px;
   cursor: pointer;
-  color: #475569;
+  color: var(--app-text);
 }
 .tab-context-menu button:hover {
-  background: #f5f5f5;
+  background: var(--app-surface-3);
 }
 
 .editor-container {
@@ -202,8 +202,8 @@ function onEditorMount(editor) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #888;
+  color: var(--app-text-soft);
   font-size: 14px;
-  background: #ffffff;
+  background: var(--app-surface);
 }
 </style>

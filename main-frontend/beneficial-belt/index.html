@@ -11,8 +11,11 @@
       html, body {
         height: 100%;
         margin: 0;
-        background: #ffffff;
-        color: #1b1a1a;
+        /* 用变量并给亮色兜底：这段内联样式在 JS 之前生效，写死白色的话
+           暗色模式下根元素会一直是白的（页面边缘/滚动回弹处会漏白）。
+           useTheme.js 启动后把 --app-bg/--app-text 注到 <html> 上，这里自然跟上。 */
+        background: var(--app-bg, #ffffff);
+        color: var(--app-text, #1b1a1a);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       }
       #app {

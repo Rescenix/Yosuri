@@ -312,7 +312,7 @@ function toolBodyText(b) {
   padding: 3px 0 3px 12px;
   border-left: 2px solid var(--app-border, #e2e8f0);
   font-size: 12px;
-  color: var(--app-text-faint, #94a3b8);
+  color: var(--app-text-faint, var(--app-text-faint));
 }
 .flow-compressed-icon { font-size: 12px; opacity: 0.8; }
 /* 中途插话提示：跟压缩提示同样"轻"，但左侧竖线用强调色——这是用户自己
@@ -325,7 +325,7 @@ function toolBodyText(b) {
   padding: 3px 0 3px 12px;
   border-left: 2px solid var(--app-accent, #6366f1);
   font-size: 12px;
-  color: var(--app-text-faint, #94a3b8);
+  color: var(--app-text-faint, var(--app-text-faint));
 }
 .flow-steer-icon { font-size: 12px; opacity: 0.8; }
 /* 自动预览提示：跟插话提示同款弱化条 */
@@ -337,7 +337,7 @@ function toolBodyText(b) {
   padding: 3px 0 3px 12px;
   border-left: 2px solid var(--app-accent, #6366f1);
   font-size: 12px;
-  color: var(--app-text-faint, #94a3b8);
+  color: var(--app-text-faint, var(--app-text-faint));
   word-break: break-all;
 }
 .flow-preview-icon { font-size: 12px; opacity: 0.8; }
@@ -348,7 +348,7 @@ function toolBodyText(b) {
   gap: 7px;
   padding: 6px 11px;
   border-radius: 9px;
-  background: var(--app-surface-2, #f7f7f8);
+  background: var(--app-surface-2, var(--app-code-bg));
   border: 1px solid var(--app-border-soft, #ededf0);
   cursor: pointer;
   user-select: none;
@@ -361,11 +361,11 @@ function toolBodyText(b) {
 }
 .flow-row-icon { flex-shrink: 0; }
 .icon-think { color: #8b5cf6; }
-.icon-tool { color: #64748b; }
+.icon-tool { color: var(--app-text-soft); }
 .flow-row-preview {
   flex: 1;
   min-width: 0;
-  color: var(--app-text-faint, #9ca3af);
+  color: var(--app-text-faint, var(--app-text-faint));
   font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -386,7 +386,7 @@ function toolBodyText(b) {
 }
 .flow-tool-badge.st-ok { color: #12b76a; background: rgba(18, 183, 106, 0.1); }
 .flow-tool-badge.st-error { color: #d94834; background: rgba(217, 72, 52, 0.1); }
-.flow-tool-badge.st-running { color: #64748b; background: rgba(100, 116, 139, 0.1); }
+.flow-tool-badge.st-running { color: var(--app-text-soft); background: rgba(100, 116, 139, 0.1); }
 .flow-badge-dot {
   width: 6px;
   height: 6px;
@@ -409,8 +409,8 @@ function toolBodyText(b) {
 }
 /* 白光字体表面扫描：只挂在文字 span 上，chevron 留在 clip 外避免被裁重叠 */
 .flow-thinking-text-label {
-  color: #1e293b;
-  background: linear-gradient(100deg, #1e293b 40%, #ffffff 50%, #1e293b 60%);
+  color: var(--app-text);
+  background: linear-gradient(100deg, #1e293b 40%, var(--app-surface) 50%, #1e293b 60%);
   background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -427,7 +427,7 @@ function toolBodyText(b) {
   padding: 2px 0 2px 12px;
   font-size: 13px;
   line-height: 1.7;
-  color: #94a3b8;
+  color: var(--app-text-faint);
   background: transparent;
   border-left: 2px solid rgba(148, 163, 184, 0.35);
   white-space: pre-wrap;
@@ -443,7 +443,7 @@ function toolBodyText(b) {
   margin: 6px 0;
   font-size: 17px;
   line-height: 1.75;
-  color: #1e293b;
+  color: var(--app-text);
   word-break: break-word;
 }
 
@@ -458,7 +458,7 @@ function toolBodyText(b) {
   max-width: 60%;
   font-size: 13.5px;
   line-height: 1.5;
-  color: #334155;
+  color: var(--app-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -480,7 +480,7 @@ function toolBodyText(b) {
 }
 .flow-chevron {
   flex-shrink: 0;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   font-size: 14px;
   transition: transform 0.15s;
   display: inline-block;
@@ -492,9 +492,9 @@ function toolBodyText(b) {
 /* 展开态才出现的白卡片：真正装 Diff / 命令输出的地方 */
 .flow-tool-body {
   margin: 6px 0 2px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--app-surface);
   padding: 8px 12px;
   overflow: hidden;
 }
@@ -514,13 +514,13 @@ function toolBodyText(b) {
   width: 34px;
   text-align: right;
   padding-right: 10px;
-  color: #a3a3a3;
+  color: var(--app-text-faint);
   user-select: none;
 }
 .flow-read-code {
   flex: 1;
   min-width: 0;
-  color: #262626;
+  color: var(--app-text);
   background: transparent;
   white-space: pre-wrap;
   word-break: break-all;
@@ -531,7 +531,7 @@ function toolBodyText(b) {
   overflow: auto;
   font-size: 12px;
   line-height: 1.6;
-  color: #4b4741;
+  color: var(--app-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
   word-break: break-all;

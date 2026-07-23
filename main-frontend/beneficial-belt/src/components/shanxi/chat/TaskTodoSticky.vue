@@ -39,10 +39,12 @@ const doneCount = computed(() => props.items.filter(i => i.status === 'done').le
   max-height: 260px;
   overflow-y: auto;
   padding: 16px 14px 13px;
-  background: #fffdf5;
+  /* 便签是刻意的"纸"，不跟随 --app-surface（那会让它变成普通面板，失去质感）。
+     但暗色下一张纯白纸会非常刺眼，所以单独给一套暗色纸张变量。 */
+  background: var(--sticky-paper, #fffdf5);
   /* 微微的纸张质感 + 轻微旋转,像随手贴的便签 */
   background-image:
-    repeating-linear-gradient(180deg, transparent, transparent 27px, rgba(0, 0, 0, 0.03) 28px);
+    repeating-linear-gradient(180deg, transparent, transparent 27px, var(--sticky-rule, rgba(0, 0, 0, 0.03)) 28px);
   border-radius: 3px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.1);
   transform: rotate(-2deg);
@@ -79,19 +81,19 @@ const doneCount = computed(() => props.items.filter(i => i.status === 'done').le
 .sticky-title {
   font-size: 13.5px;
   font-weight: 700;
-  color: #4a4436;
+  color: var(--sticky-ink, #4a4436);
   letter-spacing: 0.5px;
 }
 .sticky-count {
   font-size: 11px;
-  color: #a89f88;
+  color: var(--sticky-ink-faint, #a89f88);
   font-variant-numeric: tabular-nums;
 }
 /* 空态:便签矮一点、给一句占位 */
 .task-sticky.empty { padding-bottom: 14px; }
 .sticky-empty {
   font-size: 12px;
-  color: #b3a98f;
+  color: var(--sticky-ink-faint, #b3a98f);
   padding: 2px 0 0;
 }
 .sticky-list { list-style: none; margin: 0; padding: 0; }
@@ -102,7 +104,7 @@ const doneCount = computed(() => props.items.filter(i => i.status === 'done').le
   padding: 3px 0;
   font-size: 12.5px;
   line-height: 1.5;
-  color: #5b544a;
+  color: var(--sticky-ink-soft, #5b544a);
 }
 .sticky-check {
   flex-shrink: 0;
@@ -132,12 +134,12 @@ const doneCount = computed(() => props.items.filter(i => i.status === 'done').le
 /* 完成:打勾变绿、文字划掉弱化 */
 .sticky-item.s-done .sticky-check { color: #4caf50; }
 .sticky-item.s-done .sticky-text {
-  color: #a89f88;
+  color: var(--sticky-ink-faint, #a89f88);
   text-decoration: line-through;
   text-decoration-color: rgba(168, 159, 136, 0.6);
 }
 /* 进行中:文字加重 */
-.sticky-item.s-doing .sticky-text { color: #2f2a22; font-weight: 600; }
+.sticky-item.s-doing .sticky-text { color: var(--app-text); font-weight: 600; }
 
 /* 弹入动画 */
 .sticky-pop-enter-active { transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease; }

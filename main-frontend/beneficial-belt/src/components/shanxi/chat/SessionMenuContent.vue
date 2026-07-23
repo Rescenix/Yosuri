@@ -301,7 +301,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: #1f1f1f;
+  color: var(--app-text);
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
@@ -317,7 +317,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   gap: 8px;
   margin: 2px 10px 6px;
   padding: 7px 10px;
-  background: #ffffff;
+  background: var(--app-surface);
   border: 1px solid #e3e3e3;
   border-radius: 10px;
   flex-shrink: 0;
@@ -329,10 +329,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   background: transparent;
   outline: none;
   font-size: 12.5px;
-  color: #1a1a1a;
+  color: var(--app-text);
   font-family: inherit;
 }
-.smc-search-input::placeholder { color: #6b6b6b; }
+.smc-search-input::placeholder { color: var(--app-text-soft); }
 
 .smc-section { flex-shrink: 0; }
 .smc-section-label {
@@ -342,9 +342,9 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   padding: 16px 16px 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #4a4a4a;
+  color: var(--app-text);
 }
-.smc-count { margin-left: auto; font-weight: 400; color: #a3a3a3; font-size: 11px; }
+.smc-count { margin-left: auto; font-weight: 400; color: var(--app-text-faint); font-size: 11px; }
 
 .smc-session-area {
   overflow-y: auto;
@@ -362,8 +362,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 /* 会话行的样式已随分支树迁到 SessionTreeNode.vue（那边用主题变量，暗色模式也对） */
 
 .smc-row-dropdown {
-  background: #ffffff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 12px 28px rgba(0,0,0,0.16);
   padding: 6px 0;
@@ -373,10 +373,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   padding: 7px 14px;
   font-size: 12.5px;
   font-weight: 500;
-  color: #262626;
+  color: var(--app-text);
   cursor: pointer;
 }
-.smc-dropdown-item:hover { background: #f5f5f5; }
+.smc-dropdown-item:hover { background: var(--app-surface-3); }
 .smc-dropdown-item.danger { color: #d94834; }
 
 .fm-footer {
@@ -386,7 +386,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   margin-top: auto;
   padding: 8px 16px 14px;
   font-size: 13px;
-  color: #1a1a1a;
+  color: var(--app-text);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -395,5 +395,5 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   cursor: pointer;
   transition: color 0.15s ease;
 }
-.fm-footer-settings:hover { color: #1a1a1a; }
+.fm-footer-settings:hover { color: var(--app-text); }
 </style>

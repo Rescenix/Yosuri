@@ -46,9 +46,9 @@ defineEmits(['remove'])
   gap: 8px;
   width: 168px;
   padding: 6px 22px 6px 6px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: #fafafa;
+  background: var(--app-surface-2);
   box-sizing: border-box;
 }
 .attach-chip.error { border-color: #f3c9c2; background: #fff5f3; }
@@ -57,12 +57,12 @@ defineEmits(['remove'])
 .attach-chip-icon {
   width: 36px; height: 36px; border-radius: 7px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  background: #ececec; color: #6b6b6b; font-size: 10px; font-weight: 700;
+  background: var(--app-surface-3); color: var(--app-text-soft); font-size: 10px; font-weight: 700;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 .attach-chip-meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.attach-chip-name { font-size: 12px; color: #262626; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attach-chip-status { font-size: 10.5px; color: #a3a3a3; }
+.attach-chip-name { font-size: 12px; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-chip-status { font-size: 10.5px; color: var(--app-text-faint); }
 .attach-chip-status.error { color: #d94834; }
 .attach-chip-remove {
   position: absolute; top: -5px; right: -5px;

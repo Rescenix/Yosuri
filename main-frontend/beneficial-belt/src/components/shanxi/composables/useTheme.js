@@ -9,10 +9,10 @@ const MODE_KEY = 'aurora_mode'        // 亮度：light/dark/system
 // 色板预设：每套只需定义 accent 三件套，中性面由亮度轴提供（见下方常量）。
 // 加几十套主题 = 在此追加一个对象，零 CSS 改动。
 export const THEME_PRESETS = {
-  blue:   { label: '蓝', accent: '#3b82f6', accentHover: '#2563eb', accentSoft: 'rgba(59,130,246,0.12)' },
-  pink:   { label: '粉', accent: '#ec4899', accentHover: '#db2777', accentSoft: 'rgba(236,72,153,0.12)' },
-  purple: { label: '紫', accent: '#a855f7', accentHover: '#9333ea', accentSoft: 'rgba(168,85,247,0.12)' },
-  orange: { label: '橙', accent: '#c96442', accentHover: '#b85737', accentSoft: 'rgba(201,100,66,0.12)' },
+  blue:   { label: 'Azure',  accent: '#3b82f6', accentHover: '#2563eb', accentSoft: 'rgba(59,130,246,0.12)' },
+  pink:   { label: 'Sakura', accent: '#ec4899', accentHover: '#db2777', accentSoft: 'rgba(236,72,153,0.12)' },
+  purple: { label: 'Twilight', accent: '#a855f7', accentHover: '#9333ea', accentSoft: 'rgba(168,85,247,0.12)' },
+  orange: { label: 'Ember',  accent: '#c96442', accentHover: '#b85737', accentSoft: 'rgba(201,100,66,0.12)' },
 }
 
 // 亮度选项（沿用旧 UI 语义）
@@ -28,12 +28,19 @@ const NEUTRAL_LIGHT = {
   text: '#1a1a1a', textSoft: '#6b6b6b', textFaint: '#a3a3a3',
   border: '#e5e5e5', borderSoft: '#ececec', codeBg: '#f7f7f8',
   shadow: '0 24px 64px rgba(0,0,0,0.24)',
+  // 便签是刻意的"纸"，不跟 surface 走（跟了就变成普通面板，纸感没了）。
+  // 但纯白纸在暗色下极其刺眼，所以纸/墨单独一套，随亮度切换。
+  stickyPaper: '#fffdf5', stickyRule: 'rgba(0,0,0,0.03)',
+  stickyInk: '#4a4436', stickyInkSoft: '#5b544a', stickyInkFaint: '#a89f88',
 }
 const NEUTRAL_DARK = {
   bg: '#1e1e20', surface: '#26262a', surface2: '#2b2b30', surface3: '#313136',
   text: '#ececec', textSoft: '#a8a8b0', textFaint: '#76767e',
   border: '#3a3a40', borderSoft: '#34343a', codeBg: '#17171a',
   shadow: '0 24px 64px rgba(0,0,0,0.55)',
+  // 暗色下的"牛皮纸"：暖调深色，保留纸感又不刺眼
+  stickyPaper: '#332f28', stickyRule: 'rgba(255,255,255,0.04)',
+  stickyInk: '#e8e0cf', stickyInkSoft: '#cfc7b5', stickyInkFaint: '#8f8877',
 }
 
 export const theme = ref(THEME_PRESETS[localStorage.getItem(THEME_KEY)] ? localStorage.getItem(THEME_KEY) : 'orange')
@@ -70,6 +77,11 @@ function applyTheme() {
     '--app-border-soft': n.borderSoft,
     '--app-code-bg': n.codeBg,
     '--app-shadow': n.shadow,
+    '--sticky-paper': n.stickyPaper,
+    '--sticky-rule': n.stickyRule,
+    '--sticky-ink': n.stickyInk,
+    '--sticky-ink-soft': n.stickyInkSoft,
+    '--sticky-ink-faint': n.stickyInkFaint,
   }
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v)
 }

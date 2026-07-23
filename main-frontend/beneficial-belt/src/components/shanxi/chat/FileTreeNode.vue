@@ -133,7 +133,7 @@ onUnmounted(() => {
 <style scoped>
 .tree-node {
   display: flex; align-items: center; padding: 4px 8px;
-  cursor: pointer; font-size: 12px; color: #475569;
+  cursor: pointer; font-size: 12px; color: var(--app-text);
   border-radius: 4px; margin: 0 4px;
 }
 .tree-node:hover { background: #e2e8f0; }
@@ -156,8 +156,8 @@ onUnmounted(() => {
 .file-context-menu {
   position: fixed;
   z-index: 9999;
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   display: flex;
@@ -172,7 +172,7 @@ onUnmounted(() => {
   background: none;
   font-size: 12px;
   cursor: pointer;
-  color: #475569;
+  color: var(--app-text);
 }
 .file-context-menu button:hover {
   background: #f1f5f9;
