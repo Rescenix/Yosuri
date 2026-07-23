@@ -65,3 +65,7 @@ opencode/
 
 # Go 构建缓存
 .gocache/
+
+# 临时测试文件
+login-test.html
+test.c
