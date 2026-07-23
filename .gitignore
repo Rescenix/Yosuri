@@ -62,16 +62,6 @@ __pycache__/
 # 工具输出
 .aurora/
 opencode/
-crack/chrome_temp/
 
 # Go 构建缓存
 .gocache/
-
-# Misc
-re1/
-public/
-DESIGN_COLOR_SYSTEM.md
-THIRD_PARTY_NOTICES.md
-.gitignore_global
-
-test.c
