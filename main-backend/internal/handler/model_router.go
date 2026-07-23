@@ -102,6 +102,16 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_cerebras_gpt_oss_120b", Vendor: "Cerebras", Name: "gpt-oss-120b", Endpoint: "https://api.cerebras.ai/v1", Model: "gpt-oss-120b", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 120, Note: "Cerebras 免费档"},
 	{ID: "free_cerebras_zai_glm_4_7", Vendor: "Cerebras", Name: "zai-glm-4.7", Endpoint: "https://api.cerebras.ai/v1", Model: "zai-glm-4.7", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 0, Note: "Cerebras 免费档"},
 
+	// —— 阶跃星辰 StepFun（api.stepfun.com）——
+	// 下面这几个都是拿 STEP_API_KEY 实调 /v1/models + /v1/chat/completions 逐个验证过的：
+	// step-2x-large 在该 key 下返回「does not exist or you do not have access」，故未收录。
+	// ContextWindow 一律留 0：/v1/models 只返回 id/created/owned_by，拿不到窗口大小，
+	// 按本目录「未知者留 0，绝不伪造」的规矩不填。
+	{ID: "free_step_3_7_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.7-flash", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰", Reasoning: true},
+	{ID: "free_step_3_5_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.5-flash", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.5-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰", Reasoning: true},
+	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true},
+	{ID: "free_step_router_v1", Vendor: "阶跃星辰 StepFun", Name: "step-router-v1", Endpoint: "https://api.stepfun.com/v1", Model: "step-router-v1", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（自动选型）"},
+
 	// —— 硅基流动 SiliconFlow（api.siliconflow.cn；代金券余额可用，对终端用户免费）——
 	{ID: "free_sf_zai_org_glm_5_2", Vendor: "硅基流动 SiliconFlow", Name: "GLM-5.2", Endpoint: "https://api.siliconflow.cn/v1", Model: "zai-org/GLM-5.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
 	{ID: "free_sf_moonshotai_kimi_k2_7_code", Vendor: "硅基流动 SiliconFlow", Name: "Kimi-K2.7-Code", Endpoint: "https://api.siliconflow.cn/v1", Model: "moonshotai/Kimi-K2.7-Code", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）"},
