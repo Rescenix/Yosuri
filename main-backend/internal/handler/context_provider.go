@@ -72,6 +72,9 @@ func newWorkflowContextProvider() *contextProvider {
 		sections: []contextSection{
 			// —— 稳定段：进程内基本不变，构成前缀缓存的主体 ——
 			{key: "system", content: agent.MainAgentConfigNative().SystemPrompt, stable: true},
+			// 历史任务的读法必须由系统明说，不能指望模型自己从格式里悟。
+			// 归到 system 桶，几十个 token，但直接决定它会不会回头重做旧任务。
+			{key: "system", content: historyContractPrompt, stable: true},
 			{key: "subagent", content: subAgentUsagePrompt, stable: true},
 			// 工具索引只在 MCP server 增删时变（很少），算稳定段；
 			// 完整 schema 靠 load_tools 按需取，见 tool_ondemand.go。

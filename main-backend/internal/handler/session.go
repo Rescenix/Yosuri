@@ -61,6 +61,9 @@ type persistedMessage struct {
 	ToolCallID       string          `json:"tool_call_id,omitempty"`
 	Model            string          `json:"model,omitempty"`
 	Blocks           []FlowBlock     `json:"blocks,omitempty"`
+	// Status 任务生命周期状态（见 DSMessage.Status）。omitempty：旧存档没有这个字段，
+	// 解出来是空串，由 taskDone 统一按"已完成"解读——旧数据本来就只在成功时才落盘。
+	Status string `json:"status,omitempty"`
 }
 
 // sessionRecord 是单个会话在本地文件里的完整存储形态：
@@ -89,6 +92,7 @@ func toPersistedMessages(msgs []DSMessage) []persistedMessage {
 			ToolCallID:       m.ToolCallID,
 			Model:            m.Model,
 			Blocks:           m.Blocks,
+			Status:           m.Status,
 		}
 	}
 	return out
@@ -106,6 +110,7 @@ func fromPersistedMessages(msgs []persistedMessage) []DSMessage {
 			ToolCallID:       m.ToolCallID,
 			Model:            m.Model,
 			Blocks:           m.Blocks,
+			Status:           m.Status,
 		}
 	}
 	return out

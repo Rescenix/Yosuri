@@ -75,8 +75,14 @@ func TestInvokingBuildsSystemHistoryTask(t *testing.T) {
 	if msgs[0]["role"] != "system" {
 		t.Errorf("首条必须是 system，实得 %v", msgs[0]["role"])
 	}
-	if msgs[1]["content"] != "上一条问题" || msgs[2]["content"] != "上一条回答" {
+	// 历史里的用户消息现在会被打上「已完成」前缀（见 buildChatMessages）：
+	// 不打标的话模型会把旧任务读成待办，收尾时回头重做上一个任务。
+	// 所以这里断言"原文还在"而不是"完全相等"；assistant 回复不打标，仍是全等。
+	if !strings.Contains(msgs[1]["content"].(string), "上一条问题") || msgs[2]["content"] != "上一条回答" {
 		t.Error("会话历史没被带进去——模型会不知道上一条说了什么")
+	}
+	if !strings.HasPrefix(msgs[1]["content"].(string), completedTaskPrefix) {
+		t.Errorf("历史里的用户任务应被标记为已完成，实得 %q", msgs[1]["content"])
 	}
 	last := msgs[len(msgs)-1]
 	if last["role"] != "user" || last["content"] != "本次任务" {

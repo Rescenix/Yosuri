@@ -389,7 +389,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				if content != "" {
 					flowBlocks = append(flowBlocks, FlowBlock{Type: "intent", Text: content})
 				}
-				r.chatHandler.sessionStore.Append(sessionID, DSMessage{Role: "user", Content: task})
+				// 这里是全仓库唯一的历史落盘点，且只在工作流成功收尾时才走到，
+				// 所以落进历史的每条任务按定义都已经结题——显式标出来，别让下一次
+				// 对话把它读成"还没做的待办"（见 taskDone / buildChatMessages）。
+				r.chatHandler.sessionStore.Append(sessionID, DSMessage{
+					Role: "user", Content: task, Status: taskStatusCompleted,
+				})
 				r.chatHandler.sessionStore.Append(sessionID, DSMessage{
 					Role: "assistant", Content: content, Blocks: flowBlocks,
 				})
