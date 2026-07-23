@@ -170,17 +170,21 @@
         <div v-if="isExpanded && !sidebarOpen" class="studio-side-col">
           <div
             class="side-drag"
-            :class="{ dragging: stickyDrag.dragging.value }"
+            :class="{ dragging: stickyDrag.dragging.value, nudged: stickyDrag.offset.value.x || stickyDrag.offset.value.y }"
             :style="{ transform: `translate(${stickyDrag.offset.value.x}px, ${stickyDrag.offset.value.y}px)` }"
+            title="拖动可移动，双击复位"
             @mousedown="stickyDrag.onDown"
+            @dblclick="stickyDrag.reset"
           >
             <TaskTodoSticky :items="todoState.items" />
           </div>
           <div
             class="side-drag studio-side-live2d"
-            :class="{ dragging: live2dDrag.dragging.value }"
+            :class="{ dragging: live2dDrag.dragging.value, nudged: live2dDrag.offset.value.x || live2dDrag.offset.value.y }"
             :style="{ transform: `translate(${live2dDrag.offset.value.x}px, ${live2dDrag.offset.value.y}px)` }"
+            title="拖动可移动，双击复位"
             @mousedown="live2dDrag.onDown"
+            @dblclick="live2dDrag.reset"
           >
             <Live2DWidget />
           </div>
@@ -1234,6 +1238,12 @@ function makeDrag(storageKey) {
   }
   // 把已经存在 localStorage 里的越界位置拉回来。没有这一步的话，
   // 上一个版本拖丢的元素这次仍然在界外，用户永远够不着它。
+  // 复位：清掉偏移回到栏内默认位置。夹回边界只能保证"看得见"，回不到原位——
+  // 拖飞之后被按在工作区边缘的那个位置，既不是用户想要的也不是默认的。
+  function reset() {
+    offset.value = { x: 0, y: 0 }
+    try { localStorage.removeItem(storageKey) } catch { /* 忽略 */ }
+  }
   function rescue(selector) {
     const node = document.querySelector(selector)
     if (!node) return
@@ -1244,7 +1254,7 @@ function makeDrag(storageKey) {
       try { localStorage.setItem(storageKey, JSON.stringify(fixed)) } catch { /* 忽略 */ }
     }
   }
-  return { offset, dragging, onDown, rescue }
+  return { offset, dragging, onDown, rescue, reset }
 }
 const stickyDrag = makeDrag('corner_sticky_offset')
 const live2dDrag = makeDrag('corner_live2d_offset')
