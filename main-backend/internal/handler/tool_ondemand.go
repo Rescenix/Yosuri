@@ -49,7 +49,13 @@ var loadToolsToolDef = core.ToolDefinition{
 // 内置工具已整体退役——主 Agent 靠 load_tools 拉 MCP 工具，子代理直接用 MCP 只读子集（见 subagent.go）。
 // 这几个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
 func nativeWorkflowToolDefs() []core.ToolDefinition {
-	return []core.ToolDefinition{dispatchAgentToolDef, loadToolsToolDef, updateTodoToolDef, readSkillToolDef}
+	return []core.ToolDefinition{
+		dispatchAgentToolDef, loadToolsToolDef, updateTodoToolDef, readSkillToolDef,
+		// harness_status：让模型能问"我上下文里现在有什么、丢了什么、去哪捞"。
+		// 常驻是有意的——正因为它是自省用的，模型需要它的时候恰恰是"感觉不对劲"
+		// 的时候，那时再让它先 load_tools 就晚了。
+		harnessStatusToolDef,
+	}
 }
 
 // firstSentence 取描述的第一句，索引行只要一句话说清用途。
@@ -155,17 +161,47 @@ func handleLoadTools(argsJSON string, activated map[string]bool) (string, bool) 
 		})
 	}
 
+	// 常驻工具被拿来 load 是很常见的一类误解（"是不是所有工具都得先加载"）。
+	// 系统明明知道答案——它已经在工具数组里了——就不该回一句"名字不存在，
+	// 自己去核对索引"把模型支走。直接告诉它可以马上调。
+	var resident []string
+	stillMissing := missing[:0]
+	for _, n := range missing {
+		if isNativeWorkflowTool(n) {
+			resident = append(resident, n)
+		} else {
+			stillMissing = append(stillMissing, n)
+		}
+	}
+
 	var b strings.Builder
 	if len(loaded) > 0 {
 		schemas, _ := json.MarshalIndent(loaded, "", "  ")
 		fmt.Fprintf(&b, "已加载 %d 个工具，现在可以直接调用：\n%s", len(loaded), schemas)
 	}
-	if len(missing) > 0 {
+	if len(resident) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "%s 是常驻工具，不需要加载——它一直就在你的工具列表里，直接调用即可。",
+			strings.Join(resident, "、"))
+	}
+	if len(stillMissing) > 0 {
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
 		}
 		fmt.Fprintf(&b, "以下名字在 MCP 工具索引里不存在：%s\n请对照系统提示词里的索引核对名字。",
-			strings.Join(missing, "、"))
+			strings.Join(stillMissing, "、"))
 	}
 	return b.String(), changed
+}
+
+// isNativeWorkflowTool 判断一个名字是不是常驻工具（无需 load_tools）。
+func isNativeWorkflowTool(name string) bool {
+	for _, t := range nativeWorkflowToolDefs() {
+		if t.Function.Name == name {
+			return true
+		}
+	}
+	return false
 }

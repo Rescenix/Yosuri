@@ -235,8 +235,16 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if len(backends) > 0 {
 		histLimit = historyLimitFor(backends[0].ContextWindow)
 	}
-	history := truncateHistory(r.chatHandler.sessionStore.Get(sessionID), histLimit)
+	fullHistory := r.chatHandler.sessionStore.Get(sessionID)
+	history := truncateHistory(fullHistory, histLimit)
 	msgs := provider.Invoking(history, task)
+
+	// 上下文账本：记下"系统知道、但模型看不见"的事实（历史被截了多少、
+	// 哪些工具输出被腰斩、压缩折叠了几轮），供 harness_status 自省用。
+	ledger := newContextLedger()
+	ledger.noteHistory(len(history), len(fullHistory), histLimit)
+	// 归档目录按 TTL 淘汰，在这里扫一次即可（不再是"任务成功就删本次的全文"）
+	go sweepToolOutputArchive()
 	historyChars := 0
 	for _, m := range msgs {
 		if s, ok := m["content"].(string); ok {
@@ -342,6 +350,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"before_chars":    cr.BeforeChars,
 				"after_chars":     cr.AfterChars,
 			})
+			// 记进账本：折叠掉的轮次原始细节已经不在上下文里了，模型自己看不出来，
+			// 只有被告知才知道"这里有段记忆被换成摘要了"
+			ledger.noteCompaction(compactionEvent{
+				Round: round, FoldedMsgs: cr.FoldedMsgs,
+				BeforeChars: cr.BeforeChars, AfterChars: cr.AfterChars,
+			})
 			log.Printf("🗜️ [压缩] workflow=%s 第 %d 轮：折叠 %d 条消息 %d→%d 字符",
 				workflowID, round, cr.FoldedMsgs, cr.BeforeChars, cr.AfterChars)
 		}
@@ -379,7 +393,6 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 没有工具调用 → 最终回答，收尾
 		if len(calls) == 0 {
 			deleteWorkflowCheckpoint(workflowID)
-			cleanupToolOutputSpills(workflowID)
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "completed", "final_output": content,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
@@ -464,6 +477,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				handled[i] = handleReadSkill(tc.Function.Arguments, loadSkills())
 				continue
 			}
+			// harness_status 是纯自省：读账本，不碰外部世界
+			if tc.Function.Name == harnessStatusToolName {
+				handled[i] = handleHarnessStatus(tc.Function.Arguments, ledger, round,
+					contextBreakdown, activatedToolNames(provider.ActivatedTools()))
+				continue
+			}
 			toRun = append(toRun, calls[i])
 			runIdx = append(runIdx, i)
 		}
@@ -505,7 +524,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			// 进上下文的是压缩版（首尾保留 + 全文落盘）；前端 result 事件给完整输出，
 			// 用户看工具卡片时不该被模型的 token 预算限制视野。
 			full := truncateChars(results[i].output, codeResultMaxChars)
-			out := compactToolOutput(workflowID, tc.ID, results[i].output)
+			out, archived := compactToolOutput(workflowID, tc.ID, tc.Function.Name, results[i].output)
+			ledger.noteArchive(archived)
 			writeCodeSSE(c, "result", map[string]any{
 				"id": tc.ID, "name": tc.Function.Name, "ok": !results[i].failed, "output": full,
 			})
@@ -543,7 +563,6 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 而不是陪它空转到 codeWorkflowMaxRounds。
 		if allBlocked {
 			deleteWorkflowCheckpoint(workflowID)
-			cleanupToolOutputSpills(workflowID)
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "failed", "final_output": "检测到模型重复调用同一工具且无进展，已中止任务。",
 				"input_tokens": inputTokens, "output_tokens": outputTokens,

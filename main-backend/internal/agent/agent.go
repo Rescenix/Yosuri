@@ -23,6 +23,8 @@ const SoulTemplateCodeProtocol = `
 # 策略指南（仅作参考，不影响输出格式）
 - Token 是成本，尽量用最少 token 完成任务。
 - 文件/命令类工具走 MCP，默认不在工具列表里：先用 load_tools 按名字加载，再正常调用。
+  但**只有 mcp__ 开头的工具需要加载**——你工具列表里已经直接可见的那些（dispatch_agent、
+  load_tools、update_todo、read_skill、harness_status）是常驻的，直接调，别再去 load 它们。
 - 读大文件别整篇读进来：用 mcp__grep__read_range 读指定行号区间，或 mcp__fs__read_text_file 的 head/tail 只取首尾。
 - 改代码用 mcp__fs__edit_file：先 read_text_file 拿到精确内容，oldText 从中原样照抄（含缩进/空白/换行），不要凭记忆构造——差一个空白就匹配失败要重试。oldText 还要在文件里唯一。
 - 先用 mcp__grep__grep 搜索定位再动手，避免重复劳动。

@@ -20,7 +20,13 @@ type ToolFunctionDetail struct {
 type ToolParameters struct {
 	Type       string                  `json:"type"`
 	Properties map[string]ToolProperty `json:"properties"`
-	Required   []string                `json:"required"`
+	// omitempty 是必须的：无必填参数的工具（如 harness_status，或 MCP server 透传过来
+	// 的无必填工具）这里是 nil，不加 omitempty 就会序列化成 "required": null，
+	// 而 DeepSeek 的 schema 校验直接拒整个请求：
+	//   400 Invalid schema for function 'x': null is not of type "array"
+	// 后果是整轮降级到备用模型，且报错只在服务端日志里，前端看不出所以然。
+	// JSON Schema 规范里 required 本就是可选字段，省略合法。
+	Required []string `json:"required,omitempty"`
 }
 
 type ToolProperty struct {
