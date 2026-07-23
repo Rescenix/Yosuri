@@ -37,7 +37,7 @@
             @open-settings="showSettings = true"
           />
 
-          <!-- 折叠态：竖向图标条 -->
+          <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
           <template v-else>
             <button class="gem-icon-btn" @click="newSession" title="发起新对话">
               <Icon icon="mdi:pencil-plus-outline" width="18" />
@@ -45,24 +45,17 @@
             <button class="gem-icon-btn" @click="toggleSidebar" title="搜索对话内容">
               <Icon icon="mdi:magnify" width="18" />
             </button>
-            <button class="gem-icon-btn" @click="toggleSidebar" title="项目">
-              <Icon icon="mdi:folder-outline" width="18" />
-            </button>
-            <button class="gem-icon-btn" @click="toggleSidebar" title="附件">
-              <Icon icon="hugeicons:file-attachment" width="18" />
-            </button>
-            <!-- 会话横条：鼠标悬停立刻弹出可点击的会话卡片（不再用原生 title 提示）。
-                 笔记本(置顶)与最近分区。 -->
+            <!-- 会话横条：当前项目下会话在上，其他在下 -->
             <div
               class="gem-rail-sessions"
               @mouseenter="openRailCard"
               @mouseleave="closeRailCardDelayed"
             >
-              <template v-if="railPinned.length">
+              <template v-if="railProject.length">
                 <button
-                  v-for="s in railPinned"
+                  v-for="s in railProject"
                   :key="s.id"
-                  class="gem-rail-bar pinned"
+                  class="gem-rail-bar"
                   :class="{ active: s.id === activeSession, running: s.id === runningSession }"
                   @click="selectSession(s.id)"
                 ></button>
@@ -80,7 +73,7 @@
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
-              <div class="gem-rail-avatar" title="Prometheus · Pro">P</div>
+              <div class="gem-rail-avatar" :title="currentWorkDir.name">{{ (currentWorkDir.name || '?').charAt(0).toUpperCase() }}</div>
             </div>
 
             <!-- 悬停会话卡片：贴着折叠栏右侧弹出，整行可点击切换会话。
@@ -93,20 +86,19 @@
                 @mouseenter="openRailCard"
                 @mouseleave="closeRailCardDelayed"
               >
-                <template v-if="railPinned.length">
-                  <div class="rail-card-label">笔记本</div>
-                  <button
-                    v-for="s in railPinned"
-                    :key="s.id"
-                    class="rail-card-row"
-                    :class="{ active: s.id === activeSession }"
-                    @click="onRailCardSelect(s.id)"
-                  >
-                    <span class="rail-card-mark pinned" :class="{ running: s.id === runningSession }"></span>
-                    <span class="rail-card-name">{{ s.name }}</span>
-                  </button>
-                </template>
-                <div class="rail-card-label">最近</div>
+                <div class="rail-card-label">{{ currentWorkDir.name || '最近' }}</div>
+                <button
+                  v-for="s in railProject"
+                  :key="s.id"
+                  class="rail-card-row"
+                  :class="{ active: s.id === activeSession }"
+                  @click="onRailCardSelect(s.id)"
+                >
+                  <span class="rail-card-mark" :class="{ running: s.id === runningSession }"></span>
+                  <span class="rail-card-name">{{ s.name }}</span>
+                </button>
+                <div v-if="railRecent.length" class="rail-card-divider"></div>
+                <div class="rail-card-label">其他</div>
                 <button
                   v-for="s in railRecent"
                   :key="s.id"
@@ -770,7 +762,8 @@ async function loadSessionList() {
     // parentId/forkIndex 是侧栏拼分支树用的血缘（后端 SessionInfo 带下来，根会话为空）
     const real = (data || []).map(s => ({
       id: s.id, name: shortTitle(s.title),
-      parentId: s.parent_id || '', forkIndex: s.fork_index || 0, updatedAt: s.updated_at
+      parentId: s.parent_id || '', forkIndex: s.fork_index || 0, updatedAt: s.updated_at,
+      workdir: getSessionWorkdir(s.id)
     }))
     // 当前会话哪怕还一条消息都没有（刚新建/刚打开应用）也要出现在列表里，
     // 不然侧栏在"发第一条消息之前"会看不到自己正在哪个会话上。
@@ -790,9 +783,31 @@ function selectSession(id) {
   switchSession(id)
   loadSessionList()
 }
+// ==================== 工作目录 → 会话分组 ====================
+const WD_MAP_KEY = 'shanxi_session_workdir'
+
+function loadWorkdirMapping() {
+  try { return JSON.parse(localStorage.getItem(WD_MAP_KEY) || '{}') } catch { return {} }
+}
+function saveWorkdirMapping(m) {
+  try { localStorage.setItem(WD_MAP_KEY, JSON.stringify(m)) } catch {}
+}
+function getSessionWorkdir(sid) {
+  return loadWorkdirMapping()[sid] || ''
+}
+function recordSessionWorkdir(sid) {
+  const wd = currentWorkDir.value?.name?.trim()
+  if (!wd) return
+  const m = loadWorkdirMapping()
+  m[sid] = wd
+  saveWorkdirMapping(m)
+}
+
 function newSession() {
   const id = 'sess_' + Date.now().toString(36)
   sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0 }, ...sessionList.value]
+  // 记录当前工作目录到会话映射
+  recordSessionWorkdir(id)
   switchSession(id)
 }
 // 重命名目前只改侧栏显示，不持久化到后端——SessionStore 的标题是从首条用户消息
@@ -808,6 +823,10 @@ async function deleteSession(id) {
   } catch (e) {
     console.warn('删除会话失败', e)
   }
+  // 清理 workdir 映射
+  const wm = loadWorkdirMapping()
+  delete wm[id]
+  saveWorkdirMapping(wm)
   // 重新拉而不是本地 filter：被删会话的分支在后端会被提升为根会话，
   // 本地 filter 的话那些分支还挂着指向已删父会话的 parentId，在树里会变成孤儿
   await loadSessionList()
@@ -1442,7 +1461,6 @@ function selectModel(value) { selectedModel.value = value; localStorage.setItem(
 const showSettings = ref(false)
 function onSettingsClosed() {
   showSettings.value = false
-  // 设置面板改动（填 key/加配置）后重载后端模型列表，下拉立即反映真实模型，无需刷新页面。
   loadModelCapabilities()
 }
 
@@ -1675,7 +1693,6 @@ const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
   localStorage.setItem('sidebarOpen', sidebarOpen.value ? '1' : '0')
-  if (!sidebarOpen.value) refreshPinnedRail() // 进折叠态时同步最新置顶分区
 }
 
 // 便签/看板娘这一列是 v-if 挂上去的，出现之后才量得到尺寸；此时把上个版本
@@ -1693,16 +1710,22 @@ onMounted(() => {
     nextTick(watchSideColResize)
   }
 })
-// 折叠态会话横条：笔记本(置顶) 与 最近 分两区，悬浮 title 显示会话名。
-// 置顶 id 由 SessionMenuContent 写在 localStorage('pinnedSessions')，这里读来分区，
-// 折叠切换时刷新一次（置顶操作只发生在展开态，折叠时读到的就是最新的）。
-const pinnedIdsRail = ref([])
-function refreshPinnedRail() {
-  try { pinnedIdsRail.value = JSON.parse(localStorage.getItem('pinnedSessions') || '[]') } catch { pinnedIdsRail.value = [] }
+// 折叠态会话横条：当前项目会话在上，其他在下。
+// workdir 由 localStorage('shanxi_session_workdir') 映射管理。
+function getCurrentWorkdirName() {
+  return currentWorkDir.value?.name?.trim() || ''
 }
-onMounted(refreshPinnedRail)
-const railPinned = computed(() => sessionList.value.filter(s => pinnedIdsRail.value.includes(s.id)))
-const railRecent = computed(() => sessionList.value.filter(s => !pinnedIdsRail.value.includes(s.id)).slice(0, 10))
+const currentWorkdirName = computed(getCurrentWorkdirName)
+const railProject = computed(() => {
+  const wd = getCurrentWorkdirName()
+  if (!wd) return []
+  return sessionList.value.filter(s => s.workdir === wd).slice(0, 10)
+})
+const railRecent = computed(() => {
+  const wd = getCurrentWorkdirName()
+  if (!wd) return sessionList.value.slice(0, 10)
+  return sessionList.value.filter(s => s.workdir !== wd).slice(0, 10)
+})
 
 // 悬停横条弹出的会话卡片：立刻打开（无延迟），移开留 160ms 缓冲，
 // 让鼠标能从横条平移到卡片上而不闪断。卡片自身也挂同一对进入/离开处理。
