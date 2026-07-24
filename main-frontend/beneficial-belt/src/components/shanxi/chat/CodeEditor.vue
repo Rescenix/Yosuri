@@ -113,7 +113,10 @@ const editorOptions = {
   automaticLayout: true,
   fontSize: 13,
   tabSize: 2,
-  wordWrap: 'on'
+  wordWrap: 'on',
+  cursorStyle: 'line',
+  cursorWidth: 2,
+  cursorBlinking: 'blink'
 }
 
 function onEditorMount(editor) {
@@ -195,6 +198,16 @@ function onEditorMount(editor) {
 .editor-container {
   flex: 1;
   overflow: hidden;
+  cursor: text;
+}
+.editor-container :deep(.monaco-editor) {
+  cursor: text;
+}
+.editor-container :deep(.monaco-editor .cursor) {
+  background: var(--app-accent) !important;
+}
+.editor-container :deep(.monaco-editor .view-lines) {
+  cursor: text;
 }
 
 .editor-placeholder {

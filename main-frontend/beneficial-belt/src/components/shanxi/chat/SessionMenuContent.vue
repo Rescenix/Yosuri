@@ -46,7 +46,6 @@
     <div class="smc-section">
       <div class="smc-section-label">
         <span>任务列表</span>
-        <span class="smc-count">{{ taskGroups.length }} 组</span>
       </div>
       <div class="smc-session-area">
         <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="wd-group" :class="{ open: isGroupOpen(grp.name) }">

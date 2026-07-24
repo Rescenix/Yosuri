@@ -11,6 +11,8 @@
         <div class="settings-modal-body">
           <!-- 左侧边栏 -->
           <div class="settings-sidebar">
+            <button class="settings-tab" :class="{ on: activeTab === 'models' }" @click="activeTab = 'models'">
+              <Icon icon="mdi:brain" width="16" />模型</button>
             <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'">
               <Icon icon="mdi:server-network-outline" width="16" />提供方</button>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
@@ -25,6 +27,58 @@
 
           <!-- 右侧内容区 -->
           <div class="settings-content">
+            <!-- ========== 模型 ========== -->
+            <div v-show="activeTab === 'models'" class="settings-panel">
+              <div class="settings-section-title">模型配置</div>
+              <div class="settings-section-desc">
+                统一模型：一个模型同时处理对话与识图。分开配置：文字对话、识图分析各用各的模型
+                （比如聊天走云端大模型、识图走本地 llama.cpp）。候选来自「提供方」里选为可用的模型。
+              </div>
+
+              <div class="param-row">
+                <span class="param-label">配置方式</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: modelMode === 'unified' }" type="button" @click="setModelMode('unified')">统一模型</button>
+                  <button class="seg-btn" :class="{ on: modelMode === 'split' }" type="button" @click="setModelMode('split')">分开配置</button>
+                </div>
+              </div>
+
+              <template v-if="modelMode === 'unified'">
+                <div class="param-row">
+                  <span class="param-label">主模型</span>
+                  <select class="model-select" v-model="unifiedModelDraft" @change="setUnifiedModel(unifiedModelDraft)">
+                    <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
+                    <option v-for="m in chatList" :key="m.value" :value="m.value">
+                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}
+                    </option>
+                  </select>
+                </div>
+                <div class="settings-section-desc" style="margin-top:6px">
+                  标注“识图”的模型支持视觉分析；未标注的模型不处理图片。
+                </div>
+              </template>
+
+              <template v-else>
+                <div class="param-row">
+                  <span class="param-label">文字模型</span>
+                  <select class="model-select" v-model="textModelDraft" @change="setTextModel(textModelDraft)">
+                    <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
+                    <option v-for="m in chatList" :key="m.value" :value="m.value">{{ m.label }}</option>
+                  </select>
+                </div>
+                <div class="param-row">
+                  <span class="param-label">识图模型</span>
+                  <select class="model-select" v-model="visionModelDraft" @change="setVisionModel(visionModelDraft)">
+                    <option v-if="!visionCapableChatList.length" value="">未配置识图模型</option>
+                    <option v-for="m in visionCapableChatList" :key="m.value" :value="m.value">{{ m.label }}</option>
+                  </select>
+                </div>
+                <div v-if="!visionCapableChatList.length" class="settings-section-desc" style="margin-top:6px">
+                  未检测到可用识图模型。本地模型需确保 llama-server 已启动且模型文件存在；云端模型请到「提供方」选择。
+                </div>
+              </template>
+            </div>
+
             <!-- ========== 提供方 ========== -->
             <div v-show="activeTab === 'providers'" class="settings-panel">
               <div class="settings-section-title">免费模型提供商</div>
@@ -295,7 +349,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
@@ -407,6 +461,9 @@ const isNew = ref(false)
 const vendorGroups = computed(() => {
   const map = new Map()
   for (const fm of freeModels.value) {
+    // 本地模型（llama.cpp / Local=true）不放在提供方里手动勾选，
+    // 而是自动进入识图模型候选，做到"下载即用"。
+    if (fm.local) continue
     const v = fm.vendor || '其他'
     if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false })
     const g = map.get(v)
@@ -564,6 +621,67 @@ const chatList = chatModelList
 function loadChatList() {
   syncChatModelList()
 }
+
+// ============ 模型：统一 / 分开配置（文字 vs 识图） ============
+// 纯 localStorage 读写，跟 agentMode（Yolo/Ask）同一套轻量约定——不用共享 store，
+// 因为只有 ChatWidget 发送图片时才需要读一次（见 attachImageFile），不需要跨组件响应式。
+const MODEL_MODE_KEY = 'modelMode'
+const VISION_MODEL_KEY = 'visionModel'
+const modelMode = ref(localStorage.getItem(MODEL_MODE_KEY) === 'split' ? 'split' : 'unified')
+// 统一模式复用 selectedModel（跟 ChatWidget 顶部模型下拉同一个 key，改这里 = 改那里）；
+// 分开模式下文字模型也是 selectedModel，只是识图另配一个 visionModel。
+const unifiedModelDraft = ref(localStorage.getItem('selectedModel') || '')
+const textModelDraft = ref(localStorage.getItem('selectedModel') || '')
+const visionModelDraft = ref(localStorage.getItem(VISION_MODEL_KEY) || '')
+
+function setModelMode(mode) {
+  modelMode.value = mode
+  localStorage.setItem(MODEL_MODE_KEY, mode)
+}
+function setUnifiedModel(id) {
+  if (!id) return
+  localStorage.setItem('selectedModel', id)
+  textModelDraft.value = id // 切回分开配置时文字模型不用重选
+}
+function setTextModel(id) {
+  if (!id) return
+  localStorage.setItem('selectedModel', id)
+}
+function setVisionModel(id) {
+  localStorage.setItem(VISION_MODEL_KEY, id || '')
+}
+
+// id → 是否支持识图，合并免费池 + 自定义配置两个来源（/api/models/config 都带 vision 字段）
+const visionByID = computed(() => {
+  const map = {}
+  for (const fm of freeModels.value) map[fm.id] = !!fm.vision
+  for (const c of configs.value) map[c.id] = !!c.vision
+  return map
+})
+// 识图模型候选：用户手动在提供方里选的识图模型 + 本地模型（自动加入，无需勾选）。
+const visionCapableChatList = computed(() => {
+  const manual = chatList.value.filter(m => visionByID.value[m.value])
+  const locals = freeModels.value
+    .filter(fm => fm.local && fm.vision)
+    .map(fm => ({ label: fm.name, value: fm.id }))
+  return [...manual, ...locals]
+})
+
+// 当用户没有显式选过识图模型，且当前有可用识图模型时，自动默认选中第一个。
+// 本地模型优先级最高：用户下载了本地模型，就默认用它识图。
+watch(visionCapableChatList, (list) => {
+  if (!visionModelDraft.value && list.length) {
+    // 优先本地模型；没有本地模型时取第一个可用识图模型。
+    const local = list.find(m => {
+      const fm = freeModels.value.find(f => f.id === m.value)
+      return fm && fm.local
+    })
+    const pick = local || list[0]
+    visionModelDraft.value = pick.value
+    localStorage.setItem(VISION_MODEL_KEY, pick.value)
+  }
+}, { immediate: true })
+
 function isInChatList(value) {
   return chatList.value.some(m => m.value === value)
 }
@@ -791,6 +909,14 @@ onUnmounted(() => {
 .inline-refresh:hover { background: var(--app-surface-3); }
 .spin { animation: sm-spin 0.9s linear infinite; }
 @keyframes sm-spin { to { transform: rotate(360deg); } }
+
+.model-select {
+  margin-left: auto; max-width: 320px; flex: 1;
+  font-size: 12.5px; color: var(--app-text); background: var(--app-surface-2);
+  border: 1px solid var(--app-border); border-radius: 7px; padding: 6px 10px;
+  cursor: pointer;
+}
+.model-select:focus { outline: none; border-color: var(--app-accent); }
 
 .model-pick-btn {
   flex-shrink: 0; margin-left: auto; padding: 3px 12px; font-size: 12px; font-weight: 600;

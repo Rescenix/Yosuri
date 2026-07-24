@@ -208,17 +208,12 @@
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" title="预览">
                 <Icon icon="mage:preview" width="17" color="#6b6b6b" />
               </button>
-              <button class="header-icon-btn" :class="{ active: showBackgroundTasks }" @click.stop="showBackgroundTasks = !showBackgroundTasks" title="后台任务">
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('tasks') }" @click.stop="toggleDockPanel('tasks')" title="后台任务">
                 <Icon icon="mdi:task-minus" width="17" color="#6b6b6b" />
               </button>
-              <div class="header-more-wrap">
-                <button class="header-icon-btn" @click.stop="showMoreMenu = !showMoreMenu" title="更多">
-                  <Icon icon="mdi:dots-vertical" width="18" color="#6b6b6b" />
-                </button>
-                <div v-if="showMoreMenu" class="more-menu-dropdown" @click.stop>
-                  <div class="more-menu-item disabled">更多功能开发中</div>
-                </div>
-              </div>
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('file') }" @click.stop="toggleDockPanel('file')" title="文件">
+                <Icon icon="mdi:file-code-outline" width="17" color="#6b6b6b" />
+              </button>
             </div>
 
 
@@ -682,41 +677,58 @@
           </div>
 
           <!-- ★ AIStudio 右：多面板停靠 -->
-          <aside class="tool-panel" v-if="isExpanded && dockPanels.length" :style="{ width: dockWidth + 'px' }">
+          <aside class="tool-panel tool-panel-tabbed" v-if="isExpanded && dockPanels.length" :style="{ width: dockWidth + 'px' }">
             <div class="tool-dock-resize-handle" @mousedown="startDockWidthDrag"></div>
-            <template v-for="(panelKey, panelIdx) in dockPanels" :key="panelKey">
-              <div class="tool-dock-pane" :style="{ flex: (dockRatios[panelKey] || 0) + ' 1 0%' }">
-                <button class="tool-dock-pane-close" @click="closeDockPanel(panelKey)" title="关闭">
-                  <Icon icon="mdi:close" width="14" color="#a3a3a3" />
+            <div class="tool-dock-tabs">
+              <button
+                v-for="panelKey in dockPanels"
+                :key="panelKey"
+                class="tool-dock-tab"
+                :class="{ active: activeDockPanel === panelKey }"
+                @click="setActiveDockPanel(panelKey)"
+                :title="dockPanelLabel(panelKey)"
+              >
+                <Icon :icon="dockPanelIcon(panelKey)" width="14" class="tool-dock-tab-icon" />
+                <span class="tool-dock-tab-label">{{ dockPanelLabel(panelKey) }}</span>
+                <span class="tool-dock-tab-close" @click.stop="closeDockPanel(panelKey)">
+                  <Icon icon="mdi:close" width="12" />
+                </span>
+              </button>
+              <div class="tool-dock-tab-actions">
+                <button class="tool-dock-tab-add" @click.stop="toggleDockAddMenu" title="新建工具标签页">
+                  <Icon icon="mdi:plus" width="16" />
                 </button>
-                <div class="tool-dock-pane-body">
-                  <DiffPanel v-if="panelKey === 'diff'" />
-                  <Terminal v-else-if="panelKey === 'terminal'" class="tool-panel-terminal" :open="true" :embedded="true" />
-                  <PreviewBrowser v-else-if="panelKey === 'preview'" />
+                <div v-if="showDockAddMenu" class="tool-dock-add-menu">
+                  <button
+                    v-for="option in dockPanelOptions"
+                    :key="option.key"
+                    class="tool-dock-add-item"
+                    @click="openDockPanel(option.key)"
+                  >
+                    <span class="tool-dock-add-item-left">
+                      <Icon :icon="option.icon" width="15" />
+                      <span>{{ option.label }}</span>
+                    </span>
+                    <span v-if="dockPanels.includes(option.key)" class="tool-dock-add-badge">已打开</span>
+                  </button>
                 </div>
               </div>
-              <div
-                v-if="panelIdx < dockPanels.length - 1"
-                class="tool-dock-split-handle"
-                @mousedown="(e) => startDockSplitDrag(panelIdx, panelIdx + 1, e)"
-              ></div>
-            </template>
+            </div>
+            <div class="tool-dock-pane tool-dock-pane-single">
+              <div class="tool-dock-pane-body">
+                <DiffPanel v-if="activeDockPanel === 'diff'" />
+                <Terminal v-else-if="activeDockPanel === 'terminal'" class="tool-panel-terminal" :open="true" :embedded="true" />
+                <PreviewBrowser v-else-if="activeDockPanel === 'preview'" />
+                <FileToolPanel v-else-if="activeDockPanel === 'file'" :embedded="true" />
+                <BackgroundTasksPanel v-else-if="activeDockPanel === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" />
+              </div>
+            </div>
           </aside>
         </div>
       </div>
       </div>
 
-      <!-- 后台任务悬浮面板：作为 chat-window 的直接子元素挂载，避开 chat-main 的
-           transform 造成的包含块，保证 position:fixed/absolute 能相对整个窗口定位 -->
-      <BackgroundTasksPanel
-        v-if="showBackgroundTasks"
-        :tasks="backgroundTaskList"
-        @close="showBackgroundTasks = false"
-        @select-task="jumpToGroup"
-      />
-
       <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
-
       <div v-if="gitActionMessage" class="git-action-toast">{{ gitActionMessage }}</div>
 
       <!-- Git Commit 的毛玻璃浮层：居中悬浮，跟侧边栏抽屉一样挂在 chat-window 根下
@@ -760,10 +772,11 @@ import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
 import UserMessageRail from './UserMessageRail.vue'
 import { useChatWidget } from './useChatWidget.js'
-import { useResizableWidth, useResizableSplit } from './useResizable.js'
+import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
 import SettingsModal from './SettingsModal.vue'
+import FileToolPanel from './FileToolPanel.vue'
 import DiffPanel from './DiffPanel.vue'
 import { parseToolArgs } from './toolArgs.js'
 import Terminal from './Terminal.vue'
@@ -843,7 +856,15 @@ function saveWorkdirMapping(m) {
   try { localStorage.setItem(WD_MAP_KEY, JSON.stringify(m)) } catch {}
 }
 function getSessionWorkdir(sid) {
-  return loadWorkdirMapping()[sid] || ''
+  const mapped = loadWorkdirMapping()[sid]
+  if (mapped) return mapped
+  const fallback = currentWorkDir.value?.name?.trim() || ''
+  if (fallback) {
+    const m = loadWorkdirMapping()
+    m[sid] = fallback
+    saveWorkdirMapping(m)
+  }
+  return fallback
 }
 function recordSessionWorkdir(sid) {
   const wd = currentWorkDir.value?.name?.trim()
@@ -967,27 +988,58 @@ const currentCapability = computed(() => {
 
 // ==================== 右侧工具面板（多面板停靠） ====================
 const dockPanels = ref([])
+const activeDockPanel = ref('')
 const dockWidth = ref(380)
 const { startDrag: startDockWidthDrag } = useResizableWidth(dockWidth, { min: 300, max: 720, edge: 'left', persistKey: 'dockWidth' })
-const { ratios: dockRatios, startDragBetween: startDockSplitDrag } = useResizableSplit(dockPanels, { min: 0.15 })
-
-const DOCK_PANEL_LABELS = { diff: 'Diff', terminal: '终端', preview: '预览' }
-function dockPanelLabel(key) { return DOCK_PANEL_LABELS[key] || key }
+const showDockAddMenu = ref(false)
+const DOCK_PANEL_META = {
+  diff: { label: 'Diff', icon: 'proicons:diff' },
+  terminal: { label: '终端', icon: 'ri:terminal-line' },
+  preview: { label: '预览', icon: 'mage:preview' },
+  file: { label: '文件', icon: 'mdi:file-code-outline' },
+  tasks: { label: '任务', icon: 'mdi:task-minus' }
+}
+const dockPanelOptions = Object.entries(DOCK_PANEL_META).map(([key, meta]) => ({ key, ...meta }))
+function dockPanelLabel(key) { return DOCK_PANEL_META[key]?.label || key }
+function dockPanelIcon(key) { return DOCK_PANEL_META[key]?.icon || 'mdi:application-outline' }
+function ensureActiveDockPanel() {
+  if (!dockPanels.value.length) {
+    activeDockPanel.value = ''
+    showDockAddMenu.value = false
+    return
+  }
+  if (!dockPanels.value.includes(activeDockPanel.value)) {
+    activeDockPanel.value = dockPanels.value[dockPanels.value.length - 1]
+  }
+}
+function setActiveDockPanel(key) {
+  activeDockPanel.value = key
+}
+function openDockPanel(key) {
+  if (!dockPanels.value.includes(key)) dockPanels.value = [...dockPanels.value, key]
+  activeDockPanel.value = key
+  showDockAddMenu.value = false
+}
 function toggleDockPanel(key) {
-  const idx = dockPanels.value.indexOf(key)
-  dockPanels.value = idx === -1 ? [...dockPanels.value, key] : dockPanels.value.filter(k => k !== key)
+  if (activeDockPanel.value === key && dockPanels.value.includes(key)) {
+    closeDockPanel(key)
+    return
+  }
+  openDockPanel(key)
 }
 function closeDockPanel(key) {
   dockPanels.value = dockPanels.value.filter(k => k !== key)
+  ensureActiveDockPanel()
+}
+function toggleDockAddMenu() {
+  showDockAddMenu.value = !showDockAddMenu.value
 }
 
 // agent 改了前端文件 → 后端推 preview_open → 这里把预览面板挂进 dock。
 // 刻意不用 toggleDockPanel：那是"开关"语义，面板已经开着的时候会被它关掉，
 // 正好跟"自动打开"相反。导航到具体地址由 PreviewBrowser 自己 watch 同一个源。
 watch(() => previewRequest.seq, () => {
-  if (!dockPanels.value.includes('preview')) {
-    dockPanels.value = [...dockPanels.value, 'preview']
-  }
+  openDockPanel('preview')
 })
 
 // Diff 面板已改为 git 工作树全量 diff（DiffPanel 自己拉 /api/git/working-diff），
@@ -1512,6 +1564,10 @@ const showSettings = ref(false)
 function onSettingsClosed() {
   showSettings.value = false
   loadModelCapabilities()
+  // 设置面板「模型」页的统一模式直接写 localStorage('selectedModel')（跟这里同一个 key），
+  // 不经过本组件的 selectModel()，所以关闭时要主动拉回来，否则顶部下拉还显示旧值。
+  const persisted = localStorage.getItem('selectedModel')
+  if (persisted && persisted !== selectedModel.value) selectedModel.value = persisted
 }
 
 // ==================== 底部工具条：Yolo 模式 + "+" 附加菜单 + Command 切换器 ====================
@@ -1735,8 +1791,6 @@ if (!debugReasoning.value) onEffortChange() // 首次没设置过时落一个默
 
 // ==================== UI 状态 ====================
 const showParams = ref(false)
-const showMoreMenu = ref(false)
-const showBackgroundTasks = ref(false)
 
 // ==================== 左侧 Gemini 风侧栏：展开 vs 折叠竖条 ====================
 const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
@@ -1861,10 +1915,17 @@ function onRailCardSelect(id) {
 // 修掉"新会话回到首页还挂着上个会话工具弹窗"的 bug。仅内存级（刷新清零）。
 const dockPanelsBySession = {}
 watch(() => sessionId.value, (nid, oid) => {
-  if (oid) dockPanelsBySession[oid] = [...dockPanels.value]
-  dockPanels.value = [...(dockPanelsBySession[nid] || [])]
-  showBackgroundTasks.value = false
-  showMoreMenu.value = false
+  if (oid) {
+    dockPanelsBySession[oid] = {
+      panels: [...dockPanels.value],
+      active: activeDockPanel.value
+    }
+  }
+  const saved = dockPanelsBySession[nid] || { panels: [], active: '' }
+  dockPanels.value = [...saved.panels]
+  activeDockPanel.value = saved.active
+  ensureActiveDockPanel()
+  showDockAddMenu.value = false
 })
 
 // 消息流里每个 kind:'group' 的组件实例，供后台任务清单点击跳转+展开用
@@ -1873,7 +1934,6 @@ function setGroupRef(id, el) {
   if (el) groupRefs[id] = el
 }
 function jumpToGroup(id) {
-  showBackgroundTasks.value = false
   nextTick(() => {
     groupRefs[id]?.expand()
     document.getElementById('group-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -1931,10 +1991,13 @@ function fileToBase64(file) {
     reader.readAsDataURL(file)
   })
 }
-// 粘贴图片跟"+"菜单选图走同一条路：先当附件加进 attachments（复用 attachImageFile
-// 的分析逻辑），分析完直接自动发送——保留"粘贴即发"的原有习惯，但气泡里现在是
-// 一张缩略图 chip + 用户自己敲的话，不再是整段 Gemini 分析原文糊在消息正文里
-async function handlePaste(e) {
+// 粘贴图片跟"+"菜单选图走同一条路：只当附件加进 attachments（复用 attachImageFile
+// 的分析逻辑），发不发由用户自己按发送/回车决定。之前这里分析一完成就无条件
+// handleSend()——分析本身是异步的（本地 llama.cpp 在小显存卡上可能要几十秒），
+// 用户趁等待打字问问题时，分析一结束就把这句话连同图一起抢发出去，用户根本没
+// 机会确认。跟"+"菜单选图（onAttachFilesSelected）保持一致："先附加，用户自己
+// 决定何时发送"，不再有这个隐藏的自动发送时机。
+function handlePaste(e) {
   const items = e.clipboardData?.items
   if (!items) return
   let imageFile = null
@@ -1944,8 +2007,7 @@ async function handlePaste(e) {
   if (!imageFile) return
   e.preventDefault()
   if (flowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
-  await attachImageFile(imageFile)
-  handleSend()
+  attachImageFile(imageFile)
 }
 
 // ==================== "+" 附加菜单：添加文件/照片、添加文件夹 ====================
@@ -1973,8 +2035,13 @@ function removeAttachment(id) {
   const [removed] = attachments.value.splice(idx, 1)
   if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl)
 }
+// 只清空输入框上方的待发送 chip 列表，不 revoke blob URL——
+// 唯一调用点在 handleSend()，此时这些 URL 已经被浅拷贝进 displayAttachments 塞进了
+// 消息气泡（见下方 handleSend），气泡要一直能显示缩略图。之前这里连 URL 一起撤销，
+// 气泡里的图片发出去那一刻就变裂图标（浅拷贝复制的是同一个 blob URL 字符串，撤销
+// 是全局生效的，不是"给这个数组用的"就不影响别处）。真正要撤销 URL 的场景是用户
+// 发送前点掉某个附件（removeAttachment），那时确实再没人会用到这张图了。
 function clearAttachments() {
-  for (const a of attachments.value) { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl) }
   attachments.value = []
 }
 const hasPendingAttachments = computed(() => attachments.value.some(a => a.status === 'analyzing'))
@@ -1985,10 +2052,16 @@ async function attachImageFile(file) {
   attachments.value.push({ id, kind: 'image', name: file.name, status: 'analyzing', previewUrl })
   try {
     const base64 = await fileToBase64(file)
+    // 设置面板「模型」页：统一模式下主模型兼管识图，分开模式下用单独配的识图模型；
+    // 未配置时会默认使用首个可用的识图模型（本地 llama.cpp / GLM-5.2 / Kimi 等）。
+    const modelMode = localStorage.getItem('modelMode') === 'split' ? 'split' : 'unified'
+    const visionModel = modelMode === 'split'
+      ? (localStorage.getItem('visionModel') || '')
+      : (localStorage.getItem('selectedModel') || '')
     const res = await fetch('/api/aether/vision-preprocess', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_base64: base64, mime_type: file.type || 'image/png' })
+      body: JSON.stringify({ image_base64: base64, mime_type: file.type || 'image/png', model: visionModel })
     })
     if (!res.ok) throw new Error(`请求失败 (${res.status})`)
     const data = await res.json()
@@ -2065,7 +2138,7 @@ onMounted(() => {
   loadWorkDirState()
   syncWorkDirFromBackend()
   document.addEventListener('click', () => {
-    showModelMenu.value = false; showTokenPanel.value = false; showMoreMenu.value = false
+    showModelMenu.value = false; showTokenPanel.value = false
     showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false
   })
 

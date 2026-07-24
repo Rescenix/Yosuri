@@ -1690,28 +1690,6 @@ min-height: 90px !important;
   white-space: nowrap;
 }
 
-.header-more-wrap { position: relative; }
-.more-menu-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  padding: 6px;
-  min-width: 160px;
-  z-index: 60;
-}
-.more-menu-item {
-  padding: 7px 10px;
-  font-size: 12.5px;
-  border-radius: 7px;
-  color: var(--app-text-faint);
-  white-space: nowrap;
-}
-.more-menu-item.disabled { cursor: default; }
-
 /* ==================== 折叠栏悬浮菜单（仿 Claude 侧边浮层） ==================== */
 .floating-menu-backdrop {
   position: fixed;
@@ -1978,10 +1956,6 @@ min-height: 90px !important;
 .header-icon-btn { background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: var(--app-text-soft); transition: background 0.15s ease; }
 .header-icon-btn:hover { background: var(--app-surface-3); }
 .header-icon-btn.active { background: var(--app-surface-3); }
-.header-more-wrap { position: relative; }
-.more-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 0; width: 150px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); z-index: 50; }
-.more-menu-item { padding: 6px 16px; font-size: 13px; color: var(--app-text-soft); }
-.more-menu-item.disabled { color: var(--app-text-faint); cursor: not-allowed; }
 
 /* 不加粗、不带折叠箭头——模型名本身就是可点开的（去掉视觉上的"这是个下拉框"提示） */
 .sch-model { position: relative; display: flex; align-items: center; gap: 4px; background: var(--app-surface); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 400; cursor: pointer; color: var(--app-text); }
@@ -2297,18 +2271,17 @@ min-height: 90px !important;
 .tool-panel-preview-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--app-text-faint); font-size: 13px; gap: 8px; }
 
 
-/* ==================== 阶段3：右侧多面板停靠（dockPanels/dockRatios/dockWidth） ==================== */
-/* 旧版 .tool-panel{flex:0 0 320px} 显式设置了 flex-basis，flexbox 里 flex-basis
-   优先于 width 属性决定主轴尺寸——不管 width 是内联样式还是别的规则都不生效，
-   必须在这里把 flex-basis 交还给 auto，实测量出来的（inline style width 生效但
-   getBoundingClientRect 死活是 320px）才补上这条 */
+/* ==================== 阶段3：右侧工具标签工作区（dockPanels/dockWidth） ==================== */
 .chat-window.expanded .tool-panel {
   position: relative;
   flex: 0 0 auto;
-  gap: 8px;
-  /* 不再自带内边距——栏间距由 chat-body-row 的 gap/padding 统一给，避免右侧比别处宽 8px */
+  display: flex;
+  flex-direction: column;
   padding: 0;
   box-sizing: border-box;
+}
+.chat-window.expanded .tool-panel.tool-panel-tabbed {
+  gap: 0;
 }
 .tool-dock-resize-handle {
   position: absolute;
@@ -2323,6 +2296,149 @@ min-height: 90px !important;
 .tool-dock-resize-handle:active {
   background: rgba(201, 100, 66, 0.25);
 }
+/* 扁平浏览器式标签条：跟 image2 参考图一个量级——细线分隔、当前标签用色块下划线
+   标出，不是"卡片托盘"那种厚重圆角盒子。颜色全部换成 var(--app-*)，之前整块是
+   硬编码的暖米色 hex，跟应用其余部分的主题系统（含暗色模式）完全脱节，切个主题
+   / 深色模式这里就是一块突兀的白底色块。 */
+.tool-dock-tabs {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  height: 36px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  background: var(--app-surface-2);
+  border-bottom: 1px solid var(--app-border);
+}
+.tool-dock-tabs::-webkit-scrollbar {
+  display: none;
+}
+.tool-dock-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--app-text-faint);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.tool-dock-tab:hover {
+  color: var(--app-text-soft);
+}
+.tool-dock-tab.active {
+  color: var(--app-text);
+}
+/* 当前标签用底部色块下划线标出——不再是整块换底色的"卡片"，更接近浏览器标签 */
+.tool-dock-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--app-accent);
+}
+.tool-dock-tab-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.tool-dock-tab-label {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* 关闭按钮默认不占视觉重量，只在标签本身悬浮或被激活时才淡入——
+   平时一排标签更干净，需要关的时候手一放上去就有 */
+.tool-dock-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: var(--app-text-faint);
+  opacity: 0;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.tool-dock-tab:hover .tool-dock-tab-close,
+.tool-dock-tab.active .tool-dock-tab-close {
+  opacity: 1;
+}
+.tool-dock-tab-close:hover {
+  background: var(--app-surface-3);
+  color: var(--app-text);
+}
+.tool-dock-tab-actions {
+  position: relative;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.tool-dock-tab-add {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tool-dock-tab-add:hover {
+  background: var(--app-surface-3);
+  color: var(--app-text);
+}
+.tool-dock-add-menu {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  min-width: 170px;
+  padding: 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  z-index: 30;
+}
+.tool-dock-add-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+}
+.tool-dock-add-item:hover {
+  background: var(--app-surface-3);
+}
+.tool-dock-add-item-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tool-dock-add-badge {
+  font-size: 10.5px;
+  color: var(--app-text-faint);
+}
 .tool-dock-pane {
   position: relative;
   display: flex;
@@ -2330,27 +2446,12 @@ min-height: 90px !important;
   min-height: 0;
   overflow: hidden;
   background: var(--app-surface);
-  border: 1px solid #e8e8e8;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(20, 20, 20, 0.06);
 }
-.tool-dock-pane-close {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 6;
-  flex-shrink: 0;
-  border: none;
-  background: rgba(var(--app-surface-rgb), 0.9);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+.tool-dock-pane.tool-dock-pane-single {
+  flex: 1;
+  min-height: 0;
+  margin-top: 0;
 }
-.tool-dock-pane-close:hover { background: rgba(0, 0, 0, 0.06); }
 .tool-dock-pane-body {
   flex: 1;
   min-height: 0;
@@ -2358,17 +2459,6 @@ min-height: 90px !important;
   display: flex;
   flex-direction: column;
   background: var(--app-surface);
-  border-radius: 0 0 10px 10px;
-}
-.tool-dock-split-handle {
-  height: 8px;
-  flex-shrink: 0;
-  cursor: row-resize;
-  background: transparent;
-}
-.tool-dock-split-handle:hover,
-.tool-dock-split-handle:active {
-  background: rgba(201, 100, 66, 0.25);
 }
 
 /* ==================== 阶段3：左侧钉住面板（menuPinned/menuHovering） ==================== */
@@ -2780,13 +2870,6 @@ min-height: 90px !important;
      内缩到 pill 左边，二者在 x/y 上完全分离，顶部也不再重叠挡轴 */
   right: 40px;
   top: 10px;
-}
-.floating-tools.vertical .header-more-wrap { margin-top: 2px; }
-/* 竖条状态下，更多菜单在按钮左侧展开——按钮已贴着工具面板右边界，
-   原来朝右下弹出的下拉会被工具面板遮住/溢出。 */
-.floating-tools.vertical .more-menu-dropdown {
-  top: 0;
-  right: calc(100% + 8px);
 }
 
 /* 聊天内容上下边缘 blur（仿 Gemini）：

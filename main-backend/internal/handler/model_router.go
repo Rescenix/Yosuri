@@ -89,6 +89,9 @@ var freeModelCatalog = []FreeModelDef{
 	// —— 硅基流动 SiliconFlow（api.siliconflow.cn；代金券余额可用，对终端用户免费）——
 	{ID: "free_sf_zai_org_glm_5_2", Vendor: "硅基流动 SiliconFlow", Name: "GLM-5.2", Endpoint: "https://api.siliconflow.cn/v1", Model: "zai-org/GLM-5.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
 	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000},
+
+	// —— 本地 llama.cpp 服务（需安装 llama-server 并在环境变量中配置 n_gpu_layers）——
+	{ID: "local_llama_qwen2_5_vl_7b", Vendor: "本地 Local", Name: "Qwen2.5-VL-7B-Instruct (llama.cpp)", Endpoint: "http://127.0.0.1:8081/v1", Model: "qwen2.5-vl-7b-instruct", KeyEnv: "", ParamsB: 7, Note: "本地 llama-server，可配置 LLAMA_N_GPU_LAYERS", Vision: true, ContextWindow: 32768, Local: true},
 }
 
 func isFreeCatalogID(id string) bool {

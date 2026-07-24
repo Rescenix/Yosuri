@@ -69,3 +69,12 @@ opencode/
 # 临时测试文件
 login-test.html
 test.c
+
+# 本地模型文件
+main-backend/models/
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx

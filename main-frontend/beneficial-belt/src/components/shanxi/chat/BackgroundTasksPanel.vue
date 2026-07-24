@@ -1,44 +1,78 @@
 <template>
-  <div class="bgpanel-backdrop" @click="$emit('close')"></div>
-  <div class="bgpanel" @click.stop>
-    <div class="bgpanel-header">
-      <span class="bgpanel-title">Background tasks</span>
-      <button class="bgpanel-close-btn" @click="$emit('close')" title="关闭">
-        <Icon icon="mdi:close" width="16" color="#8a8a8a" />
-      </button>
-    </div>
-
-    <div class="bgpanel-toolbar">
-      <span class="bgpanel-filter">Finished {{ finishedCount }}</span>
-    </div>
-
-    <div class="bgpanel-list">
-      <div v-if="tasks.length === 0" class="bgpanel-empty">
-        <Icon icon="mdi:tray-outline" width="24" color="#c4c4c4" />
-        <span>暂无后台任务</span>
+  <template v-if="embedded">
+    <div class="bgpanel embedded" @click.stop>
+      <div class="bgpanel-header">
+        <span class="bgpanel-title">后台任务</span>
+        <span class="bgpanel-filter">已完成 {{ finishedCount }}</span>
       </div>
 
-      <!-- 每条任务只是标题/状态/耗时/Token 的轻量摘要；步骤明细已下沉进消息流里的
-           MessageStepGroup，这里点击一条 = 跳转+展开消息流里对应的那个 group -->
-      <div v-for="t in tasks" :key="t.key || t.id" class="bgtask-card" @click="$emit('select-task', t.id)">
-        <Icon :icon="statusIcon(t.status)" :color="statusColor(t.status)" :spin="t.status === 'running'" width="16" class="bgtask-status-icon" />
-        <div class="bgtask-summary-body">
-          <div class="bgtask-desc">{{ t.description }}</div>
-          <div class="bgtask-meta-row">
-            <span>{{ t.agentLabel || 'Agent' }}</span>
-            <span class="bgtask-dot">·</span>
-            <span :class="'bgtask-status-' + t.status">{{ statusLabel(t.status) }}</span>
-            <span class="bgtask-dot">·</span>
-            <span>{{ formatDuration(t) }}</span>
-          </div>
-          <div class="bgtask-meta-row secondary">
-            {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
-          </div>
+      <div class="bgpanel-list">
+        <div v-if="tasks.length === 0" class="bgpanel-empty">
+          <Icon icon="mdi:tray-outline" width="24" color="#c4c4c4" />
+          <span>暂无后台任务</span>
         </div>
-        <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
+
+        <div v-for="t in tasks" :key="t.key || t.id" class="bgtask-card" @click="$emit('select-task', t.id)">
+          <Icon :icon="statusIcon(t.status)" :color="statusColor(t.status)" :spin="t.status === 'running'" width="16" class="bgtask-status-icon" />
+          <div class="bgtask-summary-body">
+            <div class="bgtask-desc">{{ t.description }}</div>
+            <div class="bgtask-meta-row">
+              <span>{{ t.agentLabel || 'Agent' }}</span>
+              <span class="bgtask-dot">·</span>
+              <span :class="'bgtask-status-' + t.status">{{ statusLabel(t.status) }}</span>
+              <span class="bgtask-dot">·</span>
+              <span>{{ formatDuration(t) }}</span>
+            </div>
+            <div class="bgtask-meta-row secondary">
+              {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
+            </div>
+          </div>
+          <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
+        </div>
       </div>
     </div>
-  </div>
+  </template>
+
+  <template v-else>
+    <div class="bgpanel-backdrop" @click="$emit('close')"></div>
+    <div class="bgpanel" @click.stop>
+      <div class="bgpanel-header">
+        <span class="bgpanel-title">Background tasks</span>
+        <button class="bgpanel-close-btn" @click="$emit('close')" title="关闭">
+          <Icon icon="mdi:close" width="16" color="#8a8a8a" />
+        </button>
+      </div>
+
+      <div class="bgpanel-toolbar">
+        <span class="bgpanel-filter">Finished {{ finishedCount }}</span>
+      </div>
+
+      <div class="bgpanel-list">
+        <div v-if="tasks.length === 0" class="bgpanel-empty">
+          <Icon icon="mdi:tray-outline" width="24" color="#c4c4c4" />
+          <span>暂无后台任务</span>
+        </div>
+
+        <div v-for="t in tasks" :key="t.key || t.id" class="bgtask-card" @click="$emit('select-task', t.id)">
+          <Icon :icon="statusIcon(t.status)" :color="statusColor(t.status)" :spin="t.status === 'running'" width="16" class="bgtask-status-icon" />
+          <div class="bgtask-summary-body">
+            <div class="bgtask-desc">{{ t.description }}</div>
+            <div class="bgtask-meta-row">
+              <span>{{ t.agentLabel || 'Agent' }}</span>
+              <span class="bgtask-dot">·</span>
+              <span :class="'bgtask-status-' + t.status">{{ statusLabel(t.status) }}</span>
+              <span class="bgtask-dot">·</span>
+              <span>{{ formatDuration(t) }}</span>
+            </div>
+            <div class="bgtask-meta-row secondary">
+              {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
+            </div>
+          </div>
+          <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
+        </div>
+      </div>
+    </div>
+  </template>
 </template>
 
 <script setup>
@@ -46,7 +80,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps({
-  tasks: { type: Array, default: () => [] }
+  tasks: { type: Array, default: () => [] },
+  embedded: { type: Boolean, default: false }
 })
 defineEmits(['close', 'select-task'])
 
@@ -115,6 +150,16 @@ function statusLabel(status) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.bgpanel.embedded {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-height: none;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 .bgpanel-header {
   display: flex;

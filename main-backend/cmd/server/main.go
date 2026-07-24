@@ -41,6 +41,13 @@ func main() {
 
 	// DS 浏览器代理（crack/server.js）已随 crack/ 目录封存废弃：主链路走 /api/code/workflow，
 	// 不再需要 localhost:3000 代理，故不再自动拉起——避免 crack 删除后启动被 node 缺失阻塞。
+
+	// 尝试启动本地 llama-server（若已安装 llama.cpp 并放置了 gguf 模型）。
+	// 失败不影响主服务启动，只打印警告日志。
+	if err := handler.StartLocalLlamaServer(); err != nil {
+		log.Printf("⚠️ 本地 llama-server 启动失败: %v", err)
+	}
+
 	handler.RegisterRoutes(r, memoryStore, sessionStore)
 
 	log.Println("🚀 Aurora 引擎已启动，监听端口 :8080")

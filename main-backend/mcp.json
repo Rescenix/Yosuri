@@ -31,6 +31,10 @@
     "screenshot": {
       "command": "python",
       "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\screenshot_server.py"]
+    },
+    "chrome_devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"]
     }
   }
 }

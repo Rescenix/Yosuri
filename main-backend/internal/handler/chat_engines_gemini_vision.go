@@ -178,17 +178,74 @@ type aetherVisionRequest struct {
 	MimeType              string `json:"mime_type"`
 	Instruction           string `json:"instruction"`
 	PreviousInteractionID string `json:"previous_interaction_id"`
+	// Model 是设置面板「模型」页选出的识图模型 ID（免费池/自定义配置/本地 llama.cpp 均可，
+	// 只要该条目 Vision=true）。留空则走原有的 Gemini Interactions 路径（向后兼容）；
+	// 指定了但解析/调用失败也会自动回退 Gemini，不让一次模型抽风打断识图。
+	Model string `json:"model"`
+}
+
+// analyzeImageWithModelID 走通用 OpenAI 兼容视觉路由（model_router.go 的 resolveExact +
+// openAIChatOnce），让设置面板选的任意 Vision 模型（含本地 llama-server）都能承接识图，
+// 不再被写死在 Gemini 一条路径上。mimeType 由调用方按上传文件的真实类型传入——不像
+// vision.go 的 analyzeImageViaRouter 那样固定 image/png（那是给截图链路用的，截图确定是 PNG）。
+func analyzeImageWithModelID(ctx context.Context, modelID, imageBase64, mimeType, instruction string) (string, error) {
+	b := resolveExact("", modelID)
+	if b == nil {
+		return "", fmt.Errorf("模型 %s 未找到或未配置 Key", modelID)
+	}
+	if !b.Vision {
+		return "", fmt.Errorf("模型 %s 不支持视觉", modelID)
+	}
+	if instruction == "" {
+		instruction = geminiDefaultInstruction
+	}
+	if mimeType == "" {
+		mimeType = "image/png"
+	}
+	clean := imageBase64
+	if idx := strings.Index(clean, "base64,"); idx != -1 {
+		clean = clean[idx+7:]
+	}
+	msgs := []map[string]any{{
+		"role": "user",
+		"content": []map[string]any{
+			{"type": "text", "text": instruction},
+			{"type": "image_url", "image_url": map[string]any{"url": "data:" + mimeType + ";base64," + clean}},
+		},
+	}}
+	// 本地 llama-server 在小显存卡上可能比云端慢不少（见 llama_local.go 的调参注释），
+	// 给足 90s 而不是沿用 openAIChatOnce 默认的 45s catalog 超时太紧的场景交给调用方自行兜底。
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	content, _, err := openAIChatOnce(ctx, *b, msgs, nil)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("视觉模型返回空内容")
+	}
+	return content, nil
 }
 
 // HandleAetherVisionPreprocess POST /api/aether/vision-preprocess
-// 接收前端上传的图片，调用 Gemini 做视觉预处理，把分析出的中文文本
-// 连同这次的 interaction id 一起回传给前端；前端后续把这段文本
+// 接收前端上传的图片，优先用请求里指定的 model（设置面板「模型」页选的识图模型）分析；
+// 没指定或该模型调用失败时，回退到原有的 Gemini Interactions 路径。把分析出的中文文本
+// 连同这次的 interaction id（仅 Gemini 路径有）一起回传给前端；前端后续把这段文本
 // 作为上下文塞进 Agent 流水线（/api/workflow/run 的 task 里）即可。
 func HandleAetherVisionPreprocess(c *gin.Context) {
 	var req aetherVisionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
+	}
+
+	if req.Model != "" {
+		text, err := analyzeImageWithModelID(c.Request.Context(), req.Model, req.ImageBase64, req.MimeType, req.Instruction)
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{"text": text, "interaction_id": ""})
+			return
+		}
+		fmt.Printf("⚠️ [Aether] 指定视觉模型 %s 失败，回退 Gemini: %v\n", req.Model, err)
 	}
 
 	outputText, interactionID, err := analyzeImageWithGemini(

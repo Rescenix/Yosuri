@@ -37,6 +37,20 @@ var dangerousToolSet = map[string]bool{
 	"mcp__fs__create_file":      true,
 	// MCP shell：执行任意命令，副作用最大，必拦
 	"mcp__shell__run": true,
+	// MCP chrome_devtools：能操作真实浏览器页面的工具才拦——点击/填表/输入/导航/
+	// 上传/弹窗/任意 JS 执行都有真实副作用（提交表单、发消息、上传本地文件到网页等），
+	// 跟 shell 命令是一个量级的风险。截图/console/network/性能分析这些只读检查类
+	// 不在这个集合里，任何模式都直过，见 isDangerousTool 里的默认放行。
+	"mcp__chrome_devtools__click":           true,
+	"mcp__chrome_devtools__fill":            true,
+	"mcp__chrome_devtools__fill_form":       true,
+	"mcp__chrome_devtools__type_text":       true,
+	"mcp__chrome_devtools__drag":            true,
+	"mcp__chrome_devtools__press_key":       true,
+	"mcp__chrome_devtools__navigate_page":   true,
+	"mcp__chrome_devtools__upload_file":     true,
+	"mcp__chrome_devtools__handle_dialog":   true,
+	"mcp__chrome_devtools__evaluate_script": true,
 }
 
 // isDangerousTool 判定一个工具名是否需要审批拦截。
@@ -85,7 +99,11 @@ func toolPathArgs(argsJSON string) []string {
 			out = append(out, s)
 		}
 	}
-	for _, k := range []string{"path", "source", "destination", "file_path"} {
+	// filePath 是 chrome_devtools upload_file 的参数名（驼峰，跟其余 MCP server 的
+	// snake_case 不一样）——它读一个本地文件路径喂给浏览器上传，是跟 fs__read_file
+	// 同量级的越界读风险（把 main-backend/.env 之类的敏感文件传到任意网页），
+	// 不认出这个参数名的话，越界检测和目录级 remember 都对它失效。
+	for _, k := range []string{"path", "source", "destination", "file_path", "filePath"} {
 		add(m[k])
 	}
 	if arr, ok := m["paths"].([]any); ok {
