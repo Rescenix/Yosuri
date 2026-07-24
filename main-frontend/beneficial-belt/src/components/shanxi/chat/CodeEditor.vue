@@ -11,15 +11,15 @@
       >
         <Icon v-if="isPinned(tab)" icon="mdi:pin" width="11" class="tab-pin-icon" />
         <span class="tab-name">{{ tab.name }}</span>
-        <!-- 悬浮才淡入，不再靠"tabs.length>1"限制——只剩一个标签时也该能关掉它，
-             cursor 右键菜单也保留着当第二条关闭路径 -->
-        <button
+        <span
           class="tab-close"
           @click.stop="$emit('close-file', tab.path)"
         >
           <Icon icon="mdi:close" width="12" />
-        </button>
+        </span>
       </div>
+      <div class="editor-tab-spacer"></div>
+      <slot name="tab-actions"></slot>
     </div>
 
     <Teleport to="body">
@@ -41,7 +41,7 @@
   v-model:value="code"
   :language="language"
   :options="editorOptions"
-  theme="vs"
+  :theme="monacoTheme"
   @mount="onEditorMount"
 />
       <div v-else class="editor-placeholder">
@@ -53,8 +53,9 @@
 
 <script setup>
 /* eslint-disable vue/no-v-model-argument */
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import VueMonacoEditor from '@guolao/vue-monaco-editor'
+import { resolvedTheme } from '../composables/useTheme.js'
 
 const props = defineProps({
   tabs: { type: Array, default: () => [] },
@@ -65,6 +66,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:content', 'switch-file', 'close-file', 'editor-mounted', 'pin-file', 'unpin-file'])
+
+const monacoTheme = computed(() => resolvedTheme() === 'dark' ? 'vs-dark' : 'vs')
 
 function isPinned(tab) {
   return props.pinnedPaths.includes(tab.path)
@@ -136,42 +139,61 @@ function onEditorMount(editor) {
 
 .editor-tabs {
   display: flex;
-  background: var(--app-surface-3);
+  align-items: center;
+  background: var(--app-surface);
   border-bottom: 1px solid var(--app-border);
   overflow-x: auto;
   flex-shrink: 0;
 }
 
 .editor-tab {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  gap: 6px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
   font-size: 12px;
-  color: var(--app-text);
+  color: var(--app-text-faint);
   cursor: pointer;
+  border: none;
   border-right: 1px solid var(--app-border);
-  gap: 8px;
+  background: transparent;
+  transition: color 0.15s ease;
+}
+
+.editor-tab:hover {
+  color: var(--app-text-soft);
 }
 
 .editor-tab.active {
-  background: var(--app-surface);
   color: var(--app-text);
+  background: var(--app-surface);
 }
 
-/* 始终可见——之前试过悬浮才淡入（opacity 0→1 靠 :hover），但反馈说没出现过。
-   放弃这个不好验证的过渡方案，直接常驻显示，简单、不会有"没反应"的空间。 */
 .tab-close {
-  background: none;
-  border: none;
-  color: var(--app-text-soft);
-  cursor: pointer;
-  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   border-radius: 4px;
-  transition: background 0.15s ease, color 0.15s ease;
+  color: var(--app-text-faint);
+  opacity: 0;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.editor-tab:hover .tab-close,
+.editor-tab.active .tab-close {
+  opacity: 1;
 }
 .tab-close:hover {
   background: var(--app-surface-3);
   color: var(--app-text);
+}
+
+.editor-tab-spacer {
+  flex: 1;
 }
 
 .tab-pin-icon {
@@ -212,18 +234,25 @@ function onEditorMount(editor) {
 .editor-container {
   flex: 1;
   overflow: hidden;
-  cursor: text !important;
+  /* 亮色模式：深色 I-beam；暗色模式：浅色 I-beam */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16'%3E%3Cpath d='M3 0h2v16h-2zM1 0h6v1H1zM1 15h6v1H1z' fill='%23333'/%3E%3C/svg%3E") 3 8, text;
+  caret-color: var(--app-text);
 }
-.editor-container :deep(.monaco-editor),
-.editor-container :deep(.monaco-editor .view-lines),
-.editor-container :deep(.monaco-editor .view-line),
-.editor-container :deep(.monaco-editor .lines-content),
-.editor-container :deep(.monaco-editor .monaco-editor-background),
-.editor-container :deep(.monaco-editor .inputarea) {
-  cursor: text !important;
+[data-theme="dark"] .editor-container {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16'%3E%3Cpath d='M3 0h2v16h-2zM1 0h6v1H1zM1 15h6v1H1z' fill='%23ddd'/%3E%3C/svg%3E") 3 8, text;
+}
+.editor-container :deep(*) {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16'%3E%3Cpath d='M3 0h2v16h-2zM1 0h6v1H1zM1 15h6v1H1z' fill='%23333'/%3E%3C/svg%3E") 3 8, text !important;
+}
+[data-theme="dark"] .editor-container :deep(*) {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16'%3E%3Cpath d='M3 0h2v16h-2zM1 0h6v1H1zM1 15h6v1H1z' fill='%23ddd'/%3E%3C/svg%3E") 3 8, text !important;
 }
 .editor-container :deep(.monaco-editor .cursor) {
-  background: var(--app-accent) !important;
+  background: var(--app-text) !important;
+  border-left-color: var(--app-text) !important;
+}
+.editor-container :deep(.inputarea) {
+  caret-color: var(--app-text) !important;
 }
 
 .editor-placeholder {

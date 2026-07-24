@@ -18,22 +18,8 @@
       </div>
     </div>
 
-    <!-- 嵌入模式（右侧工具面板）：顶部单标签页头，像独立终端窗口 -->
-    <div v-if="embedded" class="terminal-tabbar">
-      <div class="terminal-tab active">
-        <Icon icon="ri:terminal-line" width="13" class="terminal-tab-icon" />
-        <span class="terminal-tab-label">powershell</span>
-      </div>
-      <Icon
-        icon="mdi:stop-circle-outline"
-        width="14"
-        class="term-action-icon term-tab-interrupt"
-        title="Ctrl+C 中断当前命令"
-        @click="sendInterrupt"
-      />
-    </div>
     <div class="terminal-body" ref="bodyRef" v-show="open || embedded">
-      <pre class="term-output">{{ output }}</pre>
+      <pre class="term-output" v-html="outputHtml"></pre>
       <div class="term-input-row">
         <span class="term-prompt">▷</span>
         <input
@@ -53,31 +39,41 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
+import Convert from 'ansi-to-html'
 
 const props = defineProps({
   open: { type: Boolean, default: true },
   height: { type: Number, default: 180 },
-  embedded: { type: Boolean, default: false }  // true = 右侧工具面板全高模式，无折叠标题栏
+  embedded: { type: Boolean, default: false },
+  snippetVisible: { type: Boolean, default: false },
+  snippetInsertCmd: { type: String, default: '' },
+  terminalId: { type: String, default: '' }
 })
-defineEmits(['update:open'])
+defineEmits(['update:open', 'toggle-snippet'])
 
-// 真实终端：后端常驻一个 powershell 进程，SSE 推输出，POST 写 stdin。
-// terminalId 存 localStorage——刷新页面/重开面板都接回同一个后端会话，
-// cd 到哪、设了什么环境变量都还在，这才是"终端"而不是一次性命令框。
-const TERMINAL_ID_KEY = 'aether_terminal_id'
-function getOrCreateTerminalId() {
-  let id = localStorage.getItem(TERMINAL_ID_KEY)
-  if (!id) {
-    id = 'term_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-    localStorage.setItem(TERMINAL_ID_KEY, id)
-  }
-  return id
-}
-const terminalId = getOrCreateTerminalId()
+const terminalId = props.terminalId || ('term_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8))
+
+const convert = new Convert({ colors: { 0: '#000', 1: '#e8e8e8', 2: '#5cb85c', 3: '#f0ad4e', 4: '#5bc0de', 5: '#d9534f', 6: '#5bc0de', 7: '#e8e8e8', 8: '#555', 9: '#ff6b6b', 10: '#51cf66', 11: '#ffd43b', 12: '#339af0', 13: '#cc5de8', 14: '#20c997', 15: '#fff' } })
 
 const output = ref('')
+const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g
+const outputHtml = computed(() => {
+  // 先把 URL 替换成占位符，避免 ANSI 转换把 URL 拆进不同 span
+  const urls = []
+  let raw = output.value.replace(URL_RE, (m) => {
+    urls.push(m)
+    return '\x00URL_' + (urls.length - 1) + '\x00'
+  })
+  let html = convert.toHtml(raw)
+  // 把占位符还原为可点击链接
+  html = html.replace(/\x00URL_(\d+)\x00/g, (_, i) => {
+    const url = urls[parseInt(i)]
+    return '<a href="' + url + '" target="_blank" rel="noopener" style="color:#5bc0de;text-decoration:none;cursor:pointer">' + url + '</a>'
+  })
+  return html
+})
 const pendingInput = ref('')
 const bodyRef = ref(null)
 const inputRef = ref(null)
@@ -134,6 +130,15 @@ function sendInterrupt() {
   sendToTerminal('\x03')
 }
 
+// 片段面板插入命令：按分号拆分逐条发送，避免 PowerShell 把分号当新行时状态错乱
+watch(() => props.snippetInsertCmd, (cmd) => {
+  if (!cmd) return
+  const parts = cmd.split(';').map(s => s.trim()).filter(Boolean)
+  parts.forEach((part, i) => {
+    setTimeout(() => sendToTerminal(part + '\r\n'), i * 300)
+  })
+})
+
 onMounted(() => {
   connect()
   if (props.embedded) nextTick(() => inputRef.value?.focus())
@@ -147,6 +152,7 @@ onUnmounted(() => {
 <style scoped>
 .terminal-panel.embedded {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   height: auto;
   border-top: none;
@@ -205,7 +211,16 @@ onUnmounted(() => {
 }
 .terminal-tab.active { font-weight: 500; }
 .terminal-tab-icon { flex-shrink: 0; color: var(--app-text-soft); }
-.term-tab-interrupt { margin-left: auto; }
+.terminal-tabbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.term-tab-interrupt { }
+.term-tab-snippet { opacity: 0.6; }
+.term-tab-snippet:hover { opacity: 1; color: var(--app-accent); }
+.term-tab-snippet.active { opacity: 1; color: var(--app-accent); }
 
 .collapse-chevron { transition: transform 180ms ease; cursor: pointer; }
 .collapse-chevron.rotated { transform: rotate(180deg); }
@@ -250,4 +265,9 @@ onUnmounted(() => {
   caret-color: #c96442;
 }
 .term-input::placeholder { color: var(--app-text-faint); }
+</style>
+
+<style>
+/* v-html 内容不受 scoped 样式管辖，hover 必须写在全局 */
+.term-output a:hover { text-decoration: underline !important; }
 </style>

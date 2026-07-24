@@ -10,7 +10,7 @@
       <div class="chat-main">
 
         <!-- 顶部横条已删除：会话切换在左侧 Gemini 风侧栏，工具组浮在聊天区右上角 -->
-        <div class="chat-body-row">
+        <div class="chat-body-row" :class="{ 'tool-expanded': dockExpanded }">
         <!-- ★ Gemini 风侧栏：展开=平铺会话面板，折叠=竖向图标条（带会话横条） -->
         <aside
           v-if="isExpanded"
@@ -742,7 +742,45 @@
             <div class="tool-dock-pane tool-dock-pane-single">
               <div class="tool-dock-pane-body">
                 <DiffPanel v-if="activeDockPanel === 'diff'" />
-                <Terminal v-else-if="activeDockPanel === 'terminal'" class="tool-panel-terminal" :open="true" :embedded="true" />
+                <div v-else-if="activeDockPanel === 'terminal'" class="terminal-group">
+                  <div class="terminal-tabs-bar">
+                    <button
+                      v-for="tab in terminalTabs"
+                      :key="tab.id"
+                      class="terminal-tab-item"
+                      :class="{ active: tab.id === activeTerminalId }"
+                      @click="activeTerminalId = tab.id"
+                    >
+                      <Icon icon="ri:terminal-line" width="12" />
+                      <span>{{ tab.name }}</span>
+                      <span v-if="terminalTabs.length > 1" class="terminal-tab-close" @click.stop="closeTerminalTab(tab.id)">
+                        <Icon icon="mdi:close" width="11" />
+                      </span>
+                    </button>
+                    <button class="terminal-tab-add" @click="addTerminalTab" title="新建终端">
+                      <Icon icon="mdi:plus" width="14" />
+                    </button>
+                    <div class="terminal-tabs-spacer"></div>
+                    <button class="terminal-tab-snippet-btn" :class="{ active: showSnippet }" @click="showSnippet = !showSnippet" title="脚本片段">
+                      <Icon icon="mdi:code-braces" width="15" />
+                    </button>
+                  </div>
+                  <div class="terminal-with-snippet">
+                    <Terminal
+                      v-for="tab in terminalTabs"
+                      :key="tab.id"
+                      v-show="tab.id === activeTerminalId"
+                      class="tool-panel-terminal"
+                      :open="true"
+                      :embedded="true"
+                      :terminal-id="tab.id"
+                      :snippet-visible="showSnippet && tab.id === activeTerminalId"
+                      :snippet-insert-cmd="tab.id === activeTerminalId ? snippetInsertCmd : ''"
+                      @toggle-snippet="showSnippet = !showSnippet"
+                    />
+                    <SnippetPanel v-if="showSnippet" @insert="onSnippetInsert" />
+                  </div>
+                </div>
                 <PreviewBrowser v-else-if="activeDockPanel === 'preview'" />
                 <FileToolPanel v-else-if="activeDockPanel === 'file'" :embedded="true" />
                 <BackgroundTasksPanel v-else-if="activeDockPanel === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" />
@@ -805,6 +843,7 @@ import FileToolPanel from './FileToolPanel.vue'
 import DiffPanel from './DiffPanel.vue'
 import { parseToolArgs } from './toolArgs.js'
 import Terminal from './Terminal.vue'
+import SnippetPanel from './SnippetPanel.vue'
 import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import AuroraStatusIcon from './AuroraStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
@@ -1019,6 +1058,26 @@ const { startDrag: startDockWidthDrag } = useResizableWidth(dockWidth, { min: 30
 const showDockAddMenu = ref(false)
 const dockAddBtnRef = ref(null)
 const dockAddMenuStyle = ref({})
+
+// ==================== 终端标签组 ====================
+let terminalSeq = 0
+const terminalTabs = ref([{ id: 'term_' + Date.now().toString(36), name: '终端 1' }])
+const activeTerminalId = ref(terminalTabs.value[0].id)
+function addTerminalTab() {
+  terminalSeq++
+  const id = 'term_' + Date.now().toString(36) + terminalSeq
+  const tab = { id, name: '终端 ' + (terminalTabs.value.length + 1) }
+  terminalTabs.value = [...terminalTabs.value, tab]
+  activeTerminalId.value = tab.id
+}
+function closeTerminalTab(id) {
+  if (terminalTabs.value.length <= 1) return
+  const idx = terminalTabs.value.findIndex(t => t.id === id)
+  terminalTabs.value = terminalTabs.value.filter(t => t.id !== id)
+  if (activeTerminalId.value === id) {
+    activeTerminalId.value = terminalTabs.value[Math.min(idx, terminalTabs.value.length - 1)].id
+  }
+}
 // shortcut 只标真的注册了全局快捷键的（见下面 onGlobalDockShortcut）——不给
 // Diff/任务挂一个中看不中用的提示文字，那是纯粹的视觉谎言。
 const DOCK_PANEL_META = {
@@ -1061,11 +1120,18 @@ function setActiveDockPanel(key) {
 // terminal 的会话、预览的页面导航状态都还在，随手点开任意一个面板按钮就原样回来。
 const dockExpanded = ref(false)
 const dockHidden = ref(false)
+const showSnippet = ref(false)
+const snippetInsertCmd = ref('')
 function toggleDockExpanded() {
   dockExpanded.value = !dockExpanded.value
 }
 function toggleDockHidden() {
   dockHidden.value = !dockHidden.value
+}
+function onSnippetInsert(cmd) {
+  // 先清空再设值，确保 watcher 即使值相同也会触发
+  snippetInsertCmd.value = ''
+  nextTick(() => { snippetInsertCmd.value = cmd })
 }
 function openDockPanel(key) {
   if (!dockPanels.value.includes(key)) dockPanels.value = [...dockPanels.value, key]
@@ -1091,7 +1157,11 @@ function toggleDockAddMenu() {
   showDockAddMenu.value = !showDockAddMenu.value
   if (showDockAddMenu.value && dockAddBtnRef.value) {
     const r = dockAddBtnRef.value.getBoundingClientRect()
-    dockAddMenuStyle.value = { top: `${r.bottom + 6}px`, left: `${r.right - 200}px` } // 200 = 菜单宽度，右对齐按钮
+    const menuW = 200
+    let left = r.right - menuW
+    if (left < 8) left = 8
+    if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8
+    dockAddMenuStyle.value = { top: `${r.bottom + 6}px`, left: `${left}px` }
   }
 }
 

@@ -28,6 +28,7 @@
     "@tsparticles/engine": "^3.9.1",
     "@tsparticles/plugin-emitters": "^3.9.1",
     "@worstone/vue-aplayer": "^1.0.8",
+    "ansi-to-html": "^0.7.2",
     "diff": "^8.0.4",
     "easymde": "^2.21.0",
     "github-markdown-css": "^5.9.0",

@@ -2260,6 +2260,85 @@ min-height: 90px !important;
 .tool-panel-header { height: 40px; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; border-bottom: 1px solid var(--app-border); background: var(--app-surface); flex-shrink: 0; }
 .tool-panel-meta { font-size: 11px; color: var(--app-text-faint); font-family: var(--app-font); }
 .tool-panel-terminal { border-radius: 0; flex: 1; border: none; }
+/* 终端 + 片段面板水平并排：片段面板固定 260px，终端 flex:1 填满剩余 */
+.terminal-with-snippet { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.terminal-with-snippet .tool-panel-terminal { min-width: 0; }
+
+/* 终端标签组 */
+.terminal-group { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.terminal-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 32px;
+  padding: 0 4px;
+  background: var(--app-surface-2);
+  border-bottom: 1px solid var(--app-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.terminal-tabs-bar::-webkit-scrollbar { display: none; }
+.terminal-tab-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--app-text-faint);
+  font-size: 11.5px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.terminal-tab-item:hover { background: var(--app-surface-3); color: var(--app-text-soft); }
+.terminal-tab-item.active { background: var(--app-surface); color: var(--app-text); font-weight: 600; }
+.terminal-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.terminal-tab-item:hover .terminal-tab-close { opacity: 1; }
+.terminal-tab-close:hover { background: var(--app-border); }
+.terminal-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--app-text-faint);
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.terminal-tab-add:hover { background: var(--app-surface-3); color: var(--app-text); }
+.terminal-tabs-spacer { flex: 1; }
+.terminal-tab-snippet-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--app-text-faint);
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.terminal-tab-snippet-btn:hover { background: var(--app-surface-3); color: var(--app-text); }
+.terminal-tab-snippet-btn.active { color: var(--app-accent); }
 .tool-panel-preview-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--app-text-faint); font-size: 13px; gap: 8px; }
 
 
@@ -2293,8 +2372,40 @@ min-height: 90px !important;
 }
 /* 放大：撑到接近整个工作区宽度，再点一次收回 dockWidth 记的手动宽度 */
 .tool-panel-tabbed.expanded {
-  flex-basis: min(1100px, 82vw) !important;
-  width: min(1100px, 82vw) !important;
+  border-left: none !important;
+}
+/* 放大时整个工作区切换为单栏：聊天内容/侧栏/间隙全部收掉 */
+.chat-body-row.tool-expanded > .gem-sidebar {
+  display: none !important;
+}
+.chat-body-row.tool-expanded > .chat-body.studio {
+  position: static !important;
+}
+.chat-body-row.tool-expanded > .chat-body.studio > .chat-content {
+  display: none !important;
+}
+.chat-body-row.tool-expanded > .chat-body.studio {
+  gap: 0 !important;
+}
+.chat-window.expanded .chat-body-row.tool-expanded {
+  padding: 0 !important;
+  gap: 0 !important;
+}
+.chat-body-row.tool-expanded > .studio-side-col {
+  display: none !important;
+}
+/* 放大时工具面板脱离文档流，绝对定位覆盖整个 chat-body-row */
+.chat-body-row.tool-expanded > .chat-body.studio > .tool-panel-tabbed.expanded {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20000;
+  flex-basis: auto !important;
+  width: auto !important;
+  border-left: none !important;
+  border-radius: 0;
 }
 .tool-dock-resize-handle {
   position: absolute;
@@ -2438,7 +2549,7 @@ min-height: 90px !important;
   border-radius: 10px;
   background: var(--app-surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
-  z-index: 10001;
+  z-index: 20001;
 }
 .tool-dock-add-shortcut {
   font-size: 10.5px;

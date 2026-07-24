@@ -1,34 +1,6 @@
 <template>
   <div v-if="embedded" class="file-tool-shell" @keydown="onKeydown">
     <div class="file-tool-card embedded-mode">
-      <div class="file-tool-mainbar">
-        <div class="file-tool-breadcrumb">
-          <span class="crumb-root">re0</span>
-          <span class="crumb-sep">›</span>
-          <span class="crumb-path">{{ activeTab?.path || '选择文件开始编辑' }}</span>
-        </div>
-        <div class="file-tool-mainbar-actions">
-          <span v-if="saveState" class="file-tool-save-state" :class="saveState">
-            {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
-          </span>
-          <!-- 文件树开关常驻在这——不再是内容区里一条会消失的窄栏，图标复用左侧
-               Gemini 风侧栏折叠用的同一个 lucide:sidebar，视觉语言对上 -->
-          <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? '显示文件树' : '隐藏文件树'">
-            <Icon icon="lucide:sidebar" width="16" />
-          </button>
-          <div class="file-tool-more-wrap">
-            <button class="file-tool-icon-btn" type="button" @click.stop="showMoreMenu = !showMoreMenu" title="更多">
-              <Icon icon="mdi:dots-horizontal" width="16" />
-            </button>
-            <div v-if="showMoreMenu" class="file-tool-more-menu" @click.stop>
-              <button type="button" @click="loadTree(); showMoreMenu = false">
-                <Icon icon="mdi:refresh" width="14" :class="{ spin: treeLoading }" />刷新文件树
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="file-tool-body" :style="{ gridTemplateColumns: `minmax(0,1fr) ${treeCollapsed ? 0 : treeWidth}px` }">
         <section class="file-tool-editor-pane">
           <CodeEditor
@@ -42,7 +14,16 @@
             @close-file="closeFile"
             @pin-file="pinFile"
             @unpin-file="unpinFile"
-          />
+          >
+            <template #tab-actions>
+              <span v-if="saveState" class="file-tool-save-state" :class="saveState">
+                {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
+              </span>
+              <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? '显示文件树' : '隐藏文件树'">
+                <Icon icon="lucide:sidebar" width="16" />
+              </button>
+            </template>
+          </CodeEditor>
         </section>
 
         <aside v-if="!treeCollapsed" class="file-tool-tree-pane">
@@ -103,35 +84,6 @@
   <Teleport v-else to="body">
     <div class="file-tool-backdrop" @click="requestClose" @keydown.esc="requestClose">
       <div class="file-tool-card" @click.stop @keydown="onKeydown">
-        <div class="file-tool-mainbar">
-          <div class="file-tool-breadcrumb">
-            <span class="crumb-root">re0</span>
-            <span class="crumb-sep">›</span>
-            <span class="crumb-path">{{ activeTab?.path || '选择文件开始编辑' }}</span>
-          </div>
-          <div class="file-tool-mainbar-actions">
-            <span v-if="saveState" class="file-tool-save-state" :class="saveState">
-              {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
-            </span>
-            <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? '显示文件树' : '隐藏文件树'">
-              <Icon icon="lucide:sidebar" width="16" />
-            </button>
-            <div class="file-tool-more-wrap">
-              <button class="file-tool-icon-btn" type="button" @click.stop="showMoreMenu = !showMoreMenu" title="更多">
-                <Icon icon="mdi:dots-horizontal" width="16" />
-              </button>
-              <div v-if="showMoreMenu" class="file-tool-more-menu" @click.stop>
-                <button type="button" @click="loadTree(); showMoreMenu = false">
-                  <Icon icon="mdi:refresh" width="14" :class="{ spin: treeLoading }" />刷新文件树
-                </button>
-              </div>
-            </div>
-            <button class="file-tool-icon-btn" type="button" @click="requestClose" title="关闭 (Esc)">
-              <Icon icon="mdi:close" width="18" />
-            </button>
-          </div>
-        </div>
-
         <div class="file-tool-body" :style="{ gridTemplateColumns: `minmax(0,1fr) ${treeCollapsed ? 0 : treeWidth}px` }">
           <section class="file-tool-editor-pane">
             <CodeEditor
@@ -145,7 +97,19 @@
               @close-file="closeFile"
               @pin-file="pinFile"
               @unpin-file="unpinFile"
-            />
+            >
+              <template #tab-actions>
+                <span v-if="saveState" class="file-tool-save-state" :class="saveState">
+                  {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
+                </span>
+                <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? '显示文件树' : '隐藏文件树'">
+                  <Icon icon="lucide:sidebar" width="16" />
+                </button>
+                <button class="file-tool-icon-btn" type="button" @click="requestClose" title="关闭 (Esc)">
+                  <Icon icon="mdi:close" width="18" />
+                </button>
+              </template>
+            </CodeEditor>
           </section>
 
           <aside v-if="!treeCollapsed" class="file-tool-tree-pane">
@@ -205,7 +169,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import CodeEditor from './CodeEditor.vue'
 import FileTreeNode from './FileTreeNode.vue'
@@ -240,7 +204,6 @@ const activeFilePath = ref('')
 const openError = ref('')
 const pinnedPaths = ref([])
 const saveState = ref('')
-const showMoreMenu = ref(false)
 let saveStateTimer = null
 
 const activeTab = computed(() => tabs.value.find(t => t.path === activeFilePath.value) || null)
@@ -465,17 +428,7 @@ function languageOf(name) {
   return LANG_MAP[ext] || 'plaintext'
 }
 
-function closeMoreMenuOutside() {
-  showMoreMenu.value = false
-}
-
-onMounted(() => {
-  loadTree()
-  document.addEventListener('click', closeMoreMenuOutside)
-})
-onUnmounted(() => {
-  document.removeEventListener('click', closeMoreMenuOutside)
-})
+onMounted(loadTree)
 </script>
 
 <style scoped>
@@ -517,54 +470,10 @@ onUnmounted(() => {
   box-shadow: none;
 }
 
-/* 简化后的顶栏：面包屑 + 保存状态 + "..." 菜单（+ 独立弹窗多一个关闭）。
-   打开/保存两个按钮已经删掉——单击文件即打开，编辑即自动保存，不需要手动触发。 */
-.file-tool-mainbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 40px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--app-border);
-  background: var(--app-surface);
-  flex-shrink: 0;
-}
-
-.file-tool-breadcrumb {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.crumb-root,
-.crumb-sep {
-  font-size: 12px;
-  color: var(--app-text-faint);
-  flex-shrink: 0;
-}
-
-.crumb-path {
-  min-width: 0;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--app-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file-tool-mainbar-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
 .file-tool-save-state {
   font-size: 11px;
   color: var(--app-text-faint);
+  padding: 0 4px;
 }
 
 .file-tool-save-state.saved { color: #12b76a; }
@@ -586,38 +495,6 @@ onUnmounted(() => {
 .file-tool-icon-btn.sm { width: 24px; height: 24px; }
 .file-tool-icon-btn:hover { background: var(--app-surface-3); color: var(--app-text); }
 
-.file-tool-more-wrap { position: relative; }
-.file-tool-more-menu {
-  position: absolute;
-  top: 32px;
-  right: 0;
-  min-width: 150px;
-  padding: 4px;
-  border: 1px solid var(--app-border);
-  border-radius: 9px;
-  background: var(--app-surface);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
-  z-index: 30;
-}
-.file-tool-more-menu button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  background: transparent;
-  padding: 7px 9px;
-  border-radius: 6px;
-  font-size: 12.5px;
-  color: var(--app-text);
-  cursor: pointer;
-  text-align: left;
-}
-.file-tool-more-menu button:hover { background: var(--app-surface-3); }
-
-/* 树宽由 treeWidth（拖拽调宽）驱动 grid-template-columns；隐藏树时收到 28px
-   只留一条能点回来的窄条。独立弹窗空间宽裕默认给 260px，嵌入右侧工具坞
-   （~380px 总宽）给 150px——之前写死 320px，编辑区会被挤到只剩几十像素。 */
 .file-tool-body {
   flex: 1;
   min-height: 0;
