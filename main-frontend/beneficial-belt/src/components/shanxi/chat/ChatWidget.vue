@@ -164,12 +164,12 @@
           </template>
         </aside>
 
-        <!-- 侧栏折叠时:便签 + 看板娘独占一栏（三栏工作区的左栏）。
-             以前它们是 position:absolute 的悬浮层，会直接压在聊天内容上；
-             现在这一栏真实占位，中间聊天列靠 flex:1 让位，互不遮挡。
-             栏内两个元素仍可各自拖动(位置记进 localStorage)，只是不再靠拖动来躲开聊天区。 -->
+        <!-- 侧栏折叠时:便签 + 看板娘悬浮在聊天区左下角（position:absolute，
+             不占布局宽度——聊天内容始终能用满整个工作区，不被这两个部件挡住）。
+             位置可各自拖动、越界会被拉回工作区内(位置记进 localStorage)。 -->
         <div v-if="isExpanded && !sidebarOpen" class="studio-side-col">
           <div
+            v-if="kanbanTaskCard"
             class="side-drag"
             :class="{ dragging: stickyDrag.dragging.value, nudged: stickyDrag.offset.value.x || stickyDrag.offset.value.y }"
             :style="{ transform: `translate(${stickyDrag.offset.value.x}px, ${stickyDrag.offset.value.y}px)` }"
@@ -180,6 +180,7 @@
             <TaskTodoSticky :items="todoState.items" />
           </div>
           <div
+            v-if="kanbanLive2D"
             class="side-drag studio-side-live2d"
             :class="{ dragging: live2dDrag.dragging.value, nudged: live2dDrag.offset.value.x || live2dDrag.offset.value.y }"
             :style="{ transform: `translate(${live2dDrag.offset.value.x}px, ${live2dDrag.offset.value.y}px)` }"
@@ -677,7 +678,12 @@
           </div>
 
           <!-- ★ AIStudio 右：多面板停靠 -->
-          <aside class="tool-panel tool-panel-tabbed" v-if="isExpanded && dockPanels.length" :style="{ width: dockWidth + 'px' }">
+          <aside
+            class="tool-panel tool-panel-tabbed"
+            v-if="isExpanded && dockPanels.length"
+            :class="{ hidden: dockHidden, expanded: dockExpanded }"
+            :style="dockExpanded || dockHidden ? {} : { width: dockWidth + 'px' }"
+          >
             <div class="tool-dock-resize-handle" @mousedown="startDockWidthDrag"></div>
             <div class="tool-dock-tabs">
               <button
@@ -695,10 +701,17 @@
                 </span>
               </button>
               <div class="tool-dock-tab-actions">
-                <button class="tool-dock-tab-add" @click.stop="toggleDockAddMenu" title="新建工具标签页">
+                <button ref="dockAddBtnRef" class="tool-dock-tab-add" @click.stop="toggleDockAddMenu" title="新建工具标签页">
                   <Icon icon="mdi:plus" width="16" />
                 </button>
-                <div v-if="showDockAddMenu" class="tool-dock-add-menu">
+              </div>
+              <!-- Teleport 到 body：.tool-dock-tabs 设了 overflow-x:auto，按 CSS 规范
+                   overflow-x/overflow-y 只要有一个不是 visible，另一个会被隐式当 auto——
+                   等于整条标签栏纵向也裁切。之前挂在标签栏内部 position:absolute 的菜单，
+                   状态确实翻转了，但会被这层隐式裁切吃掉，看起来就是"点了没反应"。
+                   CodeEditor.vue 的右键菜单也是因为同样的坑才 Teleport 到 body 的。 -->
+              <Teleport to="body">
+                <div v-if="showDockAddMenu" class="tool-dock-add-menu" :style="dockAddMenuStyle" @click.stop>
                   <button
                     v-for="option in dockPanelOptions"
                     :key="option.key"
@@ -710,8 +723,20 @@
                       <span>{{ option.label }}</span>
                     </span>
                     <span v-if="dockPanels.includes(option.key)" class="tool-dock-add-badge">已打开</span>
+                    <span v-else-if="option.shortcut" class="tool-dock-add-shortcut">{{ option.shortcut }}</span>
                   </button>
                 </div>
+              </Teleport>
+              <!-- 标签组最右侧：放大(占满工作区宽度) / 收起整块工具坞(不清空已开的标签，
+                   随便点一个 终端/预览/… 就能叫回来) —— 独立于标签组本身，跟 Cursor
+                   顶栏最右那两个图标一个位置。 -->
+              <div class="tool-dock-global-actions">
+                <button class="tool-dock-tab-add" @click.stop="toggleDockExpanded" :title="dockExpanded ? '还原宽度' : '放大'">
+                  <Icon :icon="dockExpanded ? 'mdi:arrow-collapse' : 'mdi:arrow-expand'" width="15" />
+                </button>
+                <button class="tool-dock-tab-add" @click.stop="toggleDockHidden" title="隐藏工具坞">
+                  <Icon icon="mdi:dock-right" width="15" />
+                </button>
               </div>
             </div>
             <div class="tool-dock-pane tool-dock-pane-single">
@@ -992,16 +1017,32 @@ const activeDockPanel = ref('')
 const dockWidth = ref(380)
 const { startDrag: startDockWidthDrag } = useResizableWidth(dockWidth, { min: 300, max: 720, edge: 'left', persistKey: 'dockWidth' })
 const showDockAddMenu = ref(false)
+const dockAddBtnRef = ref(null)
+const dockAddMenuStyle = ref({})
+// shortcut 只标真的注册了全局快捷键的（见下面 onGlobalDockShortcut）——不给
+// Diff/任务挂一个中看不中用的提示文字，那是纯粹的视觉谎言。
 const DOCK_PANEL_META = {
   diff: { label: 'Diff', icon: 'proicons:diff' },
-  terminal: { label: '终端', icon: 'ri:terminal-line' },
-  preview: { label: '预览', icon: 'mage:preview' },
-  file: { label: '文件', icon: 'mdi:file-code-outline' },
+  terminal: { label: '终端', icon: 'ri:terminal-line', shortcut: 'Ctrl+J' },
+  preview: { label: '预览', icon: 'mage:preview', shortcut: 'Ctrl+Shift+B' },
+  file: { label: '文件', icon: 'mdi:file-code-outline', shortcut: 'Ctrl+G' },
   tasks: { label: '任务', icon: 'mdi:task-minus' }
 }
 const dockPanelOptions = Object.entries(DOCK_PANEL_META).map(([key, meta]) => ({ key, ...meta }))
 function dockPanelLabel(key) { return DOCK_PANEL_META[key]?.label || key }
 function dockPanelIcon(key) { return DOCK_PANEL_META[key]?.icon || 'mdi:application-outline' }
+
+// 真·全局快捷键，跟菜单上标的提示一一对应——Ctrl+G/Ctrl+J 在 Monaco 编辑器里
+// 有原生含义（跳转行/…），焦点在输入框或编辑器里时让开，不抢它们的按键。
+function onGlobalDockShortcut(e) {
+  if (!(e.ctrlKey || e.metaKey)) return
+  const t = e.target
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.monaco-editor'))) return
+  const key = e.key.toLowerCase()
+  if (key === 'g' && !e.shiftKey) { e.preventDefault(); openDockPanel('file') }
+  else if (key === 'j' && !e.shiftKey) { e.preventDefault(); openDockPanel('terminal') }
+  else if (key === 'b' && e.shiftKey) { e.preventDefault(); openDockPanel('preview') }
+}
 function ensureActiveDockPanel() {
   if (!dockPanels.value.length) {
     activeDockPanel.value = ''
@@ -1015,10 +1056,22 @@ function ensureActiveDockPanel() {
 function setActiveDockPanel(key) {
   activeDockPanel.value = key
 }
+// 放大：工具坞宽度撑到接近整个工作区（放弃 dockWidth 那个手动拖出来的值，
+// 再点一次收回去）。隐藏：整块坞收进 0 宽，但 dockPanels/activeDockPanel 不清空——
+// terminal 的会话、预览的页面导航状态都还在，随手点开任意一个面板按钮就原样回来。
+const dockExpanded = ref(false)
+const dockHidden = ref(false)
+function toggleDockExpanded() {
+  dockExpanded.value = !dockExpanded.value
+}
+function toggleDockHidden() {
+  dockHidden.value = !dockHidden.value
+}
 function openDockPanel(key) {
   if (!dockPanels.value.includes(key)) dockPanels.value = [...dockPanels.value, key]
   activeDockPanel.value = key
   showDockAddMenu.value = false
+  dockHidden.value = false // 打开面板这个动作本身就该让它可见，不然像是没反应
 }
 function toggleDockPanel(key) {
   if (activeDockPanel.value === key && dockPanels.value.includes(key)) {
@@ -1031,8 +1084,15 @@ function closeDockPanel(key) {
   dockPanels.value = dockPanels.value.filter(k => k !== key)
   ensureActiveDockPanel()
 }
+// 菜单现在 Teleport 到 body 了，没法再靠 CSS position:absolute 相对按钮定位，
+// 开菜单那一刻手动量一次按钮的屏幕坐标，换算成 fixed 定位（跟 CodeEditor.vue
+// 右键菜单捕获 event.clientX/Y 是同一个思路，只是这里定位基准是按钮不是点击点）。
 function toggleDockAddMenu() {
   showDockAddMenu.value = !showDockAddMenu.value
+  if (showDockAddMenu.value && dockAddBtnRef.value) {
+    const r = dockAddBtnRef.value.getBoundingClientRect()
+    dockAddMenuStyle.value = { top: `${r.bottom + 6}px`, left: `${r.right - 200}px` } // 200 = 菜单宽度，右对齐按钮
+  }
 }
 
 // agent 改了前端文件 → 后端推 preview_open → 这里把预览面板挂进 dock。
@@ -1258,12 +1318,15 @@ onMounted(() => {
     const nextIndex = Math.floor(Math.random() * placeholders.length)
     randomPlaceholder.value = placeholders[nextIndex]
   }, 6000) // 60000毫秒 = 60秒
+  // 监听设置窗口的看板娘开关变化
+  window.addEventListener('storage', onKanbanStorage)
+  window.addEventListener('kanban-toggle', onKanbanToggle)
 })
 
 // ==================== 便签/看板娘 独立拖动 ====================
 // 每个元素一套独立的 translate 偏移,互不影响,分别记进 localStorage(刷新不丢)。
-// 注意:现在它们待在 .studio-side-col 这一栏里,拖动只是微调位置,
-// 不再承担"躲开聊天内容"的职责——那件事已经由栏本身占位解决了。
+// 两个部件是悬浮层（.studio-side-col 绝对定位，不占聊天区宽度），拖动就是
+// 它们唯一的"挪开去别处"手段——所以边界必须覆盖整个工作区，不能只在原生位置附近晃。
 // 拖动范围限制在工作区（.chat-body-row）内：以前没有边界，一不小心拖到聊天区
 // 后面或者屏幕外，元素就"消失"了，而且因为抓不到它，再也拖不回来。
 const DRAG_BOUNDS_SELECTOR = '.chat-body-row'
@@ -1351,6 +1414,19 @@ function makeDrag(storageKey) {
 const stickyDrag = makeDrag('corner_sticky_offset')
 const live2dDrag = makeDrag('corner_live2d_offset')
 
+// ============ 看板娘/任务卡片 开关（设置窗口控制） ============
+const kanbanLive2D = ref(localStorage.getItem('kanban_live2d') !== '0')
+const kanbanTaskCard = ref(localStorage.getItem('kanban_taskcard') !== '0')
+function onKanbanStorage(e) {
+  if (e.key === 'kanban_live2d') kanbanLive2D.value = e.newValue !== '0'
+  if (e.key === 'kanban_taskcard') kanbanTaskCard.value = e.newValue !== '0'
+}
+function onKanbanToggle(e) {
+  const { key, value } = e.detail
+  if (key === 'kanban_live2d') kanbanLive2D.value = value
+  if (key === 'kanban_taskcard') kanbanTaskCard.value = value
+}
+
 // 越界救回的 watch 放在 sidebarOpen 声明之后（见下方 rescueDragged），
 // 不能放这里：watch 会立即求值 getter 建依赖，会撞上 sidebarOpen 的 TDZ。
 function rescueDragged() {
@@ -1376,7 +1452,11 @@ function watchSideColResize() {
   sideColRO.observe(col)
   for (const child of col.children) sideColRO.observe(child)
 }
-onUnmounted(() => sideColRO?.disconnect())
+onUnmounted(() => {
+  sideColRO?.disconnect()
+  window.removeEventListener('storage', onKanbanStorage)
+  window.removeEventListener('kanban-toggle', onKanbanToggle)
+})
 
 // 点导航轴上的圆点：滚到那条用户消息并高亮一下，否则跳过去了也不知道落在哪。
 // 用 behavior:'auto' 而不是 'smooth'：平滑滚动是可中断的动画，会被聊天区
@@ -2140,8 +2220,12 @@ onMounted(() => {
   document.addEventListener('click', () => {
     showModelMenu.value = false; showTokenPanel.value = false
     showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false
+    showDockAddMenu.value = false
   })
-
+  window.addEventListener('keydown', onGlobalDockShortcut)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalDockShortcut)
 })
 </script>
 

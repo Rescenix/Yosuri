@@ -9,10 +9,10 @@ const MODE_KEY = 'aurora_mode'        // 亮度：light/dark/system
 // 色板预设：每套只需定义 accent 三件套，中性面由亮度轴提供（见下方常量）。
 // 加几十套主题 = 在此追加一个对象，零 CSS 改动。
 export const THEME_PRESETS = {
-  blue:   { label: 'Azure',  accent: '#3b82f6', accentHover: '#2563eb', accentSoft: 'rgba(59,130,246,0.12)' },
-  pink:   { label: 'Sakura', accent: '#ec4899', accentHover: '#db2777', accentSoft: 'rgba(236,72,153,0.12)' },
-  purple: { label: 'Twilight', accent: '#a855f7', accentHover: '#9333ea', accentSoft: 'rgba(168,85,247,0.12)' },
-  orange: { label: 'Ember',  accent: '#c96442', accentHover: '#b85737', accentSoft: 'rgba(201,100,66,0.12)' },
+  blue:   { label: '矢车菊',  accent: '#3b82f6', accentHover: '#2563eb', accentSoft: 'rgba(59,130,246,0.12)' },
+  pink:   { label: '樱花', accent: '#ec4899', accentHover: '#db2777', accentSoft: 'rgba(236,72,153,0.12)' },
+  purple: { label: '薰衣草', accent: '#a855f7', accentHover: '#9333ea', accentSoft: 'rgba(168,85,247,0.12)' },
+  orange: { label: '金盏花',  accent: '#c96442', accentHover: '#b85737', accentSoft: 'rgba(201,100,66,0.12)' },
 }
 
 // 亮度选项（沿用旧 UI 语义）

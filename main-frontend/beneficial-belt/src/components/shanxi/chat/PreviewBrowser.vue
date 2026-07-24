@@ -35,15 +35,10 @@
       </div>
     </div>
 
+    <!-- 空态不再摆放大图标+标题的装饰插画（仿 Cursor 的 Browser 面板：空的时候
+         就是空的，只有工具栏，不占地方讲一遍"输入 URL 打开页面"）。
+         有本地服务时才有内容可看，没有就是纯空白。 -->
     <div v-if="!currentUrl" class="pb-empty-shell">
-      <div class="pb-empty-hero">
-        <div class="pb-empty-icon">
-          <Icon icon="mdi:web" width="32" />
-        </div>
-        <div class="pb-empty-title">开始浏览</div>
-        <div class="pb-empty-subtitle">输入 URL 以打开页面</div>
-      </div>
-
       <div v-if="filteredServers.length" class="pb-local-section">
         <div class="pb-local-title">本地服务</div>
         <div class="pb-local-list">
@@ -181,22 +176,25 @@ function openExternal() {
 </script>
 
 <style scoped>
+/* 全部换成 var(--app-*)：原先又是一份独立的硬编码暖米色，跟主题系统脱节。
+   顶部工具栏整体收紧、仿 Cursor 的 Browser 面板——更矮、更素，图标条 + 一条
+   贯穿的地址栏，没有多余的圆角卡片感。 */
 .pb-root {
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  background: #ffffff;
+  background: var(--app-surface);
 }
 
 .pb-toolbar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #ece7df;
-  background: #ffffff;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
   flex-shrink: 0;
 }
 
@@ -204,52 +202,52 @@ function openExternal() {
 .pb-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .pb-icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
-  color: #8b857d;
+  color: var(--app-text-faint);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .pb-icon-btn:hover:not(:disabled) {
-  background: #f4f1ec;
-  color: #26211d;
+  background: var(--app-surface-3);
+  color: var(--app-text);
 }
 
 .pb-icon-btn:disabled {
-  color: #d8d3cc;
+  color: var(--app-border);
   cursor: default;
 }
 
 .pb-icon-btn.active {
-  background: #f4f1ec;
-  color: #26211d;
+  background: var(--app-surface-3);
+  color: var(--app-text);
 }
 
 .pb-url-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  height: 38px;
-  padding: 0 12px;
-  border: 1px solid #e8e2d9;
-  border-radius: 999px;
-  background: #fbfaf8;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface-2);
 }
 
 .pb-url-icon {
-  color: #9a9388;
+  color: var(--app-text-faint);
   flex-shrink: 0;
 }
 
@@ -259,9 +257,8 @@ function openExternal() {
   border: none;
   outline: none;
   background: transparent;
-  font-size: 13px;
-  color: #26211d;
-  font-family: "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  color: var(--app-text);
 }
 
 .pb-empty-shell {
@@ -274,40 +271,6 @@ function openExternal() {
   padding: 24px 28px 32px;
 }
 
-.pb-empty-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 360px;
-  color: #7c756c;
-  text-align: center;
-}
-
-.pb-empty-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #7e786f;
-  background: #f7f4ef;
-  border: 1px solid #ece5dc;
-}
-
-.pb-empty-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #23201c;
-}
-
-.pb-empty-subtitle {
-  font-size: 13px;
-  color: #8e867b;
-}
-
 .pb-local-section {
   max-width: 720px;
   margin: 0 auto;
@@ -318,7 +281,7 @@ function openExternal() {
   margin-bottom: 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #8a8378;
+  color: var(--app-text-faint);
 }
 
 .pb-local-list {
@@ -329,22 +292,21 @@ function openExternal() {
 
 .pb-local-card {
   width: 100%;
-  border: 1px solid #ebe4db;
-  border-radius: 14px;
-  background: #ffffff;
-  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+  padding: 10px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #24211d;
+  color: var(--app-text);
   cursor: pointer;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .pb-local-card:hover {
-  border-color: #ddd3c7;
-  box-shadow: 0 10px 22px rgba(33, 24, 18, 0.05);
-  transform: translateY(-1px);
+  border-color: var(--app-accent);
+  background: var(--app-surface-2);
 }
 
 .pb-local-left {
@@ -364,7 +326,7 @@ function openExternal() {
 
 .pb-local-port {
   font-size: 12px;
-  color: #978f84;
+  color: var(--app-text-faint);
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -374,27 +336,27 @@ function openExternal() {
   position: relative;
   display: flex;
   justify-content: center;
-  background: #ffffff;
+  background: var(--app-surface);
 }
 
 .pb-viewport.mobile {
   padding: 16px;
-  background: #f7f4ef;
+  background: var(--app-surface-2);
 }
 
 .pb-frame {
   width: 100%;
   height: 100%;
   border: none;
-  background: #ffffff;
+  background: var(--app-surface);
 }
 
 .pb-viewport.mobile .pb-frame {
   width: 390px;
   max-width: 100%;
-  border: 1px solid #e6dfd6;
+  border: 1px solid var(--app-border);
   border-radius: 18px;
-  box-shadow: 0 18px 36px rgba(33, 24, 18, 0.08);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.12);
 }
 
 .pb-loading-bar {
@@ -403,7 +365,7 @@ function openExternal() {
   left: 0;
   height: 2px;
   width: 100%;
-  background: linear-gradient(90deg, transparent, #c96442, transparent);
+  background: linear-gradient(90deg, transparent, var(--app-accent), transparent);
   background-size: 50% 100%;
   background-repeat: no-repeat;
   animation: pb-slide 1s linear infinite;

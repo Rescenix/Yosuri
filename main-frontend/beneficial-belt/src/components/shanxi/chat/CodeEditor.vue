@@ -11,8 +11,9 @@
       >
         <Icon v-if="isPinned(tab)" icon="mdi:pin" width="11" class="tab-pin-icon" />
         <span class="tab-name">{{ tab.name }}</span>
+        <!-- 悬浮才淡入，不再靠"tabs.length>1"限制——只剩一个标签时也该能关掉它，
+             cursor 右键菜单也保留着当第二条关闭路径 -->
         <button
-          v-if="tabs.length > 1"
           class="tab-close"
           @click.stop="$emit('close-file', tab.path)"
         >
@@ -157,12 +158,20 @@ function onEditorMount(editor) {
   color: var(--app-text);
 }
 
+/* 始终可见——之前试过悬浮才淡入（opacity 0→1 靠 :hover），但反馈说没出现过。
+   放弃这个不好验证的过渡方案，直接常驻显示，简单、不会有"没反应"的空间。 */
 .tab-close {
   background: none;
   border: none;
   color: var(--app-text-soft);
   cursor: pointer;
-  padding: 0;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tab-close:hover {
+  background: var(--app-surface-3);
+  color: var(--app-text);
 }
 
 .tab-pin-icon {
@@ -195,19 +204,26 @@ function onEditorMount(editor) {
   background: var(--app-surface-3);
 }
 
+/* 鼠标进编辑区消失的问题：之前只覆盖了 3 个选择器，漏了 lines-content/
+   monaco-editor-background/inputarea 这几层——鼠标移到这些层上时用的是 Monaco
+   自己内部动态切的 mouse-xxx 类，没盖到就掉回它自己的（有时是空/none）默认值。
+   这里只扩到"实际渲染文字内容"的几层，不用通配符打全部子元素——滚动条、行号
+   沟槽这些非文本区域的光标形状（default/pointer）是对的，不该被一起强改成 text。 */
 .editor-container {
   flex: 1;
   overflow: hidden;
-  cursor: text;
+  cursor: text !important;
 }
-.editor-container :deep(.monaco-editor) {
-  cursor: text;
+.editor-container :deep(.monaco-editor),
+.editor-container :deep(.monaco-editor .view-lines),
+.editor-container :deep(.monaco-editor .view-line),
+.editor-container :deep(.monaco-editor .lines-content),
+.editor-container :deep(.monaco-editor .monaco-editor-background),
+.editor-container :deep(.monaco-editor .inputarea) {
+  cursor: text !important;
 }
 .editor-container :deep(.monaco-editor .cursor) {
   background: var(--app-accent) !important;
-}
-.editor-container :deep(.monaco-editor .view-lines) {
-  cursor: text;
 }
 
 .editor-placeholder {

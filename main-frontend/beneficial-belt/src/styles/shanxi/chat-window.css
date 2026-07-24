@@ -1868,21 +1868,25 @@ min-height: 90px !important;
   margin: 0 auto;
 }
 
-/* 侧栏折叠时:便签 + 看板娘独占三栏工作区的左栏。
-   以前这俩是 position:absolute 的悬浮层(靠拖动躲开聊天内容),结果默认位置就压在
-   聊天列上;现在是真正的 flex 栏,自己占宽度,中间聊天列靠 flex:1 自动让位。 */
+/* 便签 + 看板娘：悬浮层，不占布局宽度——回到 position:absolute 覆盖在聊天区
+   左下角上。中间那版把它们做成真 flex 栏（自己占 180px 宽，中间聊天列靠 flex:1
+   让位）看着工整，但代价是这一栏空间被永久预留，就算把两个部件都拖走了、栏里
+   空空如也，聊天区照样让不回那 180px——这正是要去掉的"占位区域"。拖动/越界救回
+   的 JS（makeDrag/rescueDragged）边界一直算的是 .chat-body-row 整个工作区，
+   不是这一栏本身，所以改成绝对定位不用动一行 JS。 */
 .studio-side-col {
-  flex: 0 0 180px;
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 180px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end; /* 便签在上、看板娘沉底,和原来的观感一致 */
+  justify-content: flex-end; /* 便签在上、看板娘沉底 */
   gap: 10px;
-  min-height: 0;
-  /* flex item 默认 min-width:auto,子元素的 min-content 会把这一栏顶宽
-     (便签是 content-box 的 200px+28padding=228),必须显式清零 */
-  min-width: 0;
-  pointer-events: auto;
+  z-index: 25; /* 盖在聊天内容之上，但低于下拉菜单/审批条(50) */
+  pointer-events: none; /* 容器本身不挡聊天区点击/滚动，子元素各自开 */
 }
+.studio-side-col > * { pointer-events: auto; }
 /* 便签自身写死 width:200px 且是 content-box,放进窄栏会溢出——按栏宽走 */
 .studio-side-col .task-sticky { width: 100%; box-sizing: border-box; }
 /* 栏内元素仍可拖动微调(把手=元素自身)。overflow 不设 hidden,
@@ -1918,18 +1922,6 @@ min-height: 90px !important;
 .studio-side-live2d .live2d-widget { width: 100%; height: 285px; }
 .studio-side-live2d canvas { max-width: 100%; }
 
-/* 左栏会把中间聊天列整体推右,而正文是在聊天列里 margin:0 auto 居中的,
-   于是看起来就"偏右"了。在右侧补一份等宽留白,正文重新落回窗口中线。
-   右侧工具面板(终端/Diff)打开时不补——那时右边本来就有东西撑着。 */
-.chat-body-row:has(.studio-side-col):not(:has(.tool-panel)) .chat-content.studio {
-  padding-right: 188px; /* 左栏 180 + 栏间距 8 */
-  box-sizing: border-box;
-}
-/* 窄屏放不下三栏时先收掉这一栏,聊天内容优先 */
-@media (max-width: 1180px) {
-  .studio-side-col { display: none; }
-  .chat-body-row:has(.studio-side-col):not(:has(.tool-panel)) .chat-content.studio { padding-right: 0; }
-}
 
 /* ==================== 顶部栏扁平化 ==================== */
 .chat-header {
@@ -2282,6 +2274,27 @@ min-height: 90px !important;
 }
 .chat-window.expanded .tool-panel.tool-panel-tabbed {
   gap: 0;
+  transition: flex-basis 0.18s ease;
+}
+/* 隐藏：收进 0 宽但不 v-if 卸载——terminal 会话/预览页面导航状态都留着，
+   随手点开任意面板按钮就原样回来（见 openDockPanel 里 dockHidden=false）。
+   ★ 覆盖 flex-basis 而不是 width：这一路径上叠了三层 `flex:` 简写声明
+   （.tool-panel 的 flex:0 0 320px、.chat-window.expanded .tool-panel 的
+   flex:0 0 auto……），flex-basis:auto 时理论上会去接 width 的值，但实测在
+   这套多层覆盖下不可靠——width 加 !important 都测不出效果，直接覆盖
+   flex-basis 才是真正决定渲染宽度的那个属性，改哪个属性就得跟已有规则用
+   同一套语言，不能指望隔着一层 auto 解析链去赢它。 */
+.tool-panel-tabbed.hidden {
+  flex-basis: 0 !important;
+  width: 0 !important;
+  min-width: 0;
+  border-left: none;
+  overflow: hidden;
+}
+/* 放大：撑到接近整个工作区宽度，再点一次收回 dockWidth 记的手动宽度 */
+.tool-panel-tabbed.expanded {
+  flex-basis: min(1100px, 82vw) !important;
+  width: min(1100px, 82vw) !important;
 }
 .tool-dock-resize-handle {
   position: absolute;
@@ -2378,9 +2391,10 @@ min-height: 90px !important;
   background: var(--app-surface-3);
   color: var(--app-text);
 }
+/* "+" 紧挨着最后一个标签，不推到最右——最右是 .tool-dock-global-actions
+   （放大/隐藏）的位置，两簇分开，图1 参考的就是"+"贴着标签组这个布局。 */
 .tool-dock-tab-actions {
   position: relative;
-  margin-left: auto;
   flex-shrink: 0;
 }
 .tool-dock-tab-add {
@@ -2400,17 +2414,37 @@ min-height: 90px !important;
   background: var(--app-surface-3);
   color: var(--app-text);
 }
+/* 放大/隐藏两个按钮，紧跟在 +按钮 那簇后面，一起被 .tool-dock-tab-actions 的
+   margin-left:auto 顶到标签条最右——不用单独再算一次定位 */
+.tool-dock-global-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-right: 2px;
+}
+/* 纯工具列表，不带搜索框——就 5 个自家面板，搜索属于过度设计 */
+/* Teleport 到 body 了，坐标由 dockAddMenuStyle（脚本里量按钮位置算出来的）驱动，
+   position 必须是 fixed——getBoundingClientRect 拿到的是视口坐标，absolute 会按
+   body 的文档流位置算，滚动一下就对不上了 */
 .tool-dock-add-menu {
-  position: absolute;
-  top: 34px;
-  right: 0;
-  min-width: 170px;
+  position: fixed;
+  width: 200px;
+  max-height: 260px;
+  overflow-y: auto;
   padding: 5px;
   border: 1px solid var(--app-border);
   border-radius: 10px;
   background: var(--app-surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
-  z-index: 30;
+  z-index: 10001;
+}
+.tool-dock-add-shortcut {
+  font-size: 10.5px;
+  color: var(--app-text-faint);
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  white-space: nowrap;
 }
 .tool-dock-add-item {
   width: 100%;
@@ -2662,6 +2696,10 @@ min-height: 90px !important;
   transition: opacity 0.15s ease, background 0.12s ease, color 0.12s ease;
 }
 .gem-sidebar.collapsed .gem-home {
+  color: var(--app-accent);
+}
+/* 展开态：首页 icon 也显示主题色 */
+.gem-sidebar:not(.collapsed) .gem-home {
   color: var(--app-accent);
 }
 .gem-sidebar.collapsed .gem-home:hover {
