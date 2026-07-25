@@ -91,7 +91,7 @@ _聊天与记忆_
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | POST | `/api/chat/stream` | 流式聊天（SSE） |
-| POST | `/api/workflow/run` | Agent 工作流 |
+| POST | `/api/code/workflow` | Agent 工作流（四态机，SSE 流式） |
 | POST | `/api/memory/save` | 保存记忆 |
 | GET | `/api/memory/recall` | 回忆记忆 |
 | GET | `/api/memory/welcome` | 欢迎语 |
@@ -221,3 +221,7 @@ go run cmd/prismd/main.go -port 5666 -data ./data -domain Atri
 ## 许可证
 
 内部项目，未指定开源许可证。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Rescenix/ResceneAgent&type=Date)](https://star-history.com/#Rescenix/ResceneAgent&Date)
