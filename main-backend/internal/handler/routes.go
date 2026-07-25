@@ -170,6 +170,9 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/posts", GetPosts)
 	r.POST("/api/posts", CreatePost)
 	r.POST("/api/login", Login)
+	// GitHub OAuth 登录（授权码流程：/api/auth/github 发起，/api/auth/github/callback 接收回调）
+	r.GET("/api/auth/github", GitHubLogin)
+	r.GET("/api/auth/github/callback", GitHubCallback)
 	r.GET("/api/memory/welcome", memoryStore.WelcomeHandler)
 
 	r.POST("/api/memory/save", memoryStore.SaveMemoryHandler)

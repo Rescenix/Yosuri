@@ -21,6 +21,9 @@ func main() {
 	// 加载环境变量
 	_ = godotenv.Load()
 
+	// 初始化 GitHub OAuth 配置（未配置 GITHUB_CLIENT_ID 等时自动跳过）
+	handler.InitGitHubOAuth()
+
 	// 初始化数据库连接
 	database.InitDB()
 
@@ -39,14 +42,10 @@ func main() {
 	// 每次 Append/SetCompressIndex 都会异步整份重写
 	sessionStore := handler.NewSessionStore(handler.ChatSessionsDomain)
 
-	// DS 浏览器代理（crack/server.js）已随 crack/ 目录封存废弃：主链路走 /api/code/workflow，
-	// 不再需要 localhost:3000 代理，故不再自动拉起——避免 crack 删除后启动被 node 缺失阻塞。
-
-	// 尝试启动本地 llama-server（若已安装 llama.cpp 并放置了 gguf 模型）。
-	// 失败不影响主服务启动，只打印警告日志。
-	if err := handler.StartLocalLlamaServer(); err != nil {
-		log.Printf("⚠️ 本地 llama-server 启动失败: %v", err)
-	}
+	// 注册退出清理：主进程收到 SIGINT/SIGTERM 时显式停掉本地 llama-server（如有），
+	// 避免子进程变孤儿继续吃内存。本地 llama 不再随后端启动无条件拉起，
+	// 改为选中本地识图模型时按需启动（见 EnsureLocalLlamaServer）。
+	handler.RegisterLlamaCleanupOnExit()
 
 	handler.RegisterRoutes(r, memoryStore, sessionStore)
 

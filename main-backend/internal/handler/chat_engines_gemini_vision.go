@@ -196,6 +196,10 @@ func analyzeImageWithModelID(ctx context.Context, modelID, imageBase64, mimeType
 	if !b.Vision {
 		return "", fmt.Errorf("模型 %s 不支持视觉", modelID)
 	}
+	// 本地 llama-server：只有真正选中本地识图模型时才按需拉起（不占用内存直到用的时候）。
+	if b.IsLocal {
+		EnsureLocalLlamaServer()
+	}
 	if instruction == "" {
 		instruction = geminiDefaultInstruction
 	}

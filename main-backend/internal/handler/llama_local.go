@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -94,27 +96,36 @@ func loadLocalLlamaConfig() LocalLlamaConfig {
 	}
 }
 
-// StartLocalLlamaServer 尝试启动本地 llama-server。
-// 如果模型文件或可执行文件缺失，则只打印警告并返回 nil，不影响主服务启动。
-func StartLocalLlamaServer() error {
+// EnsureLocalLlamaServer 按需启动本地 llama-server（异步、非阻塞）。
+//
+// 设计目标（见 issue：后端每次启动都拉起 llama 吃光 2G 内存、且杀死主进程后
+// llama 子进程变孤儿继续跑）：
+//  1. 主服务启动阶段【不再】无条件拉起 llama —— 只有真正选了某个 IsLocal 的
+//     识图模型（如 local_llama_qwen2_5_vl_7b）发起识图请求时，才在这里按需拉起。
+//  2. 启动失败只打日志、不阻塞调用方（调用方会回退到云端 Gemini 识图）。
+//  3. 通过进程组（Setpgid）+ 信号处理，保证主进程退出时整个 llama 进程组一起退出，
+//     不再产生孤儿进程。
+//
+// 调用方（analyzeImageWithModelID）在命中本地模型时先调本函数，再走推理。
+func EnsureLocalLlamaServer() {
 	cfg := loadLocalLlamaConfig()
 
 	if _, err := os.Stat(cfg.ModelPath); err != nil {
-		log.Printf("⚠️ 本地 llama 模型未找到 (%s)，跳过启动本地服务。可通过 LLAMA_MODEL_PATH 指定路径。", cfg.ModelPath)
-		return nil
+		log.Printf("⚠️ 本地 llama 模型未找到 (%s)，无法启动本地识图服务。可通过 LLAMA_MODEL_PATH 指定路径，或改用云端识图模型。", cfg.ModelPath)
+		return
 	}
-
 	if _, err := exec.LookPath(cfg.BinPath); err != nil {
-		log.Printf("⚠️ llama-server 可执行文件未找到 (%s)，跳过启动本地服务。请安装 llama.cpp 并加入 PATH，或通过 LLAMA_SERVER_BIN 指定。", cfg.BinPath)
-		return nil
+		log.Printf("⚠️ llama-server 可执行文件未找到 (%s)，无法启动本地识图服务。请安装 llama.cpp 并加入 PATH，或通过 LLAMA_SERVER_BIN 指定。", cfg.BinPath)
+		return
 	}
 
 	llamaServerMu.Lock()
-	defer llamaServerMu.Unlock()
-
+	// 已在运行 / 正在启动，直接返回（runOnce 防止并发重复拉起）
 	if llamaServerCmd != nil {
-		return nil
+		llamaServerMu.Unlock()
+		return
 	}
+	llamaServerMu.Unlock()
 
 	args := []string{
 		"--model", cfg.ModelPath,
@@ -127,37 +138,63 @@ func StartLocalLlamaServer() error {
 		args = append(args, "--mmproj", cfg.MmprojPath)
 	}
 
-	log.Printf("🦙 启动本地 llama-server: %s %s", cfg.BinPath, strings.Join(args, " "))
+	log.Printf("🦙 按需启动本地 llama-server: %s %s", cfg.BinPath, strings.Join(args, " "))
 	cmd := exec.Command(cfg.BinPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("启动 llama-server 失败: %w", err)
-	}
+	// 非 Windows 下建独立进程组：主进程退出时统一 kill 整个组，避免 llama 变孤儿继续占内存。
+	// Windows 无进程组概念，改由 main 的退出信号处理里显式调用 StopLocalLlamaServer() 回收。
+	ensureLlamaProcessGroup(cmd)
 
+	llamaServerMu.Lock()
 	llamaServerCmd = cmd
 	llamaServerURL = fmt.Sprintf("http://%s:%d/v1", cfg.Host, cfg.Port)
+	llamaServerMu.Unlock()
 
-	if err := waitForLlamaServer(60 * time.Second); err != nil {
-		_ = cmd.Process.Kill()
-		llamaServerCmd = nil
-		llamaServerURL = ""
-		return err
-	}
-
-	log.Printf("🦙 本地 llama-server 已就绪: %s (n_gpu_layers=%d)", llamaServerURL, cfg.NGPULayers)
-
-	// 守护 goroutine：进程意外退出时打印日志并清理状态。
-	go func() {
-		_ = cmd.Wait()
+	if err := cmd.Start(); err != nil {
+		log.Printf("⚠️ 启动 llama-server 失败: %v", err)
 		llamaServerMu.Lock()
 		llamaServerCmd = nil
+		llamaServerURL = ""
+		llamaServerMu.Unlock()
+		return
+	}
+
+	// 异步等待就绪，不阻塞调用方（调用方自己带超时去打 llama 的 /v1/chat/completions）。
+	go func() {
+		if err := waitForLlamaServer(120 * time.Second); err != nil {
+			log.Printf("⚠️ 本地 llama-server 在超时内未就绪: %v（识图将回退云端）", err)
+			llamaServerMu.Lock()
+			if llamaServerCmd == cmd {
+				StopLocalLlamaServer()
+			}
+			llamaServerMu.Unlock()
+			return
+		}
+		log.Printf("🦙 本地 llama-server 已就绪: %s (n_gpu_layers=%d)", llamaServerURL, cfg.NGPULayers)
+		_ = cmd.Wait()
+		llamaServerMu.Lock()
+		if llamaServerCmd == cmd {
+			llamaServerCmd = nil
+			llamaServerURL = ""
+		}
 		llamaServerMu.Unlock()
 		log.Println("🦙 本地 llama-server 已退出")
 	}()
+}
 
-	return nil
+// IsLocalLlamaModel 判断某个模型 ID 是否走本地 llama-server（即需要本地识图服务）。
+// 仅当该模型在免费池/用户配置中标记为 Local=true 时返回 true。
+func IsLocalLlamaModel(modelID string) bool {
+	if modelID == "" {
+		return false
+	}
+	b := resolveExact("", modelID)
+	if b == nil {
+		return false
+	}
+	return b.IsLocal
 }
 
 func waitForLlamaServer(timeout time.Duration) error {
@@ -177,14 +214,33 @@ func waitForLlamaServer(timeout time.Duration) error {
 	return fmt.Errorf("llama-server 在 %v 内未就绪", timeout)
 }
 
-// StopLocalLlamaServer 停止本地 llama-server 进程。
+// StopLocalLlamaServer 停止本地 llama-server 进程，并清空状态。
+// 幂等：未运行时直接返回 nil。
+// 进程组级 kill（连孙子进程一起）走非 Windows 的 llama_local_posix.go，
+// 这里 Windows 下直接 Kill 子进程，并由 main 的退出信号统一触发。
 func StopLocalLlamaServer() error {
 	llamaServerMu.Lock()
 	defer llamaServerMu.Unlock()
 	if llamaServerCmd == nil || llamaServerCmd.Process == nil {
 		return nil
 	}
-	return llamaServerCmd.Process.Kill()
+	cmd := llamaServerCmd
+	llamaServerCmd = nil
+	llamaServerURL = ""
+	return stopLlamaProcess(cmd)
+}
+
+// RegisterLlamaCleanupOnExit 注册退出信号监听：主进程收到 SIGINT/SIGTERM 时，
+// 显式停掉本地 llama-server，避免子进程变孤儿继续占内存（Windows 下尤其依赖此路径）。
+func RegisterLlamaCleanupOnExit() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("🦙 收到退出信号，正在停止本地 llama-server（如有）...")
+		_ = StopLocalLlamaServer()
+		os.Exit(0)
+	}()
 }
 
 // LocalLlamaServerURL 返回本地 llama-server 的 OpenAI 兼容端点；未启动时返回空字符串。

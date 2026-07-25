@@ -8,6 +8,12 @@
       @keypress.enter="login"
     />
     <button v-if="!isLoggedIn" @click="login">登录</button>
+    <a
+      v-if="!isLoggedIn"
+      class="gh-btn"
+      href="/api/auth/github"
+      title="使用 GitHub 账号登录"
+    >GitHub 登录</a>
     <span v-else class="login-status">开发者模式</span>
     <button v-if="isLoggedIn" @click="logout">退出</button>
   </div>
@@ -70,5 +76,20 @@ const logout = () => {
 .login-status {
   color: #000000;
   font-size: 13px;
+}
+.gh-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 140, 180, 0.3);
+  background: rgba(15, 10, 20, 0.6);
+  color: #e2e8f0;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.gh-btn:hover {
+  border-color: rgba(255, 140, 180, 0.6);
 }
 </style>
