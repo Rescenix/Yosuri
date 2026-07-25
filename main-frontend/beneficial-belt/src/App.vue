@@ -4,19 +4,22 @@
 
 <script setup>
 import { onMounted } from 'vue'
+import { useAuth } from './composables/useAuth.js'
 
-// GitHub OAuth 回调回收：GitHubCallback 会把 JWT 通过 ?token= 带回前端首页，
-// 这里解析并存入 localStorage（与 AdminLogin 的 token 键一致），随后清掉 URL 里的 token。
+const auth = useAuth()
+
+// GitHub OAuth 回调回收：GitHubCallback 把 JWT 通过 ?token= 带回前端首页。
+// 先存好 token 再派发 auth-change，由 useAuth 统一去 /api/auth/me 验真并拉用户名/头像；
+// 伪造/过期的 token 会被 useAuth 清掉，不会误判登录成功。URL 里的 token 立即清掉防泄露。
 onMounted(() => {
   const params = new URLSearchParams(window.location.search)
   const token = params.get('token')
   if (token) {
-    localStorage.setItem('token', token)
-    // 清掉 URL 中的 token，避免刷新重复写入 / 泄露
     const url = new URL(window.location.href)
     url.searchParams.delete('token')
     window.history.replaceState({}, document.title, url.pathname + url.search)
-    // 通知登录态变化（AdminLogin 等组件监听此事件）
+
+    localStorage.setItem('token', token)
     window.dispatchEvent(new Event('auth-change'))
   }
 })

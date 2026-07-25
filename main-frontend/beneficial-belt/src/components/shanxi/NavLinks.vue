@@ -1,27 +1,14 @@
 <template>
   <ul class="nav-links">
     <li><a href="/blog">博客</a></li>
-  
   </ul>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { useAuth } from '../composables/useAuth.js'
 
-const isLoggedIn = ref(false)
-
-function updateLoginState() {
-  isLoggedIn.value = !!localStorage.getItem('token')
-}
-
-onMounted(() => {
-  updateLoginState()
-  window.addEventListener('auth-change', updateLoginState)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('auth-change', updateLoginState)
-})
+// 登录态统一由 useAuth 管理（含验真 + 监听 auth-change 自动刷新）
+const isLoggedIn = useAuth().isLoggedIn
 </script>
 
 <style scoped>

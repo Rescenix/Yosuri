@@ -88,11 +88,35 @@
     </div>
 
     <!-- footer -->
-    <div class="fm-footer">
-      <Icon icon="mdi:account-circle" width="20" color="#6b6b6b" />
-      <span>Prometheus · Pro</span>
+    <div class="fm-footer" ref="footerRef">
+      <div class="fm-user" @click.stop="toggleUserMenu" title="点击查看账户">
+        <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
+        <Icon v-else icon="mdi:account-circle" width="20" color="#6b6b6b" />
+        <span>{{ auth.displayName.value }}</span>
+      </div>
       <Icon class="fm-footer-settings" icon="mdi:cog-outline" width="18" color="#6b6b6b" @click.stop="$emit('open-settings')" />
     </div>
+
+    <!-- 用户卡片菜单：点头像悬浮白色卡片，含登录/退出 -->
+    <Teleport to="body">
+      <div v-if="showUserMenu" ref="userCardRef" class="smc-user-card" :style="userMenuStyle" @click.stop>
+        <template v-if="isLoggedIn">
+          <div class="smc-user-card-head">
+            <img v-if="auth.avatar.value" :src="auth.avatar.value" class="smc-user-avatar" alt="avatar" />
+            <Icon v-else icon="mdi:account-circle" width="26" color="var(--app-accent)" />
+            <div class="smc-user-card-name">{{ auth.name.value || auth.login.value || 'GitHub 用户' }}</div>
+          </div>
+          <button class="smc-user-card-item danger" @click="logout">退出登录</button>
+        </template>
+        <template v-else>
+          <div class="smc-user-card-head">
+            <Icon icon="mdi:account-circle" width="26" color="var(--app-accent)" />
+            <div class="smc-user-card-name">{{ auth.displayName.value }}</div>
+          </div>
+          <a class="smc-user-card-item" href="/api/auth/github">使用 GitHub 登录</a>
+        </template>
+      </div>
+    </Teleport>
 
     <!-- 文件夹三点菜单 -->
     <Teleport to="body">
@@ -115,6 +139,9 @@
 import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import SessionTreeNode from './SessionTreeNode.vue'
+import { useAuth } from '../../../composables/useAuth.js'
+
+const auth = useAuth()
 
 const PIN_KEY = 'shanxi_pinned_projects'
 
@@ -125,6 +152,43 @@ const props = defineProps({
   fill: { type: Boolean, default: false }
 })
 const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search'])
+
+// 用户卡片菜单（登录 / 退出）
+const footerRef = ref(null)
+const userCardRef = ref(null)
+const showUserMenu = ref(false)
+const userMenuStyle = ref({})
+const isLoggedIn = auth.isLoggedIn
+function refreshLoginState() { auth.refresh() }
+function toggleUserMenu() {
+  if (showUserMenu.value) { showUserMenu.value = false; return }
+  showUserMenu.value = true
+  refreshLoginState()
+  nextTick(() => {
+    const el = footerRef.value
+    const card = userCardRef.value
+    if (!el || !card) return
+    const rect = el.getBoundingClientRect()
+    const cardRect = card.getBoundingClientRect()
+    const cardW = 200
+    const cardH = cardRect.height || 100
+    const gap = 8
+    let left = rect.right - cardW
+    let top = rect.top - cardH - gap
+    if (left < 8) left = 8
+    if (top < 8) top = rect.bottom + gap
+    if (top + cardH > window.innerHeight - 8) {
+      top = window.innerHeight - cardH - 8
+      if (top < 8) top = 8
+    }
+    userMenuStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: cardW + 'px' }
+  })
+}
+function logout() {
+  auth.logout()
+  showUserMenu.value = false
+  refreshLoginState()
+}
 
 // 置顶项目文件夹
 const pinnedProjectNames = ref([])
@@ -261,10 +325,10 @@ function onDelete(s) {
   hoveredId.value = null
   emit('delete-session', s.id)
 }
-function onDocClick() { openMenuId.value = null; openFolderMenu.value = null }
+function onDocClick() { openMenuId.value = null; openFolderMenu.value = null; showUserMenu.value = false }
 
-onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick) })
-onUnmounted(() => document.removeEventListener('click', onDocClick))
+onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick); window.addEventListener('auth-change', refreshLoginState) })
+onUnmounted(() => { document.removeEventListener('click', onDocClick); window.removeEventListener('auth-change', refreshLoginState) })
 </script>
 
 <style scoped>
@@ -343,4 +407,38 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 }
 .fm-footer-settings { margin-left: auto; cursor: pointer; transition: color 0.15s ease; }
 .fm-footer-settings:hover { color: var(--app-text); }
+.fm-user { display: flex; align-items: center; gap: 10px; cursor: pointer; border-radius: 8px; }
+.fm-user:hover { opacity: 0.85; }
+.fm-user-avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid var(--app-accent); }
+
+/* 用户卡片菜单：白色卡片浮层 */
+.smc-user-card {
+  background: #ffffff;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  padding: 8px;
+  z-index: 10000;
+}
+.smc-user-card-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px 8px;
+}
+.smc-user-avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+  border: 1px solid var(--app-accent);
+}
+.smc-user-card-name { font-size: 13px; font-weight: 600; color: var(--app-text); }
+.smc-user-card-item {
+  display: block; width: 100%; box-sizing: border-box;
+  padding: 9px 12px; border: none; border-radius: 8px;
+  background: transparent; color: var(--app-text);
+  font-size: 13px; font-weight: 500; text-align: left;
+  text-decoration: none; cursor: pointer;
+  transition: background 0.12s ease;
+}
+.smc-user-card-item:hover { background: var(--app-surface-3); }
+.smc-user-card-item.danger { color: #d94834; }
+.smc-user-card-item.danger:hover { background: rgba(217, 72, 52, 0.08); }
 </style>

@@ -6,6 +6,7 @@ import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 import { loadContextBreakdown } from '../composables/contextBreakdown.js'
+import { useAuth } from '../../../composables/useAuth.js'
 
 export function useChatWidget(props) {
   const isOpen = ref(false)
@@ -24,7 +25,8 @@ if (!localStorage.getItem('prism_session_id')) {
     if (newVal) sessionId.value = newVal
   })
 
-  const isLoggedIn = ref(false)
+  // 登录态统一由 useAuth 管理（含验真 + 拉用户名/头像），不再自行伪造占位 token
+  const isLoggedIn = useAuth().isLoggedIn
   const debugTemp = ref(localStorage.getItem('debugTemp') ? parseFloat(localStorage.getItem('debugTemp')) : 0.7)
   const debugTopP = ref(localStorage.getItem('debugTopP') ? parseFloat(localStorage.getItem('debugTopP')) : 0.9)
   const debugReasoning = ref(localStorage.getItem('debugReasoning') || '')
@@ -281,8 +283,8 @@ async function switchSession(id) {
       isExpanded.value = true
     }
 
-    localStorage.setItem('token', 'dev-permanent-token')
-    isLoggedIn.value = true
+    // 登录态交由 useAuth 统一管理（启动时会用 localStorage 里的真 token 验真）；
+    // 不再写入占位 token 覆盖 GitHub 真登录换来的 JWT。
     await loadAllHistory()
     fetchBalance()
     // 初始化时恢复当前会话持久化的真实 token（横条绑定会话，刷新不丢）

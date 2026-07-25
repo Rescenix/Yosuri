@@ -531,6 +531,15 @@ min-height: 90px !important;
   animation: userMsgIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* 导航轴选中用户消息：柔和主题色光晕，无硬线圈、无动画、不跳动 */
+.message-bubble.user.active {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 0 0 1px color-mix(in srgb, var(--app-accent) 28%, transparent),
+    0 0 20px color-mix(in srgb, var(--app-accent) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--app-accent) 8%, transparent);
+}
+
 @keyframes userMsgIn {
   from { opacity: 0; transform: translateY(6px) scale(0.985); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -3399,15 +3408,7 @@ min-height: 90px !important;
    少了它就会一路上溯到 .chat-body-row，整个卡片跑到窗口左边去 */
 .toolbar-dropdown-wrap { position: relative; }
 
-/* 导航轴跳转后的短暂高亮：不闪一下的话，滚过去了也不知道停在哪条 */
-.msg-jump-flash > .message-bubble,
-.msg-jump-flash > .agentflow-wrap {
-  animation: msg-jump-flash 1.2s ease;
-}
-@keyframes msg-jump-flash {
-  0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  20%      { box-shadow: 0 0 0 3px var(--app-accent-soft, rgba(99, 102, 241, 0.35)); }
-}
+
 
 /* Auto/+ 下拉都开在工具条上方——工具条贴着窗口底边，往下开会出屏 */
 .auto-menu-dropdown,

@@ -18,6 +18,36 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// githubHTTPClient 返回专供 GitHub OAuth 请求使用的 HTTP 客户端。
+// 由于本机访问 github.com 必须走本地代理（Clash，默认 127.0.0.1:7892），
+// 直连会 TCP 超时，因此这里强制注入代理，优先级为：
+//   GITHUB_OAUTH_PROXY  >  HTTPS_PROXY  >  回退到 127.0.0.1:7892
+// 这样只影响 GitHub OAuth 流量，不会把 DeepSeek 等 LLM 请求也塞进 Clash。
+func githubHTTPClient() *http.Client {
+	proxy := os.Getenv("GITHUB_OAUTH_PROXY")
+	if proxy == "" {
+		proxy = os.Getenv("HTTPS_PROXY")
+	}
+	if proxy == "" {
+		proxy = os.Getenv("HTTP_PROXY")
+	}
+	if proxy == "" {
+		proxy = "http://127.0.0.1:7892" // 本机 Clash 默认端口
+	}
+	proxyURL, err := url.Parse(proxy)
+	if err != nil {
+		log.Printf("⚠️ GitHub OAuth 代理地址解析失败，回退直连: %v", err)
+		return &http.Client{Timeout: 30 * time.Second}
+	}
+	log.Printf("🌐 GitHub OAuth 将使用代理: %s", proxyURL.String())
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
+	}
+}
+
 // ===== GitHub OAuth 配置 =====
 // 在 .env 配置以下三项后生效：
 //   GITHUB_CLIENT_ID      —— GitHub OAuth App 的 Client ID
@@ -115,6 +145,9 @@ func GitHubLogin(c *gin.Context) {
 	q.Set("scope", "read:user user:email")
 	q.Set("state", state)
 	q.Set("allow_signup", "true")
+	// 强制 GitHub 每次弹出账号选择页（已登录时也要求重新选账号），
+	// 方便“退出后换号登录”而不被 GitHub 记住的 session 直接自动授权。
+	q.Set("prompt", "select_account")
 
 	authURL := "https://github.com/login/oauth/authorize?" + q.Encode()
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
@@ -180,7 +213,7 @@ func exchangeGitHubToken(clientID, clientSecret, redirectURL, code string) (stri
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := githubHTTPClient().Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -208,7 +241,7 @@ func fetchGitHubUser(token string) (*githubUser, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := githubHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +256,24 @@ func fetchGitHubUser(token string) (*githubUser, error) {
 		return nil, err
 	}
 	return &u, nil
+}
+
+// GitHubMe 校验当前 token 真伪（复用 middleware.AuthRequired 解析 JWT_SECRET），
+// 返回 200 + 用户信息表示登录有效，401 表示无效。供前端区分“真登录”与“伪造/过期 token”。
+func GitHubMe(c *gin.Context) {
+	role, _ := c.Get("role")
+	openid, _ := c.Get("openid")
+	login, _ := c.Get("login")
+	name, _ := c.Get("name")
+	avatar, _ := c.Get("avatar")
+	c.JSON(http.StatusOK, gin.H{
+		"authenticated": true,
+		"role":          role,
+		"openid":        openid,
+		"login":         login,
+		"name":          name,
+		"avatar":        avatar,
+	})
 }
 
 // signUserJWT 签发普通用户 JWT，openid 落地为 GitHub 登录名（与 model_config_handler 的 userKey 规划一致）。
