@@ -220,8 +220,14 @@ go run cmd/prismd/main.go -port 5666 -data ./data -domain Atri
 
 ## 许可证
 
-内部项目，未指定开源许可证。
+
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Rescenix/ResceneAgent&type=Date)](https://star-history.com/#Rescenix/ResceneAgent&Date)
+<a href="https://www.star-history.com/?type=date&repos=Rescenix%2FResceneAgent">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&theme=dark&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
+ </picture>
+</a>
