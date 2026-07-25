@@ -187,18 +187,64 @@
                 <span class="param-label">配色</span>
                 <div class="theme-swatches">
                   <button
-                    v-for="(p, key) in THEME_PRESETS"
+                    v-for="[key, p] in colorThemes"
                     :key="key"
                     class="theme-swatch"
                     :class="{ on: theme === key }"
                     type="button"
                     :title="p.label"
-                    @click="theme = key"
+                    @click="selectTheme(key)"
                   >
                     <span class="theme-swatch-dot" :style="{ background: p.accent }"></span>
                     <span class="theme-swatch-label">{{ p.label }}</span>
                   </button>
                 </div>
+              </div>
+
+              <div class="settings-section-title" style="margin-top: 10px;">皮肤</div>
+              <div class="settings-section-desc">完整氛围皮肤；部分皮肤为会员专享。</div>
+              <div class="param-row" style="align-items: flex-start;">
+                <span class="param-label">限定皮肤</span>
+                <div class="skin-groups">
+                  <div v-for="[series, items] in skinThemes" :key="series" class="skin-group">
+                    <div class="skin-group-title">{{ series }}</div>
+                    <div class="skin-cards">
+                      <button
+                        v-for="[key, p] in items"
+                        :key="key"
+                        class="skin-card"
+                        :class="{ on: theme === key, locked: p.vip && !isVip }"
+                        type="button"
+                        :title="p.label"
+                        @click="selectTheme(key)"
+                      >
+                        <span class="skin-card-preview" :style="{ background: p.skin?.dark?.surface || p.accent, borderColor: p.accent }">
+                          <span class="skin-card-flame" :style="{ background: p.accent }"></span>
+                        </span>
+                        <span class="skin-card-info">
+                          <span class="skin-card-label">{{ p.label }}</span>
+                          <span v-if="p.vip" class="skin-card-badge">
+                            <Icon icon="mdi:crown-outline" width="11" />
+                            会员
+                          </span>
+                        </span>
+                        <span v-if="p.vip && !isVip" class="skin-card-lock">
+                          <Icon icon="mdi:lock-outline" width="14" />
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VIP 解锁提示 -->
+              <div v-if="vipPromptSkin" class="vip-prompt">
+                <Icon icon="mdi:crown-outline" width="16" />
+                <span>「{{ THEME_PRESETS[vipPromptSkin]?.label }}」是会员专属皮肤，解锁会员后即可使用。</span>
+                <button class="vip-prompt-btn" type="button" @click="unlockVipDemo">模拟解锁</button>
+                <button class="vip-prompt-close" type="button" @click="vipPromptSkin = ''">
+                  <Icon icon="mdi:close" width="14" />
+                </button>
               </div>
 
               <div class="param-row">
@@ -379,7 +425,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
-import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
+import { theme, mode, MODE_OPTIONS, THEME_PRESETS, initTheme } from '../composables/useTheme.js'
 import { renderMarkdown } from './markdownRenderer.js'
 
 // 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
@@ -405,6 +451,50 @@ const emit = defineEmits(['close'])
 
 // 左侧边栏当前 tab
 const activeTab = ref('models')
+
+// ============ 会员与皮肤 ============
+const VIP_KEY = 'aurora_vip'
+const isVip = ref(localStorage.getItem(VIP_KEY) === '1')
+const vipPromptSkin = ref('')
+const colorThemes = computed(() => Object.entries(THEME_PRESETS).filter(([, p]) => !p.fullSkin))
+const skinThemes = computed(() => {
+  const groups = {}
+  Object.entries(THEME_PRESETS)
+    .filter(([, p]) => p.fullSkin)
+    .forEach(([key, p]) => {
+      const series = p.series || '限定皮肤'
+      if (!groups[series]) groups[series] = []
+      groups[series].push([key, p])
+    })
+  return Object.entries(groups)
+})
+
+function canUseTheme(key) {
+  const p = THEME_PRESETS[key]
+  return !p?.vip || isVip.value
+}
+
+function selectTheme(key) {
+  if (!canUseTheme(key)) {
+    vipPromptSkin.value = key
+    return
+  }
+  vipPromptSkin.value = ''
+  theme.value = key
+  // 切到完整皮肤时强制暗色，避免亮色下氛围不对
+  const p = THEME_PRESETS[key]
+  if (p?.fullSkin && mode.value === 'light') {
+    mode.value = 'dark'
+  }
+}
+
+function unlockVipDemo() {
+  localStorage.setItem(VIP_KEY, '1')
+  isVip.value = true
+  if (vipPromptSkin.value) {
+    selectTheme(vipPromptSkin.value)
+  }
+}
 
 // ============ 流式渐变无限循环预览（纯前端，不花 token） ============
 const previewBubble = ref(null)
@@ -1054,6 +1144,64 @@ onUnmounted(() => {
 .theme-swatch.on { border-color: var(--app-accent); color: var(--app-text); background: var(--app-accent-soft); font-weight: 600; }
 .theme-swatch-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
 .theme-swatch-label { line-height: 1; }
+
+/* 限定皮肤卡片（按系列分组） */
+.skin-groups { display: flex; flex-direction: column; gap: 12px; margin-left: auto; max-width: 460px; width: 100%; }
+.skin-group-title { font-size: 11.5px; color: var(--app-text-faint); margin-bottom: 6px; letter-spacing: 0.04em; }
+.skin-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.skin-card {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 8px 12px 8px 8px; border-radius: 12px; cursor: pointer;
+  background: var(--app-surface-2); border: 1.5px solid var(--app-border);
+  color: var(--app-text-soft); font-size: 12.5px; transition: all 0.15s ease;
+  min-width: 130px;
+}
+.skin-card:hover { border-color: var(--app-accent-soft); color: var(--app-text); }
+.skin-card.on { border-color: var(--app-accent); color: var(--app-text); background: var(--app-accent-soft); font-weight: 600; }
+.skin-card.locked { opacity: 0.72; cursor: not-allowed; }
+.skin-card.locked:hover { border-color: var(--app-border); }
+.skin-card-preview {
+  position: relative; width: 34px; height: 34px; border-radius: 8px; overflow: hidden;
+  border: 1.5px solid var(--app-border); flex-shrink: 0;
+}
+.skin-card-flame {
+  position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+  width: 22px; height: 22px; border-radius: 50% 50% 50% 0;
+  filter: blur(6px); opacity: 0.8;
+}
+.skin-card-info { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.skin-card-label { line-height: 1; }
+.skin-card-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 700; color: #d4a017;
+  background: rgba(212,160,23,0.12); padding: 1px 5px; border-radius: 999px;
+}
+.skin-card-lock {
+  position: absolute; top: 6px; right: 6px;
+  color: var(--app-text-faint);
+}
+
+/* VIP 解锁提示条 */
+.vip-prompt {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 0 4px 108px; padding: 10px 12px;
+  background: var(--app-accent-soft); border: 1px solid var(--app-accent-soft);
+  border-radius: 10px; font-size: 12px; color: var(--app-text);
+  max-width: 460px;
+}
+.vip-prompt > span { flex: 1; line-height: 1.5; }
+.vip-prompt-btn {
+  flex-shrink: 0; padding: 4px 10px; font-size: 11.5px; font-weight: 600;
+  color: #fff; background: var(--app-accent); border: none; border-radius: 6px; cursor: pointer;
+}
+.vip-prompt-btn:hover { background: var(--app-accent-hover); }
+.vip-prompt-close {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px; border: none; background: transparent;
+  color: var(--app-text-soft); cursor: pointer;
+}
+.vip-prompt-close:hover { background: var(--app-surface-3); }
 
 /* MCP / Skills 实体卡片 */
 .entity-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; background: var(--app-surface-2); }

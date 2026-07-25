@@ -253,7 +253,14 @@
                         @input="autoGrowEdit"
                         @blur="onEditBlur"
                       ></textarea>
-                      <div v-else-if="item.content">{{ item.content }}</div>
+                      <!-- 点击消息文本本身就进入编辑态（不再依赖右下角铅笔按钮）。
+                           文本 div 只在「非编辑态」渲染，与上面的 textarea 互斥，
+                           所以点击它进入编辑不会重复触发。 -->
+                      <div
+                        v-else-if="item.content"
+                        class="msg-user-text"
+                        @click="editUserMessage(item)"
+                      >{{ item.content }}</div>
                       <!-- 编辑态右下角按钮变「发送」，否则是悬浮出现的「编辑」。
                            mousedown.prevent：点发送时不让 textarea 失焦，否则会先触发 @blur 复原、
                            把编辑态撤掉导致这一下点了个寂寞。 -->
@@ -265,14 +272,6 @@
                         @click="confirmEdit(item)"
                       >
                         <Icon icon="mdi:arrow-up" width="16" />
-                      </button>
-                      <button
-                        v-else-if="item.content"
-                        class="msg-edit-btn"
-                        title="编辑并重新发送"
-                        @click="editUserMessage(item)"
-                      >
-                        <Icon icon="mdi:pencil-outline" width="15" />
                       </button>
                     </div>
                     <MessageStepGroup
@@ -601,7 +600,7 @@
                 </div>
 
                 <!-- 用户消息导航轴：占据工具栏中间的弹性空间 -->
-                <UserMessageRail :messages="messages" @jump="jumpToMessage" />
+                <UserMessageRail :messages="messages" :active-id="lastUserMessageId" @jump="jumpToMessage" />
 
                 <div class="input-toolbar-right">
                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
@@ -1039,6 +1038,13 @@ const lastAgentFlow = computed(() => {
     if (messages.value[i].kind === 'agentflow') return messages.value[i]
   }
   return null
+})
+const lastUserMessageId = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const m = messages.value[i]
+    if (m.sender === 'user' && (m.content || '').trim()) return m.id
+  }
+  return ''
 })
 const currentCapability = computed(() => {
   return modelCapabilities.value[selectedModel.value]
@@ -2356,5 +2362,176 @@ onUnmounted(() => {
 .stream-fade-seg {
   animation: om-stream-fade .5s ease-out both;
   will-change: opacity, filter;
+}
+
+/* ==================== 魔女审判 · 聊天组件氛围覆盖 ==================== */
+
+/* 用户消息：火印边框 + 内发光 */
+[data-skin="witchtrial"] .message-bubble.user {
+  position: relative;
+  background: linear-gradient(145deg, rgba(40, 20, 24, 0.95), rgba(28, 14, 18, 0.98));
+  border: 1.5px solid rgba(199, 62, 62, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 0 18px rgba(199, 62, 62, 0.08);
+  color: #f5e6e0;
+  border-radius: 14px 14px 4px 14px;
+}
+[data-skin="witchtrial"] .message-bubble.user::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 15px 15px 5px 15px;
+  background: linear-gradient(135deg, rgba(199, 62, 62, 0.45), transparent 50%, rgba(199, 62, 62, 0.2));
+  z-index: -1;
+  filter: blur(4px);
+  opacity: 0.8;
+}
+
+/* AI 消息：羊皮纸/古籍质感 */
+[data-skin="witchtrial"] .assistant-message {
+  background: linear-gradient(180deg, rgba(30, 24, 28, 0.96), rgba(24, 18, 22, 0.98));
+  border: 1px solid rgba(139, 110, 90, 0.25);
+  border-radius: 14px;
+  box-shadow: inset 0 0 30px rgba(139, 110, 90, 0.05), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+[data-skin="witchtrial"] .assistant-message .markdown-body {
+  color: #e8ddd0;
+}
+[data-skin="witchtrial"] .assistant-message .markdown-body code {
+  background: rgba(0, 0, 0, 0.35);
+  color: #e8a89a;
+}
+
+/* 工具调用条：暗红印章感 */
+[data-skin="witchtrial"] .tool-call-indicator {
+  background: rgba(199, 62, 62, 0.12);
+  border: 1px solid rgba(199, 62, 62, 0.25);
+  color: #e8a8a0;
+}
+
+/* 正在思考：火焰脉冲 */
+[data-skin="witchtrial"] .reasoning-stream .reasoning-label {
+  color: #d98a7a;
+  text-shadow: 0 0 8px rgba(199, 62, 62, 0.35);
+}
+[data-skin="witchtrial"] .reasoning-stream {
+  border-left: 2px solid rgba(199, 62, 62, 0.4);
+  background: rgba(199, 62, 62, 0.05);
+}
+
+/* 工具/步骤卡片：铁链暗框 */
+[data-skin="witchtrial"] .step-card,
+[data-skin="witchtrial"] .agent-step {
+  border-color: rgba(199, 62, 62, 0.2);
+  background: rgba(20, 14, 18, 0.7);
+}
+
+/* ==================== 二阶堂希罗 · 红黑洛丽塔 ==================== */
+
+/* 用户消息：粉丝绒圆润气泡 + 蝴蝶结与红花萦绕 */
+[data-skin="witchtrial_hiiro"] .message-bubble.user {
+  position: relative;
+  background: linear-gradient(145deg, rgba(90, 22, 48, 0.95), rgba(48, 14, 28, 0.98));
+  border: 1.5px solid rgba(233, 30, 99, 0.6);
+  border-radius: 22px 22px 4px 22px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 4px 18px rgba(0, 0, 0, 0.3),
+    0 0 22px rgba(233, 30, 99, 0.18);
+  color: #fff5f8;
+}
+
+/* 右上角蝴蝶结 */
+[data-skin="witchtrial_hiiro"] .message-bubble.user::before {
+  content: '🎀';
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+  z-index: 2;
+  animation: hiiro-bow-sway 2.8s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+
+/* 左下 + 右下红花萦绕（一朵实体 + text-shadow 复制） */
+[data-skin="witchtrial_hiiro"] .message-bubble.user::after {
+  content: '🌺';
+  position: absolute;
+  bottom: -9px;
+  left: -6px;
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+  pointer-events: none;
+  z-index: 2;
+  animation: hiiro-flower-float 3.2s ease-in-out infinite;
+  text-shadow:
+    28px -6px 0 rgba(255, 160, 180, 0.85),
+    48px 4px 0 rgba(240, 98, 146, 0.7);
+}
+
+@keyframes hiiro-bow-sway {
+  0%, 100% { transform: rotate(-6deg) scale(1); }
+  50% { transform: rotate(6deg) scale(1.05); }
+}
+
+@keyframes hiiro-flower-float {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-3px) rotate(4deg); }
+}
+
+/* AI 消息：暗粉蕾丝羊皮纸 */
+[data-skin="witchtrial_hiiro"] .assistant-message {
+  background: linear-gradient(180deg, rgba(55, 26, 38, 0.96), rgba(38, 18, 26, 0.98));
+  border: 1px solid rgba(240, 98, 146, 0.22);
+  border-radius: 20px;
+  box-shadow: inset 0 0 32px rgba(233, 30, 99, 0.06), 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+[data-skin="witchtrial_hiiro"] .assistant-message .markdown-body {
+  color: #ffeef4;
+}
+[data-skin="witchtrial_hiiro"] .assistant-message .markdown-body code {
+  background: rgba(0, 0, 0, 0.32);
+  color: #ff9ec4;
+}
+
+/* 工具调用条：蕾丝印章 */
+[data-skin="witchtrial_hiiro"] .tool-call-indicator {
+  background: rgba(233, 30, 99, 0.14);
+  border: 1px solid rgba(240, 98, 146, 0.25);
+  color: #ff9ec4;
+  border-radius: 12px;
+}
+
+/* 正在思考：粉柔光 */
+[data-skin="witchtrial_hiiro"] .reasoning-stream .reasoning-label {
+  color: #ff9ec4;
+}
+[data-skin="witchtrial_hiiro"] .reasoning-stream {
+  border-left: 2px solid rgba(233, 30, 99, 0.45);
+  background: rgba(233, 30, 99, 0.06);
+  border-radius: 0 12px 12px 0;
+}
+
+/* 工具/步骤卡片：洛丽塔暗框 */
+[data-skin="witchtrial_hiiro"] .step-card,
+[data-skin="witchtrial_hiiro"] .agent-step {
+  border-color: rgba(233, 30, 99, 0.22);
+  background: rgba(38, 16, 26, 0.74);
+  border-radius: 14px;
+}
+
+/* 用户消息文本：点击即编辑，给出明确可点反馈 */
+.msg-user-text {
+  cursor: pointer;
+  user-select: text;
+}
+.msg-user-text:hover {
+  filter: brightness(1.08);
 }
 </style>

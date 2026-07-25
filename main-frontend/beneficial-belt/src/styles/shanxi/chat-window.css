@@ -513,7 +513,7 @@ min-height: 90px !important;
   color: var(--app-text);
   border: none;
   padding: 11px 17px;
-  border-radius: 12px;
+  border-radius: 25px;
   line-height: 1.6;
   text-align: left;
   position: relative;

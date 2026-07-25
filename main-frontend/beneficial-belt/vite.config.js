@@ -5,6 +5,7 @@ import { dirname, resolve } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const apiTarget = process.env.AURORA_API_TARGET || 'http://localhost:8080';
 
 export default defineConfig({
   plugins: [vue()],
@@ -35,7 +36,8 @@ export default defineConfig({
       },
       '/images': 'http://localhost:8080',
       '/api': {
-        target: 'http://localhost:8080',
+        target: apiTarget,
+        ws: true,
         changeOrigin: true,
         secure: false,
         timeout: 120000,

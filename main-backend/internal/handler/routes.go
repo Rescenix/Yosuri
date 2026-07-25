@@ -56,6 +56,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.DELETE("/api/code/workflow/checkpoints/:id", workflowRunner.HandleCodeWorkflowCheckpointDelete)
 	// 预览浏览器：本地开发服务器探测
 	r.GET("/api/preview/servers", HandlePreviewServers)
+	// CDP 截屏中转：前端只连同源 WebSocket，后端连接本机 Chrome 9222
+	r.GET("/api/preview/cdp", HandlePreviewCDP)
 	// Python Harness (:8001) 集成示例：转发 /run_task
 	r.GET("/api/harness/demo", HandleHarnessDemo)
 

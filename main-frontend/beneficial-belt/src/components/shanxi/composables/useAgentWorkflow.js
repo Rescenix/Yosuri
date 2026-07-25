@@ -307,7 +307,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('preview_open', e => {
             const d = JSON.parse(e.data)
             if (!d.url) return
-            requestPreview(d.url)
+            // 把后端给的 cdp_ws 一并传下去——open_browser_preview 会带真实
+            // Chromium target 的 ws，PreviewBrowser 据此走 CDP screencast 渲染。
+            requestPreview(d.url, d.cdp_ws, d.cdp_error)
             flow.blocks.push({ type: 'preview', url: d.url })
             onStreamUpdate?.()
         })

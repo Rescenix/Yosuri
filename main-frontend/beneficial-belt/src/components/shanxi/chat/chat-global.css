@@ -2,7 +2,7 @@
   word-break: break-word;
   line-height: 1.68;
   color: var(--app-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
 }
 
 .markdown-body p {
@@ -19,7 +19,12 @@
   font-weight: 600;
   color: var(--app-text);
   line-height: 1.28;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
+}
+
+/* AI 消息主容器字体跟随皮肤 */
+.assistant-message {
+  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
 }
 
 .markdown-body a {

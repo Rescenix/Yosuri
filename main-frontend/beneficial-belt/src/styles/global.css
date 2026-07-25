@@ -1,3 +1,6 @@
+/* 引入差异化中文字体：魔女审判用硬朗衬线，二阶堂希罗用可爱圆体/行楷 */
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=ZCOOL+QingKe+HuangYou&display=swap');
+
 /* ========================================
    杉汐的星尘核心 · 全局样式（白蓝主题）
    ======================================== */
@@ -28,7 +31,7 @@ body {
   padding: 0;
   background: var(--app-bg);
   color: var(--app-text);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--app-font, 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif);
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -460,4 +463,237 @@ body {
 .markdown-body strong,
 .markdown-body b {
   font-weight: 700 !important;
+}
+
+/* ========================================
+   魔女审判系列 · 完整氛围皮肤覆盖
+   ======================================== */
+
+/* ----- 二阶堂希罗 · 红黑洛丽塔 ----- */
+[data-skin="witchtrial_hiiro"] body,
+[data-skin="witchtrial_hiiro"] .app-container {
+  font-family: var(--app-font, 'ZCOOL QingKe HuangYou', 'PingFang SC', 'Microsoft YaHei', 'STHeiti', cursive);
+  background-color: #0d0709;
+  background-image:
+    radial-gradient(ellipse 75% 55% at 50% -10%, rgba(233, 30, 99, 0.22), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 92% 96%, rgba(233, 30, 99, 0.14), transparent 52%),
+    radial-gradient(circle at 8% 90%, rgba(150, 40, 80, 0.16), transparent 28%),
+    radial-gradient(rgba(233, 30, 99, 0.22) 2px, transparent 2px),
+    radial-gradient(rgba(233, 30, 99, 0.1) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 18px 18px, 30px 30px;
+}
+
+[data-skin="witchtrial_hiiro"] h1,
+[data-skin="witchtrial_hiiro"] h2,
+[data-skin="witchtrial_hiiro"] h3,
+[data-skin="witchtrial_hiiro"] .settings-section-title,
+[data-skin="witchtrial_hiiro"] .settings-tab,
+[data-skin="witchtrial_hiiro"] .markdown-body,
+[data-skin="witchtrial_hiiro"] .markdown-body h1,
+[data-skin="witchtrial_hiiro"] .markdown-body h2,
+[data-skin="witchtrial_hiiro"] .markdown-body h3,
+[data-skin="witchtrial_hiiro"] .markdown-body h4,
+[data-skin="witchtrial_hiiro"] .markdown-body h5,
+[data-skin="witchtrial_hiiro"] .markdown-body h6 {
+  font-family: var(--app-font, 'ZCOOL QingKe HuangYou', 'PingFang SC', 'Microsoft YaHei', 'STHeiti', cursive);
+  letter-spacing: 0.04em;
+  font-weight: 400;
+}
+
+/* 侧边栏字体强制跟随皮肤 */
+[data-skin="witchtrial_hiiro"] .gem-sidebar,
+[data-skin="witchtrial_hiiro"] .smc-nav-item,
+[data-skin="witchtrial_hiiro"] .smc-section-label,
+[data-skin="witchtrial_hiiro"] .pin-folder-name,
+[data-skin="witchtrial_hiiro"] .wd-group-name,
+[data-skin="witchtrial_hiiro"] .fm-footer,
+[data-skin="witchtrial_hiiro"] .gem-search-row,
+[data-skin="witchtrial_hiiro"] .rail-card {
+  font-family: var(--app-font, 'ZCOOL QingKe HuangYou', 'PingFang SC', 'Microsoft YaHei', 'STHeiti', cursive);
+}
+
+/* 聊天消息字体强制跟随皮肤 */
+[data-skin="witchtrial_hiiro"] .message-bubble.user,
+[data-skin="witchtrial_hiiro"] .assistant-message,
+[data-skin="witchtrial_hiiro"] .assistant-message .markdown-body,
+[data-skin="witchtrial_hiiro"] .assistant-message .markdown-body p,
+[data-skin="witchtrial_hiiro"] .assistant-message .markdown-body li,
+[data-skin="witchtrial_hiiro"] .assistant-message .markdown-body code,
+[data-skin="witchtrial_hiiro"] .assistant-message .markdown-body pre {
+  font-family: var(--app-font, 'ZCOOL QingKe HuangYou', 'PingFang SC', 'Microsoft YaHei', 'STHeiti', cursive);
+}
+
+/* 卡片：蕾丝感超大圆角 + 顶部缎带 */
+[data-skin="witchtrial_hiiro"] .chat-window,
+[data-skin="witchtrial_hiiro"] .settings-modal,
+[data-skin="witchtrial_hiiro"] .settings-modal-content,
+[data-skin="witchtrial_hiiro"] .home-card,
+[data-skin="witchtrial_hiiro"] .stat-card {
+  position: relative;
+  border: 1.5px solid rgba(233, 30, 99, 0.35);
+  border-radius: 26px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 24px 64px rgba(0, 0, 0, 0.6),
+    inset 0 0 55px rgba(233, 30, 99, 0.05);
+}
+[data-skin="witchtrial_hiiro"] .chat-window::before,
+[data-skin="witchtrial_hiiro"] .settings-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18px;
+  right: 18px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, transparent, rgba(233, 30, 99, 0.55), rgba(240, 98, 146, 0.75), rgba(233, 30, 99, 0.55), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* 侧边栏：粉色波点竖纹 */
+[data-skin="witchtrial_hiiro"] .gem-sidebar,
+[data-skin="witchtrial_hiiro"] .fm-sidebar,
+[data-skin="witchtrial_hiiro"] aside.complementary {
+  background-image:
+    radial-gradient(circle at 7px 7px, rgba(233, 30, 99, 0.08) 1.5px, transparent 2px),
+    linear-gradient(180deg, transparent 0%, rgba(233, 30, 99, 0.04) 100%);
+  background-size: 14px 14px, 100% 100%;
+}
+
+/* 输入区：蕾丝聚焦 */
+[data-skin="witchtrial_hiiro"] .chat-input,
+[data-skin="witchtrial_hiiro"] .chat-input-area .input-card,
+[data-skin="witchtrial_hiiro"] textarea.chat-input {
+  border-color: rgba(233, 30, 99, 0.3);
+  border-radius: 18px;
+  box-shadow: inset 0 0 22px rgba(233, 30, 99, 0.05);
+}
+[data-skin="witchtrial_hiiro"] .chat-input:focus-within,
+[data-skin="witchtrial_hiiro"] .chat-input-area .input-card:focus-within {
+  border-color: rgba(233, 30, 99, 0.7);
+  box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.12), inset 0 0 28px rgba(233, 30, 99, 0.08);
+}
+
+/* 按钮：甜酷粉丝绒 */
+[data-skin="witchtrial_hiiro"] button.primary,
+[data-skin="witchtrial_hiiro"] .yolo-btn,
+[data-skin="witchtrial_hiiro"] .send-btn,
+[data-skin="witchtrial_hiiro"] .header-icon-btn.active,
+[data-skin="witchtrial_hiiro"] .settings-tab.active {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 12px rgba(233, 30, 99, 0.28);
+}
+
+/* 滚动条：粉丝绒 */
+[data-skin="witchtrial_hiiro"] ::-webkit-scrollbar-thumb {
+  background: rgba(233, 30, 99, 0.35);
+  border-radius: 4px;
+}
+[data-skin="witchtrial_hiiro"] ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+/* ----- 魔女审判 · 原初审判 ----- */
+[data-skin="witchtrial"] body,
+[data-skin="witchtrial"] .app-container {
+  font-family: var(--app-font, 'ZCOOL XiaoWei', 'Noto Serif SC', 'Source Han Serif SC', 'STSong', 'SimSun', 'Cinzel', serif);
+}
+
+/* 背景：石墙纹理 + 血月光晕 + 底部火焰余烬 */
+[data-skin="witchtrial"] body {
+  background-color: #0c0a0d;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(199, 62, 62, 0.2), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 110%, rgba(199, 62, 62, 0.14), transparent 55%),
+    repeating-linear-gradient(90deg, rgba(60, 45, 50, 0.08) 0px, rgba(60, 45, 50, 0.08) 1px, transparent 1px, transparent 70px),
+    repeating-linear-gradient(0deg, rgba(60, 45, 50, 0.08) 0px, rgba(60, 45, 50, 0.08) 1px, transparent 1px, transparent 70px),
+    radial-gradient(circle at 95% 5%, rgba(139, 90, 60, 0.08), transparent 22%);
+}
+
+/* 主要标题：哥特/审判庭衬线 */
+[data-skin="witchtrial"] h1,
+[data-skin="witchtrial"] h2,
+[data-skin="witchtrial"] h3,
+[data-skin="witchtrial"] .settings-section-title,
+[data-skin="witchtrial"] .settings-tab,
+[data-skin="witchtrial"] .markdown-body,
+[data-skin="witchtrial"] .markdown-body h1,
+[data-skin="witchtrial"] .markdown-body h2,
+[data-skin="witchtrial"] .markdown-body h3,
+[data-skin="witchtrial"] .markdown-body h4,
+[data-skin="witchtrial"] .markdown-body h5,
+[data-skin="witchtrial"] .markdown-body h6 {
+  font-family: var(--app-font, 'ZCOOL XiaoWei', 'Noto Serif SC', 'Source Han Serif SC', 'STSong', 'Cinzel', serif);
+  letter-spacing: 0.03em;
+}
+
+/* 侧边栏字体强制跟随皮肤 */
+[data-skin="witchtrial"] .gem-sidebar,
+[data-skin="witchtrial"] .smc-nav-item,
+[data-skin="witchtrial"] .smc-section-label,
+[data-skin="witchtrial"] .pin-folder-name,
+[data-skin="witchtrial"] .wd-group-name,
+[data-skin="witchtrial"] .fm-footer,
+[data-skin="witchtrial"] .gem-search-row,
+[data-skin="witchtrial"] .rail-card {
+  font-family: var(--app-font, 'ZCOOL XiaoWei', 'Noto Serif SC', 'Source Han Serif SC', 'STSong', 'Cinzel', serif);
+}
+
+/* 卡片与面板：暗红粗边框 + 审判庭尖角 */
+[data-skin="witchtrial"] .chat-window,
+[data-skin="witchtrial"] .settings-modal,
+[data-skin="witchtrial"] .settings-modal-content,
+[data-skin="witchtrial"] .home-card,
+[data-skin="witchtrial"] .stat-card {
+  border: 2px solid rgba(199, 62, 62, 0.38);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 24px 64px rgba(0, 0, 0, 0.74),
+    inset 0 0 70px rgba(199, 62, 62, 0.05);
+}
+
+/* 侧边栏：竖向暗纹 + 底部微光 */
+[data-skin="witchtrial"] .gem-sidebar,
+[data-skin="witchtrial"] .fm-sidebar,
+[data-skin="witchtrial"] aside.complementary {
+  background-image:
+    linear-gradient(180deg, transparent 0%, rgba(199, 62, 62, 0.05) 100%),
+    repeating-linear-gradient(90deg, rgba(80, 55, 60, 0.06) 0px, rgba(80, 55, 60, 0.06) 1px, transparent 1px, transparent 50px);
+}
+
+/* 输入区：火焰聚焦光晕 */
+[data-skin="witchtrial"] .chat-input,
+[data-skin="witchtrial"] .chat-input-area .input-card,
+[data-skin="witchtrial"] textarea.chat-input {
+  border-color: rgba(199, 62, 62, 0.32);
+  border-radius: 8px;
+  box-shadow: inset 0 0 20px rgba(199, 62, 62, 0.05);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+[data-skin="witchtrial"] .chat-input:focus-within,
+[data-skin="witchtrial"] .chat-input-area .input-card:focus-within {
+  border-color: rgba(199, 62, 62, 0.75);
+  box-shadow: 0 0 0 3px rgba(199, 62, 62, 0.14), inset 0 0 26px rgba(199, 62, 62, 0.1);
+}
+
+/* 按钮：烙印质感 */
+[data-skin="witchtrial"] button.primary,
+[data-skin="witchtrial"] .yolo-btn,
+[data-skin="witchtrial"] .send-btn,
+[data-skin="witchtrial"] .header-icon-btn.active,
+[data-skin="witchtrial"] .settings-tab.active {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 10px rgba(199, 62, 62, 0.28);
+}
+
+/* 自定义滚动条：暗红轨道 */
+[data-skin="witchtrial"] ::-webkit-scrollbar-thumb {
+  background: rgba(199, 62, 62, 0.38);
+  border-radius: 4px;
+}
+[data-skin="witchtrial"] ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.22);
 }

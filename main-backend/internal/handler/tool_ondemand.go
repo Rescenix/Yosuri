@@ -88,6 +88,25 @@ func mcpToolIndexPrompt() string {
 		strings.Join(lines, "\n") + "\n"
 }
 
+// nativeToolIndexPrompt 生成常驻原生工具（不按需加载、一直进 tools 数组）的索引。
+// 为什么需要它：mcpToolIndexPrompt 只列 MCP 工具，常驻原生工具（dispatch_agent /
+// load_tools 等）的 schema 走 tools 参数但**不进系统提示词索引**，模型在索引里
+// 看不到它们，就会以为"我没有这个工具"而绕路。这里把它们也列成「名字 + 一句话」，
+// 让模型知道存在、知道何时直接调。
+func nativeToolIndexPrompt() string {
+	defs := nativeWorkflowToolDefs()
+	if len(defs) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(defs))
+	for _, t := range defs {
+		lines = append(lines, fmt.Sprintf("- %s：%s", t.Function.Name, firstSentence(t.Function.Description)))
+	}
+	sort.Strings(lines)
+	return "\n━━━ 常驻原生工具（始终可用，直接调用，无需 load_tools） ━━━\n" +
+		strings.Join(lines, "\n") + "\n"
+}
+
 // buildCodeWorkflowTools 组装本轮要发给模型的 tools 数组：
 // 常驻工具 + 已被 load_tools 激活的 MCP 工具。activated 为 nil 时就只有常驻工具。
 func buildCodeWorkflowTools(activated map[string]bool) []map[string]any {

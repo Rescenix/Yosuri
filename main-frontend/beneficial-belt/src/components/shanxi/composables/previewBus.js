@@ -9,10 +9,17 @@ import { reactive } from 'vue'
 // 不如照 contextBreakdown.js / sessionTokenStats.js 的既有惯例开一个共享单例。
 //
 // seq 是必须的：同一个 URL 连续请求两次时 url 本身不变，只 watch url 不会触发。
-export const previewRequest = reactive({ url: '', seq: 0 })
+// url      —— 前端导航地址（file:// 或 http(s)://）
+// cdp_ws   —— 当后端用 open_browser_preview 开了真实 Chromium target 时，
+//             这里带上那个 target 的 WebSocket 调试地址；PreviewBrowser 据此走
+//             CDP startScreencast 真实渲染，而不是 iframe。为空则降级 iframe。
+// cdp_error —— 后端创建 CDP target 前已失败时的可见错误。
+export const previewRequest = reactive({ url: '', cdp_ws: '', cdp_error: '', seq: 0 })
 
-export function requestPreview(url) {
+export function requestPreview(url, cdpWs, cdpError) {
     if (!url) return
     previewRequest.url = url
+    previewRequest.cdp_ws = cdpWs || ''
+    previewRequest.cdp_error = cdpError || ''
     previewRequest.seq++
 }

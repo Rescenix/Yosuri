@@ -87,3 +87,45 @@ func TestFrontendCandidatesComeFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatePreviewTargetWS(t *testing.T) {
+	valid := []string{
+		"ws://127.0.0.1:9222/devtools/page/abc",
+		"ws://localhost:9222/devtools/page/abc",
+		"ws://[::1]:9222/devtools/page/abc",
+	}
+	for _, raw := range valid {
+		if _, err := validatePreviewTargetWS(raw); err != nil {
+			t.Errorf("合法的本机 CDP target 被拒绝 %q: %v", raw, err)
+		}
+	}
+
+	invalid := []string{
+		"ws://127.0.0.1:9223/devtools/page/abc",
+		"ws://192.168.1.2:9222/devtools/page/abc",
+		"ws://127.0.0.1:9222/devtools/browser/abc",
+		"wss://127.0.0.1:9222/devtools/page/abc",
+		"http://127.0.0.1:9222/devtools/page/abc",
+	}
+	for _, raw := range invalid {
+		if _, err := validatePreviewTargetWS(raw); err == nil {
+			t.Errorf("危险或无效的 CDP target 未被拒绝: %q", raw)
+		}
+	}
+}
+
+func TestValidatePreviewTargetURL(t *testing.T) {
+	if _, err := validatePreviewTargetURL("file:///C:/workspace/index.html"); err != nil {
+		t.Fatalf("合法 file URL 被拒绝: %v", err)
+	}
+	for _, raw := range []string{
+		"http://127.0.0.1:4322",
+		"https://example.com",
+		"file://",
+		"ws://127.0.0.1:9222/devtools/page/abc",
+	} {
+		if _, err := validatePreviewTargetURL(raw); err == nil {
+			t.Errorf("不安全或无效的预览 URL 未被拒绝: %q", raw)
+		}
+	}
+}

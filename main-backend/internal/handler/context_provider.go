@@ -84,7 +84,7 @@ func newWorkflowContextProvider() *contextProvider {
 			// key 用 "tools" 是有意的：前端 contextBreakdown.js 只认
 			// system/subagent/skill/memory/tools 五个桶，索引归到工具桶里，
 			// 免得凭空多一个前端会丢掉的 key，害「分类之和 ≈ prompt_tokens」对不上。
-			{key: "tools", content: mcpToolIndexPrompt(), stable: true},
+			{key: "tools", content: mcpToolIndexPrompt() + nativeToolIndexPrompt(), stable: true},
 
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
 			{key: "skill", content: skillLibraryPrompt()}, // 每次任务成功后可能新增技能

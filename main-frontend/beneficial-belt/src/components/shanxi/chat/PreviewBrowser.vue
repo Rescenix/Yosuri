@@ -54,7 +54,15 @@
     </div>
 
     <div v-else class="pb-viewport" :class="{ mobile: viewport === 'mobile' }">
+      <!-- CDP 模式：连真实 Chromium 的 target ws，用 startScreencast 把真实渲染画面刷进来。
+           取代 iframe —— agent 写的 HTML 由真实浏览器引擎渲染，不是网页自己 iframe 渲。 -->
+      <img v-if="cdpFrame" :src="cdpFrame" class="pb-frame" alt="browser preview" />
+      <div v-else-if="cdpError" class="pb-error" role="alert">
+        <Icon icon="mdi:alert-circle-outline" width="28" />
+        <span>{{ cdpError }}</span>
+      </div>
       <iframe
+        v-else-if="!isCDPPreview"
         ref="frameRef"
         :src="frameSrc"
         class="pb-frame"
@@ -67,7 +75,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { previewRequest } from '../composables/previewBus.js'
 
@@ -81,6 +89,12 @@ const frameSrc = ref('')
 const frameRef = ref(null)
 const loading = ref(false)
 const viewport = ref('desktop')
+const cdpFrame = ref('')          // CDP screencast 帧(base64 data URL)
+const cdpError = ref('')
+const isCDPPreview = ref(false)
+let cdpSocket = null              // 当前同源 CDP 中转 ws
+let currentCDPTarget = ''
+let currentCDPUrl = ''
 let reloadSeq = 0
 
 function isFrontend(s) {
@@ -103,17 +117,80 @@ async function fetchServers() {
   }
 }
 
+function cdpRelayUrl(targetWS, targetURL) {
+  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const query = targetWS
+    ? `ws=${encodeURIComponent(targetWS)}`
+    : `url=${encodeURIComponent(targetURL)}`
+  return `${scheme}//${window.location.host}/api/preview/cdp?${query}`
+}
+
+// 连接同源后端中转；CDP 命令、帧 ACK 和 9222 连接全部由后端负责。
+function connectCDP(wsUrl, targetURL = '') {
+  disconnectCDP()
+  isCDPPreview.value = true
+  currentCDPTarget = wsUrl
+  currentCDPUrl = targetURL
+  cdpFrame.value = ''
+  cdpError.value = ''
+  loading.value = true
+  try {
+    const sock = new WebSocket(cdpRelayUrl(wsUrl, targetURL))
+    cdpSocket = sock
+    sock.onmessage = (ev) => {
+      let m
+      try { m = JSON.parse(ev.data) } catch { return }
+      if (m.type === 'frame' && m.data) {
+        cdpFrame.value = 'data:image/png;base64,' + m.data
+        cdpError.value = ''
+        loading.value = false
+      } else if (m.type === 'error') {
+        cdpError.value = m.message || '预览不可用：Chrome CDP 未运行'
+        loading.value = false
+      }
+    }
+    sock.onerror = () => {
+      if (cdpSocket !== sock) return
+      cdpError.value = '预览不可用：Chrome CDP 未运行'
+      loading.value = false
+    }
+    sock.onclose = () => {
+      if (cdpSocket !== sock) return
+      cdpSocket = null
+      if (!cdpFrame.value && !cdpError.value) {
+        cdpError.value = '预览不可用：Chrome CDP 连接已断开'
+        loading.value = false
+      }
+    }
+  } catch {
+    cdpSocket = null
+    cdpError.value = '预览不可用：Chrome CDP 未运行'
+    loading.value = false
+  }
+}
+
+function disconnectCDP() {
+  if (cdpSocket) { try { cdpSocket.close() } catch {} cdpSocket = null }
+  cdpFrame.value = ''
+  cdpError.value = ''
+  isCDPPreview.value = false
+  currentCDPTarget = ''
+  currentCDPUrl = ''
+}
+
 onMounted(() => {
   fetchServers()
-  if (previewRequest.url) navigateTo(previewRequest.url)
+  if (previewRequest.url) navigateTo(previewRequest.url, previewRequest.cdp_ws, previewRequest.cdp_error)
 })
 
 watch(() => previewRequest.seq, () => {
-  if (previewRequest.url) navigateTo(previewRequest.url)
+  if (previewRequest.url) navigateTo(previewRequest.url, previewRequest.cdp_ws, previewRequest.cdp_error)
 })
 
+onUnmounted(() => disconnectCDP())
+
 function hasScheme(raw) {
-  return /^[a-z][a-z\d+\-.]*:\/\//i.test(raw)
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(raw)
 }
 
 function looksLikeLocalAddress(raw) {
@@ -129,16 +206,26 @@ function normalizeUrl(raw) {
   return 'https://' + raw
 }
 
-function loadUrl(url) {
-  currentUrl.value = url
-  urlInput.value = url
-  loading.value = true
-  frameSrc.value = url
-}
-
-function navigateTo(raw) {
+function navigateTo(raw, cdpWs, cdpStartupError) {
   const url = normalizeUrl(raw)
   if (!url) return
+  if (cdpStartupError) {
+    currentUrl.value = url
+    urlInput.value = url
+    // 创建 target 当时失败可能只是 Chrome 尚未就绪；让同源后端按 URL
+    // 重新创建一次，失败仍会收到明确 error 消息，成功则直接显示首帧。
+    connectCDP('', url)
+    return
+  }
+  // 有 CDP ws → 走真实 Chromium 渲染（内嵌窗口）
+  if (cdpWs) {
+    currentUrl.value = url
+    urlInput.value = url
+    loading.value = true
+    connectCDP(cdpWs)
+    return
+  }
+  // 否则走原 iframe
   history.value = history.value.slice(0, historyIndex.value + 1)
   history.value.push(url)
   historyIndex.value = history.value.length - 1
@@ -157,8 +244,22 @@ function goForward() {
   loadUrl(history.value[historyIndex.value])
 }
 
+// loadUrl：把地址切进 iframe 模式（CDP 分支不调用它）。
+// 原实现被删后内联回来——frameSrc 驱动 <iframe :src>，loading 触发进度条。
+function loadUrl(url) {
+  disconnectCDP()
+  currentUrl.value = url
+  urlInput.value = url
+  loading.value = true
+  frameSrc.value = url
+}
+
 function reload() {
   if (!currentUrl.value) return
+  if (isCDPPreview.value && (currentCDPTarget || currentCDPUrl)) {
+    connectCDP(currentCDPTarget, currentCDPUrl)
+    return
+  }
   loading.value = true
   reloadSeq++
   try {
@@ -349,6 +450,20 @@ function openExternal() {
   height: 100%;
   border: none;
   background: var(--app-surface);
+}
+
+.pb-error {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: var(--app-text-faint);
+  font-size: 13px;
+  text-align: center;
 }
 
 .pb-viewport.mobile .pb-frame {
