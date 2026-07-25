@@ -8,13 +8,11 @@
 - [组件](#组件)
   - [main-backend — Go 后端服务](#main-backend--go-后端服务)
   - [main-frontend — Astro + Vue 3 前端](#main-frontend--astro--vue-3-前端)
-  - [PrismD — 数字海马体记忆服务](#prismd--数字海马体记忆服务)
 - [仓库结构](#仓库结构)
 - [快速开始](#快速开始)
   - [前置依赖](#前置依赖)
   - [后端 main-backend](#后端-main-backend)
   - [前端 main-frontend](#前端-main-frontend)
-  - [记忆服务 PrismD](#记忆服务-prismd)
 - [环境变量](#环境变量)
 - [依赖](#依赖)
 - [许可证](#许可证)
@@ -29,11 +27,8 @@
 │             main-backend (Go / Gin :8080)             │
 │  多引擎聊天 · 工具调用 · Agent工作流 · 记忆 · 博客/CMS  │
 ├──────────────────────────────────────────────────────┤
-│              PrismD (Go :5666)                        │
-│         图结构记忆 · LLM压缩 · 簇隔离 · 激活扩散       │
-├──────────────────────────────────────────────────────┤
-│            Prism C API (C++17)                        │
-│           向量存储 · 忆阻器混沌演化                     │
+│   记忆层：内嵌 PrismStore (C++ 库, 静态链接 main-backend) │
+│   图结构记忆 · LLM压缩 · 簇隔离 · 忆阻器混沌演化         │
 ├──────────────────────────────────────────────────────┤
 │          Ollama / DeepSeek / Gemini (外部 LLM)        │
 └──────────────────────────────────────────────────────┘
@@ -115,7 +110,6 @@ _工具与系统_
 |------|------|------|
 | POST | `/api/tts` | 语音合成 |
 | POST | `/api/login` | 登录获取 JWT |
-| POST | `/api/prismql` | PrismQL 查询 |
 | POST | `/api/git/commit` | Git 提交 |
 | POST | `/api/tool/execute` | 工具执行 |
 
@@ -138,16 +132,16 @@ _工具与系统_
 
 **技术栈：** Three.js (3D/VRM)、Monaco Editor、GSAP 动画、tsparticles、KaTeX 数学公式、marked/highlight.js、page-flip 翻页
 
-### PrismD — 数字海马体记忆服务
+### 记忆能力 — 内嵌 PrismStore
 
-端口 `:5666`，仿生记忆引擎。详见 [Prism/README.md](Prism/README.md)。
+长期记忆由后端内嵌的 C++ 记忆库 `prism_store`（`main-backend/lib/`）提供，以静态链接形式集成在 main-backend 中，不单独部署服务。
 
 - **图结构记忆：** 神经元（记忆节点）+ 突触（记忆关联）
 - **四类簇隔离：** UserBase（用户画像）、CodeWork（代码决策）、ToolLog（工具日志）、Session（会话临时）
+- **忆阻器混沌演化：** 导电率/关联流/混沌度建模，能量衰减模拟遗忘曲线
 - **LLM 驱动压缩：** 对话 → 高密度摘要，自动判断 worth_saving
-- **激活扩散：** 倒排索引 → 图谱扩散 → 多信号融合打分
-- **夜间整理：** 自动合并重复、丢弃无价值记忆
-- **能量衰减：** 用进废退，模拟人类遗忘曲线
+
+> 注：早期规划中 PrismD 为独立 :5666 服务（含 Prism C API 与可视化），当前仓库以内嵌库形态落地，相关 `Prism/` 目录与独立服务尚未提交。
 
 ## 仓库结构
 
@@ -159,9 +153,7 @@ re0/
 │   └── skills/
 ├── main-frontend/
 │   └── beneficial-belt/   # Astro + Vue 3 前端 (:4321)
-├── Prism/                 # PrismD 记忆服务 + C API
-│   ├── prismd-visual/
-│   └── prism/
+├── harness/               # Python 脚本（MCP/测试/工具）
 └── docs/                  # 文档
 ```
 
@@ -192,11 +184,14 @@ npm install
 npm run dev    # http://localhost:4321
 ```
 
-### 记忆服务 PrismD
+### 记忆能力（内嵌）
+
+长期记忆由 main-backend 内嵌的 `prism_store` 库直接提供，随后端启动自动生效，**无需单独部署服务**。
 
 ```bash
-cd Prism
-go run cmd/prismd/main.go -port 5666 -data ./data -domain Atri
+# 记忆库随 main-backend 一同运行，无独立启动命令
+cd main-backend
+go run cmd/server/main.go
 ```
 
 ## 环境变量
