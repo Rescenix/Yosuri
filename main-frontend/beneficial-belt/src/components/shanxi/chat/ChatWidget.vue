@@ -240,7 +240,7 @@
                     <div v-if="item.type === 'image'" class="image-card">
                       <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
                     </div>
-                    <div v-else-if="item.sender === 'user'" class="message-bubble user" :class="{ editing: editingMsgId === item.id }">
+                    <div v-else-if="item.sender === 'user'" class="message-bubble user" :class="{ editing: editingMsgId === item.id, active: String(activeUserMessageId) === String(item.id) }">
                       <AttachmentChipRow v-if="item.attachments?.length" :attachments="item.attachments" />
                       <!-- 编辑态：消息框本身变成输入框，就地改，不去下面的输入框 -->
                       <textarea
@@ -600,7 +600,7 @@
                 </div>
 
                 <!-- 用户消息导航轴：占据工具栏中间的弹性空间 -->
-                <UserMessageRail :messages="messages" :active-id="lastUserMessageId" @jump="jumpToMessage" />
+                <UserMessageRail :messages="messages" :active-id="activeUserMessageId" @jump="jumpToMessage" />
 
                 <div class="input-toolbar-right">
                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
@@ -1539,11 +1539,12 @@ onUnmounted(() => {
 // 自动跟底的逻辑在半路打回原位（实测 smooth 跳完 scrollTop 原封不动，
 // 瞬时跳则稳定生效）。跨两千像素找旧消息本来也不需要看动画。
 function jumpToMessage(id) {
+  manualActiveId.value = id
   const el = document.querySelector(`[data-msg-id="${id}"]`)
   if (!el) return
   el.scrollIntoView({ behavior: 'auto', block: 'center' })
-  el.classList.add('msg-jump-flash')
-  setTimeout(() => el.classList.remove('msg-jump-flash'), 1200)
+  // 标记用户已主动滚动，防止自动跟底逻辑把刚跳过来的气泡又拉走
+  userScrolledUp.value = true
 }
 
 // ==================== 工具函数 ====================
@@ -1909,6 +1910,13 @@ const {
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+
+// 导航轴当前高亮的用户消息 id：必须放在 useChatWidget 解构之后，避免 setup 阶段命中 TDZ。
+// 默认跟随最后一条用户消息；点击节点后切换到对应消息，新消息进来再重置回最新。
+// 注意：消息 id 可能是数字 0，用 ?? 而不是 ||，避免 0 被当成空值。
+const manualActiveId = ref(null)
+const activeUserMessageId = computed(() => manualActiveId.value ?? lastUserMessageId.value)
+watch(lastUserMessageId, () => { manualActiveId.value = null })
 
 // 工作流跑完后重新拉一次会话列表：把分叉时乐观插入的分支名跟后端算出的标题对齐，
 // 也顺带修掉"新会话标题要切走再切回才出现"的老毛病（以前只在挂载/切会话时拉）。
@@ -2430,7 +2438,7 @@ onUnmounted(() => {
 
 /* ==================== 二阶堂希罗 · 红黑洛丽塔 ==================== */
 
-/* 用户消息：粉丝绒圆润气泡 + 蝴蝶结与红花萦绕 */
+/* 用户消息：粉丝绒圆润气泡 + 蝴蝶结 */
 [data-skin="witchtrial_hiiro"] .message-bubble.user {
   position: relative;
   background: linear-gradient(145deg, rgba(90, 22, 48, 0.95), rgba(48, 14, 28, 0.98));
@@ -2441,6 +2449,11 @@ onUnmounted(() => {
     0 4px 18px rgba(0, 0, 0, 0.3),
     0 0 22px rgba(233, 30, 99, 0.18);
   color: #fff5f8;
+}
+
+/* 用户消息被导航轴选中：只加亮边框，去掉发光变化，避免跳转后"一闪" */
+[data-skin="witchtrial_hiiro"] .message-bubble.user.active {
+  border-color: rgba(255, 160, 180, 0.95);
 }
 
 /* 右上角蝴蝶结 */
@@ -2458,31 +2471,9 @@ onUnmounted(() => {
   transform-origin: 50% 80%;
 }
 
-/* 左下 + 右下红花萦绕（一朵实体 + text-shadow 复制） */
-[data-skin="witchtrial_hiiro"] .message-bubble.user::after {
-  content: '🌺';
-  position: absolute;
-  bottom: -9px;
-  left: -6px;
-  font-size: 16px;
-  line-height: 1;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
-  pointer-events: none;
-  z-index: 2;
-  animation: hiiro-flower-float 3.2s ease-in-out infinite;
-  text-shadow:
-    28px -6px 0 rgba(255, 160, 180, 0.85),
-    48px 4px 0 rgba(240, 98, 146, 0.7);
-}
-
 @keyframes hiiro-bow-sway {
   0%, 100% { transform: rotate(-6deg) scale(1); }
   50% { transform: rotate(6deg) scale(1.05); }
-}
-
-@keyframes hiiro-flower-float {
-  0%, 100% { transform: translateY(0) rotate(-4deg); }
-  50% { transform: translateY(-3px) rotate(4deg); }
 }
 
 /* AI 消息：暗粉蕾丝羊皮纸 */

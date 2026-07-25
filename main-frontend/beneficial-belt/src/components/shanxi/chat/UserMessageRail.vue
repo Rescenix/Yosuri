@@ -50,8 +50,9 @@ const items = computed(() =>
 )
 
 const activeIdx = computed(() => {
-  if (!props.activeId) return items.value.length - 1
-  const idx = items.value.findIndex(m => m.id === props.activeId)
+  if (props.activeId == null || props.activeId === '') return items.value.length - 1
+  const target = String(props.activeId)
+  const idx = items.value.findIndex(m => String(m.id) === target)
   return idx >= 0 ? idx : items.value.length - 1
 })
 
