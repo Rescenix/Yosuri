@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # 杉汐的长期记忆数据（独立于项目，且为私密数据）
 shanxi_data/
+
+# Agent 前端编程能力测试产物（实测生成，不进版本控制）
+src/components/__agent_test__/
