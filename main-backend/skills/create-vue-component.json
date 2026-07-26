@@ -1,9 +1,0 @@
-{
-  "name": "create-vue-component",
-  "description": "在指定的前端项目中新建一个 Vue 3 单文件组件（script setup + scoped style），不修改其他文件",
-  "steps": [
-    "确定项目根目录路径（如已知路径或通过搜索包含项目名的目录）",
-    "确认目标组件目录存在（通常是 src/components/）",
-    "根据要求生成组件内容（template、script setup、scoped style）并写入文件"
-  ]
-}

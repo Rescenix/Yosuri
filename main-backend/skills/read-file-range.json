@@ -1,8 +1,0 @@
-{
-  "name": "read-file-range",
-  "description": "读取指定文件的指定行号区间（1-indexed闭区间）并返回原样内容",
-  "steps": [
-    "加载 read_range 工具",
-    "调用 mcp__grep__read_range，传入文件路径、起始行和结束行参数"
-  ]
-}

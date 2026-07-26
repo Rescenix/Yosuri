@@ -1,9 +1,0 @@
-{
-  "name": "edit-file-content",
-  "description": "修改指定文件的全部内容为新的文本内容，适用于替换C等源代码文件",
-  "steps": [
-    "使用 mcp__grep__glob 工具按文件名模式定位文件",
-    "使用 mcp__fs__read_text_file 工具读取文件当前内容（可选）",
-    "使用 mcp__fs__edit_file 工具将文件内容替换为目标文本"
-  ]
-}

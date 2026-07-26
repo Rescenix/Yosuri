@@ -1,8 +1,0 @@
-{
-  "servers": {
-    "fs": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Pro2026\\re0"]
-    }
-  }
-}

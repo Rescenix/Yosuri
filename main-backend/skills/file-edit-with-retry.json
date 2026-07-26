@@ -1,9 +1,0 @@
-{
-  "name": "file-edit-with-retry",
-  "description": "在文件编辑因内容不匹配失败时，先读取文件实际内容再基于准确匹配进行编辑",
-  "steps": [
-    "尝试使用 mcp__fs__edit_file 编辑文件（提供 oldText 和 newText）",
-    "如果编辑失败（返回错误信息），使用 mcp__fs__read_text_file 读取文件完整内容",
-    "根据读取到的实际内容，重新构造准确的 oldText 和新编辑参数，再次执行 mcp__fs__edit_file"
-  ]
-}

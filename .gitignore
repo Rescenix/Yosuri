@@ -59,6 +59,12 @@ __pycache__/
 .hermes/
 .clinerules/
 
+# 技能 / MCP 运行时配置（用户本地自行获取，不随仓库分发）
+main-backend/skills/
+main-backend/skills-ext/
+main-backend/mcp.json
+harness/mcp.json
+
 # 工具输出
 .aurora/
 opencode/

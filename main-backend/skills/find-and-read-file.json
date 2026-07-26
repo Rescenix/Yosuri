@@ -1,8 +1,0 @@
-{
-  "name": "find-and-read-file",
-  "description": "查找并读取指定文件的内容，适用于快速查看文件而不修改",
-  "steps": [
-    "使用glob查找目标文件，如 mcp__grep__glob({\"pattern\": \"**/目标文件名\"})",
-    "使用read_text_file读取找到的文件内容，如 mcp__fs__read_text_file({\"path\": \"文件路径\"})"
-  ]
-}

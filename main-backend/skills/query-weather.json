@@ -1,8 +1,0 @@
-{
-  "name": "query-weather",
-  "description": "查询指定城市的当前天气信息",
-  "steps": [
-    "使用 wttr.in 服务，构造城市名称和格式参数，发送 HTTP GET 请求",
-    "处理响应，提取天气数据（如温度、天气状况等）"
-  ]
-}
