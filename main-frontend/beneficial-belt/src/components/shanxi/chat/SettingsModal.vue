@@ -19,8 +19,6 @@
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
             <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()">
               <Icon icon="mdi:connection" width="16" />MCP</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'kanban' }" @click="activeTab = 'kanban'">
-              <Icon icon="mdi:human-greeting-variant" width="16" />看板</button>
             <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()">
               <Icon icon="mdi:school-outline" width="16" />Skills</button>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
@@ -362,29 +360,6 @@
               </template>
             </div>
 
-            <!-- ========== 看板娘 ========== -->
-            <div v-show="activeTab === 'kanban'" class="settings-panel">
-              <div class="settings-section-title">桌面看板娘</div>
-              <div class="settings-section-desc">控制聊天窗口折叠时显示的桌面伴侣组件。开关即时生效并自动保存。</div>
-
-              <div class="param-row">
-                <span class="param-label">看板娘</span>
-                <label class="param-switch">
-                  <input type="checkbox" v-model="kanbanLive2D" />
-                  <span class="param-switch-track"></span>
-                </label>
-              </div>
-              <div class="settings-section-desc" style="margin-top:-8px; margin-bottom:14px;">桌面左下角的 Live2D 动态角色（需在 public/live2d/ 下放置模型资源）。</div>
-
-              <div class="param-row">
-                <span class="param-label">任务卡片</span>
-                <label class="param-switch">
-                  <input type="checkbox" v-model="kanbanTaskCard" />
-                  <span class="param-switch-track"></span>
-                </label>
-              </div>
-              <div class="settings-section-desc" style="margin-top:-8px; margin-bottom:14px;">桌面左下角的便签/待办任务卡片，可拖动、双击复位。</div>
-            </div>
 
             <!-- ========== 我的（Profile + 自定义指令，仿 Claude Profile） ========== -->
             <div v-show="activeTab === 'profile'" class="settings-panel">
@@ -918,17 +893,6 @@ function handleEsc(e) {
   if (e.key === 'Escape') emit('close')
 }
 
-// ============ 看板娘开关 ============
-const kanbanLive2D = ref(localStorage.getItem('kanban_live2d') !== '0')
-const kanbanTaskCard = ref(localStorage.getItem('kanban_taskcard') !== '0')
-watch(kanbanLive2D, (v) => {
-  localStorage.setItem('kanban_live2d', v ? '1' : '0')
-  window.dispatchEvent(new CustomEvent('kanban-toggle', { detail: { key: 'kanban_live2d', value: v } }))
-})
-watch(kanbanTaskCard, (v) => {
-  localStorage.setItem('kanban_taskcard', v ? '1' : '0')
-  window.dispatchEvent(new CustomEvent('kanban-toggle', { detail: { key: 'kanban_taskcard', value: v } }))
-})
 
 onMounted(() => {
   loadConfigs()

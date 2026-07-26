@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"backend/internal/middleware"
+	"github.com/gin-gonic/gin"
 )
 
 func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
@@ -35,6 +35,7 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.POST("/api/file", gin.WrapH(http.HandlerFunc(FileWriteHandler)))
 	// agent 实际工具执行的工作目录：GET 读当前值，POST 真正切换 + 落盘持久化
 	r.GET("/api/workdir", GetWorkdir)
+	r.POST("/api/workdir/pick", PickWorkdir)
 	r.POST("/api/workdir", SetWorkdir)
 	// AgentFS：写操作事务层 —— 影子 git 仓审计 / 回退
 	r.POST("/api/agentfs/open", AgentFSOpen)

@@ -169,34 +169,6 @@
           </template>
         </aside>
 
-        <!-- 侧栏折叠时:便签 + 看板娘悬浮在聊天区左下角（position:absolute，
-             不占布局宽度——聊天内容始终能用满整个工作区，不被这两个部件挡住）。
-             位置可各自拖动、越界会被拉回工作区内(位置记进 localStorage)。 -->
-        <div v-if="isExpanded && !sidebarOpen" class="studio-side-col">
-          <div
-            v-if="kanbanTaskCard"
-            class="side-drag"
-            :class="{ dragging: stickyDrag.dragging.value, nudged: stickyDrag.offset.value.x || stickyDrag.offset.value.y }"
-            :style="{ transform: `translate(${stickyDrag.offset.value.x}px, ${stickyDrag.offset.value.y}px)` }"
-            title="拖动可移动，双击复位"
-            @mousedown="stickyDrag.onDown"
-            @dblclick="stickyDrag.reset"
-          >
-            <TaskTodoSticky :items="todoState.items" />
-          </div>
-          <div
-            v-if="kanbanLive2D"
-            class="side-drag studio-side-live2d"
-            :class="{ dragging: live2dDrag.dragging.value, nudged: live2dDrag.offset.value.x || live2dDrag.offset.value.y }"
-            :style="{ transform: `translate(${live2dDrag.offset.value.x}px, ${live2dDrag.offset.value.y}px)` }"
-            title="拖动可移动，双击复位"
-            @mousedown="live2dDrag.onDown"
-            @dblclick="live2dDrag.reset"
-          >
-            <Live2DWidget />
-          </div>
-        </div>
-
                <div class="chat-body studio">
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
@@ -867,8 +839,6 @@ import AuroraStatusIcon from './AuroraStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
 import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
-import TaskTodoSticky from './TaskTodoSticky.vue'
-import Live2DWidget from './Live2DWidget.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
 import { chatModelList } from '../composables/chatModelList.js'
@@ -1447,145 +1417,9 @@ onMounted(() => {
     const nextIndex = Math.floor(Math.random() * placeholders.length)
     randomPlaceholder.value = placeholders[nextIndex]
   }, 6000) // 60000毫秒 = 60秒
-  // 监听设置窗口的看板娘开关变化
-  window.addEventListener('storage', onKanbanStorage)
-  window.addEventListener('kanban-toggle', onKanbanToggle)
 })
 
-// ==================== 便签/看板娘 独立拖动 ====================
-// 每个元素一套独立的 translate 偏移,互不影响,分别记进 localStorage(刷新不丢)。
-// 两个部件是悬浮层（.studio-side-col 绝对定位，不占聊天区宽度），拖动就是
-// 它们唯一的"挪开去别处"手段——所以边界必须覆盖整个工作区，不能只在原生位置附近晃。
-// 拖动范围限制在工作区（.chat-body-row）内：以前没有边界，一不小心拖到聊天区
-// 后面或者屏幕外，元素就"消失"了，而且因为抓不到它，再也拖不回来。
-const DRAG_BOUNDS_SELECTOR = '.chat-body-row'
 
-const fitRange = (v, lo, hi) => (hi < lo ? lo : Math.min(Math.max(v, lo), hi))
-
-// 算出 offset 的合法范围。appliedOff 必须是「此刻页面上真正生效的偏移」——
-// getBoundingClientRect() 拿到的 rect 已经含了这个 transform，用候选偏移去反推
-// 原始位置会算出完全错误的边界（这正是第一版没夹住的原因）。
-function dragBoundsOf(el, appliedOff) {
-  const box = el?.closest?.(DRAG_BOUNDS_SELECTOR)
-  if (!el || !box) return null
-  const r = el.getBoundingClientRect()
-  const c = box.getBoundingClientRect()
-  if (!r.width || !c.width) return null // 还没布局完
-  const natLeft = r.left - appliedOff.x // 元素在 offset=0 时的位置
-  const natTop = r.top - appliedOff.y
-  return {
-    minX: c.left - natLeft,
-    maxX: c.right - r.width - natLeft,
-    minY: c.top - natTop,
-    maxY: c.bottom - r.height - natTop,
-  }
-}
-
-function clampToBounds(off, b) {
-  if (!b) return off
-  return { x: fitRange(off.x, b.minX, b.maxX), y: fitRange(off.y, b.minY, b.maxY) }
-}
-
-function makeDrag(storageKey) {
-  const offset = ref({ x: 0, y: 0 })
-  const dragging = ref(false)
-  let start = null
-  let el = null
-  let bounds = null
-  try {
-    const s = JSON.parse(localStorage.getItem(storageKey) || 'null')
-    if (s && typeof s.x === 'number' && typeof s.y === 'number') offset.value = s
-  } catch { /* 无历史位置 */ }
-  function onMove(e) {
-    if (!dragging.value || !start) return
-    const raw = { x: start.ox + (e.clientX - start.mx), y: start.oy + (e.clientY - start.my) }
-    // 边界在按下时算好，拖动过程中只做纯算术夹取：既不用每帧读 rect（Vue 异步
-    // 渲染下 rect 会滞后于 offset，读出来是上一帧的），也省掉反复触发布局
-    offset.value = clampToBounds(raw, bounds)
-  }
-  function onUp() {
-    dragging.value = false
-    window.removeEventListener('mousemove', onMove)
-    window.removeEventListener('mouseup', onUp)
-    try { localStorage.setItem(storageKey, JSON.stringify(offset.value)) } catch { /* 忽略 */ }
-  }
-  function onDown(e) {
-    dragging.value = true
-    el = e.currentTarget
-    // 此刻 rect 与 offset.value 是一致的（都是当前已渲染状态），是唯一能正确
-    // 反推出元素原始位置的时机
-    bounds = dragBoundsOf(el, offset.value)
-    start = { mx: e.clientX, my: e.clientY, ox: offset.value.x, oy: offset.value.y }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    e.preventDefault()
-  }
-  // 把已经存在 localStorage 里的越界位置拉回来。没有这一步的话，
-  // 上一个版本拖丢的元素这次仍然在界外，用户永远够不着它。
-  // 复位：清掉偏移回到栏内默认位置。夹回边界只能保证"看得见"，回不到原位——
-  // 拖飞之后被按在工作区边缘的那个位置，既不是用户想要的也不是默认的。
-  function reset() {
-    offset.value = { x: 0, y: 0 }
-    try { localStorage.removeItem(storageKey) } catch { /* 忽略 */ }
-  }
-  function rescue(selector) {
-    const node = document.querySelector(selector)
-    if (!node) return
-    // 这里 offset.value 就是页面上生效的偏移，跟 rect 一致，可以直接算边界
-    const fixed = clampToBounds(offset.value, dragBoundsOf(node, offset.value))
-    if (fixed.x !== offset.value.x || fixed.y !== offset.value.y) {
-      offset.value = fixed
-      try { localStorage.setItem(storageKey, JSON.stringify(fixed)) } catch { /* 忽略 */ }
-    }
-  }
-  return { offset, dragging, onDown, rescue, reset }
-}
-const stickyDrag = makeDrag('corner_sticky_offset')
-const live2dDrag = makeDrag('corner_live2d_offset')
-
-// ============ 看板娘/任务卡片 开关（设置窗口控制） ============
-const kanbanLive2D = ref(localStorage.getItem('kanban_live2d') !== '0')
-const kanbanTaskCard = ref(localStorage.getItem('kanban_taskcard') !== '0')
-function onKanbanStorage(e) {
-  if (e.key === 'kanban_live2d') kanbanLive2D.value = e.newValue !== '0'
-  if (e.key === 'kanban_taskcard') kanbanTaskCard.value = e.newValue !== '0'
-}
-function onKanbanToggle(e) {
-  const { key, value } = e.detail
-  if (key === 'kanban_live2d') kanbanLive2D.value = value
-  if (key === 'kanban_taskcard') kanbanTaskCard.value = value
-}
-
-// 越界救回的 watch 放在 sidebarOpen 声明之后（见下方 rescueDragged），
-// 不能放这里：watch 会立即求值 getter 建依赖，会撞上 sidebarOpen 的 TDZ。
-function rescueDragged() {
-  nextTick(() => {
-    stickyDrag.rescue('.studio-side-col .side-drag:not(.studio-side-live2d)')
-    live2dDrag.rescue('.studio-side-col .studio-side-live2d')
-  })
-}
-
-// 光在挂载时夹一次不够：看板娘的 canvas 是异步加载的，它撑大之后这一列
-// （justify-content:flex-end）会把便签整体往上顶，刚算好的边界当场失效。
-// 用 ResizeObserver 盯着尺寸变化重新夹，顺带覆盖窗口缩放。
-let sideColRO = null
-function watchSideColResize() {
-  sideColRO?.disconnect()
-  const col = document.querySelector('.studio-side-col')
-  if (!col || typeof ResizeObserver === 'undefined') return
-  let pending = null
-  sideColRO = new ResizeObserver(() => {
-    clearTimeout(pending)              // 合并连续的尺寸抖动，别每帧都夹一次
-    pending = setTimeout(rescueDragged, 120)
-  })
-  sideColRO.observe(col)
-  for (const child of col.children) sideColRO.observe(child)
-}
-onUnmounted(() => {
-  sideColRO?.disconnect()
-  window.removeEventListener('storage', onKanbanStorage)
-  window.removeEventListener('kanban-toggle', onKanbanToggle)
-})
 
 // 点导航轴上的圆点：滚到那条用户消息并高亮一下，否则跳过去了也不知道落在哪。
 // 用 behavior:'auto' 而不是 'smooth'：平滑滚动是可中断的动画，会被聊天区
@@ -2076,21 +1910,6 @@ function formatSearchDate(ts) {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-// 便签/看板娘这一列是 v-if 挂上去的，出现之后才量得到尺寸；此时把上个版本
-// 拖到界外、已经够不着的位置夹回可视范围（见 clampOffset）。
-watch(() => isExpanded.value && !sidebarOpen.value, (shown) => {
-  if (!shown) { sideColRO?.disconnect(); return }
-  rescueDragged()
-  nextTick(watchSideColResize)
-})
-// 首次进入必须走 onMounted：上面这个 watch 如果带 immediate，会在 setup 阶段
-// （DOM 还没挂载）就执行，querySelector 拿不到那一列，观察器根本建不起来。
-onMounted(() => {
-  if (isExpanded.value && !sidebarOpen.value) {
-    rescueDragged()
-    nextTick(watchSideColResize)
-  }
-})
 // 折叠态会话横条：当前项目会话在上，其他在下。
 // workdir 由 localStorage('shanxi_session_workdir') 映射管理。
 function getCurrentWorkdirName() {

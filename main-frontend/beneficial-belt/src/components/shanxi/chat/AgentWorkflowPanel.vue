@@ -21,7 +21,9 @@
           <span v-else class="flow-spacer"></span>
           <span class="flow-chevron" :class="{ open: thinkOpen[`single-${gIdx}`] ?? true }">›</span>
         </div>
-        <div v-if="thinkOpen[`single-${gIdx}`] ?? true" class="flow-thinking-text">{{ group.block.text }}</div>
+        <div v-if="thinkOpen[`single-${gIdx}`] ?? true" class="flow-detail">
+          <div class="flow-thinking-text">{{ group.block.text }}</div>
+        </div>
       </div>
 
       <!-- ask_user 提问：平铺显示「问了什么 / 答了什么」 -->
@@ -80,7 +82,9 @@
                   <span v-else class="flow-spacer"></span>
                   <span class="flow-chevron" :class="{ open: thinkOpen[`${gIdx}-${i}`] ?? true }">›</span>
                 </div>
-                <div v-if="thinkOpen[`${gIdx}-${i}`] ?? true" class="flow-thinking-text">{{ b.text }}</div>
+                <div v-if="thinkOpen[`${gIdx}-${i}`] ?? true" class="flow-detail">
+                  <div class="flow-thinking-text">{{ b.text }}</div>
+                </div>
               </div>
 
               <!-- 操作 -->
@@ -98,27 +102,29 @@
                   </span>
                   <span class="flow-chevron" :class="{ open: b.expanded }">›</span>
                 </div>
-                <div v-if="b.expanded" class="flow-tool-body">
-                  <DiffViewer
-                    v-if="isEdit(b.name)"
-                    :old-content="editOld(b) || ''"
-                    :new-content="editNew(b) || ''"
-                    :path="filePath(b) || ''"
-                    :start-line="editStartLine(b)"
-                  />
-                  <DiffViewer
-                    v-else-if="isWrite(b.name)"
-                    old-content=""
-                    :new-content="fileContent(b) || ''"
-                    :path="filePath(b) || ''"
-                  />
-                  <div v-else-if="isRead(b.name)" class="flow-read">
-                    <div v-for="row in readRows(b)" :key="row.no" class="flow-read-line">
-                      <span class="flow-read-no">{{ row.no }}</span>
-                      <code class="flow-read-code">{{ row.text || ' ' }}</code>
+                <div v-if="b.expanded" class="flow-detail flow-tool-detail">
+                  <div class="flow-tool-body">
+                    <DiffViewer
+                      v-if="isEdit(b.name)"
+                      :old-content="editOld(b) || ''"
+                      :new-content="editNew(b) || ''"
+                      :path="filePath(b) || ''"
+                      :start-line="editStartLine(b)"
+                    />
+                    <DiffViewer
+                      v-else-if="isWrite(b.name)"
+                      old-content=""
+                      :new-content="fileContent(b) || ''"
+                      :path="filePath(b) || ''"
+                    />
+                    <div v-else-if="isRead(b.name)" class="flow-read">
+                      <div v-for="row in readRows(b)" :key="row.no" class="flow-read-line">
+                        <span class="flow-read-no">{{ row.no }}</span>
+                        <code class="flow-read-code">{{ row.text || ' ' }}</code>
+                      </div>
                     </div>
+                    <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
                   </div>
-                  <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
                 </div>
               </div>
             </template>
@@ -513,23 +519,11 @@ function toolBodyText(b) {
   max-height: 800px;
 }
 
-/* ★ 展开时间线：图标即节点，竖线从图标中心穿过，被图标背景盖住形成节点间空隙 */
+/* 展开组本身不缩进：每一条思考 / 工具调用标题都要独占完整一行。 */
 .flow-body {
-  position: relative;
-  padding-left: 22px;
   margin-top: 4px;
 }
-.flow-body::before {
-  content: '';
-  position: absolute;
-  left: 5.5px;              /* 竖线中心穿过图标中心 */
-  top: 14px;
-  bottom: 14px;
-  width: 2px;
-  background: var(--app-border);
-  border-radius: 1px;
-}
-/* 时间线里的行：灰色小字、去卡片底 */
+/* 时间线里的标题：灰色小字、去卡片底 */
 .flow-body .flow-row-head,
 .flow-thinking-single .flow-row-head {
   position: relative;
@@ -544,14 +538,14 @@ function toolBodyText(b) {
   background: transparent;
 }
 /* 图标即节点：背后垫一层与聊天背景同色的圆底，把竖线遮住 */
-.flow-body .flow-row-icon {
-  position: relative;
-  z-index: 1;
-  background: var(--chat-bg, var(--app-surface));
-  border-radius: 50%;
-  padding: 3px;
-  margin: -3px 2px -3px -3px;
+/* 只让展开详情缩进并显示竖线，标题仍和上层内容左对齐。 */
+.flow-detail {
+  margin: 4px 0 6px 24px;
+  padding: 0 0 2px 16px;
+  border-left: 2px solid var(--app-border);
+  min-width: 0;
 }
+.flow-tool-detail { margin-top: 6px; }
 
 /* ---------- 思考 ---------- */
 .flow-thinking {
@@ -675,9 +669,8 @@ function toolBodyText(b) {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-/* 思考正文：灰色小字，时间线内不再额外画左侧竖线 */
+/* 思考正文：灰色小字，左侧时间线由 .flow-detail 提供 */
 .flow-thinking-text {
-  margin-top: 4px;
   padding: 2px 0;
   font-size: 12px;
   line-height: 1.7;

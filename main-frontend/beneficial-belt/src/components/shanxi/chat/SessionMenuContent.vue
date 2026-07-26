@@ -50,6 +50,9 @@
     <div class="smc-section smc-section-projects">
       <div class="smc-section-label">
         <span>项目</span>
+        <button class="smc-project-add" type="button" title="创建项目" @click="openCreateProject">
+          <Icon icon="mdi:plus" width="18" />
+        </button>
       </div>
       <div class="smc-session-area">
         <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="wd-group" :class="{ open: isGroupOpen(grp.name) }">
@@ -136,6 +139,39 @@
         <div class="smc-dropdown-item danger" @click="onDelete(openMenuSession)">删除</div>
       </div>
     </Teleport>
+
+    <!-- 创建项目：不使用产品名文案，源文件夹由用户主动选择。 -->
+    <Teleport to="body">
+      <Transition name="smc-modal">
+        <div v-if="showCreateProject" class="smc-modal-backdrop" @click.self="closeCreateProject">
+          <form class="smc-create-project" @submit.prevent="createProject">
+            <div class="smc-create-project-head">
+              <h2>创建项目</h2>
+              <button type="button" class="smc-modal-close" title="关闭" @click="closeCreateProject">
+                <Icon icon="mdi:close" width="20" />
+              </button>
+            </div>
+
+            <label class="smc-project-name-field">
+              <Icon icon="mdi:folder-outline" width="20" />
+              <input ref="projectNameInput" v-model="newProjectName" placeholder="项目名称" maxlength="80" />
+            </label>
+
+            <div class="smc-source-label">源文件夹</div>
+            <button type="button" class="smc-source-picker" @click="pickSourceFolder">
+              <Icon icon="mdi:folder-plus-outline" width="25" />
+              <span v-if="selectedSourceFolder">{{ selectedSourceFolder.name }}</span>
+              <span v-else>添加可读取和编辑的文件夹</span>
+            </button>
+
+            <div class="smc-create-project-actions">
+              <button type="button" class="smc-cancel-btn" @click="closeCreateProject">取消</button>
+              <button type="submit" class="smc-create-btn" :disabled="!newProjectName.trim() || !selectedSourceFolder">创建项目</button>
+            </div>
+          </form>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -155,7 +191,36 @@ const props = defineProps({
   runningSession: { type: String, default: '' },
   fill: { type: Boolean, default: false }
 })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins', 'create-project'])
+
+const showCreateProject = ref(false)
+const newProjectName = ref('')
+const selectedSourceFolder = ref(null)
+const projectNameInput = ref(null)
+
+function openCreateProject() {
+  showCreateProject.value = true
+  newProjectName.value = ''
+  selectedSourceFolder.value = null
+  nextTick(() => projectNameInput.value?.focus())
+}
+function closeCreateProject() { showCreateProject.value = false }
+async function pickSourceFolder() {
+  try {
+    const res = await fetch('/api/workdir/pick', { method: 'POST' })
+    if (!res.ok) throw new Error('无法打开文件夹选择器')
+    const data = await res.json()
+    if (!data.cancelled && data.path) selectedSourceFolder.value = { name: data.name || data.path, path: data.path }
+  } catch {
+    // 选择器不可用或取消时，保留当前选择。
+  }
+}
+function createProject() {
+  const name = newProjectName.value.trim()
+  if (!name || !selectedSourceFolder.value) return
+  emit('create-project', { name, sourceFolder: selectedSourceFolder.value })
+  closeCreateProject()
+}
 
 // 用户卡片菜单（登录 / 退出）
 const footerRef = ref(null)
@@ -371,6 +436,13 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   display: flex; align-items: center; gap: 8px;
   padding: 16px 16px 6px; font-size: 12px; font-weight: 600; color: var(--app-text);
 }
+.smc-project-add {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; margin-left: auto; margin-right: -6px;
+  border: 0; border-radius: 7px; background: transparent; color: var(--app-text-soft);
+  cursor: pointer; transition: background 0.15s ease, color 0.15s ease;
+}
+.smc-project-add:hover { background: var(--app-surface-3); color: var(--app-text); }
 .smc-count { margin-left: auto; font-weight: 400; color: var(--app-text-faint); font-size: 11px; }
 
 .smc-session-area { overflow-y: auto; overflow-x: visible; min-height: 0; padding: 4px 6px 14px; }
@@ -460,4 +532,55 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-user-card-item:hover { background: var(--app-surface-3); }
 .smc-user-card-item.danger { color: #d94834; }
 .smc-user-card-item.danger:hover { background: rgba(217, 72, 52, 0.08); }
+
+.smc-modal-backdrop {
+  position: fixed; inset: 0; z-index: 10020;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: rgba(15, 23, 42, 0.28); backdrop-filter: blur(3px);
+}
+.smc-create-project {
+  width: min(100%, 620px); box-sizing: border-box; padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.7); border-radius: 22px;
+  background: var(--app-surface, #fff); color: var(--app-text, #202124);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+}
+.smc-create-project-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.smc-create-project-head h2 { margin: 0; font-size: 24px; line-height: 1.2; letter-spacing: -0.02em; }
+.smc-modal-close {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--app-text-soft); cursor: pointer;
+}
+.smc-modal-close:hover { background: var(--app-surface-3); color: var(--app-text); }
+.smc-project-name-field {
+  display: flex; align-items: center; gap: 12px; height: 48px; box-sizing: border-box;
+  padding: 0 14px; border: 1.5px solid var(--app-accent, #6366f1); border-radius: 14px;
+  color: var(--app-text-soft); background: var(--app-surface);
+}
+.smc-project-name-field input {
+  width: 100%; min-width: 0; border: 0; outline: 0; background: transparent;
+  color: var(--app-text); font: inherit; font-size: 15px;
+}
+.smc-project-name-field input::placeholder { color: var(--app-text-faint); }
+.smc-source-label { margin: 20px 0 10px; font-size: 14px; font-weight: 650; }
+.smc-source-picker {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 120px; padding: 18px; border: 1px solid var(--app-border); border-radius: 14px;
+  background: var(--app-surface); color: var(--app-text); font: inherit; font-size: 14px; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.smc-source-picker:hover { border-color: var(--app-accent); background: var(--app-surface-2); }
+.smc-source-picker .iconify { color: var(--app-text-soft); }
+.smc-create-project-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.smc-cancel-btn, .smc-create-btn {
+  min-height: 40px; padding: 0 16px; border: 0; border-radius: 11px; font: inherit; font-weight: 600; cursor: pointer;
+}
+.smc-cancel-btn { background: transparent; color: var(--app-text-soft); }
+.smc-cancel-btn:hover { background: var(--app-surface-3); color: var(--app-text); }
+.smc-create-btn { background: #202124; color: #fff; }
+.smc-create-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.smc-create-btn:not(:disabled):hover { background: #000; }
+.smc-modal-enter-active, .smc-modal-leave-active { transition: opacity 0.18s ease; }
+.smc-modal-enter-active .smc-create-project, .smc-modal-leave-active .smc-create-project { transition: transform 0.18s ease, opacity 0.18s ease; }
+.smc-modal-enter-from, .smc-modal-leave-to { opacity: 0; }
+.smc-modal-enter-from .smc-create-project, .smc-modal-leave-to .smc-create-project { transform: translateY(10px) scale(0.98); opacity: 0; }
 </style>
