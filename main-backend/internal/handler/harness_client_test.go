@@ -4,7 +4,9 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 )
@@ -15,7 +17,12 @@ func TestCallHarnessRunTask_Integration(t *testing.T) {
 		t.Skipf("harness 未运行，跳过: %v", err)
 	}
 
-	body, status, err := CallHarnessRunTask("count_lines", `{"path":"C:\\Pro2026\\re0\\README.md"}`)
+	// 路径跨平台：优先读环境变量 RE0_README_PATH，否则回退到仓库根 README（相对当前工作目录）
+	readmePath := os.Getenv("RE0_README_PATH")
+	if readmePath == "" {
+		readmePath = "README.md"
+	}
+	body, status, err := CallHarnessRunTask("count_lines", fmt.Sprintf(`{"path":%q}`, readmePath))
 	if err != nil {
 		t.Fatalf("调用失败: %v", err)
 	}
