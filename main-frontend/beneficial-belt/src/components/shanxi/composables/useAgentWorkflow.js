@@ -26,6 +26,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     // 全局共享:便签渲染在 app 层(侧栏折叠时),不隶属某条消息。
     const todoState = reactive({ items: [] })
 
+    // ask_user 提问：agent 调 ask_user 工具时后端推 question 事件，这里压入一个
+    // 待回答项，ChatWidget 据此弹「提问弹窗」（复选/单选/自由输入 + 取消/确认）。
+    // 同一工作流同一时刻只会有一个未决提问（后端循环阻塞着），数组是为了容错。
+    const questionState = reactive({ pending: null })
+
     // 断点续跑：后端每轮把进行中的工作流落盘（workflow_checkpoint.go），
     // 后端重启/SSE 断线后这里查得到，输入框上方出一条「上次任务跑到第 N 轮」。
     // Yolo 全自动跑长任务时最要紧——否则一断就得从头重发，工具全再跑一遍。
@@ -314,6 +319,22 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             onStreamUpdate?.()
         })
 
+        // ask_user 提问：后端推来一个待用户回答的问题，弹窗据此渲染。
+        // 把整条（含 id/question/options/multi/allow_other）压入 questionState.pending。
+        es.addEventListener('question', e => {
+            const d = JSON.parse(e.data)
+            const options = Array.isArray(d.options) ? d.options : []
+            questionState.pending = reactive({
+                id: d.id,
+                workflowId: d.workflow_id || flow.workflowId,
+                question: d.question || '',
+                options,
+                multi: !!d.multi,
+                allowOther: !!d.allow_other || options.some(option => /其他|自由输入/.test(option.label))
+            })
+            onStreamUpdate?.()
+        })
+
         es.addEventListener('workflow_done', e => {
             const d = JSON.parse(e.data)
             flow.status = d.status || 'completed'
@@ -401,9 +422,29 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         }
     }
 
+    // 回答 ask_user 提问：把用户选中的选项/自由输入 POST 回后端，后端唤醒阻塞的循环。
+    // selected 为空且 answer 为空表示「取消」——仍发请求让后端用 fallback/空答案继续，
+    // 不卡死工作流（与审批超时自动放行同一思路：宁可继续，不留半吊子）。
+    async function answerQuestion({ id, answer = '', selected = [] }) {
+        const item = questionState.pending
+        if (!item || item.id !== id) return
+        questionState.pending = null
+        onStreamUpdate?.()
+        const wfId = item.workflowId
+        try {
+            await fetch('/api/code/workflow/answer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, workflow_id: wfId, answer: answer || '', selected })
+            })
+        } catch (err) {
+            console.error('answer 请求失败', err)
+        }
+    }
+
     return {
         flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow,
         resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable,
-        todoState, sendSteerMessage
+        todoState, sendSteerMessage, questionState, answerQuestion
     }
 }

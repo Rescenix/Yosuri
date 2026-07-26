@@ -218,6 +218,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	steerCh := registerSteerChannel(workflowID)
 	defer unregisterSteerChannel(workflowID)
 
+	// ask_user 提问等待通道：按 workflowID 注册，agent 调 ask_user 时阻塞在这里，
+	// 等前端 POST /api/code/workflow/answer 唤醒。同一工作流串行（循环阻塞着），
+	// 所以一个 channel 足够。
+	askCh := registerAskUser(workflowID)
+	defer unregisterAskUser(workflowID)
+
 	// 上下文装配全部交给 ContextProvider（见 context_provider.go）：
 	// 系统提示词分段声明、稳定段排前面（前缀缓存友好）、分类占用与提示词同源、
 	// 按需加载的工具激活集也归它管。SwiftNet 的无条件记忆注入是其中一段。
@@ -517,6 +523,16 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			if tc.Function.Name == harnessStatusToolName {
 				handled[i] = handleHarnessStatus(tc.Function.Arguments, ledger, round,
 					contextBreakdown, activatedToolNames(provider.ActivatedTools()))
+				continue
+			}
+			// ask_user：让 agent 在跑一半时向用户提问并暂停。本层直接办掉——
+			// 推 question 事件 + 阻塞等回答 + 把答案作为工具结果注入上下文，
+			// 不进 executeCodeCalls（它不碰 MCP/外部命令）。返回的答案既填进
+			// tool 消息，也落进可视化轨迹 FlowBlock（带问/答，刷新后仍可见）。
+			if tc.Function.Name == askUserToolName {
+				ans, qb := handleAskUser(c, workflowID, askCh, tc.Function.Arguments)
+				handled[i] = "用户回答：" + ans
+				flowBlocks = append(flowBlocks, qb)
 				continue
 			}
 			toRun = append(toRun, calls[i])

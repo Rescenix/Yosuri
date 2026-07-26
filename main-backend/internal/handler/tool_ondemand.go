@@ -55,6 +55,9 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// 常驻是有意的——正因为它是自省用的，模型需要它的时候恰恰是"感觉不对劲"
 		// 的时候，那时再让它先 load_tools 就晚了。
 		harnessStatusToolDef,
+		// ask_user：让 agent 在工作流中途向用户提问并暂停等待回答（human-in-the-loop）。
+		// 常驻是因为它是交互控制面工具，需要用时再 load_tools 就打断节奏了。
+		askUserToolDef,
 	}
 }
 

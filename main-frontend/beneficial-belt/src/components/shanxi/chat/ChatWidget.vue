@@ -338,6 +338,13 @@
                 <Icon icon="mdi:chevron-down" width="20" color="#555" />
               </button>
 
+              <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
+              <QuestionModal
+                v-if="questionState.pending"
+                :question="questionState.pending"
+                @answer="answerQuestion"
+              />
+
               <!-- ===== 工具审批轻量条（Ask 模式）=====
                    贴在输入框正上方，不打断视线；每条 60s 倒计时，归零自动同意
                    （后端另有 65s 兜底，防前端整个挂掉时工作流永久阻塞）。 -->
@@ -828,6 +835,7 @@
 
     <!-- 插件市场浮层（占位入口）：独立组件 + Teleport，与 SettingsModal 保持一致 -->
     <PluginsMarketModal v-if="showPluginsPanel" @close="closePluginsPanel" />
+
   </div>
 </template>
 
@@ -847,6 +855,7 @@ import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
 import SettingsModal from './SettingsModal.vue'
 import PluginsMarketModal from './PluginsMarketModal.vue'
+import QuestionModal from './QuestionModal.vue'
 import FileToolPanel from './FileToolPanel.vue'
 import DiffPanel from './DiffPanel.vue'
 import { parseToolArgs } from './toolArgs.js'
@@ -1951,6 +1960,7 @@ const {
   backgroundTaskList, playVoice,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
+  questionState, answerQuestion,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })

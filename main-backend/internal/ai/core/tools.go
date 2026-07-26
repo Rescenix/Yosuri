@@ -30,9 +30,12 @@ type ToolParameters struct {
 }
 
 type ToolProperty struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description"`
-	Enum        []string `json:"enum,omitempty"`
+	Type        string                  `json:"type"`
+	Description string                  `json:"description,omitempty"`
+	Enum        []string                `json:"enum,omitempty"`
+	Properties  map[string]ToolProperty `json:"properties,omitempty"`
+	Required    []string                `json:"required,omitempty"`
+	MinItems    int                     `json:"minItems,omitempty"`
 	// Items 描述 type:"array" 时的元素类型。缺了它，多数上游会判定 array 参数
 	// schema 不合法（或让模型自由发挥填出五花八门的元素），所以数组参数必须带。
 	Items *ToolProperty `json:"items,omitempty"`

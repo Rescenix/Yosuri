@@ -57,6 +57,8 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.POST("/api/code/workflow/approve", workflowRunner.HandleCodeWorkflowApprove)
 	// 中途插话：工作流跑着的时候插一条消息，下一轮当作用户中途发言拼进上下文
 	r.POST("/api/code/workflow/steer", HandleCodeWorkflowSteer)
+	// ask_user 提问回答回调：前端提问弹窗「确认」写回，唤醒阻塞中的 ask_user 续跑
+	r.POST("/api/code/workflow/answer", workflowRunner.HandleCodeWorkflowAnswer)
 	// 断点续跑：列出中断的工作流；续跑本身走 GET /api/code/workflow?resume=<workflow_id>
 	r.GET("/api/code/workflow/checkpoints", workflowRunner.HandleCodeWorkflowCheckpoints)
 	r.DELETE("/api/code/workflow/checkpoints/:id", workflowRunner.HandleCodeWorkflowCheckpointDelete)

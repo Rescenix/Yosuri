@@ -1,96 +1,207 @@
 <template>
   <div class="agent-flow" :class="{ streaming: flow.status === 'running' }">
-    <template v-for="(b, i) in flow.blocks" :key="i">
-      <!-- 思考：卡片行（✨ 图标 + 标签 + 收起时的一行预览 + 折叠箭头），展开是弱化正文 -->
-      <div v-if="b.type === 'thinking'" class="flow-thinking">
-        <div class="flow-row-head" @click="toggleThink(i)">
-          <Icon icon="mdi:star-four-points" class="flow-row-icon icon-think" width="13" />
+    <!--
+      ★ 按顺序渲染，但「回复(intent)」始终平铺可见；
+      连续出现的「思考 + 工具调用」才收纳进同一个概要栏 + 可折叠时间线。
+    -->
+    <template v-for="(group, gIdx) in blockGroups" :key="gIdx">
+      <!-- 可直接见的回复文本 -->
+      <div
+        v-if="group.type === 'visible'"
+        class="flow-intent markdown-body"
+        v-html="renderMarkdown(group.text, true)"
+      ></div>
+
+      <!-- 单步思考：不收束，直接平铺 -->
+      <div v-else-if="group.type === 'single-thinking'" class="flow-thinking flow-thinking-single">
+        <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`)">
+          <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
           <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考' }}</span>
-          <span v-if="!(thinkOpen[i] ?? true) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
+          <span v-if="!(thinkOpen[`single-${gIdx}`] ?? true) && group.block.text" class="flow-row-preview">{{ onelinePreview(group.block.text) }}</span>
           <span v-else class="flow-spacer"></span>
-          <span class="flow-chevron" :class="{ open: thinkOpen[i] ?? true }">›</span>
+          <span class="flow-chevron" :class="{ open: thinkOpen[`single-${gIdx}`] ?? true }">›</span>
         </div>
-        <div v-if="thinkOpen[i] ?? true" class="flow-thinking-text">{{ b.text }}</div>
+        <div v-if="thinkOpen[`single-${gIdx}`] ?? true" class="flow-thinking-text">{{ group.block.text }}</div>
       </div>
 
-      <!-- 意图/最终回答：直接平铺的 markdown，跟 chat 模式的气泡内容一个样式，
-           不带复制按钮这类额外装饰——保持跟 chat 模式一致的简洁 -->
-      <div v-else-if="b.type === 'intent'" class="flow-intent markdown-body" v-html="renderMarkdown(b.text, true)"></div>
-
-      <!-- 操作：默认就是一行与正文同样式的白话（"编辑了 xx.go +11 −6"），没有
-           徽章/状态图标/边框；点一下才展开下面那张白卡片看 Diff 或命令输出 -->
-      <div v-else-if="b.type === 'tool'" class="flow-tool">
-        <div class="flow-row-head" @click="b.expanded = !b.expanded">
-          <Icon icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
-          <span class="flow-tool-label">{{ actionText(b) }}</span>
-          <span v-if="diffCounts(b)" class="flow-tool-counts">
-            <span class="flow-add">+{{ diffCounts(b).added }}</span>
-            <span v-if="diffCounts(b).removed" class="flow-del">−{{ diffCounts(b).removed }}</span>
-          </span>
-          <span class="flow-spacer"></span>
-          <!-- 状态徽章：完成带耗时(41ms)、进行中带脉冲点、失败标红（图1 那种） -->
-          <span class="flow-tool-badge" :class="'st-' + b.status">
-            <span v-if="b.status === 'running'" class="flow-badge-dot"></span>{{ toolBadge(b) }}
-          </span>
-          <span class="flow-chevron" :class="{ open: b.expanded }">›</span>
+      <!-- ask_user 提问：平铺显示「问了什么 / 答了什么」 -->
+      <div v-else-if="group.type === 'question'" class="flow-question">
+        <div class="flow-question-head">
+          <Icon icon="mdi:help-circle-outline" class="flow-row-icon icon-question" width="14" />
+          <span class="flow-question-q">{{ group.block.question }}</span>
         </div>
-        <div v-if="b.expanded" class="flow-tool-body">
-          <!-- 内置 edit_file / MCP 的 mcp__fs__edit_file 都走 diff 视图 -->
-          <DiffViewer
-            v-if="isEdit(b.name)"
-            :old-content="editOld(b) || ''"
-            :new-content="editNew(b) || ''"
-            :path="filePath(b) || ''"
-            :start-line="editStartLine(b)"
-          />
-          <DiffViewer
-            v-else-if="isWrite(b.name)"
-            old-content=""
-            :new-content="fileContent(b) || ''"
-            :path="filePath(b) || ''"
-          />
-          <!-- 读文件：带真实行号的等宽列表，跟 Diff 视图的行号列同一观感，
-               而不是一堆无编号的裸文本——引用某一行时用户没法对上号 -->
-          <div v-else-if="isRead(b.name)" class="flow-read">
-            <div v-for="row in readRows(b)" :key="row.no" class="flow-read-line">
-              <span class="flow-read-no">{{ row.no }}</span>
-              <code class="flow-read-code">{{ row.text || ' ' }}</code>
-            </div>
+        <div v-if="group.block.options && group.block.options.length" class="flow-question-opts">
+          <span
+            v-for="(o, i) in group.block.options"
+            :key="i"
+            class="flow-question-opt"
+            :class="{ chosen: isChosenAnswer(group.block, o.value || o.label) }"
+          >{{ o.label }}</span>
+        </div>
+        <div class="flow-question-a">
+          <span class="flow-question-a-label">回答</span>
+          <span class="flow-question-a-text">{{ group.block.answer || '（等待中…）' }}</span>
+        </div>
+      </div>
+
+      <!-- 收纳起来的工具/思考时间线 -->
+      <template v-else>
+        <div class="flow-summary" @click="summaryExpanded[gIdx] = !summaryExpanded[gIdx]">
+          <div class="flow-summary-main">
+            <Icon icon="mdi:star-four-points" width="16" class="flow-summary-icon" />
+            <span class="flow-summary-text">{{ groupSummaryTitle(group) }}</span>
           </div>
-          <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
+          <div class="flow-summary-badges">
+            <span v-if="groupRunningCount(group)" class="flow-summary-badge running">
+              <span class="flow-summary-dot"></span>{{ groupRunningCount(group) }} 进行中
+            </span>
+            <span v-if="groupThinkingCount(group)" class="flow-summary-badge think">
+              <Icon icon="mdi:star-four-points" width="11" /> {{ groupThinkingCount(group) }} 思考
+            </span>
+            <span v-if="groupToolCount(group)" class="flow-summary-badge tool">
+              <Icon icon="mynaui:tool" width="11" /> {{ groupToolCount(group) }} 操作
+            </span>
+            <span v-if="groupReadCount(group)" class="flow-summary-badge read">{{ groupReadCount(group) }} 读</span>
+            <span v-if="groupWriteCount(group)" class="flow-summary-badge write">{{ groupWriteCount(group) }} 写</span>
+            <span v-if="groupEditCount(group)" class="flow-summary-badge edit">{{ groupEditCount(group) }} 改</span>
+          </div>
+          <span class="flow-chevron" :class="{ open: summaryExpanded[gIdx] }">›</span>
         </div>
-      </div>
 
-      <!-- 上下文压缩：一行弱化提示，跟思考块一个视觉重量。让用户知道早期历史被
-           折叠成了摘要（省了多少字符），而不是无声改写。 -->
-      <div v-else-if="b.type === 'compressed'" class="flow-compressed">
-        <span class="flow-compressed-icon">🗜️</span>
-        <span>已压缩早期 {{ b.foldedMessages }} 条执行记录以节省上下文（{{ compactChars(b.beforeChars) }} → {{ compactChars(b.afterChars) }}）</span>
-      </div>
+        <Transition name="flow-body">
+          <div v-show="summaryExpanded[gIdx]" class="flow-body">
+            <template v-for="(b, i) in group.blocks" :key="`${gIdx}-${i}`">
+              <!-- 思考 -->
+              <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
+                <div class="flow-row-head" @click.stop="toggleThink(`${gIdx}-${i}`)">
+                  <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
+                  <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考' }}</span>
+                  <span v-if="!(thinkOpen[`${gIdx}-${i}`] ?? true) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
+                  <span v-else class="flow-spacer"></span>
+                  <span class="flow-chevron" :class="{ open: thinkOpen[`${gIdx}-${i}`] ?? true }">›</span>
+                </div>
+                <div v-if="thinkOpen[`${gIdx}-${i}`] ?? true" class="flow-thinking-text">{{ b.text }}</div>
+              </div>
 
-      <!-- 中途插话：用户在工作流跑着的时候塞进来的一句话，已被下一轮采纳。
-           跟压缩提示一个视觉重量的弱化条，让用户确认"这句话确实生效了"。 -->
-      <div v-else-if="b.type === 'steer'" class="flow-steer">
-        <span class="flow-steer-icon">💬</span>
-        <span>已插话：{{ b.text }}</span>
-      </div>
-
-      <!-- 自动预览：改到前端文件时后端推 preview_open，右侧面板会自己弹出来。
-           这里留一行说明，否则面板凭空冒出来会让人一头雾水。 -->
-      <div v-else-if="b.type === 'preview'" class="flow-preview">
-        <span class="flow-preview-icon">🖥️</span>
-        <span>检测到前端改动，已打开预览：{{ b.url }}</span>
-      </div>
+              <!-- 操作 -->
+              <div v-else-if="b.type === 'tool'" class="flow-tool flow-tool-timeline">
+                <div class="flow-row-head" @click.stop="b.expanded = !b.expanded">
+                  <Icon icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
+                  <span class="flow-tool-label">{{ actionText(b) }}</span>
+                  <span v-if="diffCounts(b)" class="flow-tool-counts">
+                    <span class="flow-add">+{{ diffCounts(b).added }}</span>
+                    <span v-if="diffCounts(b).removed" class="flow-del">−{{ diffCounts(b).removed }}</span>
+                  </span>
+                  <span class="flow-spacer"></span>
+                  <span class="flow-tool-badge" :class="'st-' + b.status">
+                    <span v-if="b.status === 'running'" class="flow-badge-dot"></span>{{ toolBadge(b) }}
+                  </span>
+                  <span class="flow-chevron" :class="{ open: b.expanded }">›</span>
+                </div>
+                <div v-if="b.expanded" class="flow-tool-body">
+                  <DiffViewer
+                    v-if="isEdit(b.name)"
+                    :old-content="editOld(b) || ''"
+                    :new-content="editNew(b) || ''"
+                    :path="filePath(b) || ''"
+                    :start-line="editStartLine(b)"
+                  />
+                  <DiffViewer
+                    v-else-if="isWrite(b.name)"
+                    old-content=""
+                    :new-content="fileContent(b) || ''"
+                    :path="filePath(b) || ''"
+                  />
+                  <div v-else-if="isRead(b.name)" class="flow-read">
+                    <div v-for="row in readRows(b)" :key="row.no" class="flow-read-line">
+                      <span class="flow-read-no">{{ row.no }}</span>
+                      <code class="flow-read-code">{{ row.text || ' ' }}</code>
+                    </div>
+                  </div>
+                  <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
+                </div>
+              </div>
+            </template>
+          </div>
+        </Transition>
+      </template>
     </template>
   </div>
 </template>
 
 <script setup>
-import { reactive } from 'vue'
+import { reactive, computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
 import { renderMarkdown } from './markdownRenderer.js'
+
+const props = defineProps({
+  flow: { type: Object, required: true }
+})
+
+// ★ 把连续的工具调用和思考收进一组；回复(intent)单独平铺，不收纳
+// 例外：只有 1 步且是思考时，不收束，直接平铺
+const blockGroups = computed(() => {
+  const groups = []
+  let current = null
+  for (const b of props.flow?.blocks || []) {
+    if (b.type === 'thinking' || b.type === 'tool') {
+      if (!current || current.type === 'visible' || current.type === 'single-thinking') {
+        if (current) groups.push(current)
+        current = { type: 'summary', blocks: [b] }
+      } else {
+        current.blocks.push(b)
+      }
+    } else {
+      if (current) {
+        groups.push(current)
+        current = null
+      }
+      if (b.type === 'intent') {
+        groups.push({ type: 'visible', text: b.text })
+      } else if (b.type === 'question') {
+        // ask_user 提问：单独平铺，让用户直接看到「问了什么 / 答了什么」
+        groups.push({ type: 'question', block: b })
+      }
+      // 其他类型（compressed/steer/preview）暂不收纳也不平铺，避免污染回复
+    }
+  }
+  if (current) groups.push(current)
+
+  // 后处理：单步思考不收束
+  return groups.map(g => {
+    if (g.type === 'summary' && g.blocks.length === 1 && g.blocks[0].type === 'thinking') {
+      return { type: 'single-thinking', block: g.blocks[0] }
+    }
+    return g
+  })
+})
+
+// 每个 summary 组的展开状态
+const summaryExpanded = reactive({})
+
+// 各类型 block 统计（按组）
+const groupToolBlocks = (g) => g.blocks.filter(b => b.type === 'tool')
+const groupThinkingBlocks = (g) => g.blocks.filter(b => b.type === 'thinking')
+const groupRunningCount = (g) => groupToolBlocks(g).filter(b => b.status === 'running').length
+const groupThinkingCount = (g) => groupThinkingBlocks(g).length
+const groupToolCount = (g) => groupToolBlocks(g).length
+const groupReadCount = (g) => groupToolBlocks(g).filter(b => isRead(b.name)).length
+const groupWriteCount = (g) => groupToolBlocks(g).filter(b => isWrite(b.name)).length
+const groupEditCount = (g) => groupToolBlocks(g).filter(b => isEdit(b.name)).length
+
+function groupSummaryTitle(group) {
+  const running = group.blocks.some(b => b.status === 'running')
+  if (running) {
+    const last = group.blocks[group.blocks.length - 1]
+    if (last?.type === 'tool') return actionText(last)
+    if (last?.type === 'thinking') return '正在思考…'
+    return 'Agent 正在处理…'
+  }
+  const total = group.blocks.length
+  return total ? `已完成 · ${total} 步` : '已完成'
+}
 
 // 收起态思考行的一行预览：取首个非空行、压掉空白、截断
 function onelinePreview(text) {
@@ -109,10 +220,6 @@ function toolBadge(b) {
   const t = fmtMs(b.elapsedMs)
   return t ? '完成 ' + t : '完成'
 }
-
-const props = defineProps({
-  flow: { type: Object, required: true }
-})
 
 // ==================== 思考块折叠 ====================
 // 思考块默认展开（模板用 thinkOpen[i] ?? true），toggle 基于"当前是否可见"取反：
@@ -275,6 +382,15 @@ function editNew(b) {
 function fileContent(b) { const a = b.args || {}; return a.content || '' }
 function filePath(b) { const a = b.args || {}; return a.path || '' }
 
+// 判断某个选项是否被用户的回答命中（answer 可能是「A、B」这类拼接，或自由文本）
+function isChosenAnswer(block, value) {
+  const ans = (block.answer || '').trim()
+  if (!ans) return false
+  if (ans === value) return true
+  // 多选题答案形如「A、B」，按顿号/、切分后看是否含该 value
+  return ans.split(/[、,]/).map(s => s.trim()).includes(value)
+}
+
 // edit_file 结果里带 "第 N 行"，用来给 Diff 做行号偏移
 function editStartLine(b) {
   const m = /第\s*(\d+)\s*行/.exec(b.output || '')
@@ -298,6 +414,143 @@ function toolBodyText(b) {
   width: 100%;
   max-width: 100%;
   padding: 2px 0;
+}
+
+/* ---------- 概要栏：把一次 agent 回复之间的思考和工具调用都收纳进来 ---------- */
+.flow-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border-soft);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.flow-summary:hover {
+  background: var(--app-surface-3);
+  border-color: var(--app-border);
+}
+.flow-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.flow-summary-icon {
+  flex-shrink: 0;
+  color: var(--app-accent);
+}
+.flow-summary-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--app-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flow-summary-badges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.flow-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.flow-summary-badge.running {
+  color: var(--app-accent);
+  background: var(--app-accent-soft);
+}
+.flow-summary-badge.think {
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+}
+.flow-summary-badge.tool {
+  color: var(--app-text-soft);
+  background: rgba(100, 116, 139, 0.1);
+}
+.flow-summary-badge.read { color: #0ea5e9; background: rgba(14, 165, 233, 0.1); }
+.flow-summary-badge.write { color: #12b76a; background: rgba(18, 183, 106, 0.1); }
+.flow-summary-badge.edit { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+.flow-summary-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: flowSummaryPulse 1.2s ease-in-out infinite;
+}
+@keyframes flowSummaryPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.75); }
+}
+.flow-summary-icon { color: #8b5cf6; }
+
+/* 折叠/展开动画 */
+.flow-body-enter-active,
+.flow-body-leave-active {
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+.flow-body-enter-from,
+.flow-body-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+.flow-body-enter-to,
+.flow-body-leave-from {
+  opacity: 1;
+  max-height: 800px;
+}
+
+/* ★ 展开时间线：图标即节点，竖线从图标中心穿过，被图标背景盖住形成节点间空隙 */
+.flow-body {
+  position: relative;
+  padding-left: 22px;
+  margin-top: 4px;
+}
+.flow-body::before {
+  content: '';
+  position: absolute;
+  left: 5.5px;              /* 竖线中心穿过图标中心 */
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--app-border);
+  border-radius: 1px;
+}
+/* 时间线里的行：灰色小字、去卡片底 */
+.flow-body .flow-row-head,
+.flow-thinking-single .flow-row-head {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--app-text-soft);
+}
+.flow-body .flow-row-head:hover,
+.flow-thinking-single .flow-row-head:hover {
+  background: transparent;
+}
+/* 图标即节点：背后垫一层与聊天背景同色的圆底，把竖线遮住 */
+.flow-body .flow-row-icon {
+  position: relative;
+  z-index: 1;
+  background: var(--chat-bg, var(--app-surface));
+  border-radius: 50%;
+  padding: 3px;
+  margin: -3px 2px -3px -3px;
 }
 
 /* ---------- 思考 ---------- */
@@ -409,29 +662,27 @@ function toolBodyText(b) {
   cursor: pointer;
   user-select: none;
 }
-/* 白光字体表面扫描：只挂在文字 span 上，chevron 留在 clip 外避免被裁重叠 */
+/* 思考标签：默认灰色小字；streaming 时轻微闪烁 */
 .flow-thinking-text-label {
-  color: var(--app-text);
-  background: linear-gradient(100deg, #1e293b 40%, var(--app-surface) 50%, #1e293b 60%);
+  color: var(--app-text-soft);
+  font-size: inherit;
+}
+.agent-flow.streaming .flow-thinking-text-label {
+  animation: reasonShimmer 3s linear infinite;
+  background: linear-gradient(100deg, var(--app-text-soft) 40%, var(--app-text) 50%, var(--app-text-soft) 60%);
   background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: reasonShimmer 5s linear infinite;
 }
-.agent-flow:not(.streaming) .flow-thinking-text-label {
-  animation: none;
-}
-/* 思考正文不再是一块灰底色块——底色跟聊天背景一样（透明），只留左侧一条竖线
-   把它和正文区分开，视觉上"轻"下去，不跟回答抢注意力 */
+/* 思考正文：灰色小字，时间线内不再额外画左侧竖线 */
 .flow-thinking-text {
   margin-top: 4px;
-  padding: 2px 0 2px 12px;
-  font-size: 13px;
+  padding: 2px 0;
+  font-size: 12px;
   line-height: 1.7;
   color: var(--app-text-faint);
   background: transparent;
-  border-left: 2px solid rgba(148, 163, 184, 0.35);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -458,9 +709,9 @@ function toolBodyText(b) {
 .flow-tool-label {
   min-width: 0;
   max-width: 60%;
-  font-size: 13.5px;
+  font-size: inherit;
   line-height: 1.5;
-  color: var(--app-text);
+  color: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -504,7 +755,7 @@ function toolBodyText(b) {
   max-height: 320px;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.6;
 }
 .flow-read-line {
@@ -518,12 +769,16 @@ function toolBodyText(b) {
   padding-right: 10px;
   color: var(--app-text-faint);
   user-select: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
 }
 .flow-read-code {
   flex: 1;
   min-width: 0;
   color: var(--app-text);
   background: transparent;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
   white-space: pre-wrap;
   word-break: break-all;
 }
@@ -537,5 +792,66 @@ function toolBodyText(b) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* ---------- ask_user 提问块 ---------- */
+.flow-question {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border-soft);
+  margin: 4px 0;
+}
+.flow-question-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.icon-question {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--app-accent);
+}
+.flow-question-q {
+  font-size: 13px;
+  color: var(--app-text);
+  line-height: 1.5;
+  font-weight: 500;
+}
+.flow-question-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.flow-question-opt {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  color: var(--app-text-soft);
+  background: var(--app-surface);
+}
+.flow-question-opt.chosen {
+  border-color: var(--app-accent);
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+.flow-question-a {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+}
+.flow-question-a-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--app-text-faint);
+}
+.flow-question-a-text {
+  font-size: 13px;
+  color: var(--app-text);
+  line-height: 1.5;
+  word-break: break-word;
 }
 </style>

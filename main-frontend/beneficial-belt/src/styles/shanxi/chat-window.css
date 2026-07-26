@@ -513,7 +513,7 @@ min-height: 90px !important;
   color: var(--app-text);
   border: none;
   padding: 11px 17px;
-  border-radius: 25px;
+  border-radius: 12px;
   line-height: 1.6;
   text-align: left;
   position: relative;
@@ -3354,7 +3354,8 @@ img.gem-rail-avatar {
 .chat-window.expanded .chat-body.studio .chat-content .input-dir-bar,
 .chat-window.expanded .chat-body.studio .chat-content .input-git-bar,
 .chat-window.expanded .chat-body.studio .chat-content .input-bottom-toolbar,
-.chat-window.expanded .chat-body.studio .chat-content .approval-bar {
+.chat-window.expanded .chat-body.studio .chat-content .approval-bar,
+.chat-window.expanded .chat-body.studio .chat-content .question-bar {
   /* chat-input-area 是 flex column，光有 margin:auto（cross-axis 自动外边距）
      反而会让 stretch 失效、退化成按内容宽度收缩；显式给 width:100% 保证跟
      input-wrapper 一样占满可用宽度，max-width 再统一封顶到 720px */

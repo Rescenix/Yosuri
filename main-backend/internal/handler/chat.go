@@ -31,12 +31,17 @@ type DSMessage struct {
 // FlowBlock 与前端 agentflow 消息的 blocks 元素一一对应（见 useAgentWorkflow.js），
 // 字段名保持一致，前端拿到就能直接铺回面板，不用做映射。
 type FlowBlock struct {
-	Type   string `json:"type"`             // intent（模型说的话）| tool（一次工具调用）
+	Type   string `json:"type"`             // intent（模型说的话）| tool（一次工具调用）| question（agent 向用户提问）
 	Text   string `json:"text,omitempty"`   // type=intent 时的正文
 	Name   string `json:"name,omitempty"`   // type=tool 时的工具名
 	Args   string `json:"args,omitempty"`   // 原始 JSON 参数串，前端自己 parse
 	Output string `json:"output,omitempty"` // 工具输出（完整版，与 result 事件同口径）
 	Status string `json:"status,omitempty"` // ok | error
+	// question 块专用字段（ask_user 工具产生）
+	Question string          `json:"question,omitempty"` // 问用户的话
+	Options  []askUserOption `json:"options,omitempty"`  // 候选选项
+	Answer   string          `json:"answer,omitempty"`   // 用户回答后回填
+	Multi    bool            `json:"multi,omitempty"`    // 是否多选
 }
 
 type DSReq struct {
