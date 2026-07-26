@@ -21,9 +21,6 @@ func main() {
 	// 加载环境变量
 	_ = godotenv.Load()
 
-	// 初始化 GitHub OAuth 配置（未配置 GITHUB_CLIENT_ID 等时自动跳过）
-	handler.InitGitHubOAuth()
-
 	// 初始化数据库连接
 	database.InitDB()
 

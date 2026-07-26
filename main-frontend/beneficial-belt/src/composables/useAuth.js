@@ -7,6 +7,7 @@ const isLoggedIn = ref(false)
 const login = ref('')   // GitHub 登录名
 const name = ref('')    // GitHub 显示名
 const avatar = ref('')  // GitHub 头像 URL
+const isVip = ref(false) // 会员标识：仅由服务端 JWT 的 is_vip 决定，绝不读 localStorage（堵住游客伪造）
 let refreshing = false
 
 const GUEST_KEY = 'aurora_guest_name'
@@ -53,11 +54,14 @@ async function refresh() {
       login.value = data.login || data.openid || ''
       name.value = data.name || login.value
       avatar.value = data.avatar || ''
+      // is_vip 以服务端 JWT 为准：GitHub 登录或管理员密码登录才会是 true，游客恒为 false
+      isVip.value = data.is_vip === true
     } else {
       // token 无效：清掉，避免伪造/过期 token 被当作已登录
       localStorage.removeItem('token')
       isLoggedIn.value = false
       login.value = name.value = avatar.value = ''
+      isVip.value = false
     }
   } catch {
     localStorage.removeItem('token')
@@ -87,6 +91,7 @@ export function useAuth() {
     login: readonly(login),
     name: readonly(name),
     avatar: readonly(avatar),
+    isVip: readonly(isVip),
     displayName: readonly(displayName),
     displayAvatar: readonly(displayAvatar),
     refresh,

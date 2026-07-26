@@ -240,8 +240,8 @@
               <!-- VIP 解锁提示 -->
               <div v-if="vipPromptSkin" class="vip-prompt">
                 <Icon icon="mdi:crown-outline" width="16" />
-                <span>「{{ THEME_PRESETS[vipPromptSkin]?.label }}」是会员专属皮肤，解锁会员后即可使用。</span>
-                <button class="vip-prompt-btn" type="button" @click="unlockVipDemo">模拟解锁</button>
+                <span>「{{ THEME_PRESETS[vipPromptSkin]?.label }}」是会员专属皮肤，使用 GitHub 登录解锁后即可使用。</span>
+                <button class="vip-prompt-btn" type="button" @click="unlockVipByLogin">GitHub 登录解锁</button>
                 <button class="vip-prompt-close" type="button" @click="vipPromptSkin = ''">
                   <Icon icon="mdi:close" width="14" />
                 </button>
@@ -426,6 +426,7 @@ import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS, initTheme } from '../composables/useTheme.js'
+import { useAuth } from '../../../composables/useAuth.js'
 import { renderMarkdown } from './markdownRenderer.js'
 
 // 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
@@ -453,8 +454,9 @@ const emit = defineEmits(['close'])
 const activeTab = ref('models')
 
 // ============ 会员与皮肤 ============
-const VIP_KEY = 'aurora_vip'
-const isVip = ref(localStorage.getItem(VIP_KEY) === '1')
+// isVip 以服务端鉴权为准（useAuth 从 /api/auth/me 的 JWT.is_vip 读取），
+// 游客恒为 false，且不再信任 localStorage（杜绝改本地存储白嫖会员皮肤）。
+const { isVip } = useAuth()
 const vipPromptSkin = ref('')
 const colorThemes = computed(() => Object.entries(THEME_PRESETS).filter(([, p]) => !p.fullSkin))
 const skinThemes = computed(() => {
@@ -488,12 +490,10 @@ function selectTheme(key) {
   }
 }
 
-function unlockVipDemo() {
-  localStorage.setItem(VIP_KEY, '1')
-  isVip.value = true
-  if (vipPromptSkin.value) {
-    selectTheme(vipPromptSkin.value)
-  }
+// 会员皮肤点不开时：已登录但非会员（理论上不会发生，GitHub/管理员登录即会员）、
+// 或未登录游客。统一引导走 GitHub 登录解锁，不再提供本地伪造入口。
+function unlockVipByLogin() {
+  window.location.href = '/api/auth/github'
 }
 
 // ============ 流式渐变无限循环预览（纯前端，不花 token） ============

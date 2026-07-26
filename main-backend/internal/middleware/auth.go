@@ -43,7 +43,7 @@ func AuthRequired() gin.HandlerFunc {
 		c.Set("role", claims["role"])
 		// 透传常见用户字段（GitHub OAuth 签发的 JWT 含 openid/login/name/avatar），
 		// 供 /api/auth/me 等端点直接读取，对其它路由无副作用。
-		for _, k := range []string{"openid", "login", "name", "avatar", "sub"} {
+		for _, k := range []string{"openid", "login", "name", "avatar", "sub", "is_vip"} {
 			if v, ok := claims[k]; ok {
 				c.Set(k, v)
 			}

@@ -175,13 +175,16 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 
 	r.GET("/api/posts", GetPosts)
 	r.POST("/api/posts", CreatePost)
-	r.POST("/api/login", Login)
-	// GitHub OAuth 登录（授权码流程：/api/auth/github 发起，/api/auth/github/callback 接收回调）
-	r.GET("/api/auth/github", GitHubLogin)
-	r.GET("/api/auth/github/callback", GitHubCallback)
-	// 校验当前 token 真伪（复用 middleware.AuthRequired 验 JWT_SECRET）：
+	r.POST("/api/login", CloudLoginProxy)
+	// GitHub OAuth 登录：流量转发到私有鉴权服务 ResceneCloud（/api/auth/github 发起，
+	// /api/auth/github/callback 接收回调并带回 JWT）。re0 不持有 OAuth 密钥。
+	r.GET("/api/auth/github", CloudGitHubLogin)
+	r.GET("/api/auth/github/callback", CloudGitHubCallback)
+	// 校验当前 token 真伪（复用 middleware.AuthRequired 本地验 JWT_SECRET）：
 	// 仅当 token 有效时返回 200，否则 401。前端用它区分“真登录”与“伪造/过期 token”。
-	r.GET("/api/auth/me", middleware.AuthRequired(), GitHubMe)
+	r.GET("/api/auth/me", middleware.AuthRequired(), AuthMe)
+	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
+	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/welcome", memoryStore.WelcomeHandler)
 
 	r.POST("/api/memory/save", memoryStore.SaveMemoryHandler)
