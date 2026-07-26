@@ -31,6 +31,10 @@
     "chrome_devtools": {
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
+    "memory": {
+      "command": "python",
+      "args": ["C:\\Pro2026\\re0\\main-backend\\mcp\\memory_server.py"]
     }
   }
 }

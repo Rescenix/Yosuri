@@ -33,7 +33,7 @@ type SessionStore struct {
 	approvalRules       map[string]map[string]bool // sessionID → (ruleKey → true)
 	forkMeta            map[string]forkInfo        // 分支会话 → 父会话与分岐点（根会话不入表）
 	domain              string
-	// path 在构造时就定死，之后不再重读 SHANXI_DATA_DIR。
+	// path 在构造时就定死，之后不再重读 RESCENE_DATA_DIR。
 	// Append 的落盘是 fire-and-forget 的 goroutine，可能在环境变量被改掉之后才真正执行；
 	// 每次现算路径的话，那些迟到的 goroutine 会把内存状态写到另一个位置去
 	// （测试里 t.Setenv 恢复环境变量后，就正是这样把真实用户数据覆盖掉的）。
@@ -144,15 +144,15 @@ func NewSessionStore(domain string) *SessionStore {
 }
 
 // sessionsFilePath 返回该域对应的本地会话文件路径，支持
-// SHANXI_DATA_DIR 环境变量覆盖（测试/多实例场景）。
+// RESCENE_DATA_DIR 环境变量覆盖（测试/多实例场景）。
 func sessionsFilePath(domain string) string {
-	dataDir := os.Getenv("SHANXI_DATA_DIR")
+	dataDir := os.Getenv("RESCENE_DATA_DIR")
 	if dataDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			homeDir = "."
 		}
-		dataDir = filepath.Join(homeDir, "shanxi_data")
+		dataDir = filepath.Join(homeDir, "rescene_data")
 	}
 	return filepath.Join(dataDir, "sessions_"+domain+".json")
 }
@@ -197,7 +197,7 @@ func (s *SessionStore) migrateLegacyJSONFile() {
 	if err != nil {
 		return
 	}
-	legacyPath := filepath.Join(homeDir, "shanxi_data", "sessions.json")
+	legacyPath := filepath.Join(homeDir, "rescene_data", "sessions.json")
 	data, err := os.ReadFile(legacyPath)
 	if err != nil {
 		return // 没有旧文件，全新安装的正常情况

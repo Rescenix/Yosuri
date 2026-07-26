@@ -179,13 +179,13 @@ type ledgerRecord struct {
 
 // ledgerLogPath 与会话/检查点同域，方便一起备份或清理。
 func ledgerLogPath() string {
-	dataDir := os.Getenv("SHANXI_DATA_DIR")
+	dataDir := os.Getenv("RESCENE_DATA_DIR")
 	if dataDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			home = "."
 		}
-		dataDir = filepath.Join(home, "shanxi_data")
+		dataDir = filepath.Join(home, "rescene_data")
 	}
 	return filepath.Join(dataDir, "harness_ledger.jsonl")
 }

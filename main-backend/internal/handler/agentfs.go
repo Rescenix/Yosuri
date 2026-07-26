@@ -4,12 +4,12 @@ package handler
 //
 // 设计定位（与 README 核心理念段一致）：
 //   - 内存快照隔离：每次写操作前先捕获 before、写后再捕获 after，影子仓完整记录
-//   - 原子提交/回滚：用独立 git 仓库（~/shanxi_data/agentfs/repos/<project>）承载，
+//   - 原子提交/回滚：用独立 git 仓库（~/rescene_data/agentfs/repos/<project>）承载，
 //     git commit 天然原子；回退 = git checkout <sha> -- <file>
 //   - 像素级审计时间线：audit.jsonl 逐笔记录 before/after hash + 工具来源
 //   - 时间旅行调试：git log / git diff 在影子仓里跳跃
 //
-// 关键约束：影子仓位于 ~/shanxi_data/agentfs/，与用户项目 git 完全隔离，绝不污染
+// 关键约束：影子仓位于 ~/rescene_data/agentfs/，与用户项目 git 完全隔离，绝不污染
 // 主仓库（见项目测试隔离规矩）。AgentFS 是旁路——任何错误都降级静默跳过，绝不
 // 阻断正常的 mcp__fs__* 写盘主流程。
 //
@@ -43,8 +43,8 @@ var activeSession *agentfsSession
 // agentfsSession 一个项目会话 = 一次「在内存中开辟可追踪快照区」。
 type agentfsSession struct {
 	SessionID string    `json:"session_id"`
-	Project   string    `json:"project"`    // 项目名（= filepath.Base(workdir)）
-	Workdir   string    `json:"workdir"`    // 绝对路径
+	Project   string    `json:"project"` // 项目名（= filepath.Base(workdir)）
+	Workdir   string    `json:"workdir"` // 绝对路径
 	OpenedAt  time.Time `json:"opened_at"`
 	Head      string    `json:"head"` // 影子仓当前 HEAD commit（每次写后更新）
 	Seq       int       `json:"seq"`  // 审计序号计数器
@@ -63,16 +63,16 @@ type agentfsAudit struct {
 	SessionID  string    `json:"session_id"`
 }
 
-// agentfsRoot 返回 AgentFS 数据根目录（可被 SHANXI_DATA_DIR 覆盖，与 session/checkpoint 同域）。
+// agentfsRoot 返回 AgentFS 数据根目录（可被 RESCENE_DATA_DIR 覆盖，与 session/checkpoint 同域）。
 func agentfsRoot() string {
-	if d := os.Getenv("SHANXI_DATA_DIR"); d != "" {
+	if d := os.Getenv("RESCENE_DATA_DIR"); d != "" {
 		return filepath.Join(d, "agentfs")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	return filepath.Join(home, "shanxi_data", "agentfs")
+	return filepath.Join(home, "rescene_data", "agentfs")
 }
 
 func agentfsRepoDir(project string) string {
@@ -120,7 +120,7 @@ func resolveAbsPath(p string) string {
 
 // OpenAgentFSSession 开辟（或恢复）一个项目的 AgentFS 会话，并确保影子仓已 git init。
 // 由 SetWorkdir 成功后调用。失败静默返回 nil（旁路，不阻断主流程）。
-func OpenAgentFSSession(project, workdir string) *agentfsSession {
+func OpenAgentFSSession(project, workdir string, boundSessionID ...string) *agentfsSession {
 	agentfsMu.Lock()
 	defer agentfsMu.Unlock()
 
@@ -141,8 +141,12 @@ func OpenAgentFSSession(project, workdir string) *agentfsSession {
 		}
 	}
 
+	sessionID := fmt.Sprintf("afs_%d", time.Now().UnixNano())
+	if len(boundSessionID) > 0 && strings.TrimSpace(boundSessionID[0]) != "" {
+		sessionID = strings.TrimSpace(boundSessionID[0])
+	}
 	sess := &agentfsSession{
-		SessionID: fmt.Sprintf("afs_%d", time.Now().UnixNano()),
+		SessionID: sessionID,
 		Project:   project,
 		Workdir:   workdir,
 		OpenedAt:  time.Time{},
@@ -321,8 +325,9 @@ var agentfsPending sync.Map
 // AgentFSOpen POST /api/agentfs/open {project?, workdir?} 开辟/恢复会话。
 func AgentFSOpen(c *gin.Context) {
 	var body struct {
-		Project string `json:"project"`
-		Workdir string `json:"workdir"`
+		Project   string `json:"project"`
+		Workdir   string `json:"workdir"`
+		SessionID string `json:"session_id"`
 	}
 	_ = c.BindJSON(&body)
 	if body.Workdir == "" {
@@ -331,7 +336,7 @@ func AgentFSOpen(c *gin.Context) {
 	if body.Project == "" {
 		body.Project = filepath.Base(body.Workdir)
 	}
-	sess := OpenAgentFSSession(body.Project, body.Workdir)
+	sess := OpenAgentFSSession(body.Project, body.Workdir, body.SessionID)
 	if sess == nil {
 		c.JSON(500, gin.H{"error": "AgentFS 会话开启失败（见后端日志）"})
 		return
@@ -342,6 +347,7 @@ func AgentFSOpen(c *gin.Context) {
 // AgentFSLog GET /api/agentfs/log?project= 返回审计时间线。
 func AgentFSLog(c *gin.Context) {
 	project := c.Query("project")
+	sessionID := strings.TrimSpace(c.Query("session_id"))
 	if project == "" {
 		agentfsMu.Lock()
 		if activeSession != nil {
@@ -366,6 +372,9 @@ func AgentFSLog(c *gin.Context) {
 		}
 		var a agentfsAudit
 		if json.Unmarshal([]byte(line), &a) == nil {
+			if sessionID != "" && a.SessionID != sessionID {
+				continue
+			}
 			log = append(log, a)
 		}
 	}

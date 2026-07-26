@@ -15,11 +15,11 @@ import (
 //  3. 审计时间线出现该笔记录（AgentFSLog）
 //  4. AgentFSRestore 把文件还原到写之前的内容，真实盘被回退
 //
-// 全部用 t.TempDir()，不污染 ~/shanxi_data，也不碰 re0 主仓库。
+// 全部用 t.TempDir()，不污染 ~/rescene_data，也不碰 re0 主仓库。
 func TestAgentFSWriteEditRestore(t *testing.T) {
-	// 隔离 AgentFS 数据根（指向临时目录，避免污染真实 shanxi_data）
+	// 隔离 AgentFS 数据根（指向临时目录，避免污染真实 rescene_data）
 	tmpData := t.TempDir()
-	t.Setenv("SHANXI_DATA_DIR", tmpData)
+	t.Setenv("RESCENE_DATA_DIR", tmpData)
 
 	// 隔离工作目录（agent 实际改的"项目"）
 	tmpWork := t.TempDir()

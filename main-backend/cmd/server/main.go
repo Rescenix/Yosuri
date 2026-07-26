@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"path/filepath"
 
 	"backend/internal/database"
 	"backend/internal/handler"
@@ -32,9 +31,6 @@ func main() {
 		AllowCredentials: false,
 	}))
 
-	// 初始化记忆存储（本地 JSON 落盘；实际记忆检索走 SwiftNet，见 internal/swiftnet）
-	memoryStore := handler.NewMemoryStore(getMemoryPath())
-
 	// 初始化会话存储：按用途分域落本地 JSON 文件（chat_sessions / code_sessions 各自独立），
 	// 每次 Append/SetCompressIndex 都会异步整份重写
 	sessionStore := handler.NewSessionStore(handler.ChatSessionsDomain)
@@ -44,7 +40,7 @@ func main() {
 	// 改为选中本地识图模型时按需启动（见 EnsureLocalLlamaServer）。
 	handler.RegisterLlamaCleanupOnExit()
 
-	handler.RegisterRoutes(r, memoryStore, sessionStore)
+	handler.RegisterRoutes(r, sessionStore)
 
 	log.Println("🚀 Aurora 引擎已启动，监听端口 :8080")
 	addr := os.Getenv("PORT")
@@ -56,14 +52,3 @@ func main() {
 	}
 }
 
-func getMemoryPath() string {
-	memoryPath := os.Getenv("MEMORY_FILE_PATH")
-	if memoryPath == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			panic("无法获取用户目录: " + err.Error())
-		}
-		memoryPath = filepath.Join(homeDir, "shanxi_data", "memory.json")
-	}
-	return memoryPath
-}

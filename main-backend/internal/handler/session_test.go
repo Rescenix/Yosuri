@@ -9,13 +9,13 @@ import (
 )
 
 // withIsolatedSessionDir 比同包已有的 withTempDataDir 隔离得更彻底：
-// migrateLegacyJSONFile 走的是 os.UserHomeDir() 而不是 SHANXI_DATA_DIR，
-// 只设 SHANXI_DATA_DIR 的话每个用例都会去读用户真实家目录里的老 sessions.json
+// migrateLegacyJSONFile 走的是 os.UserHomeDir() 而不是 RESCENE_DATA_DIR，
+// 只设 RESCENE_DATA_DIR 的话每个用例都会去读用户真实家目录里的老 sessions.json
 // 并把真实会话迁进临时目录，测试数据就被污染了。这里把家目录也一并指向临时目录。
 func withIsolatedSessionDir(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("SHANXI_DATA_DIR", dir)
+	t.Setenv("RESCENE_DATA_DIR", dir)
 	t.Setenv("USERPROFILE", dir) // Windows 下 os.UserHomeDir() 读这个
 	t.Setenv("HOME", dir)        // 类 Unix 下读这个
 }
@@ -243,11 +243,11 @@ func TestDeleteParentPromotesChildrenToRoots(t *testing.T) {
 	}
 }
 
-// 回归测试：store 的落盘路径必须在构造时就定死，绝不能每次写盘现读 SHANXI_DATA_DIR。
+// 回归测试：store 的落盘路径必须在构造时就定死，绝不能每次写盘现读 RESCENE_DATA_DIR。
 //
 // 之前它是每次现算的，而 Append 的落盘是 fire-and-forget 的 goroutine——测试结束、
 // t.Setenv 把环境变量恢复之后，那些迟到的 goroutine 就会按恢复后的环境重新算路径，
-// 把测试用的内存状态写进用户真实的 ~/shanxi_data/。这真的发生过，把用户 340KB 的
+// 把测试用的内存状态写进用户真实的 ~/rescene_data/。这真的发生过，把用户 340KB 的
 // 会话记录覆盖成了 1KB 的测试数据。
 func TestStorePathIsPinnedAtConstruction(t *testing.T) {
 	withIsolatedSessionDir(t)
@@ -257,7 +257,7 @@ func TestStorePathIsPinnedAtConstruction(t *testing.T) {
 
 	// 模拟"测试结束、环境变量被恢复"：换一个完全不同的数据目录
 	elsewhere := t.TempDir()
-	t.Setenv("SHANXI_DATA_DIR", elsewhere)
+	t.Setenv("RESCENE_DATA_DIR", elsewhere)
 	t.Setenv("USERPROFILE", elsewhere)
 	t.Setenv("HOME", elsewhere)
 

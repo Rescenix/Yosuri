@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -17,6 +18,98 @@ type GitStatus struct {
 	Untracked []string `json:"untracked"`
 	Added     int      `json:"added"`
 	Removed   int      `json:"removed"`
+}
+
+type GitBranchRequest struct {
+	Branch string `json:"branch"`
+}
+
+var validBranchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
+
+func localGitBranches() ([]string, error) {
+	cmd := exec.Command("git", "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	cmd.Dir = GitRepoRoot
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	branches := make([]string, 0)
+	for _, branch := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if branch = strings.TrimSpace(branch); branch != "" {
+			branches = append(branches, branch)
+		}
+	}
+	return branches, nil
+}
+
+func GitBranches(c *gin.Context) {
+	branches, err := localGitBranches()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"branches": branches})
+}
+
+func bindBranchRequest(c *gin.Context) (string, bool) {
+	var body GitBranchRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "branch required"})
+		return "", false
+	}
+	body.Branch = strings.TrimSpace(body.Branch)
+	if !validBranchName.MatchString(body.Branch) ||
+		strings.Contains(body.Branch, "..") ||
+		strings.Contains(body.Branch, "//") ||
+		strings.HasSuffix(body.Branch, "/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的分支名称"})
+		return "", false
+	}
+	return body.Branch, true
+}
+
+func GitCheckout(c *gin.Context) {
+	branch, ok := bindBranchRequest(c)
+	if !ok {
+		return
+	}
+	branches, err := localGitBranches()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	found := false
+	for _, item := range branches {
+		if item == branch {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "分支不存在"})
+		return
+	}
+	cmd := exec.Command("git", "switch", branch)
+	cmd.Dir = GitRepoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": strings.TrimSpace(string(out))})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"branch": branch})
+}
+
+func GitCreateBranch(c *gin.Context) {
+	branch, ok := bindBranchRequest(c)
+	if !ok {
+		return
+	}
+	cmd := exec.Command("git", "switch", "-c", branch)
+	cmd.Dir = GitRepoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("创建分支失败: %s", strings.TrimSpace(string(out)))})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"branch": branch})
 }
 
 var shortstatInsRe = regexp.MustCompile(`(\d+) insertion`)

@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/LLM-Multi--Provider-ff69b4" alt="Multi-Provider LLM">
 </p>
 
-**ResceneAgent** 以数字生命「Aurora」为核心，将 **多 Agent 团队协作**、**MCP 工具生态**、**本地多提供方模型路由**、**内嵌终端 / 文件树 / Diff / 实时浏览器自检** 与 **C++ 图结构长期记忆（PrismStore）** 整合进同一条工作流——从需求拆解 → 代码落地 → 运行验证，闭环在聊天框里完成。
+**ResceneAgent** 以数字生命「Aurora」为核心，将 **多 Agent 团队协作**、**MCP 工具生态**、**本地多提供方模型路由**、**内嵌终端 / 文件树 / Diff / 实时浏览器自检** 与 **面向 AI Agent 的独立记忆 / 状态层** 整合进同一条工作流——从需求拆解 → 代码落地 → 运行验证，闭环在聊天框里完成。
 
 **不止会聊，更会写、会跑、会验。**
 
@@ -25,14 +25,43 @@ ResceneAgent 把"文件写操作"从直接的磁盘 IO，重构成一条**带隔
 - **原子提交 / 回滚** —— 改动经编译、测试、人工确认后，才一次性刷入磁盘；失败则整体回退，项目完好如初；
 - **像素级审计时间线** —— 每一行修改都带着操作来源，可像 Code Review 一样逐条 Approve / Reject；
 - **时间旅行调试** —— 沿快照时间线往回跳跃，定位"哪一版还能编译通过"。
+- **会话级可视化轨迹** —— 每个聊天会话拥有独立的 AgentFS 修改树；折叠侧栏即可浏览 Agent 留下的 Git 痕迹，点击节点直接查看该时刻的文件 Diff。
 
 > 思想根基：快照隔离与回退并非新发明，它源自 VFS、Git 与数据库事务等成熟工程范式。ResceneAgent 的真正差异，是把这套能力**系统性地做成了面向 AI Agent 的独立写操作事务层**——这也是平台最深的护城河。
 
-**v1 已落地**：每个项目会话（SetWorkdir）自动开辟独立影子 git 仓库（`~/shanxi_data/agentfs/`），与你的项目仓库物理隔离、绝不污染主仓库；每一次文件写操作在落盘前后被捕获为 before/after 快照并提交，形成可 `git log` / `git diff` / `git checkout` 的时间线。
+**v1 已落地**：每个项目会话（SetWorkdir）自动开辟独立影子 git 仓库（`~/rescene_data/agentfs/`），与你的项目仓库物理隔离、绝不污染主仓库；每一次文件写操作在落盘前后被捕获为 before/after 快照并提交，形成可 `git log` / `git diff` / `git checkout` 的时间线。审计记录进一步绑定真实聊天会话 ID：切换对话时，界面同步切换到该会话专属的修改历史，不会把不同 Agent 任务的轨迹混在一起。
+
+---
+
+## 核心理念 · 记忆 / 状态双轨：让 Agent 不再失业
+
+传统 AI 编程助手每次开新会话都从零开始——上一轮踩过的坑、这个项目做到哪了、用户的偏好，统统忘光。ResceneAgent 把「跨对话记忆」与「跨项目状态」做成了**面向 AI Agent 的独立记忆 / 状态层**：
+
+- **项目级 workdir + 全局 MEMORY 双轨**：`MEMORY.md`（`~/rescene_data/MEMORY.md`）承载用户 / 系统级常驻记忆（身份、偏好、全局决策）；`workdir.md`（`~/rescene_data/projects/<项目名>/workdir.md`）按项目隔离，记录「这个项目现在在做什么、关键上下文、待办、约定」。两者物理隔离在 `rescene_data` 下，**不污染你的仓库**。
+- **Agent 自己通过工具主动写入**：记忆不是靠 prompt 硬塞，而是 Agent 在对话中通过 MCP 工具（`memory_append` / `memory_pin` / `memory_handoff` / `workdir_write` / `workdir_append`）主动决定「什么值得记住」。只有用户选择记住的内容才落盘，避免把对话垃圾灌进记忆。
+- **跨对话持久化**：记忆以单文件形式落盘，进程重启后自动重新加载，下一次会话无缝续上。
+- **会话开始自动注入上下文**：每个工作流启动时，`workdir.md` 与 `MEMORY.md` 无条件拼进系统提示词——Agent 一开口就了解项目概况与历史约定，**不再失忆**。
+
+> 思想根基：单文件事实库与「模型主动写、启动时读」的范式并不新奇，它借鉴了笔记软件与 VFS 的成熟思路。ResceneAgent 的差异，是把这套机制**系统性地做成了面向 AI Agent 的独立记忆 / 状态层**——agent 既是读者也是作者，记忆随工作流自然生长，而非依赖人工维护的外部知识库。
 
 ---
 
 ## 特性一览
+
+### AgentFS Trace：会话级 Git 痕迹树
+
+这是 ResceneAgent 面向 AI 编程审计打造的原创交互：侧边栏折叠后，空白区域不再只是导航占位，而是一条持续生长的 **AgentFS 竖式快照树**。
+
+- **一会话一条轨迹**：AgentFS 提交绑定聊天会话 ID；切换会话，修改树随之切换
+- **一次写入一个节点**：Agent 每次 `write_file` / `edit_file` 都留下提交节点、文件路径、操作类型、时间与 before/after 哈希
+- **实时生长**：Agent 工作期间自动轮询，新快照无需刷新页面即可进入时间树
+- **悬浮 Diff 卡片**：点击任意节点，在树右侧打开玻璃质感预览，展示提交号、增删统计、行号和逐行着色 Diff
+- **影子 Git 隔离**：所有轨迹来自 `~/rescene_data/agentfs/` 下的独立仓库，不向用户项目写入额外提交
+- **时间旅行基础**：节点对应真实影子 Git commit，为后续按文件恢复、版本对比和 Agent 行为回放提供稳定锚点
+
+这让用户不必等 Agent 完成后再检查一个巨大的最终 Diff，而能随时回答三个问题：**这个 Agent 在当前会话改了什么、按什么顺序改、每一步具体改变了哪些行。**
+
+---
 
 ### 断点续传
 
@@ -156,14 +185,13 @@ VS Code 风格的差异查看器，内联于 Agent 工作流。
 - **索引注入**：技能名 + 描述注入系统 Prompt，Agent 按需通过 `read_skill` 获取完整步骤
 - 持久化到 `./skills/*.json`，跨会话可用
 
-### 内嵌 PrismStore 长期记忆
+### 记忆 / 状态双轨（详见上文「核心理念」）
 
-图结构记忆库，以 C++ 静态链接形式集成在后端。
+Agent 既是记忆的读者也是作者：通过 MCP 工具主动写入 `MEMORY.md`（全局）与 `workdir.md`（项目级），跨对话持久化，并在每个工作流启动时自动注入上下文，彻底告别「每次会话从零开始」。
 
-- **神经元 + 突触**：记忆节点 + 记忆关联的图结构
-- **四类簇隔离**：UserBase（用户画像）、CodeWork（代码决策）、ToolLog（工具日志）、Session（会话临时）
-- **忆阻器混沌演化**：电导率/关联流/混沌度建模，能量衰减模拟遗忘曲线
-- **LLM 驱动压缩**：对话 → 高密度摘要，自动判断 worth_saving
+- **全局 MEMORY.md**：用户画像、偏好、全局决策，无条件注入系统提示词
+- **项目级 workdir.md**：按项目隔离的当前状态、待办、约定，会话开始即载入
+- **零外部依赖**：单文件落盘于 `~/rescene_data/`，无需额外服务或数据库
 
 ---
 
@@ -217,8 +245,10 @@ AI 编程的安全事故，九成源于"全自动模式下无人看守的破坏�
 │              main-backend (Go / Gin :8080)                    │
 │   四态机工作流 · 多Agent调度 · MCP工具 · 技能学习 · 记忆 · CMS  │
 ├──────────────────────────────────────────────────────────────┤
-│     记忆层：内嵌 PrismStore (C++ 静态链接)                      │
-│     图结构记忆 · LLM压缩 · 簇隔离 · 忆阻器混沌演化              │
+│ AgentFS：会话级快照树 · 影子 Git · Diff 审计 · 时间旅行基础     │
+├──────────────────────────────────────────────────────────────┤
+│     记忆层：MEMORY.md(全局) + workdir.md(项目级)，单文件落盘 ~/rescene_data/  │
+│     双轨持久化 · 会话开始自动注入上下文 · Agent 主动写入                  │
 ├──────────────────────────────────────────────────────────────┤
 │           Ollama / DeepSeek / Gemini (外部 LLM)               │
 └──────────────────────────────────────────────────────────────┘
@@ -231,6 +261,7 @@ re0/
 ├── main-backend/              # Go 后端服务 (:8080)
 │   ├── cmd/server/
 │   ├── internal/handler/
+│   │   ├── agentfs.go                  # 会话级影子 Git、审计时间线与 Diff
 │   │   ├── agent_workflow_handler.go   # 四态机工作流
 │   │   ├── browser_preview_tool.go     # CDP 实时预览
 │   │   ├── terminal_handler.go         # 内嵌终端
@@ -239,7 +270,7 @@ re0/
 │   │   ├── subagent.go                 # 雨燕子Agent
 │   │   └── workflow_checkpoint.go      # 断点续传
 │   ├── skills/                         # 学习到的技能
-│   └── lib/                            # PrismStore C++ 库
+│   └── mcp/                            # 自研 MCP server（grep/shell/memory…）
 ├── main-frontend/
 │   └── beneficial-belt/       # Astro + Vue 3 前端 (:4321)
 │       └── src/components/shanxi/chat/
@@ -280,9 +311,9 @@ npm install
 npm run dev    # http://localhost:4321
 ```
 
-### 记忆能力（内嵌）
+### 记忆能力（双轨）
 
-记忆库随 main-backend 启动自动生效，无需单独部署。
+记忆层随 `main-backend` 启动自动生效，无需单独部署。默认已通过 `mcp.json` 注册 `memory` MCP server，提供 `memory_*` / `workdir_*` 工具；`MEMORY.md` 与 `workdir.md` 落盘于 `~/rescene_data/`，Agent 在对话中主动调用工具写入，并在每个工作流启动时自动注入上下文。
 
 ## 环境变量
 
@@ -291,7 +322,8 @@ npm run dev    # http://localhost:4321
 | `ADMIN_PASSWORD` | 管理员密码 |
 | `JWT_SECRET` | JWT 签名密钥 |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key |
-| `PRISM_API_TYPE` | 默认聊天引擎（ds/local） |
+| `MCP_CONFIG` | MCP server 配置文件路径（默认 `./mcp.json`），记忆服务在此注册 |
+| `RESCENE_DATA_DIR` | 记忆 / AgentFS / 会话数据根目录（默认 `~/rescene_data`） |
 | `DEV_MODE` | 开发模式（true 时任意密码登录） |
 
 ## 许可证

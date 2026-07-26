@@ -20,9 +20,12 @@ package handler
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"backend/internal/agent"
+	"backend/internal/ai/core"
 	"backend/internal/swiftnet"
 )
 
@@ -69,6 +72,7 @@ func newWorkflowContextProvider() *contextProvider {
 	if memoryInject != "" {
 		memorySection = "\n\n# 长期记忆（无条件注入，身份/工作态/收件箱）\n" + memoryInject
 	}
+	workdirSection := projectWorkdirPrompt()
 
 	return &contextProvider{
 		activated: map[string]bool{},
@@ -89,6 +93,7 @@ func newWorkflowContextProvider() *contextProvider {
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
 			{key: "skill", content: skillLibraryPrompt()}, // 每次任务成功后可能新增技能
 			{key: "memory", content: memorySection},       // 每写一次记忆就变
+		{key: "memory", content: workdirSection},      // 项目级 workdir.md，会话开始即注入，跨对话不失业
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},
@@ -174,4 +179,31 @@ func (p *contextProvider) RestoreActivatedTools(set map[string]bool) {
 		return
 	}
 	p.activated = set
+}
+
+// projectWorkdirPrompt 把当前项目的 workdir.md（~/rescene_data/projects/<项目名>/workdir.md）
+// 注入系统提示词，让 agent 每次会话一开始就了解「这个项目现在在做什么、关键上下文、
+// 待办、约定」——跨对话的项目状态，避免失忆。与全局 MEMORY.md 互补：MEMORY.md 是
+// 用户/系统级常驻，workdir.md 是按项目隔离的。文件不存在时静默跳过（项目尚无笔记）。
+// 路径隔离在 rescene_data 下，不污染 repo 本身。
+func projectWorkdirPrompt() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	root := core.GetProjectRoot()
+	if root == "" {
+		return ""
+	}
+	proj := filepath.Base(root)
+	path := filepath.Join(home, "rescene_data", "projects", proj, "workdir.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "" // 项目尚无 workdir.md，正常（agent 会在需要时写）
+	}
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return ""
+	}
+	return "\n\n# 项目工作目录笔记（" + proj + "，跨对话保留）\n" + text
 }

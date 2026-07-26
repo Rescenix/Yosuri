@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-// 所有用例都把 SHANXI_DATA_DIR 指到临时目录，绝不碰用户真实的 ~/shanxi_data。
+// 所有用例都把 RESCENE_DATA_DIR 指到临时目录，绝不碰用户真实的 ~/rescene_data。
 func withTempDataDir(t *testing.T) {
 	t.Helper()
-	t.Setenv("SHANXI_DATA_DIR", t.TempDir())
+	t.Setenv("RESCENE_DATA_DIR", t.TempDir())
 }
 
 func TestCheckpointRoundTrip(t *testing.T) {

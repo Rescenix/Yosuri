@@ -44,7 +44,7 @@ func init() {
 }
 
 // workdirStateFile 支持 SHANXI_WORKDIR_STATE_FILE 覆盖路径——主要是给测试用，
-// 避免 SetProjectRoot 的落盘操作意外写到真实用户的 ~/shanxi_data/workdir.txt
+// 避免 SetProjectRoot 的落盘操作意外写到真实用户的 ~/rescene_data/workdir.txt
 func workdirStateFile() string {
 	if override := os.Getenv("SHANXI_WORKDIR_STATE_FILE"); override != "" {
 		return override
@@ -53,7 +53,7 @@ func workdirStateFile() string {
 	if err != nil {
 		home = "."
 	}
-	return filepath.Join(home, "shanxi_data", "workdir.txt")
+	return filepath.Join(home, "rescene_data", "workdir.txt")
 }
 
 func loadInitialProjectRoot() string {

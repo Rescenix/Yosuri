@@ -2869,6 +2869,318 @@ min-height: 90px !important;
   scrollbar-width: none;
 }
 .gem-rail-sessions::-webkit-scrollbar { display: none; }
+
+/* ==================== AgentFS 会话级修改轨迹 ==================== */
+.agentfs-rail {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 14px;
+  overflow: hidden;
+}
+.agentfs-rail-head {
+  position: relative;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
+  color: var(--app-accent);
+  cursor: pointer;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 12%, transparent);
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+.agentfs-rail-head:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--app-accent) 14%, var(--app-surface));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--app-accent) 20%, transparent);
+}
+.agentfs-rail.loading .agentfs-rail-head svg { animation: agentfsPulse 1s ease-in-out infinite; }
+.agentfs-tree {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin-top: 10px;
+  padding: 4px 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.agentfs-tree::-webkit-scrollbar { display: none; }
+.agentfs-tree::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 13px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--app-accent) 55%, var(--app-border)),
+    var(--app-border) 70%,
+    transparent
+  );
+}
+.agentfs-node {
+  position: relative;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.agentfs-node-dot {
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--app-surface);
+  border-radius: 50%;
+  background: var(--app-border);
+  color: transparent;
+  box-shadow: 0 0 0 1px var(--app-border);
+  transition: width 0.2s cubic-bezier(.2,.8,.2,1), height 0.2s cubic-bezier(.2,.8,.2,1),
+    background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.agentfs-node:hover .agentfs-node-dot,
+.agentfs-node.active .agentfs-node-dot {
+  width: 24px;
+  height: 24px;
+  background: var(--app-accent);
+  color: white;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 14%, transparent),
+    0 4px 10px color-mix(in srgb, var(--app-accent) 25%, transparent);
+}
+.agentfs-node.latest .agentfs-node-dot {
+  background: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 13%, transparent);
+}
+.agentfs-node.latest:not(:hover):not(.active)::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--app-accent);
+  border-radius: 50%;
+  animation: agentfsRipple 2.2s ease-out infinite;
+}
+.agentfs-empty-rail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 18px;
+}
+.agentfs-empty-rail::before {
+  content: "";
+  width: 1px;
+  height: 48px;
+  background: linear-gradient(var(--app-border), transparent);
+}
+.agentfs-empty-rail span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--app-border);
+}
+@keyframes agentfsRipple {
+  0% { opacity: 0.65; transform: scale(0.65); }
+  70%, 100% { opacity: 0; transform: scale(1.45); }
+}
+@keyframes agentfsPulse {
+  50% { opacity: 0.45; transform: scale(0.88); }
+}
+
+/* Teleport 到 body 的 Diff 快照悬浮卡片 */
+.agentfs-diff-card {
+  position: fixed;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 14%, var(--app-border));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-surface) 96%, transparent);
+  color: var(--app-text);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.65) inset,
+    0 24px 70px rgba(0,0,0,0.18),
+    0 5px 18px rgba(0,0,0,0.09);
+  backdrop-filter: blur(22px) saturate(1.2);
+}
+.agentfs-card-header {
+  flex-shrink: 0;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--app-border);
+  background:
+    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--app-accent) 12%, transparent), transparent 42%),
+    var(--app-surface);
+}
+.agentfs-card-brand { display: flex; align-items: center; gap: 11px; }
+.agentfs-card-logo {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: white;
+  background: linear-gradient(145deg, var(--app-accent), color-mix(in srgb, var(--app-accent) 72%, #6c5ce7));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--app-accent) 28%, transparent);
+}
+.agentfs-card-brand div { display: flex; flex-direction: column; gap: 2px; }
+.agentfs-card-brand strong { font-size: 13.5px; letter-spacing: 0.01em; }
+.agentfs-card-brand small { color: var(--app-text-faint); font-size: 10.5px; }
+.agentfs-card-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--app-text-faint);
+  cursor: pointer;
+}
+.agentfs-card-close:hover { background: var(--app-surface-3); color: var(--app-text); }
+.agentfs-card-meta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 18px;
+}
+.agentfs-file-mark {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--app-surface-3);
+  color: var(--app-text-soft);
+}
+.agentfs-file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.agentfs-file-info strong {
+  overflow: hidden;
+  color: var(--app-text);
+  font: 600 12.5px "JetBrains Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agentfs-file-info span { color: var(--app-text-faint); font-size: 10.5px; }
+.agentfs-card-meta > code {
+  flex-shrink: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  color: var(--app-text-soft);
+  font-size: 10px;
+}
+.agentfs-diff-toolbar {
+  flex-shrink: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-top: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface-2);
+  color: var(--app-text-faint);
+  font-size: 10.5px;
+}
+.agentfs-diff-toolbar > span { display: flex; align-items: center; gap: 6px; }
+.agentfs-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22b573;
+  box-shadow: 0 0 0 3px rgba(34,181,115,0.12);
+}
+.agentfs-diff-stats b { color: #168a58; font-weight: 650; }
+.agentfs-diff-stats em { color: #cf493e; font-style: normal; font-weight: 650; }
+.agentfs-diff-body {
+  flex: 1;
+  min-height: 180px;
+  overflow: auto;
+  background: color-mix(in srgb, var(--app-surface-2) 72%, var(--app-surface));
+}
+.agentfs-code {
+  min-width: max-content;
+  padding: 10px 0 14px;
+  font: 11.5px/1.65 "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+.agentfs-code-line {
+  min-height: 19px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  padding-right: 18px;
+  white-space: pre;
+}
+.agentfs-line-no {
+  padding-right: 12px;
+  color: var(--app-text-faint);
+  text-align: right;
+  user-select: none;
+  opacity: 0.72;
+}
+.agentfs-code-line code { color: var(--app-text-soft); font: inherit; }
+.agentfs-code-line.added { background: color-mix(in srgb, #22b573 10%, transparent); }
+.agentfs-code-line.added code { color: color-mix(in srgb, #168a58 78%, var(--app-text)); }
+.agentfs-code-line.removed { background: color-mix(in srgb, #df4d43 9%, transparent); }
+.agentfs-code-line.removed code { color: color-mix(in srgb, #c94339 78%, var(--app-text)); }
+.agentfs-code-line.hunk {
+  margin: 7px 0;
+  background: color-mix(in srgb, var(--app-accent) 7%, transparent);
+}
+.agentfs-code-line.hunk code { color: var(--app-accent); }
+.agentfs-diff-state {
+  min-height: 230px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--app-text-faint);
+  font-size: 12px;
+}
+.agentfs-diff-state.error { color: #cf493e; padding: 22px; text-align: center; }
+.agentfs-spin { animation: agentfsSpin 0.8s linear infinite; }
+@keyframes agentfsSpin { to { transform: rotate(360deg); } }
+.agentfs-card-enter-active,
+.agentfs-card-leave-active {
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(.2,.8,.2,1);
+}
+.agentfs-card-enter-from,
+.agentfs-card-leave-to {
+  opacity: 0;
+  transform: translateX(-10px) scale(0.985);
+}
+
 .gem-rail-bar {
   flex-shrink: 0;
   width: 24px;
@@ -3195,6 +3507,92 @@ img.gem-rail-avatar {
 .workdir-menu-item.disabled { color: var(--app-text-faint); cursor: default; }
 .workdir-menu-item.disabled:hover { background: transparent; }
 .workdir-menu-divider { height: 1px; background: var(--app-surface-3); margin: 6px 0; }
+
+/* 真实 Git 分支选择器 */
+.branch-menu-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(270px, calc(100vw - 48px));
+  min-height: 215px;
+  max-height: min(330px, calc(100vh - 180px));
+  display: flex;
+  flex-direction: column;
+  padding: 9px 10px 0;
+  overflow: hidden;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.14);
+  z-index: 70;
+}
+.branch-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  color: var(--app-text-faint);
+}
+.branch-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 14px;
+}
+.branch-search input::placeholder { color: var(--app-text-faint); }
+.branch-menu-label {
+  padding: 5px 0 4px;
+  color: var(--app-text-faint);
+  font-size: 13px;
+}
+.branch-menu-item,
+.branch-menu-create {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.branch-menu-item:hover,
+.branch-menu-create:hover { background: var(--app-surface-3); }
+.branch-menu-item:disabled { cursor: wait; opacity: 0.65; }
+.branch-menu-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.branch-menu-check { margin-left: auto; flex-shrink: 0; }
+.branch-menu-empty {
+  padding: 8px;
+  color: var(--app-text-faint);
+  font-size: 13px;
+}
+.branch-menu-divider {
+  height: 1px;
+  margin-top: auto;
+  background: var(--app-border);
+}
+.branch-menu-create {
+  flex-shrink: 0;
+  min-height: 38px;
+  padding-left: 0;
+  border-radius: 0;
+}
+.input-dir-clickable.active { background: var(--app-surface-3); }
 
 /* git 状态条：Code 模式下代替工作目录条，同一个位置、同一套卡片外观 */
 .input-git-bar {

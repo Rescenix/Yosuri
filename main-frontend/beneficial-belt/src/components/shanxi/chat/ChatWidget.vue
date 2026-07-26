@@ -99,37 +99,104 @@
             <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
               <Icon icon="mdi:puzzle-outline" width="18" />
             </button>
-            <!-- 会话横条：当前项目下会话在上，其他在下 -->
-            <div
-              class="gem-rail-sessions"
-              @mouseenter="openRailCard"
-              @mouseleave="closeRailCardDelayed"
-            >
-              <template v-if="railProject.length">
-                <button
-                  v-for="s in railProject"
-                  :key="s.id"
-                  class="gem-rail-bar"
-                  :class="{ active: s.id === activeSession, running: s.id === runningSession }"
-                  @click="selectSession(s.id)"
-                ></button>
-                <div class="gem-rail-divider"></div>
-              </template>
+            <!-- AgentFS：当前聊天会话专属的文件修改快照树 -->
+            <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
               <button
-                v-for="s in railRecent"
-                :key="s.id"
-                class="gem-rail-bar"
-                :class="{ active: s.id === activeSession, running: s.id === runningSession }"
-                @click="selectSession(s.id)"
-              ></button>
+                class="agentfs-rail-head"
+                type="button"
+                title="AgentFS 修改快照"
+                @click="refreshAgentFSTimeline"
+              >
+                <Icon icon="mdi:source-commit" width="18" />
+              </button>
+              <div v-if="agentFSTimeline.length" class="agentfs-tree">
+                <button
+                  v-for="(snapshot, index) in agentFSTimeline"
+                  :key="snapshot.commit + '-' + snapshot.seq"
+                  type="button"
+                  class="agentfs-node"
+                  :class="{
+                    active: selectedAgentFSSnapshot?.commit === snapshot.commit,
+                    latest: index === 0
+                  }"
+                  :title="`${snapshot.rel_path} · ${formatAgentFSTime(snapshot.ts)}`"
+                  @click.stop="openAgentFSSnapshot(snapshot, $event)"
+                >
+                  <span class="agentfs-node-dot">
+                    <Icon :icon="snapshot.op === 'edit' ? 'mdi:pencil-outline' : 'mdi:file-plus-outline'" width="10" />
+                  </span>
+                </button>
+              </div>
+              <div v-else class="agentfs-empty-rail" title="当前会话还没有 AgentFS 修改快照">
+                <span></span><span></span><span></span>
+              </div>
             </div>
-              <div class="gem-rail-bottom">
+            <div class="gem-rail-bottom">
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
               <img v-if="railAuth.displayAvatar.value" :src="railAuth.displayAvatar.value" class="gem-rail-avatar" :title="railAuth.displayName.value" />
               <div v-else class="gem-rail-avatar" :title="railAuth.displayName.value">{{ (railAuth.displayName.value || '?').charAt(0).toUpperCase() }}</div>
             </div>
+
+            <Teleport to="body">
+              <Transition name="agentfs-card">
+                <aside
+                  v-if="selectedAgentFSSnapshot"
+                  class="agentfs-diff-card"
+                  :style="agentFSDiffCardStyle"
+                  @click.stop
+                >
+                  <header class="agentfs-card-header">
+                    <div class="agentfs-card-brand">
+                      <span class="agentfs-card-logo"><Icon icon="mdi:source-commit" width="16" /></span>
+                      <div>
+                        <strong>AgentFS Trace</strong>
+                        <small>会话修改快照</small>
+                      </div>
+                    </div>
+                    <button type="button" class="agentfs-card-close" @click="closeAgentFSDiff">
+                      <Icon icon="mdi:close" width="16" />
+                    </button>
+                  </header>
+                  <div class="agentfs-card-meta">
+                    <div class="agentfs-file-mark">
+                      <Icon icon="mdi:file-code-outline" width="17" />
+                    </div>
+                    <div class="agentfs-file-info">
+                      <strong :title="selectedAgentFSSnapshot.rel_path">{{ selectedAgentFSSnapshot.rel_path }}</strong>
+                      <span>{{ selectedAgentFSSnapshot.op === 'edit' ? '编辑文件' : '写入文件' }} · {{ formatAgentFSTime(selectedAgentFSSnapshot.ts) }}</span>
+                    </div>
+                    <code>{{ selectedAgentFSSnapshot.commit }}</code>
+                  </div>
+                  <div class="agentfs-diff-toolbar">
+                    <span><i class="agentfs-status-dot"></i> 已捕获</span>
+                    <span class="agentfs-diff-stats">
+                      <b>+{{ agentFSDiffStats.added }}</b>
+                      <em>−{{ agentFSDiffStats.removed }}</em>
+                    </span>
+                  </div>
+                  <div class="agentfs-diff-body">
+                    <div v-if="agentFSDiffLoading" class="agentfs-diff-state">
+                      <Icon icon="mdi:loading" width="20" class="agentfs-spin" /> 正在读取快照…
+                    </div>
+                    <div v-else-if="agentFSDiffError" class="agentfs-diff-state error">{{ agentFSDiffError }}</div>
+                    <div v-else-if="agentFSDiffLines.length" class="agentfs-code">
+                      <div
+                        v-for="(line, index) in agentFSDiffLines"
+                        :key="index"
+                        class="agentfs-code-line"
+                        :class="line.kind"
+                      >
+                        <span class="agentfs-line-no">{{ line.number }}</span>
+                        <code>{{ line.text || ' ' }}</code>
+                      </div>
+                    </div>
+                    <div v-else class="agentfs-diff-state">该快照没有可显示的文本差异</div>
+                  </div>
+                </aside>
+              </Transition>
+            </Teleport>
 
             <!-- 悬停会话卡片：贴着折叠栏右侧弹出，整行可点击切换会话。
                  Teleport 到 body，避免被侧栏的 overflow/宽度裁切。 -->
@@ -385,9 +452,13 @@
                       {{ currentWorkDir.name }}
                     </span>
                     <span class="input-dir-divider"></span>
-                    <span class="input-dir-item">
+                    <span
+                      class="input-dir-item input-dir-clickable"
+                      :class="{ active: showBranchMenu }"
+                      @click.stop="toggleBranchMenu"
+                    >
                       <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
-                      {{ activeSessionObj?.branch || 'main' }}
+                      {{ gitStatus.branch || 'main' }}
                     </span>
                     <button class="input-dir-add-btn" type="button" title="添加工作目录" @click.stop="toggleWorkDirMenu">
                       <Icon icon="mdi:plus" width="15" />
@@ -429,6 +500,44 @@
                       </template>
                       <div v-else class="workdir-menu-item disabled">未找到可选目录</div>
                     </template>
+                  </div>
+                  <div v-if="showBranchMenu" class="branch-menu-dropdown" @click.stop>
+                    <label class="branch-search">
+                      <Icon icon="mdi:magnify" width="17" />
+                      <input
+                        ref="branchSearchInput"
+                        v-model="branchSearch"
+                        placeholder="搜索分支"
+                        @keydown.esc="showBranchMenu = false"
+                      />
+                    </label>
+                    <div class="branch-menu-label">分支</div>
+                    <div v-if="branchesLoading" class="branch-menu-empty">正在读取分支…</div>
+                    <button
+                      v-for="branch in filteredGitBranches"
+                      :key="branch"
+                      type="button"
+                      class="branch-menu-item"
+                      :disabled="branchSwitching"
+                      @click="checkoutGitBranch(branch)"
+                    >
+                      <Icon icon="mdi:source-branch" width="17" />
+                      <span>{{ branch }}</span>
+                      <Icon
+                        v-if="branch === gitStatus.branch"
+                        class="branch-menu-check"
+                        icon="mdi:check"
+                        width="18"
+                      />
+                    </button>
+                    <div v-if="!branchesLoading && !filteredGitBranches.length" class="branch-menu-empty">
+                      没有匹配的分支
+                    </div>
+                    <div class="branch-menu-divider"></div>
+                    <button type="button" class="branch-menu-create" @click="createGitBranch">
+                      <Icon icon="mdi:plus" width="20" />
+                      <span>创建并检出新分支…</span>
+                    </button>
                   </div>
                 </div>
 
@@ -1220,6 +1329,142 @@ const workDirBrowseOptions = ref([])
 const workDirBrowseLoading = ref(false)
 const workDirSwitching = ref(false)
 
+// ==================== AgentFS 会话快照树 ====================
+const agentFSTimeline = ref([])
+const agentFSLoading = ref(false)
+const selectedAgentFSSnapshot = ref(null)
+const agentFSDiffRaw = ref('')
+const agentFSDiffLoading = ref(false)
+const agentFSDiffError = ref('')
+const agentFSDiffCardStyle = ref({ top: '120px', left: '76px' })
+let agentFSPollTimer = null
+let boundAgentFSKey = ''
+
+const agentFSDiffLines = computed(() => {
+  let oldLine = 0
+  let newLine = 0
+  const result = []
+  for (const text of agentFSDiffRaw.value.split('\n')) {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(text)
+    if (hunk) {
+      oldLine = Number(hunk[1])
+      newLine = Number(hunk[2])
+      result.push({ text, number: '··', kind: 'hunk' })
+      continue
+    }
+    if (text.startsWith('+++') || text.startsWith('---') || text.startsWith('diff ') ||
+        text.startsWith('index ') || text.startsWith('commit ') || text.startsWith('Author:') ||
+        text.startsWith('Date:') || (!oldLine && !newLine)) continue
+    if (text.startsWith('+')) {
+      result.push({ text: text.slice(1), number: newLine++, kind: 'added' })
+    } else if (text.startsWith('-')) {
+      result.push({ text: text.slice(1), number: oldLine++, kind: 'removed' })
+    } else {
+      result.push({ text: text.startsWith(' ') ? text.slice(1) : text, number: newLine || oldLine, kind: 'context' })
+      oldLine++
+      newLine++
+    }
+  }
+  return result
+})
+
+const agentFSDiffStats = computed(() => ({
+  added: agentFSDiffLines.value.filter(line => line.kind === 'added').length,
+  removed: agentFSDiffLines.value.filter(line => line.kind === 'removed').length
+}))
+
+function formatAgentFSTime(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const today = new Date()
+  const sameDay = date.toDateString() === today.toDateString()
+  return sameDay
+    ? date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+}
+
+async function bindAgentFSSession() {
+  if (!activeSession.value || !currentWorkDir.value?.path) return false
+  const key = `${activeSession.value}\u0000${currentWorkDir.value.path}`
+  if (boundAgentFSKey === key) return true
+  try {
+    const res = await fetch('/api/agentfs/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project: currentWorkDir.value.name,
+        workdir: currentWorkDir.value.path,
+        session_id: activeSession.value
+      })
+    })
+    if (res.ok) boundAgentFSKey = key
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+async function refreshAgentFSTimeline() {
+  if (!activeSession.value) return
+  agentFSLoading.value = true
+  try {
+    await bindAgentFSSession()
+    const params = new URLSearchParams({
+      project: currentWorkDir.value.name,
+      session_id: activeSession.value
+    })
+    const res = await fetch(`/api/agentfs/log?${params}`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `读取失败 (${res.status})`)
+    agentFSTimeline.value = (Array.isArray(data.log) ? data.log : []).slice().reverse().slice(0, 18)
+    if (selectedAgentFSSnapshot.value &&
+        !agentFSTimeline.value.some(item => item.commit === selectedAgentFSSnapshot.value.commit)) {
+      closeAgentFSDiff()
+    }
+  } catch (err) {
+    console.warn('读取 AgentFS 会话时间线失败', err)
+    agentFSTimeline.value = []
+  } finally {
+    agentFSLoading.value = false
+  }
+}
+
+async function openAgentFSSnapshot(snapshot, event) {
+  selectedAgentFSSnapshot.value = snapshot
+  agentFSDiffRaw.value = ''
+  agentFSDiffError.value = ''
+  const rect = event.currentTarget.getBoundingClientRect()
+  const cardWidth = Math.min(620, window.innerWidth - 100)
+  const cardHeight = Math.min(560, window.innerHeight - 32)
+  agentFSDiffCardStyle.value = {
+    left: `${Math.min(rect.right + 18, window.innerWidth - cardWidth - 16)}px`,
+    top: `${Math.max(16, Math.min(rect.top - 88, window.innerHeight - cardHeight - 16))}px`,
+    width: `${cardWidth}px`,
+    maxHeight: `${cardHeight}px`
+  }
+  agentFSDiffLoading.value = true
+  try {
+    const res = await fetch('/api/agentfs/diff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: currentWorkDir.value.name, commit: snapshot.commit })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `Diff 读取失败 (${res.status})`)
+    agentFSDiffRaw.value = data.diff || ''
+  } catch (err) {
+    agentFSDiffError.value = err.message || '无法读取该快照'
+  } finally {
+    agentFSDiffLoading.value = false
+  }
+}
+
+function closeAgentFSDiff() {
+  selectedAgentFSSnapshot.value = null
+  agentFSDiffRaw.value = ''
+  agentFSDiffError.value = ''
+}
+
 function loadWorkDirState() {
   try {
     const raw = localStorage.getItem(WORKDIR_STORAGE_KEY)
@@ -1273,6 +1518,7 @@ async function selectWorkDir(dir) {
     saveWorkDirState()
     showWorkDirMenu.value = false
     showGitToast(`已切换工作目录: ${resolved.name}`)
+    await refreshAgentFSTimeline()
   } catch (e) {
     showGitToast(e.message || '切换工作目录失败')
   } finally {
@@ -1300,6 +1546,103 @@ async function openFolderBrowser() {
 // 复用后端已有的 /api/git-status、/api/git/add-all、/api/git/commit、/api/git/push，
 // 不新增接口——面板上的分支名、+N/-N 都是这里拉回来的真实数据，不再是写死的假值
 const gitStatus = ref({ branch: '', added: 0, removed: 0 })
+const showBranchMenu = ref(false)
+const gitBranches = ref([])
+const branchSearch = ref('')
+const branchSearchInput = ref(null)
+const branchesLoading = ref(false)
+const branchSwitching = ref(false)
+const filteredGitBranches = computed(() => {
+  const query = branchSearch.value.trim().toLocaleLowerCase()
+  return query
+    ? gitBranches.value.filter(branch => branch.toLocaleLowerCase().includes(query))
+    : gitBranches.value
+})
+
+async function readGitResponse(res) {
+  const text = await res.text()
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    if (!res.ok) {
+      throw new Error(res.status === 404
+        ? '分支接口尚未加载，请重启后端服务'
+        : `Git 接口返回异常 (${res.status})`)
+    }
+    throw new Error('Git 接口返回了无法识别的数据')
+  }
+}
+
+async function fetchGitBranches() {
+  branchesLoading.value = true
+  try {
+    const res = await fetch('/api/git/branches')
+    const data = await readGitResponse(res)
+    if (!res.ok) throw new Error(data.error || `读取失败 (${res.status})`)
+    gitBranches.value = Array.isArray(data.branches) ? data.branches : []
+  } catch (err) {
+    showGitToast(err.message || '读取分支失败')
+  } finally {
+    branchesLoading.value = false
+  }
+}
+
+async function toggleBranchMenu() {
+  showBranchMenu.value = !showBranchMenu.value
+  showWorkDirMenu.value = false
+  if (!showBranchMenu.value) return
+  branchSearch.value = ''
+  await fetchGitBranches()
+  nextTick(() => branchSearchInput.value?.focus())
+}
+
+async function checkoutGitBranch(branch) {
+  if (branch === gitStatus.value.branch) {
+    showBranchMenu.value = false
+    return
+  }
+  branchSwitching.value = true
+  try {
+    const res = await fetch('/api/git/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch })
+    })
+    const data = await readGitResponse(res)
+    if (!res.ok) throw new Error(data.error || `切换失败 (${res.status})`)
+    showBranchMenu.value = false
+    await fetchGitStatus()
+    showGitToast(`已切换到 ${branch}`)
+  } catch (err) {
+    showGitToast(err.message || '切换分支失败')
+  } finally {
+    branchSwitching.value = false
+  }
+}
+
+async function createGitBranch() {
+  const suggested = branchSearch.value.trim()
+  const branch = window.prompt('输入新分支名称', suggested)
+  if (!branch?.trim()) return
+  branchSwitching.value = true
+  try {
+    const res = await fetch('/api/git/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch: branch.trim() })
+    })
+    const data = await readGitResponse(res)
+    if (!res.ok) throw new Error(data.error || `创建失败 (${res.status})`)
+    showBranchMenu.value = false
+    await Promise.all([fetchGitStatus(), fetchGitBranches()])
+    showGitToast(`已创建并切换到 ${data.branch}`)
+  } catch (err) {
+    showGitToast(err.message || '创建分支失败')
+  } finally {
+    branchSwitching.value = false
+  }
+}
 async function fetchGitStatus() {
   try {
     const res = await fetch('/api/git-status')
@@ -2173,6 +2516,18 @@ function buildOutgoingMessage() {
 const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.value })
 
 watch(messages, () => { nextTick(() => { streamFadePass(); highlightAllCodeBlocks() }) }, { deep: true })
+watch(
+  [activeSession, () => currentWorkDir.value.path],
+  () => {
+    boundAgentFSKey = ''
+    closeAgentFSDiff()
+    refreshAgentFSTimeline()
+  }
+)
+watch(sidebarOpen, open => {
+  if (!open) refreshAgentFSTimeline()
+  else closeAgentFSDiff()
+})
 // 切进 git 状态条可见的 Code 模式时刷新一次，避免面板上的 +N/-N 停留在挂载时的旧快照
 watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
 // 工作流（四态机）结束时，停止按钮消失，立刻把输入框高度塌回单行——
@@ -2186,15 +2541,21 @@ onMounted(() => {
   fetchGitStatus()
   loadWorkDirState()
   syncWorkDirFromBackend()
+  refreshAgentFSTimeline()
+  agentFSPollTimer = window.setInterval(() => {
+    if (!sidebarOpen.value) refreshAgentFSTimeline()
+  }, 4000)
   document.addEventListener('click', () => {
     showModelMenu.value = false; showTokenPanel.value = false
-    showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false
+    showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false; showBranchMenu.value = false
     showDockAddMenu.value = false
+    closeAgentFSDiff()
   })
   window.addEventListener('keydown', onGlobalDockShortcut)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalDockShortcut)
+  window.clearInterval(agentFSPollTimer)
 })
 </script>
 

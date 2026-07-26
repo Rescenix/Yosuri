@@ -55,15 +55,15 @@ type workflowCheckpoint struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
-// checkpointDir 与会话文件同域：SHANXI_DATA_DIR 覆盖，默认 ~/shanxi_data/workflow_checkpoints。
+// checkpointDir 与会话文件同域：RESCENE_DATA_DIR 覆盖，默认 ~/rescene_data/workflow_checkpoints。
 func checkpointDir() string {
-	dataDir := os.Getenv("SHANXI_DATA_DIR")
+	dataDir := os.Getenv("RESCENE_DATA_DIR")
 	if dataDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			homeDir = "."
 		}
-		dataDir = filepath.Join(homeDir, "shanxi_data")
+		dataDir = filepath.Join(homeDir, "rescene_data")
 	}
 	return filepath.Join(dataDir, "workflow_checkpoints")
 }

@@ -21,6 +21,8 @@
               <Icon icon="mdi:connection" width="16" />MCP</button>
             <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()">
               <Icon icon="mdi:school-outline" width="16" />Skills</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'memory' }" @click="activeTab = 'memory'; loadMemoryInject()">
+              <Icon icon="mdi:brain" width="16" />记忆</button>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
           </div>
@@ -360,6 +362,25 @@
               </template>
             </div>
 
+
+            <!-- ========== 记忆（当前注入上下文的内容，仿 Claude Memory） ========== -->
+            <div v-show="activeTab === 'memory'" class="settings-panel">
+              <div class="settings-section-title">记忆</div>
+              <div class="settings-section-desc">以下内容是<span class="mem-emphasis">当前真正注入每次对话系统提示词</span>的记忆，分两段——<b>自定义指令</b>（昵称 / 身份 / 指令，归 system 桶）与 <b>长期记忆</b>（身份常驻 / 工作态交接 / 跨 agent 收件箱，归 memory 桶）。数据由后端 <code>/api/memory/inject</code> 实时返回，与上下文装配零漂移。</div>
+              <template v-if="memorySegments.length">
+                <div v-for="seg in memorySegments" :key="seg.key" class="memory-seg">
+                  <div class="memory-seg-title">
+                    <span class="mem-bucket">{{ seg.key }}</span>
+                    {{ seg.title }}
+                    <span v-if="!seg.enabled" class="mem-empty-tag">（空）</span>
+                  </div>
+                  <div v-if="seg.enabled" class="memory-md markdown-body" v-html="renderMarkdown(seg.raw)"></div>
+                  <div v-else class="memory-empty">该段尚未配置内容。</div>
+                </div>
+              </template>
+              <div v-else-if="!memoryLoading" class="memory-empty">尚未配置任何记忆。</div>
+              <div v-if="memoryLoading" class="memory-empty">加载中…</div>
+            </div>
 
             <!-- ========== 我的（Profile + 自定义指令，仿 Claude Profile） ========== -->
             <div v-show="activeTab === 'profile'" class="settings-panel">
@@ -856,6 +877,27 @@ async function loadSkills(force = false) {
 }
 // ============ Profile ============
 const profile = ref({ full_name: '', work: '', instructions: '' })
+
+// 记忆 tab：直接渲染后端 /api/memory/inject 返回的真实注入段（system / memory 两段），
+// 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
+const memorySegments = ref([])
+const memoryLoading = ref(false)
+async function loadMemoryInject() {
+  memoryLoading.value = true
+  try {
+    const res = await fetch('/api/memory/inject')
+    if (res.ok) {
+      const data = await res.json()
+      memorySegments.value = Array.isArray(data.segments) ? data.segments : []
+    } else {
+      memorySegments.value = []
+    }
+  } catch (e) {
+    memorySegments.value = []
+  } finally {
+    memoryLoading.value = false
+  }
+}
 const profileSaving = ref(false)
 const profileSaved = ref(false)
 async function loadProfile() {
@@ -1213,4 +1255,46 @@ onUnmounted(() => {
 .preview-bubble :deep(th) { background: var(--app-surface-3); }
 .preview-bubble :deep(.katex) { color: var(--app-text); }
 .api-form-btn.save:disabled { opacity: 0.6; cursor: default; }
+
+/* 记忆 tab：复用全局 .markdown-body 排版，这里只管容器与提示 */
+.memory-seg { margin-top: 10px; }
+.memory-seg-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mem-bucket {
+  font-family: var(--app-mono-font, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--app-accent);
+  background: var(--app-surface-3);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+.mem-empty-tag { color: var(--app-text-faint); font-weight: 400; font-size: 12px; }
+.memory-md {
+  margin-top: 6px;
+  padding: 14px 16px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  max-height: 44vh;
+  overflow-y: auto;
+}
+.mem-emphasis { color: var(--app-accent); font-weight: 600; }
+.memory-empty {
+  margin-top: 6px;
+  padding: 14px 16px;
+  font-size: 12.5px;
+  color: var(--app-text-faint);
+  background: var(--app-surface-2);
+  border: 1px dashed var(--app-border);
+  border-radius: 12px;
+}
 </style>

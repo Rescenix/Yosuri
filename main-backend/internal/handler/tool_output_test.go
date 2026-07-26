@@ -12,7 +12,7 @@ import (
 
 // withTempProjectRoot 把项目根指到临时目录并在用例结束后还原。
 // SHANXI_WORKDIR_STATE_FILE 也要一起改，否则 SetProjectRoot 会把临时路径
-// 写进用户真实的 ~/shanxi_data/workdir.txt，跑完测试工作目录就被换掉了。
+// 写进用户真实的 ~/rescene_data/workdir.txt，跑完测试工作目录就被换掉了。
 func withTempProjectRoot(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

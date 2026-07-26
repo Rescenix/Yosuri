@@ -7,7 +7,7 @@ import (
 )
 
 // withIsolatedWorkdirState 把状态文件重定向到临时目录，防止测试写坏
-// 真实用户的 ~/shanxi_data/workdir.txt（之前吃过这个亏，SetProjectRoot 落盘
+// 真实用户的 ~/rescene_data/workdir.txt（之前吃过这个亏，SetProjectRoot 落盘
 // 一旦跑进临时目录，就会把正在跑的 agent 工作目录悄悄改没了）
 func withIsolatedWorkdirState(t *testing.T) {
 	t.Helper()

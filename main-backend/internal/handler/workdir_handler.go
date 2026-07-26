@@ -105,7 +105,7 @@ func GetWorkdir(c *gin.Context) {
 // SetWorkdir POST /api/workdir {"path": "main-frontend"} —— 真正切换 agent 的工作目录。
 // path 支持相对路径（相对 GitRepoRoot，跟 /api/file-tree 返回的 path 字段对齐）和绝对路径。
 // 切换后 read_file/write_file/edit_file/execute_command（含 rg 代码检索）/search_memory 全部立刻生效，
-// 并落盘持久化到 ~/shanxi_data/workdir.txt，下次启动自动恢复。
+// 并落盘持久化到 ~/rescene_data/workdir.txt，下次启动自动恢复。
 func SetWorkdir(c *gin.Context) {
 	var body struct {
 		Path string `json:"path" binding:"required"`

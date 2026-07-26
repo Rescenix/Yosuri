@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *SessionStore) {
+func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 全局 CORS 处理
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -23,13 +23,13 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		c.Next()
 	})
 	r.GET("/api/git-status", gin.WrapH(http.HandlerFunc(GitStatusHandler)))
+	r.GET("/api/git/branches", GitBranches)
+	r.POST("/api/git/checkout", GitCheckout)
+	r.POST("/api/git/branches", GitCreateBranch)
 	// git 工作树全量 diff（Diff 面板）
 	r.GET("/api/git/working-diff", HandleGitWorkingDiff)
 	r.GET("/api/git/working-diff/file", HandleGitWorkingDiffFile)
-	chatHandler := NewChatHandler(memoryStore, sessionStore)
-	// 记忆清理只保留 HTTP 入口（/api/admin/clean-memories，见下方）直接调 CleanMemories()；
-	// 内置 clean_memories 工具已随 core.ExecuteToolCall 退役（原本就标注"禁止主动调用"）。
-
+	chatHandler := NewChatHandler(sessionStore)
 	r.GET("/api/file-tree", gin.WrapH(http.HandlerFunc(FileTreeHandler)))
 	r.GET("/api/file", gin.WrapH(http.HandlerFunc(FileReadHandler)))
 	r.POST("/api/file", gin.WrapH(http.HandlerFunc(FileWriteHandler)))
@@ -128,10 +128,6 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 		filename := c.Param("filename")
 		c.File("/tmp/shanxi_uploads/" + filename)
 	})
-	r.GET("/api/admin/clean-memories", func(c *gin.Context) {
-		memoryStore.CleanMemories()
-		c.JSON(200, gin.H{"status": "ok", "message": "记忆清理已触发，请查看控制台日志"})
-	})
 	r.GET("/api/balance", GetBalance)
 	r.GET("/api/shanxi/status", func(c *gin.Context) {
 		hour := time.Now().Hour()
@@ -188,10 +184,7 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	r.GET("/api/auth/me", middleware.AuthRequired(), AuthMe)
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
-	r.GET("/api/memory/welcome", memoryStore.WelcomeHandler)
-
-	r.POST("/api/memory/save", memoryStore.SaveMemoryHandler)
-	r.GET("/api/memory/recall", memoryStore.RecallMemoryHandler)
+	r.GET("/api/memory/inject", HandleMemoryInject)
 
 	r.GET("/api/book/list", ListBooks)
 	r.GET("/api/book/content", GetBookContent)

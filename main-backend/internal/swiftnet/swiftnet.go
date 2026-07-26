@@ -58,7 +58,7 @@ var (
 )
 
 // Default 返回进程级单例。路径：AURORA_MEMORY_FILE 环境变量，
-// 默认 ~/shanxi_data/MEMORY.md（与旧 memory.json 同目录）。
+// 默认 ~/rescene_data/MEMORY.md（与旧 memory.json 同目录）。
 func Default() *Net {
 	defaultOnce.Do(func() {
 		path := os.Getenv("AURORA_MEMORY_FILE")
@@ -67,7 +67,7 @@ func Default() *Net {
 			if err != nil {
 				home = "."
 			}
-			path = filepath.Join(home, "shanxi_data", "MEMORY.md")
+			path = filepath.Join(home, "rescene_data", "MEMORY.md")
 		}
 		defaultNet = New(path)
 	})
