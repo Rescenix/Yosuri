@@ -15,6 +15,40 @@
 
 ---
 
+## 目录
+
+- [核心理念 · AgentFS：给 AI 的写操作加上「事务」](#核心理念--agentfs给-ai-的写操作加上事务)
+- [核心理念 · 记忆 / 状态双轨：让 Agent 不再失业](#核心理念--记忆--状态双轨让-agent-不再失业)
+- [特性一览](#特性一览)
+  - [AgentFS Trace：会话级 Git 痕迹树](#agentfs-trace会话级-git-痕迹树)
+  - [Agent 主动 TODO：计划不再藏在思考里](#agent-主动-todo计划不再藏在思考里)
+  - [Agent 主动向用户提问：真正的 Human-in-the-loop](#agent-主动向用户提问真正的-human-in-the-loop)
+  - [断点续传](#断点续传)
+  - [内嵌终端 + 自定义脚本片段](#内嵌终端--自定义脚本片段)
+  - [内置编辑器 + 文件树](#内置编辑器--文件树)
+  - [实时渲染调试浏览器](#实时渲染调试浏览器)
+  - [Diff 预览](#diff-预览)
+  - [Agent 消息流式渐变动画](#agent-消息流式渐变动画)
+  - [魔女审判二次元皮肤](#魔女审判二次元皮肤)
+- [平台能力](#平台能力)
+  - [多 Agent 调度](#多-agent-调度)
+  - [MCP 富集工具生态](#mcp-富集工具生态)
+  - [技能自学习](#技能自学习)
+  - [记忆 / 状态双轨](#记忆--状态双轨详见上文核心理念)
+- [企业级安全与校验](#企业级安全与校验)
+  - [不可逆操作零豁免审批](#不可逆操作零豁免审批)
+  - [收尾强制构建 + 截图校验](#收尾强制构建--截图校验post-workflow-verification-gate)
+  - [AgentFS 审计溯源](#agentfs-审计溯源见上核心理念段)
+- [系统架构](#系统架构)
+- [仓库结构](#仓库结构)
+- [快速开始](#快速开始)
+- [环境变量](#环境变量)
+- [许可证](#许可证)
+- [Star History](#star-history)
+- [English](#english)
+
+---
+
 ## 核心理念 · AgentFS：给 AI 的写操作加上"事务"
 
 传统 AI 编程最致命的弱点不是写不出代码，而是**改坏了收不回**：AI 联动改写十个文件，改到第五个崩了，前四个已经脏写进硬盘，没有人能完美回滚。
@@ -359,6 +393,8 @@ npm run dev    # http://localhost:4321
 
 本项目基于 [MIT License](./LICENSE) 开源。
 
+---
+
 ## Star History
 
 <a href="https://www.star-history.com/?type=date&repos=Rescenix%2FResceneAgent">
@@ -367,4 +403,27 @@ npm run dev    # http://localhost:4321
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
  </picture>
-</a>
+ </a>
+
+ ---
+
+ ## English
+
+ **ResceneAgent** is a frontend-specialized multi-agent platform that packs an IDE, terminal, browser, and an AI team into a single chat box. Built around the digital persona **Aurora**, it closes the loop from requirement breakdown → code → runtime verification, all inside one conversation.
+
+ **Why pull it?** Most AI coding assistants can *talk* about code. ResceneAgent *writes, runs, and verifies* — and does so inside guardrails that make autonomous editing safe enough to trust.
+
+ ### Core capabilities
+
+ - **AgentFS — a transaction layer for AI writes.** Snapshot-isolated, auditable, rollback-capable file operations backed by a per-session shadow git repo (`~/rescene_data/agentfs/`, physically isolated from your project). Every change carries a before/after hash, tool source, and session ID — so a runaway agent edit is always recoverable. *Roots: snapshot isolation and rollback borrow from VFS, Git, and database transactions; the real difference is making this a systematic, agent-facing write-transaction layer.*
+ - **AgentFS Trace — session-level Git timeline.** A live, growing shadow-Git tree per chat session, with hover-to-view diff cards and one-click time-travel recovery.
+ - **Memory / state dual-track.** `MEMORY.md` (global) + `workdir.md` (per-project) are single-file facts the agent writes to *and* reads from, auto-injected at every workflow start — no more "starts from zero every session."
+ - **Agent-driven TODO.** A structured `pending / doing / done` plan the agent maintains live, survives context compression, and resumes with the workflow.
+ - **Real Human-in-the-loop.** `ask_user` pauses the workflow for genuine decisions; irreversible ops (delete/move) always require approval even in YOLO mode.
+ - **Live render & verify.** Agent-written HTML is rendered in a real Chromium engine (not an iframe); a post-workflow gate runs `go build` / `npm run build` + screenshot on completion.
+ - **Embedded IDE surface.** Monaco editor, recursive file tree, real PowerShell terminal, VS-Code-style diff viewer, and a Live2D-able 2D skin system — all inside the chat panel.
+ - **Multi-agent orchestration.** A 4-state (think → intent → action → result) workflow with a Swift sub-agent, context-aware compression, and multi-backend model routing with vision/reasoning metadata.
+
+ Licensed under [MIT](./LICENSE). Setup details (env vars, quick start, repo layout) are in the Chinese section above.
+
+
