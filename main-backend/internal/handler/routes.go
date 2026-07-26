@@ -36,6 +36,11 @@ func RegisterRoutes(r *gin.Engine, memoryStore *MemoryStore, sessionStore *Sessi
 	// agent 实际工具执行的工作目录：GET 读当前值，POST 真正切换 + 落盘持久化
 	r.GET("/api/workdir", GetWorkdir)
 	r.POST("/api/workdir", SetWorkdir)
+	// AgentFS：写操作事务层 —— 影子 git 仓审计 / 回退
+	r.POST("/api/agentfs/open", AgentFSOpen)
+	r.GET("/api/agentfs/log", AgentFSLog)
+	r.POST("/api/agentfs/diff", AgentFSDiff)
+	r.POST("/api/agentfs/restore", AgentFSRestore)
 	// 真实交互式终端：SSE 输出 + POST 写 stdin，会话按 id 常驻（详见 terminal_handler.go）
 	r.GET("/api/terminal/stream", HandleTerminalStream)
 	r.POST("/api/terminal/input", HandleTerminalInput)

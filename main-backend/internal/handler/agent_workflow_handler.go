@@ -390,7 +390,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		}
 
 		finalRound = round // 账本落盘用（defer 里读的是最终值）
-		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, roundMsgs, tools, effort)
+		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, roundMsgs, tools, effort, staticSum)
 		// inTok 优先用上游真实 prompt_tokens；为 0 时退化为历史字符/4 估算（与四态机口径一致）
 		if inTok > 0 {
 			inputTokens = inTok
@@ -426,6 +426,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		if len(calls) == 0 {
 			outcome = "completed"
 			deleteWorkflowCheckpoint(workflowID)
+			// agent 决定结束对话：跑一次 build + 截图校验（旁路，失败不阻断）
+			verifyOnWorkflowDone(c, workflowID)
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "completed", "final_output": content,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
@@ -700,10 +702,14 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 	// ——后者以前是 MCP 层直接硬报错，agent 只能把文件都往工作目录里塞。
 	// yolo 模式 / 非危险且未越界 / 已设 don't-ask-again → 直接放行。
 	maybeRequestApproval := func(tc core.ToolCall) bool {
-		if mode == "yolo" {
-			return true // Yolo 畅通无阻：危险工具与越界访问一律不拦
-		}
 		name := tc.Function.Name
+		if mode == "yolo" {
+			// Yolo 畅通无阻：危险工具与越界访问一律不拦——但不可逆文件操作
+			// （删除/移动/重命名）除外，必须进下方审批，避免 agent 全自动误删。
+			if !isIrreversibleTool(name) {
+				return true
+			}
+		}
 		outside, outPath := toolOutsideRoot(tc.Function.Arguments)
 		if !isDangerousTool(name) && !outside {
 			return true

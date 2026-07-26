@@ -140,30 +140,32 @@ watch(() => items.value.length, async () => {
 .umr-node {
   position: relative;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: 2px solid var(--app-border, #e4e4e7);
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--app-surface, #fff);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: rotate(45deg);
 }
 .umr-node-num {
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 600;
   color: var(--app-text-soft, #71717a);
   line-height: 1;
   user-select: none;
+  transform: rotate(-45deg);
 }
 
 .umr-node:hover,
 .umr-node.hovered {
   border-color: var(--app-accent, #6366f1);
-  transform: scale(1.15);
+  transform: rotate(45deg) scale(1.15);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 .umr-node:hover .umr-node-num,
@@ -174,7 +176,7 @@ watch(() => items.value.length, async () => {
 .umr-node.active {
   border-color: var(--app-accent, #6366f1);
   background: var(--app-accent, #6366f1);
-  transform: scale(1.15);
+  transform: rotate(45deg) scale(1.15);
 }
 .umr-node.active .umr-node-num {
   color: #fff;
@@ -218,13 +220,14 @@ watch(() => items.value.length, async () => {
 
 /* 节点：洛丽塔丝绒圆点 */
 [data-skin="witchtrial_hiiro"] .umr-node {
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   border-width: 1.5px;
   border-color: rgba(240, 98, 146, 0.5);
-  border-radius: 50%;
+  border-radius: 0;
   background: radial-gradient(circle at 30% 30%, rgba(100, 32, 62, 0.9), rgba(38, 14, 24, 0.98));
   box-shadow: inset 0 0 9px rgba(240, 98, 146, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transform: rotate(45deg);
 }
 [data-skin="witchtrial_hiiro"] .umr-node-num {
   color: #ffc2d6;
@@ -249,7 +252,7 @@ watch(() => items.value.length, async () => {
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 220, 235, 0.35);
-  transform: scale(1.25);
+  transform: rotate(45deg) scale(1.25);
 }
 [data-skin="witchtrial_hiiro"] .umr-node.active .umr-node-num,
 [data-skin="witchtrial_hiiro"] .umr-node-wrap.active .umr-node .umr-node-num {
@@ -261,7 +264,7 @@ watch(() => items.value.length, async () => {
 [data-skin="witchtrial_hiiro"] .umr-node:hover,
 [data-skin="witchtrial_hiiro"] .umr-node.hovered {
   border-color: rgba(240, 98, 146, 0.85);
-  transform: scale(1.15);
+  transform: rotate(45deg) scale(1.15);
   box-shadow: inset 0 0 12px rgba(240, 98, 146, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 [data-skin="witchtrial_hiiro"] .umr-node:hover .umr-node-num,
@@ -310,12 +313,14 @@ watch(() => items.value.length, async () => {
 
 /* 节点：审判火印 */
 [data-skin="witchtrial"] .umr-node {
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   border-width: 1.5px;
   border-color: rgba(199, 62, 62, 0.5);
+  border-radius: 0;
   background: radial-gradient(circle at 30% 30%, rgba(65, 22, 22, 0.9), rgba(22, 10, 12, 0.98));
   box-shadow: inset 0 0 6px rgba(199, 62, 62, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.45);
+  transform: rotate(45deg);
 }
 [data-skin="witchtrial"] .umr-node-num {
   color: #e08a78;
@@ -340,6 +345,7 @@ watch(() => items.value.length, async () => {
     0 0 0 1px rgba(0, 0, 0, 0.5),
     0 0 14px rgba(199, 62, 62, 0.6),
     inset 0 0 10px rgba(255, 160, 120, 0.3);
+  transform: rotate(45deg) scale(1.15);
   animation: umr-flame-pulse 1.6s ease-in-out infinite;
 }
 [data-skin="witchtrial"] .umr-node.active .umr-node-num {

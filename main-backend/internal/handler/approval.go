@@ -76,6 +76,33 @@ func isDangerousTool(name string) bool {
 	return false
 }
 
+// irreversibleToolSet 不可逆文件操作：一旦执行（尤其 YOLO 全自动模式下）无法无损
+// 撤回，即使有 AgentFS 影子仓能还原，也比普通写盘风险高一个量级，所以 YOLO 模式
+// 下也必须走审批拦截，不让 agent「畅通无阻」地删/移。
+var irreversibleToolSet = map[string]bool{
+	"mcp__fs__delete_file":      true,
+	"mcp__fs__delete_directory": true,
+	"mcp__fs__move_file":        true,
+}
+
+// isIrreversibleTool 判定一个工具名是否代表不可逆的文件操作（删除/移动/重命名）。
+// YOLO 模式下其余写操作（write/edit/create）仍畅通，仅这几类强制进审批。
+func isIrreversibleTool(name string) bool {
+	if irreversibleToolSet[name] {
+		return true
+	}
+	if strings.HasPrefix(name, "mcp__fs__") {
+		rest := strings.TrimPrefix(name, "mcp__fs__")
+		switch {
+		case strings.HasPrefix(rest, "delete"),
+			strings.HasPrefix(rest, "move"),
+			strings.HasPrefix(rest, "rename"):
+			return true
+		}
+	}
+	return false
+}
+
 // ---- 工作目录越界判定 ----
 //
 // MCP 各 server 底层已不再锁死目录（见 mcp_client.go fsAllowedDirs / grep_server.py），

@@ -65,13 +65,10 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useAuth } from '../../../composables/useAuth.js'
 
 const apiBase = import.meta.env.VITE_API_BASE || ''
-
-
-const props = defineProps({
-  userName: { type: String, default: 'Prometheus' }
-})
+const auth = useAuth()
 
 const greetingMessages = [
   "接下来做什么，{name}？",
@@ -86,7 +83,7 @@ const currentGreeting = ref(greetingMessages[0])
 const greetingIconRef = ref(null) // 用来获取图标的 DOM
 
 const displayGreeting = computed(() => {
-  return currentGreeting.value.replace('{name}', props.userName)
+  return currentGreeting.value.replace('{name}', auth.displayName.value)
 })
 
 // 触发图标动画的函数
@@ -231,21 +228,49 @@ const heatmapCells = computed(() => {
   }))
 })
 
-// 手抄一遍《逆天邪神》全本大致需要的字数（数字仅为营造效果的粗略估算）
-const NOVEL_TOTAL_TOKENS = 800_000
+// 世界名著大致字数（用于将 token 消耗量换算为"手抄X遍"的趣味类比）
+const CLASSIC_BOOKS = [
+  { title: '《局外人》', author: '加缪', chars: 30_000 },
+  { title: '《查拉图斯特拉如是说》', author: '尼采', chars: 70_000 },
+  { title: '《小王子》', author: '圣埃克苏佩里', chars: 20_000 },
+  { title: '《动物农场》', author: '奥威尔', chars: 30_000 },
+  { title: '《1984》', author: '奥威尔', chars: 90_000 },
+  { title: '《了不起的盖茨比》', author: '菲茨杰拉德', chars: 50_000 },
+  { title: '《老人与海》', author: '海明威', chars: 27_000 },
+  { title: '《瓦尔登湖》', author: '梭罗', chars: 75_000 },
+]
+
+// 根据 token 总量选取最合适的书，使 "copies" 尽量落在 0.01~9 之间
+function pickBook(tokenCount) {
+  // 优先选 copies 在 0.1~5 范围内的书；若全部不在则取最接近 1 的
+  let best = CLASSIC_BOOKS[0]
+  let bestScore = Infinity
+  for (const book of CLASSIC_BOOKS) {
+    const ratio = tokenCount / book.chars
+    // 理想区间 [0.1, 5] 内得分越低越好；区间外用距离惩罚
+    const inRange = ratio >= 0.1 && ratio <= 5
+    const score = inRange ? Math.abs(Math.log2(ratio)) : 100 + Math.abs(Math.log2(ratio))
+    if (score < bestScore) {
+      bestScore = score
+      best = book
+    }
+  }
+  return best
+}
 
 const heatmapCaption = computed(() => {
   const totalTokens = dailyStats.value.reduce((sum, d) => sum + (d.tokens || 0), 0)
   if (totalTokens <= 0) return '最近还没有对话记录，开始聊点什么吧。'
 
-  const copies = totalTokens / NOVEL_TOTAL_TOKENS
+  const book = pickBook(totalTokens)
+  const copies = totalTokens / book.chars
   if (copies >= 1) {
     const copiesText = copies >= 10 ? copies.toFixed(0) : copies.toFixed(1)
-    return `这些对话消耗的 token，抵得上手抄 ${copiesText} 遍《逆天邪神》全本。`
+    return `这些对话消耗的 token，抵得上手抄 ${copiesText} 遍${book.title}。`
   }
   const percent = copies * 100
   const percentText = percent < 0.01 ? '不到 0.01' : percent.toFixed(2)
-  return `这些对话消耗的 token，抵得上手抄了《逆天邪神》全本的 ${percentText}%。`
+  return `这些对话消耗的 token，抵得上手抄了${book.title}的 ${percentText}%。`
 })
 </script>
 

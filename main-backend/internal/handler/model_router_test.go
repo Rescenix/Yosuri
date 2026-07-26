@@ -79,7 +79,7 @@ func TestStreamRouterRoundEmptyChainMessage(t *testing.T) {
 	r := &WorkflowRunner{}
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("GET", "/api/code/workflow", nil)
-	_, _, _, _, _, err := r.streamRouterRound(c, nil, nil, nil, "")
+	_, _, _, _, _, err := r.streamRouterRound(c, nil, nil, nil, "", 0)
 	if err == nil {
 		t.Fatal("空链应报错")
 	}

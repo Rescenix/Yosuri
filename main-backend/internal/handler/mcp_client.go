@@ -417,6 +417,8 @@ func callMCPTool(fullName, argsJSON string) (string, error) {
 	if fullName == "mcp__fs__edit_file" {
 		normalizeMCPEditArgs(args)
 	}
+	// AgentFS：真实落盘前捕获 before 快照（旁路，错误静默忽略）
+	OnBeforeWrite(fullName, args)
 
 	raw, err := conn.request("tools/call", map[string]any{
 		"name": mcpRealName[fullName], "arguments": args,
@@ -446,6 +448,9 @@ func callMCPTool(fullName, argsJSON string) (string, error) {
 	if result.IsError {
 		return "", fmt.Errorf("%s", text)
 	}
+	// AgentFS：真实落盘成功后捕获 after 并写入影子仓审计（仅成功路径；
+	// IsError / err 返回的路径文件未真正改动，不记审计）
+	OnAfterWrite(fullName, args)
 	return text, nil
 }
 

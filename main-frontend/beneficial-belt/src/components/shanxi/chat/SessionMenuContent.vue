@@ -1,14 +1,18 @@
 <template>
   <div class="smc-root" :class="{ fill }">
-    <!-- 顶部功能项 -->
+    <!-- 顶部功能项：新建任务 / 搜索对话 / 插件市场 -->
     <div class="smc-nav">
       <button class="smc-nav-item" @click="$emit('new-session')">
-        <Icon icon="mdi:pencil-plus-outline" width="18" />
-        <span>发起新对话</span>
+        <Icon icon="mdi:plus-circle-outline" width="18" />
+        <span>新建任务</span>
       </button>
       <button class="smc-nav-item" @click="$emit('open-search')">
         <Icon icon="mdi:magnify" width="18" />
-        <span>搜索对话内容</span>
+        <span>搜索对话</span>
+      </button>
+      <button class="smc-nav-item" @click="$emit('open-plugins')">
+        <Icon icon="mdi:puzzle-outline" width="18" />
+        <span>插件市场</span>
       </button>
     </div>
 
@@ -42,10 +46,10 @@
       </div>
     </div>
 
-    <!-- 任务列表：按工作目录分组的会话 -->
-    <div class="smc-section">
+    <!-- 项目：按工作目录分组的会话 -->
+    <div class="smc-section smc-section-projects">
       <div class="smc-section-label">
-        <span>任务列表</span>
+        <span>项目</span>
       </div>
       <div class="smc-session-area">
         <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="wd-group" :class="{ open: isGroupOpen(grp.name) }">
@@ -89,7 +93,7 @@
 
     <!-- footer -->
     <div class="fm-footer" ref="footerRef">
-      <div class="fm-user" @click.stop="toggleUserMenu" title="点击查看账户">
+      <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" title="点击查看账户">
         <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
         <Icon v-else icon="mdi:account-circle" width="20" color="#6b6b6b" />
         <span>{{ auth.displayName.value }}</span>
@@ -151,10 +155,11 @@ const props = defineProps({
   runningSession: { type: String, default: '' },
   fill: { type: Boolean, default: false }
 })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins'])
 
 // 用户卡片菜单（登录 / 退出）
 const footerRef = ref(null)
+const userRef = ref(null)
 const userCardRef = ref(null)
 const showUserMenu = ref(false)
 const userMenuStyle = ref({})
@@ -165,7 +170,7 @@ function toggleUserMenu() {
   showUserMenu.value = true
   refreshLoginState()
   nextTick(() => {
-    const el = footerRef.value
+    const el = userRef.value || footerRef.value
     const card = userCardRef.value
     if (!el || !card) return
     const rect = el.getBoundingClientRect()
@@ -336,16 +341,30 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-root.fill { height: 100%; min-height: 0; }
 .smc-root.fill .smc-session-area { flex: 1; max-height: none; }
 
-.smc-nav { flex-shrink: 0; padding: 10px 8px 6px; display: flex; flex-direction: column; gap: 2px; }
-.smc-nav-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 9px 12px; border: none; border-radius: 999px;
-  background: transparent; color: var(--app-text);
-  font-size: 13.5px; font-weight: 500; cursor: pointer; text-align: left;
-  transition: background 0.12s ease;
+.smc-nav {
+  flex-shrink: 0;
+  padding: 10px 8px 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
 }
-.smc-nav-item:hover { background: rgba(0, 0, 0, 0.06); }
-.smc-nav-item.on { background: rgba(0, 0, 0, 0.08); }
+.smc-nav-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px;
+  padding: 10px 4px; border: 1px solid var(--app-border); border-radius: 12px;
+  background: linear-gradient(180deg, var(--app-surface) 0%, var(--app-surface-2) 100%);
+  color: var(--app-text);
+  font-size: 11.5px; font-weight: 600; cursor: pointer; text-align: center;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.smc-nav-item:hover {
+  background: var(--app-surface);
+  border-color: var(--app-text-faint);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+.smc-nav-item .iconify { color: var(--app-accent); }
 
 .smc-section { flex-shrink: 0; }
 .smc-section-label {

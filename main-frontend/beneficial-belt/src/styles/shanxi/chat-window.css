@@ -1960,8 +1960,8 @@ min-height: 90px !important;
 
 /* 不加粗、不带折叠箭头——模型名本身就是可点开的（去掉视觉上的"这是个下拉框"提示） */
 .sch-model { position: relative; display: flex; align-items: center; gap: 4px; background: var(--app-surface); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 400; cursor: pointer; color: var(--app-text); }
-.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
-.model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; color: var(--app-text); }
+.model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; color: var(--app-text); }
 .model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
 
@@ -2021,61 +2021,53 @@ min-height: 90px !important;
   cursor: pointer;
 }
 
-/* ---------- Context window 用量：常驻横条（紧凑模式，保留圆环） ---------- */
+/* ---------- Context window 用量：与左侧 toolbar-icon-pill-btn 风格统一 ---------- */
 .context-bar-widget {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 999px;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 12px;
-  font-family: var(--app-font);
-  color: var(--app-text-soft);
+  transition: background 0.15s ease;
 }
+.context-bar-widget:hover { background: rgba(0,0,0,0.04); }
 .ctx-bar-text,
 .ctx-bar-pct { display: none; }
-.ctx-bar-track {
-  width: 16px;
-  height: 16px;
-}
-.ctx-ring {
+.ctx-reservoir {
   display: block;
-  width: 20px;
-  height: 20px;
-  transform: rotate(-90deg);
   flex-shrink: 0;
+  pointer-events: none;
 }
-.ctx-ring-track {
-  stroke: #e5e5e5;
-  stroke-width: 3;
-}
-.ctx-ring-fill {
-  stroke: var(--app-accent);
-  stroke-width: 3;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.3s ease;
+.ctx-water-body {
+  transition: y 0.4s ease, height 0.4s ease;
 }
 
-/* 模型 pill：紧凑、浅底、无粗体 */
+/* 模型 pill：仿 Yolo 主题色白字 */
 .sch-model {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--app-surface-3);
+  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
+  border: 1px solid transparent;
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  color: var(--app-text);
+  color: #fff;
   white-space: nowrap;
+  transition: filter 0.15s ease;
 }
-.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; }
-.model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+.sch-model:hover { filter: brightness(1.05); }
+.sch-model-caret { color: rgba(255,255,255,0.85); flex-shrink: 0; }
+.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; color: var(--app-text); }
+.model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; color: var(--app-text); }
 .model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
 
@@ -2639,7 +2631,7 @@ min-height: 90px !important;
   gap: 8px;
   background: transparent;
 }
-/* ==================== Gemini 风侧栏（平铺，不做悬浮卡片） ==================== */
+/* ==================== Gemini 风侧栏（悬浮页面卡片感） ==================== */
 .gem-sidebar {
   flex-shrink: 0;
   width: 220px;                       /* 初始展开宽度已缩窄，实际由 JS 绑定覆盖 */
@@ -2648,9 +2640,20 @@ min-height: 90px !important;
   min-height: 0;
   overflow: hidden;
   background: var(--app-surface);   /* 白色面（暗色自动跟随主题） */
-  border-radius: 14px;
-  transition: width 0.18s ease;
+  border-radius: 16px;
+  border: 1px solid var(--app-border);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.45) inset,
+    0 10px 32px rgba(0, 0, 0, 0.10),
+    0 3px 8px rgba(0, 0, 0, 0.06);
+  transition: width 0.18s ease, box-shadow 0.2s ease;
   position: relative;
+}
+.chat-window.expanded .chat-body-row:hover .gem-sidebar {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.45) inset,
+    0 14px 40px rgba(0, 0, 0, 0.13),
+    0 4px 10px rgba(0, 0, 0, 0.07);
 }
 /* 展开态右侧拖拽条：仿右侧 tool-panel 的 resize handle */
 .gem-sidebar-resize-handle {
@@ -2993,6 +2996,11 @@ min-height: 90px !important;
   align-items: center;
   justify-content: center;
   cursor: default;
+  flex-shrink: 0;
+}
+img.gem-rail-avatar {
+  object-fit: cover;
+  display: block;
 }
 
 /* ==================== 顶部横条删除后的浮动工具组 + 边缘 blur ==================== */
@@ -3646,3 +3654,4 @@ min-height: 90px !important;
   right: 0;
   margin-top: 0;
 }
+

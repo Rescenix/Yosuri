@@ -14,9 +14,7 @@
         <span
           class="tab-close"
           @click.stop="$emit('close-file', tab.path)"
-        >
-          <Icon icon="mdi:close" width="12" />
-        </span>
+        >&times;</span>
       </div>
       <div class="editor-tab-spacer"></div>
       <slot name="tab-actions"></slot>
@@ -152,6 +150,8 @@ function onEditorMount(editor) {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  width: fit-content;
+  max-width: 160px;
   height: 34px;
   padding: 0 10px;
   font-size: 12px;
@@ -179,13 +179,15 @@ function onEditorMount(editor) {
   width: 16px;
   height: 16px;
   border-radius: 4px;
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
   color: var(--app-text-faint);
-  opacity: 0;
-  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.editor-tab:hover .tab-close,
-.editor-tab.active .tab-close {
-  opacity: 1;
+.editor-tab:hover .tab-close {
+  color: var(--app-text-soft);
 }
 .tab-close:hover {
   background: var(--app-surface-3);
@@ -199,6 +201,13 @@ function onEditorMount(editor) {
 .tab-pin-icon {
   color: #c96442;
   flex-shrink: 0;
+}
+
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .tab-context-menu {

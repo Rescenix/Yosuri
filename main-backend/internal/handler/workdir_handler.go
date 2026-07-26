@@ -47,6 +47,9 @@ func SetWorkdir(c *gin.Context) {
 	// 必须跟随主页选中的项目移动，否则 mcp__fs__* 全部越界报错。
 	ReinitMCP()
 
+	// AgentFS：为每个项目会话开辟可追踪可回退的影子快照区（旁路，失败不影响主流程）
+	OpenAgentFSSession(filepath.Base(target), target)
+
 	c.JSON(http.StatusOK, gin.H{
 		"path": target,
 		"name": filepath.Base(target),

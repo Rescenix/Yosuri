@@ -85,15 +85,19 @@
             @delete-session="deleteSession"
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
+            @open-plugins="openPluginsMarket"
           />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
           <template v-else>
-            <button class="gem-icon-btn" @click="newSession" title="发起新对话">
-              <Icon icon="mdi:pencil-plus-outline" width="18" />
+            <button class="gem-icon-btn" @click="newSession" title="新建任务">
+              <Icon icon="mdi:plus-circle-outline" width="18" />
             </button>
-            <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话内容">
+            <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话">
               <Icon icon="mdi:magnify" width="18" />
+            </button>
+            <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
+              <Icon icon="mdi:puzzle-outline" width="18" />
             </button>
             <!-- 会话横条：当前项目下会话在上，其他在下 -->
             <div
@@ -119,11 +123,12 @@
                 @click="selectSession(s.id)"
               ></button>
             </div>
-            <div class="gem-rail-bottom">
+              <div class="gem-rail-bottom">
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
-              <div class="gem-rail-avatar" :title="currentWorkDir.name">{{ (currentWorkDir.name || '?').charAt(0).toUpperCase() }}</div>
+              <img v-if="railAuth.displayAvatar.value" :src="railAuth.displayAvatar.value" class="gem-rail-avatar" :title="railAuth.displayName.value" />
+              <div v-else class="gem-rail-avatar" :title="railAuth.displayName.value">{{ (railAuth.displayName.value || '?').charAt(0).toUpperCase() }}</div>
             </div>
 
             <!-- 悬停会话卡片：贴着折叠栏右侧弹出，整行可点击切换会话。
@@ -405,8 +410,9 @@
                       <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
                       {{ activeSessionObj?.branch || 'main' }}
                     </span>
-                    <span class="input-dir-divider"></span>
-                    <span class="input-dir-item input-dir-worktree">worktree</span>
+                    <button class="input-dir-add-btn" type="button" title="添加工作目录" @click.stop="toggleWorkDirMenu">
+                      <Icon icon="mdi:plus" width="15" />
+                    </button>
                   </div>
 
                   <div v-if="showWorkDirMenu" class="workdir-menu-dropdown" @click.stop>
@@ -447,9 +453,6 @@
                   </div>
                 </div>
 
-                <button class="input-dir-add-btn" type="button" title="添加工作目录" @click.stop="toggleWorkDirMenu">
-                  <Icon icon="mdi:plus" width="15" />
-                </button>
               </div>
 
               <div v-else-if="inputTopBarMode === 'git' && showGitBar" class="input-git-bar">
@@ -604,18 +607,19 @@
 
                 <div class="input-toolbar-right">
                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
-                  <div class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
-                    <span class="ctx-bar-text" style="display:none">{{ formatTok(ctxTotalUsed) }}/{{ formatTok(ctxWindow) }}</span>
-                    <svg class="ctx-ring" viewBox="0 0 18 18" width="14" height="14" aria-hidden="true">
-                      <circle class="ctx-ring-track" cx="9" cy="9" r="7" fill="none" />
-                      <circle
-                        class="ctx-ring-fill"
-                        cx="9" cy="9" r="7" fill="none"
-                        :stroke-dasharray="ctxRingC"
-                        :stroke-dashoffset="ctxRingC * (1 - ctxPct / 100)"
-                      />
+                  <div v-if="messages.length > 0 && ctxTotalUsed > 0" class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
+                    <svg class="ctx-reservoir" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                      <defs>
+                        <clipPath id="ctxResClip">
+                          <circle cx="12" cy="12" r="10" />
+                        </clipPath>
+                      </defs>
+                      <circle cx="12" cy="12" r="10" fill="none" stroke="var(--app-accent)" stroke-width="1.2" opacity="0.5" />
+                      <g clip-path="url(#ctxResClip)">
+                        <rect class="ctx-water-body" x="0" :y="ctxWaterY" width="24" :height="ctxWaterH" fill="var(--app-accent)" opacity="0.85" />
+                        <path class="ctx-wave" :d="ctxWavePath" fill="var(--app-accent)" opacity="0.85" />
+                      </g>
                     </svg>
-                    <span class="ctx-bar-pct" style="display:none">{{ ctxPct.toFixed(0) }}%</span>
                     <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
                       <div class="tup-header">
                         <span class="tup-title">上下文用量</span>
@@ -643,6 +647,7 @@
                   <!-- 模型名 pill -->
                   <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
                     <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || (hasModels ? '模型' : '无可用模型') }}</span>
+                    <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
                       <div v-if="!hasModels" class="model-menu-empty"></div>
                       <div
@@ -820,6 +825,9 @@
 
       <!-- 工具审批已改成输入框上方的轻量条（见 .approval-bar），不再用打断式弹窗 -->
     </div>
+
+    <!-- 插件市场浮层（占位入口）：独立组件 + Teleport，与 SettingsModal 保持一致 -->
+    <PluginsMarketModal v-if="showPluginsPanel" @close="closePluginsPanel" />
   </div>
 </template>
 
@@ -838,10 +846,12 @@ import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
 import SettingsModal from './SettingsModal.vue'
+import PluginsMarketModal from './PluginsMarketModal.vue'
 import FileToolPanel from './FileToolPanel.vue'
 import DiffPanel from './DiffPanel.vue'
 import { parseToolArgs } from './toolArgs.js'
 import Terminal from './Terminal.vue'
+import { useAuth } from '../../../composables/useAuth.js'
 import SnippetPanel from './SnippetPanel.vue'
 import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import AuroraStatusIcon from './AuroraStatusIcon.vue'
@@ -853,13 +863,14 @@ import Live2DWidget from './Live2DWidget.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
 import { chatModelList } from '../composables/chatModelList.js'
-import { contextBreakdown, loadContextBreakdown } from '../composables/contextBreakdown.js'
+import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
   sessionId: { type: String, default: 'global_chat_session' }
 })
+const railAuth = useAuth()
 
 // ==================== 会话与数据状态 ====================
 // 会话列表曾经是硬编码假数据（Aether/Prism/Nebula 占位），新增/删除/重命名只改
@@ -998,8 +1009,41 @@ const ctxTotalUsed = computed(() => {
 })
 const ctxWindow = computed(() => contextBreakdown.value.contextWindow || sessionTokenStats.value?.contextWindow || currentCapability.value.context_window || 0)
 const ctxPct = computed(() => ctxWindow.value > 0 ? Math.min((ctxTotalUsed.value / ctxWindow.value) * 100, 100) : 0)
-// 用量圆环的周长：半径 r=7（与模板里的 <circle r="7"> 对应），dasharray/offset 都按它算
-const ctxRingC = 2 * Math.PI * 7
+// 水位：<=35% 固定 35%，>35% 弹性映射
+const MIN_LEVEL = 35
+const ctxLevel = computed(() => ctxPct.value <= MIN_LEVEL ? MIN_LEVEL : ctxPct.value)
+const ctxWaterY = computed(() => 24 - ctxLevel.value * 0.2)
+const ctxWaterH = computed(() => ctxLevel.value * 0.2 + 2)
+// 随机水波：三层不同频率/振幅的正弦叠加，用 t 驱动相位偏移模拟流动
+const waveT = ref(0)
+let waveRaf = 0
+function animateWave() {
+  waveT.value = Date.now() * 0.001
+  waveRaf = requestAnimationFrame(animateWave)
+}
+onMounted(() => animateWave())
+onUnmounted(() => cancelAnimationFrame(waveRaf))
+
+const ctxWavePath = computed(() => {
+  const wy = ctxWaterY.value
+  const t = waveT.value
+  // 三层极浅涟漪，amplitude 极小使水面近乎水平
+  const layers = [
+    { amp: 0.15, freq: 1.4, speed: 0.6 },
+    { amp: 0.1,  freq: 2.3, speed: -0.9 },
+    { amp: 0.05, freq: 3.5, speed: 1.3 },
+  ]
+  let d = `M -2 ${wy}`
+  for (let x = -2; x <= 26; x += 0.4) {
+    let y = wy
+    for (const l of layers) {
+      y += Math.sin(x * l.freq + t * l.speed) * l.amp
+    }
+    d += ` L ${x} ${y}`
+  }
+  d += ` L 26 26 L -2 26 Z`
+  return d
+})
 
 // ==================== 模型能力（识图 / 上下文窗口 / 是否支持思考强度） ====================
 // 免费池模型的能力元数据是静态已知的（后端 freeModelCatalog），开工前就能查到；
@@ -2003,6 +2047,15 @@ function onSearchSelect(id) {
   closeSearchPanel()
 }
 
+// 插件市场：当前为占位入口，后续可接入真实插件商店接口
+const showPluginsPanel = ref(false)
+function openPluginsMarket() {
+  showPluginsPanel.value = true
+}
+function closePluginsPanel() {
+  showPluginsPanel.value = false
+}
+
 function formatSearchDate(ts) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -2090,6 +2143,9 @@ watch(() => sessionId.value, (nid, oid) => {
   activeDockPanel.value = saved.active
   ensureActiveDockPanel()
   showDockAddMenu.value = false
+  // 切会话时重载上下文数据，否则继续显示上个会话的数值
+  loadContextBreakdown(nid || '')
+  sessionTokenStats.value = loadSessionTokenStats(nid || '')
 })
 
 // 消息流里每个 kind:'group' 的组件实例，供后台任务清单点击跳转+展开用

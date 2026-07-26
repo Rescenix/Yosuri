@@ -371,7 +371,7 @@ func streamHTTPClient() *http.Client {
 // 实时把 reasoning_content/content 增量写成 thinking/intent SSE 事件。
 // 返回值里带上实际承接这轮请求的 backend（而不只是个名字字符串），前端要靠它
 // 拿到 vision/context_window/reasoning 这些能力元数据，决定要不要开放识图之类的功能。
-func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any, effort string) (string, []core.ToolCall, int, int, *RouterBackend, error) {
+func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any, effort string, staticSum int) (string, []core.ToolCall, int, int, *RouterBackend, error) {
 	// 空链是真实可能的：本地兜底已于 8186699e 移除，一个 Key 都没配时链就是空的。
 	// 不给这条单独的错误信息的话，用户看到的是 "所有模型源不可用：" 后面跟一片空白。
 	if len(backends) == 0 {
@@ -432,7 +432,7 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		if len(tried) > 0 {
 			fmt.Printf("🔀 [路由] 流式请求由 %s 承接（此前 %d 个源失败）\n", b.Name, len(tried))
 		}
-		content, calls, inTok, outTok, err := drainChatStream(c, resp)
+		content, calls, inTok, outTok, err := drainChatStream(c, resp, msgs, staticSum)
 		resp.Body.Close()
 		usedBackend := b
 		return content, calls, inTok, outTok, &usedBackend, err
@@ -443,7 +443,7 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 // drainChatStream 读一条已建立的 SSE 流，实时转发 thinking/intent 事件。
 // 返回真实拆分的 inputTokens/outputTokens：优先取上游 usage.prompt_tokens/completion_tokens，
 // 上游不回传时退化为字符/4 估算（与四态机历史口径一致）。
-func drainChatStream(c *gin.Context, resp *http.Response) (string, []core.ToolCall, int, int, error) {
+func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any, staticSum int) (string, []core.ToolCall, int, int, error) {
 	reader := bufio.NewReader(resp.Body)
 	var full strings.Builder
 	charCount := 0
@@ -538,6 +538,18 @@ func drainChatStream(c *gin.Context, resp *http.Response) (string, []core.ToolCa
 	// 上游没回传 usage：用字符/4 估算兜底（与四态机 input 估算口径同源）
 	if !gotUsage {
 		outTok = charCount / 4
+		// inputTokens 也要估算：上游不返回 prompt_tokens 时，按 msgs 内容字符/4
+		// 再加上静态部分（system/tools/skill/subagent/memory），得到完整 prompt tokens。
+		// conversationTokens(inTok, staticSum) 才能算出正确的对话部分。
+		charSum := 0
+		for _, m := range msgs {
+			if s, ok := m["content"].(string); ok {
+				charSum += len(s)
+			}
+		}
+		if charSum > 0 {
+			inTok = charSum/4 + staticSum
+		}
 	}
 	return full.String(), calls, inTok, outTok, nil
 }
