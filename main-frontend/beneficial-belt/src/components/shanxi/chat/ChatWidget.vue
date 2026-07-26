@@ -99,37 +99,25 @@
             <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
               <Icon icon="mdi:puzzle-outline" width="18" />
             </button>
-            <!-- AgentFS：当前聊天会话专属的文件修改快照树 -->
-            <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
-              <button
-                class="agentfs-rail-head"
-                type="button"
-                title="AgentFS 修改快照"
-                @click="refreshAgentFSTimeline"
-              >
-                <Icon icon="mdi:source-commit" width="18" />
-              </button>
-              <div v-if="agentFSTimeline.length" class="agentfs-tree">
+            <!-- 会话横条：与 AgentFS 图谱完全分离，保留快速会话跳转 -->
+            <div class="gem-rail-sessions" @mouseenter="openRailCard" @mouseleave="closeRailCardDelayed">
+              <template v-if="railProject.length">
                 <button
-                  v-for="(snapshot, index) in agentFSTimeline"
-                  :key="snapshot.commit + '-' + snapshot.seq"
-                  type="button"
-                  class="agentfs-node"
-                  :class="{
-                    active: selectedAgentFSSnapshot?.commit === snapshot.commit,
-                    latest: index === 0
-                  }"
-                  :title="`${snapshot.rel_path} · ${formatAgentFSTime(snapshot.ts)}`"
-                  @click.stop="openAgentFSSnapshot(snapshot, $event)"
-                >
-                  <span class="agentfs-node-dot">
-                    <Icon :icon="snapshot.op === 'edit' ? 'mdi:pencil-outline' : 'mdi:file-plus-outline'" width="10" />
-                  </span>
-                </button>
-              </div>
-              <div v-else class="agentfs-empty-rail" title="当前会话还没有 AgentFS 修改快照">
-                <span></span><span></span><span></span>
-              </div>
+                  v-for="s in railProject"
+                  :key="s.id"
+                  class="gem-rail-bar"
+                  :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+                  @click="selectSession(s.id)"
+                ></button>
+                <div class="gem-rail-divider"></div>
+              </template>
+              <button
+                v-for="s in railRecent"
+                :key="s.id"
+                class="gem-rail-bar"
+                :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+                @click="selectSession(s.id)"
+              ></button>
             </div>
             <div class="gem-rail-bottom">
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
@@ -236,7 +224,42 @@
           </template>
         </aside>
 
-               <div class="chat-body studio">
+        <Transition name="agentfs-gutter">
+          <div v-if="!sidebarOpen && dockPanels.length === 0" class="agentfs-gutter">
+            <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
+              <button class="agentfs-rail-head" type="button" title="AgentFS 修改快照" @click.stop="refreshAgentFSTimeline">
+                <Icon icon="mdi:source-commit" width="18" />
+              </button>
+              <div v-if="agentFSTimeline.length" class="agentfs-tree">
+                <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="agentfs-link-gradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="var(--app-accent)" stop-opacity=".72" />
+                      <stop offset="100%" stop-color="var(--app-accent)" stop-opacity=".16" />
+                    </linearGradient>
+                  </defs>
+                  <path v-for="link in agentFSGraphLinks" :key="link.key" :d="link.d" class="agentfs-tree-link" />
+                </svg>
+                <button
+                  v-for="node in agentFSGraphNodes"
+                  :key="node.snapshot.commit + '-' + node.snapshot.seq"
+                  type="button"
+                  class="agentfs-node"
+                  :class="{ active: selectedAgentFSSnapshot?.commit === node.snapshot.commit, latest: node.index === 0 }"
+                  :style="{ left: `${node.x}px`, top: `${node.y}px` }"
+                  :title="`${node.snapshot.rel_path} · ${formatAgentFSTime(node.snapshot.ts)}`"
+                  @click.stop="openAgentFSSnapshot(node.snapshot, $event)"
+                >
+                  <span class="agentfs-node-dot"><Icon :icon="node.snapshot.op === 'edit' ? 'mdi:pencil-outline' : 'mdi:file-plus-outline'" width="10" /></span>
+                  <span class="agentfs-node-label">{{ node.shortName }}</span>
+                </button>
+              </div>
+              <div v-else class="agentfs-empty-rail" title="当前会话还没有 AgentFS 修改快照"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </Transition>
+
+        <div class="chat-body studio">
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
 
@@ -376,6 +399,28 @@
               <button v-show="showScrollButton" class="scroll-to-bottom-btn" @click="forceScrollToBottom" title="回到底部">
                 <Icon icon="mdi:chevron-down" width="20" color="#555" />
               </button>
+
+              <!-- ===== 任务清单条（TODO）=====
+                   仿 Hermes：贴在输入框正上方，agent 调 update_todo 时实时勾选。
+                   后端推 todo 事件 → todoState.items 全量覆盖。无项时整条不渲染。 -->
+              <div v-if="todoState.items.length" class="todo-bar">
+                <div class="todo-bar-head">
+                  <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
+                  <span class="todo-bar-title">任务清单</span>
+                  <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
+                </div>
+                <ul class="todo-bar-list">
+                  <li
+                    v-for="(it, i) in todoState.items"
+                    :key="i"
+                    class="todo-bar-item"
+                    :class="'todo-' + it.status"
+                  >
+                    <span class="todo-bar-mark">{{ it.status === 'done' ? '☑' : it.status === 'doing' ? '▶' : '☐' }}</span>
+                    <span class="todo-bar-text">{{ it.text }}</span>
+                  </li>
+                </ul>
+              </div>
 
               <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
               <QuestionModal
@@ -1339,6 +1384,43 @@ const agentFSDiffError = ref('')
 const agentFSDiffCardStyle = ref({ top: '120px', left: '76px' })
 let agentFSPollTimer = null
 let boundAgentFSKey = ''
+const agentFSGraphWidth = 260
+
+const agentFSGraphNodes = computed(() => {
+  const paths = [...new Set(agentFSTimeline.value.map(item => item.rel_path))]
+  const laneCount = Math.min(Math.max(paths.length, 1), 5)
+  const gap = laneCount > 1 ? 168 / (laneCount - 1) : 0
+  const lanes = new Map(paths.map((path, index) => [path, laneCount === 1 ? 0 : -84 + (index % laneCount) * gap]))
+  return agentFSTimeline.value.map((snapshot, index) => {
+    const name = (snapshot.rel_path || '').split('/').pop() || snapshot.rel_path
+    return {
+      snapshot,
+      index,
+      x: agentFSGraphWidth / 2 + (lanes.get(snapshot.rel_path) || 0) - 15,
+      y: 28 + index * 52,
+      shortName: name.length > 15 ? `${name.slice(0, 12)}…` : name
+    }
+  })
+})
+const agentFSGraphHeight = computed(() => Math.max(120, 28 + agentFSGraphNodes.value.length * 52))
+const agentFSGraphLinks = computed(() => {
+  const links = []
+  const previousByPath = new Map()
+  for (const node of agentFSGraphNodes.value) {
+    const previous = previousByPath.get(node.snapshot.rel_path)
+    const x1 = previous ? previous.x + 15 : agentFSGraphWidth / 2
+    const y1 = previous ? previous.y + 15 : 0
+    const x2 = node.x + 15
+    const y2 = node.y + 15
+    const mid = y1 + (y2 - y1) * 0.48
+    links.push({
+      key: `${node.snapshot.rel_path}-${node.snapshot.seq}`,
+      d: `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`
+    })
+    previousByPath.set(node.snapshot.rel_path, node)
+  }
+  return links
+})
 
 const agentFSDiffLines = computed(() => {
   let oldLine = 0
@@ -2141,6 +2223,11 @@ const {
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+// 任务清单完成数（输入框上方 todo-bar 用），仿 Hermes 勾选清单。
+const todoDoneCount = computed(() =>
+  (todoState.items || []).filter(it => it.status === 'done').length
+)
+
 
 // 导航轴当前高亮的用户消息 id：必须放在 useChatWidget 解构之后，避免 setup 阶段命中 TDZ。
 // 默认跟随最后一条用户消息；点击节点后切换到对应消息，新消息进来再重置回最新。
@@ -2527,6 +2614,10 @@ watch(
 watch(sidebarOpen, open => {
   if (!open) refreshAgentFSTimeline()
   else closeAgentFSDiff()
+})
+watch(dockPanels, panels => {
+  if (panels.length) closeAgentFSDiff()
+  else if (!sidebarOpen.value) refreshAgentFSTimeline()
 })
 // 切进 git 状态条可见的 Code 模式时刷新一次，避免面板上的 +N/-N 停留在挂载时的旧快照
 watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })

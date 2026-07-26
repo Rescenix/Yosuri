@@ -2621,6 +2621,7 @@ min-height: 90px !important;
    间隙是白色（与中间聊天区同色）不会割裂视觉，左右卡片靠自身边框+阴影浮起来。
    非展开的小窗气泡不受影响。 */
 .chat-window.expanded .chat-body-row {
+  position: relative;
   background: var(--app-surface);
   padding: 8px;
   gap: 8px;
@@ -2871,6 +2872,26 @@ min-height: 90px !important;
 .gem-rail-sessions::-webkit-scrollbar { display: none; }
 
 /* ==================== AgentFS 会话级修改轨迹 ==================== */
+.agentfs-gutter {
+  position: absolute;
+  top: 76px;
+  bottom: 76px;
+  left: 84px;
+  z-index: 4;
+  width: 280px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.agentfs-gutter-enter-active,
+.agentfs-gutter-leave-active {
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(.2,.8,.2,1);
+}
+.agentfs-gutter-enter-from,
+.agentfs-gutter-leave-to {
+  opacity: 0;
+  transform: translateX(-10px) scale(0.97);
+}
 .agentfs-rail {
   position: relative;
   flex: 1;
@@ -2881,6 +2902,7 @@ min-height: 90px !important;
   align-items: center;
   padding: 10px 0 14px;
   overflow: hidden;
+  pointer-events: none;
 }
 .agentfs-rail-head {
   position: relative;
@@ -2898,6 +2920,7 @@ min-height: 90px !important;
   cursor: pointer;
   box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 12%, transparent);
   transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  pointer-events: auto;
 }
 .agentfs-rail-head:hover {
   transform: translateY(-1px);
@@ -2909,34 +2932,28 @@ min-height: 90px !important;
   position: relative;
   flex: 1;
   min-height: 0;
-  width: 100%;
+  width: 260px;
   margin-top: 10px;
-  padding: 4px 0 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
   overflow-y: auto;
+  overflow-x: visible;
   scrollbar-width: none;
+  pointer-events: none;
 }
 .agentfs-tree::-webkit-scrollbar { display: none; }
-.agentfs-tree::before {
-  content: "";
+.agentfs-tree-links {
   position: absolute;
-  top: 10px;
-  bottom: 13px;
-  left: 50%;
-  width: 1px;
-  transform: translateX(-50%);
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--app-accent) 55%, var(--app-border)),
-    var(--app-border) 70%,
-    transparent
-  );
+  inset: 0;
+  overflow: visible;
+}
+.agentfs-tree-link {
+  fill: none;
+  stroke: url(#agentfs-link-gradient);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--app-accent) 22%, transparent));
 }
 .agentfs-node {
-  position: relative;
+  position: absolute;
   z-index: 1;
   width: 30px;
   height: 30px;
@@ -2947,7 +2964,11 @@ min-height: 90px !important;
   border: 0;
   background: transparent;
   cursor: pointer;
+  pointer-events: auto;
+  transform: translateZ(0);
+  transition: transform 0.18s ease;
 }
+.agentfs-node:hover { transform: scale(1.04); z-index: 3; }
 .agentfs-node-dot {
   width: 14px;
   height: 14px;
@@ -2982,6 +3003,31 @@ min-height: 90px !important;
   border: 1px solid var(--app-accent);
   border-radius: 50%;
   animation: agentfsRipple 2.2s ease-out infinite;
+}
+.agentfs-node-label {
+  position: absolute;
+  top: 27px;
+  left: 50%;
+  max-width: 100px;
+  padding: 3px 6px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--app-surface) 90%, transparent);
+  color: var(--app-text-faint);
+  font: 9px/1.2 "JetBrains Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-50%) translateY(-3px);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+.agentfs-node:hover .agentfs-node-label,
+.agentfs-node.active .agentfs-node-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 .agentfs-empty-rail {
   flex: 1;
