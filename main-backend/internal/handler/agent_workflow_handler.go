@@ -504,7 +504,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				}
 				continue
 			}
-			// update_todo 是纯 UI 副作用（更新左下角便签），同样在这层办掉、不进执行链
+			// update_todo 是纯 UI 副作用（更新输入框上方的任务清单条），同样在这层办掉、不进执行链
 			if tc.Function.Name == updateTodoToolName {
 				items, ack := handleUpdateTodo(tc.Function.Arguments)
 				handled[i] = ack

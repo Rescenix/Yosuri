@@ -22,8 +22,8 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     const APPROVAL_TIMEOUT_SEC = 60
     const approvalTimers = new Map() // id -> intervalId
 
-    // 当前任务 TODO：agent 调 update_todo 时后端推 todo 事件,便签(左下角)据此实时勾选。
-    // 全局共享:便签渲染在 app 层(侧栏折叠时),不隶属某条消息。
+    // 当前任务 TODO：agent 调 update_todo 时后端推 todo 事件，输入框上方的 todo-bar 据此实时勾选。
+    // 全局共享，不隶属某条消息，挂在 ChatWidget 输入框上方（仿 Hermes 勾选清单）。
     const todoState = reactive({ items: [] })
 
     // ask_user 提问：agent 调 ask_user 工具时后端推 question 事件，这里压入一个
