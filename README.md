@@ -40,14 +40,10 @@ AI 联动改十个文件，改到第五个崩了，前四个已脏写进硬盘�
 
 ## 特性
 
-![主界面：三栏布局 + 右侧 Harness 实时架构面板](docs/screenshots/01-main-ui.png)
-
 ### 差异化能力
 
 - **AgentFS Trace：会话级 Git 痕迹树** —— 侧栏一条持续生长的快照树，一会话一轨迹，点击节点看玻璃质感 Diff 卡片；所有轨迹来自隔离影子 Git 仓库，不向主仓库写额外提交。
 - **Harness Flow：实时工作流架构图** —— 聊天右侧内嵌画布，把 Gateway / Memory / LLM / Tools / Reply 及 Trace / Eval / Release 阶段串成真实事件驱动的流动图，当前链路高亮。
-
-  ![Harness 实时架构面板](docs/screenshots/02-harness-flow.png)
 - **Agent 主动 TODO** —— 复杂任务开始即发布 `pending / doing / done` 结构化清单，SSE 推送到输入框上方，跨上下文压缩不丢计划、断点可恢复。
 - **主动向用户提问（Human-in-the-loop）** —— `ask_user` 在工作流现场发起结构化决策（单选/多选/自由输入），回答作为正式上下文原地续跑，绝不擅自猜测。
 - **断点续传** —— 每轮自动快照（消息历史、工具、TODO、Token 计数），重启或断网后前端展示恢复条，从断点轮次重放。
@@ -93,7 +89,7 @@ re0/
 │   └── mcp/               # 自研 MCP server（grep/shell/memory…）
 ├── main-frontend/beneficial-belt/   # Astro + Vue 3 前端
 ├── harness/               # Python 脚本（MCP/测试/工具）
-└── docs/                  # 文档与截图资产
+└── docs/                  # 文档资产
 ```
 
 ## 快速开始
