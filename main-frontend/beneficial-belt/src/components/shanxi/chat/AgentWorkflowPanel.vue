@@ -63,7 +63,7 @@
 
       <!-- 收纳起来的工具/思考时间线 -->
       <template v-else>
-        <div class="flow-summary" @click="summaryExpanded[gIdx] = !summaryExpanded[gIdx]">
+        <div class="flow-summary" @click="toggleSummary(group, gIdx)">
           <div class="flow-summary-main">
             <Icon icon="mdi:star-four-points" width="16" class="flow-summary-icon" />
             <span class="flow-summary-text">{{ groupSummaryTitle(group) }}</span>
@@ -82,11 +82,11 @@
             <span v-if="groupWriteCount(group)" class="flow-summary-badge write">{{ groupWriteCount(group) }} 写</span>
             <span v-if="groupEditCount(group)" class="flow-summary-badge edit">{{ groupEditCount(group) }} 改</span>
           </div>
-          <span class="flow-chevron" :class="{ open: summaryExpanded[gIdx] }">›</span>
+          <span class="flow-chevron" :class="{ open: isSummaryExpanded(group, gIdx) }">›</span>
         </div>
 
         <Transition name="flow-body">
-          <div v-show="summaryExpanded[gIdx]" class="flow-body">
+          <div v-show="isSummaryExpanded(group, gIdx)" class="flow-body">
             <template v-for="(b, i) in group.blocks" :key="`${gIdx}-${i}`">
               <!-- 思考 -->
               <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
@@ -204,10 +204,23 @@ const blockGroups = computed(() => {
 // 每个 summary 组的展开状态
 const summaryExpanded = reactive({})
 
+// 正在生成参数或正在执行的工具组默认展开，方便实时看增量 diff；
+// 只有该组的工具都收尾后才默认收起。用户点击后的选择优先。
+function groupHasActiveTool(group) {
+  return group.blocks.some(block => block.type === 'tool' &&
+    (block.status === 'generating' || block.status === 'running'))
+}
+function isSummaryExpanded(group, index) {
+  return summaryExpanded[index] ?? groupHasActiveTool(group)
+}
+function toggleSummary(group, index) {
+  summaryExpanded[index] = !isSummaryExpanded(group, index)
+}
+
 // 各类型 block 统计（按组）
 const groupToolBlocks = (g) => g.blocks.filter(b => b.type === 'tool')
 const groupThinkingBlocks = (g) => g.blocks.filter(b => b.type === 'thinking')
-const groupRunningCount = (g) => groupToolBlocks(g).filter(b => b.status === 'running').length
+const groupRunningCount = (g) => groupToolBlocks(g).filter(b => b.status === 'generating' || b.status === 'running').length
 const groupThinkingCount = (g) => groupThinkingBlocks(g).length
 const groupToolCount = (g) => groupToolBlocks(g).length
 const groupReadCount = (g) => groupToolBlocks(g).filter(b => isRead(b.name)).length
