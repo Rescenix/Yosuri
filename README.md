@@ -1,3 +1,5 @@
+[English](./README.en.md) · [中文](./README.md) · [正体中文](./README.zhtw.md) · [日本語](./README.ja.md) · [Tiếng Việt](./README.vi.md) · [தமிழ்](./README.ta.md)
+
 # ResceneAgent
 
 > 前端特化的多智能体作战平台 —— 把 IDE、终端、浏览器和一支 AI 团队，塞进同一个对话框。以数字生命「Aurora」为核心，从需求拆解 → 代码落地 → 运行验证，闭环在聊天框里完成。
@@ -146,21 +148,3 @@ npm run dev    # http://localhost:4322
  </picture>
 </a>
 ---
-
-## English
-
-**ResceneAgent** is a frontend-specialized multi-agent platform that packs an IDE, terminal, browser, and an AI team into a single chat box. Built around the digital persona **Aurora**, it closes the loop from requirement breakdown → code → runtime verification, all inside one conversation.
-
-**Why pull it?** Most AI coding assistants can *talk* about code. ResceneAgent *writes, runs, and verifies* — inside guardrails that make autonomous editing safe enough to trust.
-
-### Core differentiators
-
-- **AgentFS — a transaction layer for AI writes.** Snapshot-isolated, auditable, rollback-capable file operations backed by a per-session shadow git repo (`~/rescene_data/agentfs/`, physically isolated from your project). A runaway agent edit is always recoverable. *Roots: VFS / Git / database transactions; the real difference is making this a systematic, agent-facing write-transaction layer.*
-- **AgentFS Trace** — a live, per-session shadow-Git tree with hover-to-view diff cards and one-click time-travel recovery.
-- **Memory / state dual-track** — `MEMORY.md` (global) + `workdir.md` (per-project) are single-file facts the agent writes to *and* reads from, auto-injected at every workflow start.
-- **Agent-driven TODO** — a live `pending / doing / done` plan that survives context compression and resumes with the workflow.
-- **Real Human-in-the-loop** — `ask_user` pauses the workflow for genuine decisions; irreversible ops (delete/move) always require approval even in YOLO mode.
-- **Live render & verify** — agent-written HTML renders in a real Chromium engine (CDP, not iframe); a post-workflow gate runs `go build` / `npm run build` + screenshot on completion.
-- **Embedded IDE surface** — Monaco editor, recursive file tree, real PowerShell terminal, VS-Code-style diff, and a 2D skin system with Live2D — all inside the chat panel.
-
-Licensed under [MIT](./LICENSE). Setup details (env vars, quick start, repo layout) are in the Chinese section above.
