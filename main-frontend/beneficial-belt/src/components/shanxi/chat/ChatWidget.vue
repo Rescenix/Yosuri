@@ -79,6 +79,8 @@
             :sessions="sessionList"
             :active-session="activeSession"
             :running-session="runningSession"
+            :agentfs-visible="showAgentFSAudit"
+            :harness-visible="showHarnessWorkflow"
             @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
@@ -86,6 +88,8 @@
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
             @open-plugins="openPluginsMarket"
+            @toggle-agentfs="toggleAgentFSAudit"
+            @toggle-harness="toggleHarnessWorkflow"
           />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
@@ -120,28 +124,12 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
-              <div v-if="railsObscuredByDock" class="gem-rail-context-actions">
-                <button
-                  class="gem-icon-btn"
-                  type="button"
-                  title="预览 AgentFS 审计轨迹"
-                  @mouseenter="openRailUtilityPreview('agentfs', $event)"
-                  @focus="openRailUtilityPreview('agentfs', $event)"
-                  @mouseleave="closeRailUtilityPreviewDelayed"
-                >
-                  <Icon icon="mdi:source-commit" width="18" />
-                </button>
-                <button
-                  class="gem-icon-btn"
-                  type="button"
-                  title="预览 Harness 工作流"
-                  @mouseenter="openRailUtilityPreview('harness', $event)"
-                  @focus="openRailUtilityPreview('harness', $event)"
-                  @mouseleave="closeRailUtilityPreviewDelayed"
-                >
-                  <Icon icon="mdi:transit-connection-variant" width="18" />
-                </button>
-              </div>
+              <button class="gem-icon-btn" :class="{ active: showAgentFSAudit }" @click="toggleAgentFSAudit" :title="showAgentFSAudit ? '关闭审计痕迹' : '显示审计痕迹'">
+                <Icon icon="mdi:source-commit" width="18" />
+              </button>
+              <button class="gem-icon-btn" :class="{ active: showHarnessWorkflow }" @click="toggleHarnessWorkflow" :title="showHarnessWorkflow ? '关闭工作流图' : '显示工作流图'">
+                <Icon icon="mdi:transit-connection-variant" width="18" />
+              </button>
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
@@ -280,7 +268,7 @@
         </aside>
 
         <Transition name="agentfs-gutter">
-          <div v-if="!sidebarOpen && (!dockPanels.length || dockHidden) && !dockExpanded" class="agentfs-gutter">
+          <div v-if="showAgentFSAudit && utilitySurfacesVisible && !sidebarOpen && (!dockPanels.length || dockHidden) && !dockExpanded" class="agentfs-gutter">
             <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
               <div v-if="agentFSTimeline.length" ref="agentFSTreeRef" class="agentfs-tree">
                 <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
@@ -359,7 +347,7 @@
             </div>
 
             <!-- 只覆盖聊天内容自身的右侧留白；不参与外层工作区布局。 -->
-            <HarnessFlowRail v-if="isExpanded && (!dockPanels.length || dockHidden)" :flow="lastAgentFlow" />
+            <HarnessFlowRail v-if="showHarnessWorkflow && utilitySurfacesVisible && isExpanded && (!dockPanels.length || dockHidden)" :flow="lastAgentFlow" />
 
 
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
@@ -1386,9 +1374,6 @@ function setActiveDockPanel(key) {
 // terminal 的会话、预览的页面导航状态都还在，随手点开任意一个面板按钮就原样回来。
 const dockExpanded = ref(false)
 const dockHidden = ref(false)
-const railsObscuredByDock = computed(() =>
-  !sidebarOpen.value && dockPanels.value.length > 0 && !dockHidden.value
-)
 const showSnippet = ref(false)
 const snippetInsertCmd = ref('')
 function toggleDockExpanded() {
@@ -2370,6 +2355,10 @@ const showParams = ref(false)
 
 // ==================== 左侧 Gemini 风侧栏：展开 vs 折叠竖条 ====================
 const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
+// 这两个视图是按需打开的辅助界面。每次进入默认关闭，且首页不渲染，避免挤压欢迎页。
+const showAgentFSAudit = ref(false)
+const showHarnessWorkflow = ref(false)
+const utilitySurfacesVisible = computed(() => messages.value.length > 0)
 const sidebarWidth = ref(220)
 const { startDrag: startSidebarWidthDrag } = useResizableWidth(sidebarWidth, {
   min: 180,
@@ -2380,6 +2369,13 @@ const { startDrag: startSidebarWidthDrag } = useResizableWidth(sidebarWidth, {
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
   localStorage.setItem('sidebarOpen', sidebarOpen.value ? '1' : '0')
+}
+function toggleAgentFSAudit() {
+  showAgentFSAudit.value = !showAgentFSAudit.value
+  if (!showAgentFSAudit.value) closeAgentFSDiff()
+}
+function toggleHarnessWorkflow() {
+  showHarnessWorkflow.value = !showHarnessWorkflow.value
 }
 
 // ==================== Gemini 风格对话搜索面板 ====================
