@@ -8,6 +8,7 @@ package handler
 //   model_info      {name, vision, context_window, reasoning}  // 本轮实际承接的 backend 能力元数据，每个工作流只发一次
 //   thinking        {content}   // 模型 reasoning_content 增量（模型支持时才有）
 //   intent          {content}   // 叙述文本增量（工具调用前的意图说明 / 最终回答）
+//   action_delta    {id, name, args_delta} // 工具参数生成中的增量；只用于前端预览，不执行
 //   action          {id, name, args}         // args 是真实 JSON 字符串
 //   result          {id, name, ok, output}   // 工具执行结果
 //   workflow_done   {status, final_output, input_tokens, output_tokens}

@@ -454,6 +454,10 @@ func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any,
 	var full strings.Builder
 	charCount := 0
 	callsMap := map[int]*core.ToolCall{}
+	// tool_calls 的 arguments 也是流式 token。以前只累计到 callsMap，等整轮结束后才
+	// 发 action，导致前端无法在模型还在生成文件内容时展示红绿 diff。
+	// emittedToolStarts 确保每个调用只发一次空 delta，用来尽早创建工具卡片。
+	emittedToolStarts := map[int]bool{}
 	// 真实 usage：上游在最后一个空 choices chunk 里回传（stream_options.include_usage）
 	var inTok, outTok int
 	gotUsage := false
@@ -527,8 +531,21 @@ func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any,
 					if name, ok := fnMap["name"].(string); ok && name != "" {
 						tc.Function.Name = name
 					}
+					if tc.ID != "" && tc.Function.Name != "" && !emittedToolStarts[idx] {
+						writeCodeSSE(c, "action_delta", map[string]any{
+							// 少数兼容服务会先送 arguments、后送 name；把已累计部分
+							// 一次补发，避免前端漏掉文件内容的开头。
+							"id": tc.ID, "name": tc.Function.Name, "args_delta": tc.Function.Arguments,
+						})
+						emittedToolStarts[idx] = true
+					}
 					if argsStr, ok := fnMap["arguments"].(string); ok {
 						tc.Function.Arguments += argsStr
+						if tc.ID != "" && tc.Function.Name != "" && argsStr != "" {
+							writeCodeSSE(c, "action_delta", map[string]any{
+								"id": tc.ID, "name": tc.Function.Name, "args_delta": argsStr,
+							})
+						}
 					}
 				}
 			}

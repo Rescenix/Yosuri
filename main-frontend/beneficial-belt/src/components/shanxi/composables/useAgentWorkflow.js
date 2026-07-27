@@ -200,6 +200,22 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('thinking', e => appendText('thinking', JSON.parse(e.data).content))
         es.addEventListener('intent', e => appendText('intent', JSON.parse(e.data).content))
 
+        // 工具参数同样是流式生成的。先把尚未闭合的 JSON 保存到 _rawArgs，
+        // AgentWorkflowPanel 会从中容错提取 path/content/newText 来实时画预览 diff。
+        // 这里只展示草稿；后端仍会等完整 action 后才真正执行文件写入。
+        es.addEventListener('action_delta', e => {
+            const d = JSON.parse(e.data)
+            if (!d.id || !d.name) return
+            let t = [...flow.blocks].reverse().find(b => b.type === 'tool' && b.id === d.id)
+            if (!t) {
+                t = { type: 'tool', id: d.id, name: d.name, args: {}, _rawArgs: '', status: 'generating', output: '', expanded: true, startTime: Date.now(), elapsedMs: 0 }
+                flow.blocks.push(t)
+            }
+            t.name = d.name
+            t._rawArgs = (t._rawArgs || '') + (d.args_delta || '')
+            onStreamUpdate?.()
+        })
+
         // 上下文压缩：后端在上下文超窗口 80% 时把早期轮次折叠成摘要，插一个轻量块
         // 让用户知道"这里发生了压缩、省了多少"，而不是默默改写历史。
         es.addEventListener('context_compressed', e => {
@@ -224,7 +240,16 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             let args = {}
             try { args = JSON.parse(d.args || '{}') } catch { /* 参数留空对象，卡片仍可显示工具名 */ }
             // startTime：记下发起时刻，result 到达时算耗时（图1 那种「完成 41ms」徽章）
-            flow.blocks.push({ type: 'tool', id: d.id, name: d.name, args, status: 'running', output: '', expanded: false, startTime: Date.now(), elapsedMs: 0 })
+            const t = [...flow.blocks].reverse().find(b => b.type === 'tool' && b.id === d.id)
+            if (t) {
+                t.name = d.name
+                t.args = args
+                t._rawArgs = d.args || ''
+                t.status = 'running'
+                t.expanded = false
+            } else {
+                flow.blocks.push({ type: 'tool', id: d.id, name: d.name, args, _rawArgs: d.args || '', status: 'running', output: '', expanded: false, startTime: Date.now(), elapsedMs: 0 })
+            }
             onStreamUpdate?.()
         })
 
@@ -236,6 +261,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
                 t.status = d.ok ? 'ok' : 'error'
                 t.output = d.output || ''
                 t.elapsedMs = t.startTime ? (Date.now() - t.startTime) : 0
+                if (d.ok && /^(write_file|edit_file|mcp__fs__(write_file|edit_file|create_file))$/.test(d.name || t.name)) {
+                    window.dispatchEvent(new CustomEvent('agent-working-diff-changed'))
+                }
             }
             onStreamUpdate?.()
         })

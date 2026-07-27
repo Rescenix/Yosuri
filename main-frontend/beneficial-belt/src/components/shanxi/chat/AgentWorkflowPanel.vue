@@ -238,6 +238,7 @@ function fmtMs(ms) {
 }
 // 状态徽章文案：完成带耗时、进行中、失败
 function toolBadge(b) {
+  if (b.status === 'generating') return '生成预览'
   if (b.status === 'running') return '进行中'
   if (b.status === 'error') return '失败'
   const t = fmtMs(b.elapsedMs)
@@ -282,7 +283,8 @@ function baseName(p) {
 // 动作对象：文件类取文件名（全路径太长且没信息量），命令类取命令原文，其余取首个参数
 function target(b) {
   const a = b.args || {}
-  if (a.path) return baseName(a.path)
+  const path = filePath(b)
+  if (path) return baseName(path)
   const v = a.command || a.task || a.query || Object.values(a)[0] || ''
   const s = String(v)
   return s.length > 48 ? s.slice(0, 48) + '…' : s
@@ -294,7 +296,7 @@ function actionText(b) {
   if (b.name === 'load_tools') return b.status === 'running' ? '加载 MCP 工具中…' : '加载了 MCP 工具'
   const verb = VERBS[b.name] || (b.name.startsWith('mcp__') ? b.name.split('__').slice(1).join(' · ') : b.name)
   const obj = target(b)
-  const running = b.status === 'running'
+  const running = b.status === 'running' || b.status === 'generating'
   // 读文件时把 head/tail/行范围（偏移和限制）显式带出来，否则用户以为每次都读全文
   const range = isRead(b.name) ? readRangeLabel(b) : ''
   const suffix = range ? `（${range}）` : ''
@@ -303,13 +305,14 @@ function actionText(b) {
 }
 
 // 只有写/改文件才有增删行数（对齐设计稿的 "+11 −6"）；其它工具返回 null 不显示。
-// 模板里一行要问三次（有没有、加了几、删了几），而流式期间每来一个 token 就重渲染一遍，
-// 不缓存就是对着整份文件反复跑 diff。工具块的 args 落定后不再变，按块缓存是安全的。
+// 参数现在会流式到达，因此缓存必须以原始参数为 key；不能再只按工具块缓存。
 const countsCache = new WeakMap()
 function diffCounts(b) {
-  if (countsCache.has(b)) return countsCache.get(b)
+  const raw = b._rawArgs || JSON.stringify(b.args || {})
+  const cached = countsCache.get(b)
+  if (cached?.raw === raw) return cached.value
   const v = computeDiffCounts(b)
-  countsCache.set(b, v)
+  countsCache.set(b, { raw, value: v })
   return v
 }
 function computeDiffCounts(b) {
@@ -401,22 +404,35 @@ function readRows(b) {
 // MCP filesystem 的 edit_file 真实 schema：{ path, edits: [{oldText, newText}] }（数组，
 // 每项一对 oldText/newText）。内置 edit_file 是 { path, old_string, new_string }（单数）。
 // 两者都要兼容。write_file 内容字段内置/MCP 都是 content，path 都是 path。
+function streamedArg(b, key) {
+  const raw = b._rawArgs || ''
+  // 截取 JSON 字符串的已到达部分；JSON.parse 负责还原转义。流恰好停在反斜杠时，
+  // 保留上一次可解析内容，下一批 token 到来后自然补全。
+  const match = new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)`).exec(raw)
+  if (!match) return undefined
+  try { return JSON.parse(`"${match[1]}"`) } catch { return undefined }
+}
+function argValue(b, ...keys) {
+  const a = b.args || {}
+  for (const key of keys) {
+    const streamed = streamedArg(b, key)
+    if (streamed !== undefined) return streamed
+    if (a[key] != null) return a[key]
+  }
+  return ''
+}
 function editOld(b) {
   const a = b.args || {}
   if (a.old_string) return a.old_string
-  if (a.oldText) return a.oldText
-  if (Array.isArray(a.edits) && a.edits[0]) return a.edits[0].oldText || ''
-  return ''
+  return argValue(b, 'old_string', 'oldText')
 }
 function editNew(b) {
   const a = b.args || {}
   if (a.new_string) return a.new_string
-  if (a.newText) return a.newText
-  if (Array.isArray(a.edits) && a.edits[0]) return a.edits[0].newText || ''
-  return ''
+  return argValue(b, 'new_string', 'newText')
 }
-function fileContent(b) { const a = b.args || {}; return a.content || '' }
-function filePath(b) { const a = b.args || {}; return a.path || '' }
+function fileContent(b) { return argValue(b, 'content') }
+function filePath(b) { return argValue(b, 'path') }
 
 // 判断某个选项是否被用户的回答命中（answer 可能是「A、B」这类拼接，或自由文本）
 function isChosenAnswer(block, value) {

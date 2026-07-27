@@ -103,7 +103,15 @@ async function fetchList() {
     listLoading.value = false
   }
 }
-onMounted(fetchList)
+function refreshAfterAgentWrite() {
+  // 列表和已展开文件内容都来自 Git 工作树；写入完成后旧缓存不再可信。
+  for (const key of Object.keys(contents)) delete contents[key]
+  fetchList()
+}
+onMounted(() => {
+  fetchList()
+  window.addEventListener('agent-working-diff-changed', refreshAfterAgentWrite)
+})
 
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -145,7 +153,10 @@ async function copyFullPath() {
 }
 function onEscClose(e) { if (e.key === 'Escape') closeCtxMenu() }
 onMounted(() => document.addEventListener('keydown', onEscClose))
-onUnmounted(() => document.removeEventListener('keydown', onEscClose))
+onUnmounted(() => {
+  document.removeEventListener('keydown', onEscClose)
+  window.removeEventListener('agent-working-diff-changed', refreshAfterAgentWrite)
+})
 
 async function toggleFile(df) {
   expanded[df.path] = !expanded[df.path]
