@@ -139,6 +139,11 @@ func HandlePreviewCDP(c *gin.Context) {
 		writePreviewCDPError(clientConn, "预览不可用：无法启用 Chrome 页面")
 		return
 	}
+	// 双向交互核心：启用 Input 域，这样前端的鼠标/键盘才能被打进这台 Chromium。
+	if err := cdpConn.WriteJSON(map[string]any{"id": 1, "method": "Input.enable"}); err != nil {
+		writePreviewCDPError(clientConn, "预览不可用：无法启用 Chrome 输入")
+		return
+	}
 	if err := cdpConn.WriteJSON(map[string]any{
 		"id":     2,
 		"method": "Page.startScreencast",
@@ -148,43 +153,142 @@ func HandlePreviewCDP(c *gin.Context) {
 		return
 	}
 
+	// 坐标映射：前端 canvas 像素 → CDP 所需的页面坐标系。
+	// 前端发 input 时带 canvas 宽高(layoutW/layoutH)与实际页面尺寸(viewW/viewH)，
+	// 没有则按 1:1 透传。这样用户戳画面哪个点，就落到 Chromium 里对应的元素。
+	toPageCoords := func(x, y, layoutW, layoutH, viewW, viewH float64) (float64, float64) {
+		px, py := x, y
+		if layoutW > 0 && viewW > 0 {
+			px = x / layoutW * viewW
+		}
+		if layoutH > 0 && viewH > 0 {
+			py = y / layoutH * viewH
+		}
+		return px, py
+	}
+
+	// 把前端来的 input 消息翻译成 CDP Input 命令打进 Chromium。
+	dispatchInput := func(raw []byte) {
+		var m struct {
+			Kind string `json:"kind"` // mouse | key
+			// mouse
+			Action   string  `json:"action"`   // mousePressed | mouseReleased | mouseMoved
+			X, Y     float64 `json:"x"`        // canvas 坐标系
+			Button   string  `json:"button"`   // left | right | middle
+			LayoutW  float64 `json:"layoutW"`  // 前端 canvas 显示宽度
+			LayoutH  float64 `json:"layoutH"`  // 前端 canvas 显示高度
+			ViewW    float64 `json:"viewW"`    // Chromium 页面宽度
+			ViewH    float64 `json:"viewH"`    // Chromium 页面高度
+			// key
+			Key       string `json:"key"`
+			Code      string `json:"code"`
+			KeyAction string `json:"keyAction"` // keyDown | keyUp
+		}
+		if json.Unmarshal(raw, &m) != nil {
+			return
+		}
+		switch m.Kind {
+		case "mouse":
+			px, py := toPageCoords(m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH)
+			log.Printf("🖱️ [预览输入] mouse %s @ (%.0f,%.0f) -> page(%.0f,%.0f) btn=%s",
+				m.Action, m.X, m.Y, px, py, m.Button)
+			cdpConn.WriteJSON(map[string]any{
+				"id":     nextPreviewReqID(),
+				"method": "Input.dispatchMouseEvent",
+				"params": map[string]any{
+					"type":       m.Action,
+					"x":          px,
+					"y":          py,
+					"button":     m.Button,
+					"clickCount": boolToInt(m.Action == "mousePressed"),
+				},
+			})
+		case "key":
+			ka := m.KeyAction
+			if ka == "" {
+				ka = "keyDown"
+			}
+			cdpConn.WriteJSON(map[string]any{
+				"id":     nextPreviewReqID(),
+				"method": "Input.dispatchKeyEvent",
+				"params": map[string]any{
+					"type":  ka,
+					"key":   m.Key,
+					"code":  m.Code,
+					"ascii": int(m.Key[0]),
+				},
+			})
+		}
+	}
+
+	// 两条并发读：① 从 CDP 读 screencast 帧转发给前端；② 从前端读 input 打进 CDP。
+	// 用 done 通道让任一侧断开就整体退出。
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			_, payload, err := cdpConn.ReadMessage()
+			if err != nil {
+				writePreviewCDPError(clientConn, "预览不可用：Chrome CDP 连接已断开")
+				return
+			}
+			var message struct {
+				ID     int             `json:"id"`
+				Error  json.RawMessage `json:"error"`
+				Method string          `json:"method"`
+				Params struct {
+					Data      string `json:"data"`
+					SessionID int    `json:"sessionId"`
+				} `json:"params"`
+			}
+			if json.Unmarshal(payload, &message) != nil {
+				continue
+			}
+			if message.ID == 2 && len(message.Error) > 0 {
+				writePreviewCDPError(clientConn, "预览不可用：Chrome 拒绝启动截屏")
+				return
+			}
+			if message.Method != "Page.screencastFrame" || message.Params.Data == "" {
+				continue
+			}
+			if err := clientConn.WriteJSON(map[string]string{
+				"type": "frame",
+				"data": message.Params.Data,
+			}); err != nil {
+				return
+			}
+			if err := cdpConn.WriteJSON(map[string]any{
+				"id":     3,
+				"method": "Page.screencastFrameAck",
+				"params": map[string]any{"sessionId": message.Params.SessionID},
+			}); err != nil {
+				return
+			}
+		}
+	}()
+
 	for {
-		_, payload, err := cdpConn.ReadMessage()
+		select {
+		case <-done:
+			return
+		default:
+		}
+		// 读前端的消息（frame 之外唯一的交互入口）。
+		mt, raw, err := clientConn.ReadMessage()
 		if err != nil {
-			writePreviewCDPError(clientConn, "预览不可用：Chrome CDP 连接已断开")
-			return
+			return // 前端断开
 		}
-		var message struct {
-			ID     int             `json:"id"`
-			Error  json.RawMessage `json:"error"`
-			Method string          `json:"method"`
-			Params struct {
-				Data      string `json:"data"`
-				SessionID int    `json:"sessionId"`
-			} `json:"params"`
-		}
-		if json.Unmarshal(payload, &message) != nil {
-			continue
-		}
-		if message.ID == 2 && len(message.Error) > 0 {
-			writePreviewCDPError(clientConn, "预览不可用：Chrome 拒绝启动截屏")
-			return
-		}
-		if message.Method != "Page.screencastFrame" || message.Params.Data == "" {
-			continue
-		}
-		if err := clientConn.WriteJSON(map[string]string{
-			"type": "frame",
-			"data": message.Params.Data,
-		}); err != nil {
-			return
-		}
-		if err := cdpConn.WriteJSON(map[string]any{
-			"id":     3,
-			"method": "Page.screencastFrameAck",
-			"params": map[string]any{"sessionId": message.Params.SessionID},
-		}); err != nil {
-			return
+		if mt == websocket.TextMessage {
+			var hdr struct {
+				Type string `json:"type"`
+			}
+			if json.Unmarshal(raw, &hdr) != nil {
+				continue
+			}
+			if hdr.Type == "input" {
+				dispatchInput(raw)
+			}
+			// 其它 type（如首帧协商）忽略，保持向后兼容。
 		}
 	}
 }
@@ -350,6 +454,22 @@ func cdpNavigate(tabWS, targetURL string) error {
 		}
 	}
 	return nil
+}
+
+// nextPreviewReqID 返回自增的 CDP 请求 id，避免双向通道里多条命令 id 撞车。
+var previewReqSeq int64
+
+func nextPreviewReqID() int64 {
+	previewReqSeq++
+	return previewReqSeq
+}
+
+// boolToInt 供 CDP 鼠标事件 clickCount 字段使用（按下=1，其它=0）。
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // resolvePreviewURL 把 agent 给的路径/url 规整成前端能导航的地址。
