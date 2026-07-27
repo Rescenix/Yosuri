@@ -2510,10 +2510,6 @@ function onRailCardSelect(id) {
   selectSession(id)
 }
 
-watch(railsObscuredByDock, visible => {
-  if (!visible) railUtilityPreview.value = ''
-})
-
 // ==================== 工具面板状态绑定会话 ====================
 // dockPanels（终端/Diff/预览）是会话的工作现场：切会话/新会话时各自恢复各自的，
 // 修掉"新会话回到首页还挂着上个会话工具弹窗"的 bug。仅内存级（刷新清零）。
