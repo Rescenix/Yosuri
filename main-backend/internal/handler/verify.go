@@ -13,6 +13,7 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -101,6 +102,20 @@ func verifyOnWorkflowDone(c *gin.Context, workflowID string) {
 			url, _, cdpErr, ok := autoOpenBrowserPreview(abs)
 			if ok {
 				result["screenshot"] = map[string]any{"status": "opened", "url": url}
+				// 收尾截图：截「当前内嵌预览活 target」作为交付凭证发聊天（harness 控制，
+				// 不另开浏览器）。与 capture_preview 工具共用同一底层截图能力。
+				if png, serr := capturePreviewScreenshot(""); serr == nil && len(png) > 0 {
+					mime := "image/png"
+					writeCodeSSE(c, "artifact", map[string]any{
+						"id":         fmt.Sprintf("verify_%s_screenshot", workflowID),
+						"kind":       "image",
+						"tool":       "verify_screenshot",
+						"image":      "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(png),
+						"source_url": url,
+						"caption":    "收尾校验：当前内嵌预览页面截图。",
+					})
+					result["screenshot"] = map[string]any{"status": "captured", "url": url}
+				}
 			} else {
 				result["screenshot"] = map[string]any{"status": "skip", "reason": cdpErr}
 			}

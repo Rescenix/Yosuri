@@ -47,20 +47,23 @@ type agentfsSession struct {
 	Workdir   string    `json:"workdir"` // 绝对路径
 	OpenedAt  time.Time `json:"opened_at"`
 	Head      string    `json:"head"` // 影子仓当前 HEAD commit（每次写后更新）
-	Seq       int       `json:"seq"`  // 审计序号计数器
+	Branch    string    `json:"branch"`
+	Seq       int       `json:"seq"` // 审计序号计数器
 }
 
 // agentfsAudit 审计时间线的一行。
 type agentfsAudit struct {
-	Seq        int       `json:"seq"`
-	TS         time.Time `json:"ts"`
-	Op         string    `json:"op"`       // write / edit
-	RelPath    string    `json:"rel_path"` // 相对工作目录的路径
-	BeforeHash string    `json:"before_hash"`
-	AfterHash  string    `json:"after_hash"`
-	Commit     string    `json:"commit"` // 影子仓本次提交的短 hash
-	Tool       string    `json:"tool"`   // mcp__fs__write_file / mcp__fs__edit_file
-	SessionID  string    `json:"session_id"`
+	Seq          int       `json:"seq"`
+	TS           time.Time `json:"ts"`
+	Op           string    `json:"op"`       // write / edit
+	RelPath      string    `json:"rel_path"` // 相对工作目录的路径
+	BeforeHash   string    `json:"before_hash"`
+	AfterHash    string    `json:"after_hash"`
+	Commit       string    `json:"commit"` // 影子仓本次提交的短 hash
+	ParentCommit string    `json:"parent_commit,omitempty"`
+	Branch       string    `json:"branch,omitempty"`
+	Tool         string    `json:"tool"` // mcp__fs__write_file / mcp__fs__edit_file
+	SessionID    string    `json:"session_id"`
 }
 
 // agentfsRoot 返回 AgentFS 数据根目录（可被 RESCENE_DATA_DIR 覆盖，与 session/checkpoint 同域）。
@@ -153,6 +156,7 @@ func OpenAgentFSSession(project, workdir string, boundSessionID ...string) *agen
 	}
 	sess.OpenedAt = time.Now()
 	sess.Head = currentHead(repo)
+	sess.Branch = currentBranch(repo)
 	sess.Seq = 0
 	// 恢复已有会话的 seq（看 audit.jsonl 行数）
 	if data, err := os.ReadFile(agentfsAuditPath(project)); err == nil {
@@ -180,6 +184,14 @@ func currentHead(repo string) string {
 	out, err := gitRun(repo, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+func currentBranch(repo string) string {
+	out, err := gitRun(repo, "branch", "--show-current")
+	if err != nil || strings.TrimSpace(out) == "" {
+		return "main"
 	}
 	return strings.TrimSpace(out)
 }
@@ -265,6 +277,8 @@ func OnAfterWrite(fullName string, args map[string]any) {
 
 	// git 提交（降级：git 不可用则只留文件副本，无时间线）
 	commit := ""
+	parentCommit := currentHead(repo)
+	branch := currentBranch(repo)
 	if gitAvailable {
 		if out, err := gitRun(repo, "add", "-A"); err != nil {
 			log.Printf("⚠️ AgentFS: git add 失败: %v (%s)", err, out)
@@ -281,15 +295,17 @@ func OnAfterWrite(fullName string, args map[string]any) {
 
 	sess.Seq++
 	audit := agentfsAudit{
-		Seq:        sess.Seq,
-		TS:         time.Now(),
-		Op:         opName(fullName),
-		RelPath:    rel,
-		BeforeHash: beforeHash,
-		AfterHash:  afterHash,
-		Commit:     commit,
-		Tool:       fullName,
-		SessionID:  sess.SessionID,
+		Seq:          sess.Seq,
+		TS:           time.Now(),
+		Op:           opName(fullName),
+		RelPath:      rel,
+		BeforeHash:   beforeHash,
+		AfterHash:    afterHash,
+		Commit:       commit,
+		ParentCommit: parentCommit,
+		Branch:       branch,
+		Tool:         fullName,
+		SessionID:    sess.SessionID,
 	}
 	if buf, err := json.Marshal(audit); err == nil {
 		ap := agentfsAuditPath(sess.Project)
@@ -301,6 +317,7 @@ func OnAfterWrite(fullName string, args map[string]any) {
 		}
 	}
 	sess.Head = commit
+	sess.Branch = branch
 }
 
 // opName 把工具名映射成写操作类型。
@@ -341,7 +358,7 @@ func AgentFSOpen(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "AgentFS 会话开启失败（见后端日志）"})
 		return
 	}
-	c.JSON(200, gin.H{"session_id": sess.SessionID, "project": sess.Project, "head": sess.Head})
+	c.JSON(200, gin.H{"session_id": sess.SessionID, "project": sess.Project, "head": sess.Head, "branch": sess.Branch})
 }
 
 // AgentFSLog GET /api/agentfs/log?project= 返回审计时间线。
@@ -378,7 +395,49 @@ func AgentFSLog(c *gin.Context) {
 			log = append(log, a)
 		}
 	}
-	c.JSON(200, gin.H{"project": project, "log": log})
+	repo := agentfsRepoDir(project)
+	c.JSON(200, gin.H{"project": project, "log": log, "current_branch": currentBranch(repo), "head": currentHead(repo)})
+}
+
+// AgentFSCreateBranch POST /api/agentfs/branches
+// {project, commit, name}：从任意审计节点创建真实影子 Git 分支并立即切换。
+func AgentFSCreateBranch(c *gin.Context) {
+	var body struct {
+		Project string `json:"project"`
+		Commit  string `json:"commit"`
+		Name    string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "请求格式错误"})
+		return
+	}
+	body.Name = strings.TrimSpace(body.Name)
+	if body.Project == "" || body.Commit == "" || body.Name == "" {
+		c.JSON(400, gin.H{"error": "project、commit 与 name 必填"})
+		return
+	}
+	repo := agentfsRepoDir(body.Project)
+	if _, err := gitRun(repo, "check-ref-format", "--branch", body.Name); err != nil {
+		c.JSON(400, gin.H{"error": "分支名称无效"})
+		return
+	}
+
+	agentfsMu.Lock()
+	defer agentfsMu.Unlock()
+	if activeSession == nil || activeSession.Project != body.Project {
+		c.JSON(409, gin.H{"error": "当前 AgentFS 会话与项目不匹配"})
+		return
+	}
+	if out, err := gitRun(repo, "checkout", "-q", "-b", body.Name, body.Commit); err != nil {
+		c.JSON(409, gin.H{"error": "创建分支失败", "detail": strings.TrimSpace(out)})
+		return
+	}
+	activeSession.Head = currentHead(repo)
+	activeSession.Branch = currentBranch(repo)
+	c.JSON(200, gin.H{
+		"project": body.Project, "branch": activeSession.Branch,
+		"head": activeSession.Head, "from": body.Commit,
+	})
 }
 
 // AgentFSDiff POST /api/agentfs/diff {project, commit} 返回该 commit 的 git diff。

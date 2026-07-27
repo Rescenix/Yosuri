@@ -170,11 +170,14 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         const effort = localStorage.getItem('debugReasoning') || ''
         // mode: yolo(全自动) / ask(危险工具每步问) / plan(执行前必问)，由底部工具条选出
         const mode = localStorage.getItem('agentMode') || 'yolo'
+        // 生图提供商：设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
+        // 不走提示词——跟识图模型路由一个思路，模型不感知、不浪费 token
+        const imageProvider = localStorage.getItem('imageProvider') || 'pollinations'
         // 续跑：只带 resume=<workflow_id>，task/model/mode/effort 后端全从检查点取，
         // 免得前端此刻的模型选择跟中断前不一致（换模型会让已有 tool_calls 历史串味）
         const url = opts.resumeId
             ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}`
-            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`
+            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}`
         es = new EventSource(url)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
@@ -221,20 +224,93 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('thinking', e => appendText('thinking', JSON.parse(e.data).content))
         es.addEventListener('intent', e => appendText('intent', JSON.parse(e.data).content))
 
-        // 工具参数同样是流式生成的。先把尚未闭合的 JSON 保存到 _rawArgs，
-        // AgentWorkflowPanel 会从中容错提取 path/content/newText 来实时画预览 diff。
-        // 这里只展示草稿；后端仍会等完整 action 后才真正执行文件写入。
+        // 工具参数同样是流式生成的，但绝不能把不断增长的完整 JSON 每个 token 都塞进
+        // Vue 响应式状态：长 HTML 会导致整棵消息树反复渲染，DiffViewer 还会反复做
+        // O(n) diff，累计成 O(n²)，最终把浏览器主线程拖死。
+        //
+        // 像主聊天正文一样做单向 SSE 瀑布：每个字符只解码一次，完成一行就推入
+        // 环形窗口。绝不把累计全文重新塞回 Vue，也不重新 JSON.parse / diff / highlight。
+        const LIVE_LINE_WINDOW = 36
+        function feedLiveContent(progress, delta) {
+            let source = delta
+            if (!progress.inString) {
+                progress.seek = (progress.seek + source).slice(-160)
+                const match = /"(?:content|newText|new_string)"\s*:\s*"/.exec(progress.seek)
+                if (!match) return
+                const consumed = match.index + match[0].length
+                source = progress.seek.slice(consumed)
+                progress.seek = ''
+                progress.inString = true
+            }
+            for (let i = 0; i < source.length && progress.inString; i++) {
+                const ch = source[i]
+                if (progress.unicodeLeft > 0) {
+                    progress.unicode += ch
+                    progress.unicodeLeft--
+                    if (progress.unicodeLeft === 0) {
+                        const code = Number.parseInt(progress.unicode, 16)
+                        if (Number.isFinite(code)) progress.line += String.fromCharCode(code)
+                        progress.unicode = ''
+                    }
+                    continue
+                }
+                if (progress.escaped) {
+                    progress.escaped = false
+                    if (ch === 'n') {
+                        progress.lines.push({ no: ++progress.totalLines, text: progress.line })
+                        progress.line = ''
+                        if (progress.lines.length > LIVE_LINE_WINDOW) progress.lines.shift()
+                    } else if (ch === 'r') {
+                        // CRLF 的 CR 不单独生成一行。
+                    } else if (ch === 't') progress.line += '\t'
+                    else if (ch === 'u') {
+                        progress.unicodeLeft = 4
+                        progress.unicode = ''
+                    } else {
+                        progress.line += ({ b: '\b', f: '\f' })[ch] ?? ch
+                    }
+                    continue
+                }
+                if (ch === '\\') {
+                    progress.escaped = true
+                } else if (ch === '"') {
+                    progress.inString = false
+                } else {
+                    progress.line += ch
+                }
+            }
+        }
+        const actionDeltaProgress = new Map()
         es.addEventListener('action_delta', e => {
             const d = JSON.parse(e.data)
             if (!d.id || !d.name) return
             let t = [...flow.blocks].reverse().find(b => b.type === 'tool' && b.id === d.id)
             if (!t) {
-                t = { type: 'tool', id: d.id, name: d.name, args: {}, _rawArgs: '', status: 'generating', output: '', expanded: true, startTime: Date.now(), elapsedMs: 0 }
+                // 生成参数时默认展开，让用户直接看到有界的红绿实时 Diff；
+                // action 闭合、真正开始执行工具后会在下方自动收起。
+                t = { type: 'tool', id: d.id, name: d.name, args: {}, _rawArgs: '', generatedChars: 0, status: 'generating', output: '', expanded: true, startTime: Date.now(), elapsedMs: 0 }
                 flow.blocks.push(t)
             }
             t.name = d.name
-            t._rawArgs = (t._rawArgs || '') + (d.args_delta || '')
-            onStreamUpdate?.()
+            const now = Date.now()
+            const delta = d.args_delta || ''
+            const progress = actionDeltaProgress.get(d.id) || {
+                chars: 0, lastUiAt: 0, seek: '', inString: false, escaped: false,
+                unicodeLeft: 0, unicode: '', line: '', lines: [], totalLines: 0
+            }
+            progress.chars += delta.length
+            feedLiveContent(progress, delta)
+            if (now - progress.lastUiAt >= 120) {
+                t.generatedChars = progress.chars
+                const visible = progress.line
+                    ? [...progress.lines, { no: progress.totalLines + 1, text: progress.line }]
+                    : progress.lines
+                t.liveLines = visible.slice(-LIVE_LINE_WINDOW)
+                t.totalLiveLines = progress.totalLines + (progress.line ? 1 : 0)
+                progress.lastUiAt = now
+                onStreamUpdate?.()
+            }
+            actionDeltaProgress.set(d.id, progress)
         })
 
         // 上下文压缩：后端在上下文超窗口 80% 时把早期轮次折叠成摘要，插一个轻量块
@@ -258,6 +334,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
 
         es.addEventListener('action', e => {
             const d = JSON.parse(e.data)
+            actionDeltaProgress.delete(d.id)
             let args = {}
             try { args = JSON.parse(d.args || '{}') } catch { /* 参数留空对象，卡片仍可显示工具名 */ }
             // startTime：记下发起时刻，result 到达时算耗时（图1 那种「完成 41ms」徽章）
@@ -403,10 +480,29 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
                 allowOther: !!d.allow_other || options.some(option => /其他|自由输入/.test(option.label)),
                 answer: '',
                 answered: false,
+                submitting: false,
+                error: '',
             })
             questionState.pending = q
             // 同步压入当前工作流轨迹：和 tool/think 同一机制，刷新前即可见（刷新后由后端 FlowBlock 兜底）。
-            flow.blocks.push({ type: 'question', question: q.question, options, multi: q.multi, allowOther: q.allowOther, answer: '', answered: false })
+            flow.blocks.push({
+                type: 'question', id: q.id, workflowId: q.workflowId,
+                question: q.question, options, multi: q.multi, allowOther: q.allowOther,
+                answer: '', answered: false
+            })
+            onStreamUpdate?.()
+        })
+        es.addEventListener('question_answered', e => {
+            const d = JSON.parse(e.data)
+            const pending = questionState.pending
+            if (pending?.id === d.id) questionState.pending = null
+            for (const b of flow.blocks) {
+                if (b.type === 'question' && b.id === d.id) {
+                    b.answer = d.answer || b.answer || ''
+                    b.answered = true
+                    break
+                }
+            }
             onStreamUpdate?.()
         })
 
@@ -505,26 +601,32 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     async function answerQuestion({ id, answer = '', selected = [] }) {
         const item = questionState.pending
         if (!item || item.id !== id) return
-        // 不清空 pending（popup 由组件自身 unmount 关闭），且回填进 flow.blocks 的
-        // 对应 question 块——刷新前即可见选中项 + 已回答态，刷新后由后端 FlowBlock 兜底。
-        questionState.pending = null
-        for (const b of flow.blocks) {
-            if (b.type === 'question' && b.question === item.question) {
-                b.answer = answer || selected.join('、')
-                b.answered = true
-                break
-            }
-        }
-        onStreamUpdate?.()
+        if (item.submitting) return
+        item.submitting = true
+        item.error = ''
         const wfId = item.workflowId
         try {
-            await fetch('/api/code/workflow/answer', {
+            const res = await fetch('/api/code/workflow/answer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id, workflow_id: wfId, answer: answer || '', selected })
             })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(data.error || `提交失败 (${res.status})`)
+            for (const b of flow.blocks) {
+                if (b.type === 'question' && b.id === item.id) {
+                    b.answer = answer || selected.join('、')
+                    b.answered = true
+                    break
+                }
+            }
+            questionState.pending = null
+            onStreamUpdate?.()
         } catch (err) {
             console.error('answer 请求失败', err)
+            item.error = err.message || '回答提交失败，请重试'
+        } finally {
+            item.submitting = false
         }
     }
 

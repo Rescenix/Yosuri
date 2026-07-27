@@ -20,6 +20,7 @@ package handler
 // args 用真实 JSON，前端由 AgentWorkflowPanel.vue + useAgentWorkflow.js 消费。
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -176,6 +177,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		openID, model, effort = resumed.OpenID, resumed.Model, resumed.Effort
 	}
 	backends := resolveBackends(openID, model)
+
+	// 生图提供商：前端设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
+	// 不走提示词——跟识图模型路由一个思路
+	SetImageProvider(c.Query("image_provider"))
 
 	// 允许单次请求覆盖轮次/token 预算（比如撞上限后带着更宽松的值 resume），
 	// 不影响全局默认，也不持久化进检查点。
@@ -541,6 +546,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				flowBlocks = append(flowBlocks, qb)
 				continue
 			}
+			// capture_preview / open_preview 是 harness 内置常驻工具，在下方 564 的
+			// switch 里直接处理（设 results[i]），不进 executeCodeCalls——否则会因非
+			// mcp__ 前缀被 872 行误判为「未知工具」。提前 continue 掉，避免被塞进 toRun。
+			if tc.Function.Name == "capture_preview" || tc.Function.Name == "open_preview" {
+				continue
+			}
 			toRun = append(toRun, calls[i])
 			runIdx = append(runIdx, i)
 		}
@@ -558,6 +569,29 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				}
 			case handled[i] != "":
 				results[i] = codeExecResult{output: handled[i]}
+			case calls[i].Function.Name == "capture_preview":
+				// harness 截「用户正在看的内嵌预览页」并作为图片工件发聊天。
+				png, cerr := capturePreviewScreenshot(extractURLArg(calls[i].Function.Arguments))
+				if cerr != nil {
+					results[i] = codeExecResult{failed: true, output: "截图失败：" + cerr.Error()}
+				} else {
+					results[i] = codeExecResult{
+						output: "已截取内嵌预览页面（见下方图片工件）。",
+						images: []mcpImageArtifact{{Data: base64.StdEncoding.EncodeToString(png), MimeType: "image/png"}},
+					}
+				}
+			case calls[i].Function.Name == "open_preview":
+				// agent 主动把指定页面弹进内嵌预览面板（harness CDP 通道）。
+				// 必须补发 preview_open SSE —— 前端 PreviewBrowser 只认这个事件去连 CDP
+				// 渲染（cdp_ws 非空走 startScreencast 真实可交互渲染，否则降级 iframe）。
+				// 只回文本不给事件的话，后端开了页面但前端不会弹（之前的 bug）。
+				addr, cdpWS, perr := openPreviewInPanel(calls[i].Function.Arguments)
+				if perr != nil {
+					results[i] = codeExecResult{failed: true, output: "打开预览失败：" + perr.Error()}
+				} else {
+					writeCodeSSE(c, "preview_open", map[string]any{"url": addr, "cdp_ws": cdpWS})
+					results[i] = codeExecResult{output: "已把页面弹进内嵌预览面板，用户现在可以直接查看并交互：" + addr}
+				}
 			}
 		}
 		if len(toRun) > 0 {

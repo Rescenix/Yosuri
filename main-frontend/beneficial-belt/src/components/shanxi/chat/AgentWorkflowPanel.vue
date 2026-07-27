@@ -119,8 +119,20 @@
                 </div>
                 <div v-if="b.expanded" class="flow-detail flow-tool-detail">
                   <div class="flow-tool-body">
+                    <div v-if="b.status === 'generating' && (isEdit(b.name) || isWrite(b.name))" class="flow-live-diff">
+                      <div
+                        v-for="row in livePreviewRows(b)"
+                        :key="`${row.type}-${row.no}`"
+                        class="flow-live-line"
+                        :class="'is-' + row.type"
+                      >
+                        <span class="flow-live-no">{{ row.no }}</span>
+                        <span class="flow-live-sign">{{ row.type === 'add' ? '+' : '−' }}</span>
+                        <code>{{ row.text || ' ' }}</code>
+                      </div>
+                    </div>
                     <DiffViewer
-                      v-if="isEdit(b.name)"
+                      v-else-if="isEdit(b.name)"
                       :old-content="editOld(b) || ''"
                       :new-content="editNew(b) || ''"
                       :path="filePath(b) || ''"
@@ -251,7 +263,10 @@ function fmtMs(ms) {
 }
 // 状态徽章文案：完成带耗时、进行中、失败
 function toolBadge(b) {
-  if (b.status === 'generating') return '生成预览'
+  if (b.status === 'generating') {
+    const chars = Number(b.generatedChars || 0)
+    return chars >= 1000 ? `生成参数 ${(chars / 1000).toFixed(1)}k` : '生成参数'
+  }
   if (b.status === 'running') return '进行中'
   if (b.status === 'error') return '失败'
   const t = fmtMs(b.elapsedMs)
@@ -332,6 +347,10 @@ function computeDiffCounts(b) {
   if (!isEdit(b.name) && !isWrite(b.name)) return null
   const oldStr = isEdit(b.name) ? editOld(b) : ''
   const newStr = isEdit(b.name) ? editNew(b) : fileContent(b)
+  if (b.status === 'generating') {
+    const added = Number(b.totalLiveLines || 0)
+    return added ? { added, removed: 0 } : null
+  }
   let added = 0, removed = 0
   for (const p of diffLines(oldStr || '', newStr || '')) {
     if (!p.added && !p.removed) continue
@@ -447,6 +466,34 @@ function editNew(b) {
 function fileContent(b) { return argValue(b, 'content') }
 function filePath(b) { return argValue(b, 'path') }
 
+// 生成阶段使用纯文本、固定行数的轻量预览。禁止挂载 DiffViewer：后者会在每次
+// 流式刷新时对每一行执行 highlight.js，长 HTML 足以持续占满浏览器主线程。
+const LIVE_PREVIEW_LINES = 36
+const livePreviewCache = new WeakMap()
+function livePreviewData(b) {
+  if (Array.isArray(b.liveLines)) {
+    return {
+      rows: b.liveLines.map(row => ({ ...row, type: 'add' }))
+    }
+  }
+  const raw = b._rawArgs || ''
+  const cached = livePreviewCache.get(b)
+  if (cached?.raw === raw) return cached.value
+  const rows = []
+  const append = (text, type) => {
+    const lines = (text || '').split('\n')
+    for (let i = 0; i < lines.length && rows.length < LIVE_PREVIEW_LINES; i++) {
+      rows.push({ type, no: i + 1, text: lines[i] })
+    }
+  }
+  if (isEdit(b.name)) append(editOld(b), 'del')
+  append(isEdit(b.name) ? editNew(b) : fileContent(b), 'add')
+  const value = { rows }
+  livePreviewCache.set(b, { raw, value })
+  return value
+}
+function livePreviewRows(b) { return livePreviewData(b).rows }
+
 // 判断某个选项是否被用户的回答命中（answer 可能是「A、B」这类拼接，或自由文本）
 function isChosenAnswer(block, value) {
   const ans = (block.answer || '').trim()
@@ -479,6 +526,57 @@ function toolBodyText(b) {
   width: 100%;
   max-width: 100%;
   padding: 2px 0;
+}
+
+.flow-live-diff {
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  font: 11.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* 跟主聊天区相同：渐变属于稳定的视口遮罩，不给每一行反复做 opacity 动画。 */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.3) 0,
+    rgba(0, 0, 0, 0.8) 30px,
+    #000 72px,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.3) 0,
+    rgba(0, 0, 0, 0.8) 30px,
+    #000 72px,
+    #000 100%
+  );
+}
+.flow-live-line {
+  display: grid;
+  grid-template-columns: 34px 16px minmax(0, 1fr);
+  min-height: 18px;
+}
+.flow-live-line.is-add { background: rgba(18, 183, 106, 0.10); }
+.flow-live-line.is-del { background: rgba(217, 72, 52, 0.08); }
+.flow-live-no {
+  padding-right: 8px;
+  color: var(--app-text-faint);
+  text-align: right;
+  user-select: none;
+}
+.flow-live-sign {
+  color: #12b76a;
+  text-align: center;
+  font-weight: 700;
+}
+.flow-live-line.is-del .flow-live-sign { color: #d94834; }
+.flow-live-line code {
+  min-width: 0;
+  padding-right: 10px;
+  overflow: hidden;
+  color: var(--app-text);
+  background: transparent;
+  white-space: pre;
+  text-overflow: ellipsis;
 }
 
 /* ---------- 概要栏：把一次 agent 回复之间的思考和工具调用都收纳进来 ---------- */

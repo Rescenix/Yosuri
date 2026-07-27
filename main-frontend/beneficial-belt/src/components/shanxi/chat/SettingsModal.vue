@@ -56,7 +56,14 @@
                   </select>
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
-                  标注“识图”的模型支持视觉分析；未标注的模型不处理图片。
+                  标注"识图"的模型支持视觉分析；未标注的模型不处理图片。
+                </div>
+                <div class="param-row">
+                  <span class="param-label">生图提供商</span>
+                  <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
+                    <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
+                    <option value="agnes">Agnes（免费，需 key，质量高）</option>
+                  </select>
                 </div>
               </template>
 
@@ -77,6 +84,14 @@
                 </div>
                 <div v-if="!visionCapableChatList.length" class="settings-section-desc" style="margin-top:6px">
                   未检测到可用识图模型。本地模型需确保 llama-server 已启动且模型文件存在；云端模型请到「提供方」选择。
+                </div>
+                <div class="param-row">
+                  <span class="param-label">生图提供商</span>
+                  <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
+                    <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
+                    <option value="agnes">Agnes（免费，需 key，质量高）</option>
+                    <option value="siliconflow">SiliconFlow（免费额度，需 key）</option>
+                  </select>
                 </div>
               </template>
             </div>
@@ -770,6 +785,12 @@ function setTextModel(id) {
 }
 function setVisionModel(id) {
   localStorage.setItem(VISION_MODEL_KEY, id || '')
+}
+
+const IMAGE_PROVIDER_KEY = 'imageProvider'
+const imageProviderDraft = ref(localStorage.getItem(IMAGE_PROVIDER_KEY) || 'pollinations')
+function setImageProvider(provider) {
+  localStorage.setItem(IMAGE_PROVIDER_KEY, provider || 'pollinations')
 }
 
 // id → 是否支持识图，合并免费池 + 自定义配置两个来源（/api/models/config 都带 vision 字段）

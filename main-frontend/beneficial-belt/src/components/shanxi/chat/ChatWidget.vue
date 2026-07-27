@@ -199,6 +199,16 @@
                       <em>−{{ agentFSDiffStats.removed }}</em>
                     </span>
                     <span class="agentfs-meta-time">{{ selectedAgentFSSnapshot.op === 'edit' ? '编辑' : '写入' }} · {{ formatAgentFSTime(selectedAgentFSSnapshot.ts) }}</span>
+                    <button
+                      type="button"
+                      class="agentfs-branch-btn"
+                      :disabled="agentFSBranchCreating"
+                      title="从此快照创建 AgentFS 分支"
+                      @click="createAgentFSBranch(selectedAgentFSSnapshot)"
+                    >
+                      <Icon icon="mdi:source-branch-plus" width="14" />
+                      {{ agentFSBranchCreating ? '创建中' : '建分支' }}
+                    </button>
                     <button type="button" class="agentfs-card-close" title="关闭" @click="closeAgentFSDiff">
                       <Icon icon="mdi:close" width="15" />
                     </button>
@@ -569,9 +579,18 @@
                       <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
                       {{ gitStatus.branch || 'main' }}
                     </span>
-                    <button class="input-dir-add-btn" type="button" title="添加工作目录" @click.stop="toggleWorkDirMenu">
+                    <button class="input-dir-add-btn" type="button" title="从系统中选择工作目录" @click.stop="openSystemWorkDirPicker">
                       <Icon icon="mdi:plus" width="15" />
                     </button>
+                    <input
+                      ref="workDirFolderInputRef"
+                      type="file"
+                      webkitdirectory
+                      multiple
+                      class="workdir-folder-input"
+                      @change="onSystemWorkDirSelected"
+                      @click.stop
+                    />
                   </div>
 
                   <div v-if="showWorkDirMenu" class="workdir-menu-dropdown" @click.stop>
@@ -1444,10 +1463,13 @@ const workDirMenuView = ref('recent') // 'recent' | 'browse'
 const workDirBrowseOptions = ref([])
 const workDirBrowseLoading = ref(false)
 const workDirSwitching = ref(false)
+const workDirFolderInputRef = ref(null)
 
 // ==================== AgentFS 会话快照树 ====================
 const agentFSTimeline = ref([])
 const agentFSLoading = ref(false)
+const agentFSCurrentBranch = ref('main')
+const agentFSBranchCreating = ref(false)
 const selectedAgentFSSnapshot = ref(null)
 const agentFSDiffRaw = ref('')
 const agentFSDiffLoading = ref(false)
@@ -1464,22 +1486,32 @@ function syncAgentFSTreeViewport() {
   if (height) agentFSViewportHeight.value = Math.max(180, Math.floor(height))
 }
 
-// AgentFS 当前影子仓每次写入都是一个真实 Git commit。日志没有 merge parent，
-// 所以严格按 git log --graph 的单主干渲染；不拿文件路径伪造“分叉”。
+// AgentFS 审计记录携带真实 branch / parent_commit。旧记录没有这两个字段时，
+// 按历史顺序兼容成 main 单主干，不伪造额外分叉。
 const agentFSGraphHeight = computed(() => Math.max(180, agentFSViewportHeight.value - 8))
 const agentFSGraphNodes = computed(() => {
   const ordered = [...agentFSTimeline.value].sort((a, b) => (b.seq || 0) - (a.seq || 0))
   const spacing = Math.min(48, Math.max(30, (agentFSGraphHeight.value - 70) / Math.max(ordered.length + 1, 2)))
-  const laneX = Math.round(agentFSGraphWidth / 2)
+  const branchNames = [...new Set(ordered.map(item => item.branch || 'main'))]
+  const laneGap = 30
+  const firstLaneX = Math.round(agentFSGraphWidth / 2 - ((branchNames.length - 1) * laneGap) / 2)
+  const latestByBranch = new Set()
   return ordered.map((snapshot, index) => {
     const name = (snapshot.rel_path || '').split('/').pop() || snapshot.rel_path
+    const branch = snapshot.branch || 'main'
+    const lane = Math.max(0, branchNames.indexOf(branch))
+    const centerX = firstLaneX + lane * laneGap
+    const isLeaf = !latestByBranch.has(branch)
+    latestByBranch.add(branch)
     return {
       snapshot,
       index,
-      isLeaf: index === 0,
-      isBranch: false,
-      hue: 330,
-      x: laneX - (index === 0 ? 12 : 8),
+      branch,
+      isLeaf,
+      isBranch: branch !== 'main' || branchNames.length > 1,
+      hue: (330 + lane * 67) % 360,
+      centerX,
+      x: centerX - 12,
       y: 28 + index * spacing,
       shortName: name.length > 15 ? `${name.slice(0, 12)}…` : name
     }
@@ -1488,10 +1520,26 @@ const agentFSGraphNodes = computed(() => {
 const agentFSGraphLinks = computed(() => {
   const nodes = agentFSGraphNodes.value
   if (!nodes.length) return []
-  const x = Math.round(agentFSGraphWidth / 2)
-  const firstY = nodes[0].y + 12
-  const lastY = Math.min(agentFSGraphHeight.value - 18, nodes[nodes.length - 1].y + 26)
-  return [{ key: '__main__', d: `M ${x} ${firstY} L ${x} ${lastY}`, trunk: true }]
+  const byCommit = new Map(nodes.map(node => [node.snapshot.commit, node]))
+  return nodes.flatMap((node, index) => {
+    let parent = node.snapshot.parent_commit ? byCommit.get(node.snapshot.parent_commit) : null
+    // 旧数据没有 parent_commit：退化连接到下一条更旧记录。
+    if (!parent && !node.snapshot.parent_commit) parent = nodes[index + 1]
+    if (!parent) return []
+    const x1 = node.centerX
+    const y1 = node.y + 12
+    const x2 = parent.centerX
+    const y2 = parent.y + 12
+    const midY = Math.round((y1 + y2) / 2)
+    return [{
+      key: `${node.snapshot.commit}-${parent.snapshot.commit}`,
+      d: x1 === x2
+        ? `M ${x1} ${y1} L ${x2} ${y2}`
+        : `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`,
+      trunk: node.branch === 'main' && parent.branch === 'main',
+      hue: node.hue
+    }]
+  })
 })
 
 const agentFSDiffLines = computed(() => {
@@ -1571,6 +1619,7 @@ async function refreshAgentFSTimeline() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || `读取失败 (${res.status})`)
     agentFSTimeline.value = (Array.isArray(data.log) ? data.log : []).slice().reverse().slice(0, 18)
+    agentFSCurrentBranch.value = data.current_branch || 'main'
     if (selectedAgentFSSnapshot.value &&
         !agentFSTimeline.value.some(item => item.commit === selectedAgentFSSnapshot.value.commit)) {
       closeAgentFSDiff()
@@ -1650,6 +1699,67 @@ async function syncWorkDirFromBackend() {
 function toggleWorkDirMenu() {
   showWorkDirMenu.value = !showWorkDirMenu.value
   if (showWorkDirMenu.value) workDirMenuView.value = 'recent'
+}
+
+async function createAgentFSBranch(snapshot) {
+  if (!snapshot?.commit || agentFSBranchCreating.value) return
+  const suggested = `branch-${snapshot.seq || Date.now()}`
+  const name = window.prompt('新 AgentFS 分支名称', suggested)?.trim()
+  if (!name) return
+  agentFSBranchCreating.value = true
+  try {
+    const res = await fetch('/api/agentfs/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project: currentWorkDir.value.name,
+        commit: snapshot.commit,
+        name
+      })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `创建失败 (${res.status})`)
+    agentFSCurrentBranch.value = data.branch || name
+    showGitToast(`AgentFS 已切换到分支: ${agentFSCurrentBranch.value}`)
+    closeAgentFSDiff()
+    await refreshAgentFSTimeline()
+  } catch (err) {
+    showGitToast(err.message || '创建 AgentFS 分支失败')
+  } finally {
+    agentFSBranchCreating.value = false
+  }
+}
+function openSystemWorkDirPicker() {
+  showWorkDirMenu.value = false
+  // 清空旧值后，同一个目录也能再次触发 change。
+  if (workDirFolderInputRef.value) {
+    workDirFolderInputRef.value.value = ''
+    workDirFolderInputRef.value.click()
+  }
+}
+async function onSystemWorkDirSelected(event) {
+  const files = Array.from(event.target.files || [])
+  if (!files.length) return
+
+  const relativeParts = (files[0].webkitRelativePath || '').split('/').filter(Boolean)
+  const folderName = relativeParts[0]
+  if (!folderName) {
+    showGitToast('无法识别所选目录')
+    return
+  }
+
+  // Electron/WebView 会暴露 File.path，可保留系统选择器返回的完整路径；
+  // 普通浏览器出于安全原因只提供目录名，此时仍可选择仓库根目录下的子目录。
+  let path = folderName
+  const nativeFilePath = files[0].path
+  if (nativeFilePath && relativeParts.length > 1) {
+    const normalized = nativeFilePath.replace(/\\/g, '/')
+    const relativeTail = relativeParts.slice(1).join('/')
+    if (normalized.endsWith(`/${relativeTail}`)) {
+      path = normalized.slice(0, -(relativeTail.length + 1))
+    }
+  }
+  await selectWorkDir({ name: folderName, path })
 }
 async function selectWorkDir(dir) {
   if (workDirSwitching.value) return

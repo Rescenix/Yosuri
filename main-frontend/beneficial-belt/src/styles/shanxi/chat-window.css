@@ -3447,6 +3447,22 @@ min-height: 90px !important;
 }
 .agentfs-card-meta .agentfs-diff-stats { flex: 0 0 auto; display: flex; gap: 5px; font: 600 10.5px "JetBrains Mono", ui-monospace, monospace; }
 .agentfs-meta-time { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--app-text-faint); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.agentfs-branch-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
+  color: var(--app-accent);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.agentfs-branch-btn:hover { background: color-mix(in srgb, var(--app-accent) 14%, var(--app-surface)); }
+.agentfs-branch-btn:disabled { cursor: wait; opacity: 0.55; }
 .agentfs-card-close { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; }
 .agentfs-diff-body { min-height: 0; }
 .agentfs-diff-body {
@@ -3853,6 +3869,7 @@ img.gem-rail-avatar {
   transition: background 0.15s ease;
 }
 .input-dir-add-btn:hover { background: var(--app-surface-3); }
+.workdir-folder-input { display: none; }
 /* 悬浮卡片交互反馈：hover 时阴影加深，强化"浮起来"的感觉 */
 .input-dir-bar:hover,
 .input-git-bar:hover {

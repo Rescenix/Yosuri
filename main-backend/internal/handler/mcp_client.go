@@ -18,7 +18,6 @@ package handler
 
 import (
 	"bufio"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,7 +25,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -62,6 +60,20 @@ var (
 	mcpRealName = map[string]string{}   // 完整工具名 -> server 内的原始工具名
 	mcpConns    = map[string]*mcpConn{} // server 名 -> 连接，重建时统一关闭
 )
+
+// currentImageProvider 当前工作流用户选的生图提供商。
+// 由 HandleCodeWorkflow 从前端 query 参数读入并 SetImageProvider 设置，
+// callMCPToolWithArtifacts 在调用 image_generate 时自动注入——模型不感知、不浪费 token，
+// 跟识图模型路由一个思路。默认 pollinations（免费无 key）。
+var currentImageProvider = "pollinations"
+
+// SetImageProvider 设置当前工作流的生图提供商，工作流启动时调用一次。
+func SetImageProvider(provider string) {
+	p := strings.TrimSpace(strings.ToLower(provider))
+	if p == "pollinations" || p == "agnes" {
+		currentImageProvider = p
+	}
+}
 
 func mcpConfigPath() string {
 	if p := os.Getenv("MCP_CONFIG"); p != "" {
@@ -341,16 +353,15 @@ func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefin
 }
 
 // request 发送一个 JSON-RPC 请求并等待响应（带超时）。
-// slowMCPTools 这些工具要开浏览器 + 等页面 networkidle + 再走一次视觉模型，
-// 天然就是分钟级的。用默认 60s 的话会出现最坑的失败模式：工具其实在正常干活，
-// 却被外层判超时，模型收到"MCP 工具失败"后会误判成"服务没起"，转头去重启 dev server。
-var slowMCPTools = map[string]bool{
-	"mcp__screenshot__screenshot": true,
+// mcpToolTimeouts 为耗时特征不同的工具单独配置硬上限。
+var mcpToolTimeouts = map[string]time.Duration{
+	"mcp__screenshot__screenshot":         180 * time.Second,
+	"mcp__image_generate__image_generate": 15 * time.Second,
 }
 
 func mcpCallTimeout(fullName string) time.Duration {
-	if slowMCPTools[fullName] {
-		return 180 * time.Second
+	if timeout, ok := mcpToolTimeouts[fullName]; ok {
+		return timeout
 	}
 	return 60 * time.Second
 }
@@ -411,47 +422,6 @@ type mcpToolCallResult struct {
 	Images []mcpImageArtifact
 }
 
-// chrome-devtools-mcp 的文案结尾通常会带句号："Saved screenshot to C:\\...\\shot.png."。
-// 句号是自然语言标点，不属于文件名，必须在这里剥掉。
-var chromeScreenshotPathRE = regexp.MustCompile(`(?im)^saved screenshot to\s+(.+?\.(?:png|jpe?g|webp))\.?\s*$`)
-
-// chrome-devtools-mcp 的截图工具只回传临时文件路径，而不会带 MCP image content。
-// 只针对该工具、且只允许系统临时目录内的图片读取，随后把它补成聊天可显示的图像。
-func chromeDevtoolsScreenshotArtifact(toolName, text string) *mcpImageArtifact {
-	if toolName != "mcp__chrome_devtools__take_screenshot" {
-		return nil
-	}
-	match := chromeScreenshotPathRE.FindStringSubmatch(text)
-	if len(match) != 2 {
-		return nil
-	}
-	path := strings.TrimSpace(match[1])
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return nil
-	}
-	tempPath, err := filepath.Abs(os.TempDir())
-	if err != nil {
-		return nil
-	}
-	rel, err := filepath.Rel(tempPath, absPath)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return nil
-	}
-	data, err := os.ReadFile(absPath)
-	if err != nil || len(data) == 0 || len(data) > 12*1024*1024 {
-		return nil
-	}
-	ext := strings.ToLower(filepath.Ext(absPath))
-	mime := "image/png"
-	if ext == ".jpg" || ext == ".jpeg" {
-		mime = "image/jpeg"
-	} else if ext == ".webp" {
-		mime = "image/webp"
-	}
-	return &mcpImageArtifact{Data: base64.StdEncoding.EncodeToString(data), MimeType: mime}
-}
-
 // callMCPTool 执行 mcp__server__tool 形式的工具调用，保留旧的纯文本调用面。
 func callMCPTool(fullName, argsJSON string) (string, error) {
 	result, err := callMCPToolWithArtifacts(fullName, argsJSON)
@@ -476,6 +446,11 @@ func callMCPToolWithArtifacts(fullName, argsJSON string) (mcpToolCallResult, err
 	}
 	if fullName == "mcp__fs__edit_file" {
 		normalizeMCPEditArgs(args)
+	}
+	// 生图工具：模型没显式传 provider 时自动注入前端选的默认值。
+	// 不走系统提示词——跟识图模型路由一个思路，模型不感知、不浪费 token。
+	if fullName == "mcp__image_generate__image_generate" {
+		injectImageProvider(args)
 	}
 	// AgentFS：真实落盘前捕获 before 快照（旁路，错误静默忽略）
 	OnBeforeWrite(fullName, args)
@@ -513,11 +488,6 @@ func callMCPToolWithArtifacts(fullName, argsJSON string) (mcpToolCallResult, err
 	if result.IsError {
 		return mcpToolCallResult{}, fmt.Errorf("%s", text)
 	}
-	if len(images) == 0 {
-		if image := chromeDevtoolsScreenshotArtifact(fullName, sb.String()); image != nil {
-			images = append(images, *image)
-		}
-	}
 	// AgentFS：真实落盘成功后捕获 after 并写入影子仓审计（仅成功路径；
 	// IsError / err 返回的路径文件未真正改动，不记审计）
 	OnAfterWrite(fullName, args)
@@ -554,6 +524,15 @@ func normalizeMCPEditArgs(args map[string]any) {
 	delete(args, "new_string")
 	delete(args, "oldText")
 	delete(args, "newText")
+}
+
+// injectImageProvider 在调用 image_generate 时无条件注入前端用户选的提供商。
+// 工具 schema 不暴露 provider 参数——这是用户的选择，不是模型的决策。
+func injectImageProvider(args map[string]any) {
+	if args == nil {
+		return
+	}
+	args["provider"] = currentImageProvider
 }
 
 // close 终止 MCP server 子进程，切换项目重建连接前调用。

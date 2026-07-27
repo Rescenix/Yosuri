@@ -390,7 +390,10 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		}
 		reqBody := map[string]any{
 			"model": b.Model, "messages": msgs, "stream": true,
-			"temperature": 0.2, "top_p": 0.85, "max_tokens": 4096,
+			// 4k 会把稍长的单文件 HTML 截在 write_file JSON 中间，随后工具必然报
+			// unexpected end of JSON input，模型再整份重写，形成“失败—重试”死循环。
+			// 工作流自身已有总 token 预算，这里给单轮足够空间完成长文件参数。
+			"temperature": 0.2, "top_p": 0.85, "max_tokens": 16384,
 			// 请求上游回传 usage（prompt/completion tokens）——绝大多数 OpenAI 兼容免费源支持，
 			// 不影响计费，仅让前端 context 横条显示真实值而非纯字符/4 估算。
 			"stream_options": map[string]any{"include_usage": true},
@@ -461,6 +464,7 @@ func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any,
 	// 真实 usage：上游在最后一个空 choices chunk 里回传（stream_options.include_usage）
 	var inTok, outTok int
 	gotUsage := false
+	finishReason := ""
 
 	for {
 		line, rerr := reader.ReadString('\n')
@@ -498,6 +502,9 @@ func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any,
 			continue
 		}
 		choice, _ := choices[0].(map[string]any)
+		if reason, ok := choice["finish_reason"].(string); ok && reason != "" {
+			finishReason = reason
+		}
 		delta, _ := choice["delta"].(map[string]any)
 		if delta == nil {
 			continue
@@ -556,6 +563,16 @@ func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any,
 	for i := 0; i < len(callsMap); i++ {
 		if tc, ok := callsMap[i]; ok && tc.Function.Name != "" {
 			calls = append(calls, *tc)
+		}
+	}
+	// 截断或坏 JSON 绝不能送进工具执行。以前它会显示成一次普通工具失败，
+	// 模型下一轮又重发整份长文件，即使已生成上万字符也永远无法成功。
+	for _, tc := range calls {
+		if finishReason == "length" || !json.Valid([]byte(tc.Function.Arguments)) {
+			return full.String(), nil, inTok, outTok, fmt.Errorf(
+				"模型输出在工具参数完成前被截断；本轮未执行 %s，请缩短单次内容或改用分段写入",
+				tc.Function.Name,
+			)
 		}
 	}
 	// 上游没回传 usage：用字符/4 估算兜底（与四态机 input 估算口径同源）

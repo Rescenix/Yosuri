@@ -14,6 +14,7 @@
         class="question-option"
         :class="{ checked: isChecked(opt.value) }"
         type="button"
+        :disabled="question.submitting"
         @click="onToggle(opt.value)"
       >
         <span class="question-option-key">{{ optionKey(i) }}</span>
@@ -27,13 +28,13 @@
           class="question-free-input"
           placeholder="其他（输入你的答案）"
         />
-        <button class="question-submit" type="submit" :disabled="!freeText.trim()">发送</button>
+        <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">发送</button>
       </form>
       <button
         v-if="question.multi"
         class="question-submit"
         type="button"
-        :disabled="!selected.length && !freeText.trim()"
+        :disabled="question.submitting || (!selected.length && !freeText.trim())"
         @click="onConfirm"
       >确认</button>
     </div>
@@ -49,8 +50,9 @@
         class="question-free-input"
         :placeholder="question.options.length ? '输入其他回答' : '输入你的回答'"
       />
-      <button class="question-submit" type="submit" :disabled="!freeText.trim()">发送</button>
+      <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">发送</button>
     </form>
+    <div v-if="question.error" class="question-error">{{ question.error }}</div>
   </section>
 </template>
 
@@ -130,6 +132,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   border-radius: 10px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   animation: question-bar-in 0.14s ease-out;
+}
+.question-error {
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, #d94834 8%, transparent);
+  color: #c43d32;
+  font-size: 12px;
 }
 @keyframes question-bar-in {
   from { opacity: 0; transform: translateY(4px); }

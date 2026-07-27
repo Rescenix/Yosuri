@@ -85,3 +85,7 @@ main-backend/models/
 *.pt
 *.pth
 *.onnx
+
+# 编译产物
+main-backend/aurora-server-bin
+.cache/

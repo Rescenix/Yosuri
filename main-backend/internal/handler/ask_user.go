@@ -111,6 +111,9 @@ type askUserReply struct {
 var (
 	askRegistryMu sync.Mutex
 	askRegistry   = make(map[string]chan askUserReply)
+	// askQuestionRegistry 以真正的问题 id 为权威索引。workflow_id 在续跑/重连时
+	// 可能发生前端状态漂移，而 question id 是一次提问唯一且随事件原样回传的。
+	askQuestionRegistry = make(map[string]chan askUserReply)
 )
 
 func registerAskUser(workflowID string) chan askUserReply {
@@ -124,6 +127,18 @@ func registerAskUser(workflowID string) chan askUserReply {
 func unregisterAskUser(workflowID string) {
 	askRegistryMu.Lock()
 	delete(askRegistry, workflowID)
+	askRegistryMu.Unlock()
+}
+
+func registerAskQuestion(id string, ch chan askUserReply) {
+	askRegistryMu.Lock()
+	askQuestionRegistry[id] = ch
+	askRegistryMu.Unlock()
+}
+
+func unregisterAskQuestion(id string) {
+	askRegistryMu.Lock()
+	delete(askQuestionRegistry, id)
 	askRegistryMu.Unlock()
 }
 
@@ -160,7 +175,10 @@ func (r *WorkflowRunner) HandleCodeWorkflowAnswer(c *gin.Context) {
 		return
 	}
 	askRegistryMu.Lock()
-	ch, ok := askRegistry[req.WorkflowID]
+	ch, ok := askQuestionRegistry[req.ID]
+	if !ok && req.WorkflowID != "" {
+		ch, ok = askRegistry[req.WorkflowID]
+	}
 	askRegistryMu.Unlock()
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "提问不存在或已结束", "id": req.ID})
@@ -215,6 +233,8 @@ func handleAskUser(c *gin.Context, workflowID string, askCh chan askUserReply, a
 		opts = append(opts, map[string]string{"label": o.Label, "value": v})
 		blockOpts = append(blockOpts, askUserOption{Label: o.Label, Value: v})
 	}
+	registerAskQuestion(id, askCh)
+	defer unregisterAskQuestion(id)
 	writeCodeSSE(c, "question", map[string]any{
 		"id":          id,
 		"workflow_id": workflowID,

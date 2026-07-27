@@ -37,20 +37,9 @@ var dangerousToolSet = map[string]bool{
 	"mcp__fs__create_file":      true,
 	// MCP shell：执行任意命令，副作用最大，必拦
 	"mcp__shell__run": true,
-	// MCP chrome_devtools：能操作真实浏览器页面的工具才拦——点击/填表/输入/导航/
-	// 上传/弹窗/任意 JS 执行都有真实副作用（提交表单、发消息、上传本地文件到网页等），
-	// 跟 shell 命令是一个量级的风险。截图/console/network/性能分析这些只读检查类
-	// 不在这个集合里，任何模式都直过，见 isDangerousTool 里的默认放行。
-	"mcp__chrome_devtools__click":           true,
-	"mcp__chrome_devtools__fill":            true,
-	"mcp__chrome_devtools__fill_form":       true,
-	"mcp__chrome_devtools__type_text":       true,
-	"mcp__chrome_devtools__drag":            true,
-	"mcp__chrome_devtools__press_key":       true,
-	"mcp__chrome_devtools__navigate_page":   true,
-	"mcp__chrome_devtools__upload_file":     true,
-	"mcp__chrome_devtools__handle_dialog":   true,
-	"mcp__chrome_devtools__evaluate_script": true,
+	// 注：浏览器渲染/真机验证/截图已由 harness 内置预览面板（browser_preview_tool.go）
+	// 负责，不再给 LLM 暴露 chrome_devtools MCP——避免 agent 自己开独立 Chrome 窗口、
+	// 架空后端预览面板。故 chrome_devtools 工具不再登记进危险集合。
 }
 
 // isDangerousTool 判定一个工具名是否需要审批拦截。

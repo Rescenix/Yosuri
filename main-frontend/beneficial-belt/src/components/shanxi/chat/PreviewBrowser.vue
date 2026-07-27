@@ -55,8 +55,18 @@
 
     <div v-else class="pb-viewport" :class="{ mobile: viewport === 'mobile' }">
       <!-- CDP 模式：连真实 Chromium 的 target ws，用 startScreencast 把真实渲染画面刷进来。
-           取代 iframe —— agent 写的 HTML 由真实浏览器引擎渲染，不是网页自己 iframe 渲。 -->
-      <img v-if="cdpFrame" :src="cdpFrame" class="pb-frame" alt="browser preview" />
+           取代 iframe —— agent 写的 HTML 由真实浏览器引擎渲染。
+           双向：canvas 渲染帧 + 把用户的鼠标/键盘经 cdpSocket 转成 input 打回 Chromium，
+           于是用户在面板里就能直接操作 agent 渲染的页面（比如玩它造的网页游戏）。 -->
+      <canvas
+        v-if="cdpFrame"
+        ref="cdpCanvas"
+        class="pb-frame pb-canvas"
+        @mousemove="onCanvasMouse('mouseMoved', $event)"
+        @mousedown="onCanvasMouse('mousePressed', $event)"
+        @mouseup="onCanvasMouse('mouseReleased', $event)"
+        @contextmenu.prevent
+      ></canvas>
       <div v-else-if="cdpError" class="pb-error" role="alert">
         <Icon icon="mdi:alert-circle-outline" width="28" />
         <span>{{ cdpError }}</span>
@@ -96,6 +106,7 @@ let cdpSocket = null              // 当前同源 CDP 中转 ws
 let currentCDPTarget = ''
 let currentCDPUrl = ''
 let reloadSeq = 0
+const cdpCanvas = ref(null)       // 双向渲染画布（替代 <img>）
 
 function isFrontend(s) {
   if (s.category) return s.category === 'frontend'
@@ -141,7 +152,19 @@ function connectCDP(wsUrl, targetURL = '') {
       let m
       try { m = JSON.parse(ev.data) } catch { return }
       if (m.type === 'frame' && m.data) {
-        cdpFrame.value = 'data:image/png;base64,' + m.data
+        // 双向渲染：把 screencast 帧画到 canvas（不再用 <img>），canvas 才能收交互。
+        const img = new Image()
+        img.onload = () => {
+          const cv = cdpCanvas.value
+          if (!cv) return
+          // 按帧真实像素设画布尺寸，避免拉伸；CSS 再自适应容器。
+          if (cv.width !== img.naturalWidth) cv.width = img.naturalWidth
+          if (cv.height !== img.naturalHeight) cv.height = img.naturalHeight
+          const ctx = cv.getContext('2d')
+          ctx.drawImage(img, 0, 0)
+        }
+        img.src = 'data:image/png;base64,' + m.data
+        cdpFrame.value = m.data
         cdpError.value = ''
         loading.value = false
       } else if (m.type === 'error') {
@@ -181,13 +204,19 @@ function disconnectCDP() {
 onMounted(() => {
   fetchServers()
   if (previewRequest.url) navigateTo(previewRequest.url, previewRequest.cdp_ws, previewRequest.cdp_error)
+  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keyup', onKeyUp)
 })
 
 watch(() => previewRequest.seq, () => {
   if (previewRequest.url) navigateTo(previewRequest.url, previewRequest.cdp_ws, previewRequest.cdp_error)
 })
 
-onUnmounted(() => disconnectCDP())
+onUnmounted(() => {
+  disconnectCDP()
+  window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('keyup', onKeyUp)
+})
 
 function hasScheme(raw) {
   return /^[a-z][a-z\d+.-]*:\/\//i.test(raw)
@@ -269,6 +298,41 @@ function reload() {
   } catch {
     frameSrc.value = currentUrl.value
   }
+}
+
+// 双向交互：把 canvas 上的鼠标事件经 cdpSocket 转成后端约定的 input 消息打回 Chromium。
+// 坐标相对 canvas 显示区，后端再映射回页面坐标（layoutW/H = canvas 显示尺寸，
+// viewW/H = Chromium 页面尺寸，这里先按画布实际像素 1:1，后续可由 preview_open 带 pageSize 精化）。
+function onCanvasMouse(action, e) {
+  if (!cdpSocket || cdpSocket.readyState !== WebSocket.OPEN) return
+  const cv = cdpCanvas.value
+  if (!cv) return
+  const rect = cv.getBoundingClientRect()
+  const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left'
+  cdpSocket.send(JSON.stringify({
+    type: 'input', kind: 'mouse', action,
+    x: e.clientX - rect.left, y: e.clientY - rect.top,
+    button: btn,
+    layoutW: rect.width, layoutH: rect.height,
+    viewW: cv.width, viewH: cv.height,
+    // 诊断字段：定位 raw=(0,0) 是 clientX=0 还是 rect.left 异常
+    dbgRectLeft: Math.round(rect.left), dbgRectTop: Math.round(rect.top),
+    dbgClientX: Math.round(e.clientX), dbgClientY: Math.round(e.clientY),
+  }))
+}
+
+// 键盘：面板聚焦时全局转发（节流靠浏览器自身重复事件即可）。
+function onKeyDown(e) {
+  if (!cdpSocket || cdpSocket.readyState !== WebSocket.OPEN) return
+  cdpSocket.send(JSON.stringify({
+    type: 'input', kind: 'key', key: e.key, code: e.code, keyAction: 'keyDown',
+  }))
+}
+function onKeyUp(e) {
+  if (!cdpSocket || cdpSocket.readyState !== WebSocket.OPEN) return
+  cdpSocket.send(JSON.stringify({
+    type: 'input', kind: 'key', key: e.key, code: e.code, keyAction: 'keyUp',
+  }))
 }
 
 function openExternal() {
@@ -450,6 +514,19 @@ function openExternal() {
   height: 100%;
   border: none;
   background: var(--app-surface);
+}
+
+.pb-canvas {
+  display: block;
+  /* 不用 object-fit: contain —— canvas 的「元素盒」必须等同「可见画面」，
+     否则 getBoundingClientRect 返回的是含黑边的 100%×100% 盒子，鼠标坐标
+     与游戏画面错位（实测坐标恒落 0 区 → 球拍钉死）。直接 100% 撑满，
+     cv.width/height 是绘制分辨率、CSS 100% 是显示尺寸，浏览器拉伸显示，
+     坐标用 clientX/rect.width*cv.width 映射依然一一对应。 */
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .pb-error {

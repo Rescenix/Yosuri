@@ -14,19 +14,23 @@ package handler
 // agent 只管写文件，后端全自动预览。
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"backend/internal/ai/core"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -69,13 +73,16 @@ func requestHostname(r *http.Request) string {
 
 // validatePreviewTargetWS 只允许连接本机 Chrome 的 page target，避免把中转端点变成
 // 可访问任意内网服务的 WebSocket 代理。
+// 预览专用端口 9223（隔离用户日常 Chrome 的 9222），同时兼容 9222 以不影响既有 MCP。
+const previewCDPPort = "9223"
+
 func validatePreviewTargetWS(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "ws" {
 		return "", fmt.Errorf("CDP target 地址无效")
 	}
-	if !isLoopbackHost(u.Hostname()) || u.Port() != "9222" {
-		return "", fmt.Errorf("仅允许连接本机 Chrome CDP(9222)")
+	if !isLoopbackHost(u.Hostname()) || (u.Port() != "9222" && u.Port() != previewCDPPort) {
+		return "", fmt.Errorf("仅允许连接本机 Chrome CDP(9222/9223)")
 	}
 	if !strings.HasPrefix(u.Path, "/devtools/page/") {
 		return "", fmt.Errorf("仅允许连接 CDP page target")
@@ -135,16 +142,27 @@ func HandlePreviewCDP(c *gin.Context) {
 	}
 	defer cdpConn.Close()
 
-	if err := cdpConn.WriteJSON(map[string]any{"id": 1, "method": "Page.enable"}); err != nil {
+	// 并发写保护：screencast 帧回执 goroutine 与前端 input 分发 goroutine
+	// 都会写同一个 cdpConn，gorilla/websocket 不允许并发写，否则直接 panic
+	// 崩溃整个预览进程（现象：面板弹出后完全不能交互、坐标卡 0）。所有写
+	// cdpConn 的路径统一走 writeCDP 加锁。
+	var cdpWriteMu sync.Mutex
+	writeCDP := func(v any) error {
+		cdpWriteMu.Lock()
+		defer cdpWriteMu.Unlock()
+		return cdpConn.WriteJSON(v)
+	}
+
+	if err := writeCDP(map[string]any{"id": 1, "method": "Page.enable"}); err != nil {
 		writePreviewCDPError(clientConn, "预览不可用：无法启用 Chrome 页面")
 		return
 	}
 	// 双向交互核心：启用 Input 域，这样前端的鼠标/键盘才能被打进这台 Chromium。
-	if err := cdpConn.WriteJSON(map[string]any{"id": 1, "method": "Input.enable"}); err != nil {
+	if err := writeCDP(map[string]any{"id": 1, "method": "Input.enable"}); err != nil {
 		writePreviewCDPError(clientConn, "预览不可用：无法启用 Chrome 输入")
 		return
 	}
-	if err := cdpConn.WriteJSON(map[string]any{
+	if err := writeCDP(map[string]any{
 		"id":     2,
 		"method": "Page.startScreencast",
 		"params": map[string]any{"format": "png", "everyNthFrame": 1, "quality": 80},
@@ -158,10 +176,12 @@ func HandlePreviewCDP(c *gin.Context) {
 	// 没有则按 1:1 透传。这样用户戳画面哪个点，就落到 Chromium 里对应的元素。
 	toPageCoords := func(x, y, layoutW, layoutH, viewW, viewH float64) (float64, float64) {
 		px, py := x, y
-		if layoutW > 0 && viewW > 0 {
+		// 除零 / NaN 保护：任一缩放基准缺失或异常时，不做缩放、原样透传，
+		// 避免静默落 0 误导诊断（实测坐标恒 0 多半是前端传了异常值）。
+		if layoutW > 0 && viewW > 0 && !math.IsNaN(x) && !math.IsNaN(layoutW) && !math.IsNaN(viewW) {
 			px = x / layoutW * viewW
 		}
-		if layoutH > 0 && viewH > 0 {
+		if layoutH > 0 && viewH > 0 && !math.IsNaN(y) && !math.IsNaN(layoutH) && !math.IsNaN(viewH) {
 			py = y / layoutH * viewH
 		}
 		return px, py
@@ -172,13 +192,19 @@ func HandlePreviewCDP(c *gin.Context) {
 		var m struct {
 			Kind string `json:"kind"` // mouse | key
 			// mouse
-			Action   string  `json:"action"`   // mousePressed | mouseReleased | mouseMoved
-			X, Y     float64 `json:"x"`        // canvas 坐标系
-			Button   string  `json:"button"`   // left | right | middle
-			LayoutW  float64 `json:"layoutW"`  // 前端 canvas 显示宽度
-			LayoutH  float64 `json:"layoutH"`  // 前端 canvas 显示高度
-			ViewW    float64 `json:"viewW"`    // Chromium 页面宽度
-			ViewH    float64 `json:"viewH"`    // Chromium 页面高度
+			Action  string  `json:"action"`  // mousePressed | mouseReleased | mouseMoved
+			X       float64 `json:"x"`       // canvas 坐标系 X（前端发 "x"）
+			Y       float64 `json:"y"`       // canvas 坐标系 Y（前端发 "y"）
+			Button  string  `json:"button"`  // left | right | middle
+			LayoutW float64 `json:"layoutW"` // 前端 canvas 显示宽度
+			LayoutH float64 `json:"layoutH"` // 前端 canvas 显示高度
+			ViewW   float64 `json:"viewW"`   // Chromium 页面宽度
+			ViewH   float64 `json:"viewH"`   // Chromium 页面高度
+			// 诊断字段：定位 raw=(0,0) 是 clientX=0 还是 rect.left 异常
+			DbgRectLeft  float64 `json:"dbgRectLeft"`
+			DbgRectTop   float64 `json:"dbgRectTop"`
+			DbgClientX   float64 `json:"dbgClientX"`
+			DbgClientY   float64 `json:"dbgClientY"`
 			// key
 			Key       string `json:"key"`
 			Code      string `json:"code"`
@@ -190,9 +216,12 @@ func HandlePreviewCDP(c *gin.Context) {
 		switch m.Kind {
 		case "mouse":
 			px, py := toPageCoords(m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH)
-			log.Printf("🖱️ [预览输入] mouse %s @ (%.0f,%.0f) -> page(%.0f,%.0f) btn=%s",
-				m.Action, m.X, m.Y, px, py, m.Button)
-			cdpConn.WriteJSON(map[string]any{
+			// 诊断日志：把前端原始坐标 + rect/canvas 尺寸一起打出，
+			// 便于定位「坐标恒 (0,0)」是前端 x/y 本身就是 0，还是映射后落 0。
+			log.Printf("🖱️ [预览输入] mouse %s raw=(%.0f,%.0f) layout=(%.0fx%.0f) view=(%.0fx%.0f) dbg[rectL=%.0f rectT=%.0f cliX=%.0f cliY=%.0f] -> page(%.0f,%.0f) btn=%s",
+				m.Action, m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH,
+				m.DbgRectLeft, m.DbgRectTop, m.DbgClientX, m.DbgClientY, px, py, m.Button)
+			_ = writeCDP(map[string]any{
 				"id":     nextPreviewReqID(),
 				"method": "Input.dispatchMouseEvent",
 				"params": map[string]any{
@@ -208,7 +237,7 @@ func HandlePreviewCDP(c *gin.Context) {
 			if ka == "" {
 				ka = "keyDown"
 			}
-			cdpConn.WriteJSON(map[string]any{
+			_ = writeCDP(map[string]any{
 				"id":     nextPreviewReqID(),
 				"method": "Input.dispatchKeyEvent",
 				"params": map[string]any{
@@ -257,7 +286,7 @@ func HandlePreviewCDP(c *gin.Context) {
 			}); err != nil {
 				return
 			}
-			if err := cdpConn.WriteJSON(map[string]any{
+			if err := writeCDP(map[string]any{
 				"id":     3,
 				"method": "Page.screencastFrameAck",
 				"params": map[string]any{"sessionId": message.Params.SessionID},
@@ -293,11 +322,11 @@ func HandlePreviewCDP(c *gin.Context) {
 	}
 }
 
-// cdpBrowserWS 返回已运行的 Chrome 的 browser 级 WebSocket 调试地址。
-// 失败返回空串（调用方据此降级为「不自动预览」）。
+// cdpBrowserWS 返回已运行的预览专用 Chrome（端口 9223）的 browser 级 WebSocket 调试地址。
+// 9223 与用户日常 Chrome 的 9222 隔离，预览永不借用/弹出用户的普通浏览器。
 func cdpBrowserWS() string {
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:9222/json/version")
+	resp, err := client.Get("http://127.0.0.1:" + previewCDPPort + "/json/version")
 	if err != nil {
 		return ""
 	}
@@ -340,14 +369,13 @@ func findChromeExecutable() string {
 	return ""
 }
 
-// ensureChromeCDP 确保本机有一个以调试模式（9222）运行的 Chrome 供预览用。
-// 若 9222 已在监听则直接返回；否则自动拉起一个 headless Chrome（独立 user-data-dir，
-// 不干扰用户正常使用的 Chrome）。拉起失败（找不到可执行文件/超时）则静默返回，
-// 由调用方走原有降级/报错路径。这是修复「Chrome CDP 未运行」的关键：此前后端只假设
-// Chrome 已以调试模式运行，从不主动拉起，导致双击打开的普通 Chrome 不满足预览条件。
+// ensureChromeCDP 确保本机有一个以调试模式（预览专用端口 9223）运行的 headless Chrome 供预览用。
+// 9223 与用户日常 Chrome 的 9222 完全隔离 —— 预览永远只用这台无头实例，绝不借用/弹出
+// 用户自己打开的有头 Chrome。若 9223 已在监听则直接返回；否则自动拉起一个 headless Chrome
+// （独立 user-data-dir + HideWindow，Windows 下无窗口）。拉起失败则静默返回走降级/报错路径。
 func ensureChromeCDP() {
 	if cdpBrowserWS() != "" {
-		return // 已经在跑，别重复拉
+		return // 9223 已经在跑（多半是上次拉的无头实例），别重复拉
 	}
 	exe := findChromeExecutable()
 	if exe == "" {
@@ -357,7 +385,7 @@ func ensureChromeCDP() {
 	userDataDir := filepath.Join(os.TempDir(), "aurora-cdp-profile")
 	cmd := exec.Command(exe,
 		"--headless=new",
-		"--remote-debugging-port=9222",
+		"--remote-debugging-port="+previewCDPPort,
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--disable-background-networking",
@@ -370,29 +398,28 @@ func ensureChromeCDP() {
 		log.Printf("⚠️ [预览] 拉起 Chrome 失败: %v", err)
 		return
 	}
-	// 轮询 9222 直到就绪（最多 ~10s），不长时间阻塞调用方。
+	// 轮询 9223 直到就绪（最多 ~10s），不长时间阻塞调用方。
 	for i := 0; i < 40; i++ {
 		time.Sleep(250 * time.Millisecond)
 		if cdpBrowserWS() != "" {
-			log.Printf("🖥️ [预览] 已自动拉起 Chrome CDP (pid=%d)", cmd.Process.Pid)
+			log.Printf("🖥️ [预览] 已自动拉起 headless Chrome CDP (pid=%d, port=%s)", cmd.Process.Pid, previewCDPPort)
 			return
 		}
 	}
-	log.Printf("⚠️ [预览] Chrome 已拉起但 9222 未在超时内就绪")
+	log.Printf("⚠️ [预览] Chrome 已拉起但 %s 未在超时内就绪", previewCDPPort)
 }
 
 // cdpOpenTarget 在 Chrome 里开一个新标签页并导航到 targetURL，返回该标签页的
 // WebSocket 调试地址。targetURL 为空时开 about:blank。
 func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) {
-	ensureChromeCDP() // 9222 没在跑就自动拉起，修复「Chrome CDP 未运行」
+	ensureChromeCDP() // 9223 没在跑就自动拉起 headless 实例，修复「Chrome CDP 未运行」
 	browserWS := cdpBrowserWS()
 	if browserWS == "" {
-		return "", "", fmt.Errorf("chrome CDP 未运行(9222 无响应)")
+		return "", "", fmt.Errorf("chrome CDP 未运行(预览端口 " + previewCDPPort + " 无响应)")
 	}
-	// 直接开带 url 的 target 最省事；CDP 的 /json/new?<url> 支持 query 形式。
 	// 注意：Chrome 新版本（~109+）的 /json/new 只接受 PUT（GET/POST 返回 405），
 	// 所以这里用 PUT，而不是 client.Post。
-	newURL := "http://127.0.0.1:9222/json/new"
+	newURL := "http://127.0.0.1:" + previewCDPPort + "/json/new"
 	if targetURL != "" {
 		newURL += "?" + url.QueryEscape(targetURL)
 	}
@@ -496,6 +523,145 @@ func resolvePreviewURL(path, rawURL string) string {
 	return "file://" + p
 }
 
+// currentPreviewTargetWS 记录「内嵌预览面板当前正在渲染的那个 CDP target」的调试地址。
+// 来源：autoOpenBrowserPreview 成功开 target 后写入。LLM 的 capture_preview 工具截的就是
+// 这个 target —— 即用户正在看的同一页（含用户的点击/输入状态），而不是另开一个浏览器渲染同 URL。
+// 用 RWMutex 保护：预览面板每次重开都会更新它，截图工具并发读。
+var (
+	previewTargetMu        sync.RWMutex
+	currentPreviewTargetWS string
+)
+
+// setCurrentPreviewTarget 记录当前内嵌预览 target（autoOpenBrowserPreview 成功后调用）。
+func setCurrentPreviewTarget(ws string) {
+	previewTargetMu.Lock()
+	currentPreviewTargetWS = ws
+	previewTargetMu.Unlock()
+}
+
+// getCurrentPreviewTarget 返回当前内嵌预览 target 的 ws 地址（可能为 ""）。
+func getCurrentPreviewTarget() string {
+	previewTargetMu.RLock()
+	defer previewTargetMu.RUnlock()
+	return currentPreviewTargetWS
+}
+
+// capturePreviewScreenshot 截取「内嵌预览面板当前显示的那个页面」（用户正在看的活 target）。
+// url 为空 → 截 currentPreviewTargetWS（用户看到啥截到啥，含交互状态）；
+// url 非空 → 复用同一台 headless Chrome（预览端口 9223）开/复用 target 截 —— 仍由 harness 控制，
+// 不交给 LLM 自己开浏览器。返回的 PNG 字节可直接作为聊天图像工件发布。
+func capturePreviewScreenshot(url string) ([]byte, error) {
+	targetWS := ""
+	if url == "" {
+		targetWS = getCurrentPreviewTarget()
+		if targetWS == "" {
+			return nil, fmt.Errorf("当前没有正在预览的内嵌页面；可传 url 参数截指定页面")
+		}
+	} else {
+		// 在同一台 headless Chrome 里开 target 渲染该 url（仍是 harness 的 9223 实例）。
+		ws, _, err := cdpOpenTarget(url)
+		if err != nil {
+			return nil, fmt.Errorf("打开预览目标失败: %w", err)
+		}
+		if strings.HasPrefix(url, "file://") {
+			if nerr := cdpNavigate(ws, url); nerr != nil {
+				return nil, fmt.Errorf("预览目标导航失败: %w", nerr)
+			}
+		}
+		// 给页面一点渲染时间
+		time.Sleep(500)
+		targetWS = ws
+	}
+
+	conn, _, err := websocket.DefaultDialer.Dial(targetWS, nil)
+	if err != nil {
+		return nil, fmt.Errorf("连接预览 target 失败: %w", err)
+	}
+	defer conn.Close()
+	if err := conn.WriteJSON(map[string]any{
+		"id":     1000,
+		"method": "Page.enable",
+	}); err != nil {
+		return nil, fmt.Errorf("启用 Page 域失败: %w", err)
+	}
+	// Page.captureScreenshot 截当前实时帧（含用户已做的交互），不是另起渲染。
+	if err := conn.WriteJSON(map[string]any{
+		"id":     1001,
+		"method": "Page.captureScreenshot",
+		"params": map[string]any{"format": "png", "captureBeyondViewport": false},
+	}); err != nil {
+		return nil, fmt.Errorf("发送截图命令失败: %w", err)
+	}
+	conn.SetReadDeadline(time.Now().Add(8 * time.Second))
+	for {
+		_, msg, e := conn.ReadMessage()
+		if e != nil {
+			return nil, fmt.Errorf("读取截图结果超时: %w", e)
+		}
+		var r struct {
+			ID     int             `json:"id"`
+			Error  json.RawMessage `json:"error"`
+			Result struct {
+				Data string `json:"data"`
+			} `json:"result"`
+		}
+		if json.Unmarshal(msg, &r) != nil {
+			continue
+		}
+		if r.ID == 1001 {
+			if len(r.Error) > 0 {
+				return nil, fmt.Errorf("Chrome 拒绝截图: %s", string(r.Error))
+			}
+			if r.Result.Data == "" {
+				return nil, fmt.Errorf("截图结果为空")
+			}
+			return base64.StdEncoding.DecodeString(r.Result.Data)
+		}
+	}
+}
+
+// capturePreviewToolDef 是 harness 提供给 LLM 的「截内嵌预览页面」工具，常驻、无需 load_tools。
+// 截的是用户正在看的那一页（同一 CDP target），不是另开浏览器渲染同 URL。
+var capturePreviewToolDef = core.ToolDefinition{
+	Type: "function",
+	Function: core.ToolFunctionDetail{
+		Name: "capture_preview",
+		Description: "截取「内嵌浏览器预览面板当前正在显示的页面」并作为图片插入聊天。" +
+			"这是用户正在看的同一页面（含用户已做的点击/输入/滚动状态），不是另开浏览器渲染的副本。" +
+			"做前端开发时用来把界面效果/报错直接发到对话里。不传 url 截当前预览页；" +
+			"传 url 则在同一台预览用 headless Chrome 里打开该地址再截（仍是同一个浏览器引擎）。",
+		Parameters: core.ToolParameters{
+			Type: "object",
+			Properties: map[string]core.ToolProperty{
+				"url": {
+					Type:        "string",
+					Description: "可选。要截图的页面地址（http(s):// 或 file:// 路径）。留空则截当前内嵌预览面板正在显示的页面。",
+				},
+			},
+			Required: []string{},
+		},
+	},
+}
+
+func init() {
+	// 确保 core 包被引用（工具定义复用其结构，避免未使用导入告警）。
+	_ = core.ToolDefinition{}
+}
+
+// extractURLArg 从 capture_preview 工具的参数 JSON 里取 url 字段（可选）。
+func extractURLArg(argsJSON string) string {
+	if argsJSON == "" {
+		return ""
+	}
+	var a struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil {
+		return ""
+	}
+	return a.URL
+}
+
 // parseFrontendEditPath 从文件工具参数里取 path（前端改动检测用）。
 func parseFrontendEditPath(argsJSON string) (string, error) {
 	var a struct {
@@ -532,6 +698,81 @@ func autoOpenBrowserPreview(editPath string) (url string, cdpWS string, cdpError
 			return target, "", "预览不可用：Chrome 页面导航失败", false
 		}
 	}
-	time.Sleep(400) // 给页面一点渲染时间
+	time.Sleep(400)                // 给页面一点渲染时间
+	setCurrentPreviewTarget(tabWS) // 记下活 target，供 capture_preview 截同一页
 	return target, tabWS, "", true
+}
+
+// openPreviewToolDef 让 agent 主动把指定页面弹进内嵌预览面板（harness 控制的 CDP 通道，
+// 不是 agent 自己开独立浏览器）。区别于系统在工作流收尾自动弹出的预览——这里 agent
+// 自己决定何时展示，主动权在 agent。面板已支持双向输入（鼠标/键盘回传），故用户能直接交互/试玩。
+var openPreviewToolDef = core.ToolDefinition{
+	Type: "function",
+	Function: core.ToolFunctionDetail{
+		Name: "open_preview",
+		Description: "主动把指定页面弹进内嵌浏览器预览面板，让用户可以立刻看到并交互（鼠标/键盘可操作）。" +
+			"这是 agent 主动发起的预览，区别于系统在工作流收尾自动弹出的预览——你（agent）来决定何时展示，而不是等系统。" +
+			"适用场景：你刚生成或修改完一个网页/游戏，想让用户马上在面板里看到并试玩时，调用本工具。" +
+			"参数二选一：path 传本地 html 文件绝对路径（harness 用真实 Chromium 渲染，可交互）；" +
+			"url 传 http(s) 地址（如前端 dev server 页面 http://localhost:4322）。",
+		Parameters: core.ToolParameters{
+			Type: "object",
+			Properties: map[string]core.ToolProperty{
+				"path": {
+					Type:        "string",
+					Description: "本地 html 文件绝对路径（如 C:/Pro2026/test/pong-battle.html）。与 url 二选一。",
+				},
+				"url": {
+					Type:        "string",
+					Description: "http(s) 页面地址（如 http://localhost:4322）。与 path 二选一。",
+				},
+			},
+			Required: []string{},
+		},
+	},
+}
+
+// openPreviewInPanel 把 agent 显式指定的页面弹进内嵌预览面板。
+// 返回 (预览地址, CDP target ws, error)。cdpWS 非空时前端走 CDP startScreencast 真实
+// 渲染（可交互）；复用 autoOpenBrowserPreview 的底层 CDP 通道，与 capture_preview /
+// 系统收尾自动预览共用同一台 harness headless Chrome（端口 9223）。
+func openPreviewInPanel(argsJSON string) (string, string, error) {
+	var a struct {
+		Path string `json:"path"`
+		URL  string `json:"url"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil {
+		return "", "", fmt.Errorf("参数解析失败：path 或 url 应为字符串")
+	}
+	raw := a.URL
+	if raw == "" {
+		raw = a.Path
+	}
+	if raw == "" {
+		return "", "", fmt.Errorf("请传入 path（本地 html 文件绝对路径）或 url（http(s) 地址）")
+	}
+
+	// http(s) url：直接在同一台 harness headless Chrome 里开 target 并导航，弹预览。
+	if strings.Contains(raw, "://") {
+		ws, _, err := cdpOpenTarget(raw)
+		if err != nil {
+			return "", "", fmt.Errorf("打开预览目标失败: %w", err)
+		}
+		if nerr := cdpNavigate(ws, raw); nerr != nil {
+			return "", "", fmt.Errorf("预览目标导航失败: %w", nerr)
+		}
+		time.Sleep(400)
+		setCurrentPreviewTarget(ws)
+		return raw, ws, nil
+	}
+
+	// 本地路径（.html 或任意文件）：复用 autoOpenBrowserPreview 的 CDP 通道。
+	url, cdpWS, cdpErr, ok := autoOpenBrowserPreview(raw)
+	if !ok && cdpErr != "" {
+		return "", "", fmt.Errorf("%s", cdpErr)
+	}
+	if url == "" {
+		return "", "", fmt.Errorf("预览不可用：无法解析地址 %q", raw)
+	}
+	return url, cdpWS, nil
 }
