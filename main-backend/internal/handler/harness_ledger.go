@@ -132,7 +132,7 @@ func (l *contextLedger) report(round int, breakdown map[string]int, activated []
 			fmt.Fprintf(&b, "  - %s (call %s)：共 %d 字符，省略 %d，全文 → %s\n",
 				a.Tool, a.CallID, a.TotalChars, a.OmittedChars, a.RelPath)
 		}
-		b.WriteString("  用 mcp__fs__read_text_file 读上面的路径可取回全文（支持 head/tail 只取一段）\n")
+		b.WriteString("  用 mcp__grep__read_range 按行读取上面的路径可取回全文\n")
 	}
 
 	// 5) 已激活的按需工具

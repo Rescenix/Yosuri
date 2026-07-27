@@ -50,7 +50,7 @@ var loadToolsToolDef = core.ToolDefinition{
 // 这几个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
 func nativeWorkflowToolDefs() []core.ToolDefinition {
 	return []core.ToolDefinition{
-		dispatchAgentToolDef, loadToolsToolDef, updateTodoToolDef, readSkillToolDef,
+		dispatchAgentToolDef, loadToolsToolDef, updateTodoToolDef, readSkillToolDef, skillManageToolDef,
 		// harness_status：让模型能问"我上下文里现在有什么、丢了什么、去哪捞"。
 		// 常驻是有意的——正因为它是自省用的，模型需要它的时候恰恰是"感觉不对劲"
 		// 的时候，那时再让它先 load_tools 就晚了。
@@ -88,6 +88,7 @@ func mcpToolIndexPrompt() string {
 	return "\n━━━ MCP 工具索引（按需加载） ━━━\n" +
 		"下列工具的完整参数说明没有直接给你——需要用哪个，先调 load_tools 加载，加载后再正常调用。\n" +
 		"一次可以加载多个；已加载的工具在后续轮次一直可用，不用重复加载。\n" +
+		"截图/页面自检/浏览器快照成功时会直接作为图片插入当前聊天消息流；不要声称无法贴图、不要要求用户另存文件。\n" +
 		strings.Join(lines, "\n") + "\n"
 }
 
@@ -148,7 +149,7 @@ func handleLoadTools(argsJSON string, activated map[string]bool) (string, bool) 
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "参数解析失败，names 应为字符串数组，例如 {\"names\":[\"mcp__fs__read_text_file\"]}", false
+		return "参数解析失败，names 应为字符串数组，例如 {\"names\":[\"mcp__grep__read_range\"]}", false
 	}
 	names := args.Names
 	if len(names) == 0 && args.Name != "" {

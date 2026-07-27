@@ -90,6 +90,12 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_sf_zai_org_glm_5_2", Vendor: "硅基流动 SiliconFlow", Name: "GLM-5.2", Endpoint: "https://api.siliconflow.cn/v1", Model: "zai-org/GLM-5.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
 	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000},
 
+	// —— Agnes AI 免费多模态网关（apihub.agnes-ai.com/v1，OpenAI 兼容）——
+	// 2026-07-27 用户要求接入：文本 + 多模态理解（识图）走 /v1/chat/completions，
+	// 生图（/v1/images/generations）暂未接进本路由层（现有生图为 DASHSCOPE 专线）。
+	// KeyEnv=AGNES_API_KEY，用户需自备（设置面板填写或环境变量）。
+	{ID: "free_agnes", Vendor: "Agnes AI", Name: "Agnes 2.0 Flash (多模态)", Endpoint: "https://apihub.agnes-ai.com/v1", Model: "agnes-2.0-flash", KeyEnv: "Agnes_API_KEY", ParamsB: 0, Note: "Agnes AI 免费多模态网关（文本/识图）", Vision: true},
+
 	// —— 本地 llama.cpp 服务（需安装 llama-server 并在环境变量中配置 n_gpu_layers）——
 	{ID: "local_llama_qwen2_5_vl_7b", Vendor: "本地 Local", Name: "Qwen2.5-VL-7B-Instruct (llama.cpp)", Endpoint: "http://127.0.0.1:8081/v1", Model: "qwen2.5-vl-7b-instruct", KeyEnv: "", ParamsB: 7, Note: "本地 llama-server，可配置 LLAMA_N_GPU_LAYERS", Vision: true, ContextWindow: 32768, Local: true},
 }

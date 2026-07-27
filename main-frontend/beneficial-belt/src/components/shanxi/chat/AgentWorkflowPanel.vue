@@ -46,6 +46,21 @@
         </div>
       </div>
 
+      <!-- 截图是工作流中的一条内容：默认紧凑预览，点开才展示完整尺寸。 -->
+      <button
+        v-else-if="group.type === 'image'"
+        type="button"
+        class="flow-screenshot"
+        :class="{ expanded: group.block.expanded }"
+        @click="group.block.expanded = !group.block.expanded"
+      >
+        <span class="flow-screenshot-head">
+          <span><Icon icon="mdi:image-outline" width="14" /> 页面截图</span>
+          <span>{{ group.block.expanded ? '收起' : '展开' }}</span>
+        </span>
+        <img :src="group.block.image" :alt="group.block.content || 'Agent 截图'" />
+      </button>
+
       <!-- 收纳起来的工具/思考时间线 -->
       <template v-else>
         <div class="flow-summary" @click="summaryExpanded[gIdx] = !summaryExpanded[gIdx]">
@@ -169,6 +184,8 @@ const blockGroups = computed(() => {
       } else if (b.type === 'question') {
         // ask_user 提问：单独平铺，让用户直接看到「问了什么 / 答了什么」
         groups.push({ type: 'question', block: b })
+      } else if (b.type === 'image') {
+        groups.push({ type: 'image', block: b })
       }
       // 其他类型（compressed/steer/preview）暂不收纳也不平铺，避免污染回复
     }
@@ -317,24 +334,37 @@ function isRead(name) {
     name === 'mcp__fs__read_text_file' || name === 'mcp__grep__read_range'
 }
 
-// 把各种"读一段"的参数翻成人话贴在动作行尾（偏移和限制）。之前前端只认老 native tool
-// 的 start_line/end_line，MCP 的 head/tail、自研 read_range 的 start/end 都没显示，
-// 所以读文件看起来永远是"读全文"。覆盖三套命名：
+// 把各种"读一段"的参数翻成人话贴在动作行尾（offset=起点, limit=实际行数）。
+// 之前前端只认老 native tool 的 start_line/end_line，MCP 的 head/tail、自研 read_range
+// 的 start/end 都没显示，所以读文件看起来永远是"读全文"。覆盖三套命名：
 //   mcp__fs__read_text_file → head / tail（头/尾 N 行）
 //   mcp__grep__read_range   → start / end（第 X–Y 行，能读中间任意段）
-//   老 native read_file      → start_line / end_line / mode=outline
+//   老 native read_file     → start_line / end_line / mode=outline
+//
+// limit 优先用"实际返回的行数"——从 read_range 输出首行的元信息 "# 路径 第 X-Y 行" 里
+// 解析出来：agent 传 start=6 不传 end 时，工具会默认读到 400 行（甚至文件末尾），
+// 把这个真实数字展示出来比 "limit=400" 更有信息量；正好也能看出"是不是浪费 token 了"。
 function readRangeLabel(b) {
   const a = b.args || {}
   const head = parseInt(a.head, 10)
   const tail = parseInt(a.tail, 10)
-  if (Number.isFinite(head)) return `前 ${head} 行`
-  if (Number.isFinite(tail)) return `后 ${tail} 行`
   const s = parseInt(a.start ?? a.start_line, 10)
   const e = parseInt(a.end ?? a.end_line, 10)
-  if (Number.isFinite(s) && Number.isFinite(e)) return `第 ${s}–${e} 行`
-  if (Number.isFinite(s)) return `第 ${s} 行起`
-  if (a.mode === 'outline') return '骨架'
-  return ''
+  // read_range 的元信息行 "# path 第 X-Y 行（共 N 行）"：X=真实起点, Y=真实终点
+  // 只有成功时才有元信息行，失败时看 agent 传的参数
+  if (b.status !== 'error' && b.output) {
+    const metaMatch = /^#\s.+\s第\s(\d+)-(\d+)\s行/.exec(b.output.split('\n')[0] || '')
+    if (metaMatch) {
+      const ms = parseInt(metaMatch[1], 10), me = parseInt(metaMatch[2], 10)
+      if (Number.isFinite(ms) && Number.isFinite(me)) return `offset=${ms}, limit=${me - ms + 1}`
+    }
+  }
+  if (Number.isFinite(head)) return `offset=0, limit=${head}`
+  if (Number.isFinite(tail)) return `offset=-${tail}, limit=${tail}`
+  if (Number.isFinite(s) && Number.isFinite(e)) return `offset=${s}, limit=${e - s + 1}`
+  if (Number.isFinite(s)) return `offset=${s}, limit=400`
+  if (a.mode === 'outline') return 'offset=0, limit=outline'
+  return 'offset=0, limit=full'
 }
 
 function compactChars(n) {
@@ -693,6 +723,45 @@ function toolBodyText(b) {
   word-break: break-word;
 }
 
+/* 截图默认只占一行半的紧凑预览，不抢走聊天阅读节奏；点击后才展开全图。 */
+.flow-screenshot {
+  display: block;
+  width: min(100%, 360px);
+  margin: 10px 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 16%, var(--app-border));
+  border-radius: 10px;
+  background: var(--app-surface-2);
+  color: var(--app-text-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.flow-screenshot:hover { border-color: color-mix(in srgb, var(--app-accent) 38%, var(--app-border)); box-shadow: 0 4px 14px color-mix(in srgb, var(--app-accent) 10%, transparent); }
+.flow-screenshot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 9px;
+  color: var(--app-text-faint);
+  font-size: 11px;
+}
+.flow-screenshot-head span:first-child { display: inline-flex; align-items: center; gap: 5px; }
+.flow-screenshot-head svg { color: var(--app-accent); }
+.flow-screenshot img {
+  display: block;
+  width: 100%;
+  height: 72px;
+  object-fit: cover;
+  object-position: top;
+  background: var(--app-surface-3);
+  transition: height .2s ease;
+}
+.flow-screenshot.expanded { width: min(100%, 680px); }
+.flow-screenshot.expanded img { height: auto; max-height: 520px; object-fit: contain; }
+
 /* ---------- 操作行 ---------- */
 /* 收起态就是一行正文：无边框、无底色、无徽章，字号字色跟 .flow-intent 一致，
    读起来像在叙述而不是像一张控件卡片。白卡片留给展开后的 Diff / 输出。 */
@@ -715,7 +784,7 @@ function toolBodyText(b) {
   gap: 5px;
   font-size: 13px;
   font-weight: 600;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
 }
 .flow-add { color: #12b76a; }
 .flow-del { color: #d94834; }
@@ -747,7 +816,7 @@ function toolBodyText(b) {
 .flow-read {
   max-height: 320px;
   overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
   font-size: 11.5px;
   line-height: 1.6;
 }
@@ -762,7 +831,7 @@ function toolBodyText(b) {
   padding-right: 10px;
   color: var(--app-text-faint);
   user-select: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
   font-size: 11.5px;
 }
 .flow-read-code {
@@ -770,7 +839,7 @@ function toolBodyText(b) {
   min-width: 0;
   color: var(--app-text);
   background: transparent;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
   font-size: 11.5px;
   white-space: pre-wrap;
   word-break: break-all;
@@ -782,7 +851,7 @@ function toolBodyText(b) {
   font-size: 12px;
   line-height: 1.6;
   color: var(--app-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
   white-space: pre-wrap;
   word-break: break-all;
 }

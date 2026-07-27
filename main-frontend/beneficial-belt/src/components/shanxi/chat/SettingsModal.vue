@@ -337,12 +337,11 @@
                 <button class="inline-refresh" type="button" @click="loadSkills" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
               </div>
               <div class="settings-section-desc">
-                <strong>自研</strong>：工作流成功后自动沉淀（<code>{{ skillsDir || './skills' }}</code>）。
-                <strong>外部</strong>：把 Anthropic/Claude 风格的 <code>SKILL.md</code> 文件夹丢进 <code>{{ skillsExtDir || './skills-ext' }}</code> 即被加载。两类都会注入到 agent 的技能库索引。
+                Agent 仅会在复杂且成功的工作流后后台学习并<strong>自动启用</strong>；无需人工确认。闲置或重复的自研技能由后台归档且可恢复。外部 <code>SKILL.md</code> 仅展示、不受治理影响。
               </div>
               <div v-if="skillsLoading" class="settings-loading">加载中...</div>
               <template v-else>
-                <div v-if="!skills.length" class="settings-empty">技能库为空。跑几次 Code 工作流会自动沉淀自研技能，或往 <code>./skills-ext</code> 丢外部 SKILL.md。</div>
+                <div v-if="!skills.length" class="settings-empty">还没有技能。完成一次复杂工作流后，Agent 会在后台自动学习。</div>
                 <div v-for="sk in skills" :key="(sk.source || '') + ':' + sk.name" class="entity-card">
                   <div class="entity-head" @click="toggleSkill(sk.name)" style="cursor:pointer">
                     <Icon :icon="sk.source === 'external' ? 'mdi:puzzle-outline' : 'mdi:school-outline'" width="15" />
@@ -350,6 +349,7 @@
                     <span class="entity-badge" :class="sk.source === 'external' ? 'src-ext' : 'src-learned'">
                       {{ sk.source === 'external' ? '外部' : '自研' }}
                     </span>
+                    <span v-if="sk.source !== 'external'" class="entity-badge skill-status" :class="'is-' + normalizedSkillStatus(sk)">{{ skillStatusLabel(sk) }}</span>
                     <span v-if="sk.source !== 'external'" class="entity-badge">{{ (sk.steps || []).length }} 步</span>
                     <Icon :icon="expandedSkill === sk.name ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="16" style="margin-left:auto" />
                   </div>
@@ -357,7 +357,16 @@
                   <ol v-if="expandedSkill === sk.name && sk.steps && sk.steps.length" class="skill-steps">
                     <li v-for="(st, i) in sk.steps" :key="i">{{ st }}</li>
                   </ol>
+                  <div v-if="expandedSkill === sk.name && sk.source !== 'external'" class="skill-detail">
+                    <div><b>何时使用</b> {{ sk.trigger || '旧版技能未填写' }}</div>
+                    <div><b>如何验证</b> {{ sk.verification || '旧版技能未填写' }}</div>
+                  </div>
                   <pre v-else-if="expandedSkill === sk.name && sk.body" class="skill-body">{{ sk.body }}</pre>
+                  <div v-if="sk.source !== 'external'" class="skill-actions">
+                    <button v-if="isSkillActive(sk)" type="button" @click.stop="setSkillStatus(sk, 'archived')">关闭</button>
+                    <button v-else type="button" @click.stop="setSkillStatus(sk, 'active')">恢复启用</button>
+                    <button class="danger" type="button" @click.stop="removeSkill(sk)">删除</button>
+                  </div>
                 </div>
               </template>
             </div>
@@ -859,6 +868,9 @@ const skillsExtDir = ref('')
 const expandedSkill = ref(null)
 let skillsLoaded = false
 function toggleSkill(name) { expandedSkill.value = expandedSkill.value === name ? null : name }
+function normalizedSkillStatus(skill) { return skill.status === 'archived' ? 'archived' : 'active' }
+function skillStatusLabel(skill) { return normalizedSkillStatus(skill) === 'active' ? '已启用' : '已关闭' }
+function isSkillActive(skill) { return normalizedSkillStatus(skill) === 'active' }
 async function loadSkills(force = false) {
   if (skillsLoaded && !force) return
   skillsLoaded = true
@@ -874,6 +886,24 @@ async function loadSkills(force = false) {
   } finally {
     skillsLoading.value = false
   }
+}
+async function setSkillStatus(skill, status) {
+  try {
+    const res = await fetch('/api/skills/' + encodeURIComponent(skill.name) + '/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '更新失败')
+    await loadSkills(true)
+  } catch (e) { errorMsg.value = e.message }
+}
+async function removeSkill(skill) {
+  if (!window.confirm(`删除技能「${skill.name}」？此操作不可恢复。`)) return
+  try {
+    const res = await fetch('/api/skills/' + encodeURIComponent(skill.name), { method: 'DELETE' })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '删除失败')
+    if (expandedSkill.value === skill.name) expandedSkill.value = null
+    await loadSkills(true)
+  } catch (e) { errorMsg.value = e.message }
 }
 // ============ Profile ============
 const profile = ref({ full_name: '', work: '', instructions: '' })
@@ -1221,6 +1251,14 @@ onUnmounted(() => {
 /* 技能来源角标：自研走中性色，外部走强调色，一眼区分 */
 .entity-badge.src-learned { color: var(--app-text-soft); background: var(--app-surface-3); }
 .entity-badge.src-ext { color: var(--app-accent); background: var(--app-accent-soft); }
+.skill-status.is-active { color: #047857; background: #d1fae5; }
+.skill-status.is-archived { color: var(--app-text-faint); background: var(--app-surface-3); }
+.skill-detail { margin: 8px 0; display: grid; gap: 4px; font-size: 11.5px; line-height: 1.55; color: var(--app-text-soft); }
+.skill-detail b { color: var(--app-text); margin-right: 5px; }
+.skill-actions { display: flex; gap: 6px; margin-top: 10px; }
+.skill-actions button { border: 1px solid var(--app-border); background: var(--app-surface); color: var(--app-text-soft); border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; }
+.skill-actions button:hover { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
+.skill-actions button.danger:hover { background: #dc2626; border-color: #dc2626; }
 /* 外部技能正文（SKILL.md markdown 原文，保留换行/缩进） */
 .skill-body { margin: 8px 0 2px; padding: 10px 12px; font-size: 12px; line-height: 1.65; color: var(--app-text-soft); background: var(--app-surface-3); border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-family: inherit; max-height: 320px; overflow-y: auto; }
 

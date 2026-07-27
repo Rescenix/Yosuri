@@ -20,10 +20,11 @@ import (
 
 // ---------------- 技能库 ----------------
 
-// HandleListSkills GET /api/skills —— 实时读技能库，返回自研沉淀 + 外部导入两类，
+// HandleListSkills GET /api/skills —— 返回完整技能库存：候选/启用/归档的自研技能
+// 与外部导入两类，设置页据此提供类似 Hermes 的审阅和恢复动作。
 // 每条带 source 字段（learned / external）供前端区分展示。
 func HandleListSkills(c *gin.Context) {
-	skills := loadSkills()
+	skills := append(loadLearnedSkillsForSettings(), loadExternalSkills()...)
 	if skills == nil {
 		skills = make([]Skill, 0)
 	}
@@ -33,6 +34,30 @@ func HandleListSkills(c *gin.Context) {
 		"dir":     skillsDir(),
 		"ext_dir": externalSkillsDir(),
 	})
+}
+
+func HandleUpdateSkillStatus(c *gin.Context) {
+	var body struct {
+		Status string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求体不是合法 JSON"})
+		return
+	}
+	s, err := setLearnedSkillStatus(c.Param("name"), body.Status)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"skill": s})
+}
+
+func HandleDeleteSkill(c *gin.Context) {
+	if err := deleteLearnedSkill(c.Param("name")); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // ---------------- MCP 生态 ----------------

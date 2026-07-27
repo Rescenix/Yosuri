@@ -72,6 +72,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	// 设置面板：技能库 / MCP 生态 / 用户档案（含自定义指令）
 	r.GET("/api/skills", HandleListSkills)
+	r.POST("/api/skills/:name/status", HandleUpdateSkillStatus)
+	r.DELETE("/api/skills/:name", HandleDeleteSkill)
 	r.GET("/api/mcp", HandleMCPStatus)
 	r.GET("/api/profile", HandleGetProfile)
 	r.POST("/api/profile", HandleSaveProfile)

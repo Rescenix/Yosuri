@@ -18,6 +18,7 @@ package handler
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -197,9 +199,9 @@ func initMCPServers() {
 		}
 		mcpConns[name] = conn
 		for _, t := range tools {
-			// 不向 agent 暴露 search_files：它依赖 MCP server 内部的 glob 搜索，
-			// 实际使用中容易卡死/转圈，代码检索统一走 rg（execute_command）。
-			if t.Function.Name == "search_files" {
+			// 全文检索与文件正文统一走 grep MCP：filesystem 的 search/read 与它重叠，
+			// 还会让模型在两套参数形状间摇摆。fs 只保留目录和受审批的写入能力。
+			if t.Function.Name == "search_files" || t.Function.Name == "read_text_file" {
 				continue
 			}
 			fullName := fmt.Sprintf("mcp__%s__%s", name, t.Function.Name)
@@ -344,11 +346,6 @@ func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefin
 // 却被外层判超时，模型收到"MCP 工具失败"后会误判成"服务没起"，转头去重启 dev server。
 var slowMCPTools = map[string]bool{
 	"mcp__screenshot__screenshot": true,
-	"mcp__screenshot__page_check": true,
-	// browser_open 要等 networkidle，browser_snapshot 还要再跑一次视觉模型；
-	// 其余交互动作（click/fill/eval）很快，走默认 60s 就够。
-	"mcp__screenshot__browser_open":     true,
-	"mcp__screenshot__browser_snapshot": true,
 }
 
 func mcpCallTimeout(fullName string) time.Duration {
@@ -402,16 +399,79 @@ func (c *mcpConn) notify(method string, params any) {
 	c.mu.Unlock()
 }
 
-// callMCPTool 执行 mcp__server__tool 形式的工具调用，返回文本结果。
+// mcpImageArtifact 是 MCP 工具携带的图像工件。它不进入模型的文本上下文，
+// 而是由工作流 SSE 原样交给聊天界面，作为 Agent 自主产出的截图交付。
+type mcpImageArtifact struct {
+	Data     string
+	MimeType string
+}
+
+type mcpToolCallResult struct {
+	Text   string
+	Images []mcpImageArtifact
+}
+
+// chrome-devtools-mcp 的文案结尾通常会带句号："Saved screenshot to C:\\...\\shot.png."。
+// 句号是自然语言标点，不属于文件名，必须在这里剥掉。
+var chromeScreenshotPathRE = regexp.MustCompile(`(?im)^saved screenshot to\s+(.+?\.(?:png|jpe?g|webp))\.?\s*$`)
+
+// chrome-devtools-mcp 的截图工具只回传临时文件路径，而不会带 MCP image content。
+// 只针对该工具、且只允许系统临时目录内的图片读取，随后把它补成聊天可显示的图像。
+func chromeDevtoolsScreenshotArtifact(toolName, text string) *mcpImageArtifact {
+	if toolName != "mcp__chrome_devtools__take_screenshot" {
+		return nil
+	}
+	match := chromeScreenshotPathRE.FindStringSubmatch(text)
+	if len(match) != 2 {
+		return nil
+	}
+	path := strings.TrimSpace(match[1])
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil
+	}
+	tempPath, err := filepath.Abs(os.TempDir())
+	if err != nil {
+		return nil
+	}
+	rel, err := filepath.Rel(tempPath, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return nil
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil || len(data) == 0 || len(data) > 12*1024*1024 {
+		return nil
+	}
+	ext := strings.ToLower(filepath.Ext(absPath))
+	mime := "image/png"
+	if ext == ".jpg" || ext == ".jpeg" {
+		mime = "image/jpeg"
+	} else if ext == ".webp" {
+		mime = "image/webp"
+	}
+	return &mcpImageArtifact{Data: base64.StdEncoding.EncodeToString(data), MimeType: mime}
+}
+
+// callMCPTool 执行 mcp__server__tool 形式的工具调用，保留旧的纯文本调用面。
 func callMCPTool(fullName, argsJSON string) (string, error) {
+	result, err := callMCPToolWithArtifacts(fullName, argsJSON)
+	if err != nil {
+		return "", err
+	}
+	return result.Text, nil
+}
+
+// callMCPToolWithArtifacts 保留 MCP 的非文本 content 项。这样截图是工具能力，
+// 不是某个固定工作流或前端按钮的特例；任何 MCP 工具均可返回图像工件。
+func callMCPToolWithArtifacts(fullName, argsJSON string) (mcpToolCallResult, error) {
 	conn, ok := mcpRoutes[fullName]
 	if !ok {
-		return "", fmt.Errorf("未知的 MCP 工具: %s", fullName)
+		return mcpToolCallResult{}, fmt.Errorf("未知的 MCP 工具: %s", fullName)
 	}
 	var args map[string]any
 	if argsJSON != "" {
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-			return "", fmt.Errorf("MCP 工具参数解析失败: %w", err)
+			return mcpToolCallResult{}, fmt.Errorf("MCP 工具参数解析失败: %w", err)
 		}
 	}
 	if fullName == "mcp__fs__edit_file" {
@@ -424,34 +484,44 @@ func callMCPTool(fullName, argsJSON string) (string, error) {
 		"name": mcpRealName[fullName], "arguments": args,
 	}, mcpCallTimeout(fullName))
 	if err != nil {
-		return "", err
+		return mcpToolCallResult{}, err
 	}
 
 	var result struct {
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			Data     string `json:"data"`
+			MimeType string `json:"mimeType"`
 		} `json:"content"`
 		IsError bool `json:"isError"`
 	}
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return "", fmt.Errorf("MCP 结果解析失败: %w", err)
+		return mcpToolCallResult{}, fmt.Errorf("MCP 结果解析失败: %w", err)
 	}
 
 	var sb strings.Builder
+	images := make([]mcpImageArtifact, 0, 1)
 	for _, item := range result.Content {
 		if item.Type == "text" {
 			sb.WriteString(item.Text)
+		} else if item.Type == "image" && item.Data != "" {
+			images = append(images, mcpImageArtifact{Data: item.Data, MimeType: item.MimeType})
 		}
 	}
 	text := truncateChars(sb.String(), codeResultMaxChars)
 	if result.IsError {
-		return "", fmt.Errorf("%s", text)
+		return mcpToolCallResult{}, fmt.Errorf("%s", text)
+	}
+	if len(images) == 0 {
+		if image := chromeDevtoolsScreenshotArtifact(fullName, sb.String()); image != nil {
+			images = append(images, *image)
+		}
 	}
 	// AgentFS：真实落盘成功后捕获 after 并写入影子仓审计（仅成功路径；
 	// IsError / err 返回的路径文件未真正改动，不记审计）
 	OnAfterWrite(fullName, args)
-	return text, nil
+	return mcpToolCallResult{Text: text, Images: images}, nil
 }
 
 // normalizeMCPEditArgs 兜底纠正模型对 mcp__fs__edit_file 的参数形状混淆。

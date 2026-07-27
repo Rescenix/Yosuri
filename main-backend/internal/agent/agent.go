@@ -25,10 +25,11 @@ const SoulTemplateCodeProtocol = `
 - 文件/命令类工具走 MCP，默认不在工具列表里：先用 load_tools 按名字加载，再正常调用。
   但**只有 mcp__ 开头的工具需要加载**——你工具列表里已经直接可见的那些（dispatch_agent、
   load_tools、update_todo、read_skill、harness_status）是常驻的，直接调，别再去 load 它们。
-- 读大文件别整篇读进来：用 mcp__grep__read_range 读指定行号区间，或 mcp__fs__read_text_file 的 head/tail 只取首尾。
-- 改代码用 mcp__fs__edit_file：先 read_text_file 拿到精确内容，oldText 从中原样照抄（含缩进/空白/换行），不要凭记忆构造——差一个空白就匹配失败要重试。oldText 还要在文件里唯一。
+- **必须按行读取文件**：读文件时必须使用 mcp__grep__read_range 指定 start/end 行号区间（offset=start, limit=end-start+1），禁止用 mcp__fs__read_text_file 不加 head/tail 参数读全文。start/end 从 1 开始编号，一次最多读 400 行。
+- 改代码用 mcp__fs__edit_file：先 read_range 拿到精确内容，oldText 从中原样照抄（含缩进/空白/换行），不要凭记忆构造——差一个空白就匹配失败要重试。oldText 还要在文件里唯一。
 - 先用 mcp__grep__grep 搜索定位再动手，避免重复劳动。
 - 复杂多步任务:开工前用 update_todo 列出计划清单,每完成一步再调一次更新状态(便签会实时勾选)。简单一两步的任务别调,免得啰嗦。
+- 对复杂任务中形成的通用流程，系统会在成功后后台自动沉淀为技能；无需提示用户审阅或要求额外操作。只有用户明确要求保存流程时才直接调用 skill_manage。
 `
 
 // MainAgent 主Agent定义

@@ -176,15 +176,15 @@ TOOLS = [
     },
     {
         "name": "read_range",
-        "description": "读取文件的指定行号区间（第 start 到 end 行，1-indexed 闭区间），返回带行号的内容。用于只看大文件的某一段、而不是整文件读进上下文——比 read_text_file 的 head/tail 更精确（能读中间任意段）。一次最多返回 400 行，越界自动裁剪；返回里会提示总行数和是否还有后续。",
+        "description": "读取文件的指定行号区间（offset=start, limit=end-start+1），返回带行号的内容。用于只看大文件的某一段、而不是整文件读进上下文。start/end 从 1 开始编号（1-indexed），一次最多返回 400 行，越界自动裁剪；返回里会提示总行数和是否还有后续。**禁止用 mcp__fs__read_text_file 不加 head/tail 参数读全文**。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "文件路径，相对项目根或绝对路径（须在项目根内）"},
-                "start": {"type": "integer", "description": "起始行号（1-indexed，闭区间），默认 1"},
-                "end": {"type": "integer", "description": "结束行号（1-indexed，闭区间），缺省则从 start 起读一屏（最多 400 行）"},
+                "start": {"type": "integer", "description": "起始行号（1-indexed，闭区间），默认 1，对应 offset=start"},
+                "end": {"type": "integer", "description": "结束行号（1-indexed，闭区间），必填！不传会报错。读一行传 start=N, end=N；读一段传 start=N, end=M。对应 limit=end-start+1"},
             },
-            "required": ["path"],
+            "required": ["path", "start", "end"],
         },
     },
 ]

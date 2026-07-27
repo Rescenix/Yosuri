@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 所有用例都把 AURORA_SKILLS_DIR 指到临时目录，绝不碰用户真实的 ./skills。
@@ -102,5 +103,36 @@ func TestSkillLibraryPromptIsIndexOnly(t *testing.T) {
 	}
 	if strings.Contains(prompt, "ZZZ") {
 		t.Errorf("索引不该包含 steps 正文，否则按需加载失去意义: %s", prompt)
+	}
+}
+
+func TestLegacyCandidateSkillIsMigratedToActive(t *testing.T) {
+	dir := withTempSkillsDir(t)
+	writeSkillFile(t, dir, Skill{
+		Name: "legacy-candidate", Description: "旧候选应自动启用", Status: "candidate",
+		UpdatedAt: time.Now(), Steps: []string{"a", "b", "c"},
+	})
+	if got := skillLibraryPrompt(); !strings.Contains(got, "legacy-candidate") {
+		t.Fatalf("旧候选应迁移为已启用技能，实得: %s", got)
+	}
+}
+
+func TestIdleActiveSkillIsArchived(t *testing.T) {
+	dir := withTempSkillsDir(t)
+	old := time.Now().Add(-skillActiveIdleTTL - time.Hour)
+	writeSkillFile(t, dir, Skill{
+		Name: "stale-skill", Description: "闲置技能", Status: skillStatusActive,
+		CreatedAt: old, UpdatedAt: old, LastUsedAt: old, Steps: []string{"a", "b", "c"},
+	})
+	if got := loadLearnedSkills(); len(got) != 0 {
+		t.Fatalf("闲置 active 技能应归档而非继续暴露，实得: %#v", got)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "stale-skill.json"))
+	if err != nil {
+		t.Fatalf("归档不应删除技能文件: %v", err)
+	}
+	var saved Skill
+	if err := json.Unmarshal(data, &saved); err != nil || saved.Status != skillStatusArchived {
+		t.Fatalf("技能没有正确归档: %+v, err=%v", saved, err)
 	}
 }

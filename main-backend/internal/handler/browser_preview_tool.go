@@ -17,9 +17,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -202,9 +207,80 @@ func cdpBrowserWS() string {
 	return v.WebSocketDebuggerURL
 }
 
+// findChromeExecutable 定位本机 Chrome/Chromium 可执行文件。
+// 优先读 CHROME_PATH 环境变量，否则在常见安装目录里找；最后回退到 PATH 查找。
+// 找不到返回空串（调用方据此走降级/报错路径）。
+func findChromeExecutable() string {
+	if p := os.Getenv("CHROME_PATH"); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	candidates := []string{
+		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
+		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+		`C:\Program Files\Google\Chrome Beta\Application\chrome.exe`,
+		`C:\Users\` + os.Getenv("USERNAME") + `\AppData\Local\Google\Chrome\Application\chrome.exe`,
+		`C:\Program Files\Chromium\Application\chrome.exe`,
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	for _, name := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// ensureChromeCDP 确保本机有一个以调试模式（9222）运行的 Chrome 供预览用。
+// 若 9222 已在监听则直接返回；否则自动拉起一个 headless Chrome（独立 user-data-dir，
+// 不干扰用户正常使用的 Chrome）。拉起失败（找不到可执行文件/超时）则静默返回，
+// 由调用方走原有降级/报错路径。这是修复「Chrome CDP 未运行」的关键：此前后端只假设
+// Chrome 已以调试模式运行，从不主动拉起，导致双击打开的普通 Chrome 不满足预览条件。
+func ensureChromeCDP() {
+	if cdpBrowserWS() != "" {
+		return // 已经在跑，别重复拉
+	}
+	exe := findChromeExecutable()
+	if exe == "" {
+		log.Printf("⚠️ [预览] 未找到 Chrome 可执行文件，无法自动拉起 CDP")
+		return
+	}
+	userDataDir := filepath.Join(os.TempDir(), "aurora-cdp-profile")
+	cmd := exec.Command(exe,
+		"--headless=new",
+		"--remote-debugging-port=9222",
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--disable-background-networking",
+		"--user-data-dir="+userDataDir,
+		"about:blank",
+	)
+	// Windows 下隐藏可能闪现的窗口；其他平台该字段为零值不影响。
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := cmd.Start(); err != nil {
+		log.Printf("⚠️ [预览] 拉起 Chrome 失败: %v", err)
+		return
+	}
+	// 轮询 9222 直到就绪（最多 ~10s），不长时间阻塞调用方。
+	for i := 0; i < 40; i++ {
+		time.Sleep(250 * time.Millisecond)
+		if cdpBrowserWS() != "" {
+			log.Printf("🖥️ [预览] 已自动拉起 Chrome CDP (pid=%d)", cmd.Process.Pid)
+			return
+		}
+	}
+	log.Printf("⚠️ [预览] Chrome 已拉起但 9222 未在超时内就绪")
+}
+
 // cdpOpenTarget 在 Chrome 里开一个新标签页并导航到 targetURL，返回该标签页的
 // WebSocket 调试地址。targetURL 为空时开 about:blank。
 func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) {
+	ensureChromeCDP() // 9222 没在跑就自动拉起，修复「Chrome CDP 未运行」
 	browserWS := cdpBrowserWS()
 	if browserWS == "" {
 		return "", "", fmt.Errorf("chrome CDP 未运行(9222 无响应)")

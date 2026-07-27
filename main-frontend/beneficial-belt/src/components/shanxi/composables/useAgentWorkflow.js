@@ -240,6 +240,22 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             onStreamUpdate?.()
         })
 
+        // 截图紧跟触发它的工具步骤插进同一条 Agent 工作流；不能另起消息追加到
+        // 整段工作流之后，否则视觉上会“永远卡在聊天底部”，打乱后续回复顺序。
+        es.addEventListener('artifact', e => {
+            const d = JSON.parse(e.data)
+            if (d.kind !== 'image' || !d.image) return
+            flow.blocks.push({
+                type: 'image',
+                id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                image: d.image,
+                sourceUrl: d.source_url || '',
+                content: d.caption || 'Agent 已发布截图交付。',
+                expanded: false
+            })
+            onStreamUpdate?.()
+        })
+
         // 工具审批请求（Ask/Plan 模式）：后端在执行危险工具前推来，前端弹批准条等人点。
         // 把整条请求（含 id/tool/args）压入 approvalState.pending，弹窗据此渲染。
         es.addEventListener('approval_request', e => {
@@ -324,14 +340,19 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('question', e => {
             const d = JSON.parse(e.data)
             const options = Array.isArray(d.options) ? d.options : []
-            questionState.pending = reactive({
+            const q = reactive({
                 id: d.id,
                 workflowId: d.workflow_id || flow.workflowId,
                 question: d.question || '',
                 options,
                 multi: !!d.multi,
-                allowOther: !!d.allow_other || options.some(option => /其他|自由输入/.test(option.label))
+                allowOther: !!d.allow_other || options.some(option => /其他|自由输入/.test(option.label)),
+                answer: '',
+                answered: false,
             })
+            questionState.pending = q
+            // 同步压入当前工作流轨迹：和 tool/think 同一机制，刷新前即可见（刷新后由后端 FlowBlock 兜底）。
+            flow.blocks.push({ type: 'question', question: q.question, options, multi: q.multi, allowOther: q.allowOther, answer: '', answered: false })
             onStreamUpdate?.()
         })
 
@@ -428,7 +449,16 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     async function answerQuestion({ id, answer = '', selected = [] }) {
         const item = questionState.pending
         if (!item || item.id !== id) return
+        // 不清空 pending（popup 由组件自身 unmount 关闭），且回填进 flow.blocks 的
+        // 对应 question 块——刷新前即可见选中项 + 已回答态，刷新后由后端 FlowBlock 兜底。
         questionState.pending = null
+        for (const b of flow.blocks) {
+            if (b.type === 'question' && b.question === item.question) {
+                b.answer = answer || selected.join('、')
+                b.answered = true
+                break
+            }
+        }
         onStreamUpdate?.()
         const wfId = item.workflowId
         try {

@@ -120,6 +120,28 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
+              <div v-if="railsObscuredByDock" class="gem-rail-context-actions">
+                <button
+                  class="gem-icon-btn"
+                  type="button"
+                  title="预览 AgentFS 审计轨迹"
+                  @mouseenter="openRailUtilityPreview('agentfs', $event)"
+                  @focus="openRailUtilityPreview('agentfs', $event)"
+                  @mouseleave="closeRailUtilityPreviewDelayed"
+                >
+                  <Icon icon="mdi:source-commit" width="18" />
+                </button>
+                <button
+                  class="gem-icon-btn"
+                  type="button"
+                  title="预览 Harness 工作流"
+                  @mouseenter="openRailUtilityPreview('harness', $event)"
+                  @focus="openRailUtilityPreview('harness', $event)"
+                  @mouseleave="closeRailUtilityPreviewDelayed"
+                >
+                  <Icon icon="mdi:transit-connection-variant" width="18" />
+                </button>
+              </div>
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
@@ -130,39 +152,72 @@
             <Teleport to="body">
               <Transition name="agentfs-card">
                 <aside
+                  v-if="railUtilityPreview"
+                  class="rail-utility-preview"
+                  :class="`is-${railUtilityPreview}`"
+                  :style="railUtilityPreviewStyle"
+                  @mouseenter="cancelRailUtilityPreviewClose"
+                  @mouseleave="closeRailUtilityPreviewDelayed"
+                >
+                  <div v-if="railUtilityPreview === 'agentfs'" class="rail-agentfs-preview">
+                    <div v-if="agentFSTimeline.length" class="agentfs-tree">
+                      <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="agentfs-preview-link-gradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="var(--app-accent)" stop-opacity=".72" />
+                            <stop offset="100%" stop-color="var(--app-accent)" stop-opacity=".16" />
+                          </linearGradient>
+                        </defs>
+                        <path
+                          v-for="link in agentFSGraphLinks"
+                          :key="link.key"
+                          :d="link.d"
+                          class="agentfs-tree-link"
+                          :class="link.trunk ? 'trunk-link' : 'branch-link'"
+                          :style="link.trunk ? {} : { '--link-hue': link.hue }"
+                        />
+                      </svg>
+                      <button
+                        v-for="node in agentFSGraphNodes"
+                        :key="`preview-${node.snapshot.commit}-${node.snapshot.seq}`"
+                        class="agentfs-node"
+                        :class="{ active: selectedAgentFSSnapshot?.commit === node.snapshot.commit, latest: node.index === 0, leaf: node.isLeaf, branch: node.isBranch }"
+                        :style="{ left: node.x + 'px', top: node.y + 'px', '--node-hue': node.hue, '--node-order': node.index }"
+                        type="button"
+                        :title="`${node.snapshot.rel_path} · ${formatAgentFSTime(node.snapshot.ts)}`"
+                        @click.stop="openAgentFSFromRailPreview(node.snapshot, $event)"
+                      >
+                        <span class="agentfs-node-dot"></span>
+                        <span class="agentfs-node-label">{{ node.shortName }}</span>
+                      </button>
+                    </div>
+                    <div v-else class="rail-utility-empty">当前会话还没有修改快照</div>
+                  </div>
+                  <HarnessFlowRail v-else compact :flow="lastAgentFlow" />
+                </aside>
+              </Transition>
+            </Teleport>
+
+            <Teleport to="body">
+              <Transition name="agentfs-card">
+                <aside
                   v-if="selectedAgentFSSnapshot"
                   class="agentfs-diff-card"
                   :style="agentFSDiffCardStyle"
                   @click.stop
                 >
-                  <header class="agentfs-card-header">
-                    <div class="agentfs-card-brand">
-                      <span class="agentfs-card-logo"><Icon icon="mdi:source-commit" width="16" /></span>
-                      <div>
-                        <strong>AgentFS Trace</strong>
-                        <small>会话修改快照</small>
-                      </div>
-                    </div>
-                    <button type="button" class="agentfs-card-close" @click="closeAgentFSDiff">
-                      <Icon icon="mdi:close" width="16" />
-                    </button>
-                  </header>
                   <div class="agentfs-card-meta">
-                    <div class="agentfs-file-mark">
-                      <Icon icon="mdi:file-code-outline" width="17" />
-                    </div>
-                    <div class="agentfs-file-info">
-                      <strong :title="selectedAgentFSSnapshot.rel_path">{{ selectedAgentFSSnapshot.rel_path }}</strong>
-                      <span>{{ selectedAgentFSSnapshot.op === 'edit' ? '编辑文件' : '写入文件' }} · {{ formatAgentFSTime(selectedAgentFSSnapshot.ts) }}</span>
-                    </div>
+                    <Icon icon="mdi:file-code-outline" width="15" class="agentfs-meta-icon" />
+                    <strong :title="selectedAgentFSSnapshot.rel_path">{{ selectedAgentFSSnapshot.rel_path }}</strong>
                     <code>{{ selectedAgentFSSnapshot.commit }}</code>
-                  </div>
-                  <div class="agentfs-diff-toolbar">
-                    <span><i class="agentfs-status-dot"></i> 已捕获</span>
                     <span class="agentfs-diff-stats">
                       <b>+{{ agentFSDiffStats.added }}</b>
                       <em>−{{ agentFSDiffStats.removed }}</em>
                     </span>
+                    <span class="agentfs-meta-time">{{ selectedAgentFSSnapshot.op === 'edit' ? '编辑' : '写入' }} · {{ formatAgentFSTime(selectedAgentFSSnapshot.ts) }}</span>
+                    <button type="button" class="agentfs-card-close" title="关闭" @click="closeAgentFSDiff">
+                      <Icon icon="mdi:close" width="15" />
+                    </button>
                   </div>
                   <div class="agentfs-diff-body">
                     <div v-if="agentFSDiffLoading" class="agentfs-diff-state">
@@ -225,12 +280,9 @@
         </aside>
 
         <Transition name="agentfs-gutter">
-          <div v-if="!sidebarOpen && dockPanels.length === 0" class="agentfs-gutter">
+          <div v-if="!sidebarOpen && (!dockPanels.length || dockHidden) && !dockExpanded" class="agentfs-gutter">
             <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
-              <button class="agentfs-rail-head" type="button" title="AgentFS 修改快照" @click.stop="refreshAgentFSTimeline">
-                <Icon icon="mdi:source-commit" width="18" />
-              </button>
-              <div v-if="agentFSTimeline.length" class="agentfs-tree">
+              <div v-if="agentFSTimeline.length" ref="agentFSTreeRef" class="agentfs-tree">
                 <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
                   <defs>
                     <linearGradient id="agentfs-link-gradient" x1="0" y1="0" x2="0" y2="1">
@@ -238,23 +290,30 @@
                       <stop offset="100%" stop-color="var(--app-accent)" stop-opacity=".16" />
                     </linearGradient>
                   </defs>
-                  <path v-for="link in agentFSGraphLinks" :key="link.key" :d="link.d" class="agentfs-tree-link" />
+                  <path
+                    v-for="link in agentFSGraphLinks"
+                    :key="link.key"
+                    :d="link.d"
+                    class="agentfs-tree-link"
+                    :class="link.trunk ? 'trunk-link' : 'branch-link'"
+                    :style="link.trunk ? {} : { '--link-hue': link.hue }"
+                  />
                 </svg>
                 <button
                   v-for="node in agentFSGraphNodes"
                   :key="node.snapshot.commit + '-' + node.snapshot.seq"
                   type="button"
                   class="agentfs-node"
-                  :class="{ active: selectedAgentFSSnapshot?.commit === node.snapshot.commit, latest: node.index === 0 }"
-                  :style="{ left: `${node.x}px`, top: `${node.y}px` }"
+                  :class="{ active: selectedAgentFSSnapshot?.commit === node.snapshot.commit, latest: node.index === 0, leaf: node.isLeaf, branch: node.isBranch }"
+                  :style="{ left: `${node.x}px`, top: `${node.y}px`, '--node-hue': node.hue, '--node-order': node.index }"
                   :title="`${node.snapshot.rel_path} · ${formatAgentFSTime(node.snapshot.ts)}`"
                   @click.stop="openAgentFSSnapshot(node.snapshot, $event)"
                 >
-                  <span class="agentfs-node-dot"><Icon :icon="node.snapshot.op === 'edit' ? 'mdi:pencil-outline' : 'mdi:file-plus-outline'" width="10" /></span>
+                  <span class="agentfs-node-dot"></span>
                   <span class="agentfs-node-label">{{ node.shortName }}</span>
                 </button>
               </div>
-              <div v-else class="agentfs-empty-rail" title="当前会话还没有 AgentFS 修改快照"><span></span><span></span><span></span></div>
+              <div v-else class="agentfs-empty-rail" aria-label="当前会话还没有 AgentFS 修改快照"></div>
             </div>
           </div>
         </Transition>
@@ -266,23 +325,41 @@
             <!-- 右上角工具组：顶部横条删除后浮在聊天区右上（Code 模式才有意义）。
                  工具窗口（终端/Diff/预览）打开后丝滑变成竖条贴靠面板边缘，DOM 顺序不变，
                  更多(三点)本来就排最后，变竖条后自然落在底部。 -->
-            <div class="floating-tools" :class="{ vertical: dockPanels.length > 0 }" v-if="inputTopBarMode === 'git'">
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
-                <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
+            <div
+              v-if="inputTopBarMode === 'git'"
+              class="floating-tools"
+              :class="{ vertical: dockPanels.length > 0 && !dockHidden, 'collapsed-dock': dockPanels.length > 0 && dockHidden }"
+            >
+              <button
+                v-if="dockPanels.length > 0 && dockHidden"
+                class="header-icon-btn dock-restore-btn"
+                type="button"
+                title="展开工具坞"
+                @click.stop="toggleDockHidden"
+              >
+                <Icon icon="mdi:chevron-left" width="19" color="#6b6b6b" />
               </button>
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
-                <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
-              </button>
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" title="预览">
-                <Icon icon="mage:preview" width="17" color="#6b6b6b" />
-              </button>
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('tasks') }" @click.stop="toggleDockPanel('tasks')" title="后台任务">
-                <Icon icon="mdi:task-minus" width="17" color="#6b6b6b" />
-              </button>
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('file') }" @click.stop="toggleDockPanel('file')" title="文件">
-                <Icon icon="mdi:file-code-outline" width="17" color="#6b6b6b" />
-              </button>
+              <template v-else>
+                <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
+                  <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
+                </button>
+                <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
+                  <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
+                </button>
+                <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" title="预览">
+                  <Icon icon="mage:preview" width="17" color="#6b6b6b" />
+                </button>
+                <button class="header-icon-btn" :class="{ active: dockPanels.includes('tasks') }" @click.stop="toggleDockPanel('tasks')" title="后台任务">
+                  <Icon icon="mdi:task-minus" width="17" color="#6b6b6b" />
+                </button>
+                <button class="header-icon-btn" :class="{ active: dockPanels.includes('file') }" @click.stop="toggleDockPanel('file')" title="文件">
+                  <Icon icon="mdi:file-code-outline" width="17" color="#6b6b6b" />
+                </button>
+              </template>
             </div>
+
+            <!-- 只覆盖聊天内容自身的右侧留白；不参与外层工作区布局。 -->
+            <HarnessFlowRail v-if="isExpanded && (!dockPanels.length || dockHidden)" :flow="lastAgentFlow" />
 
 
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
@@ -304,9 +381,14 @@
                     {{ formatChatTime(item.timestamp) }}
                   </div>
                   <div v-else-if="item.type === 'message'" :key="item.id" class="message-row" :class="item.sender" :data-msg-id="item.id">
-                    <div v-if="item.type === 'image'" class="image-card">
-                      <img :src="item.image" style="max-width: 240px; border-radius: 12px;" />
-                    </div>
+                    <article v-if="item.kind === 'screenshot'" class="agent-screenshot-card">
+                      <div class="agent-screenshot-head">
+                        <span><Icon icon="mdi:camera-outline" width="15" /> Agent 已发布截图</span>
+                        <small>{{ item.sourceUrl || '当前预览' }}</small>
+                      </div>
+                      <img :src="item.image" :alt="item.content || 'Agent 交付截图'" class="agent-screenshot-image" />
+                      <p v-if="item.content" class="agent-screenshot-note">{{ item.content }}</p>
+                    </article>
                     <div v-else-if="item.sender === 'user'" class="message-bubble user" :class="{ editing: editingMsgId === item.id, active: String(activeUserMessageId) === String(item.id) }">
                       <AttachmentChipRow v-if="item.attachments?.length" :attachments="item.attachments" />
                       <!-- 编辑态：消息框本身变成输入框，就地改，不去下面的输入框 -->
@@ -396,7 +478,7 @@
 
             <div class="chat-input-area">
               <!-- 回到底部：紧贴在输入框卡片正上方 -->
-              <button v-show="showScrollButton" class="scroll-to-bottom-btn" @click="forceScrollToBottom" title="回到底部">
+              <button v-show="showScrollButton" class="scroll-to-bottom-btn" :class="{ 'wf-running': flowState.active }" @click="forceScrollToBottom" title="回到底部">
                 <Icon icon="mdi:chevron-down" width="20" color="#555" />
               </button>
 
@@ -992,6 +1074,7 @@ import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import AuroraStatusIcon from './AuroraStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
 import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
+import HarnessFlowRail from './HarnessFlowRail.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
@@ -1303,13 +1386,18 @@ function setActiveDockPanel(key) {
 // terminal 的会话、预览的页面导航状态都还在，随手点开任意一个面板按钮就原样回来。
 const dockExpanded = ref(false)
 const dockHidden = ref(false)
+const railsObscuredByDock = computed(() =>
+  !sidebarOpen.value && dockPanels.value.length > 0 && !dockHidden.value
+)
 const showSnippet = ref(false)
 const snippetInsertCmd = ref('')
 function toggleDockExpanded() {
   dockExpanded.value = !dockExpanded.value
 }
 function toggleDockHidden() {
-  dockHidden.value = !dockHidden.value
+  const willHide = !dockHidden.value
+  dockHidden.value = willHide
+  if (willHide) dockExpanded.value = false
 }
 function onSnippetInsert(cmd) {
   // 先清空再设值，确保 watcher 即使值相同也会触发
@@ -1332,6 +1420,10 @@ function toggleDockPanel(key) {
 function closeDockPanel(key) {
   dockPanels.value = dockPanels.value.filter(k => k !== key)
   ensureActiveDockPanel()
+  if (!dockPanels.value.length) {
+    dockExpanded.value = false
+    dockHidden.value = false
+  }
 }
 // 菜单现在 Teleport 到 body 了，没法再靠 CSS position:absolute 相对按钮定位，
 // 开菜单那一刻手动量一次按钮的屏幕坐标，换算成 fixed 定位（跟 CodeEditor.vue
@@ -1382,44 +1474,45 @@ const agentFSDiffRaw = ref('')
 const agentFSDiffLoading = ref(false)
 const agentFSDiffError = ref('')
 const agentFSDiffCardStyle = ref({ top: '120px', left: '76px' })
+const agentFSTreeRef = ref(null)
+const agentFSViewportHeight = ref(620)
 let agentFSPollTimer = null
 let boundAgentFSKey = ''
 const agentFSGraphWidth = 260
 
+function syncAgentFSTreeViewport() {
+  const height = agentFSTreeRef.value?.clientHeight
+  if (height) agentFSViewportHeight.value = Math.max(180, Math.floor(height))
+}
+
+// AgentFS 当前影子仓每次写入都是一个真实 Git commit。日志没有 merge parent，
+// 所以严格按 git log --graph 的单主干渲染；不拿文件路径伪造“分叉”。
+const agentFSGraphHeight = computed(() => Math.max(180, agentFSViewportHeight.value - 8))
 const agentFSGraphNodes = computed(() => {
-  const paths = [...new Set(agentFSTimeline.value.map(item => item.rel_path))]
-  const laneCount = Math.min(Math.max(paths.length, 1), 5)
-  const gap = laneCount > 1 ? 168 / (laneCount - 1) : 0
-  const lanes = new Map(paths.map((path, index) => [path, laneCount === 1 ? 0 : -84 + (index % laneCount) * gap]))
-  return agentFSTimeline.value.map((snapshot, index) => {
+  const ordered = [...agentFSTimeline.value].sort((a, b) => (b.seq || 0) - (a.seq || 0))
+  const spacing = Math.min(48, Math.max(30, (agentFSGraphHeight.value - 70) / Math.max(ordered.length + 1, 2)))
+  const laneX = Math.round(agentFSGraphWidth / 2)
+  return ordered.map((snapshot, index) => {
     const name = (snapshot.rel_path || '').split('/').pop() || snapshot.rel_path
     return {
       snapshot,
       index,
-      x: agentFSGraphWidth / 2 + (lanes.get(snapshot.rel_path) || 0) - 15,
-      y: 28 + index * 52,
+      isLeaf: index === 0,
+      isBranch: false,
+      hue: 330,
+      x: laneX - (index === 0 ? 12 : 8),
+      y: 28 + index * spacing,
       shortName: name.length > 15 ? `${name.slice(0, 12)}…` : name
     }
   })
 })
-const agentFSGraphHeight = computed(() => Math.max(120, 28 + agentFSGraphNodes.value.length * 52))
 const agentFSGraphLinks = computed(() => {
-  const links = []
-  const previousByPath = new Map()
-  for (const node of agentFSGraphNodes.value) {
-    const previous = previousByPath.get(node.snapshot.rel_path)
-    const x1 = previous ? previous.x + 15 : agentFSGraphWidth / 2
-    const y1 = previous ? previous.y + 15 : 0
-    const x2 = node.x + 15
-    const y2 = node.y + 15
-    const mid = y1 + (y2 - y1) * 0.48
-    links.push({
-      key: `${node.snapshot.rel_path}-${node.snapshot.seq}`,
-      d: `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`
-    })
-    previousByPath.set(node.snapshot.rel_path, node)
-  }
-  return links
+  const nodes = agentFSGraphNodes.value
+  if (!nodes.length) return []
+  const x = Math.round(agentFSGraphWidth / 2)
+  const firstY = nodes[0].y + 12
+  const lastY = Math.min(agentFSGraphHeight.value - 18, nodes[nodes.length - 1].y + 26)
+  return [{ key: '__main__', d: `M ${x} ${firstY} L ${x} ${lastY}`, trunk: true }]
 })
 
 const agentFSDiffLines = computed(() => {
@@ -1431,7 +1524,7 @@ const agentFSDiffLines = computed(() => {
     if (hunk) {
       oldLine = Number(hunk[1])
       newLine = Number(hunk[2])
-      result.push({ text, number: '··', kind: 'hunk' })
+      result.push({ text: `区块 · 原行 ${oldLine} → 新行 ${newLine}`, number: '··', kind: 'hunk' })
       continue
     }
     if (text.startsWith('+++') || text.startsWith('---') || text.startsWith('diff ') ||
@@ -2223,6 +2316,7 @@ const {
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+
 // 任务清单完成数（输入框上方 todo-bar 用），仿 Hermes 勾选清单。
 const todoDoneCount = computed(() =>
   (todoState.items || []).filter(it => it.status === 'done').length
@@ -2362,6 +2456,40 @@ const railRecent = computed(() => {
 const railCardOpen = ref(false)
 const railCardStyle = ref({})
 let railCardCloseTimer = null
+const railUtilityPreview = ref('')
+const railUtilityPreviewStyle = ref({})
+let railUtilityPreviewCloseTimer = null
+
+function cancelRailUtilityPreviewClose() {
+  clearTimeout(railUtilityPreviewCloseTimer)
+}
+function openRailUtilityPreview(type, event) {
+  cancelRailUtilityPreviewClose()
+  railCardOpen.value = false
+  const rect = event.currentTarget.getBoundingClientRect()
+  const cardHeight = type === 'agentfs'
+    ? Math.min(500, window.innerHeight - 32)
+    : Math.min(500, window.innerHeight - 32)
+  const top = Math.max(16, Math.min(rect.bottom - cardHeight, window.innerHeight - cardHeight - 16))
+  railUtilityPreviewStyle.value = {
+    left: `${rect.right + 10}px`,
+    top: `${top}px`,
+    height: `${cardHeight}px`
+  }
+  railUtilityPreview.value = type
+  if (type === 'agentfs') refreshAgentFSTimeline()
+}
+function closeRailUtilityPreviewDelayed() {
+  cancelRailUtilityPreviewClose()
+  railUtilityPreviewCloseTimer = setTimeout(() => {
+    railUtilityPreview.value = ''
+  }, 160)
+}
+function openAgentFSFromRailPreview(snapshot, event) {
+  cancelRailUtilityPreviewClose()
+  railUtilityPreview.value = ''
+  openAgentFSSnapshot(snapshot, event)
+}
 function openRailCard(e) {
   clearTimeout(railCardCloseTimer)
   // 只在从横条区进入时重算位置；从卡片自身进入时保持原位
@@ -2385,6 +2513,10 @@ function onRailCardSelect(id) {
   railCardOpen.value = false
   selectSession(id)
 }
+
+watch(railsObscuredByDock, visible => {
+  if (!visible) railUtilityPreview.value = ''
+})
 
 // ==================== 工具面板状态绑定会话 ====================
 // dockPanels（终端/Diff/预览）是会话的工作现场：切会话/新会话时各自恢复各自的，
@@ -2619,6 +2751,7 @@ watch(dockPanels, panels => {
   if (panels.length) closeAgentFSDiff()
   else if (!sidebarOpen.value) refreshAgentFSTimeline()
 })
+watch(agentFSTimeline, () => nextTick(syncAgentFSTreeViewport), { flush: 'post' })
 // 切进 git 状态条可见的 Code 模式时刷新一次，避免面板上的 +N/-N 停留在挂载时的旧快照
 watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
 // 工作流（四态机）结束时，停止按钮消失，立刻把输入框高度塌回单行——
@@ -2643,9 +2776,12 @@ onMounted(() => {
     closeAgentFSDiff()
   })
   window.addEventListener('keydown', onGlobalDockShortcut)
+  window.addEventListener('resize', syncAgentFSTreeViewport)
+  nextTick(syncAgentFSTreeViewport)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalDockShortcut)
+  window.removeEventListener('resize', syncAgentFSTreeViewport)
   window.clearInterval(agentFSPollTimer)
 })
 </script>

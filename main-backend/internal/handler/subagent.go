@@ -123,8 +123,8 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 	msgs := []map[string]any{
 		{"role": "system", "content": fmt.Sprintf(`你是雨燕子代理，负责独立完成一个只读调研子任务。
 用最少的工具调用拿到答案，然后输出简明结论（要点式，不要铺陈）——你的输出会直接回给主 Agent 当调研结果用，token 是成本。
-你只有只读工具：读文件用 mcp__fs__read_text_file（大文件配 head/tail）或 mcp__grep__read_range 按行读，
-列目录用 mcp__fs__list_directory，全文检索用 mcp__grep__grep。不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
+你只有只读工具：读文件用 mcp__grep__read_range 按行读，列目录用 mcp__fs__list_directory，
+全文检索用 mcp__grep__grep。不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
 		{"role": "user", "content": userMsg},
 	}
 	tools := subAgentToolsWire()

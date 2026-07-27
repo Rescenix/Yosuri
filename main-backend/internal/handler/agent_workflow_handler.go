@@ -519,6 +519,11 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				handled[i] = handleReadSkill(tc.Function.Arguments, loadSkills())
 				continue
 			}
+			// skill_manage 是显式 /learn 的候选箱；不进普通执行链，也不自动启用。
+			if tc.Function.Name == skillManageToolName {
+				handled[i] = handleSkillManage(tc.Function.Arguments)
+				continue
+			}
 			// harness_status 是纯自省：读账本，不碰外部世界
 			if tc.Function.Name == harnessStatusToolName {
 				handled[i] = handleHarnessStatus(tc.Function.Arguments, ledger, round,
@@ -581,6 +586,22 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			writeCodeSSE(c, "result", map[string]any{
 				"id": tc.ID, "name": tc.Function.Name, "ok": !results[i].failed, "output": full,
 			})
+			// 图像是 MCP 工具的通用返回工件：Agent 无论在何种任务里主动截图，
+			// 都会自动作为一条聊天交付消息出现，不依赖某个写死的工作流分支或 UI 按钮。
+			for imageIndex, image := range results[i].images {
+				mime := image.MimeType
+				if mime == "" {
+					mime = "image/png"
+				}
+				writeCodeSSE(c, "artifact", map[string]any{
+					"id":         fmt.Sprintf("%s_image_%d", tc.ID, imageIndex),
+					"kind":       "image",
+					"tool":       tc.Function.Name,
+					"image":      "data:" + mime + ";base64," + image.Data,
+					"source_url": artifactSourceURL(tc.Function.Arguments),
+					"caption":    "Agent 已截取当前页面，作为本次交付凭证。",
+				})
+			}
 			status := "ok"
 			if results[i].failed {
 				status = "error"
@@ -639,6 +660,18 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	}
 }
 
+// artifactSourceURL 尽力从工具参数里取出展示用来源地址。取不到不影响工件发布；
+// browser_snapshot 这类复用已有会话的调用本来就没有 url 参数。
+func artifactSourceURL(argsJSON string) string {
+	var args struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal([]byte(argsJSON), &args) != nil {
+		return ""
+	}
+	return args.URL
+}
+
 // HandleCodeWorkflowCheckpoints GET /api/code/workflow/checkpoints?session_id=
 // 列出可续跑的中断工作流；前端据此显示「上次有个任务没跑完」并带 resume=<id> 重连。
 func (r *WorkflowRunner) HandleCodeWorkflowCheckpoints(c *gin.Context) {
@@ -655,6 +688,7 @@ func (r *WorkflowRunner) HandleCodeWorkflowCheckpointDelete(c *gin.Context) {
 type codeExecResult struct {
 	output string
 	failed bool
+	images []mcpImageArtifact
 }
 
 // frontendEditTools 会真正改动文件内容的 MCP 文件工具。读类工具不算——
@@ -795,14 +829,15 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			if name == "mcp__fs__edit_file" {
 				preEditLine = r.calcEditStartLine(tc.Function.Arguments)
 			}
-			out, err := callMCPTool(name, tc.Function.Arguments)
+			mcpResult, err := callMCPToolWithArtifacts(name, tc.Function.Arguments)
 			if err != nil {
 				results[i] = codeExecResult{output: "MCP 工具失败: " + err.Error(), failed: true}
 			} else {
+				out := mcpResult.Text
 				if name == "mcp__fs__edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
 					out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
 				}
-				results[i] = codeExecResult{output: out}
+				results[i] = codeExecResult{output: out, images: mcpResult.Images}
 			}
 			continue
 		}

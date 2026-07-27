@@ -26,6 +26,7 @@ import (
 // Skill 统一承载两类技能：
 //   - 自研沉淀（Source=learned）：工作流成功后抽象出的 JSON，正文在 Steps。
 //   - 外部导入（Source=external）：Anthropic/Claude 风格的 SKILL.md，正文在 Body。
+//
 // Source 在加载时按来源目录打标，不落盘（磁盘文件保持干净）。
 type Skill struct {
 	Name        string   `json:"name"`
@@ -33,7 +34,22 @@ type Skill struct {
 	Steps       []string `json:"steps,omitempty"`
 	Body        string   `json:"body,omitempty"`   // 外部 SKILL.md 正文（markdown）
 	Source      string   `json:"source,omitempty"` // learned | external
+	// Status 只作用于自研技能：active 可按需加载，archived 保留在磁盘供恢复，
+	// 不再使用候选/审阅状态，避免把治理成本推给用户。
+	Status       string    `json:"status,omitempty"`
+	Trigger      string    `json:"trigger,omitempty"`
+	Verification string    `json:"verification,omitempty"`
+	CreatedAt    time.Time `json:"created_at,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	LastUsedAt   time.Time `json:"last_used_at,omitempty"`
+	UseCount     int       `json:"use_count,omitempty"`
 }
+
+const (
+	skillStatusActive   = "active"
+	skillStatusArchived = "archived"
+	skillActiveIdleTTL  = 45 * 24 * time.Hour
+)
 
 func skillsDir() string {
 	if dir := os.Getenv("AURORA_SKILLS_DIR"); dir != "" {
@@ -58,8 +74,21 @@ func loadSkills() []Skill {
 	return append(loadLearnedSkills(), loadExternalSkills()...)
 }
 
-// loadLearnedSkills 扫描自研技能库目录（./skills/*.json），打 Source=learned。
+// loadLearnedSkills 扫描自研技能库目录，只返回 active 技能；闲置技能可恢复归档。
 func loadLearnedSkills() []Skill {
+	all := loadLearnedSkillsForSettings()
+	skills := make([]Skill, 0, len(all))
+	for _, s := range all {
+		if s.Status == skillStatusActive {
+			skills = append(skills, s)
+		}
+	}
+	return skills
+}
+
+// loadLearnedSkillsForSettings 返回完整库存（启用/归档），供设置页治理使用。
+// 生命周期清理仍在这里执行，但 archived 永不自动删除，保证可恢复。
+func loadLearnedSkillsForSettings() []Skill {
 	entries, err := os.ReadDir(skillsDir())
 	if err != nil {
 		return nil
@@ -69,7 +98,8 @@ func loadLearnedSkills() []Skill {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(skillsDir(), e.Name()))
+		path := filepath.Join(skillsDir(), e.Name())
+		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
@@ -78,9 +108,109 @@ func loadLearnedSkills() []Skill {
 			continue
 		}
 		s.Source = "learned"
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		changed := normalizeLearnedSkill(&s, info.ModTime())
+		if s.Status == skillStatusActive && time.Since(skillLastActivity(s)) > skillActiveIdleTTL {
+			s.Status = skillStatusArchived
+			s.UpdatedAt = time.Now()
+			changed = true
+		}
+		if changed {
+			persistLearnedSkill(path, s)
+		}
 		skills = append(skills, s)
 	}
 	return skills
+}
+
+func normalizeLearnedSkill(s *Skill, fallback time.Time) bool {
+	changed := false
+	// 兼容旧格式：已有技能不在升级时消失，按文件修改时间开始计算闲置期。
+	if s.Status == "" {
+		s.Status = skillStatusActive
+		changed = true
+	}
+	// 兼容之前短暂写入过的 candidate：不再要求用户审阅，直接恢复为可用。
+	if s.Status == "candidate" {
+		s.Status = skillStatusActive
+		changed = true
+	}
+	if s.CreatedAt.IsZero() {
+		s.CreatedAt = fallback
+		changed = true
+	}
+	if s.UpdatedAt.IsZero() {
+		s.UpdatedAt = fallback
+		changed = true
+	}
+	return changed
+}
+
+func skillLastActivity(s Skill) time.Time {
+	last := s.UpdatedAt
+	if s.LastUsedAt.After(last) {
+		last = s.LastUsedAt
+	}
+	if s.CreatedAt.After(last) {
+		last = s.CreatedAt
+	}
+	return last
+}
+
+func persistLearnedSkill(path string, s Skill) {
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err == nil {
+		_ = os.WriteFile(path, data, 0644)
+	}
+}
+
+func learnedSkillPath(name string) (string, error) {
+	clean := skillNameSanitizer.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-")
+	clean = strings.Trim(clean, "-")
+	if clean == "" || clean != name {
+		return "", fmt.Errorf("技能名必须是 kebab-case 英文标识")
+	}
+	return filepath.Join(skillsDir(), clean+".json"), nil
+}
+
+// setLearnedSkillStatus 是设置页的显式治理入口。external SKILL.md 不经过这里，
+// 因而绝不会被 GC 或 UI 的状态切换误伤。
+func setLearnedSkillStatus(name, status string) (Skill, error) {
+	if status != skillStatusActive && status != skillStatusArchived {
+		return Skill{}, fmt.Errorf("不支持的技能状态")
+	}
+	path, err := learnedSkillPath(name)
+	if err != nil {
+		return Skill{}, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Skill{}, fmt.Errorf("技能不存在")
+	}
+	var s Skill
+	if json.Unmarshal(data, &s) != nil || s.Name != name {
+		return Skill{}, fmt.Errorf("技能文件无效")
+	}
+	s.Source, s.Status, s.UpdatedAt = "learned", status, time.Now()
+	persistLearnedSkill(path, s)
+	return s, nil
+}
+
+func deleteLearnedSkill(name string) error {
+	path, err := learnedSkillPath(name)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("技能不存在")
+		}
+		return err
+	}
+	return nil
 }
 
 // loadExternalSkills 扫描外部技能目录：每个子目录一个 SKILL.md（Anthropic/Claude 格式），
@@ -104,7 +234,7 @@ func loadExternalSkills() []Skill {
 		if name == "" {
 			return
 		}
-		skills = append(skills, Skill{Name: name, Description: desc, Body: body, Source: "external"})
+		skills = append(skills, Skill{Name: name, Description: desc, Body: body, Source: "external", Status: skillStatusActive})
 	}
 	for _, e := range entries {
 		if e.IsDir() {
@@ -166,6 +296,49 @@ func skillLibraryPrompt() string {
 
 // readSkillToolName 是取回技能完整步骤的钥匙，跟 load_tools 一样必须常驻工具集。
 const readSkillToolName = "read_skill"
+
+const skillManageToolName = "skill_manage"
+
+// skill_manage 仅供用户明确要求保存流程时使用；常规自动学习走后台质量门槛，
+// 两者都直接启用，不设置人工审阅台阶。
+var skillManageToolDef = core.ToolDefinition{
+	Type: "function",
+	Function: core.ToolFunctionDetail{
+		Name:        skillManageToolName,
+		Description: "创建并启用一个自研技能。仅在用户明确要求保存工作流经验时使用；技能必须是可复用、可验证的具体流程。",
+		Parameters: core.ToolParameters{Type: "object", Properties: map[string]core.ToolProperty{
+			"name":         {Type: "string", Description: "kebab-case 英文技能名"},
+			"description":  {Type: "string", Description: "不超过 60 字的中文用途描述"},
+			"trigger":      {Type: "string", Description: "明确的使用条件"},
+			"verification": {Type: "string", Description: "可执行或可观察的成功验证"},
+			"steps":        {Type: "array", Description: "3 到 6 条具体、可执行步骤", Items: &core.ToolProperty{Type: "string"}},
+		}, Required: []string{"name", "description", "trigger", "verification", "steps"}},
+	},
+}
+
+func handleSkillManage(argsJSON string) string {
+	var skill Skill
+	if err := json.Unmarshal([]byte(argsJSON), &skill); err != nil {
+		return "参数解析失败：需要 name、description、trigger、verification、steps"
+	}
+	skill.Name = skillNameSanitizer.ReplaceAllString(strings.ToLower(strings.TrimSpace(skill.Name)), "-")
+	skill.Name = strings.Trim(skill.Name, "-")
+	skill.Description, skill.Trigger, skill.Verification = strings.TrimSpace(skill.Description), strings.TrimSpace(skill.Trigger), strings.TrimSpace(skill.Verification)
+	if skill.Name == "" || skill.Description == "" || skill.Trigger == "" || skill.Verification == "" || len(skill.Steps) < 3 || len(skill.Steps) > 6 {
+		return "技能未保存：请给出 kebab-case 名称、描述、触发条件、验证方式和 3–6 个步骤"
+	}
+	if err := os.MkdirAll(skillsDir(), 0755); err != nil {
+		return "技能未保存：" + err.Error()
+	}
+	path := filepath.Join(skillsDir(), skill.Name+".json")
+	if _, err := os.Stat(path); err == nil {
+		return "技能未保存：同名技能已存在，请在设置页审阅或换名"
+	}
+	skill.Source, skill.Status = "learned", skillStatusActive
+	skill.CreatedAt, skill.UpdatedAt = time.Now(), time.Now()
+	persistLearnedSkill(path, skill)
+	return fmt.Sprintf("技能已保存并启用：%s。", skill.Name)
+}
 
 var readSkillToolDef = core.ToolDefinition{
 	Type: "function",
@@ -233,6 +406,9 @@ func handleReadSkill(argsJSON string, skills []Skill) string {
 		if s.Body != "" {
 			entry["content"] = s.Body
 		}
+		if s.Source == "learned" {
+			markSkillUsed(s)
+		}
 		found = append(found, entry)
 	}
 
@@ -251,6 +427,28 @@ func handleReadSkill(argsJSON string, skills []Skill) string {
 	return b.String()
 }
 
+func markSkillUsed(s Skill) {
+	if s.Source != "learned" || s.Name == "" {
+		return
+	}
+	path := filepath.Join(skillsDir(), s.Name+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var disk Skill
+	if json.Unmarshal(data, &disk) != nil || disk.Name != s.Name {
+		return
+	}
+	disk.UseCount++
+	disk.LastUsedAt = time.Now()
+	disk.UpdatedAt = disk.LastUsedAt
+	if disk.Status == "" {
+		disk.Status = skillStatusActive
+	}
+	persistLearnedSkill(path, disk)
+}
+
 var skillNameSanitizer = regexp.MustCompile(`[^a-z0-9\-]+`)
 
 // generateSkillAsync 在工作流成功后异步抽象技能。失败只打日志，绝不影响主流程。
@@ -261,8 +459,9 @@ func generateSkillAsync(task string, transcript []string) {
 		}
 	}()
 
-	// 单工具、两步以内的任务没有沉淀价值
-	if len(transcript) < 2 {
+	// Hermes 风格的低摩擦学习：只在真正复杂的已完成任务后后台尝试提炼，
+	// 由模型再判断是否值得保存；通过质量门槛的产物直接启用，不打扰用户。
+	if len(transcript) < 5 {
 		return
 	}
 
@@ -274,8 +473,8 @@ func generateSkillAsync(task string, transcript []string) {
 动作序列：
 %s
 
-只输出一个 JSON 对象，不要任何解释和代码块包裹：
-{"name":"kebab-case英文技能名","description":"一句话中文描述什么场景用这个技能","steps":["步骤1","步骤2"]}`,
+只输出一个 JSON 对象，不要任何解释和代码块包裹。技能必须有明确触发条件、可验证结果，且只保留 3–6 个可执行步骤；不得写入临时路径、密钥或项目专属垃圾信息：
+{"name":"kebab-case英文技能名","description":"一句话中文描述什么场景用这个技能","trigger":"何时调用","verification":"如何验证成功","steps":["步骤1","步骤2","步骤3"]}`,
 		truncateChars(task, 500), strings.Join(transcript, "\n"))
 
 	msgs := []map[string]any{{"role": "user", "content": prompt}}
@@ -301,7 +500,7 @@ func generateSkillAsync(task string, transcript []string) {
 	}
 	skill.Name = skillNameSanitizer.ReplaceAllString(strings.ToLower(strings.TrimSpace(skill.Name)), "-")
 	skill.Name = strings.Trim(skill.Name, "-")
-	if skill.Name == "" || len(skill.Steps) < 2 {
+	if skill.Name == "" || len(skill.Steps) < 3 || len(skill.Steps) > 6 || skill.Trigger == "" || skill.Verification == "" {
 		return // 模型判定无复用价值
 	}
 
@@ -309,11 +508,15 @@ func generateSkillAsync(task string, transcript []string) {
 		log.Printf("⚠️ 创建技能目录失败: %v", err)
 		return
 	}
+	// 自动学习不制造待办：通过质量门槛后直接启用；后台 curator 负责后续归档。
+	skill.Status = skillStatusActive
+	skill.CreatedAt = time.Now()
+	skill.UpdatedAt = skill.CreatedAt
 	path := filepath.Join(skillsDir(), skill.Name+".json")
 	data, _ := json.MarshalIndent(skill, "", "  ")
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		log.Printf("⚠️ 写入技能文件失败: %v", err)
 		return
 	}
-	log.Printf("🎓 新技能已沉淀: %s（%s）", skill.Name, skill.Description)
+	log.Printf("🎓 新技能已自动启用: %s（%s）", skill.Name, skill.Description)
 }

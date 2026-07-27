@@ -21,6 +21,7 @@
 - [核心理念 · 记忆 / 状态双轨：让 Agent 不再失业](#核心理念--记忆--状态双轨让-agent-不再失业)
 - [特性一览](#特性一览)
   - [AgentFS Trace：会话级 Git 痕迹树](#agentfs-trace会话级-git-痕迹树)
+  - [Harness Flow：实时工作流架构图](#harness-flow实时工作流架构图)
   - [Agent 主动 TODO：计划不再藏在思考里](#agent-主动-todo计划不再藏在思考里)
   - [Agent 主动向用户提问：真正的 Human-in-the-loop](#agent-主动向用户提问真正的-human-in-the-loop)
   - [断点续传](#断点续传)
@@ -28,6 +29,7 @@
   - [内置编辑器 + 文件树](#内置编辑器--文件树)
   - [实时渲染调试浏览器](#实时渲染调试浏览器)
   - [Diff 预览](#diff-预览)
+  - [截图工件：Agent 可直接交付页面证据](#截图工件agent-可直接交付页面证据)
   - [Agent 消息流式渐变动画](#agent-消息流式渐变动画)
   - [魔女审判二次元皮肤](#魔女审判二次元皮肤)
 - [平台能力](#平台能力)
@@ -94,6 +96,21 @@ ResceneAgent 把"文件写操作"从直接的磁盘 IO，重构成一条**带隔
 - **时间旅行基础**：节点对应真实影子 Git commit，为后续按文件恢复、版本对比和 Agent 行为回放提供稳定锚点
 
 这让用户不必等 Agent 完成后再检查一个巨大的最终 Diff，而能随时回答三个问题：**这个 Agent 在当前会话改了什么、按什么顺序改、每一步具体改变了哪些行。**
+
+![AgentFS Trace 占位图：替换为左侧 Git 分支审计轨迹截图](https://via.placeholder.com/1200x560/fdf7fa/e2388f?text=TODO%3A+AgentFS+Trace+%E5%AE%A1%E8%AE%A1%E8%BD%A8%E8%BF%B9)
+
+---
+
+### Harness Flow：实时工作流架构图
+
+聊天内容右侧的空白画布承载 **Harness Flow**：它不是另一张浮层卡片，而是与 AgentFS 对齐的内嵌工作流视图。每次任务会把 Gateway、Working Memory、LLM、Tools、Reply，以及 Trace / Eval / Release 等阶段串成实时流动的架构图。
+
+- **真实阶段驱动**：节点状态来自工作流事件，不是静态文案
+- **主题色连接线**：当前执行链路高亮、流向动画反映执行进度
+- **不挤压聊天宽度**：中间聊天区保留既有宽度；工具窗口出现时，左右画布可收纳为侧栏预览入口
+- **收纳可回看**：被 Dock 覆盖的轨迹与流程可从侧栏底部悬浮预览，审计节点仍可点击查看 Diff
+
+![Harness Flow 占位图：替换为聊天右侧实时工作流画布截图](https://via.placeholder.com/1200x560/fdf7fa/e2388f?text=TODO%3A+Harness+Flow+%E5%AE%9E%E6%97%B6%E5%B7%A5%E4%BD%9C%E6%B5%81)
 
 ---
 
@@ -190,6 +207,19 @@ VS Code 风格的差异查看器，内联于 Agent 工作流。
 
 ---
 
+### 截图工件：Agent 可直接交付页面证据
+
+截图不再只是工具输出中的一个临时路径。无论 Agent 通过 Chrome DevTools 还是截图 MCP 完成页面截图，后端都会将图片作为 **artifact** 插入当前聊天流，位置与对应工具调用保持顺序一致。
+
+- **默认折叠**：聊天中仅显示紧凑预览，不撑开长对话
+- **按需展开**：点击查看原始截图，再次点击收起
+- **先截图、后结论**：后续说明自然排在图片之后，不再发生“截图永远置底”
+- **自主能力**：这是 Agent 的工具交付能力，不是用户必须点击的前端按钮
+
+![截图工件占位图：替换为聊天内折叠截图与展开状态截图](https://via.placeholder.com/1200x560/fdf7fa/e2388f?text=TODO%3A+Chat+Screenshot+Artifact)
+
+---
+
 ### Agent 消息流式渐变动画
 
 模仿 ChatGPT/Gemini 的逐字渐入效果，带模糊到清晰的过渡。
@@ -235,17 +265,20 @@ VS Code 风格的差异查看器，内联于 Agent 工作流。
 
 基于 Model Context Protocol 的可扩展工具系统。
 
-- **内置 MCP 工具**：文件系统读写、Grep 搜索、Web Fetch、截图/视觉测试、Chrome DevTools 自动化、Shell 执行
+- **职责收敛**：Grep 统一负责检索与按行读取；Filesystem 只负责目录与受审批写入；Chrome DevTools 是唯一浏览器交互与真实页面验证入口；截图 MCP 只负责图片交付
 - **按需加载**：默认仅注入工具名 + 一行描述到上下文，模型调用 `load_tools` 激活完整 Schema，节省 ~91% 静态 Token 预算
 - **审批机制**：MCP 文件写入、Shell 执行、Chrome 交互等危险工具需用户批准，支持「本次会话不再询问」
 
 ### 技能自学习
 
-工作流成功后自动抽象可复用技能。
+技能是 Agent 的程序性记忆，但不应变成一堆“调用某个工具”的垃圾 JSON。当前实现采用低摩擦的后台学习与可恢复 GC：用户不需要手动 `/learn`、不需要逐条审阅。
 
-- **学习型技能**：2 步以上工作流完成后，LLM 异步抽象行动序列为 JSON 技能（名称 + 描述 + 步骤）
+- **质量门槛**：仅在成功且复杂（至少 5 次工具执行）的任务完成后，才异步尝试提炼；模型仍可判断“没有复用价值”并跳过
+- **直接可用**：合格技能自动启用，下一次任务只注入名称与描述；Agent 需要时通过 `read_skill` 按需取得完整流程
+- **生命周期 GC**：45 天未使用的自研技能自动、可恢复地关闭；不会自动删除用户导入的外部技能
+- **极简治理**：设置页仅提供关闭、恢复启用与删除；没有“待审阅 / 候选”台阶
 - **外部技能导入**：支持 Anthropic/Claude 风格的 SKILL.md 文件，YAML 前置元数据
-- **索引注入**：技能名 + 描述注入系统 Prompt，Agent 按需通过 `read_skill` 获取完整步骤
+- **渐进加载**：技能名 + 描述注入系统 Prompt，Agent 按需通过 `read_skill` 获取完整步骤，避免把所有正文常驻进上下文
 - 持久化到 `./skills/*.json`，跨会话可用
 
 ### 记忆 / 状态双轨（详见上文「核心理念」）
@@ -425,5 +458,4 @@ npm run dev    # http://localhost:4321
  - **Multi-agent orchestration.** A 4-state (think → intent → action → result) workflow with a Swift sub-agent, context-aware compression, and multi-backend model routing with vision/reasoning metadata.
 
  Licensed under [MIT](./LICENSE). Setup details (env vars, quick start, repo layout) are in the Chinese section above.
-
 

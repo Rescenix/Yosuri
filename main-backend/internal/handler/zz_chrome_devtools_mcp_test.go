@@ -12,6 +12,14 @@ import (
 	"testing"
 )
 
+func TestChromeScreenshotPathParsesTerminalPeriod(t *testing.T) {
+	text := "Took a screenshot of the full current page.\nSaved screenshot to C:\\Users\\agent\\AppData\\Local\\Temp\\chrome-devtools-mcp-x\\screenshot.png."
+	match := chromeScreenshotPathRE.FindStringSubmatch(text)
+	if len(match) != 2 || !strings.HasSuffix(strings.ToLower(match[1]), "screenshot.png") {
+		t.Fatalf("截图路径未从 chrome-devtools 返回文本中正确解析: %q", match)
+	}
+}
+
 func TestMCPChromeDevtoolsListPages(t *testing.T) {
 	if os.Getenv("SKIP_MCP_INTEGRATION") != "" {
 		t.Skip("SKIP_MCP_INTEGRATION 已设置")
