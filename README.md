@@ -142,13 +142,7 @@ npm run dev    # http://localhost:4322
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=Rescenix%2FResceneAgent&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&theme=dark&legend=top-left&sealed_token=GLODzwLvPs4L2KSPf7PJETF-pLQnjROuT3FSFMXMjxSm5Ypq9l71Jd_JU5999eJq7y9XbyplTPF05J2CHyhhSCna9guG3cAzM1Z6rID9cfcOQ8vA0M-4lQ" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=GLODzwLvPs4L2KSPf7PJETF-pLQnjROuT3FSFMXMjxSm5Ypq9l71Jd_JU5999eJq7y9XbyplTPF05J2CHyhhSCna9guG3cAzM1Z6rID9cfcOQ8vA0M-4lQ" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=GLODzwLvPs4L2KSPf7PJETF-pLQnjROuT3FSFMXMjxSm5Ypq9l71Jd_JU5999eJq7y9XbyplTPF05J2CHyhhSCna9guG3cAzM1Z6rID9cfcOQ8vA0M-4lQ" />
- </picture>
-</a>
+[![Star History Chart](https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=RElry_9jChe6VcryBXv5DB6a21-WXhwIc1Kg4qhhKj8YOTlTWU_QzNAxJBo8scsdZdZ2HayQ0T9RBBbzfUDOFXjouxI8glmp-sAI1OAr-eB6RmZVj8CZ_CEpHx4hZ5XjMoEk-PZKcwCKFq7jQ_dJhw5_70GoFPZ5YJoAa86StEZ1Qwf9Tdw-kXtmG_se)](https://www.star-history.com/?repos=Rescenix%2FResceneAgent&type=date&legend=top-left)
 
 ---
 
