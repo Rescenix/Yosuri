@@ -94,30 +94,6 @@
       </div>
     </div>
 
-    <!-- 辅助视图：放在设置上方，默认由父组件关闭。 -->
-    <div class="smc-utility-actions">
-      <button
-        type="button"
-        class="smc-utility-btn"
-        :class="{ active: agentfsVisible }"
-        :aria-pressed="agentfsVisible"
-        @click="$emit('toggle-agentfs')"
-      >
-        <Icon icon="mdi:source-commit" width="17" />
-        <span>审计痕迹</span>
-      </button>
-      <button
-        type="button"
-        class="smc-utility-btn"
-        :class="{ active: harnessVisible }"
-        :aria-pressed="harnessVisible"
-        @click="$emit('toggle-harness')"
-      >
-        <Icon icon="mdi:transit-connection-variant" width="17" />
-        <span>工作流图</span>
-      </button>
-    </div>
-
     <!-- footer -->
     <div class="fm-footer" ref="footerRef">
       <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" title="点击查看账户">
@@ -213,11 +189,9 @@ const props = defineProps({
   sessions: { type: Array, default: () => [] },
   activeSession: { type: String, default: '' },
   runningSession: { type: String, default: '' },
-  agentfsVisible: { type: Boolean, default: false },
-  harnessVisible: { type: Boolean, default: false },
   fill: { type: Boolean, default: false }
 })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'toggle-agentfs', 'toggle-harness'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins', 'create-project'])
 
 const showCreateProject = ref(false)
 const newProjectName = ref('')
@@ -563,33 +537,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   position: fixed; inset: 0; z-index: 10020;
   display: flex; align-items: center; justify-content: center;
   padding: 24px; background: rgba(15, 23, 42, 0.28); backdrop-filter: blur(3px);
-}
-.smc-utility-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 8px 10px 4px;
-  border-top: 1px solid var(--app-border-soft, rgba(0, 0, 0, .07));
-}
-.smc-utility-btn {
-  min-height: 36px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--app-text-muted, #6b6b6b);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background .18s ease, color .18s ease, border-color .18s ease;
-}
-.smc-utility-btn:hover { background: var(--app-hover, rgba(0, 0, 0, .05)); color: var(--app-text, #222); }
-.smc-utility-btn.active {
-  color: var(--app-accent);
-  background: color-mix(in srgb, var(--app-accent) 10%, transparent);
-  border-color: color-mix(in srgb, var(--app-accent) 28%, transparent);
 }
 .smc-create-project {
   width: min(100%, 620px); box-sizing: border-box; padding: 28px;

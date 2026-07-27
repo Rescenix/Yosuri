@@ -79,8 +79,6 @@
             :sessions="sessionList"
             :active-session="activeSession"
             :running-session="runningSession"
-            :agentfs-visible="showAgentFSAudit"
-            :harness-visible="showHarnessWorkflow"
             @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
@@ -88,8 +86,6 @@
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
             @open-plugins="openPluginsMarket"
-            @toggle-agentfs="toggleAgentFSAudit"
-            @toggle-harness="toggleHarnessWorkflow"
           />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
