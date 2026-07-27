@@ -110,7 +110,7 @@ def render(x: np.ndarray, y: np.ndarray, repo: str, theme: dict[str, str], outpu
     fig, axis = plt.subplots(figsize=(12, 6.2), dpi=160)
     fig.patch.set_facecolor(theme["bg"])
     axis.set_facecolor(theme["bg"])
-    fig.subplots_adjust(left=0.075, right=0.97, top=0.80, bottom=0.10)
+    fig.subplots_adjust(left=0.075, right=0.97, top=0.86, bottom=0.10)
     span = max(1, x[-1] - x[0])
     axis.set_xlim(x[0], x[-1] + span * 0.03)
     axis.set_ylim(0, max(1, y[-1]) * 1.10)
@@ -128,8 +128,9 @@ def render(x: np.ndarray, y: np.ndarray, repo: str, theme: dict[str, str], outpu
     axis.scatter([x[-1]], [y[-1]], s=70, color=ACCENT, edgecolor=theme["bg"], linewidth=2.2, zorder=4)
     axis.annotate(f"{int(y[-1]):,} stars", (x[-1], y[-1]), xytext=(-6, 14), textcoords="offset points",
                   ha="right", fontsize=16, fontweight="bold", color=theme["text"])
-    fig.text(0.075, 0.93, "Star History", fontsize=22, fontweight="bold", color=theme["text"])
-    fig.text(0.075, 0.862, repo, fontsize=12.5, color=theme["subtext"])
+    # README already has the “Star History” heading; keep the generated image
+    # focused on the repository and chart instead of repeating that title.
+    fig.text(0.075, 0.93, repo, fontsize=12.5, color=theme["subtext"])
     axis.yaxis.grid(True, color=theme["grid"], linewidth=0.9, linestyle=(0, (5, 4)))
     axis.set_axisbelow(True)
     for side in ("top", "right", "left"):
