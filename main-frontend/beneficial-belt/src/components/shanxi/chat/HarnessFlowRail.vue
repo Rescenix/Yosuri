@@ -97,11 +97,10 @@ const edges = computed(() => edgeDefs.map(edge => ({
 
 <style scoped>
 .harness-flow-rail {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 368px;
+  position: absolute;
+  z-index: 2;
+  inset: -8px -8px -8px auto;
   width: 368px;
-  min-width: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -162,7 +161,7 @@ const edges = computed(() => edgeDefs.map(edge => ({
 .harness-ops-label { left: 266px; top: 320px; color: var(--app-accent); }
 .harness-flow-rail.compact {
   position: relative;
-  flex: 0 0 auto;
+  inset: auto;
   width: 304px;
   height: 500px;
   padding: 0;

@@ -347,6 +347,7 @@
             </div>
 
             <!-- 只覆盖聊天内容自身的右侧留白；不参与外层工作区布局。 -->
+            <HarnessFlowRail v-if="showHarnessWorkflow && utilitySurfacesVisible && isExpanded && (!dockPanels.length || dockHidden)" :flow="lastAgentFlow" />
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
                  当 `messages` 为空时，它独占整个 Flex 空间，把输入区推到最底部。 -->
             <div v-if="messages.length === 0" class="home-container-for-layout">
@@ -880,12 +881,6 @@
               </div>
             </div>
           </div>
-
-          <!-- 工作流图是工作区的真实右列，不作为聊天内容上的绝对定位覆盖层。 -->
-          <HarnessFlowRail
-            v-if="showHarnessWorkflow && utilitySurfacesVisible && isExpanded && (!dockPanels.length || dockHidden)"
-            :flow="lastAgentFlow"
-          />
 
           <!-- ★ AIStudio 右：多面板停靠 -->
           <aside
