@@ -186,6 +186,27 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             onStreamUpdate?.()
         }
 
+        // 大多数上游会在流式 tool call 一开始就给 id；少数兼容服务会在最终 action
+        // 才补 id，导致 action_delta 创建的“生成预览”卡片无法按 id 找回，永久卡住。
+        // id 精确匹配优先；只有找不到时才按同名、未完成的最近卡片兜底。
+        const findPendingTool = (id, name) => {
+            const blocks = [...flow.blocks].reverse()
+            const exact = blocks.find(b => b.type === 'tool' && b.id === id)
+            if (exact) return exact
+            return blocks.find(b => b.type === 'tool' && b.name === name &&
+                (b.status === 'generating' || b.status === 'running'))
+        }
+
+        const settlePendingTools = (status = 'error', output = '') => {
+            for (const block of flow.blocks) {
+                if (block.type !== 'tool' || (block.status !== 'generating' && block.status !== 'running')) continue
+                block.status = status
+                block.elapsedMs = block.startTime ? (Date.now() - block.startTime) : 0
+                if (output && !block.output) block.output = output
+            }
+            onStreamUpdate?.()
+        }
+
         // 之前这个事件完全没人听——workflow_id 从没进过前端状态，sendSteerMessage
         // 也就无从知道该往哪个工作流投消息。
         es.addEventListener('workflow_start', e => {
@@ -240,8 +261,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             let args = {}
             try { args = JSON.parse(d.args || '{}') } catch { /* 参数留空对象，卡片仍可显示工具名 */ }
             // startTime：记下发起时刻，result 到达时算耗时（图1 那种「完成 41ms」徽章）
-            const t = [...flow.blocks].reverse().find(b => b.type === 'tool' && b.id === d.id)
+            const t = findPendingTool(d.id, d.name)
             if (t) {
+                t.id = d.id
                 t.name = d.name
                 t.args = args
                 t._rawArgs = d.args || ''
@@ -256,8 +278,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('result', e => {
             const d = JSON.parse(e.data)
             // 从后往前找，同一 id 只可能对应最近一条 running 的动作
-            const t = [...flow.blocks].reverse().find(b => b.type === 'tool' && b.id === d.id)
+            const t = findPendingTool(d.id, d.name)
             if (t) {
+                t.id = d.id
                 t.status = d.ok ? 'ok' : 'error'
                 t.output = d.output || ''
                 t.elapsedMs = t.startTime ? (Date.now() - t.startTime) : 0
@@ -341,6 +364,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         es.addEventListener('flow_error', e => {
             const d = JSON.parse(e.data)
             appendText('intent', `\n\n⚠️ ${d.message}`)
+            // 后端通常紧随其后发送 workflow_done；这里先收尾，避免网络在两事件之间
+            // 断开时把“生成预览”永远留在界面上。
+            settlePendingTools('error', d.message || '工作流已中断')
         })
 
         // 中途插话已被下一轮采纳：插一个轻量块，让用户看到"我刚才那句话生效了"，
@@ -388,6 +414,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             const d = JSON.parse(e.data)
             flow.status = d.status || 'completed'
             flow.endTime = Date.now()
+            settlePendingTools('error', d.final_output || '工具调用未完成')
             flow.inputTokens = d.input_tokens || 0
             flow.outputTokens = d.output_tokens || 0
             // 对话类 token：用后端已扣除静态部分的 conversation_tokens。
@@ -422,6 +449,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             if (currentFlow && currentFlow.status === 'running') {
                 currentFlow.status = 'failed'
                 currentFlow.endTime = Date.now()
+                settlePendingTools('error', '连接已断开，工具调用未完成')
                 settleSubagents(currentFlow, 'failed')
                 currentFlow = null
                 // 断在半路（后端被重启 / 网络断）—— 这正是检查点存在的意义，
