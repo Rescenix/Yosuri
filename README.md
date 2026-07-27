@@ -142,11 +142,11 @@ npm run dev    # http://localhost:4322
 
 ## Star History
 
-<a href="https://www.star-history.com/?type=date&repos=Rescenix%2FResceneAgent">
+<a href="https://www.star-history.com/?repos=Rescenix%2FResceneAgent&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&theme=dark&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=8W0tNyXJm7iAjKqmFUwlIiWBXo7Zu9aVDMAvRqWWaS9ju5eUtGH3Pz4SkHxMOBg5nGdU3KnXkw86SXzzzPcEK4R6_Iqt-HMzpsReNO4lxpA5-8WNB8bEvg" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&theme=dark&legend=top-left&sealed_token=GLODzwLvPs4L2KSPf7PJETF-pLQnjROuT3FSFMXMjxSm5Ypq9l71Jd_JU5999eJq7y9XbyplTPF05J2CHyhhSCna9guG3cAzM1Z6rID9cfcOQ8vA0M-4lQ" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=GLODzwLvPs4L2KSPf7PJETF-pLQnjROuT3FSFMXMjxSm5Ypq9l71Jd_JU5999eJq7y9XbyplTPF05J2CHyhhSCna9guG3cAzM1Z6rID9cfcOQ8vA0M-4lQ" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=GLODzwLvPs4L2KSPf7PJETF-pLQnjROuT3FSFMXMjxSm5Ypq9l71Jd_JU5999eJq7y9XbyplTPF05J2CHyhhSCna9guG3cAzM1Z6rID9cfcOQ8vA0M-4lQ" />
  </picture>
 </a>
 
