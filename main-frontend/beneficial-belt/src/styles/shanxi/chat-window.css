@@ -2923,12 +2923,10 @@ min-height: 90px !important;
 
 /* ==================== AgentFS 会话级修改轨迹 ==================== */
 .agentfs-gutter {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 64px;
-  z-index: 4;
-  width: 330px;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 260px;
+  width: 260px;
   align-self: stretch;
   display: flex;
   justify-content: center;
