@@ -140,11 +140,13 @@ npm run dev    # http://localhost:4322
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=Rescenix%2FResceneAgent&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&theme=dark&legend=top-left&sealed_token=RElry_9jChe6VcryBXv5DB6a21-WXhwIc1Kg4qhhKj8YOTlTWU_QzNAxJBo8scsdZdZ2HayQ0T9RBBbzfUDOFXjouxI8glmp-sAI1OAr-eB6RmZVj8CZ_CEpHx4hZ5XjMoEk-PZKcwCKFq7jQ_dJhw5_70GoFPZ5YJoAa86StEZ1Qwf9Tdw-kXtmG_se" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=RElry_9jChe6VcryBXv5DB6a21-WXhwIc1Kg4qhhKj8YOTlTWU_QzNAxJBo8scsdZdZ2HayQ0T9RBBbzfUDOFXjouxI8glmp-sAI1OAr-eB6RmZVj8CZ_CEpHx4hZ5XjMoEk-PZKcwCKFq7jQ_dJhw5_70GoFPZ5YJoAa86StEZ1Qwf9Tdw-kXtmG_se" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Rescenix/ResceneAgent&type=date&legend=top-left&sealed_token=RElry_9jChe6VcryBXv5DB6a21-WXhwIc1Kg4qhhKj8YOTlTWU_QzNAxJBo8scsdZdZ2HayQ0T9RBBbzfUDOFXjouxI8glmp-sAI1OAr-eB6RmZVj8CZ_CEpHx4hZ5XjMoEk-PZKcwCKFq7jQ_dJhw5_70GoFPZ5YJoAa86StEZ1Qwf9Tdw-kXtmG_se" />
- </picture>
+<a href="https://star-history.com/#Rescenix/ResceneAgent&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/star-history-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/star-history-light.png" />
+    <img alt="Star History Chart" src="assets/star-history-light.png" width="100%" />
+  </picture>
 </a>
+
+<sub>由 [`scripts/gen_star_history.py`](scripts/gen_star_history.py) 生成，GitHub Actions 每日自动更新；点击图片查看实时数据。</sub>
 ---
