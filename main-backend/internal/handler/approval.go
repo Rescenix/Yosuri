@@ -65,6 +65,42 @@ func isDangerousTool(name string) bool {
 	return false
 }
 
+// isReadOnlyToolCall 是 Harness 的通用审批判定。它不依赖 Agent 名称或提示词：
+// shell 仅放行 Git 的查询子命令（允许先 cd 到工作目录），其余命令仍按危险操作审批。
+func isReadOnlyToolCall(name, argsJSON string) bool {
+	if strings.HasPrefix(name, "mcp__fs__") {
+		return !isDangerousTool(name)
+	}
+	if name != "mcp__shell__run" {
+		return !isDangerousTool(name) && name != "dispatch_agent"
+	}
+	var args struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal([]byte(argsJSON), &args) != nil {
+		return false
+	}
+	for _, part := range strings.Split(args.Command, ";") {
+		part = strings.TrimSpace(strings.ToLower(part))
+		if part == "" || strings.HasPrefix(part, "cd ") || strings.HasPrefix(part, "set-location ") {
+			continue
+		}
+		if !strings.HasPrefix(part, "git ") {
+			return false
+		}
+		fields := strings.Fields(part)
+		if len(fields) < 2 {
+			return false
+		}
+		switch fields[1] {
+		case "status", "diff", "show", "log", "branch", "rev-parse", "ls-files", "remote":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // irreversibleToolSet 不可逆文件操作：一旦执行（尤其 YOLO 全自动模式下）无法无损
 // 撤回，即使有 AgentFS 影子仓能还原，也比普通写盘风险高一个量级，所以 YOLO 模式
 // 下也必须走审批拦截，不让 agent「畅通无阻」地删/移。

@@ -28,7 +28,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"backend/internal/ai/core"
@@ -417,8 +416,8 @@ func ensureChromeCDP() {
 		"--user-data-dir="+userDataDir,
 		"about:blank",
 	)
-	// Windows 下隐藏可能闪现的窗口；其他平台该字段为零值不影响。
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	// Windows 下隐藏可能闪现的窗口；其他平台 SysProcAttr 结构体无该字段，用 build tag 隔离。
+	setHideWindow(cmd)
 	if err := cmd.Start(); err != nil {
 		log.Printf("⚠️ [预览] 拉起 Chrome 失败: %v", err)
 		return

@@ -126,6 +126,9 @@
               <button class="gem-icon-btn" :class="{ active: showHarnessWorkflow }" @click="toggleHarnessWorkflow" :title="showHarnessWorkflow ? '关闭工作流图' : '显示工作流图'">
                 <Icon icon="mdi:transit-connection-variant" width="18" />
               </button>
+              <button class="gem-icon-btn" :class="{ active: showGitDeliveryAgent }" @click="openGitDeliveryAgent" title="Agent 工作台">
+                <Icon icon="mdi:robot-outline" width="18" />
+              </button>
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
@@ -902,7 +905,7 @@
                     <span class="effort-value">{{ effortLabel }}</span>
                   </div>
                   <Teleport to="body">
-                    <div v-if="showEffortPanel" class="effort-panel" :style="effortPanelStyle" @click.stop>
+                    <div v-if="showEffortPanel" class="effort-panel" :style="effortPanelPos" @click.stop>
                       <div class="effort-panel-title">
                         Effort <b>{{ modelOptions.find(m => m.value === selectedModel)?.label || '' }}</b>
                       </div>
@@ -2512,20 +2515,44 @@ const EFFORT_LEVELS = ['low', 'medium', 'high']
 const EFFORT_UI_LABELS = { low: 'Faster', medium: 'Balanced', high: 'Smarter' }
 const showEffortPanel = ref(false)
 const effortWidgetRef = ref(null)
+// 面板定位：打开时 nextTick 重新测量 pill 位置并做视口边界 clamp，
+// 避免 computed 惰性求值在 ref 未就绪时拿到错误坐标（表现为弹层掉到下方）。
+const effortPanelPos = ref({})
+function measureEffortPanel() {
+  const el = effortWidgetRef.value
+  if (!el) { effortPanelPos.value = {}; return }
+  const rect = el.getBoundingClientRect()
+  const panelW = 220
+  const panelH = 88 // 估算高度（标题+滑块），用于底部边界判断
+  // 默认浮在 pill 正上方、水平居中对齐
+  let top = rect.top - 8
+  let left = rect.left + rect.width / 2
+  let transform = 'translate(-50%, -100%)'
+  // 顶部空间不足则翻到 pill 下方
+  if (top - panelH < 4) {
+    top = rect.bottom + 8
+    transform = 'translate(-50%, 0)'
+  }
+  // 水平超出右边界则右对齐收边
+  if (left + panelW / 2 > window.innerWidth - 4) {
+    left = window.innerWidth - panelW / 2 - 4
+  } else if (left - panelW / 2 < 4) {
+    left = panelW / 2 + 4
+  }
+  effortPanelPos.value = {
+    position: 'fixed',
+    top: top + 'px',
+    left: left + 'px',
+    transform,
+    zIndex: 9999
+  }
+}
+watch(showEffortPanel, (open) => {
+  if (open) nextTick(measureEffortPanel)
+})
 const initialEffortIdx = EFFORT_LEVELS.indexOf(debugReasoning.value)
 const effortLevel = ref(initialEffortIdx >= 0 ? initialEffortIdx : 1)
 const effortLabel = computed(() => EFFORT_UI_LABELS[EFFORT_LEVELS[effortLevel.value]])
-const effortPanelStyle = computed(() => {
-  if (!effortWidgetRef.value) return {}
-  const rect = effortWidgetRef.value.getBoundingClientRect()
-  return {
-    position: 'fixed',
-    top: (rect.top - 8) + 'px',
-    left: (rect.left + rect.width / 2) + 'px',
-    transform: 'translate(-50%, -100%)',
-    zIndex: 9999
-  }
-})
 function onEffortChange() {
   debugReasoning.value = EFFORT_LEVELS[effortLevel.value]
   localStorage.setItem('debugReasoning', debugReasoning.value)

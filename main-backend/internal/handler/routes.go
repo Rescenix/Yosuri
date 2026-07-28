@@ -203,7 +203,6 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 			c.JSON(200, gin.H{"status": "disabled", "message": "Redis 未启用"})
 		}
 	})
-	r.POST("/api/image/generate", GenerateImage)
 	// view_image MCP server（main-backend/mcp/view_image_server.py）的转发目标，
 	// Key/视觉模型调用只在这一处，见 HandleVisionAnalyze 头注释。
 	r.POST("/api/vision/analyze", HandleVisionAnalyze)

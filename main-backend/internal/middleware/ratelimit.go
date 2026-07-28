@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +35,7 @@ func (rl *RateLimiter) Limit() gin.HandlerFunc {
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-				return []byte(os.Getenv("JWT_SECRET")), nil
+				return jwtSecret(), nil
 			})
 			if err == nil && token.Valid {
 				if claims, ok := token.Claims.(jwt.MapClaims); ok && claims["role"] == "admin" {

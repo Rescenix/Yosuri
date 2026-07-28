@@ -157,7 +157,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if resumed != nil && sessionID == "" {
 		sessionID = resumed.SessionID
 	}
-	// mode: yolo(全自动,默认) / ask(危险工具每步问)。不传或非法值(含旧 plan)按 yolo 处理。
+	// mode: yolo(全自动,默认) / ask(危险工具每步问)。
 	mode := strings.ToLower(c.Query("mode"))
 	if mode == "" && resumed != nil {
 		mode = resumed.Mode
@@ -677,8 +677,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			if !previewOpened && !results[i].failed && isFrontendEdit(tc.Function.Name, tc.Function.Arguments) {
 				previewOpened = true
 
-					// 优先用 CDP 在真实 Chromium 里渲染 agent 刚改的那个文件，把 target
-					// 的 ws 回给前端做 screencast（不再 iframe 整站）。HTML 的 CDP 失败会
+				// 优先用 CDP 在真实 Chromium 里渲染 agent 刚改的那个文件，把 target
+				// 的 ws 回给前端做 screencast（不再 iframe 整站）。HTML 的 CDP 失败会
 				// 显式推错误；只有非 HTML 文件才降级为前端 dev server 首页（iframe）。
 				var editPath string
 				if p, e := parseFrontendEditPath(tc.Function.Arguments); e == nil {
@@ -819,6 +819,11 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			}
 		}
 		outside, outPath := toolOutsideRoot(tc.Function.Arguments)
+		// Harness 的统一只读判定：无论哪个 Agent、哪个前端入口，只要参数
+		// 本身是安全读取，就不弹审批；不是由某个 Git Agent 特例决定的。
+		if !outside && isReadOnlyToolCall(name, tc.Function.Arguments) {
+			return true
+		}
 		if !isDangerousTool(name) && !outside {
 			return true
 		}

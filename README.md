@@ -4,7 +4,7 @@
 
 > 前端交付最慢的部分不是写代码，是“写完后手动跑起来、逐屏验收、再改再验”。
 
-ResceneAgent 是面向前端工程团队的本地 Agent 工作台：你只需要给出一个你的想法，多 Agent 协同拆解任务、生成代码、运行构建、启动真实 Chromium 预览，并把验收截图与 Diff 证据写回同一条对话流。所有改动先进入 AgentFS 隔离快照，危险操作经系统门阀审批，不满意可一键回滚——它不是生成片段的玩具，而是把前端交付闭环搬进聊天框的生产力系统。
+ResceneAgent 是面向前端工程团队的本地 Agent 工作台：一句需求，多 Agent 协同拆解任务、生成代码、运行构建、启动真实 Chromium 预览，并把验收截图与 Diff 证据写回同一条对话流。你还可以创造并编排自己的专门 Agent——Git 审查、测试、文档、合规检查——让它们在一条工作流里接力。所有改动先进入 AgentFS 隔离快照，危险操作经系统门阀审批，不满意可一键回滚：它不是生成片段的玩具，而是把前端交付闭环搬进聊天框的生产力系统。
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
@@ -35,20 +35,18 @@ ResceneAgent 不只是“AI 写完给你一段代码”。你对它说"做个能
 
 | 能力 | 常见对话式 Coding Agent | ResceneAgent |
 | --- | --- | --- |
-| 对话生成/修改代码 | ✓ | ✓ |
-| 子 Agent 协作 | 依实现而定 | 多 Agent 调度，任务可拆分、可追踪 |
-| 任务计划 | 常隐藏在模型内部 | 实时 `TODO`：`pending / doing / done`，前端同步展示 |
-| 主动向人确认 | 通常靠自由文本 | `ask_user` 结构化提问，回答原地回流工作流 |
-| 中断后的继续执行 | 依会话实现而定 | 每轮快照消息、工具、TODO 与 Token 计数，可断点续传 |
-| 文件 edit 过程 | 常是整段结果或黑盒工具调用 | SSE 流式瀑布 + 渐变呈现：新增/删除计数、流式内容与最终 Diff |
-| 编辑、终端与 Diff | 往往依赖外部 IDE | Monaco、文件树、PowerShell、可审计 Diff 集成在聊天面板 |
-| 运行后的网页验收 | 截图、iframe 或由用户另开浏览器 | 真实 Chromium + CDP Screencast；鼠标、键盘可双向交互 |
-| 感知用户的真实交互 | 通常只看到代码或另起一份截图 | 读取用户正在操作的**同一 live 预览页**：点击、输入、滚动后的截图与 DOM 文本都可回流给 Agent 判断状态 |
-| 交付证据 | 通常只返回文字说明 | 页面截图按工具调用顺序成为 artifact，可按需展开 |
-| AI 生成图片 | 依产品而定 | 对话内 `image_generate`，结果可继续作为前端素材使用 |
-| 安全交付闭环 | 常依模型自觉或直接改工作目录 | 危险操作系统门阀（YOLO 也无豁免）+ AgentFS 隔离/Diff/回滚 + 按改动类型构建与 CDP 验收 |
-| 长期上下文 | 依会话或外部记忆 | 全局 `MEMORY.md` + 项目 `workdir.md` 双轨隔离，不污染仓库 |
-| 免费模型池与自动路由 | 常需手动逐个配置和切换 | 免费模型自动熔断、失败秒切，确定性失效自动跳过 |
+| 自定义 Agent 编排 | 通常单一 Agent 硬编码 | 创造多个专门 Agent，按名称与系统提示词编排，在工作流中调度接力 |
+| 任务计划 | 隐藏在模型内部 | 实时 `TODO`：`pending / doing / done`，前端同步展示 |
+| 主动向人确认 | 自由文本追问 | `ask_user` 结构化提问，回答原地回流工作流 |
+| 中断后的继续执行 | 依赖会话实现 | 每轮快照消息、工具、TODO 与 Token 计数，可断点续传 |
+| 文件 edit 过程 | 整段结果或黑盒调用 | SSE 流式瀑布 + 渐变呈现：新增/删除计数、流式内容与最终 Diff |
+| 编辑、终端与 Diff | 依赖外部 IDE | Monaco、文件树、PowerShell、可审计 Diff 集成在聊天面板 |
+| 运行后的网页验收 | 截图、iframe 或另开浏览器 | 真实 Chromium + CDP Screencast；鼠标、键盘可双向交互 |
+| 感知用户真实交互 | 只看到代码或另起截图 | 读取同一 live 预览页：点击、输入、滚动后的截图与 DOM 都可回流 Agent |
+| 交付证据 | 文字说明 | 页面截图按工具调用顺序成为 artifact，可按需展开 |
+| 安全交付闭环 | 依赖模型自觉或直写工作目录 | 危险操作系统门阀（YOLO 也无豁免）+ AgentFS 隔离/Diff/回滚 + 按改动类型构建与 CDP 验收 |
+| 长期上下文 | 依赖会话或外部记忆 | 全局 `MEMORY.md` + 项目 `workdir.md` 双轨隔离，不污染仓库 |
+| 多模型路由与故障转移 | 手动逐个配置切换 | 自动熔断、失败秒切、确定性失效自动跳过 |
 | 工作流可视化 | 较少提供 | Harness Flow 实时展示 Gateway / Memory / LLM / Tools / Reply 及 Trace / Eval / Release 链路 |
 
 ### 企业级安全门阀：能力越大，越不能越权
@@ -122,3 +120,17 @@ npm run dev
 | 许可证 | [MIT](./LICENSE) |
 
 如果这个方向让你对“AI 不是只会聊天，而是能交付的东西”多一点期待，欢迎点一个 Star。
+
+---
+
+## Star History
+
+<a href="https://star-history.com/#Rescenix/ResceneAgent&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/star-history-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/star-history-light.png" />
+    <img alt="ResceneAgent Star History Chart" src="assets/star-history-light.png" width="100%" />
+  </picture>
+</a>
+
+<sub>由 [`scripts/gen_star_history.py`](scripts/gen_star_history.py) 生成，GitHub Actions 每日自动更新；点击图片查看实时数据。</sub>

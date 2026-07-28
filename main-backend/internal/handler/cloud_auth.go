@@ -20,11 +20,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// cloudAuthBase 返回 ResceneCloud 基址，未配置则回退本地 8088。
+// cloudAuthBase 返回 ResceneCloud 基址，未配置则回退默认云端，保证开箱即连。
 func cloudAuthBase() string {
 	u := os.Getenv("RESCENE_CLOUD_URL")
 	if u == "" {
-		u = "http://localhost:8088"
+		u = "https://rescenecloud.onrender.com"
 	}
 	return strings.TrimRight(u, "/")
 }

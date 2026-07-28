@@ -10,6 +10,18 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// defaultJWTSecret 是未配置 JWT_SECRET 时的回退默认值，与 ResceneCloud 共享。
+// 自托管或生产部署请用 JWT_SECRET 环境变量覆盖为强随机值。
+const defaultJWTSecret = "rescenecloud-aurora-shared-jwt-secret-v1"
+
+// jwtSecret 返回 JWT 签名密钥：优先取环境变量，未配置则回退默认值。
+func jwtSecret() []byte {
+	if s := os.Getenv("JWT_SECRET"); s != "" {
+		return []byte(s)
+	}
+	return []byte(defaultJWTSecret)
+}
+
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -19,8 +31,8 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 动态读取密钥
-		jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+		// 动态读取密钥（env 优先，未配置则回退硬编码默认值，保证开箱即验 token）
+		jwtSecret := jwtSecret()
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {

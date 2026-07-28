@@ -1,133 +1,254 @@
 <template>
-  <section class="git-delivery-agent" aria-label="交付 Agent Git">
+  <section class="git-delivery-agent" aria-label="交付 Agent">
     <header class="gda-header">
-      <div class="gda-title">
-        <Icon icon="mdi:source-branch-check" width="18" />
-        <div><strong>{{ agentName }}</strong><span>交付前只读审查</span></div>
+      <div class="gda-tabs" role="tablist">
+        <button
+          v-for="agent in tabAgents"
+          :key="agent.id"
+          type="button"
+          class="gda-tab"
+          :class="{ active: agent.id === activeAgentId }"
+          role="tab"
+          :aria-selected="agent.id === activeAgentId"
+          @click="selectAgent(agent.id)"
+        ><Icon icon="mdi:source-branch-check" width="16" /> {{ agent.name }}</button>
+        <button type="button" class="gda-add-tab" title="添加已配置 Agent" @click="showAgentPicker = !showAgentPicker"><Icon icon="mdi:plus" width="17" /></button>
+        <div v-if="showAgentPicker" class="gda-agent-picker">
+          <button v-for="agent in availableAgents" :key="agent.id" type="button" @click="openAgentTab(agent.id)"><Icon icon="mdi:source-branch-check" width="15" /> {{ agent.name }}</button>
+          <p v-if="!availableAgents.length">所有已配置 Agent 都已打开</p>
+          <button type="button" class="gda-manage-agents" @click="showAgentPicker = false; showSettings = true"><Icon icon="mdi:cog-outline" width="15" /> 管理 Agent…</button>
+        </div>
       </div>
-      <div class="gda-header-actions">
-        <button type="button" title="Git Agent 设置" @click="showSettings = !showSettings"><Icon icon="mdi:cog-outline" width="17" /></button>
+      <div class="gda-actions">
+        <button type="button" title="管理 Agent" @click="showSettings = true"><Icon icon="mdi:cog-outline" width="17" /></button>
         <button type="button" title="关闭" @click="$emit('close')"><Icon icon="mdi:close" width="18" /></button>
       </div>
     </header>
 
-    <div v-if="showSettings" class="gda-settings">
-      <label>Agent 名称<input v-model.trim="agentName" maxlength="40" /></label>
-      <label>审查提示词<textarea v-model="agentPrompt" rows="7" /></label>
-      <button type="button" @click="resetPrompt">恢复内置提示词</button>
-    </div>
-
-    <div class="gda-body">
-      <div class="gda-summary">
-        <span>{{ branch || '当前分支' }}</span>
-        <span>{{ files.length }} 个文件</span>
-        <span class="add">+{{ additions }}</span><span class="del">−{{ deletions }}</span>
+    <main ref="messagesRef" class="gda-messages">
+      <div v-for="message in activeMessages" :key="message.id" class="gda-message" :class="message.role">
+        <template v-if="message.role === 'activity'">
+          <div class="gda-activity">{{ message.content }}</div>
+        </template>
+        <template v-else>
+        <div v-if="message.role === 'agent'" class="gda-avatar"><Icon icon="mdi:source-branch-check" width="14" /></div>
+        <div class="gda-bubble">{{ message.content }}</div>
+        </template>
       </div>
+      <div v-if="reviewing" class="gda-message agent"><div class="gda-avatar">…</div><div class="gda-bubble typing"><i></i><i></i><i></i></div></div>
+      <section v-if="pendingApproval" class="gda-approval">
+        <strong>等待你的批准</strong>
+        <span>{{ pendingApproval.tool }}</span>
+        <pre>{{ pendingApproval.args }}</pre>
+        <div><button type="button" @click="respondApproval(false)">拒绝</button><button type="button" @click="respondApproval(true)">允许</button></div>
+      </section>
+    </main>
 
-      <div v-if="loading" class="gda-state"><Icon icon="mdi:loading" class="spin" width="16" /> 正在读取本次改动…</div>
-      <template v-else>
-        <div v-if="signals.length" class="gda-section warning">
-          <div class="gda-section-title"><Icon icon="mdi:shield-alert-outline" width="15" /> 需要确认</div>
-          <div v-for="signal in signals" :key="signal.path + signal.message" class="gda-signal"><code>{{ signal.path }}</code><span>{{ signal.message }}</span></div>
-        </div>
-        <div v-else class="gda-section clean"><Icon icon="mdi:shield-check-outline" width="16" /> 未发现常见密钥、构建产物或二进制风险。</div>
+    <form class="gda-input" @submit.prevent="sendMessage()">
+      <textarea v-model="draft" rows="1" placeholder="输入要交给 Agent 的任务…" @keydown.enter.exact.prevent="sendMessage()" @keydown.esc="$emit('close')"></textarea>
+      <span v-if="reviewing" class="gda-running">{{ elapsedSeconds }}s</span>
+      <button v-if="reviewing" type="button" class="gda-stop" title="停止审查" @click="cancelReview"><Icon icon="mdi:stop" width="15" /></button>
+      <button type="submit" :disabled="!draft.trim() || reviewing" title="发送"><Icon icon="mdi:arrow-up" width="17" /></button>
+    </form>
 
-        <div class="gda-section">
-          <div class="gda-section-title">改动文件</div>
-          <div v-for="file in files.slice(0, 8)" :key="file.path" class="gda-file"><code>{{ file.path }}</code><span class="add">+{{ file.additions }}</span><span class="del">−{{ file.deletions }}</span></div>
-          <div v-if="files.length > 8" class="gda-more">另有 {{ files.length - 8 }} 个文件</div>
-        </div>
-
-        <div class="gda-section gda-review">
-          <div class="gda-section-title"><Icon :icon="reviewing ? 'mdi:loading' : 'mdi:robot-outline'" :class="{ spin: reviewing }" width="15" /> {{ reviewing ? 'Git Agent 正在审查…' : 'Git Agent 结论' }}</div>
-          <p v-if="reviewError" class="gda-error">{{ reviewError }}</p>
-          <p v-else-if="review" class="gda-review-text">{{ review }}</p>
-          <p v-else class="gda-muted">正在准备审查任务…</p>
-        </div>
-      </template>
-    </div>
-    <footer><button type="button" :disabled="loading || reviewing" @click="refresh"><Icon icon="mdi:refresh" width="15" /> 重新审查</button></footer>
+    <Teleport to="body">
+      <div v-if="showSettings" class="gda-settings-backdrop" @click.self="showSettings = false">
+        <section class="gda-settings-dialog" role="dialog" aria-modal="true" aria-label="Git Agent 设置">
+          <header><strong>Agent 设置</strong><button type="button" @click="showSettings = false"><Icon icon="mdi:close" width="18" /></button></header>
+          <div class="gda-agent-list">
+            <article v-for="(agent, index) in agents" :key="agent.id" class="gda-agent-form">
+              <div class="gda-agent-form-head"><span>Agent {{ index + 1 }}</span><button v-if="agents.length > 1" type="button" title="删除 Agent" @click="removeAgent(agent.id)"><Icon icon="mdi:trash-can-outline" width="15" /></button></div>
+              <label>名称<input v-model.trim="agent.name" maxlength="32" placeholder="Agent 名称" /></label>
+              <label>系统提示词<textarea v-model="agent.prompt" rows="6" /></label>
+            </article>
+          </div>
+          <footer><button type="button" class="gda-add-agent" @click="addAgent"><Icon icon="mdi:plus" width="16" /> 添加 Agent</button><button type="button" class="gda-settings-done" @click="showSettings = false">完成</button></footer>
+        </section>
+      </div>
+    </Teleport>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 
-const emit = defineEmits(['close'])
-const DEFAULT_NAME = 'Git Agent'
-const DEFAULT_PROMPT = `你是交付前的 Git 审查 Agent。只读检查当前工作树的改动，绝不执行写入、暂存、提交、推送或删除操作。重点找出：泄露的密钥/环境变量、二进制或构建产物、无意加入的垃圾文件、危险脚本、明显的回归和缺失测试。先说明本次改动的目的，再按严重程度列出可操作问题；没有问题时明确写“可以交付”，但不要编造问题。回答使用简洁中文。`
-const agentName = ref(localStorage.getItem('gitDeliveryAgentName') || DEFAULT_NAME)
-const agentPrompt = ref(localStorage.getItem('gitDeliveryAgentPrompt') || DEFAULT_PROMPT)
-const showSettings = ref(false)
-const loading = ref(true)
-const reviewing = ref(false)
-const review = ref('')
-const reviewError = ref('')
-const branch = ref('')
-const files = ref([])
-let reviewStream = null
-
-watch(agentName, value => localStorage.setItem('gitDeliveryAgentName', value || DEFAULT_NAME))
-watch(agentPrompt, value => localStorage.setItem('gitDeliveryAgentPrompt', value || DEFAULT_PROMPT))
-const additions = computed(() => files.value.reduce((n, file) => n + (file.additions || 0), 0))
-const deletions = computed(() => files.value.reduce((n, file) => n + (file.deletions || 0), 0))
-const signals = computed(() => files.value.flatMap(file => {
-  const path = file.path || ''
-  const lower = path.toLowerCase()
-  if (/(^|\/)node_modules\/|(^|\/)dist\/|(^|\/)build\/|\.cache\//.test(lower)) return [{ path, message: '疑似构建产物或依赖目录，不建议交付。' }]
-  if (/(^|\/)\.env($|\.)|\.pem$|\.key$|\.p12$|id_rsa|credentials|secret/.test(lower)) return [{ path, message: '可能包含密钥或凭据，交付前必须核实。' }]
-  if (/\.(exe|dll|so|dylib|jar|zip|tar|gz|7z)$/i.test(path) || file.binary) return [{ path, message: '二进制或归档文件，确认是否应纳入版本控制。' }]
-  if (/package-lock\.json|pnpm-lock\.yaml|yarn\.lock/.test(lower) && file.additions + file.deletions > 500) return [{ path, message: '锁文件改动较大，确认没有意外依赖变更。' }]
-  return []
-}))
-
-function resetPrompt() { agentPrompt.value = DEFAULT_PROMPT }
-function stopReview() { reviewStream?.close(); reviewStream = null }
-function reviewTask() {
-  const summary = files.value.map(f => `${f.status || 'M'} ${f.path} (+${f.additions || 0}/-${f.deletions || 0})`).join('\n')
-  return `${agentPrompt.value}\n\n本次工作树改动摘要：\n分支：${branch.value || 'unknown'}\n${summary || '没有检测到改动'}\n\n请基于实际 git diff 完成审查。`
+defineEmits(['close'])
+const STORAGE_KEY = 'gitDeliveryAgents'
+const DEFAULT_PROMPT = `你是 Git Agent，负责交付前的只读代码审查。必须使用当前工作树的 git diff 作为事实依据，绝不写入、暂存、提交、推送或删除文件。运行环境是 Windows PowerShell：多条命令必须用分号 ; 分隔，绝不能使用 && 或 ||。单条命令失败时先解释错误，不要原样重复失败命令。用简洁中文说明改动、风险和下一步；重点关注密钥、垃圾文件、二进制构建产物、危险脚本、回归和测试缺口。没有问题时明确说明可以交付，不要编造问题。`
+const GENERIC_PROMPT = `你是一个通用工作 Agent。先理解用户目标，再使用可用工具完成任务；执行命令前确认环境和参数，失败后解释原因并换用安全方案。用简洁中文汇报进展和结果。`
+const GIT_REVIEW_TASK = '请审查当前工作树这次改动，确认是否适合交付。'
+function defaultAgent() { return { id: 'git-agent', name: 'Git Agent', prompt: DEFAULT_PROMPT } }
+function readAgents() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    return Array.isArray(saved) && saved.length ? saved : [defaultAgent()]
+  } catch { return [defaultAgent()] }
 }
-function startReview() {
+const agents = ref(readAgents())
+const activeAgentId = ref(agents.value[0].id)
+const openAgentIds = ref([agents.value[0].id])
+const messagesByAgent = ref({})
+const draft = ref('')
+const reviewing = ref(false)
+const elapsedSeconds = ref(0)
+const pendingApproval = ref(null)
+const showSettings = ref(false)
+const showAgentPicker = ref(false)
+const messagesRef = ref(null)
+let reviewStream = null
+let elapsedTimer = null
+let thinkingMessageId = ''
+const tabAgents = computed(() => {
+  const open = agents.value.filter(agent => openAgentIds.value.includes(agent.id))
+  return open.length ? open : [agents.value[0]]
+})
+const availableAgents = computed(() => agents.value.filter(agent => !openAgentIds.value.includes(agent.id)))
+const activeAgent = computed(() => tabAgents.value.find(agent => agent.id === activeAgentId.value) || tabAgents.value[0])
+const activeMessages = computed(() => messagesByAgent.value[activeAgentId.value] || [])
+watch(agents, value => localStorage.setItem(STORAGE_KEY, JSON.stringify(value)), { deep: true })
+watch([activeAgentId, activeMessages, reviewing], scrollToBottom, { flush: 'post' })
+function scrollToBottom() { nextTick(() => { if (messagesRef.value) messagesRef.value.scrollTop = messagesRef.value.scrollHeight }) }
+function pushMessage(role, content) {
+  const id = activeAgentId.value
+  const next = { ...messagesByAgent.value }
+  next[id] = [...(next[id] || []), { id: `${Date.now()}-${Math.random()}`, role, content }]
+  messagesByAgent.value = next
+}
+function pushActivity(content, icon = 'mdi:circle-outline', loading = false) {
+  const id = activeAgentId.value
+  const next = { ...messagesByAgent.value }
+  next[id] = [...(next[id] || []), { id: `${Date.now()}-${Math.random()}`, role: 'activity', content, icon, loading }]
+  messagesByAgent.value = next
+}
+function appendThinking(content) {
+  const agentId = activeAgentId.value
+  const entries = messagesByAgent.value[agentId] || []
+  const index = entries.findIndex(message => message.id === thinkingMessageId)
+  if (index < 0) {
+    pushActivity(`思考：${content}`)
+    thinkingMessageId = messagesByAgent.value[agentId].at(-1).id
+    return
+  }
+  const next = { ...messagesByAgent.value }
+  next[agentId] = [...entries]
+  next[agentId][index] = { ...entries[index], content: entries[index].content + content }
+  messagesByAgent.value = next
+}
+function stopReview() {
+  reviewStream?.close()
+  reviewStream = null
+  reviewing.value = false
+  clearInterval(elapsedTimer)
+  elapsedTimer = null
+  elapsedSeconds.value = 0
+  pendingApproval.value = null
+}
+function startReviewClock() {
+  clearInterval(elapsedTimer)
+  elapsedSeconds.value = 0
+  elapsedTimer = setInterval(() => { elapsedSeconds.value++ }, 1000)
+}
+function cancelReview() {
+  if (!reviewing.value) return
   stopReview()
+  pushActivity('已停止本次审查。')
+}
+async function respondApproval(allow) {
+  const approval = pendingApproval.value
+  if (!approval) return
+  try {
+    const res = await fetch('/api/code/workflow/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: approval.id, allow, remember: false, tool: approval.tool })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    pushActivity(allow ? `已允许工具：${approval.tool}` : `已拒绝工具：${approval.tool}`)
+    pendingApproval.value = null
+  } catch (error) {
+    pushActivity(`审批提交失败：${error.message || '未知错误'}`)
+  }
+}
+function taskFor(text) {
+  return `执行环境规则：当前命令终端是 Windows PowerShell。多条命令只允许用分号 ; 分隔，绝不能使用 && 或 ||；命令失败后不要原样重试。\n\n${activeAgent.value.prompt}\n\n用户请求：${text}`
+}
+function sendMessage(initialText = '') {
+  const text = (initialText || draft.value).trim()
+  if (!text || reviewing.value) return
+  draft.value = ''
+  thinkingMessageId = ''
+  pushMessage('user', text)
   reviewing.value = true
-  review.value = ''
-  reviewError.value = ''
-  reviewStream = new EventSource('/api/code/workflow?mode=ask&max_rounds=4&task=' + encodeURIComponent(reviewTask()))
+  startReviewClock()
+  pushActivity('已启动审查，等待 Git Agent 响应…', 'mdi:clock-outline', true)
+  reviewStream = new EventSource('/api/code/workflow?mode=ask&task=' + encodeURIComponent(taskFor(text)))
+  reviewStream.addEventListener('workflow_start', event => {
+    try { pushActivity(`工作流已启动：${JSON.parse(event.data).mode === 'ask' ? '安全审批模式' : '自动模式'}`) } catch {}
+  })
+  reviewStream.addEventListener('thinking', event => {
+    try {
+      const content = JSON.parse(event.data).content || ''
+      if (content) appendThinking(content)
+    } catch { pushActivity('Git Agent 正在思考…') }
+  })
+  reviewStream.addEventListener('action', event => {
+    try {
+      const data = JSON.parse(event.data)
+      pushActivity(`正在调用工具：${data.name || 'unknown'}`, 'mdi:tools', true)
+    } catch { pushActivity('正在调用工具…', 'mdi:tools', true) }
+  })
+  reviewStream.addEventListener('approval_request', event => {
+    try {
+      const data = JSON.parse(event.data)
+      pendingApproval.value = { id: data.id, tool: data.tool || 'unknown', args: data.args || '' }
+      pushActivity(`工具正在等待批准：${data.tool || 'unknown'}`)
+    } catch { pushActivity('工具正在等待批准。') }
+  })
   reviewStream.addEventListener('result', event => {
-    try { review.value = JSON.parse(event.data).content || JSON.parse(event.data).result || '' } catch { review.value = event.data }
+    try {
+      const data = JSON.parse(event.data)
+      const state = data.ok === false ? '工具失败' : '工具完成'
+      pushActivity(`${state}：${data.name || 'unknown'}${data.output ? `\n${data.output}` : ''}`, data.ok === false ? 'mdi:alert-circle-outline' : 'mdi:check-circle-outline')
+    } catch { pushActivity('工具已返回结果。', 'mdi:check-circle-outline') }
   })
   reviewStream.addEventListener('flow_error', event => {
-    try { reviewError.value = JSON.parse(event.data).message || 'Git Agent 审查失败' } catch { reviewError.value = 'Git Agent 审查失败' }
+    try { pushMessage('agent', `审查未完成：${JSON.parse(event.data).message || '模型服务不可用。'}`) } catch { pushMessage('agent', '审查未完成：模型服务不可用。') }
   })
-  reviewStream.addEventListener('workflow_done', () => { reviewing.value = false; stopReview() })
-  reviewStream.onerror = () => { if (reviewing.value) { reviewError.value = '无法连接 Git Agent，请检查模型配置。'; reviewing.value = false; stopReview() } }
+  reviewStream.addEventListener('workflow_done', event => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data.final_output) pushMessage('agent', data.final_output)
+      else if (data.status !== 'completed') pushMessage('agent', `审查未完成：${data.status || '工作流已停止'}。`)
+    } catch { pushMessage('agent', '审查工作流已结束。') }
+    stopReview()
+  })
+  reviewStream.onerror = () => { if (reviewing.value) { pushMessage('agent', '无法连接 Git Agent，请检查模型配置。'); stopReview() } }
 }
-async function refresh() {
-  stopReview()
-  loading.value = true
-  review.value = ''
-  reviewError.value = ''
-  try {
-    const res = await fetch('/api/git/working-diff')
-    if (!res.ok) throw new Error('无法读取 Git diff')
-    const data = await res.json()
-    branch.value = data.branch || ''
-    files.value = data.files || []
-  } catch (error) {
-    reviewError.value = error.message || '无法读取 Git diff'
-  } finally {
-    loading.value = false
-  }
-  startReview()
+function selectAgent(id) { if (id !== activeAgentId.value) { stopReview(); activeAgentId.value = id } }
+function openAgentTab(id) {
+  if (!openAgentIds.value.includes(id)) openAgentIds.value.push(id)
+  showAgentPicker.value = false
+  selectAgent(id)
+  if (!(messagesByAgent.value[id] || []).length) draft.value = id === 'git-agent' ? GIT_REVIEW_TASK : '请协助我完成当前任务。'
 }
-onMounted(refresh)
+function addAgent() {
+  const agent = { id: `agent-${Date.now()}`, name: '新 Agent', prompt: GENERIC_PROMPT }
+  agents.value.push(agent)
+}
+function removeAgent(id) {
+  if (agents.value.length === 1) return
+  agents.value = agents.value.filter(agent => agent.id !== id)
+  openAgentIds.value = openAgentIds.value.filter(agentId => agentId !== id)
+  if (activeAgentId.value === id) activeAgentId.value = agents.value[0].id
+}
+onMounted(() => { draft.value = GIT_REVIEW_TASK })
 onUnmounted(stopReview)
 </script>
 
 <style scoped>
-.git-delivery-agent { position: fixed; right: 24px; bottom: 24px; z-index: 2100; width: min(390px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 48px)); display: flex; flex-direction: column; overflow: hidden; color: #242424; background: #fff; border: 1px solid #e7e7e7; border-radius: 14px; box-shadow: 0 18px 52px rgba(0,0,0,.18); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-.gda-header { display:flex; align-items:center; justify-content:space-between; padding:14px 14px 12px; border-bottom:1px solid #eee; }.gda-title,.gda-header-actions { display:flex; align-items:center; gap:9px; }.gda-title strong,.gda-title span { display:block; }.gda-title strong { font-size:14px; }.gda-title span { color:#747474; font-size:11px; margin-top:2px; }.gda-header-actions button, footer button { display:inline-flex; align-items:center; justify-content:center; gap:5px; border:0; background:transparent; color:#606060; cursor:pointer; border-radius:7px; }.gda-header-actions button { width:28px; height:28px; }.gda-header-actions button:hover,footer button:hover { background:#f0f0f0; color:#242424; }
-.gda-settings { display:grid; gap:9px; padding:12px 14px; background:#fafafa; border-bottom:1px solid #eee; }.gda-settings label { display:grid; gap:4px; font-size:11px; color:#666; }.gda-settings input,.gda-settings textarea { box-sizing:border-box; width:100%; border:1px solid #ddd; border-radius:7px; padding:7px; font:12px/1.45 inherit; color:#333; background:#fff; resize:vertical; }.gda-settings button { justify-self:start; border:0; padding:0; color:#80563d; background:transparent; font-size:11px; cursor:pointer; }
-.gda-body { overflow:auto; padding:12px 14px; }.gda-summary { display:flex; align-items:center; gap:7px; font-size:11px; color:#666; margin-bottom:12px; }.gda-summary span:first-child { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.add { color:#168247!important; }.del { color:#c43c38!important; }.gda-section { margin-top:12px; padding-top:12px; border-top:1px solid #f0f0f0; }.gda-section:first-child { margin-top:0; }.gda-section-title { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:650; }.gda-section.clean { display:flex; align-items:center; gap:7px; padding:9px; border:0; border-radius:8px; color:#176b40; background:#f0faf4; font-size:11px; }.gda-section.warning { border:0; padding:9px; border-radius:8px; background:#fff8ea; }.gda-signal { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-top:7px; font-size:11px; color:#72511e; }.gda-signal code,.gda-file code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:11px ui-monospace,SFMono-Regular,Consolas,monospace; }.gda-file { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:7px; margin-top:7px; font-size:11px; }.gda-more,.gda-muted { color:#777; font-size:11px; margin:8px 0 0; }.gda-review-text { margin:7px 0 0; white-space:pre-wrap; font-size:12px; line-height:1.5; }.gda-error { color:#b53b37; font-size:11px; line-height:1.45; }.gda-state { display:flex; justify-content:center; align-items:center; gap:7px; min-height:120px; color:#777; font-size:12px; }footer { display:flex; justify-content:flex-end; padding:9px 12px; border-top:1px solid #eee; }footer button { padding:6px 9px; font-size:12px; }footer button:disabled { opacity:.45; cursor:default; }.spin { animation:gda-spin .9s linear infinite; }@keyframes gda-spin { to { transform:rotate(360deg); } }
+.git-delivery-agent { position:fixed; right:24px; bottom:24px; z-index:2100; width:min(420px,calc(100vw - 32px)); height:min(560px,calc(100vh - 48px)); display:flex; flex-direction:column; overflow:hidden; color:#252525; background:#fff; border:1px solid #e7e7e7; border-radius:14px; box-shadow:0 18px 52px rgba(0,0,0,.18); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+.gda-header { min-height:50px; display:flex; align-items:stretch; justify-content:space-between; border-bottom:1px solid #ededed; }.gda-tabs { position:relative; flex:1; min-width:0; display:flex; overflow:visible; }.gda-tab,.gda-add-tab { flex:0 1 auto; display:inline-flex; align-items:center; gap:7px; padding:0 16px; border:0; border-right:1px solid #eee; color:#777; background:#fafafa; font-size:12.5px; cursor:pointer; white-space:nowrap; }.gda-tab { max-width:145px; overflow:hidden; text-overflow:ellipsis; }.gda-tab.active { color:#242424; background:#fff; box-shadow:inset 0 -2px #242424; font-weight:650; }.gda-add-tab { flex:0 0 auto; width:34px; justify-content:center; padding:0; background:#fff; color:#666; }.gda-add-tab:hover { color:#242424; background:#f3f3f3; }.gda-agent-picker { position:absolute; top:50px; left:8px; z-index:31000; min-width:180px; padding:5px; border:1px solid #ddd; border-radius:9px; background:#fff; box-shadow:0 10px 28px rgba(0,0,0,.16); }.gda-agent-picker button { width:100%; display:flex; align-items:center; gap:7px; padding:8px; border:0; border-radius:6px; color:#333; background:transparent; text-align:left; font-size:12px; cursor:pointer; }.gda-agent-picker button:hover { background:#f2f2f2; }.gda-agent-picker p { margin:7px 8px; color:#777; font-size:11px; }.gda-agent-picker .gda-manage-agents { margin-top:3px; border-top:1px solid #eee; border-radius:0; color:#6c4934; }.gda-actions { flex:0 0 auto; display:flex; align-items:center; gap:2px; padding:0 8px; background:#fff; }.gda-actions button { width:29px; height:29px; display:inline-flex; align-items:center; justify-content:center; border:0; border-radius:7px; color:#666; background:transparent; cursor:pointer; }.gda-actions button:hover { color:#222; background:#f1f1f1; }
+.gda-messages { flex:1; overflow:auto; padding:16px; background:#fff; }.gda-message { display:flex; gap:8px; margin:0 0 12px; }.gda-message.user { justify-content:flex-end; }.gda-message.activity { margin:4px 0 8px 34px; }.gda-activity { max-width:90%; display:flex; align-items:flex-start; gap:6px; color:#727272; font-size:11.5px; line-height:1.45; white-space:pre-wrap; }.gda-activity :deep(svg) { flex:0 0 auto; margin-top:1px; color:#8b6046; }.gda-avatar { width:26px; height:26px; flex:0 0 auto; display:grid; place-items:center; border-radius:8px; color:#79533c; background:#f6eee9; }.gda-bubble { max-width:82%; padding:9px 11px; border-radius:10px; color:#303030; background:#f5f5f5; font-size:12.5px; line-height:1.55; white-space:pre-wrap; }.gda-message.user .gda-bubble { color:#fff; background:#262626; }.gda-bubble.typing { display:flex; align-items:center; gap:4px; min-width:36px; }.typing i { width:4px; height:4px; border-radius:50%; background:#777; animation:blink 1.15s infinite ease-in-out; }.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+.gda-input { display:flex; align-items:flex-end; gap:8px; padding:10px 12px; border-top:1px solid #ececec; background:#fff; }.gda-input textarea { flex:1; min-height:20px; max-height:110px; padding:7px 0; resize:none; border:0; outline:0; color:#242424; font:13px/1.45 inherit; }.gda-input textarea::placeholder { color:#999; }.gda-input button { width:28px; height:28px; display:grid; place-items:center; flex:0 0 auto; border:0; border-radius:8px; color:#fff; background:#242424; cursor:pointer; }.gda-input .gda-stop { color:#6f352f; background:#f6e9e7; }.gda-input button:disabled { opacity:.35; cursor:default; }
+.gda-approval { margin:4px 0 12px 34px; padding:10px; border:1px solid #e9cda9; border-radius:9px; background:#fff8ee; }.gda-approval strong,.gda-approval span { display:block; font-size:12px; }.gda-approval span { margin-top:3px; color:#754d25; font-family:ui-monospace,Consolas,monospace; }.gda-approval pre { max-height:90px; overflow:auto; margin:8px 0; padding:7px; border-radius:6px; color:#5b4b3b; background:rgba(255,255,255,.7); font:10px/1.4 ui-monospace,Consolas,monospace; white-space:pre-wrap; }.gda-approval div { display:flex; justify-content:flex-end; gap:7px; }.gda-approval button { border:0; border-radius:6px; padding:5px 9px; font-size:11px; cursor:pointer; }.gda-approval button:first-child { color:#753a34; background:#f6e9e7; }.gda-approval button:last-child { color:#fff; background:#262626; }.gda-settings-backdrop { position:fixed; inset:0; z-index:50000; display:grid; place-items:center; background:rgba(0,0,0,.22); }.gda-settings-dialog { width:min(520px,calc(100vw - 32px)); max-height:min(660px,calc(100vh - 32px)); display:flex; flex-direction:column; overflow:hidden; color:#292929; background:#fff; border-radius:14px; box-shadow:0 18px 56px rgba(0,0,0,.24); }.gda-settings-dialog > header,.gda-settings-dialog > footer { display:flex; align-items:center; justify-content:space-between; padding:13px 16px; border-bottom:1px solid #eee; }.gda-settings-dialog > header strong { font-size:14px; }.gda-settings-dialog > header button,.gda-agent-form-head button { border:0; color:#666; background:transparent; cursor:pointer; }.gda-agent-list { overflow:auto; padding:14px 16px; }.gda-agent-form { margin-bottom:14px; padding:12px; border:1px solid #e7e7e7; border-radius:10px; }.gda-agent-form-head { display:flex; justify-content:space-between; margin-bottom:10px; color:#555; font-size:12px; font-weight:650; }.gda-agent-form label { display:grid; gap:5px; margin-top:9px; color:#777; font-size:11px; }.gda-agent-form input,.gda-agent-form textarea { box-sizing:border-box; width:100%; padding:7px 8px; border:1px solid #ddd; border-radius:7px; color:#303030; font:12px/1.45 inherit; }.gda-agent-form textarea { resize:vertical; }.gda-settings-dialog > footer { border-top:1px solid #eee; border-bottom:0; }.gda-settings-dialog footer button { border:0; border-radius:8px; padding:7px 10px; cursor:pointer; font-size:12px; }.gda-add-agent { display:inline-flex; align-items:center; gap:5px; color:#60412f; background:#f5eee9; }.gda-settings-done { color:#fff; background:#242424; }.spin { animation:spin .9s linear infinite; }@keyframes spin { to { transform:rotate(360deg) } }@keyframes blink { 0%,80%,100%{opacity:.28}40%{opacity:1} }
 </style>
