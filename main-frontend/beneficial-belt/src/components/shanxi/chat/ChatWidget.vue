@@ -882,13 +882,16 @@
                     <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
                       <div v-if="!hasModels" class="model-menu-empty"></div>
-                      <div
-                        v-for="m in modelOptions"
-                        :key="m.value"
-                        class="model-menu-item"
-                        :class="{ active: selectedModel === m.value }"
-                        @click="selectModel(m.value)"
-                      >{{ m.label }}</div>
+                      <template v-for="grp in groupedModelOptions" :key="grp.vendor">
+                        <div class="model-menu-group-title">{{ grp.vendor }}</div>
+                        <div
+                          v-for="m in grp.items"
+                          :key="m.value"
+                          class="model-menu-item"
+                          :class="{ active: selectedModel === m.value }"
+                          @click="selectModel(m.value)"
+                        ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span></div>
+                      </template>
                     </div>
                   </div>
 
@@ -1285,13 +1288,16 @@ const ctxWavePath = computed(() => {
 const modelCapabilities = ref({}) // { [modelId]: {vision, context_window, reasoning} }
 // 后端 catalog 的 id→显示名映射，供下拉框在只有裸 id（持久化的选择）时复原标签
 const modelLabels = ref({}) // { [modelId]: 显示名 }
+// 全量免费模型目录（含 vendor 字段），用于聊天下拉按提供方分组渲染
+const freeModelsFull = ref([]) // [{ id, vendor, name, ... }]
 async function loadModelCapabilities() {
   try {
     const res = await fetch('/api/models/config')
     const data = await res.json()
     const map = {}
     const labels = {}
-    for (const fm of (data.free_models || [])) {
+    freeModelsFull.value = data.free_models || []
+    for (const fm of freeModelsFull.value) {
       map[fm.id] = { vision: fm.vision, context_window: fm.context_window, reasoning: fm.reasoning }
       labels[fm.id] = fm.name
     }
@@ -2212,16 +2218,39 @@ watch(chatModelList, (list) => {
     localStorage.setItem('selectedModel', ids[0])
   }
 }, { deep: true })
-const modelOptions = computed(() => {
-  // 仅展示用户在设置面板选为可用的模型，且必须是后端真实存在的（modelLabels 有记录）。
-  // 过滤掉 localStorage 残留的幽灵 id（如过期的 'cloud'/480B），它们不在后端 freeModelCatalog 里。
-  return chatModelList.value
-    .filter(m => m.value in modelLabels.value)
-    .map(m => ({
-      label: modelLabels.value[m.value] || m.label || m.value,
-      value: m.value
-    }))
+// 按提供方（vendor）分组后的下拉数据：[{ vendor, items: [{ label, value }] }]
+// 仅展示用户在设置面板选为可用的模型，且必须是后端真实存在的（modelLabels 有记录）。
+// 过滤掉 localStorage 残留的幽灵 id（如过期的 'cloud'/480B），它们不在后端 freeModelCatalog 里。
+// vendor 来自后端 freeModelCatalog；不在目录里的自定义配置（无 vendor）归入「其他」。
+const enabledIds = computed(() => new Set(
+  chatModelList.value.filter(m => m.value in modelLabels.value).map(m => m.value)
+))
+const groupedModelOptions = computed(() => {
+  const groups = new Map()
+  for (const fm of freeModelsFull.value) {
+    if (!enabledIds.value.has(fm.id)) continue
+    const vendor = fm.vendor || '其他'
+    if (!groups.has(vendor)) groups.set(vendor, { vendor, items: [] })
+    groups.get(vendor).items.push({
+      label: modelLabels.value[fm.id] || fm.name || fm.id,
+      value: fm.id
+    })
+  }
+  // 自定义配置（在 chatModelList 但不在 freeModelCatalog 里）归入「其他」
+  for (const m of chatModelList.value) {
+    if (enabledIds.value.has(m.value) && !freeModelsFull.value.some(f => f.id === m.value)) {
+      const vendor = '其他'
+      if (!groups.has(vendor)) groups.set(vendor, { vendor, items: [] })
+      groups.get(vendor).items.push({
+        label: modelLabels.value[m.value] || m.label || m.value,
+        value: m.value
+      })
+    }
+  }
+  return Array.from(groups.values())
 })
+// 保持旧 modelOptions 引用（模板/逻辑其他地方可能直接读），指向展平列表
+const modelOptions = computed(() => groupedModelOptions.value.flatMap(g => g.items))
 const hasModels = computed(() => modelOptions.value.length > 0)
 const showModelMenu = ref(false)
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }

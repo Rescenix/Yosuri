@@ -1,0 +1,3 @@
+# ripgrep 专属忽略规则（不影响 git / .gitignore 语义）
+# 显式声明：搜索时跳过以下目录，避免污染结果、拖慢速度
+node_modules/

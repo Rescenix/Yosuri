@@ -57,7 +57,7 @@
       <!-- CDP 模式：连真实 Chromium 的 target ws，用 startScreencast 把真实渲染画面刷进来。
            取代 iframe —— agent 写的 HTML 由真实浏览器引擎渲染。
            双向：canvas 渲染帧 + 把用户的鼠标/键盘经 cdpSocket 转成 input 打回 Chromium，
-           于是用户在面板里就能直接操作 agent 渲染的页面（比如玩它造的网页游戏）。 -->
+           于是用户在面板里就能直接操作 agent 渲染的页面。 -->
       <canvas
         v-if="cdpFrame"
         ref="cdpCanvas"
@@ -315,7 +315,8 @@ function onCanvasMouse(action, e) {
     button: btn,
     layoutW: rect.width, layoutH: rect.height,
     viewW: cv.width, viewH: cv.height,
-    // 诊断字段：定位 raw=(0,0) 是 clientX=0 还是 rect.left 异常
+    // 诊断字段：让后端日志里的 dbg[...] 显示真实值，
+    // 用于定位「坐标恒 (0,0)」是 rect 异常还是 clientX 异常（见 browser_preview_tool.go:247）。
     dbgRectLeft: Math.round(rect.left), dbgRectTop: Math.round(rect.top),
     dbgClientX: Math.round(e.clientX), dbgClientY: Math.round(e.clientY),
   }))
@@ -518,13 +519,13 @@ function openExternal() {
 
 .pb-canvas {
   display: block;
-  /* 不用 object-fit: contain —— canvas 的「元素盒」必须等同「可见画面」，
-     否则 getBoundingClientRect 返回的是含黑边的 100%×100% 盒子，鼠标坐标
-     与游戏画面错位（实测坐标恒落 0 区 → 球拍钉死）。直接 100% 撑满，
-     cv.width/height 是绘制分辨率、CSS 100% 是显示尺寸，浏览器拉伸显示，
-     坐标用 clientX/rect.width*cv.width 映射依然一一对应。 */
+  /* 保持 screencast 原始宽高比，完整显示页面并避免绘制缓冲撑开容器。
+     contain 下鼠标坐标按画布实际显示区域映射。 */
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
   cursor: crosshair;
   touch-action: none;
 }

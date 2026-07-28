@@ -549,7 +549,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			// capture_preview / open_preview 是 harness 内置常驻工具，在下方 564 的
 			// switch 里直接处理（设 results[i]），不进 executeCodeCalls——否则会因非
 			// mcp__ 前缀被 872 行误判为「未知工具」。提前 continue 掉，避免被塞进 toRun。
-			if tc.Function.Name == "capture_preview" || tc.Function.Name == "open_preview" {
+			if tc.Function.Name == "capture_preview" || tc.Function.Name == "open_preview" ||
+				tc.Function.Name == "inject_preview_js" {
 				continue
 			}
 			toRun = append(toRun, calls[i])
@@ -597,6 +598,21 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				} else {
 					writeCodeSSE(c, "preview_open", map[string]any{"url": addr, "cdp_ws": cdpWS})
 					results[i] = codeExecResult{output: "已把页面弹进内嵌预览面板，用户现在可以直接查看并交互：" + addr}
+				}
+			case calls[i].Function.Name == "inject_preview_js":
+				// 前端设计 Agent 在用户正在看的预览页中执行通用检查或交互脚本。
+				var a struct {
+					JS string `json:"js"`
+				}
+				if err := json.Unmarshal([]byte(calls[i].Function.Arguments), &a); err != nil || strings.TrimSpace(a.JS) == "" {
+					results[i] = codeExecResult{failed: true, output: "inject_preview_js 需要 js 参数（要注入的 JS 字符串）"}
+					break
+				}
+				msg, ierr := injectPreviewJS(a.JS)
+				if ierr != nil {
+					results[i] = codeExecResult{failed: true, output: "注入失败：" + ierr.Error()}
+				} else {
+					results[i] = codeExecResult{output: msg}
 				}
 			}
 		}

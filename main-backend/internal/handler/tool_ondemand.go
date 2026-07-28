@@ -63,6 +63,8 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// open_preview：agent 主动把指定页面弹进内嵌预览面板（harness CDP 通道），
 		// 区别于系统收尾自动弹——主动权在 agent。常驻，无需 load_tools。
 		openPreviewToolDef,
+		// 通用页面注入：供前端设计 Agent 在当前预览页执行交互或验证脚本。
+		injectPreviewToolDef,
 	}
 }
 

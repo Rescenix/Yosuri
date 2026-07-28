@@ -1694,6 +1694,23 @@ min-height: 90px !important;
 .model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
 
+/* 按提供方分组：组头（仿图2 的 ANTHROPIC / NOUS PORTAL 分组标题） */
+.model-menu-group-title {
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-faint);
+}
+/* 选中项的勾选标记（图2 右侧对勾） */
+.model-menu-check {
+  width: 16px;
+  margin-right: 2px;
+  color: var(--app-accent);
+  flex-shrink: 0;
+}
+
 .header-left {
   flex: 1;
   min-width: 0;

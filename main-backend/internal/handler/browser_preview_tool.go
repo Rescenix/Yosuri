@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -34,6 +35,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+var activePreviewClientWriteMu sync.Mutex
+
+type previewClientWriter interface {
+	WriteJSON(v any) error
+}
+
+func writePreviewClient(client previewClientWriter, payload any) error {
+	if client == nil {
+		return fmt.Errorf("no_active_preview")
+	}
+	activePreviewClientWriteMu.Lock()
+	defer activePreviewClientWriteMu.Unlock()
+	return client.WriteJSON(payload)
+}
 
 var previewCDPUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -100,7 +116,7 @@ func validatePreviewTargetURL(raw string) (string, error) {
 }
 
 func writePreviewCDPError(conn *websocket.Conn, message string) {
-	_ = conn.WriteJSON(map[string]string{"type": "error", "message": message})
+	_ = writePreviewClient(conn, map[string]string{"type": "error", "message": message})
 }
 
 // HandlePreviewCDP GET /api/preview/cdp?ws=<targetWS>
@@ -152,18 +168,27 @@ func HandlePreviewCDP(c *gin.Context) {
 		defer cdpWriteMu.Unlock()
 		return cdpConn.WriteJSON(v)
 	}
-
-	if err := writeCDP(map[string]any{"id": 1, "method": "Page.enable"}); err != nil {
+	if err := writeCDP(map[string]any{"id": nextPreviewReqID(), "method": "Page.enable"}); err != nil {
 		writePreviewCDPError(clientConn, "预览不可用：无法启用 Chrome 页面")
 		return
 	}
-	// 双向交互核心：启用 Input 域，这样前端的鼠标/键盘才能被打进这台 Chromium。
-	if err := writeCDP(map[string]any{"id": 1, "method": "Input.enable"}); err != nil {
-		writePreviewCDPError(clientConn, "预览不可用：无法启用 Chrome 输入")
+	// 启用 Runtime 域，供前端设计 Agent 在当前页面执行通用检查或交互脚本。
+	if err := writeCDP(map[string]any{"id": nextPreviewReqID(), "method": "Runtime.enable"}); err != nil {
+		writePreviewCDPError(clientConn, "预览不可用：无法启用 Chrome 运行时")
 		return
 	}
+	// 新创建的 headless target 可能尚未处于 active 状态；Chrome 会拒绝直接
+	// 启动 screencast，因此先激活页面再建立预览帧流。
+	if err := writeCDP(map[string]any{"id": nextPreviewReqID(), "method": "Page.bringToFront"}); err != nil {
+		writePreviewCDPError(clientConn, "预览不可用：无法激活 Chrome 页面")
+		return
+	}
+	// bringToFront 的完成响应只代表命令已受理；headless target 切到 active
+	// 仍需一个极短调度窗口，否则紧随其后的 startScreencast 可能被拒绝。
+	time.Sleep(80 * time.Millisecond)
+	startScreencastID := nextPreviewReqID()
 	if err := writeCDP(map[string]any{
-		"id":     2,
+		"id":     startScreencastID,
 		"method": "Page.startScreencast",
 		"params": map[string]any{"format": "png", "everyNthFrame": 1, "quality": 80},
 	}); err != nil {
@@ -201,10 +226,10 @@ func HandlePreviewCDP(c *gin.Context) {
 			ViewW   float64 `json:"viewW"`   // Chromium 页面宽度
 			ViewH   float64 `json:"viewH"`   // Chromium 页面高度
 			// 诊断字段：定位 raw=(0,0) 是 clientX=0 还是 rect.left 异常
-			DbgRectLeft  float64 `json:"dbgRectLeft"`
-			DbgRectTop   float64 `json:"dbgRectTop"`
-			DbgClientX   float64 `json:"dbgClientX"`
-			DbgClientY   float64 `json:"dbgClientY"`
+			DbgRectLeft float64 `json:"dbgRectLeft"`
+			DbgRectTop  float64 `json:"dbgRectTop"`
+			DbgClientX  float64 `json:"dbgClientX"`
+			DbgClientY  float64 `json:"dbgClientY"`
 			// key
 			Key       string `json:"key"`
 			Code      string `json:"code"`
@@ -273,21 +298,21 @@ func HandlePreviewCDP(c *gin.Context) {
 			if json.Unmarshal(payload, &message) != nil {
 				continue
 			}
-			if message.ID == 2 && len(message.Error) > 0 {
+			if int64(message.ID) == startScreencastID && len(message.Error) > 0 {
 				writePreviewCDPError(clientConn, "预览不可用：Chrome 拒绝启动截屏")
 				return
 			}
 			if message.Method != "Page.screencastFrame" || message.Params.Data == "" {
 				continue
 			}
-			if err := clientConn.WriteJSON(map[string]string{
+			if err := writePreviewClient(clientConn, map[string]string{
 				"type": "frame",
 				"data": message.Params.Data,
 			}); err != nil {
 				return
 			}
 			if err := writeCDP(map[string]any{
-				"id":     3,
+				"id":     nextPreviewReqID(),
 				"method": "Page.screencastFrameAck",
 				"params": map[string]any{"sessionId": message.Params.SessionID},
 			}); err != nil {
@@ -411,6 +436,29 @@ func ensureChromeCDP() {
 
 // cdpOpenTarget 在 Chrome 里开一个新标签页并导航到 targetURL，返回该标签页的
 // WebSocket 调试地址。targetURL 为空时开 about:blank。
+// cdpApplyViewport 给预览目标设置稳定的桌面视口，避免默认 800×600 导致页面
+// 主体被截断。它是预览渲染适配，不依赖任何页面业务协议。
+func cdpApplyViewport(tabWS string) {
+	if tabWS == "" {
+		return
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(tabWS, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	_ = conn.WriteJSON(map[string]any{
+		"id":     100,
+		"method": "Emulation.setDeviceMetricsOverride",
+		"params": map[string]any{
+			"width":             1280,
+			"height":            720,
+			"deviceScaleFactor": 1,
+			"mobile":            false,
+		},
+	})
+}
+
 func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) {
 	ensureChromeCDP() // 9223 没在跑就自动拉起 headless 实例，修复「Chrome CDP 未运行」
 	browserWS := cdpBrowserWS()
@@ -447,6 +495,7 @@ func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) 
 		}
 		return "", "", fmt.Errorf("解析 /json/new 响应失败: %s", preview)
 	}
+	cdpApplyViewport(t.WebSocketDebuggerURL)
 	return t.WebSocketDebuggerURL, t.URL, nil
 }
 
@@ -484,11 +533,10 @@ func cdpNavigate(tabWS, targetURL string) error {
 }
 
 // nextPreviewReqID 返回自增的 CDP 请求 id，避免双向通道里多条命令 id 撞车。
-var previewReqSeq int64
+var previewReqSeq atomic.Int64
 
 func nextPreviewReqID() int64 {
-	previewReqSeq++
-	return previewReqSeq
+	return previewReqSeq.Add(1)
 }
 
 // boolToInt 供 CDP 鼠标事件 clickCount 字段使用（按下=1，其它=0）。
@@ -765,9 +813,9 @@ var openPreviewToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name: "open_preview",
-		Description: "主动把指定页面弹进内嵌浏览器预览面板，让用户可以立刻看到并交互（鼠标/键盘可操作）。" +
+		Description: "主动把指定页面弹进内嵌浏览器预览面板，让用户可以立刻看到并交互（鼠标/键盘可操作，是真实 Chromium 渲染的可交互网页，不是截图）。" +
 			"这是 agent 主动发起的预览，区别于系统在工作流收尾自动弹出的预览——你（agent）来决定何时展示，而不是等系统。" +
-			"适用场景：你刚生成或修改完一个网页/游戏，想让用户马上在面板里看到并试玩时，调用本工具。" +
+			"适用场景：你刚生成或修改完一个网页，想让用户马上在面板里查看并交互时，调用本工具。" +
 			"参数二选一：path 传本地 html 文件绝对路径（harness 用真实 Chromium 渲染，可交互）；" +
 			"url 传 http(s) 地址（如前端 dev server 页面 http://localhost:4322）。",
 		Parameters: core.ToolParameters{
@@ -775,7 +823,7 @@ var openPreviewToolDef = core.ToolDefinition{
 			Properties: map[string]core.ToolProperty{
 				"path": {
 					Type:        "string",
-					Description: "本地 html 文件绝对路径（如 C:/Pro2026/test/pong-battle.html）。与 url 二选一。",
+					Description: "本地 html 文件绝对路径（如 C:/Pro2026/test/page.html）。与 url 二选一。",
 				},
 				"url": {
 					Type:        "string",
@@ -830,4 +878,99 @@ func openPreviewInPanel(argsJSON string) (string, string, error) {
 		return "", "", fmt.Errorf("预览不可用：无法解析地址 %q", raw)
 	}
 	return url, cdpWS, nil
+}
+
+// evaluatePreviewExpression 在当前预览页同步执行 JS，并读取 CDP 的真实执行结果。
+// 注入工具不能只看 WriteJSON 成功：那只能证明命令送出，无法证明页面没有抛错。
+func evaluatePreviewExpression(expression string) (json.RawMessage, error) {
+	targetWS := getCurrentPreviewTarget()
+	if targetWS == "" {
+		return nil, fmt.Errorf("当前没有正在预览的内嵌页面；请先 open_preview 或等系统自动弹出预览")
+	}
+	return evaluatePreviewExpressionAt(targetWS, expression)
+}
+
+func evaluatePreviewExpressionAt(targetWS, expression string) (json.RawMessage, error) {
+	if targetWS == "" {
+		return nil, fmt.Errorf("预览 target 为空")
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(targetWS, nil)
+	if err != nil {
+		return nil, fmt.Errorf("连接预览 target 失败: %w", err)
+	}
+	defer conn.Close()
+
+	id := nextPreviewReqID()
+	if err := conn.WriteJSON(map[string]any{
+		"id": id, "method": "Runtime.evaluate",
+		"params": map[string]any{"expression": expression, "returnByValue": true, "awaitPromise": true},
+	}); err != nil {
+		return nil, fmt.Errorf("执行预览 JS 失败: %w", err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+	for {
+		var response struct {
+			ID     int64 `json:"id"`
+			Result struct {
+				Result struct {
+					Value json.RawMessage `json:"value"`
+				} `json:"result"`
+				ExceptionDetails json.RawMessage `json:"exceptionDetails"`
+			} `json:"result"`
+		}
+		if err := conn.ReadJSON(&response); err != nil {
+			return nil, fmt.Errorf("等待预览 JS 结果失败: %w", err)
+		}
+		if response.ID != id {
+			continue
+		}
+		if len(response.Result.ExceptionDetails) > 0 && string(response.Result.ExceptionDetails) != "null" {
+			return nil, fmt.Errorf("预览 JS 抛出异常: %s", truncateVerify(string(response.Result.ExceptionDetails)))
+		}
+		if len(response.Result.Result.Value) == 0 {
+			return json.RawMessage("null"), nil
+		}
+		return response.Result.Result.Value, nil
+	}
+}
+
+// injectPreviewJS 在当前预览页执行一段通用 JavaScript。它只负责网页检查、
+// 交互和设计验证，不约定任何业务状态或组件协议。
+func injectPreviewJS(js string) (string, error) {
+	if strings.TrimSpace(js) == "" {
+		return "", fmt.Errorf("js 参数不能为空")
+	}
+	result, err := evaluatePreviewExpression(js)
+	if err != nil {
+		return "", err
+	}
+	if string(result) == "null" {
+		return "JavaScript 已在当前预览页面执行", nil
+	}
+	return "JavaScript 已执行，返回值：" + truncateVerify(string(result)), nil
+}
+
+// injectPreviewToolDef 让 agent 主动把 JS 注入「用户正在看的内嵌预览页面」
+// （当前活跃 CDP target 的 Runtime）。区别于 open_preview（弹页面）和
+// capture_preview（截图）——本工具用于前端设计检查和通用页面交互。
+var injectPreviewToolDef = core.ToolDefinition{
+	Type: "function",
+	Function: core.ToolFunctionDetail{
+		Name: "inject_preview_js",
+		Description: "在用户正在看的内嵌预览页面中执行一段 JavaScript（当前活跃 CDP target 的 Runtime.evaluate）。" +
+			"用于读取 DOM 状态、触发页面交互、检查响应式布局或验证前端设计结果。" +
+			"页面必须已在预览面板中（先 open_preview 或等系统自动弹出）。" +
+			"注入的是纯前端 JS，作用域是目标页面的 window；不要传整段 HTML。" +
+			"需要读取结果时让表达式返回可 JSON 序列化的值。",
+		Parameters: core.ToolParameters{
+			Type: "object",
+			Properties: map[string]core.ToolProperty{
+				"js": {
+					Type:        "string",
+					Description: "要执行的 JavaScript。例如：document.querySelector('button')?.click()，或 (() => ({ title: document.title }))()。",
+				},
+			},
+			Required: []string{"js"},
+		},
+	},
 }

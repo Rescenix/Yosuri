@@ -57,6 +57,8 @@ Starting every new session from scratch? ResceneAgent makes cross-session memory
 
 An embedded real PowerShell terminal (snippet panel), Monaco editor + recursive file tree, VS Code-style Diff preview, message streaming gradient animation, and a full-UI anime skin system (with Live2D mascot). It also ships blog/CMS, e-book, image bed, TTS, and stats dashboard modules.
 
+- **Model list grouped by provider** — the chat model dropdown folds models by the backend catalog's `vendor` (provider), with a ✓ mark on the selected one; it shares the same grouping as the settings panel and only lists models the user enabled there, with custom configs falling under "Others".
+
 ---
 
 ## System architecture
