@@ -4,13 +4,28 @@
 
 > 让 AI 做完网页后，你立刻在同一个对话框里玩、点、验收。
 
-ResceneAgent 是本地优先的前端 Agent 工作台：描述需求，Agent 写代码、运行真实浏览器、展示结果；你可以直接用鼠标和键盘操作它刚做出的网页，而不只是看一张截图。
+ResceneAgent 是本地运行的前端 Agent 工作台：描述需求，Agent 写代码、运行真实浏览器、展示结果；你可以直接用鼠标和键盘操作它刚做出的网页，而不只是看一张截图。
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Local--first-Your%20keys%2C%20your%20control-5b5bd6" alt="Local first">
   <img src="https://img.shields.io/badge/LLM-Multi--provider-ff69b4" alt="Multi-provider LLM">
 </p>
+
+## 先看它如何交付
+
+![ResceneAgent 一键生成交互测试站点，并在真实预览中自动操作和验收的演示占位图](./assets/agent-interaction-demo-placeholder.svg)
+
+> **演示占位图**：这里将替换为真实 GIF。它展示的不是手工搭好的页面，而是 Agent 根据一句需求**一键生成**的交互测试站点；文件编辑在对话中以流式瀑布和渐变实时显现，随后 Agent 打开真实预览、亲自操作页面，并把验收结果写回任务流。
+
+```text
+一句需求
+  → 子 Agent 拆解任务，实时 TODO 可见
+  → 文件 edit 以 SSE 流式瀑布生成，新增/删除与最终 Diff 可审计
+  → 一键生成并启动完整交互网站
+  → Agent 通过真实 Chromium / CDP 点击、输入、触发 DOM 与 CSS 交互
+  → 构建、截图与验收结果成为交付证据；不满意可回滚
+```
 
 ## 为什么值得试试
 
@@ -28,14 +43,6 @@ AgentFS 把每轮文件修改放进隔离快照：查看 Diff、回到任一个�
 
 ## 能力对照
 
-```text
-一句需求
-  → Agent 拆解并生成代码
-  → 浏览器自动运行和渲染
-  → 你直接交互验收
-  → 查看 Diff，保留或回滚这次修改
-```
-
 | 能力 | 常见对话式 Coding Agent | ResceneAgent |
 | --- | --- | --- |
 | 对话生成/修改代码 | ✓ | ✓ |
@@ -43,7 +50,7 @@ AgentFS 把每轮文件修改放进隔离快照：查看 Diff、回到任一个�
 | 任务计划 | 常隐藏在模型内部 | 实时 `TODO`：`pending / doing / done`，前端同步展示 |
 | 主动向人确认 | 通常靠自由文本 | `ask_user` 结构化提问，回答原地回流工作流 |
 | 中断后的继续执行 | 依会话实现而定 | 每轮快照消息、工具、TODO 与 Token 计数，可断点续传 |
-| 代码生成过程 | 常是整段结果或黑盒工具调用 | SSE 代码瀑布：新增/删除计数、流式内容与最终 Diff |
+| 文件 edit 过程 | 常是整段结果或黑盒工具调用 | SSE 流式瀑布 + 渐变呈现：新增/删除计数、流式内容与最终 Diff |
 | 编辑、终端与 Diff | 往往依赖外部 IDE | Monaco、文件树、PowerShell、可审计 Diff 集成在聊天面板 |
 | 运行后的网页验收 | 截图、iframe 或由用户另开浏览器 | 真实 Chromium + CDP Screencast；鼠标、键盘可双向交互 |
 | 交付证据 | 通常只返回文字说明 | 页面截图按工具调用顺序成为 artifact，可按需展开 |
@@ -79,9 +86,9 @@ npm run dev
 
 访问 `http://localhost:4322`，再在设置中填写你自己的 LLM 提供方、模型与 API Key。
 
-## 开源与 Cloud
+## 开源
 
-核心前后端以 [MIT License](./LICENSE) 开源，本地使用不依赖云服务。Rescene Cloud 是可选的早期云能力：用于 GitHub 登录，以及未来的模型兼容性补丁、同步与更新通知；它不会替代你的本地模型配置或接管 API Key。
+核心前后端以 [MIT License](./LICENSE) 开源
 
 ## 深入了解
 

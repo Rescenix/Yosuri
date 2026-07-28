@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">ResceneAgent 交互式交付演示占位图</title>
+  <desc id="desc">左侧为任务、聊天与流式文件编辑，右侧为 Agent 生成并自动操作的交互测试网站预览。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#151326"/><stop offset="1" stop-color="#27244b"/></linearGradient>
+    <linearGradient id="pink" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff4fa3"/><stop offset="1" stop-color="#a765ff"/></linearGradient>
+    <linearGradient id="code" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#49d8ff"/><stop offset="1" stop-color="#ff64b5"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#080614" flood-opacity=".45"/></filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#background)"/>
+  <circle cx="1380" cy="-20" r="380" fill="#ff4fa3" opacity=".08"/><circle cx="60" cy="870" r="360" fill="#47d7ff" opacity=".08"/>
+  <text x="80" y="95" fill="#fff" font-family="Arial, sans-serif" font-size="42" font-weight="700">ResceneAgent · 从一句需求到可交互验收</text>
+  <text x="80" y="140" fill="#bab6d4" font-family="Arial, sans-serif" font-size="24">演示占位图 — 请替换为真实 GIF：生成 → 流式编辑 → 自动操作 → 交付证据</text>
+  <g filter="url(#shadow)">
+    <rect x="78" y="190" width="650" height="610" rx="25" fill="#f8f7fc"/>
+    <rect x="78" y="190" width="650" height="75" rx="25" fill="#fff"/>
+    <circle cx="120" cy="228" r="10" fill="#ff62a9"/><circle cx="150" cy="228" r="10" fill="#ffc75d"/><circle cx="180" cy="228" r="10" fill="#57dca3"/>
+    <text x="220" y="237" fill="#312c4d" font-family="Arial, sans-serif" font-size="24" font-weight="700">任务与流式文件编辑</text>
+    <rect x="105" y="300" width="255" height="310" rx="16" fill="#f0edf9"/>
+    <text x="135" y="345" fill="#ec438f" font-family="Arial, sans-serif" font-size="25" font-weight="700">任务清单  4/4</text>
+    <g fill="#5a5573" font-family="Arial, sans-serif" font-size="19"><text x="137" y="400">☑ 生成交互测试页</text><text x="137" y="448">☑ 流式写入 HTML / CSS</text><text x="137" y="496">☑ 注入脚本执行交互</text><text x="137" y="544">☑ 截图并输出验收结果</text></g>
+    <rect x="390" y="300" width="300" height="410" rx="16" fill="#211d37"/>
+    <text x="420" y="345" fill="#8de8ff" font-family="Consolas, monospace" font-size="19">interaction-test.html</text>
+    <g font-family="Consolas, monospace" font-size="18"><text x="420" y="400" fill="#f783bd">+ &lt;button onclick=&quot;add()&quot;&gt;</text><text x="420" y="440" fill="#8eeab7">+ 计数器 +1</text><text x="420" y="480" fill="#72dfff">+ .card { transition: .3s }</text><text x="420" y="520" fill="#f5d27a">+ form.checkValidity()</text><text x="420" y="560" fill="url(#code)">▌ 正在流式生成…</text></g>
+    <rect x="105" y="650" width="585" height="95" rx="16" fill="#fff0f7" stroke="#ff64ad" stroke-width="2"/>
+    <text x="135" y="710" fill="#6b4060" font-family="Arial, sans-serif" font-size="22">“生成一个包含按钮、表单、动画和 DOM 测试的网页”</text>
+  </g>
+  <path d="M770 485h72" stroke="url(#pink)" stroke-width="10" stroke-linecap="round"/><path d="M820 450l42 35-42 35" fill="none" stroke="#ff69b4" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <g filter="url(#shadow)">
+    <rect x="885" y="190" width="635" height="610" rx="25" fill="#fbfbff"/>
+    <rect x="885" y="190" width="635" height="75" rx="25" fill="#fff"/>
+    <text x="930" y="237" fill="#312c4d" font-family="Arial, sans-serif" font-size="24" font-weight="700">真实 Chromium 预览 · Agent 自动验收</text>
+    <rect x="920" y="300" width="565" height="445" rx="12" fill="#16172d"/>
+    <text x="955" y="348" fill="#ff76ba" font-family="Arial, sans-serif" font-size="28" font-weight="700">AI 交互能力期末考卷</text>
+    <g fill="#252743" stroke="#3c4062" stroke-width="2"><rect x="955" y="385" width="160" height="140" rx="13"/><rect x="1130" y="385" width="160" height="140" rx="13"/><rect x="1305" y="385" width="145" height="140" rx="13"/><rect x="955" y="545" width="245" height="160" rx="13"/><rect x="1218" y="545" width="232" height="160" rx="13"/></g>
+    <g font-family="Arial, sans-serif"><text x="977" y="425" fill="#fff" font-size="18" font-weight="700">1 按钮点击</text><text x="980" y="470" fill="#ff70ad" font-size="43" font-weight="700">2</text><rect x="975" y="486" width="65" height="25" rx="9" fill="url(#pink)"/><text x="990" y="505" fill="#fff" font-size="14">+1</text><text x="1150" y="425" fill="#fff" font-size="18" font-weight="700">2 表单验证</text><rect x="1150" y="450" width="118" height="27" rx="7" fill="#111224"/><text x="1161" y="470" fill="#b9b8cc" font-size="13">ai@test.com</text><text x="1323" y="425" fill="#fff" font-size="18" font-weight="700">3 下拉选择</text><text x="978" y="583" fill="#fff" font-size="18" font-weight="700">4 复选框</text><text x="1240" y="583" fill="#fff" font-size="18" font-weight="700">5 CSS 动画</text></g>
+    <circle cx="1335" cy="655" r="24" fill="#ff72ad"/><circle cx="1385" cy="655" r="18" fill="#8a6bff"/>
+    <rect x="1318" y="318" width="150" height="124" rx="11" fill="#121326" stroke="#ff74b6"/>
+    <text x="1335" y="350" fill="#fff" font-family="Arial, sans-serif" font-size="16" font-weight="700">验收结果</text><g fill="#8ae9b0" font-family="Arial, sans-serif" font-size="14"><text x="1335" y="380">✓ 点击成功</text><text x="1335" y="405">✓ 表单通过</text><text x="1335" y="430">✓ DOM 已更新</text></g>
+  </g>
+  <text x="800" y="850" text-anchor="middle" fill="#f8c2dd" font-family="Arial, sans-serif" font-size="22">生成的页面不是终点：Agent 会亲自操作、验证，再把证据带回来。</text>
+</svg>
