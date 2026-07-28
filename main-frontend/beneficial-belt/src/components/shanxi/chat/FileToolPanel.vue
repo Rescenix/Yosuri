@@ -9,6 +9,7 @@
             :file-content="activeTab?.content ?? ''"
             :language="activeTab ? languageOf(activeTab.name) : 'plaintext'"
             :pinned-paths="pinnedPaths"
+            :external-changes="[...externalChanges]"
             @update:content="onUpdateContent"
             @switch-file="switchFile"
             @close-file="closeFile"
@@ -92,6 +93,7 @@
               :file-content="activeTab?.content ?? ''"
               :language="activeTab ? languageOf(activeTab.name) : 'plaintext'"
               :pinned-paths="pinnedPaths"
+              :external-changes="[...externalChanges]"
               @update:content="onUpdateContent"
               @switch-file="switchFile"
               @close-file="closeFile"
@@ -169,7 +171,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import CodeEditor from './CodeEditor.vue'
 import FileTreeNode from './FileTreeNode.vue'
@@ -205,6 +207,8 @@ const openError = ref('')
 const pinnedPaths = ref([])
 const saveState = ref('')
 let saveStateTimer = null
+const externalChanges = ref(new Set())
+let fileChangesStream = null
 
 const activeTab = computed(() => tabs.value.find(t => t.path === activeFilePath.value) || null)
 
@@ -321,6 +325,43 @@ async function openFile(node) {
   }
 }
 
+async function refreshChangedFile(path) {
+  const tab = tabs.value.find(t => t.path === path)
+  if (!tab) return
+  try {
+    const res = await fetch('/api/file?path=' + encodeURIComponent(path))
+    if (!res.ok) throw new Error(await res.text())
+    const content = await res.text()
+    // 保留用户正输入但尚未落盘的内容，绝不让另一个 agent 的写入静默覆盖它。
+    if (isDirty(tab)) {
+      if (content !== tab.content) externalChanges.value = new Set([...externalChanges.value, path])
+      return
+    }
+    if (content !== tab.content) {
+      tab.content = content
+      tab.savedContent = content
+    }
+    const next = new Set(externalChanges.value)
+    next.delete(path)
+    externalChanges.value = next
+  } catch {
+    // 文件可能在 agent 重命名/删除的中间态；下一次事件或手动打开会给出具体错误。
+  }
+}
+
+function connectFileChanges() {
+  fileChangesStream?.close()
+  fileChangesStream = null
+  const paths = tabs.value.map(tab => tab.path)
+  if (!paths.length) return
+  fileChangesStream = new EventSource('/api/file/changes?paths=' + encodeURIComponent(paths.join(',')))
+  fileChangesStream.addEventListener('changed', (event) => {
+    try { refreshChangedFile(JSON.parse(event.data).path) } catch {}
+  })
+}
+
+watch(() => tabs.value.map(tab => tab.path).join('\u0000'), connectFileChanges)
+
 function switchFile(path) {
   flushAutoSave() // 离开当前标签前把没落盘的防抖改动先冲掉，不等 600ms
   activeFilePath.value = path
@@ -338,6 +379,9 @@ function closeFile(path) {
   const idx = tabs.value.findIndex(t => t.path === path)
   if (idx === -1) return
   tabs.value.splice(idx, 1)
+  const nextChanges = new Set(externalChanges.value)
+  nextChanges.delete(path)
+  externalChanges.value = nextChanges
   if (activeFilePath.value === path) {
     activeFilePath.value = tabs.value[Math.max(0, idx - 1)]?.path || ''
   }
@@ -429,6 +473,11 @@ function languageOf(name) {
 }
 
 onMounted(loadTree)
+onUnmounted(() => {
+  clearTimeout(autoSaveTimer)
+  clearTimeout(saveStateTimer)
+  fileChangesStream?.close()
+})
 </script>
 
 <style scoped>

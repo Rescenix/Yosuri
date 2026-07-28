@@ -126,6 +126,28 @@ func TestFileWriteHandler_RejectsGetMethod(t *testing.T) {
 	}
 }
 
+func TestWatchedVersionDetectsWriteAndDelete(t *testing.T) {
+	root := withTempRepoRoot(t)
+	path := filepath.Join(root, "watched.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("准备测试文件失败: %v", err)
+	}
+	before := watchedVersion(path)
+	if err := os.WriteFile(path, []byte("new content"), 0o644); err != nil {
+		t.Fatalf("改写测试文件失败: %v", err)
+	}
+	afterWrite := watchedVersion(path)
+	if !afterWrite.changedFrom(before) {
+		t.Fatal("改写后的文件版本应该变化")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("删除测试文件失败: %v", err)
+	}
+	if !watchedVersion(path).changedFrom(afterWrite) {
+		t.Fatal("删除后的文件版本应该变化")
+	}
+}
+
 // 树构建要跳过 .gocache/.mimocode 这类几千文件的垃圾目录，否则「文件」工具的树
 // 会被这些目录塞爆——2026-07-24 在真实仓库上实测过（.gocache 3800+、.mimocode 3400+ 文件）。
 func TestBuildFileTree_SkipsJunkDirs(t *testing.T) {

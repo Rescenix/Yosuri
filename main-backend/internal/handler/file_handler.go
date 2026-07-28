@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // skipTreeDirs 是构建文件树时整个跳过的目录名（不进 children，也不递归）。
@@ -22,6 +23,72 @@ type FileNode struct {
 	Type     string      `json:"type"` // "file" or "folder"
 	Path     string      `json:"path,omitempty"`
 	Children []*FileNode `json:"children,omitempty"`
+}
+
+// watchedFileVersion 是文件工具用来识别磁盘变化的轻量指纹。我们只监视客户端
+// 当前打开的少数文件，而不是递归监听整个仓库（node_modules 等目录会产生海量事件）。
+type watchedFileVersion struct {
+	modified time.Time
+	size     int64
+	exists   bool
+}
+
+func watchedVersion(fullPath string) watchedFileVersion {
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		return watchedFileVersion{}
+	}
+	return watchedFileVersion{modified: info.ModTime(), size: info.Size(), exists: true}
+}
+
+func (v watchedFileVersion) changedFrom(other watchedFileVersion) bool {
+	return v.exists != other.exists || v.size != other.size || !v.modified.Equal(other.modified)
+}
+
+// FileChangesHandler 为已打开的文件提供 SSE 变更通知。其他 agent、终端和这个
+// 编辑器自己的写入都会落到同一个磁盘，因此轮询 stat 是跨写入来源最可靠的共同点。
+// 前端收到 path 后再 GET 内容，避免把文件正文长期缓存或塞进 SSE 流。
+func FileChangesHandler(w http.ResponseWriter, r *http.Request) {
+	rawPaths := strings.Split(r.URL.Query().Get("paths"), ",")
+	versions := make(map[string]watchedFileVersion, len(rawPaths))
+	for _, path := range rawPaths {
+		path = strings.TrimSpace(path)
+		fullPath, ok := resolveRepoPath(path)
+		if path == "" || !ok {
+			continue
+		}
+		versions[path] = watchedVersion(fullPath)
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ticker := time.NewTicker(350 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			for path, previous := range versions {
+				fullPath, _ := resolveRepoPath(path)
+				current := watchedVersion(fullPath)
+				if !current.changedFrom(previous) {
+					continue
+				}
+				versions[path] = current
+				data, _ := json.Marshal(map[string]string{"path": path})
+				fmt.Fprintf(w, "event: changed\ndata: %s\n\n", data)
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 // FileTreeHandler 返回项目目录树

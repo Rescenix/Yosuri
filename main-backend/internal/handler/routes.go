@@ -33,6 +33,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/file-tree", gin.WrapH(http.HandlerFunc(FileTreeHandler)))
 	r.GET("/api/file", gin.WrapH(http.HandlerFunc(FileReadHandler)))
 	r.POST("/api/file", gin.WrapH(http.HandlerFunc(FileWriteHandler)))
+	r.GET("/api/file/changes", gin.WrapH(http.HandlerFunc(FileChangesHandler)))
 	// agent 实际工具执行的工作目录：GET 读当前值，POST 真正切换 + 落盘持久化
 	r.GET("/api/workdir", GetWorkdir)
 	r.POST("/api/workdir/pick", PickWorkdir)

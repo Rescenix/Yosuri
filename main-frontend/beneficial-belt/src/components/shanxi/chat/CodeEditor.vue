@@ -5,11 +5,12 @@
         v-for="tab in tabs"
         :key="tab.path"
         class="editor-tab"
-        :class="{ active: tab.path === activeFilePath }"
+        :class="{ active: tab.path === activeFilePath, conflict: externalChanges.includes(tab.path) }"
         @click="$emit('switch-file', tab.path)"
         @contextmenu.prevent="onTabRightClick($event, tab)"
       >
         <Icon v-if="isPinned(tab)" icon="mdi:pin" width="11" class="tab-pin-icon" />
+        <Icon v-if="externalChanges.includes(tab.path)" icon="mdi:alert-circle-outline" width="12" class="tab-conflict-icon" title="磁盘上的文件已被外部修改；请先保存或重新打开后再处理" />
         <span class="tab-name">{{ tab.name }}</span>
         <span
           class="tab-close"
@@ -53,6 +54,7 @@
 /* eslint-disable vue/no-v-model-argument */
 import { ref, computed, watch } from 'vue'
 import VueMonacoEditor from '@guolao/vue-monaco-editor'
+import * as monaco from 'monaco-editor'
 import { resolvedTheme } from '../composables/useTheme.js'
 
 const props = defineProps({
@@ -60,7 +62,8 @@ const props = defineProps({
   activeFilePath: { type: String, default: '' },
   fileContent: { type: String, default: '' },
   language: { type: String, default: 'text' },
-  pinnedPaths: { type: Array, default: () => [] }
+  pinnedPaths: { type: Array, default: () => [] },
+  externalChanges: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['update:content', 'switch-file', 'close-file', 'editor-mounted', 'pin-file', 'unpin-file'])
@@ -122,6 +125,14 @@ const editorOptions = {
 }
 
 function onEditorMount(editor) {
+  // VS Code 的 Format Document 快捷键。没有注册相应格式化器的语言会保持 Monaco
+  // 默认行为（不改写内容），已注册的 HTML/CSS/JSON/JS 等直接格式化当前文档。
+  editor.addAction({
+    id: 'file-tool.format-document',
+    label: '格式化文档',
+    keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
+    run: (instance) => instance.getAction('editor.action.formatDocument')?.run()
+  })
   emit('editor-mounted', editor)
 }
 </script>
@@ -200,6 +211,10 @@ function onEditorMount(editor) {
 
 .tab-pin-icon {
   color: #c96442;
+  flex-shrink: 0;
+}
+.tab-conflict-icon {
+  color: #d58a2d;
   flex-shrink: 0;
 }
 
