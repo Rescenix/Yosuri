@@ -492,8 +492,10 @@
 
               <!-- ===== 任务清单条（TODO）=====
                    仿 Hermes：贴在输入框正上方，agent 调 update_todo 时实时勾选。
-                   后端推 todo 事件 → todoState.items 全量覆盖。无项时整条不渲染。 -->
-              <div v-if="todoState.items.length" class="todo-bar">
+                   后端推 todo 事件 → todoState.items 全量覆盖。全部完成后延迟 3.5s 淡出，
+                   让用户先看到 N/N 再整条消失；中途出现新/未完成项则取消淡出。 -->
+              <Transition name="todo-fade">
+                <div v-if="todoState.items.length" class="todo-bar">
                 <div class="todo-bar-head">
                   <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
                   <span class="todo-bar-title">任务清单</span>
@@ -511,6 +513,7 @@
                   </li>
                 </ul>
               </div>
+              </Transition>
 
               <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
               <QuestionModal
@@ -881,8 +884,15 @@
                     <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || (hasModels ? '模型' : '无可用模型') }}</span>
                     <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
-                      <div v-if="!hasModels" class="model-menu-empty"></div>
-                      <template v-for="grp in groupedModelOptions" :key="grp.vendor">
+                      <div class="model-menu-search">
+                        <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
+                        <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
+                      </div>
+                      <div class="model-menu-footer" @click.stop="showModelManager = true; showModelMenu = false">
+                        <Icon icon="mdi:cog-outline" width="14" /> 编辑模型...
+                      </div>
+                      <div v-if="!hasModels" class="model-menu-empty">没有可用模型（去设置填 Key 或选免 Key 模型）</div>
+                      <template v-for="grp in filteredGroupedOptions" :key="grp.vendor">
                         <div class="model-menu-group-title">{{ grp.vendor }}</div>
                         <div
                           v-for="m in grp.items"
@@ -1031,6 +1041,13 @@
       </div>
 
       <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
+      <ModelManagerModal
+        v-if="showModelManager"
+        :free-models="freeModelsFull"
+        :loading="false"
+        @close="showModelManager = false"
+        @add-provider="showModelManager = false; showSettings = true"
+      />
       <div v-if="gitActionMessage" class="git-action-toast">{{ gitActionMessage }}</div>
 
       <!-- Git Commit 的毛玻璃浮层：居中悬浮，跟侧边栏抽屉一样挂在 chat-window 根下
@@ -1082,6 +1099,7 @@ import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
 import SettingsModal from './SettingsModal.vue'
+import ModelManagerModal from './ModelManagerModal.vue'
 import PluginsMarketModal from './PluginsMarketModal.vue'
 import QuestionModal from './QuestionModal.vue'
 import FileToolPanel from './FileToolPanel.vue'
@@ -1091,7 +1109,7 @@ import Terminal from './Terminal.vue'
 import { useAuth } from '../../../composables/useAuth.js'
 import SnippetPanel from './SnippetPanel.vue'
 import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
-import AuroraStatusIcon from './AuroraStatusIcon.vue'
+import ResceneStatusIcon from './ResceneStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
 import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
 import HarnessFlowRail from './HarnessFlowRail.vue'
@@ -1099,6 +1117,7 @@ import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
 import { chatModelList } from '../composables/chatModelList.js'
+import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 
@@ -2204,31 +2223,32 @@ async function copyText(text) {
 }
 
 // ==================== 模型选择 ====================
-// 下拉只显示用户在设置面板「选为可用」加入的模型——读共享的 chatModelList store，
-// 这是 SettingsModal.toggleVendorModels 写入的权威列表。设置里没勾选 → 这里就是空。
-// modelLabels 仅用于把持久化的裸 id 还原成显示名（后端返回 name）。
+// 下拉直接展示后端 free_models 里「免 key 或已配 Key」的全部模型，按提供方分组；
+// 不再有「选为可用」手动门控——填了 Key（或模型本身免 key）就自动出现。
+// 图2「编辑模型」弹窗里的开关控制 hiddenModelIds（用户可隐藏不想见的模型），默认空=全显示。
+// hiddenModelIds 由 composables/modelVisibility.js 统一管理（与图2 弹窗共享）。
+const isModelVisible = (fm) => (fm.keyless || fm.api_key_set) && !hiddenModelIds.value.has(fm.id)
+
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
-// 列表为空（用户设置里没选任何模型）时，下拉无选项；选中项若不在真实列表里则定位到第一个。
-// 只用后端真实存在的 id 定位，跳过 localStorage 残留的幽灵 id（如 'cloud'/480B）。
-watch(chatModelList, (list) => {
-  const ids = (list || []).filter(m => m.value in modelLabels.value).map(m => m.value)
+// 列表为空时下拉无选项；选中项若不在真实可见列表里则定位到第一个。
+watch([freeModelsFull, hiddenModelIds], () => {
+  const ids = visibleModelIds.value
   if (ids.length === 0) return
   if (!ids.includes(selectedModel.value)) {
     selectedModel.value = ids[0]
     localStorage.setItem('selectedModel', ids[0])
   }
 }, { deep: true })
+
+const visibleModelIds = computed(() =>
+  freeModelsFull.value.filter(isModelVisible).map(fm => fm.id)
+)
 // 按提供方（vendor）分组后的下拉数据：[{ vendor, items: [{ label, value }] }]
-// 仅展示用户在设置面板选为可用的模型，且必须是后端真实存在的（modelLabels 有记录）。
-// 过滤掉 localStorage 残留的幽灵 id（如过期的 'cloud'/480B），它们不在后端 freeModelCatalog 里。
-// vendor 来自后端 freeModelCatalog；不在目录里的自定义配置（无 vendor）归入「其他」。
-const enabledIds = computed(() => new Set(
-  chatModelList.value.filter(m => m.value in modelLabels.value).map(m => m.value)
-))
+// 仅展示免 key/已配 key 且未被隐藏的模型。
 const groupedModelOptions = computed(() => {
   const groups = new Map()
   for (const fm of freeModelsFull.value) {
-    if (!enabledIds.value.has(fm.id)) continue
+    if (!isModelVisible(fm)) continue
     const vendor = fm.vendor || '其他'
     if (!groups.has(vendor)) groups.set(vendor, { vendor, items: [] })
     groups.get(vendor).items.push({
@@ -2236,24 +2256,24 @@ const groupedModelOptions = computed(() => {
       value: fm.id
     })
   }
-  // 自定义配置（在 chatModelList 但不在 freeModelCatalog 里）归入「其他」
-  for (const m of chatModelList.value) {
-    if (enabledIds.value.has(m.value) && !freeModelsFull.value.some(f => f.id === m.value)) {
-      const vendor = '其他'
-      if (!groups.has(vendor)) groups.set(vendor, { vendor, items: [] })
-      groups.get(vendor).items.push({
-        label: modelLabels.value[m.value] || m.label || m.value,
-        value: m.value
-      })
-    }
-  }
   return Array.from(groups.values())
 })
 // 保持旧 modelOptions 引用（模板/逻辑其他地方可能直接读），指向展平列表
 const modelOptions = computed(() => groupedModelOptions.value.flatMap(g => g.items))
 const hasModels = computed(() => modelOptions.value.length > 0)
 const showModelMenu = ref(false)
+const modelSearch = ref('')
+// 搜索过滤后的分组（图1 顶部搜索框）
+const filteredGroupedOptions = computed(() => {
+  const q = modelSearch.value.trim().toLowerCase()
+  if (!q) return groupedModelOptions.value
+  return groupedModelOptions.value
+    .map(g => ({ vendor: g.vendor, items: g.items.filter(m => m.label.toLowerCase().includes(q)) }))
+    .filter(g => g.items.length > 0)
+})
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
+// 图2「编辑模型」弹窗开关
+const showModelManager = ref(false)
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
@@ -2455,6 +2475,20 @@ const {
 const todoDoneCount = computed(() =>
   (todoState.items || []).filter(it => it.status === 'done').length
 )
+
+// 全部完成后延迟淡出：先让用户看到 N/N，再整条消失（仿 Hermes 收尾）。
+// agent 每次 update_todo 会全量覆盖 items，所以中途插入新/未完成项要取消定时。
+let todoClearTimer = null
+watch(
+  () => todoState.items.length > 0 && todoDoneCount.value === todoState.items.length,
+  (allDone) => {
+    if (todoClearTimer) { clearTimeout(todoClearTimer); todoClearTimer = null }
+    if (allDone) {
+      todoClearTimer = setTimeout(() => { todoState.items = [] }, 3500)
+    }
+  }
+)
+onUnmounted(() => { if (todoClearTimer) clearTimeout(todoClearTimer) })
 
 
 // 导航轴当前高亮的用户消息 id：必须放在 useChatWidget 解构之后，避免 setup 阶段命中 TDZ。

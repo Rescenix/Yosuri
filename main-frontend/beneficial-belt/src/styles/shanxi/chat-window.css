@@ -4242,6 +4242,15 @@ img.gem-rail-avatar {
   box-shadow: 0 5px 18px color-mix(in srgb, var(--app-accent) 8%, transparent);
   animation: todo-bar-in 0.2s ease-out;
 }
+/* 全部完成后整条淡出（配合 <Transition name="todo-fade">） */
+.todo-fade-leave-active {
+  transition: opacity 0.45s ease, transform 0.45s ease, margin 0.45s ease;
+}
+.todo-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+  margin-bottom: 0;
+}
 .todo-bar::after {
   content: "";
   position: absolute;
@@ -4561,4 +4570,12 @@ img.gem-rail-avatar {
   right: 0;
   margin-top: 0;
 }
+
+/* 聊天下拉：搜索框 + 空态 + 底部「编辑模型」入口 */
+.model-menu-search { display: flex; align-items: center; gap: 6px; margin: 4px 10px 6px; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 9px; }
+.model-menu-search-icon { color: var(--app-text-faint); flex-shrink: 0; }
+.model-menu-search-input { border: none; background: none; outline: none; flex: 1; font-size: 13px; color: var(--app-text); }
+.model-menu-empty { padding: 12px 16px; font-size: 12px; color: var(--app-text-faint); }
+.model-menu-footer { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 9px 16px; border-top: 1px solid var(--app-border); font-size: 13px; color: var(--app-text-soft); cursor: pointer; position: relative; z-index: 2; }
+.model-menu-footer:hover { color: var(--app-accent); }
 

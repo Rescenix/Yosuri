@@ -12,7 +12,7 @@ type AgentNode struct {
 	IsDead bool
 }
 
-// AAPServer 是 Aurora 应用协议的核心服务端，负责管理 Agent 节点和事件广播
+// AAPServer 是 Rescene 应用协议的核心服务端，负责管理 Agent 节点和事件广播
 type AAPServer struct {
 	mu       sync.RWMutex
 	agents   map[string]*AgentNode // 已注册的 Agent 节点

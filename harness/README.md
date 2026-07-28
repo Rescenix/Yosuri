@@ -1,4 +1,4 @@
-# Aurora Harness
+# Rescene Harness
 
 长驻 Agent 运行时（Python/FastAPI，端口 **8001**）。re0 仓库的独立常驻后端子模块，
 由 Go 后端（main-backend, :8080）经 HTTP 调用。对标 Hermes 的"独立常驻运行时"模型。
@@ -51,7 +51,7 @@ pytest tests/ -v          # 测试
 
 ## Windows 服务化
 
-管理员运行 `install_nssm.bat`：注册 AuroraHarness（本 harness）与 AuroraBackend（Go server.exe），
+管理员运行 `install_nssm.bat`：注册 ResceneHarness（本 harness）与 ResceneBackend（Go server.exe），
 均 SERVICE_AUTO_START。python 路径由 `where python` 动态解析（跳过 WindowsApps stub）。
 
 ## Go 侧调用

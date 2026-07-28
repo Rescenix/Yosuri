@@ -129,7 +129,7 @@ class MCPConnection:
         self._request("initialize", {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": {"name": "aurora-harness", "version": "1.0.0"},
+            "clientInfo": {"name": "rescene-harness", "version": "1.0.0"},
         }, timeout=60.0)  # 首次 npx 要下包，放宽
         self._notify("notifications/initialized", {})
         result = self._request("tools/list", {}, timeout=30.0)

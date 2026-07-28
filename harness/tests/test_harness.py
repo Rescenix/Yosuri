@@ -30,7 +30,7 @@ def test_health_200(client):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["service"] == "aurora-harness"
+    assert body["service"] == "rescene-harness"
 
 
 def test_status_fields(client):

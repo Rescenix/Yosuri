@@ -2,7 +2,7 @@
 
 # ResceneAgent
 
-> フロントエンド特化のマルチエージェント作戦プラットフォーム —— IDE・ターミナル・ブラウザ・AIチームをひとつのチャットボックスに詰め込む。デジタル生命「Aurora」を中核とし、要件分解 → コード実装 → 実行検証までをチャット内で完結させる。
+> フロントエンド特化のマルチエージェント作戦プラットフォーム —— IDE・ターミナル・ブラウザ・AIチームをひとつのチャットボックスに詰め込む。デジタル生命「Rescene」を中核とし、要件分解 → コード実装 → 実行検証までをチャット内で完結させる。
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>

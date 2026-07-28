@@ -68,8 +68,9 @@ func TestResolveBackendsChainEntriesAreUsable(t *testing.T) {
 		if b.Name == "" || b.BaseURL == "" {
 			t.Errorf("链里有残缺 backend: %+v", b)
 		}
-		if b.APIKey == "" && !b.IsLocal {
-			t.Errorf("非本地 backend 无 Key 却入了链，发出去必然 401: %s", b.Name)
+		// 非本地、非免 key 网关的 backend 无 Key 却入了链 → 发出去必然 401
+		if b.APIKey == "" && !b.IsLocal && !b.Keyless {
+			t.Errorf("非本地/非免key backend 无 Key 却入了链，发出去必然 401: %s", b.Name)
 		}
 	}
 }

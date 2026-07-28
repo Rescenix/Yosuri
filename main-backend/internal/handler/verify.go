@@ -122,6 +122,69 @@ func verifyOnWorkflowDone(c *gin.Context, workflowID string) {
 		}
 	}
 
+	// 交互验证：仅当改了前端、且预览已成功在真实 Chromium 里渲染时才跑。
+	// 探测页面是否含可交互元素（按钮/输入框/链接/可点击节点）；有则通过 CDP 实测
+	// 一次点击 + 一次输入，读 DOM 反馈确认「页面真能交互」，作为交付凭证；
+	// 纯展示页（无交互元素）则跳过，照常收尾。全部失败只记录、不阻断对话。
+	if (hasFrontend || hasHTML) && frontendEntry != "" {
+		probe := `(() => { const sel = 'button,input,select,textarea,a[href],[onclick],[role=button]';` +
+			`const nodes = document.querySelectorAll(sel);` +
+			`const types = {}; nodes.forEach(n => types[n.tagName] = (types[n.tagName]||0)+1);` +
+			`return JSON.stringify({ count: nodes.length, types }); })()`
+		if raw, perr := evaluatePreviewExpression(probe); perr == nil {
+			var probeRes struct {
+				Count int             `json:"count"`
+				Types map[string]int `json:"types"`
+			}
+			if json.Unmarshal(raw, &probeRes) == nil {
+				if probeRes.Count == 0 {
+					result["interaction"] = map[string]any{"status": "none", "note": "纯展示页，无可交互元素，跳过交互验证"}
+				} else {
+					ran = true
+					// 实测：点第一个按钮 + 给第一个输入框赋值，再读反馈
+					act := `(() => {` +
+						`const btn = document.querySelector('button,[role=button],[onclick]');` +
+						`const inp = document.querySelector('input,textarea,select');` +
+						`let clicked = false, typed = false;` +
+						`if (btn) { btn.click(); clicked = true; }` +
+						`if (inp) { try { const v = 'hermes-verify'; ` +
+						`const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;` +
+						`setter.call(inp, v); inp.dispatchEvent(new Event('input', {bubbles:true})); ` +
+						`typed = inp.value === v; } catch(e) {} }` +
+						`return JSON.stringify({ clicked, typed }); })()`
+					detail := map[string]any{"status": "tested", "elements": probeRes.Count, "types": probeRes.Types}
+					if actRaw, aerr := evaluatePreviewExpression(act); aerr == nil {
+						var actRes struct {
+							Clicked bool `json:"clicked"`
+							Typed   bool `json:"typed"`
+						}
+						if json.Unmarshal(actRaw, &actRes) == nil {
+							detail["click_ok"] = actRes.Clicked
+							detail["input_ok"] = actRes.Typed
+							detail["verdict"] = yesNo(actRes.Clicked || actRes.Typed)
+						}
+					} else {
+						detail["error"] = aerr.Error()
+					}
+					result["interaction"] = detail
+					// 交互后截图作为交付凭证
+					if png, serr := capturePreviewScreenshot(""); serr == nil && len(png) > 0 {
+						mime := "image/png"
+						writeCodeSSE(c, "artifact", map[string]any{
+							"id":      fmt.Sprintf("verify_%s_interaction", workflowID),
+							"kind":    "image",
+							"tool":    "verify_interaction",
+							"image":   "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(png),
+							"caption": "收尾校验：交互实测后的预览页面（已触发点击/输入）。",
+						})
+					}
+				}
+			}
+		} else {
+			result["interaction"] = map[string]any{"status": "skip", "reason": perr.Error()}
+		}
+	}
+
 	if !ran {
 		result["status"] = "skipped"
 		result["reason"] = "本轮未改动可构建的文件类型"

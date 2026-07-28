@@ -42,7 +42,7 @@ func main() {
 
 	handler.RegisterRoutes(r, sessionStore)
 
-	log.Println("🚀 Aurora 引擎已启动，监听端口 :8080")
+	log.Println("🚀 Rescene 引擎已启动，监听端口 :8080")
 	addr := os.Getenv("PORT")
 	if addr == "" {
 		addr = "8080"

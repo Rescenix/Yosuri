@@ -36,6 +36,7 @@ type RouterBackend struct {
 	APIKey  string // 空 = 免 key（本地）
 	ParamsB float64
 	IsLocal bool
+	Keyless bool
 	Timeout time.Duration
 	Source  string // user / env / free / local
 	// 能力元数据：前端按模型配置，决定能否识图 / 上下文窗口 / 是否支持思考强度
@@ -61,6 +62,9 @@ type FreeModelDef struct {
 	// Local=true 表示走本地 Ollama（localhost:11434/v1，OpenAI 兼容）路由到云端模型，
 	// 不需要 API Key，复用现有 OpenAI 兼容链。
 	Local bool `json:"local"`
+	// Keyless=true 表示远端网关本身免 key（如 opencode zen：鉴权全程由域名承载，
+	// 无需 Bearer Token），可直接进链、可直接被「提供方」勾选，无需填 Key。
+	Keyless bool `json:"keyless"`
 	// Disabled=true 表示该模型被运行时探测判定为不可用（如提供方退役/下架），
 	// 路由链与精确解析均跳过；由 nimRefresh 每日探测后动态置位。
 	Disabled bool `json:"disabled"`
@@ -84,17 +88,29 @@ var freeModelCatalog = []FreeModelDef{
 	// step-2x-large 在该 key 下返回「does not exist or you do not have access」，故未收录。
 	// ContextWindow 一律留 0：/v1/models 只返回 id/created/owned_by，拿不到窗口大小，
 	// 按本目录「未知者留 0，绝不伪造」的规矩不填。
-	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true},
+	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true},
 
 	// —— 硅基流动 SiliconFlow（api.siliconflow.cn；代金券余额可用，对终端用户免费）——
 	{ID: "free_sf_zai_org_glm_5_2", Vendor: "硅基流动 SiliconFlow", Name: "GLM-5.2", Endpoint: "https://api.siliconflow.cn/v1", Model: "zai-org/GLM-5.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
-	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000},
+	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
 
 	// —— Agnes AI 免费多模态网关（apihub.agnes-ai.com/v1，OpenAI 兼容）——
 	// 2026-07-27 用户要求接入：文本 + 多模态理解（识图）走 /v1/chat/completions，
 	// 生图（/v1/images/generations）暂未接进本路由层（现有生图为 DASHSCOPE 专线）。
 	// KeyEnv=AGNES_API_KEY，用户需自备（设置面板填写或环境变量）。
-	{ID: "free_agnes", Vendor: "Agnes AI", Name: "Agnes 2.0 Flash (多模态)", Endpoint: "https://apihub.agnes-ai.com/v1", Model: "agnes-2.0-flash", KeyEnv: "Agnes_API_KEY", ParamsB: 0, Note: "Agnes AI 免费多模态网关（文本/识图）", Vision: true},
+	{ID: "free_agnes", Vendor: "Agnes AI", Name: "Agnes 2.0 Flash (多模态)", Endpoint: "https://apihub.agnes-ai.com/v1", Model: "agnes-2.0-flash", KeyEnv: "Agnes_API_KEY", ParamsB: 0, Note: "Agnes AI 免费多模态网关（文本/识图）", Vision: true, Reasoning: true},
+
+	// —— OpenCode Zen 免 key 网关（opencode.ai/zen/v1，OpenAI 兼容）——
+	// 2026-07-28 用户实测接入：全程免 key，鉴权由域名承载；/v1/models 与
+	// /v1/chat/completions 均免 Bearer Token（curl 空 Authorization 实测 cost=0 返回 OK）。
+	// 模型列表来自 /models 实测筛选的 *-free 后缀档；初筛 6 个免费模型后逐一带
+	// tools 做 agent 调用实测，淘汰 3 个不可用项（ling-3.0/限流、laguna-s-2.1/限流、
+	// nemotron-3-ultra/tools 上游失败），仅保留 3 个能稳定返回 tool_calls 的。
+	// 能力元数据未知者一律留 0/false，绝不伪造（与目录「未知留空」规矩一致）。
+	// Keyless=true：免 key 远端网关，可直接进链、可被「提供方」直接勾选，无需填 Key。
+	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
+	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
+	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·最快）", Keyless: true, Reasoning: true},
 
 	// —— 本地 llama.cpp 服务（需安装 llama-server 并在环境变量中配置 n_gpu_layers）——
 	{ID: "local_llama_qwen2_5_vl_7b", Vendor: "本地 Local", Name: "Qwen2.5-VL-7B-Instruct (llama.cpp)", Endpoint: "http://127.0.0.1:8081/v1", Model: "qwen2.5-vl-7b-instruct", KeyEnv: "", ParamsB: 7, Note: "本地 llama-server，可配置 LLAMA_N_GPU_LAYERS", Vision: true, ContextWindow: 32768, Local: true},
@@ -157,10 +173,10 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 			key = e.APIKey
 			isDefault = e.IsDefault
 		}
-		if key == "" && !f.Local {
+		if key == "" && !f.Local && !f.Keyless {
 			key = os.Getenv(f.KeyEnv)
 		}
-		if key == "" && !f.Local {
+		if key == "" && !f.Local && !f.Keyless {
 			continue
 		}
 		source := "free"
@@ -168,7 +184,7 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
 			APIKey: key, ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: source,
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
-			IsLocal: f.Local,
+			IsLocal: f.Local, Keyless: f.Keyless,
 		}
 		if isDefault {
 			// 用户显式把某个免费模型设为默认 → 提到链头
@@ -211,7 +227,7 @@ func resolveExact(userKey string, model string) *RouterBackend {
 			continue
 		}
 		key := ""
-		if !f.Local {
+		if !f.Local && !f.Keyless {
 			if e, ok := entryByID[f.ID]; ok {
 				key = e.APIKey
 			}
@@ -219,7 +235,7 @@ func resolveExact(userKey string, model string) *RouterBackend {
 				key = os.Getenv(f.KeyEnv)
 			}
 		}
-		if key == "" && !f.Local {
+		if key == "" && !f.Local && !f.Keyless {
 			return nil
 		}
 		source := "free"
@@ -227,7 +243,7 @@ func resolveExact(userKey string, model string) *RouterBackend {
 			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
 			APIKey: key, ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: source,
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
-			IsLocal: f.Local,
+			IsLocal: f.Local, Keyless: f.Keyless,
 		}
 	}
 	// 用户自定义配置

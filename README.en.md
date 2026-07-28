@@ -2,7 +2,7 @@
 
 # ResceneAgent
 
-> A frontend-specialized multi-agent platform that packs an IDE, terminal, browser, and an AI team into a single chat box. Built around the digital persona **Aurora**, it closes the loop from requirement breakdown → code → runtime verification, all inside one conversation.
+> A frontend-specialized multi-agent platform that packs an IDE, terminal, browser, and an AI team into a single chat box. Built around the digital persona **Rescene**, it closes the loop from requirement breakdown → code → runtime verification, all inside one conversation.
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>

@@ -1,9 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 REM ============================================================
-REM  Aurora 服务注册脚本（需管理员权限运行）
-REM  1) AuroraHarness  -> python watchdog.py   (AppDirectory=harness)
-REM  2) AuroraBackend  -> server.exe           (AppDirectory=main-backend)
+REM  Rescene 服务注册脚本（需管理员权限运行）
+REM  1) ResceneHarness  -> python watchdog.py   (AppDirectory=harness)
+REM  2) ResceneBackend  -> server.exe           (AppDirectory=main-backend)
 REM  均设为 SERVICE_AUTO_START，stdout/stderr 落到各自 logs 目录。
 REM ============================================================
 
@@ -40,45 +40,45 @@ if not defined PYTHON_EXE (
 )
 echo [INFO] python = !PYTHON_EXE!
 
-REM ============ 服务 1: AuroraHarness ============
-nssm stop AuroraHarness >nul 2>&1
-nssm remove AuroraHarness confirm >nul 2>&1
+REM ============ 服务 1: ResceneHarness ============
+nssm stop ResceneHarness >nul 2>&1
+nssm remove ResceneHarness confirm >nul 2>&1
 
-nssm install AuroraHarness "!PYTHON_EXE!" "%HARNESS_DIR%\watchdog.py"
-nssm set AuroraHarness AppDirectory "%HARNESS_DIR%"
-nssm set AuroraHarness Start SERVICE_AUTO_START
-nssm set AuroraHarness AppStdout "%HARNESS_DIR%\logs\service_stdout.log"
-nssm set AuroraHarness AppStderr "%HARNESS_DIR%\logs\service_stderr.log"
-nssm set AuroraHarness AppRotateFiles 1
-nssm set AuroraHarness AppRotateBytes 10485760
-nssm set AuroraHarness Description "Aurora Harness (FastAPI :8001, watchdog-supervised)"
-echo [OK] AuroraHarness 已注册
+nssm install ResceneHarness "!PYTHON_EXE!" "%HARNESS_DIR%\watchdog.py"
+nssm set ResceneHarness AppDirectory "%HARNESS_DIR%"
+nssm set ResceneHarness Start SERVICE_AUTO_START
+nssm set ResceneHarness AppStdout "%HARNESS_DIR%\logs\service_stdout.log"
+nssm set ResceneHarness AppStderr "%HARNESS_DIR%\logs\service_stderr.log"
+nssm set ResceneHarness AppRotateFiles 1
+nssm set ResceneHarness AppRotateBytes 10485760
+nssm set ResceneHarness Description "Rescene Harness (FastAPI :8001, watchdog-supervised)"
+echo [OK] ResceneHarness 已注册
 
-REM ============ 服务 2: AuroraBackend (Go) ============
+REM ============ 服务 2: ResceneBackend (Go) ============
 if not exist "%GO_DIR%\server.exe" (
     echo [WARN] %GO_DIR%\server.exe 不存在，先构建:
     echo     cd %GO_DIR% ^&^& go build -o server.exe .\cmd\server
-    echo 跳过 AuroraBackend 注册。
+    echo 跳过 ResceneBackend 注册。
     goto :start_services
 )
-nssm stop AuroraBackend >nul 2>&1
-nssm remove AuroraBackend confirm >nul 2>&1
+nssm stop ResceneBackend >nul 2>&1
+nssm remove ResceneBackend confirm >nul 2>&1
 
-nssm install AuroraBackend "%GO_DIR%\server.exe"
-nssm set AuroraBackend AppDirectory "%GO_DIR%"
-nssm set AuroraBackend Start SERVICE_AUTO_START
-nssm set AuroraBackend AppStdout "%GO_DIR%\logs\service_stdout.log"
-nssm set AuroraBackend AppStderr "%GO_DIR%\logs\service_stderr.log"
-nssm set AuroraBackend AppRotateFiles 1
-nssm set AuroraBackend AppRotateBytes 10485760
-nssm set AuroraBackend Description "Aurora Go Backend (:8080)"
-echo [OK] AuroraBackend 已注册
+nssm install ResceneBackend "%GO_DIR%\server.exe"
+nssm set ResceneBackend AppDirectory "%GO_DIR%"
+nssm set ResceneBackend Start SERVICE_AUTO_START
+nssm set ResceneBackend AppStdout "%GO_DIR%\logs\service_stdout.log"
+nssm set ResceneBackend AppStderr "%GO_DIR%\logs\service_stderr.log"
+nssm set ResceneBackend AppRotateFiles 1
+nssm set ResceneBackend AppRotateBytes 10485760
+nssm set ResceneBackend Description "Rescene Go Backend (:8080)"
+echo [OK] ResceneBackend 已注册
 
 :start_services
-nssm start AuroraHarness
-echo [INFO] AuroraHarness 已启动。验证: curl http://localhost:8001/health
+nssm start ResceneHarness
+echo [INFO] ResceneHarness 已启动。验证: curl http://localhost:8001/health
 if exist "%GO_DIR%\server.exe" (
-    nssm start AuroraBackend
-    echo [INFO] AuroraBackend 已启动。验证: curl http://localhost:8080/
+    nssm start ResceneBackend
+    echo [INFO] ResceneBackend 已启动。验证: curl http://localhost:8080/
 )
 endlocal

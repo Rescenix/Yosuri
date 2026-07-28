@@ -292,7 +292,7 @@ func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefin
 	initParams := map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "aurora-backend", "version": "1.0.0"},
+		"clientInfo":      map[string]any{"name": "rescene-backend", "version": "1.0.0"},
 	}
 	if _, err := conn.request("initialize", initParams, 15*time.Second); err != nil {
 		return nil, nil, fmt.Errorf("initialize 失败: %w", err)

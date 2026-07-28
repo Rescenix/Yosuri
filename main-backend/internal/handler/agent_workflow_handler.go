@@ -676,8 +676,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			// 一次任务改十个文件不该弹十次，用户手动关掉后也不该被反复强开。
 			if !previewOpened && !results[i].failed && isFrontendEdit(tc.Function.Name, tc.Function.Arguments) {
 				previewOpened = true
-				// 优先用 CDP 在真实 Chromium 里渲染 agent 刚改的那个文件，把 target
-				// 的 ws 回给前端做 screencast（不再 iframe 整站）。HTML 的 CDP 失败会
+
+					// 优先用 CDP 在真实 Chromium 里渲染 agent 刚改的那个文件，把 target
+					// 的 ws 回给前端做 screencast（不再 iframe 整站）。HTML 的 CDP 失败会
 				// 显式推错误；只有非 HTML 文件才降级为前端 dev server 首页（iframe）。
 				var editPath string
 				if p, e := parseFrontendEditPath(tc.Function.Arguments); e == nil {

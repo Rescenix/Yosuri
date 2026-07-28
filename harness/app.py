@@ -1,4 +1,4 @@
-"""Aurora Harness —— 长驻 Agent 运行时（对标 Hermes 的独立常驻模型）。
+"""Rescene Harness —— 长驻 Agent 运行时（对标 Hermes 的独立常驻模型）。
 
 FastAPI 服务，端口 8001（HARNESS_PORT 可覆盖）。由 Go 后端经 HTTP 调用：
   GET /health                     存活探针
@@ -50,24 +50,24 @@ _task_counter = {"run": 0, "ok": 0, "err": 0}
 @asynccontextmanager
 async def _lifespan(app):
     sentinel.start()
-    logger.info("Aurora Harness 启动 pid=%s port=%s", os.getpid(), os.environ.get("HARNESS_PORT", "8001"))
+    logger.info("Rescene Harness 启动 pid=%s port=%s", os.getpid(), os.environ.get("HARNESS_PORT", "8001"))
     yield
     sentinel.stop()
     mcp.close()
 
 
-app = FastAPI(title="Aurora Harness", version="1.0.0", lifespan=_lifespan)
+app = FastAPI(title="Rescene Harness", version="1.0.0", lifespan=_lifespan)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "aurora-harness", "pid": os.getpid()}
+    return {"status": "ok", "service": "rescene-harness", "pid": os.getpid()}
 
 
 @app.get("/status")
 def status():
     return {
-        "service": "aurora-harness",
+        "service": "rescene-harness",
         "pid": os.getpid(),
         "started_at": datetime.fromtimestamp(STARTED_AT).isoformat(timespec="seconds"),
         "uptime_s": round(time.time() - STARTED_AT, 1),

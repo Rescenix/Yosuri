@@ -107,15 +107,9 @@
                   <div class="vendor-head">
                     <span class="vendor-name">{{ grp.vendor }}</span>
                     <span class="vendor-count">{{ grp.items.length }} 个模型</span>
-                    <span class="vendor-keystate" :class="{ on: grp.hasKey }">{{ grp.hasKey ? '已配 Key' : '未配 Key' }}</span>
-                    <button
-                      class="model-pick-btn"
-                      :class="{ on: isVendorSelected(grp.vendor) }"
-                      type="button"
-                      @click.stop="toggleVendorModels(grp)"
-                    >{{ isVendorSelected(grp.vendor) ? '已选' : '选为可用' }}</button>
-                    <button v-if="editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
-                    <button v-else class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
+                    <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? '免 Key' : (grp.hasKey ? '已配 Key' : '未配 Key') }}</span>
+                    <button v-if="!grp.keyless && editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
+                    <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
                   </div>
                   <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
                     <input
@@ -601,10 +595,12 @@ const vendorGroups = computed(() => {
     // 而是自动进入识图模型候选，做到"下载即用"。
     if (fm.local) continue
     const v = fm.vendor || '其他'
-    if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false })
+    if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false, keyless: false })
     const g = map.get(v)
     g.items.push(fm)
     if (fm.api_key_set) g.hasKey = true
+    // 该提供方下任一模型是免 key 网关（如 opencode zen），整组标记免 Key
+    if (fm.keyless) g.keyless = true
   }
   return Array.from(map.values())
 })
@@ -826,25 +822,6 @@ watch(visionCapableChatList, (list) => {
 
 function isInChatList(value) {
   return chatList.value.some(m => m.value === value)
-}
-function isVendorSelected(vendor) {
-  const items = vendorGroups.value.find(g => g.vendor === vendor)?.items || []
-  if (items.length === 0) return false
-  return items.every(it => isInChatList(it.id))
-}
-function toggleVendorModels(grp) {
-  const entries = grp.items.map(fm => ({ label: fm.name, value: fm.id }))
-  const allIn = entries.every(e => isInChatList(e.value))
-  let next
-  if (allIn) {
-    const drop = new Set(entries.map(e => e.value))
-    next = chatList.value.filter(m => !drop.has(m.value))
-  } else {
-    const have = new Set(chatList.value.map(m => m.value))
-    next = [...chatList.value]
-    for (const e of entries) if (!have.has(e.value)) next.push(e)
-  }
-  setChatModelList(next)
 }
 // 自定义 API 配置（DS 等）的「选为可用」：把它作为一个模型条目写进共享的 chatModelList，
 // 聊天下拉 modelOptions 只读 chatModelList，没进这里就永远不显示。value 用配置 id（后端
@@ -1143,6 +1120,7 @@ onUnmounted(() => {
 .vendor-count { font-size: 10.5px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 1px 8px; flex-shrink: 0; }
 .vendor-keystate { font-size: 10.5px; font-weight: 600; color: var(--app-text-faint); flex-shrink: 0; }
 .vendor-keystate.on { color: #12b76a; }
+.vendor-keystate.free { color: var(--app-accent); }
 .vendor-key-btn { font-size: 11px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 3px 10px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-btn:hover { background: var(--app-surface-3); }
 .vendor-model-hint { margin-top: 6px; font-size: 11px; color: var(--app-text-faint); line-height: 1.5; padding-left: 2px; }
