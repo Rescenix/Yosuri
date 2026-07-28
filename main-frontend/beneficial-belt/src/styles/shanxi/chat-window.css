@@ -2922,11 +2922,16 @@ min-height: 90px !important;
 .gem-rail-sessions::-webkit-scrollbar { display: none; }
 
 /* ==================== 左侧辅助卡片：审计痕迹 / 工作流图 ====================
-   这是 chat-body-row 的普通 flex 子项，而不是绝对定位遮罩；打开后聊天列会自然收缩。 */
+   卡片只使用折叠边栏与 720px 聊天阅读列之间的自然留白，不参加 flex 排版，
+   这样聊天正文和输入框始终按原工作区中线居中。 */
 .left-utility-stack {
   position: relative;
-  flex: 0 0 auto;
-  min-width: 280px;
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  bottom: 8px;
+  left: 72px; /* 8px 工作区内边距 + 56px 折叠边栏 + 8px 栏间距 */
+  width: min(var(--left-utility-width, 320px), max(0px, calc((100% - 800px) / 2 - 8px)));
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2946,6 +2951,7 @@ min-height: 90px !important;
   background: var(--app-surface);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10), 0 2px 7px rgba(15, 23, 42, 0.06);
 }
+.harness-utility-card .harness-flow-rail { flex: 1 1 auto; min-height: 0; }
 .left-utility-card-head {
   height: 38px;
   flex: 0 0 auto;
@@ -2980,6 +2986,9 @@ min-height: 90px !important;
 .left-utility-card-leave-to {
   opacity: 0;
   transform: translateX(-10px) scale(0.97);
+}
+@media (max-width: 1100px) {
+  .left-utility-stack { display: none; }
 }
 .agentfs-rail {
   position: relative;

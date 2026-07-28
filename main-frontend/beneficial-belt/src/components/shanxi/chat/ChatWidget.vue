@@ -277,7 +277,7 @@
           <aside
             v-if="leftUtilityVisible"
             class="left-utility-stack"
-            :style="{ width: leftUtilityWidth + 'px' }"
+            :style="{ '--left-utility-width': leftUtilityWidth + 'px' }"
           >
             <div class="left-utility-resize-handle" @mousedown="startLeftUtilityWidthDrag" title="拖动调整卡片宽度"></div>
             <section v-if="showAgentFSAudit" class="left-utility-card agentfs-utility-card">

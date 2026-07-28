@@ -1,7 +1,8 @@
 <template>
   <aside class="harness-flow-rail" :class="{ compact }" aria-label="Harness 实时架构">
-    <div class="harness-flow-canvas">
-      <div class="harness-graph-stage">
+    <div ref="canvasRef" class="harness-flow-canvas" title="滚轮滚动画布；Ctrl/⌘ + 滚轮缩放画布" @wheel="handleCanvasWheel">
+      <div class="harness-graph-viewport" :style="graphViewportStyle">
+      <div class="harness-graph-stage" :style="graphStageStyle">
         <svg class="harness-edges" viewBox="0 0 360 620" preserveAspectRatio="xMidYMin meet" aria-hidden="true">
           <defs>
             <marker id="harness-arrow" viewBox="0 0 7 7" markerWidth="7" markerHeight="7" refX="6" refY="3.5" markerUnits="userSpaceOnUse" orient="auto">
@@ -31,12 +32,13 @@
         <span class="harness-loop-label">AGENT LOOP</span>
         <span class="harness-ops-label">TRACE / VERIFY</span>
       </div>
+      </div>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 
 const props = defineProps({
   flow: { type: Object, default: null },
@@ -48,6 +50,37 @@ const runningTool = computed(() => tools.value.find(block => block.status === 'r
 const lastTool = computed(() => tools.value[tools.value.length - 1])
 const hasThinking = computed(() => blocks.value.some(block => block.type === 'thinking'))
 const hasIntent = computed(() => blocks.value.some(block => block.type === 'intent'))
+const canvasRef = ref(null)
+const graphZoom = ref(1)
+const graphViewportStyle = computed(() => ({
+  width: `${360 * graphZoom.value}px`,
+  height: `${620 * graphZoom.value}px`
+}))
+const graphStageStyle = computed(() => ({ transform: `scale(${graphZoom.value})` }))
+
+function handleCanvasWheel(event) {
+  // 普通滚轮仍由可滚动容器处理；只接管浏览器会拿去做页面缩放的 Ctrl/⌘ + 滚轮。
+  if (!event.ctrlKey && !event.metaKey) return
+  event.preventDefault()
+  const canvas = canvasRef.value
+  if (!canvas) return
+
+  const rect = canvas.getBoundingClientRect()
+  const pointerX = event.clientX - rect.left
+  const pointerY = event.clientY - rect.top
+  const previousZoom = graphZoom.value
+  const nextZoom = Math.min(2.4, Math.max(0.55, previousZoom * Math.exp(-event.deltaY * 0.0015)))
+  if (nextZoom === previousZoom) return
+
+  // 缩放后把鼠标所指的画布坐标留在原位，而不是跳回画布左上角。
+  const graphX = (canvas.scrollLeft + pointerX) / previousZoom
+  const graphY = (canvas.scrollTop + pointerY) / previousZoom
+  graphZoom.value = nextZoom
+  nextTick(() => {
+    canvas.scrollLeft = graphX * nextZoom - pointerX
+    canvas.scrollTop = graphY * nextZoom - pointerY
+  })
+}
 
 const stage = computed(() => {
   if (!props.flow) return -1
@@ -111,11 +144,20 @@ const edges = computed(() => edgeDefs.map(edge => ({
     linear-gradient(color-mix(in srgb, var(--app-text) 3.5%, transparent) 1px, transparent 1px),
     linear-gradient(90deg, color-mix(in srgb, var(--app-text) 3.5%, transparent) 1px, transparent 1px);
   background-size: auto, 24px 24px, 24px 24px;
-  pointer-events: none;
+  pointer-events: auto;
 }
-.harness-flow-canvas { position: relative; flex: 1; min-height: 0; overflow: hidden; }
-.harness-flow-canvas::-webkit-scrollbar { display: none; }
-.harness-graph-stage { position: absolute; top: 0; left: 0; width: 360px; height: 620px; transform: scale(.88); transform-origin: top left; }
+.harness-flow-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 38%, transparent) transparent;
+}
+.harness-flow-canvas::-webkit-scrollbar { width: 8px; height: 8px; }
+.harness-flow-canvas::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in srgb, var(--app-accent) 42%, transparent); background-clip: padding-box; }
+.harness-graph-viewport { position: relative; min-width: 360px; min-height: 620px; }
+.harness-graph-stage { position: relative; width: 360px; height: 620px; transform-origin: top left; }
 .harness-edges { position: absolute; inset: 0; width: 360px; height: 620px; overflow: visible; }
 .harness-edge {
   fill: none;
@@ -166,9 +208,6 @@ const edges = computed(() => edgeDefs.map(edge => ({
   height: auto;
   min-height: 260px;
   padding: 0;
-}
-.harness-flow-rail.compact .harness-graph-stage {
-  transform: scale(.8);
 }
 @keyframes harnessFlow { to { stroke-dashoffset: -18; } }
 @media (max-width: 1199px) {
