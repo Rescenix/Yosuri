@@ -1,13 +1,16 @@
 [English](./README.en.md) · [中文](./README.md) · [正体中文](./README.zhtw.md) · [日本語](./README.ja.md) · [Tiếng Việt](./README.vi.md) · [தமிழ்](./README.ta.md)
 
-# ResceneAgent 开箱可用无需Key
+# ResceneAgent
 
-> 前端交付最慢的部分不是写代码，是“写完后手动跑起来、逐屏验收、再改再验”。
+> 真正免费、无需 API Key 的前端 Agent 工作台：内置免费模型池，自动熔断、秒级故障转移。
 
-ResceneAgent 是面向前端工程团队的本地 Agent 工作台：一句需求，多 Agent 协同拆解任务、生成代码、运行构建、启动真实 Chromium 预览，并把验收截图与 Diff 证据写回同一条对话流。你还可以创造并编排自己的专门 Agent——Git 审查、测试、文档、合规检查——让它们在一条工作流里接力。所有改动先进入 AgentFS 隔离快照，危险操作经系统门阀审批，不满意可一键回滚：它不是生成片段的玩具，而是把前端交付闭环搬进聊天框的生产力系统。
+一句需求，Agent 写代码、跑构建、启动真实 Chromium 预览，你还能亲手点击验收。ResceneAgent 内置多模型路由与自动故障转移，接入真实可用的免费模型池；模型失败时自动切换，无需私有 Key 就能跑完第一个工作流。
+
+你还可以创造并编排自己的专门 Agent——Git 审查、测试、文档、合规检查——让它们在一条工作流里接力。所有改动先进入 AgentFS 隔离快照，危险操作经系统门阀审批，不满意可一键回滚。
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Free%20Models-No%20API%20Key%20Required-brightgreen" alt="Free Models, No API Key Required">
   <img src="https://img.shields.io/badge/Local--first-Your%20keys%2C%20your%20control-5b5bd6" alt="Local first">
   <img src="https://img.shields.io/badge/LLM-Multi--provider-ff69b4" alt="Multi-provider LLM">
 </p>
@@ -27,9 +30,66 @@ ResceneAgent 是面向前端工程团队的本地 Agent 工作台：一句需求
   → 构建、截图与验收结果成为交付证据；不满意可回滚
 ```
 
+## 系统架构
+
+```mermaid
+flowchart TB
+    User([用户]) --> ChatUI[聊天界面\nMonaco / 文件树 / Diff / 预览]
+    ChatUI --> Gateway[Gateway\ntask received]
+
+    Gateway --> WorkingMemory[Working Memory\nMEMORY.md + workdir.md\ncontext assembled]
+    WorkingMemory --> Planner[Planner\n实时 TODO 拆解]
+    Planner --> AgentLoop
+
+    subgraph AgentLoop [AGENT LOOP]
+        direction TB
+        LLMAgent[LLM Agent\nreasoning...]
+        ToolCall[Tool Call\nfile / shell / browser]
+        ToolResult[Tool Result\nevent + diff + screenshot]
+        ReplyDraft[Reply Draft]
+
+        LLMAgent -->|decide| ToolCall
+        ToolCall -->|execute| ToolResult
+        ToolResult -->|observe| LLMAgent
+        LLMAgent -->|respond| ReplyDraft
+    end
+
+    ReplyDraft --> Reply[Reply\nback to user]
+    Reply --> Trace[Trace\nevents / tokens / artifacts]
+
+    Trace -->|VERIFY| Eval[Eval\ndeterministic checks]
+    Eval --> Release[Release\nresult gets committed]
+
+    Release --> ChatUI
+    Release -->|next task| Gateway
+
+    LLMAgent --> LLMRouter[LLM Router\n内置免费模型池]
+    LLMRouter --> FreeModels[免费模型池]
+    LLMRouter --> LocalModels[本地模型\nOllama / llama.cpp]
+    LLMRouter --> PaidModels[私有模型\n用户自填 Key]
+
+    ToolCall --> FileEdit[File Edit]
+    ToolCall --> Shell[Shell / Terminal]
+    ToolCall --> Browser[Browser / CDP]
+    ToolCall --> AskUser[ask_user]
+    ToolCall --> ImageGen[Image Generate]
+
+    FileEdit --> AgentFS[AgentFS\n隔离快照 / Diff / 回滚]
+    Shell --> DangerGate{危险操作\n门阀审批}
+    Browser --> LivePreview[真实 Chromium\nlive preview]
+
+    DangerGate -->|需要审批| User
+    AskUser -->|用户回答| WorkingMemory
+
+    AgentFS --> Harness[Harness\nbuild + CDP 交互测试]
+    LivePreview --> Harness
+    Harness --> Screenshot[截图 Artifact]
+    Screenshot --> Trace
+```
+
 ## 能力对照
 
-ResceneAgent 不只是“AI 写完给你一段代码”。你对它说"做个能联机的贪吃蛇"，它会生成项目、启动真实 Chromium 预览，让你亲自点击、输入并根据用户网页交互改进、验收；模型、提供方和 API Key 完全由你配置存储本地，开源后端只做免费Agent模型动态路由。
+ResceneAgent 不只是“AI 写完给你一段代码”。你对它说"做个能联机的贪吃蛇"，它会生成项目、启动真实 Chromium 预览，让你亲自点击、输入并根据用户网页交互改进、验收。模型与 API Key 完全由你掌控并存储本地；后端内置多模型路由，自动在可用模型间故障转移，无需私有 Key 也能启动第一个 Agent 工作流。
 
 下表逐项对比常见能力：
 
