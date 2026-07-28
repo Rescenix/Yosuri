@@ -620,6 +620,61 @@ func capturePreviewScreenshot(url string) ([]byte, error) {
 	}
 }
 
+// readCurrentPreviewText reads text from the same live CDP target shown in the
+// embedded preview. It supplements a screenshot for state questions: agents
+// must not infer a small score or status label from pixels when the page has
+// exposed that value as readable DOM text.
+func readCurrentPreviewText() (string, error) {
+	targetWS := getCurrentPreviewTarget()
+	if targetWS == "" {
+		return "", fmt.Errorf("当前没有正在预览的内嵌页面")
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(targetWS, nil)
+	if err != nil {
+		return "", fmt.Errorf("连接预览 target 失败: %w", err)
+	}
+	defer conn.Close()
+
+	id := nextPreviewReqID()
+	if err := conn.WriteJSON(map[string]any{
+		"id": id, "method": "Runtime.evaluate",
+		"params": map[string]any{
+			"expression":   "document.body ? document.body.innerText : ''",
+			"returnByValue": true,
+		},
+	}); err != nil {
+		return "", fmt.Errorf("读取预览 DOM 文本失败: %w", err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+	for {
+		var response struct {
+			ID     int64           `json:"id"`
+			Error  json.RawMessage `json:"error"`
+			Result struct {
+				Result struct {
+					Value string `json:"value"`
+				} `json:"result"`
+			} `json:"result"`
+		}
+		if err := conn.ReadJSON(&response); err != nil {
+			return "", fmt.Errorf("读取预览 DOM 文本结果失败: %w", err)
+		}
+		if response.ID != id {
+			continue
+		}
+		if len(response.Error) > 0 {
+			return "", fmt.Errorf("Chrome 拒绝读取预览 DOM 文本: %s", string(response.Error))
+		}
+		text := strings.TrimSpace(response.Result.Result.Value)
+		const maxPreviewTextRunes = 4000
+		runes := []rune(text)
+		if len(runes) > maxPreviewTextRunes {
+			text = string(runes[:maxPreviewTextRunes]) + "\n…（DOM 文本已截断）"
+		}
+		return text, nil
+	}
+}
+
 // capturePreviewToolDef 是 harness 提供给 LLM 的「截内嵌预览页面」工具，常驻、无需 load_tools。
 // 截的是用户正在看的那一页（同一 CDP target），不是另开浏览器渲染同 URL。
 var capturePreviewToolDef = core.ToolDefinition{

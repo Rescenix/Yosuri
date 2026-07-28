@@ -575,8 +575,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				if cerr != nil {
 					results[i] = codeExecResult{failed: true, output: "截图失败：" + cerr.Error()}
 				} else {
+					output := "已截取内嵌预览页面（见下方图片工件）。"
+					// 对分数、计数器等状态问题，优先把同一 live target 的 DOM 文本
+					// 一并给 agent；不能让小字号截图成为唯一事实来源。
+					if text, terr := readCurrentPreviewText(); terr == nil && text != "" {
+						output += "\n【同一预览页面的 DOM 文本（状态判断优先依据此处）】\n" + text
+					}
 					results[i] = codeExecResult{
-						output: "已截取内嵌预览页面（见下方图片工件）。",
+						output: output,
 						images: []mcpImageArtifact{{Data: base64.StdEncoding.EncodeToString(png), MimeType: "image/png"}},
 					}
 				}
