@@ -706,17 +706,9 @@
                       <span class="sch-caret">▾</span>
                     </button>
                     <div v-if="showPrMenu" class="pr-menu-dropdown" @click.stop>
-                      <div class="pr-menu-item" @click="runGitAdd">
-                        <Icon icon="mdi:plus-box-outline" width="14" />
-                        <span>Git Add .</span>
-                      </div>
-                      <div class="pr-menu-item" @click="openCommitModal">
-                        <Icon icon="mdi:content-save-edit-outline" width="14" />
-                        <span>Git Commit</span>
-                      </div>
-                      <div class="pr-menu-item" @click="runGitPush">
-                        <Icon icon="mdi:cloud-upload-outline" width="14" />
-                        <span>Git Push</span>
+                      <div class="pr-menu-item" @click="openGitDeliveryAgent">
+                        <Icon icon="mdi:robot-outline" width="15" />
+                        <span>交付 Agent Git</span>
                       </div>
                     </div>
                   </div>
@@ -1049,6 +1041,7 @@
         @add-provider="showModelManager = false; showSettings = true"
       />
       <div v-if="gitActionMessage" class="git-action-toast">{{ gitActionMessage }}</div>
+      <GitDeliveryAgent v-if="showGitDeliveryAgent" @close="showGitDeliveryAgent = false" />
 
       <!-- Git Commit 的毛玻璃浮层：居中悬浮，跟侧边栏抽屉一样挂在 chat-window 根下
            避免被内部 transform 影响定位 -->
@@ -1086,6 +1079,7 @@
 
 <script setup>
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
+import GitDeliveryAgent from './GitDeliveryAgent.vue'
 import { Icon } from '@iconify/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
@@ -1959,6 +1953,11 @@ async function fetchGitStatus() {
 }
 
 const showPrMenu = ref(false)
+const showGitDeliveryAgent = ref(false)
+function openGitDeliveryAgent() {
+  showPrMenu.value = false
+  showGitDeliveryAgent.value = true
+}
 const gitActionMessage = ref('')
 let gitToastTimer = null
 function showGitToast(msg) {
