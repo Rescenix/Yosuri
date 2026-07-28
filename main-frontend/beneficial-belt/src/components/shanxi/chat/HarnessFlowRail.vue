@@ -162,13 +162,16 @@ const edges = computed(() => edgeDefs.map(edge => ({
 .harness-flow-rail.compact {
   position: relative;
   inset: auto;
-  width: 304px;
-  height: 500px;
+  width: 100%;
+  height: auto;
+  min-height: 260px;
   padding: 0;
 }
-.harness-flow-rail.compact .harness-graph-stage { transform: scale(.8); }
+.harness-flow-rail.compact .harness-graph-stage {
+  transform: scale(.8);
+}
 @keyframes harnessFlow { to { stroke-dashoffset: -18; } }
 @media (max-width: 1199px) {
-  .harness-flow-rail { display: none; }
+  .harness-flow-rail:not(.compact) { display: none; }
 }
 </style>

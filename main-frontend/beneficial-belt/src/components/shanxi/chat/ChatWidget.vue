@@ -273,9 +273,19 @@
           </template>
         </aside>
 
-        <Transition name="agentfs-gutter">
-          <div v-if="showAgentFSAudit && utilitySurfacesVisible && !sidebarOpen && (!dockPanels.length || dockHidden) && !dockExpanded" class="agentfs-gutter">
-            <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
+        <Transition name="left-utility-card">
+          <aside
+            v-if="leftUtilityVisible"
+            class="left-utility-stack"
+            :style="{ width: leftUtilityWidth + 'px' }"
+          >
+            <div class="left-utility-resize-handle" @mousedown="startLeftUtilityWidthDrag" title="拖动调整卡片宽度"></div>
+            <section v-if="showAgentFSAudit" class="left-utility-card agentfs-utility-card">
+              <header class="left-utility-card-head">
+                <span><Icon icon="mdi:source-commit" width="15" /> 审计痕迹</span>
+                <span class="left-utility-card-hint">拖右边缘调宽</span>
+              </header>
+              <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
               <div v-if="agentFSTimeline.length" ref="agentFSTreeRef" class="agentfs-tree">
                 <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
                   <defs>
@@ -308,8 +318,16 @@
                 </button>
               </div>
               <div v-else class="agentfs-empty-rail" aria-label="当前会话还没有 AgentFS 修改快照"></div>
-            </div>
-          </div>
+              </div>
+            </section>
+            <section v-if="showHarnessWorkflow" class="left-utility-card harness-utility-card">
+              <header class="left-utility-card-head">
+                <span><Icon icon="mdi:transit-connection-variant" width="15" /> 工作流图</span>
+                <span class="left-utility-card-hint">拖右边缘调宽</span>
+              </header>
+              <HarnessFlowRail :flow="lastAgentFlow" compact />
+            </section>
+          </aside>
         </Transition>
 
         <div class="chat-body studio">
@@ -352,8 +370,6 @@
               </template>
             </div>
 
-            <!-- 只覆盖聊天内容自身的右侧留白；不参与外层工作区布局。 -->
-            <HarnessFlowRail v-if="showHarnessWorkflow && utilitySurfacesVisible && isExpanded && (!dockPanels.length || dockHidden)" :flow="lastAgentFlow" />
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
                  当 `messages` 为空时，它独占整个 Flex 空间，把输入区推到最底部。 -->
             <div v-if="messages.length === 0" class="home-container-for-layout">
@@ -2463,6 +2479,23 @@ const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
 const showAgentFSAudit = ref(false)
 const showHarnessWorkflow = ref(false)
 const utilitySurfacesVisible = computed(() => messages.value.length > 0)
+// 折叠侧栏和聊天列之间的辅助卡片：它参与 flex 布局，绝不覆盖聊天正文。
+// 宽度持久化后，审计图与工作流图共享同一条左侧卡片栏，避免两张卡片抢占内容区。
+const leftUtilityWidth = ref(320)
+const { startDrag: startLeftUtilityWidthDrag } = useResizableWidth(leftUtilityWidth, {
+  min: 280,
+  max: 520,
+  edge: 'right',
+  persistKey: 'leftUtilityWidth'
+})
+const leftUtilityVisible = computed(() => (
+  isExpanded.value &&
+  utilitySurfacesVisible.value &&
+  !sidebarOpen.value &&
+  !dockExpanded.value &&
+  (!dockPanels.value.length || dockHidden.value) &&
+  (showAgentFSAudit.value || showHarnessWorkflow.value)
+))
 const sidebarWidth = ref(220)
 const { startDrag: startSidebarWidthDrag } = useResizableWidth(sidebarWidth, {
   min: 180,
