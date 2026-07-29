@@ -144,15 +144,27 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 		for _, e := range entries {
 			entryByID[e.ID] = e
 		}
-		// 1. 用户自定义配置（跳过免费池条目，它们下面单独走目录逻辑）
+		// 1. 用户自定义提供方（跳过免费池条目，它们下面单独走目录逻辑）。
+		// 自动路由时每个提供方只取一个默认模型；用户在下拉框明确选择时，
+		// resolveExact 会按“提供方 + 模型”精确路由到该目录里的任意模型。
 		for _, e := range entries {
-			if e.APIKey == "" || isFreeCatalogID(e.ID) {
+			if (e.APIKey == "" && !e.Keyless) || isFreeCatalogID(e.ID) {
+				continue
+			}
+			defaultModel := strings.TrimSpace(e.DefaultModel)
+			if defaultModel == "" {
+				if models := configuredProviderModels(e); len(models) > 0 {
+					defaultModel = models[0].ID
+				}
+			}
+			if defaultModel == "" {
 				continue
 			}
 			b := RouterBackend{
-				Name: e.Name, BaseURL: e.Endpoint, Model: e.DefaultModel,
+				Name: e.Name, BaseURL: e.Endpoint, Model: defaultModel,
 				APIKey: e.APIKey, Timeout: 5 * time.Minute, Source: "user",
 				Vision: e.Vision, ContextWindow: e.ContextWindow, Reasoning: e.Reasoning,
+				Keyless: e.Keyless,
 			}
 			if e.IsDefault {
 				userChain = append([]RouterBackend{b}, userChain...)
@@ -246,18 +258,51 @@ func resolveExact(userKey string, model string) *RouterBackend {
 			IsLocal: f.Local, Keyless: f.Keyless,
 		}
 	}
+	// 自定义提供方目录里的精确模型。选择 ID 同时编码 providerID 和上游 modelID，
+	// 避免两个 OpenAI 兼容提供方都暴露同名模型时发生冲突。
+	if providerID, upstreamModelID, ok := parseCustomModelSelectionID(model); ok {
+		for _, e := range entries {
+			if e.ID != providerID || isFreeCatalogID(e.ID) {
+				continue
+			}
+			if e.APIKey == "" && !e.Keyless {
+				return nil
+			}
+			var selected *ModelConfigModel
+			for _, candidate := range configuredProviderModels(e) {
+				if candidate.ID == upstreamModelID {
+					copy := candidate
+					selected = &copy
+					break
+				}
+			}
+			if selected == nil {
+				return nil
+			}
+			return &RouterBackend{
+				Name: e.Name + " · " + selected.Name, BaseURL: e.Endpoint, Model: selected.ID,
+				APIKey: e.APIKey, Timeout: 5 * time.Minute, Source: "user",
+				Vision:        selected.Vision || e.Vision,
+				ContextWindow: selected.ContextWindow,
+				Reasoning:     selected.Reasoning || e.Reasoning,
+				Keyless:       e.Keyless,
+			}
+		}
+		return nil
+	}
 	// 用户自定义配置
 	for _, e := range entries {
 		if e.ID != model || isFreeCatalogID(e.ID) {
 			continue
 		}
-		if e.APIKey == "" {
+		if e.APIKey == "" && !e.Keyless {
 			return nil
 		}
 		return &RouterBackend{
 			Name: e.Name, BaseURL: e.Endpoint, Model: e.DefaultModel,
 			APIKey: e.APIKey, Timeout: 5 * time.Minute, Source: "user",
 			Vision: e.Vision, ContextWindow: e.ContextWindow, Reasoning: e.Reasoning,
+			Keyless: e.Keyless,
 		}
 	}
 	return nil

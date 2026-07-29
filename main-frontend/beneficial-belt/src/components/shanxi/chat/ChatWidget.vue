@@ -1100,7 +1100,6 @@ import HarnessFlowRail from './HarnessFlowRail.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
-import { chatModelList } from '../composables/chatModelList.js'
 import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
@@ -1299,13 +1298,10 @@ async function loadModelCapabilities() {
     const data = await res.json()
     const map = {}
     const labels = {}
-    freeModelsFull.value = data.free_models || []
+    freeModelsFull.value = [...(data.free_models || []), ...(data.custom_models || [])]
     for (const fm of freeModelsFull.value) {
       map[fm.id] = { vision: fm.vision, context_window: fm.context_window, reasoning: fm.reasoning }
       labels[fm.id] = fm.name
-    }
-    for (const c of (data.configs || [])) {
-      labels[c.id] = c.name || '自定义配置'
     }
     modelCapabilities.value = map
     modelLabels.value = labels
@@ -1313,7 +1309,11 @@ async function loadModelCapabilities() {
     console.warn('加载模型能力失败', e)
   }
 }
-onMounted(loadModelCapabilities)
+onMounted(() => {
+  loadModelCapabilities()
+  window.addEventListener('model-config-changed', loadModelCapabilities)
+})
+onUnmounted(() => window.removeEventListener('model-config-changed', loadModelCapabilities))
 // 刷新时从 localStorage 恢复当前会话的上下文分类占用（不丢）
 loadContextBreakdown(localStorage.getItem('prism_session_id') || '')
 // 刷新时恢复当前会话的真实 input/output token（不丢，横条靠它显示实际值）
@@ -2205,7 +2205,7 @@ async function copyText(text) {
 }
 
 // ==================== 模型选择 ====================
-// 下拉直接展示后端 free_models 里「免 key 或已配 Key」的全部模型，按提供方分组；
+// 下拉展示后端内置目录与自定义提供方目录中「免 key 或已配 Key」的全部模型，按提供方分组；
 // 不再有「选为可用」手动门控——填了 Key（或模型本身免 key）就自动出现。
 // 图2「编辑模型」弹窗里的开关控制 hiddenModelIds（用户可隐藏不想见的模型），默认空=全显示。
 // hiddenModelIds 由 composables/modelVisibility.js 统一管理（与图2 弹窗共享）。
@@ -2226,7 +2226,7 @@ const visibleModelIds = computed(() =>
   freeModelsFull.value.filter(isModelVisible).map(fm => fm.id)
 )
 // 按提供方（vendor）分组后的下拉数据：[{ vendor, items: [{ label, value }] }]
-// 仅展示免 key/已配 key 且未被隐藏的模型。
+// 仅展示免 key/已配 key 且未被隐藏的模型；同名模型由后端生成的复合 ID 精确区分。
 const groupedModelOptions = computed(() => {
   const groups = new Map()
   for (const fm of freeModelsFull.value) {

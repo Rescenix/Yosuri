@@ -192,6 +192,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 用户自定义 API 接入配置（设置面板用，QQ 登录接入前先用固定 "default" 用户）
 	r.GET("/api/models/config", HandleGetModelConfig)
 	r.PUT("/api/models/config", HandlePutModelConfig)
+	r.POST("/api/models/discover", HandleDiscoverProviderModels)
 
 	r.Static("/images", "./public/images")
 }

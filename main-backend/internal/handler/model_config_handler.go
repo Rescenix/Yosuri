@@ -12,6 +12,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,18 +21,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ModelConfigEntry 用户自己配置的一套 API 接入信息
-type ModelConfigEntry struct {
+// ModelConfigModel 是自定义提供方通过 /models 暴露的一个模型。
+// 能力字段通常不会出现在 OpenAI 兼容的模型目录里，未知时保持零值。
+type ModelConfigModel struct {
 	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Endpoint      string `json:"endpoint"`
-	APIKey        string `json:"api_key,omitempty"` // 只在请求体里写入时使用，响应里永远清空
-	APIKeySet     bool   `json:"api_key_set"`       // 响应里用这个告诉前端"已经存了一把 key"
-	DefaultModel  string `json:"default_model"`
-	IsDefault     bool   `json:"is_default"`
+	Name          string `json:"name,omitempty"`
 	Vision        bool   `json:"vision,omitempty"`
 	ContextWindow int    `json:"context_window,omitempty"`
 	Reasoning     bool   `json:"reasoning,omitempty"`
+}
+
+// ModelConfigEntry 用户自己配置的一个 API 提供方。
+// Models 保存该提供方通过 /models 返回的完整目录；DefaultModel 仅用于兼容旧配置
+// 以及“自动”调用链需要从一个提供方挑选单个默认模型的场景。
+type ModelConfigEntry struct {
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	Endpoint      string             `json:"endpoint"`
+	APIKey        string             `json:"api_key,omitempty"` // 只在请求体里写入时使用，响应里永远清空
+	APIKeySet     bool               `json:"api_key_set"`       // 响应里用这个告诉前端"已经存了一把 key"
+	Keyless       bool               `json:"keyless,omitempty"` // /models 与聊天接口均不要求 Bearer Token
+	DefaultModel  string             `json:"default_model"`
+	IsDefault     bool               `json:"is_default"`
+	Vision        bool               `json:"vision,omitempty"`
+	ContextWindow int                `json:"context_window,omitempty"`
+	Reasoning     bool               `json:"reasoning,omitempty"`
+	Models        []ModelConfigModel `json:"models,omitempty"`
 }
 
 // 前端在没有修改 Key 的情况下会把这个占位符原样传回来，后端据此判断"不用覆盖旧 key"
@@ -92,6 +107,51 @@ type freeModelView struct {
 	IsDefault bool `json:"is_default"`
 }
 
+// customModelView 与 freeModelView 保持前端需要的公共字段，让聊天下拉框可以把
+// 内置目录和用户自定义提供方目录放进同一套按 vendor 分组的模型列表。
+type customModelView struct {
+	ID            string `json:"id"`
+	Vendor        string `json:"vendor"`
+	Name          string `json:"name"`
+	APIKeySet     bool   `json:"api_key_set"`
+	Keyless       bool   `json:"keyless"`
+	Vision        bool   `json:"vision,omitempty"`
+	ContextWindow int    `json:"context_window,omitempty"`
+	Reasoning     bool   `json:"reasoning,omitempty"`
+}
+
+const customModelIDPrefix = "custom::"
+
+func customModelSelectionID(providerID, modelID string) string {
+	return customModelIDPrefix + url.QueryEscape(providerID) + "::" + url.QueryEscape(modelID)
+}
+
+func parseCustomModelSelectionID(selectionID string) (providerID, modelID string, ok bool) {
+	if !strings.HasPrefix(selectionID, customModelIDPrefix) {
+		return "", "", false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(selectionID, customModelIDPrefix), "::", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	providerID, errProvider := url.QueryUnescape(parts[0])
+	modelID, errModel := url.QueryUnescape(parts[1])
+	if errProvider != nil || errModel != nil || providerID == "" || modelID == "" {
+		return "", "", false
+	}
+	return providerID, modelID, true
+}
+
+func configuredProviderModels(e ModelConfigEntry) []ModelConfigModel {
+	if len(e.Models) > 0 {
+		return e.Models
+	}
+	if strings.TrimSpace(e.DefaultModel) != "" {
+		return []ModelConfigModel{{ID: e.DefaultModel, Name: e.DefaultModel}}
+	}
+	return nil
+}
+
 // HandleGetModelConfig GET /api/models/config?openid=...
 // 返回用户自定义配置 + 内置免费模型池（设置面板默认展示后者）。
 func HandleGetModelConfig(c *gin.Context) {
@@ -103,6 +163,7 @@ func HandleGetModelConfig(c *gin.Context) {
 	}
 	entryByID := make(map[string]ModelConfigEntry, len(entries))
 	safe := make([]ModelConfigEntry, 0, len(entries))
+	customModels := make([]customModelView, 0)
 	for _, e := range entries {
 		entryByID[e.ID] = e
 		if isFreeCatalogID(e.ID) {
@@ -111,6 +172,29 @@ func HandleGetModelConfig(c *gin.Context) {
 		e.APIKeySet = e.APIKey != ""
 		e.APIKey = ""
 		safe = append(safe, e)
+		vendor := strings.TrimSpace(e.Name)
+		if vendor == "" {
+			vendor = "自定义 API"
+		}
+		for _, model := range configuredProviderModels(e) {
+			if strings.TrimSpace(model.ID) == "" {
+				continue
+			}
+			name := strings.TrimSpace(model.Name)
+			if name == "" {
+				name = model.ID
+			}
+			customModels = append(customModels, customModelView{
+				ID:            customModelSelectionID(e.ID, model.ID),
+				Vendor:        vendor,
+				Name:          name,
+				APIKeySet:     e.APIKeySet,
+				Keyless:       e.Keyless,
+				Vision:        model.Vision || e.Vision,
+				ContextWindow: model.ContextWindow,
+				Reasoning:     model.Reasoning || e.Reasoning,
+			})
+		}
 	}
 
 	freeModels := make([]freeModelView, 0, len(freeModelCatalog))
@@ -126,7 +210,11 @@ func HandleGetModelConfig(c *gin.Context) {
 		freeModels = append(freeModels, v)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"configs": safe, "free_models": freeModels})
+	c.JSON(http.StatusOK, gin.H{
+		"configs":       safe,
+		"free_models":   freeModels,
+		"custom_models": customModels,
+	})
 }
 
 // HandlePutModelConfig PUT /api/models/config?openid=...
@@ -164,6 +252,8 @@ func HandlePutModelConfig(c *gin.Context) {
 			// 前端没改 key（还是打码占位符，或者没填）——保留旧值，不能拿空值/占位符覆盖真实 key
 			if old, ok := existingByID[e.ID]; ok {
 				req.Configs[i].APIKey = old.APIKey
+			} else {
+				req.Configs[i].APIKey = ""
 			}
 		} else if len(e.APIKey) < 8 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "「" + e.Name + "」的 API Key 长度不合理"})

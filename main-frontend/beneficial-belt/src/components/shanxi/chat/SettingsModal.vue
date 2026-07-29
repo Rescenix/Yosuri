@@ -99,7 +99,7 @@
             <!-- ========== 提供方 ========== -->
             <div v-show="activeTab === 'providers'" class="settings-panel">
               <div class="settings-section-title">免费模型提供商</div>
-              <div class="settings-section-desc">点一个提供商，它的全部模型会直接进聊天下拉框（再点一次移除）。填了 Key 的提供商才会真正进调用链。</div>
+              <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；免 Key 提供方可直接使用。</div>
 
               <div v-if="loading" class="settings-loading">加载中...</div>
               <template v-else>
@@ -122,12 +122,12 @@
                     <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
                     <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
                   </div>
-                  <div class="vendor-model-hint">点击「选为可用」将加入：{{ grp.items.map(m => m.name).join('、') }}</div>
+                  <div class="vendor-model-hint">配置后自动加入：{{ grp.items.map(m => m.name).join('、') }}</div>
                 </div>
               </template>
 
-              <div class="settings-section-title" style="margin-top: 18px;">自定义 API 配置</div>
-              <div class="settings-section-desc">配置自己的模型接入方式；设为默认的配置会排在调用链最前面。</div>
+              <div class="settings-section-title" style="margin-top: 18px;">自定义 API 提供方</div>
+              <div class="settings-section-desc">一条配置对应一个提供方。保存时会读取它的 /models，并把该提供方的全部模型加入聊天下拉框。</div>
 
               <template v-if="!loading">
                 <div v-for="cfg in configs" :key="cfg.id" class="api-config-card">
@@ -135,23 +135,21 @@
                     <span class="api-config-name">{{ cfg.name || '未命名配置' }}</span>
                     <span v-if="cfg.is_default" class="api-config-default-badge">默认</span>
                     <div class="api-config-actions">
-                      <button
-                        class="api-config-action-btn"
-                        :class="{ on: isInChatList(cfg.id) }"
-                        @click="toggleConfigModel(cfg)"
-                      >{{ isInChatList(cfg.id) ? '已选' : '选为可用' }}</button>
+                      <button class="api-config-action-btn" :disabled="!!configBusy" @click="refreshConfigModels(cfg)">
+                        {{ configBusy === cfg.id ? '获取中...' : '刷新模型' }}
+                      </button>
                       <button v-if="!cfg.is_default" class="api-config-action-btn" @click="setDefault(cfg.id)">设为默认</button>
                       <button class="api-config-action-btn" @click="startEdit(cfg)">编辑</button>
                       <button class="api-config-action-btn danger" @click="removeConfig(cfg.id)">删除</button>
                     </div>
                   </div>
                   <div class="api-config-meta">
-                    {{ cfg.endpoint }} · {{ cfg.default_model || '未指定模型' }} · {{ cfg.api_key_set ? '已设置 Key' : '未设置 Key' }}
+                    {{ cfg.endpoint }} · {{ providerModelCount(cfg) }} 个模型 · {{ cfg.api_key_set ? '已设置 Key' : '免 Key / 未设置 Key' }}
                   </div>
                 </div>
 
                 <div v-if="!editingConfig" class="api-config-add-btn" @click="startAdd">
-                  <Icon icon="mdi:plus" width="15" /> 新增 API 配置
+                  <Icon icon="mdi:plus" width="15" /> 添加自定义提供方
                 </div>
 
                 <div v-else class="api-config-form">
@@ -160,7 +158,7 @@
                     <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" type="button" @click="applyPreset(p)">{{ p.name }}</button>
                   </div>
                   <label class="api-form-field">
-                    <span>API 名称</span>
+                    <span>提供方名称</span>
                     <input v-model="editingConfig.name" type="text" placeholder="比如 DeepSeek" autocomplete="off" />
                   </label>
                   <label class="api-form-field">
@@ -176,13 +174,12 @@
                       :placeholder="editingConfig.api_key_set ? '••••••••（留空则不修改）' : '输入 API Key'"
                     />
                   </label>
-                  <label class="api-form-field">
-                    <span>默认模型名</span>
-                    <input v-model="editingConfig.default_model" type="text" placeholder="比如 deepseek-chat" autocomplete="off" />
-                  </label>
+                  <div class="api-form-hint">无需逐个填写模型名；系统会从 Endpoint 的 /models 自动获取全部模型。</div>
                   <div class="api-form-actions">
                     <button class="api-form-btn cancel" type="button" @click="cancelEdit">取消</button>
-                    <button class="api-form-btn save" type="button" @click="saveConfig">保存</button>
+                    <button class="api-form-btn save" type="button" :disabled="!!configBusy" @click="saveConfig">
+                      {{ configBusy ? '正在获取模型...' : '保存并添加全部模型' }}
+                    </button>
                   </div>
                 </div>
               </template>
@@ -449,7 +446,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
 import {
@@ -589,12 +585,14 @@ const MASKED = '••••••••'
 
 const configs = ref([])
 const freeModels = ref([])
+const customModels = ref([])
 const loading = ref(true)
 const errorMsg = ref('')
 const editingConfig = ref(null)
 const editingVendor = ref(null)
 const vendorKeyDraft = ref('')
 const isNew = ref(false)
+const configBusy = ref('')
 
 const vendorGroups = computed(() => {
   const map = new Map()
@@ -617,6 +615,10 @@ function configUrl() {
   return `/api/models/config${props.openid ? '?openid=' + encodeURIComponent(props.openid) : ''}`
 }
 
+function discoverUrl() {
+  return `/api/models/discover${props.openid ? '?openid=' + encodeURIComponent(props.openid) : ''}`
+}
+
 async function loadConfigs() {
   loading.value = true
   errorMsg.value = ''
@@ -626,6 +628,7 @@ async function loadConfigs() {
     const data = await res.json()
     configs.value = data.configs || []
     freeModels.value = data.free_models || []
+    customModels.value = data.custom_models || []
   } catch (e) {
     errorMsg.value = '加载配置失败，请稍后再试'
   } finally {
@@ -643,6 +646,7 @@ async function persist(nextConfigs) {
     const data = await res.json().catch(() => ({}))
     throw new Error(data.error || '保存失败')
   }
+  window.dispatchEvent(new CustomEvent('model-config-changed'))
 }
 
 function startAdd() {
@@ -651,7 +655,7 @@ function startAdd() {
   editingConfig.value = {
     id: 'cfg_' + Date.now().toString(36),
     name: '', endpoint: '', api_key: '', api_key_set: false,
-    default_model: '', is_default: configs.value.length === 0
+    default_model: '', models: [], is_default: configs.value.length === 0
   }
 }
 function startEdit(cfg) {
@@ -708,32 +712,87 @@ function applyPreset(p) {
   if (!editingConfig.value.name) editingConfig.value.name = p.name
 }
 
+function providerModelCount(cfg) {
+  if (Array.isArray(cfg.models) && cfg.models.length) return cfg.models.length
+  return cfg.default_model ? 1 : 0
+}
+
+async function discoverProviderModels(cfg) {
+  const res = await fetch(discoverUrl(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      config_id: cfg.id,
+      endpoint: cfg.endpoint,
+      api_key: cfg.api_key || ''
+    })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || '获取模型列表失败')
+  return data.models || []
+}
+
 async function saveConfig() {
+  if (!editingConfig.value.name.trim()) {
+    errorMsg.value = '提供方名称不能为空'
+    return
+  }
   if (!editingConfig.value.endpoint.trim()) {
     errorMsg.value = 'Endpoint 不能为空'
     return
   }
   errorMsg.value = ''
-  const entry = {
-    id: editingConfig.value.id,
-    name: editingConfig.value.name,
-    endpoint: editingConfig.value.endpoint,
-    api_key: editingConfig.value.api_key || MASKED,
-    default_model: editingConfig.value.default_model,
-    is_default: editingConfig.value.is_default
-  }
-  let next = isNew.value
-    ? [...configs.value, entry]
-    : configs.value.map(c => (c.id === entry.id ? entry : c))
-  if (entry.is_default) {
-    next = next.map(c => ({ ...c, api_key: c.id === entry.id ? entry.api_key : MASKED, is_default: c.id === entry.id }))
-  }
+  configBusy.value = editingConfig.value.id
   try {
+    const models = await discoverProviderModels(editingConfig.value)
+    const previousDefault = editingConfig.value.default_model
+    const defaultModel = models.some(model => model.id === previousDefault)
+      ? previousDefault
+      : (models[0]?.id || '')
+    const entry = {
+      ...editingConfig.value,
+      name: editingConfig.value.name.trim(),
+      endpoint: editingConfig.value.endpoint.trim(),
+      api_key: editingConfig.value.api_key || MASKED,
+      keyless: !editingConfig.value.api_key && !editingConfig.value.api_key_set,
+      default_model: defaultModel,
+      models
+    }
+    let next = isNew.value
+      ? [...configs.value, entry]
+      : configs.value.map(c => (c.id === entry.id ? entry : c))
+    if (entry.is_default) {
+      next = next.map(c => ({ ...c, api_key: c.id === entry.id ? entry.api_key : MASKED, is_default: c.id === entry.id }))
+    }
     await persist(next)
     await loadConfigs()
     editingConfig.value = null
   } catch (e) {
     errorMsg.value = e.message
+  } finally {
+    configBusy.value = ''
+  }
+}
+
+async function refreshConfigModels(cfg) {
+  errorMsg.value = ''
+  configBusy.value = cfg.id
+  try {
+    const models = await discoverProviderModels(cfg)
+    const defaultModel = models.some(model => model.id === cfg.default_model)
+      ? cfg.default_model
+      : (models[0]?.id || '')
+    const next = configs.value.map(c => ({
+      ...c,
+      api_key: MASKED,
+      ...(c.id === cfg.id ? { models, default_model: defaultModel } : {})
+    }))
+    await persist(next)
+    await loadConfigs()
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    configBusy.value = ''
   }
 }
 
@@ -757,10 +816,15 @@ async function setDefault(id) {
   }
 }
 
-const chatList = chatModelList
-function loadChatList() {
-  syncChatModelList()
-}
+const chatList = computed(() => {
+  const builtIn = freeModels.value
+    .filter(model => model.local || model.keyless || model.api_key_set)
+    .map(model => ({ label: model.name || model.id, value: model.id }))
+  const custom = customModels.value
+    .filter(model => model.keyless || model.api_key_set)
+    .map(model => ({ label: `${model.vendor} · ${model.name}`, value: model.id }))
+  return [...builtIn, ...custom]
+})
 
 // ============ 模型：统一 / 分开配置（文字 vs 识图） ============
 // 纯 localStorage 读写，跟 agentMode（Yolo/Ask）同一套轻量约定——不用共享 store，
@@ -801,16 +865,12 @@ function setImageProvider(provider) {
 const visionByID = computed(() => {
   const map = {}
   for (const fm of freeModels.value) map[fm.id] = !!fm.vision
-  for (const c of configs.value) map[c.id] = !!c.vision
+  for (const model of customModels.value) map[model.id] = !!model.vision
   return map
 })
-// 识图模型候选：用户手动在提供方里选的识图模型 + 本地模型（自动加入，无需勾选）。
+// 识图模型候选：当前全部可用模型里声明支持识图的条目。
 const visionCapableChatList = computed(() => {
-  const manual = chatList.value.filter(m => visionByID.value[m.value])
-  const locals = freeModels.value
-    .filter(fm => fm.local && fm.vision)
-    .map(fm => ({ label: fm.name, value: fm.id }))
-  return [...manual, ...locals]
+  return chatList.value.filter(m => visionByID.value[m.value])
 })
 
 // 当用户没有显式选过识图模型，且当前有可用识图模型时，自动默认选中第一个。
@@ -827,23 +887,6 @@ watch(visionCapableChatList, (list) => {
     localStorage.setItem(VISION_MODEL_KEY, pick.value)
   }
 }, { immediate: true })
-
-function isInChatList(value) {
-  return chatList.value.some(m => m.value === value)
-}
-// 自定义 API 配置（DS 等）的「选为可用」：把它作为一个模型条目写进共享的 chatModelList，
-// 聊天下拉 modelOptions 只读 chatModelList，没进这里就永远不显示。value 用配置 id（后端
-// resolveExact 按 id 精确路由到用户自定义配置），label 用配置名。
-function toggleConfigModel(cfg) {
-  const value = cfg.id
-  let next
-  if (isInChatList(value)) {
-    next = chatList.value.filter(m => m.value !== value)
-  } else {
-    next = [...chatList.value, { label: cfg.name || '未命名配置', value }]
-  }
-  setChatModelList(next)
-}
 
 // ============ MCP ============
 const mcpServers = ref([])
@@ -984,7 +1027,6 @@ function handleEsc(e) {
 onMounted(() => {
   initDynamicWallpaper()
   loadConfigs()
-  loadChatList()
   loadProfile()
   document.addEventListener('keydown', handleEsc)
   nextTick(startPreviewLoop)
@@ -1157,6 +1199,7 @@ onUnmounted(() => {
 .api-form-field span { font-size: 11.5px; color: var(--app-text-soft); font-weight: 600; }
 .api-form-field input { font-size: 13px; padding: 7px 10px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); outline: none; font-family: inherit; }
 .api-form-field input:focus { border-color: #c96442; }
+.api-form-hint { font-size: 11.5px; line-height: 1.6; color: var(--app-text-soft); }
 
 .api-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .api-form-btn { font-size: 12.5px; font-weight: 600; padding: 6px 14px; border-radius: 8px; cursor: pointer; border: none; }
