@@ -1,13 +1,13 @@
 package handler
 
-// 工具按需加载 —— 默认只把 MCP 工具的「名字 + 一句话」放进上下文，
+// 工具按需加载 —— 默认只把 Go 内置工具和外部 MCP 工具的「名字 + 一句话」放进上下文，
 // 模型要用哪个再调 load_tools 取回完整 schema，之后该工具才进 tools 数组。
 //
 // 为什么：实测（context_budget_test.go）全量 schema 占 6563 tok，是整个静态前缀的 91%，
 // 而且每轮都要重发一遍——20 轮就是 13 万 token 只为反复描述工具长什么样。
 // 一个任务真正会用到的通常是 2-4 个工具，剩下 25 个的 schema 是纯粹的浪费。
 //
-// 为什么不用「万能代理工具」（call_mcp_tool(name, args)）：那样模型是照着一句话描述
+// 为什么不用「万能代理工具」（call_tool(name, args)）：那样模型是照着一句话描述
 // 猜参数，参数名写错了才在执行时报错。这里保持原生 function calling——工具一旦被
 // load_tools 激活就带着完整 schema 进 tools 数组，模型仍然是照着 schema 填参数。
 
@@ -27,7 +27,7 @@ var loadToolsToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name: loadToolsToolName,
-		Description: "按名字取回 MCP 工具的完整参数说明并激活它们。系统提示词里的「MCP 工具索引」" +
+		Description: "按名字取回 Go 内置或外部 MCP 工具的完整参数说明并激活它们。系统提示词里的「按需工具索引」" +
 			"只给了名字和用途，要真正调用某个工具，先用这个把它加载进来（可一次传多个）。" +
 			"加载后该工具就出现在你的可用工具列表里，直接照常调用即可。",
 		Parameters: core.ToolParameters{
@@ -35,7 +35,7 @@ var loadToolsToolDef = core.ToolDefinition{
 			Properties: map[string]core.ToolProperty{
 				"names": {
 					Type:        "array",
-					Description: "要加载的工具名数组，必须与索引里的名字完全一致，例如 [\"mcp__fs__edit_file\"]",
+					Description: "要加载的工具名数组，必须与索引里的名字完全一致，例如 [\"read_file\",\"edit_file\"]",
 					Items:       &core.ToolProperty{Type: "string"},
 				},
 			},
@@ -45,8 +45,8 @@ var loadToolsToolDef = core.ToolDefinition{
 }
 
 // nativeWorkflowToolDefs 常驻工具：编排类的 dispatch_agent + load_tools/read_skill 这类
-// 按需取全文的钥匙 + update_todo。文件读写/命令/检索/记忆全部走 MCP（按需 load_tools 加载），
-// 内置工具已整体退役——主 Agent 靠 load_tools 拉 MCP 工具，子代理直接用 MCP 只读子集（见 subagent.go）。
+// 按需取全文的钥匙 + update_todo。文件读写/命令/检索/记忆由 Go 内置工具提供，
+// 同样通过 load_tools 按需激活；真正的外部能力仍可由 MCP 扩展。
 // 这几个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
 func nativeWorkflowToolDefs() []core.ToolDefinition {
 	return []core.ToolDefinition{
@@ -80,10 +80,9 @@ func firstSentence(s string) string {
 	return truncateChars(s, 110)
 }
 
-// mcpToolIndexPrompt 生成注入系统提示词的 MCP 工具索引（名字 + 一句话）。
-// 这段本身是稳定内容（只在 MCP 增删时变），适合待在前缀里。
+// mcpToolIndexPrompt 保留旧函数名以减少调用面变更；它现在生成全部按需工具索引。
 func mcpToolIndexPrompt() string {
-	defs := loadMCPToolDefs()
+	defs := allOnDemandToolDefs()
 	if len(defs) == 0 {
 		return ""
 	}
@@ -92,7 +91,7 @@ func mcpToolIndexPrompt() string {
 		lines = append(lines, fmt.Sprintf("- %s：%s", t.Function.Name, firstSentence(t.Function.Description)))
 	}
 	sort.Strings(lines)
-	return "\n━━━ MCP 工具索引（按需加载） ━━━\n" +
+	return "\n━━━ 按需工具索引（Go 内置 + 外部 MCP） ━━━\n" +
 		"下列工具的完整参数说明没有直接给你——需要用哪个，先调 load_tools 加载，加载后再正常调用。\n" +
 		"一次可以加载多个；已加载的工具在后续轮次一直可用，不用重复加载。\n" +
 		"截图/页面自检/浏览器快照成功时会直接作为图片插入当前聊天消息流；不要声称无法贴图、不要要求用户另存文件。\n" +
@@ -100,7 +99,7 @@ func mcpToolIndexPrompt() string {
 }
 
 // nativeToolIndexPrompt 生成常驻原生工具（不按需加载、一直进 tools 数组）的索引。
-// 为什么需要它：mcpToolIndexPrompt 只列 MCP 工具，常驻原生工具（dispatch_agent /
+// 为什么需要它：mcpToolIndexPrompt 只列按需工具，常驻原生工具（dispatch_agent /
 // load_tools 等）的 schema 走 tools 参数但**不进系统提示词索引**，模型在索引里
 // 看不到它们，就会以为"我没有这个工具"而绕路。这里把它们也列成「名字 + 一句话」，
 // 让模型知道存在、知道何时直接调。
@@ -119,11 +118,11 @@ func nativeToolIndexPrompt() string {
 }
 
 // buildCodeWorkflowTools 组装本轮要发给模型的 tools 数组：
-// 常驻工具 + 已被 load_tools 激活的 MCP 工具。activated 为 nil 时就只有常驻工具。
+// 常驻工具 + 已被 load_tools 激活的 Go 内置/MCP 工具。activated 为 nil 时就只有常驻工具。
 func buildCodeWorkflowTools(activated map[string]bool) []map[string]any {
 	defs := nativeWorkflowToolDefs()
 	if len(activated) > 0 {
-		for _, t := range loadMCPToolDefs() {
+		for _, t := range allOnDemandToolDefs() {
 			if activated[t.Function.Name] {
 				defs = append(defs, t)
 			}
@@ -156,18 +155,18 @@ func handleLoadTools(argsJSON string, activated map[string]bool) (string, bool) 
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "参数解析失败，names 应为字符串数组，例如 {\"names\":[\"mcp__grep__read_range\"]}", false
+		return "参数解析失败，names 应为字符串数组，例如 {\"names\":[\"read_file\",\"grep\"]}", false
 	}
 	names := args.Names
 	if len(names) == 0 && args.Name != "" {
 		names = []string{args.Name}
 	}
 	if len(names) == 0 {
-		return "names 为空，请指定要加载的工具名（见系统提示词里的 MCP 工具索引）", false
+		return "names 为空，请指定要加载的工具名（见系统提示词里的按需工具索引）", false
 	}
 
 	byName := map[string]core.ToolDefinition{}
-	for _, t := range loadMCPToolDefs() {
+	for _, t := range allOnDemandToolDefs() {
 		byName[t.Function.Name] = t
 	}
 
@@ -220,7 +219,7 @@ func handleLoadTools(argsJSON string, activated map[string]bool) (string, bool) 
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
 		}
-		fmt.Fprintf(&b, "以下名字在 MCP 工具索引里不存在：%s\n请对照系统提示词里的索引核对名字。",
+		fmt.Fprintf(&b, "以下名字在按需工具索引里不存在：%s\n请对照系统提示词里的索引核对名字。",
 			strings.Join(stillMissing, "、"))
 	}
 	return b.String(), changed

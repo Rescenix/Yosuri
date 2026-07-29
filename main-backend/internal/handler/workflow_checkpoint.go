@@ -43,7 +43,7 @@ type workflowCheckpoint struct {
 	Msgs         []map[string]any `json:"msgs"`
 	Transcript   []string         `json:"transcript"`
 	CallSigCount map[string]int   `json:"call_sig_count"`
-	// ActivatedTools 已被 load_tools 激活的 MCP 工具（见 tool_ondemand.go）。
+	// ActivatedTools 已被 load_tools 激活的 Go 内置/MCP 工具（见 tool_ondemand.go）。
 	// 不存的话续跑后 tools 数组缩回常驻集，模型上一轮刚加载的工具突然消失，
 	// 只能再 load 一遍——白白浪费一轮。
 	ActivatedTools map[string]bool `json:"activated_tools"`

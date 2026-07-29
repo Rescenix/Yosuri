@@ -752,6 +752,8 @@ type codeExecResult struct {
 // frontendEditTools 会真正改动文件内容的 MCP 文件工具。读类工具不算——
 // 光看一眼文件不该弹预览。
 var frontendEditTools = map[string]bool{
+	"write_file":           true,
+	"edit_file":            true,
 	"mcp__fs__write_file":  true,
 	"mcp__fs__edit_file":   true,
 	"mcp__fs__create_file": true,
@@ -886,6 +888,34 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			results[i] = codeExecResult{output: "用户未批准执行 " + name + "，已跳过", failed: true}
 			continue
 		}
+		if isNativeOnDemandTool(name) {
+			var args map[string]any
+			if err := json.Unmarshal([]byte(defaultJSONObject(tc.Function.Arguments)), &args); err != nil {
+				results[i] = codeExecResult{output: "内置工具参数失败: " + err.Error(), failed: true}
+				continue
+			}
+			var preEditLine int
+			if name == "edit_file" {
+				preEditLine = r.calcEditStartLine(tc.Function.Arguments)
+			}
+			if name == "write_file" || name == "edit_file" {
+				OnBeforeWrite(name, args)
+			}
+			nativeResult, err := callNativeTool(c.Request.Context(), name, tc.Function.Arguments)
+			if err != nil {
+				results[i] = codeExecResult{output: "内置工具失败: " + err.Error(), failed: true}
+			} else {
+				if name == "write_file" || name == "edit_file" {
+					OnAfterWrite(name, args)
+				}
+				out := nativeResult.Text
+				if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
+					out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
+				}
+				results[i] = codeExecResult{output: out, images: nativeResult.Images}
+			}
+			continue
+		}
 		if strings.HasPrefix(name, "mcp__") {
 			// MCP edit_file：执行前读文件记下行号，执行后补到结果里
 			var preEditLine int
@@ -904,10 +934,9 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			}
 			continue
 		}
-		// 到这里说明是个既非 MCP、也非编排类（dispatch_agent/load_tools 已在上层处理）
-		// 的工具名——内置工具已整体退役，模型多半是幻觉出了个不存在的名字。
+		// 到这里说明是个既非 Go 内置/MCP、也非编排类的工具名。
 		results[i] = codeExecResult{
-			output: fmt.Sprintf("未知工具 %s：文件/命令/检索类工具都在 MCP 里，先用 load_tools 加载再调用。", name),
+			output: fmt.Sprintf("未知工具 %s：请对照按需工具索引，先用 load_tools 加载再调用。", name),
 			failed: true,
 		}
 	}

@@ -6,7 +6,7 @@ package handler
 // 存入本地技能库目录；下次工作流启动时，技能库的名称+描述会注入系统提示词，
 // 让 Agent 知道"这类任务以前是怎么做成的"。
 //
-// 目录：AURORA_SKILLS_DIR 环境变量，默认 ./skills（相对 server 工作目录）。
+// 可复用出厂技能用 go:embed 随二进制发布；用户学习到的技能写入用户数据目录。
 
 import (
 	"context"
@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"backend/internal/ai/core"
+	"backend/internal/builtinskills"
 )
 
 // Skill 统一承载两类技能：
-//   - 自研沉淀（Source=learned）：工作流成功后抽象出的 JSON，正文在 Steps。
+//   - 出厂内置（Source=builtin）：编译进 Go 二进制的 JSON，正文在 Steps。
+//   - 自研沉淀（Source=learned）：工作流成功后写入用户数据目录的 JSON。
 //   - 外部导入（Source=external）：Anthropic/Claude 风格的 SKILL.md，正文在 Body。
 //
 // Source 在加载时按来源目录打标，不落盘（磁盘文件保持干净）。
@@ -33,7 +35,7 @@ type Skill struct {
 	Description string   `json:"description"`
 	Steps       []string `json:"steps,omitempty"`
 	Body        string   `json:"body,omitempty"`   // 外部 SKILL.md 正文（markdown）
-	Source      string   `json:"source,omitempty"` // learned | external
+	Source      string   `json:"source,omitempty"` // builtin | learned | external
 	// Status 只作用于自研技能：active 可按需加载，archived 保留在磁盘供恢复，
 	// 不再使用候选/审阅状态，避免把治理成本推给用户。
 	Status       string    `json:"status,omitempty"`
@@ -55,7 +57,7 @@ func skillsDir() string {
 	if dir := os.Getenv("AURORA_SKILLS_DIR"); dir != "" {
 		return dir
 	}
-	return "./skills"
+	return filepath.Join(resceneUserDataDir(), "skills")
 }
 
 // externalSkillsDir 是外部技能的挂载点：往这里丢 Anthropic/Claude 风格的 SKILL.md
@@ -64,14 +66,62 @@ func externalSkillsDir() string {
 	if dir := os.Getenv("AURORA_EXT_SKILLS_DIR"); dir != "" {
 		return dir
 	}
-	return "./skills-ext"
+	return filepath.Join(resceneUserDataDir(), "skills-ext")
 }
 
 // loadSkills 返回全部可用技能：自研沉淀 + 外部导入。
 // skillLibraryPrompt（索引）和 handleReadSkill（取全文）共用这一份数据源，
 // 就像 mcpToolIndexPrompt 和 handleLoadTools 共用 loadMCPToolDefs 一样。
 func loadSkills() []Skill {
-	return append(loadLearnedSkills(), loadExternalSkills()...)
+	skills := loadBuiltinSkills()
+	skills = append(skills, loadLearnedSkills()...)
+	return append(skills, loadExternalSkills()...)
+}
+
+func resceneUserDataDir() string {
+	if dir := os.Getenv("RESCENE_DATA_DIR"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", "rescene_data")
+	}
+	return filepath.Join(home, "rescene_data")
+}
+
+// loadBuiltinSkills 从编译进二进制的只读文件系统加载出厂技能。
+func loadBuiltinSkills() []Skill {
+	entries, err := builtinskills.Files.ReadDir(".")
+	if err != nil {
+		return nil
+	}
+	var out []Skill
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := builtinskills.Files.ReadFile(entry.Name())
+		if err != nil {
+			continue
+		}
+		var skill Skill
+		if json.Unmarshal(data, &skill) != nil || skill.Name == "" {
+			continue
+		}
+		skill.Source = "builtin"
+		skill.Status = skillStatusActive
+		out = append(out, skill)
+	}
+	return out
+}
+
+func isBuiltinSkillName(name string) bool {
+	for _, skill := range loadBuiltinSkills() {
+		if skill.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // loadLearnedSkills 扫描自研技能库目录，只返回 active 技能；闲置技能可恢复归档。
@@ -179,6 +229,9 @@ func learnedSkillPath(name string) (string, error) {
 // setLearnedSkillStatus 是设置页的显式治理入口。external SKILL.md 不经过这里，
 // 因而绝不会被 GC 或 UI 的状态切换误伤。
 func setLearnedSkillStatus(name, status string) (Skill, error) {
+	if isBuiltinSkillName(name) {
+		return Skill{}, fmt.Errorf("内置技能随客户端发布，不能归档或修改")
+	}
 	if status != skillStatusActive && status != skillStatusArchived {
 		return Skill{}, fmt.Errorf("不支持的技能状态")
 	}
@@ -200,6 +253,9 @@ func setLearnedSkillStatus(name, status string) (Skill, error) {
 }
 
 func deleteLearnedSkill(name string) error {
+	if isBuiltinSkillName(name) {
+		return fmt.Errorf("内置技能随客户端发布，不能删除")
+	}
 	path, err := learnedSkillPath(name)
 	if err != nil {
 		return err
@@ -285,7 +341,9 @@ func skillLibraryPrompt() string {
 	lines := make([]string, 0, len(skills))
 	for _, s := range skills {
 		tag := ""
-		if s.Source == "external" {
+		if s.Source == "builtin" {
+			tag = "[内置] "
+		} else if s.Source == "external" {
 			tag = "[外部] " // 官方/外部导入的技能，正文是说明文档而非步骤
 		}
 		lines = append(lines, fmt.Sprintf("- %s%s：%s", tag, s.Name, s.Description))
@@ -326,6 +384,9 @@ func handleSkillManage(argsJSON string) string {
 	skill.Description, skill.Trigger, skill.Verification = strings.TrimSpace(skill.Description), strings.TrimSpace(skill.Trigger), strings.TrimSpace(skill.Verification)
 	if skill.Name == "" || skill.Description == "" || skill.Trigger == "" || skill.Verification == "" || len(skill.Steps) < 3 || len(skill.Steps) > 6 {
 		return "技能未保存：请给出 kebab-case 名称、描述、触发条件、验证方式和 3–6 个步骤"
+	}
+	if isBuiltinSkillName(skill.Name) {
+		return "技能未保存：该名称属于随客户端发布的内置技能"
 	}
 	if err := os.MkdirAll(skillsDir(), 0755); err != nil {
 		return "技能未保存：" + err.Error()
@@ -502,6 +563,9 @@ func generateSkillAsync(task string, transcript []string) {
 	skill.Name = strings.Trim(skill.Name, "-")
 	if skill.Name == "" || len(skill.Steps) < 3 || len(skill.Steps) > 6 || skill.Trigger == "" || skill.Verification == "" {
 		return // 模型判定无复用价值
+	}
+	if isBuiltinSkillName(skill.Name) {
+		return
 	}
 
 	if err := os.MkdirAll(skillsDir(), 0755); err != nil {

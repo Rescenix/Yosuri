@@ -27,6 +27,13 @@ import (
 // 危险工具分级：这些工具在 Ask 模式必须等人批准；其余（read_file /
 // search_memory / dispatch_agent / 只读 MCP）任何模式都直过，不烦人。
 var dangerousToolSet = map[string]bool{
+	"write_file":       true,
+	"edit_file":        true,
+	"create_directory": true,
+	"move_file":        true,
+	"delete_file":      true,
+	"delete_directory": true,
+	"run_command":      true,
 	// MCP filesystem 写删类：mcp__fs__write / edit / delete_file / move_file / create_directory
 	"mcp__fs__write_file":       true,
 	"mcp__fs__edit_file":        true,
@@ -71,7 +78,7 @@ func isReadOnlyToolCall(name, argsJSON string) bool {
 	if strings.HasPrefix(name, "mcp__fs__") {
 		return !isDangerousTool(name)
 	}
-	if name != "mcp__shell__run" {
+	if name != "mcp__shell__run" && name != "run_command" {
 		return !isDangerousTool(name) && name != "dispatch_agent"
 	}
 	var args struct {
@@ -79,6 +86,14 @@ func isReadOnlyToolCall(name, argsJSON string) bool {
 	}
 	if json.Unmarshal([]byte(argsJSON), &args) != nil {
 		return false
+	}
+	// 不允许把“看起来以 git status 开头”的复合 shell 命令伪装成只读操作。
+	// 重定向、管道、后台执行、命令替换都可能在同一条命令里产生任意副作用。
+	lowerCommand := strings.ToLower(args.Command)
+	for _, token := range []string{"|", "&", ">", "<", "\n", "\r", "`", "$(", "@("} {
+		if strings.Contains(lowerCommand, token) {
+			return false
+		}
 	}
 	for _, part := range strings.Split(args.Command, ";") {
 		part = strings.TrimSpace(strings.ToLower(part))
@@ -105,6 +120,9 @@ func isReadOnlyToolCall(name, argsJSON string) bool {
 // 撤回，即使有 AgentFS 影子仓能还原，也比普通写盘风险高一个量级，所以 YOLO 模式
 // 下也必须走审批拦截，不让 agent「畅通无阻」地删/移。
 var irreversibleToolSet = map[string]bool{
+	"delete_file":               true,
+	"delete_directory":          true,
+	"move_file":                 true,
 	"mcp__fs__delete_file":      true,
 	"mcp__fs__delete_directory": true,
 	"mcp__fs__move_file":        true,

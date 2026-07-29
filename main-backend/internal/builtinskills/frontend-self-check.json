@@ -1,0 +1,14 @@
+{
+  "name": "frontend-self-check",
+  "description": "修改前端后在内置真实 Chromium 预览中验证视觉、交互和运行时错误",
+  "steps": [
+    "先用 open_preview 打开目标页面；打不开时再用 run_command 检查 dev server 状态，不要在端口已占用时重复启动服务",
+    "用 capture_preview 获取当前页面截图和 DOM 文本，核对本次修改的布局、文案与初始状态",
+    "用 inject_preview_js 检查关键 DOM、资源加载和运行时状态；精确数量优先用 document.querySelectorAll(...).length 断言",
+    "若需求包含筛选、切换、展开或表单，用 inject_preview_js 触发交互并读取变化后的 DOM 状态",
+    "根据错误、失败资源和断言结果修改代码，再次预览验证，直到视觉与交互均符合需求"
+  ],
+  "status": "active",
+  "trigger": "修改了 Vue、React、HTML、CSS 或浏览器交互代码后",
+  "verification": "前端构建通过，真实预览无阻断错误，关键视觉和交互断言全部满足"
+}

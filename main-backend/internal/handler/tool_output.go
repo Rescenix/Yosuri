@@ -105,7 +105,7 @@ func compactToolOutput(workflowID, callID, toolName, output string) (string, *ar
 			rel = path
 		}
 		rel = filepath.ToSlash(rel)
-		hint = fmt.Sprintf("……[中间省略约 %d 字符。完整输出已存到 %s，需要中间部分就用 mcp__grep__read_range 按行读它（别整篇读回来）]……",
+		hint = fmt.Sprintf("……[中间省略约 %d 字符。完整输出已存到 %s，需要中间部分就用 read_file 按行读它（别整篇读回来）]……",
 			omitted, rel)
 		record = &archivedOutput{
 			CallID: callID, Tool: toolName, OmittedChars: omitted,

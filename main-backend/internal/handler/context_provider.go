@@ -41,7 +41,7 @@ type contextSection struct {
 // 全程在同一个 goroutine 里用（子代理有自己的实例）。
 type contextProvider struct {
 	sections []contextSection
-	// activated 已被 load_tools 激活的 MCP 工具，决定 Tools() 返回什么
+	// activated 已被 load_tools 激活的 Go 内置/MCP 工具，决定 Tools() 返回什么
 	activated map[string]bool
 	// onInvoked 每轮收尾时的落状态回调（当前用于落检查点）。
 	// 不由 provider 自己存盘：轮次内的 msgs/token 统计属于循环，provider 不该假装拥有它们。
@@ -83,7 +83,7 @@ func newWorkflowContextProvider() *contextProvider {
 			// 归到 system 桶，几十个 token，但直接决定它会不会回头重做旧任务。
 			{key: "system", content: historyContractPrompt, stable: true},
 			{key: "subagent", content: subAgentUsagePrompt, stable: true},
-			// 工具索引只在 MCP server 增删时变（很少），算稳定段；
+			// 工具索引只在内置工具或 MCP server 增删时变（很少），算稳定段；
 			// 完整 schema 靠 load_tools 按需取，见 tool_ondemand.go。
 			// key 用 "tools" 是有意的：前端 contextBreakdown.js 只认
 			// system/subagent/skill/memory/tools 五个桶，索引归到工具桶里，
@@ -93,7 +93,7 @@ func newWorkflowContextProvider() *contextProvider {
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
 			{key: "skill", content: skillLibraryPrompt()}, // 每次任务成功后可能新增技能
 			{key: "memory", content: memorySection},       // 每写一次记忆就变
-		{key: "memory", content: workdirSection},      // 项目级 workdir.md，会话开始即注入，跨对话不失业
+			{key: "memory", content: workdirSection},      // 项目级 workdir.md，会话开始即注入，跨对话不失业
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},
@@ -139,7 +139,7 @@ func (p *contextProvider) StaticSum() int {
 	return sum
 }
 
-// Tools 本轮要发的 tools 数组：常驻工具 + 已激活的 MCP 工具。
+// Tools 本轮要发的 tools 数组：常驻工具 + 已激活的 Go 内置/MCP 工具。
 func (p *contextProvider) Tools() []map[string]any {
 	return buildCodeWorkflowTools(p.activated)
 }

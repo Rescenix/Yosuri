@@ -1,0 +1,14 @@
+{
+  "name": "code-review-keys-and-binaries",
+  "description": "交付前审查当前 Git 变更，重点发现未跟踪文件中的密钥与意外二进制产物",
+  "steps": [
+    "用 run_command 执行 git status --porcelain，收集所有变更状态",
+    "提取 ?? 开头的未跟踪文件作为重点审查列表",
+    "用 grep 检查 AKIA 密钥、私钥、密码、api_key、token 等敏感信息模式",
+    "检查未跟踪文件类型与体积，区分必要图片资源和意外的 exe、dll、bin、构建产物",
+    "输出发现、风险等级和需要处理的具体路径；没有问题时明确说明检查范围"
+  ],
+  "status": "active",
+  "trigger": "实现完成准备提交或交付前，需要确认新增文件没有泄密和意外产物",
+  "verification": "输出完整的未跟踪文件审查结果，并对每个风险给出具体路径和证据"
+}

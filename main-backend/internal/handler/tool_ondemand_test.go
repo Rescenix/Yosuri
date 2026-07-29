@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 常驻工具集必须包含 load_tools 本身——否则模型没有任何办法把 MCP 工具拿回来，
+// 常驻工具集必须包含 load_tools 本身——否则模型没有任何办法把按需工具拿回来，
 // 整个按需加载机制会变成"永远加载不了"。
 func TestNativeToolsAlwaysIncludeLoadTools(t *testing.T) {
 	tools := buildCodeWorkflowTools(nil)
@@ -49,11 +49,7 @@ func TestHandleLoadToolsBadArgs(t *testing.T) {
 // 激活后该工具必须真的进 tools 数组——只回 schema 文本而不进数组的话，
 // 模型看得见说明书却调不动，会卡在反复 load_tools。
 func TestActivatedToolEntersToolsArray(t *testing.T) {
-	defs := loadMCPToolDefs()
-	if len(defs) == 0 {
-		t.Skip("本次运行没有接入 MCP server（需 MCP_CONFIG），跳过")
-	}
-	name := defs[0].Function.Name
+	name := "read_file"
 
 	base := len(buildCodeWorkflowTools(nil))
 	activated := map[string]bool{}
@@ -78,10 +74,7 @@ func TestActivatedToolEntersToolsArray(t *testing.T) {
 
 // 索引行必须精简：一个工具占一行、一句话。膨胀了就退化成"换个地方塞全量 schema"。
 func TestToolIndexIsCompact(t *testing.T) {
-	defs := loadMCPToolDefs()
-	if len(defs) == 0 {
-		t.Skip("本次运行没有接入 MCP server（需 MCP_CONFIG），跳过")
-	}
+	defs := allOnDemandToolDefs()
 	index := mcpToolIndexPrompt()
 	fullJSON, _ := json.Marshal(buildCodeWorkflowTools(func() map[string]bool {
 		all := map[string]bool{}

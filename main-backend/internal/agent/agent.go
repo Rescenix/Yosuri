@@ -16,16 +16,19 @@ type ModelConfig struct {
 }
 
 // SoulTemplateCodeProtocol 注入主 Agent 系统提示词的工作方式指南。
-// 工具名必须与四态机实际暴露的一致：文件读写走 MCP（mcp__fs__* / mcp__grep__*），
+// 工具名必须与四态机实际暴露的一致：本机基础能力走 Go 内置按需工具，
 // 这些工具默认不在工具列表里，要先 load_tools 按名加载再调用（见 tool_ondemand.go）。
 // 早期版本这里写的是已被过滤掉的内置 read_file/edit_file，等于叫模型用它拿不到的工具。
 const SoulTemplateCodeProtocol = `
 # 策略指南（仅作参考，不影响输出格式）
 - Token 是成本，尽量用最少 token 完成任务。
-- 文件/命令类工具走 MCP，默认不在工具列表里：先用 load_tools 按名字加载，再正常调用。
+- 文件/命令/检索/记忆工具默认不在工具列表里：先用 load_tools 按名字加载，再正常调用。
+- 基础工具优先使用 Go 内置的 read_file、grep、glob、write_file、edit_file、run_command；
+  mcp__ 前缀只代表用户额外接入的外部 MCP 扩展。
+- read_file 用 offset/limit 分段读取；edit_file 用 old_string/new_string 做唯一替换。
   但**只有 mcp__ 开头的工具需要加载**——你工具列表里已经直接可见的那些（dispatch_agent、
   load_tools、update_todo、read_skill、harness_status）是常驻的，直接调，别再去 load 它们。
-- **必须按行读取文件**：读文件时必须使用 mcp__grep__read_range 指定 start/end 行号区间（offset=start, limit=end-start+1），禁止用 mcp__fs__read_text_file 不加 head/tail 参数读全文。start/end 从 1 开始编号，一次最多读 400 行。
+- **必须按行读取文件**：使用 read_file 的 offset/limit 分段读取，offset 从 1 开始，一次最多 400 行；禁止无目的地把大文件全文塞进上下文。
 - 改代码用 mcp__fs__edit_file：先 read_range 拿到精确内容，oldText 从中原样照抄（含缩进/空白/换行），不要凭记忆构造——差一个空白就匹配失败要重试。oldText 还要在文件里唯一。
 - 先用 mcp__grep__grep 搜索定位再动手，避免重复劳动。
 - 复杂多步任务:开工前用 update_todo 列出计划清单,每完成一步再调一次更新状态(便签会实时勾选)。简单一两步的任务别调,免得啰嗦。

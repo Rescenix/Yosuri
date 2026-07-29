@@ -49,7 +49,21 @@ var dispatchAgentToolDef = core.ToolDefinition{
 	},
 }
 
-// 子代理可用的 MCP server 白名单：整个 server 放行（都是只读/无副作用）。
+// 子代理可用的 Go 内置只读工具。基础调研不再要求 Python/npm 子进程。
+var subAgentNativeTools = map[string]bool{
+	"read_file":      true,
+	"grep":           true,
+	"glob":           true,
+	"list_directory": true,
+	"directory_tree": true,
+	"get_file_info":  true,
+	"web_fetch":      true,
+	"view_image":     true,
+	"memory_search":  true,
+	"workdir_read":   true,
+}
+
+// 子代理可用的 MCP server 白名单：给用户主动配置的外部扩展保留兼容。
 // fs 不在这里——它有写删类工具，单独在 isSubagentMCPToolAllowed 里按只读过滤。
 var subAgentMCPServers = map[string]bool{
 	"grep":       true, // grep 全文检索 + read_range 按行读
@@ -78,11 +92,8 @@ func isSubagentMCPToolAllowed(name string) bool {
 
 func subAgentToolsWire() []map[string]any {
 	var out []map[string]any
-	// 子代理工具全部来自 MCP（fs 只读 + grep + web_fetch + view_image）。
-	// MCP 工具懒加载，第一次调用时才拉起各 server 子进程；主 Agent 通常已初始化过，
-	// 这里只是确保子代理独立运行时也不会拿到空表。
-	for _, t := range loadMCPToolDefs() {
-		if !isSubagentMCPToolAllowed(t.Function.Name) {
+	for _, t := range allOnDemandToolDefs() {
+		if !subAgentNativeTools[t.Function.Name] && !isSubagentMCPToolAllowed(t.Function.Name) {
 			continue
 		}
 		out = append(out, map[string]any{
@@ -123,8 +134,8 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 	msgs := []map[string]any{
 		{"role": "system", "content": fmt.Sprintf(`你是雨燕子代理，负责独立完成一个只读调研子任务。
 用最少的工具调用拿到答案，然后输出简明结论（要点式，不要铺陈）——你的输出会直接回给主 Agent 当调研结果用，token 是成本。
-你只有只读工具：读文件用 mcp__grep__read_range 按行读，列目录用 mcp__fs__list_directory，
-全文检索用 mcp__grep__grep。不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
+你只有只读工具：读文件用 read_file，列目录用 list_directory，全文检索用 grep。
+不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
 		{"role": "user", "content": userMsg},
 	}
 	tools := subAgentToolsWire()
@@ -164,7 +175,13 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 
 		for _, tc := range calls {
 			var out string
-			if isSubagentMCPToolAllowed(tc.Function.Name) {
+			if subAgentNativeTools[tc.Function.Name] {
+				if res, err := callNativeTool(ctx, tc.Function.Name, tc.Function.Arguments); err != nil {
+					out = "工具执行失败: " + err.Error()
+				} else {
+					out = res.Text
+				}
+			} else if isSubagentMCPToolAllowed(tc.Function.Name) {
 				if res, err := callMCPTool(tc.Function.Name, tc.Function.Arguments); err != nil {
 					out = "工具执行失败: " + err.Error()
 				} else {

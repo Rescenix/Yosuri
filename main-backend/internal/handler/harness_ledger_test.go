@@ -47,7 +47,7 @@ func TestLedgerReportsArchivePaths(t *testing.T) {
 	l.noteArchive(nil) // nil 必须被安静忽略，不能 panic
 	got := l.report(3, nil, nil)
 
-	for _, want := range []string{"mcp__shell__run", "call_7", "12000", ".aurora/tool_outputs/", "read_text_file"} {
+	for _, want := range []string{"mcp__shell__run", "call_7", "12000", ".aurora/tool_outputs/", "read_file"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("归档信息缺少 %q：\n%s", want, got)
 		}

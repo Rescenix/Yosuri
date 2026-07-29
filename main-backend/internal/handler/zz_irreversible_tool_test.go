@@ -7,6 +7,9 @@ import "testing"
 func TestIsIrreversibleTool(t *testing.T) {
 	// 必须拦截的不可逆操作
 	mustBlock := []string{
+		"delete_file",
+		"delete_directory",
+		"move_file",
 		"mcp__fs__delete_file",
 		"mcp__fs__delete_directory",
 		"mcp__fs__move_file",

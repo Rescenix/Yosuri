@@ -132,15 +132,15 @@ func (l *contextLedger) report(round int, breakdown map[string]int, activated []
 			fmt.Fprintf(&b, "  - %s (call %s)：共 %d 字符，省略 %d，全文 → %s\n",
 				a.Tool, a.CallID, a.TotalChars, a.OmittedChars, a.RelPath)
 		}
-		b.WriteString("  用 mcp__grep__read_range 按行读取上面的路径可取回全文\n")
+		b.WriteString("  用 read_file 按行读取上面的路径可取回全文\n")
 	}
 
 	// 5) 已激活的按需工具
 	if len(activated) > 0 {
 		sortStrings(activated)
-		fmt.Fprintf(&b, "【已加载的 MCP 工具】%s\n", strings.Join(activated, ", "))
+		fmt.Fprintf(&b, "【已加载的按需工具】%s\n", strings.Join(activated, ", "))
 	} else {
-		b.WriteString("【已加载的 MCP 工具】无（要用文件/命令类工具得先 load_tools）\n")
+		b.WriteString("【已加载的按需工具】无（要用文件/命令类工具得先 load_tools）\n")
 	}
 
 	// 6) 归档目录：让模型知道往哪翻更早的东西
@@ -266,7 +266,7 @@ var harnessStatusToolDef = core.ToolDefinition{
 		Name: harnessStatusToolName,
 		Description: "查看你自己当前的上下文状况：系统提示词各段占用、会话历史带入了多少条/" +
 			"有没有被窗口截掉、上下文是否发生过压缩折叠、哪些工具输出被截断以及全文归档在哪、" +
-			"已加载了哪些 MCP 工具。当你怀疑「我是不是漏看了什么」「刚才那个长输出的中间部分去哪了」" +
+			"已加载了哪些按需工具。当你怀疑「我是不是漏看了什么」「刚才那个长输出的中间部分去哪了」" +
 			"「之前是不是已经查过这个」时调它，比盲目重跑一遍工具便宜得多。",
 		Parameters: core.ToolParameters{Type: "object", Properties: map[string]core.ToolProperty{}},
 	},

@@ -41,9 +41,8 @@ type ToolProperty struct {
 	Items *ToolProperty `json:"items,omitempty"`
 }
 
-// 内置原生工具已整体退役：文件/命令/检索/记忆全部走 MCP（见 handler/tool_ondemand.go、
-// subagent.go）。本文件只保留工具定义的数据结构（上面的 ToolDefinition 等）与
-// DS 浏览器标记解析辅助（下方 unescapeToolMarker/ExtractToolArgs）。
+// 具体工具实现位于 handler：本机基础能力由 Go 内置，外部扩展可走 MCP。
+// 本文件只保留工具定义的数据结构与 DS 浏览器标记解析辅助。
 
 // unescapeToolMarker 还原 DS 浏览器返回的转义字符
 func unescapeToolMarker(raw string) string {

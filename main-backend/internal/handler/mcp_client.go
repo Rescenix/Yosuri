@@ -5,8 +5,10 @@ package handler
 // 手写的极简实现（newline-delimited JSON-RPC 2.0 over stdio），不引入新依赖：
 // initialize → notifications/initialized → tools/list → tools/call。
 //
-// 配置文件：MCP_CONFIG 环境变量指定路径，默认 ./mcp.json（相对 server 工作目录）：
+// 配置文件：MCP_CONFIG 环境变量指定路径；默认读取用户数据目录下的 mcp.json：
 //   {"servers": {"fs": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Pro2026\\re0"]}}}
+// 仓库根的旧 mcp.json 仅作为迁移参考保留，不会随 Wails 客户端自动启动，避免把
+// Python/npm/npx 变成用户的隐式运行时依赖；需要兼容旧配置时显式设置 MCP_CONFIG。
 //
 // ★ allowed directory 不要写死成某个具体项目——它会与「主页动态选项目」的工作目录
 // 脱节，导致所有 mcp__fs__* 读写报 "path outside allowed directories"。initMCPServers
@@ -79,7 +81,7 @@ func mcpConfigPath() string {
 	if p := os.Getenv("MCP_CONFIG"); p != "" {
 		return p
 	}
-	return "./mcp.json"
+	return filepath.Join(resceneUserDataDir(), "mcp.json")
 }
 
 // loadMCPToolDefs 懒初始化：读配置、拉起各 server 进程、收集工具定义。

@@ -390,17 +390,17 @@
                 <button class="inline-refresh" type="button" @click="loadSkills" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
               </div>
               <div class="settings-section-desc">
-                Agent 仅会在复杂且成功的工作流后后台学习并<strong>自动启用</strong>；无需人工确认。闲置或重复的自研技能由后台归档且可恢复。外部 <code>SKILL.md</code> 仅展示、不受治理影响。
+                内置技能随客户端发布、无需额外运行时；Agent 也会在复杂且成功的工作流后学习并<strong>自动启用</strong>。外部 <code>SKILL.md</code> 仅展示。
               </div>
               <div v-if="skillsLoading" class="settings-loading">加载中...</div>
               <template v-else>
                 <div v-if="!skills.length" class="settings-empty">还没有技能。完成一次复杂工作流后，Agent 会在后台自动学习。</div>
                 <div v-for="sk in skills" :key="(sk.source || '') + ':' + sk.name" class="entity-card">
                   <div class="entity-head" @click="toggleSkill(sk.name)" style="cursor:pointer">
-                    <Icon :icon="sk.source === 'external' ? 'mdi:puzzle-outline' : 'mdi:school-outline'" width="15" />
+                    <Icon :icon="sk.source === 'builtin' ? 'mdi:package-variant-closed' : (sk.source === 'external' ? 'mdi:puzzle-outline' : 'mdi:school-outline')" width="15" />
                     <span class="entity-name">{{ sk.name }}</span>
                     <span class="entity-badge" :class="sk.source === 'external' ? 'src-ext' : 'src-learned'">
-                      {{ sk.source === 'external' ? '外部' : '自研' }}
+                      {{ sk.source === 'builtin' ? '内置' : (sk.source === 'external' ? '外部' : '自研') }}
                     </span>
                     <span v-if="sk.source !== 'external'" class="entity-badge skill-status" :class="'is-' + normalizedSkillStatus(sk)">{{ skillStatusLabel(sk) }}</span>
                     <span v-if="sk.source !== 'external'" class="entity-badge">{{ (sk.steps || []).length }} 步</span>
@@ -415,7 +415,7 @@
                     <div><b>如何验证</b> {{ sk.verification || '旧版技能未填写' }}</div>
                   </div>
                   <pre v-else-if="expandedSkill === sk.name && sk.body" class="skill-body">{{ sk.body }}</pre>
-                  <div v-if="sk.source !== 'external'" class="skill-actions">
+                  <div v-if="sk.source === 'learned'" class="skill-actions">
                     <button v-if="isSkillActive(sk)" type="button" @click.stop="setSkillStatus(sk, 'archived')">关闭</button>
                     <button v-else type="button" @click.stop="setSkillStatus(sk, 'active')">恢复启用</button>
                     <button class="danger" type="button" @click.stop="removeSkill(sk)">删除</button>

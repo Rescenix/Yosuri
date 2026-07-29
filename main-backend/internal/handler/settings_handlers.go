@@ -1,7 +1,7 @@
 package handler
 
 // 设置面板只读/配置端点：技能库、MCP 生态、用户档案（含自定义指令）。
-//   GET  /api/skills   —— 列出已学技能（./skills/*.json）
+//   GET  /api/skills   —— 列出内置、已学与外部技能
 //   GET  /api/mcp      —— 列出已配置的 MCP server 与运行时注册的工具
 //   GET  /api/profile  —— 读取用户档案 + 自定义指令
 //   POST /api/profile  —— 保存用户档案 + 自定义指令
@@ -24,7 +24,9 @@ import (
 // 与外部导入两类，设置页据此提供类似 Hermes 的审阅和恢复动作。
 // 每条带 source 字段（learned / external）供前端区分展示。
 func HandleListSkills(c *gin.Context) {
-	skills := append(loadLearnedSkillsForSettings(), loadExternalSkills()...)
+	skills := loadBuiltinSkills()
+	skills = append(skills, loadLearnedSkillsForSettings()...)
+	skills = append(skills, loadExternalSkills()...)
 	if skills == nil {
 		skills = make([]Skill, 0)
 	}
