@@ -247,9 +247,7 @@ function groupSummaryTitle(group) {
     if (last?.type === 'thinking') return '正在思考…'
     return 'Agent 正在处理…'
   }
-  // 收起后的摘要说清最后完成的实际动作；"N 步"没有帮助用户判断 Agent 做了什么。
-  const lastTool = [...group.blocks].reverse().find(b => b.type === 'tool')
-  return lastTool ? `已完成 · ${actionText(lastTool)}` : '已完成'
+  return '已完成'
 }
 
 // 收起态思考行的一行预览：取首个非空行、压掉空白、截断
