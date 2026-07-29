@@ -77,7 +77,7 @@
               <span class="flow-summary-dot"></span>{{ groupRunningCount(group) }} 进行中
             </span>
             <span v-if="groupThinkingCount(group)" class="flow-summary-badge think">
-              <Icon icon="mdi:star-four-points" width="11" /> {{ groupThinkingCount(group) }} 思考
+              {{ groupThinkingCount(group) }} 思考
             </span>
             <span v-if="groupToolCount(group)" class="flow-summary-badge tool">
               <Icon icon="mynaui:tool" width="11" /> {{ groupToolCount(group) }} 操作
