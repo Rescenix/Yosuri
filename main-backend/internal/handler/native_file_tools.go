@@ -51,6 +51,8 @@ func callNativeFileTool(name, argsJSON string) (nativeToolResult, error) {
 		return nativeWriteFile(args)
 	case "edit_file":
 		return nativeEditFile(args)
+	case "apply_patch":
+		return nativeApplyPatch(args)
 	case "create_directory":
 		return nativeCreateDirectory(args)
 	case "move_file":

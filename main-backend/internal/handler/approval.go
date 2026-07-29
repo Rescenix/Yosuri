@@ -29,6 +29,7 @@ import (
 var dangerousToolSet = map[string]bool{
 	"write_file":       true,
 	"edit_file":        true,
+	"apply_patch":      true,
 	"create_directory": true,
 	"move_file":        true,
 	"delete_file":      true,
@@ -146,6 +147,13 @@ func isIrreversibleTool(name string) bool {
 	return false
 }
 
+func isIrreversibleToolCall(name, argsJSON string) bool {
+	if isIrreversibleTool(name) {
+		return true
+	}
+	return name == "apply_patch" && nativePatchContainsDelete(argsJSON)
+}
+
 // ---- 工作目录越界判定 ----
 //
 // 用户额外接入的 filesystem MCP 底层会放开可达根目录（见 mcp_client.go
@@ -179,6 +187,11 @@ func toolPathArgs(argsJSON string) []string {
 	if arr, ok := m["paths"].([]any); ok {
 		for _, v := range arr {
 			add(v)
+		}
+	}
+	if patch, ok := m["patch"].(string); ok {
+		for _, path := range nativePatchHeaderPaths(patch) {
+			add(path)
 		}
 	}
 	return out

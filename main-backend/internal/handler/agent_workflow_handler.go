@@ -681,7 +681,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				// 的 ws 回给前端做 screencast（不再 iframe 整站）。HTML 的 CDP 失败会
 				// 显式推错误；只有非 HTML 文件才降级为前端 dev server 首页（iframe）。
 				var editPath string
-				if p, e := parseFrontendEditPath(tc.Function.Arguments); e == nil {
+				if p, e := parseFrontendEditPath(tc.Function.Name, tc.Function.Arguments); e == nil {
 					editPath = p
 				}
 				url, cdpWS, cdpError, ok := autoOpenBrowserPreview(editPath)
@@ -754,6 +754,7 @@ type codeExecResult struct {
 var frontendEditTools = map[string]bool{
 	"write_file":           true,
 	"edit_file":            true,
+	"apply_patch":          true,
 	"mcp__fs__write_file":  true,
 	"mcp__fs__edit_file":   true,
 	"mcp__fs__create_file": true,
@@ -771,16 +772,24 @@ func isFrontendEdit(toolName, argsJSON string) bool {
 	if !frontendEditTools[toolName] {
 		return false
 	}
-	var args struct {
-		Path string `json:"path"`
+	paths := []string{}
+	if toolName == "apply_patch" {
+		paths = nativePatchPathsFromArgs(argsJSON)
+	} else {
+		var args struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal([]byte(argsJSON), &args) != nil {
+			return false
+		}
+		paths = append(paths, args.Path)
 	}
-	if json.Unmarshal([]byte(argsJSON), &args) != nil {
-		return false
-	}
-	p := strings.ToLower(args.Path)
-	for _, ext := range frontendExts {
-		if strings.HasSuffix(p, ext) {
-			return true
+	for _, path := range paths {
+		p := strings.ToLower(path)
+		for _, ext := range frontendExts {
+			if strings.HasSuffix(p, ext) {
+				return true
+			}
 		}
 	}
 	return false
@@ -832,7 +841,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 		if mode == "yolo" {
 			// Yolo 畅通无阻：危险工具与越界访问一律不拦——但不可逆文件操作
 			// （删除/移动/重命名）除外，必须进下方审批，避免 agent 全自动误删。
-			if !isIrreversibleTool(name) {
+			if !isIrreversibleToolCall(name, tc.Function.Arguments) {
 				return true
 			}
 		}
@@ -904,7 +913,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			results[i] = codeExecResult{output: "用户未批准执行 " + name + "，已跳过", failed: true}
 			continue
 		}
-		if isNativeOnDemandTool(name) {
+		if isNativeExecutableTool(name) {
 			var args map[string]any
 			if err := json.Unmarshal([]byte(defaultJSONObject(tc.Function.Arguments)), &args); err != nil {
 				results[i] = codeExecResult{output: "内置工具参数失败: " + err.Error(), failed: true}
@@ -914,14 +923,24 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			if name == "edit_file" {
 				preEditLine = r.calcEditStartLine(tc.Function.Arguments)
 			}
-			if name == "write_file" || name == "edit_file" {
+			patchArgs := []map[string]any(nil)
+			if name == "apply_patch" {
+				patchArgs = nativePatchWritableArgs(tc.Function.Arguments)
+				for _, patchArg := range patchArgs {
+					OnBeforeWrite(name, patchArg)
+				}
+			} else if name == "write_file" || name == "edit_file" {
 				OnBeforeWrite(name, args)
 			}
 			nativeResult, err := callNativeTool(c.Request.Context(), name, tc.Function.Arguments)
 			if err != nil {
 				results[i] = codeExecResult{output: "内置工具失败: " + err.Error(), failed: true}
 			} else {
-				if name == "write_file" || name == "edit_file" {
+				if name == "apply_patch" {
+					for _, patchArg := range patchArgs {
+						OnAfterWrite(name, patchArg)
+					}
+				} else if name == "write_file" || name == "edit_file" {
 					OnAfterWrite(name, args)
 				}
 				out := nativeResult.Text

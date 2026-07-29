@@ -128,9 +128,10 @@ func OpenAgentFSSession(project, workdir string, boundSessionID ...string) *agen
 }
 
 // OnBeforeWrite 在文件工具真实落盘前调用：捕获 before 内容，存进 pending。
-// 仅对 write_file / edit_file 生效；其余工具直接返回。
+// apply_patch 的每个新增/更新文件会分别调用一次；删除仍走不可逆审批。
 func OnBeforeWrite(fullName string, args map[string]any) {
 	if fullName != "write_file" && fullName != "edit_file" &&
+		fullName != "apply_patch" &&
 		fullName != "mcp__fs__write_file" && fullName != "mcp__fs__edit_file" {
 		return
 	}
@@ -163,6 +164,7 @@ func OnBeforeWrite(fullName string, args map[string]any) {
 // OnAfterWrite 在文件工具真实落盘后调用：把 before 内容写入本地历史并记录审计。
 func OnAfterWrite(fullName string, args map[string]any) {
 	if fullName != "write_file" && fullName != "edit_file" &&
+		fullName != "apply_patch" &&
 		fullName != "mcp__fs__write_file" && fullName != "mcp__fs__edit_file" {
 		return
 	}
@@ -207,7 +209,7 @@ func OnAfterWrite(fullName string, args map[string]any) {
 
 // opName 把工具名映射成写操作类型。
 func opName(fullName string) string {
-	if fullName == "edit_file" || fullName == "mcp__fs__edit_file" {
+	if fullName == "edit_file" || fullName == "apply_patch" || fullName == "mcp__fs__edit_file" {
 		return "edit"
 	}
 	return "write"

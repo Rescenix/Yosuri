@@ -50,6 +50,9 @@ var loadToolsToolDef = core.ToolDefinition{
 // 这几个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
 func nativeWorkflowToolDefs() []core.ToolDefinition {
 	return []core.ToolDefinition{
+		// apply_patch 是长文件写入的基础能力，必须从第一轮起直接可用。
+		// 模型可以先建骨架，再用多个小补丁逐段追加，避开单次 write_file 参数过长。
+		nativeApplyPatchToolDef,
 		dispatchAgentToolDef, loadToolsToolDef, updateTodoToolDef, readSkillToolDef, skillManageToolDef,
 		// harness_status：让模型能问"我上下文里现在有什么、丢了什么、去哪捞"。
 		// 常驻是有意的——正因为它是自省用的，模型需要它的时候恰恰是"感觉不对劲"

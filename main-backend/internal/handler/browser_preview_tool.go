@@ -955,8 +955,19 @@ func extractURLArg(argsJSON string) string {
 	return a.URL
 }
 
-// parseFrontendEditPath 从文件工具参数里取 path（前端改动检测用）。
-func parseFrontendEditPath(argsJSON string) (string, error) {
+// parseFrontendEditPath 从文件工具参数里取第一个可预览 path（前端改动检测用）。
+func parseFrontendEditPath(toolName, argsJSON string) (string, error) {
+	if toolName == "apply_patch" {
+		for _, path := range nativePatchPathsFromArgs(argsJSON) {
+			lower := strings.ToLower(path)
+			for _, ext := range frontendExts {
+				if strings.HasSuffix(lower, ext) {
+					return path, nil
+				}
+			}
+		}
+		return "", nil
+	}
 	var a struct {
 		Path string `json:"path"`
 	}

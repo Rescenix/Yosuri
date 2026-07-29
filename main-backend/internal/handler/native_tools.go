@@ -143,6 +143,10 @@ func isNativeOnDemandTool(name string) bool {
 	return false
 }
 
+func isNativeExecutableTool(name string) bool {
+	return name == "apply_patch" || isNativeOnDemandTool(name)
+}
+
 func allOnDemandToolDefs() []core.ToolDefinition {
 	defs := nativeOnDemandToolDefs()
 	return append(defs, loadMCPToolDefs()...)
@@ -151,7 +155,7 @@ func allOnDemandToolDefs() []core.ToolDefinition {
 func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResult, error) {
 	switch name {
 	case "read_file", "grep", "glob", "list_directory", "directory_tree", "get_file_info",
-		"write_file", "edit_file", "create_directory", "move_file", "delete_file", "delete_directory":
+		"write_file", "edit_file", "apply_patch", "create_directory", "move_file", "delete_file", "delete_directory":
 		return callNativeFileTool(name, argsJSON)
 	case "run_command":
 		return callNativeCommand(ctx, argsJSON)
