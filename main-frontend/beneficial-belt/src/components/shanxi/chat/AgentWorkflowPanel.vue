@@ -63,7 +63,11 @@
 
       <!-- 收纳起来的工具/思考时间线 -->
       <template v-else>
-        <div class="flow-summary" @click="toggleSummary(group, gIdx)">
+        <div
+          class="flow-summary"
+          :class="{ settled: !groupHasActiveTool(group) }"
+          @click="toggleSummary(group, gIdx)"
+        >
           <div class="flow-summary-main">
             <Icon icon="mdi:star-four-points" width="16" class="flow-summary-icon" />
             <span class="flow-summary-text">{{ groupSummaryTitle(group) }}</span>
@@ -204,7 +208,8 @@ const blockGroups = computed(() => {
   }
   if (current) groups.push(current)
 
-  // 后处理：单步思考不收束
+  // 后处理：单步思考不收束。不同工具流之间可能穿插 intent，必须留在各自
+  // 的时间位置，不能跨 intent 合并，否则展开后的执行顺序会被改写。
   return groups.map(g => {
     if (g.type === 'summary' && g.blocks.length === 1 && g.blocks[0].type === 'thinking') {
       return { type: 'single-thinking', block: g.blocks[0] }
@@ -247,7 +252,7 @@ function groupSummaryTitle(group) {
     if (last?.type === 'thinking') return '正在思考…'
     return 'Agent 正在处理…'
   }
-  return '已完成'
+  return '过程'
 }
 
 // 收起态思考行的一行预览：取首个非空行、压掉空白、截断
@@ -617,6 +622,28 @@ function toolBodyText(b) {
 .flow-summary:hover {
   background: var(--app-surface-3);
   border-color: var(--app-border);
+}
+/* 已结束的分段仍按时间顺序留在 intent 之间，但退化成轻量折叠行，不让一串
+   “完成卡片”抢走正文空间；正在运行的分段继续使用上面的卡片样式强调状态。 */
+.flow-summary.settled {
+  gap: 7px;
+  margin: 1px 0;
+  padding: 4px 2px;
+  border-color: transparent;
+  border-radius: 6px;
+  background: transparent;
+}
+.flow-summary.settled:hover {
+  border-color: transparent;
+  background: var(--app-surface-2);
+}
+.flow-summary.settled .flow-summary-icon {
+  width: 13px;
+  height: 13px;
+}
+.flow-summary.settled .flow-summary-text {
+  font-size: 11.5px;
+  color: var(--app-text-faint);
 }
 .flow-summary-main {
   display: flex;

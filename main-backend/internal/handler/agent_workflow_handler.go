@@ -47,8 +47,8 @@ const (
 	codeWorkflowMaxTokensDefault = 500000
 	codeResultMaxChars           = 10000
 	// codeRepeatCallLimit 同一 工具名+参数 在一个工作流里最多真实执行几次；
-	// 超出即熔断（回提示不再真跑），防止模型原地打转烧满轮次。
-	codeRepeatCallLimit = 2
+	// 动态结果工具另行豁免。普通工具留出合理的重试空间，超出才熔断。
+	codeRepeatCallLimit = 4
 )
 
 // codeWorkflowTokenBudget 读取 token 预算：env 覆盖优先，否则用默认值。
@@ -565,7 +565,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			case blocked[i]:
 				results[i] = codeExecResult{
 					failed: true,
-					output: fmt.Sprintf("已阻止：%s 用完全相同的参数连续调用了 %d 次，结果不会变化。请勿重复调用，改用已有结果作答或换一个思路。",
+					output: fmt.Sprintf("已阻止：%s 用完全相同的参数已连续执行 %d 次。为避免工具调用陷入循环，本次未再执行；请复用已有结果或调整参数。",
 						calls[i].Function.Name, codeRepeatCallLimit),
 				}
 			case handled[i] != "":
@@ -786,12 +786,28 @@ func isFrontendEdit(toolName, argsJSON string) bool {
 	return false
 }
 
-// shouldBlockRepeat 熔断判定：同一签名（工具名+参数）真实执行次数达到 limit 后，
-// 第 limit+1 次及以后返回 true（本层拦截，不再真跑）。会自增计数。
+// repeatGuardExemptTools 的结果依赖当前页面或操作时机：即使参数完全相同，下一次
+// 截图、重新打开或再次注入也可能得到不同结果，不能套用静态调用的重复熔断。
+var repeatGuardExemptTools = map[string]bool{
+	"capture_preview":   true,
+	"open_preview":      true,
+	"inject_preview_js": true,
+}
+
+// shouldBlockRepeat 只统计连续的同签名调用：中间执行过其他工具就重置。页面或文件
+// 状态可能已被其他操作改变，不能把整轮工作流里相隔很远的同参数调用累计成死循环。
+// 同一签名连续真实执行次数达到 limit 后，第 limit+1 次及以后返回 true。
 // 抽成纯函数是为了能脱离整个 SSE handler 单测——熔断是"模型抽风时的护栏"，
 // 健康模型看得见工具结果就不会重复调，实况里几乎不触发，只能靠单测覆盖。
 func shouldBlockRepeat(counts map[string]int, name, args string, limit int) bool {
+	if repeatGuardExemptTools[name] {
+		clear(counts)
+		return false
+	}
 	sig := name + "|" + args
+	if _, continuing := counts[sig]; !continuing {
+		clear(counts)
+	}
 	counts[sig]++
 	return counts[sig] > limit
 }
