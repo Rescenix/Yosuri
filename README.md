@@ -205,17 +205,3 @@ re0/
 ## 开源协议
 
 核心前后端以 [MIT License](./LICENSE) 开源。
-
----
-
-## Star History
-
-<a href="https://star-history.com/#Rescenix/ResceneAgent&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/star-history-dark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="assets/star-history-light.png" />
-    <img alt="ResceneAgent Star History Chart" src="assets/star-history-light.png" width="100%" />
-  </picture>
-</a>
-
-<sub>由 [`scripts/gen_star_history.py`](scripts/gen_star_history.py) 生成，GitHub Actions 每日自动更新；点击图片查看实时数据。</sub>
