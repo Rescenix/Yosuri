@@ -38,10 +38,32 @@
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()">
-              <Icon icon="mdi:connection" width="16" />MCP</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()">
-              <Icon icon="mdi:school-outline" width="16" />Skills</button>
+            <div class="settings-tab-group">
+              <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()">
+                <Icon icon="mdi:connection" width="16" />MCP
+              </button>
+              <div v-show="activeTab === 'mcp'" class="settings-subtabs">
+                <button class="settings-subtab" :class="{ on: mcpSubTab === 'local' }" type="button" @click="mcpSubTab = 'local'; loadMCP()">
+                  <Icon icon="mdi:laptop" width="15" />本地
+                </button>
+                <button class="settings-subtab" :class="{ on: mcpSubTab === 'external' }" type="button" @click="mcpSubTab = 'external'; loadMCPRegistry()">
+                  <Icon icon="mdi:cloud-outline" width="15" />外部
+                </button>
+              </div>
+            </div>
+            <div class="settings-tab-group">
+              <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()">
+                <Icon icon="mdi:school-outline" width="16" />Skills
+              </button>
+              <div v-show="activeTab === 'skills'" class="settings-subtabs">
+                <button class="settings-subtab" :class="{ on: skillsSubTab === 'local' }" type="button" @click="skillsSubTab = 'local'; loadSkills()">
+                  <Icon icon="mdi:laptop" width="15" />本地
+                </button>
+                <button class="settings-subtab" :class="{ on: skillsSubTab === 'external' }" type="button" @click="skillsSubTab = 'external'; loadSkillRegistry()">
+                  <Icon icon="mdi:cloud-outline" width="15" />外部
+                </button>
+              </div>
+            </div>
             <button class="settings-tab" :class="{ on: activeTab === 'memory' }" @click="activeTab = 'memory'; loadMemoryInject()">
               <Icon icon="mdi:brain" width="16" />记忆</button>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
@@ -361,66 +383,154 @@
 
             <!-- ========== MCP ========== -->
             <div v-show="activeTab === 'mcp'" class="settings-panel">
-              <div class="settings-section-title">
-                MCP 生态
-                <button class="inline-refresh" type="button" @click="loadMCP" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: mcpLoading }" /></button>
-              </div>
-              <div class="settings-section-desc">项目已接入的 MCP server（读自 <code>{{ mcpConfigPath || 'mcp.json' }}</code>）与运行时注册的工具。</div>
-              <div v-if="mcpLoading" class="settings-loading">加载中...</div>
-              <template v-else>
-                <div v-if="!mcpServers.length" class="settings-empty">未配置 MCP server（项目根目录放 mcp.json 即可接入）。</div>
-                <div v-for="s in mcpServers" :key="s.name" class="entity-card">
-                  <div class="entity-head">
-                    <Icon icon="mdi:connection" width="15" />
-                    <span class="entity-name">{{ s.name }}</span>
-                    <span class="entity-badge">{{ s.tools.length }} 工具</span>
-                  </div>
-                  <div class="entity-meta">{{ s.command }} {{ (s.args || []).join(' ') }}</div>
-                  <div v-if="s.tools.length" class="entity-tags">
-                    <span v-for="t in s.tools" :key="t" class="entity-tag">{{ t.replace('mcp__' + s.name + '__', '') }}</span>
-                  </div>
+              <template v-if="mcpSubTab === 'local'">
+                <div class="settings-section-title">
+                  已接入的 MCP
+                  <button class="inline-refresh" type="button" @click="loadMCP(true)" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: mcpLoading }" /></button>
                 </div>
+                <div class="settings-section-desc">
+                  本机配置与已安装的远程 MCP（读自 <code>{{ mcpConfigPath || 'mcp.json' }}</code>）。远程连接由应用内置的 Go 客户端完成。
+                </div>
+                <div v-if="mcpLoading" class="settings-loading">加载中...</div>
+                <template v-else>
+                  <div v-if="!mcpServers.length" class="settings-empty">还没有 MCP。可到「外部」从官方 Registry 一键接入。</div>
+                  <div v-for="s in mcpServers" :key="s.name" class="entity-card">
+                    <div class="entity-head">
+                      <Icon :icon="s.transport === 'streamable-http' ? 'mdi:cloud-check-outline' : 'mdi:console'" width="15" />
+                      <span class="entity-name">{{ s.registry_name || s.name }}</span>
+                      <span class="entity-badge">{{ s.transport === 'streamable-http' ? '远程' : '本机' }}</span>
+                      <span class="entity-badge mcp-state" :class="'is-' + s.status">{{ s.status === 'connected' ? '已连接' : '待配置' }}</span>
+                      <span class="entity-badge">{{ s.tools.length }} 工具</span>
+                    </div>
+                    <div class="entity-meta">{{ s.url || (s.command + ' ' + (s.args || []).join(' ')) }}</div>
+                    <div v-if="s.tools.length" class="entity-tags">
+                      <span v-for="t in s.tools" :key="t" class="entity-tag">{{ t.replace('mcp__' + s.name + '__', '') }}</span>
+                    </div>
+                    <div v-if="s.source === 'official-registry'" class="skill-actions">
+                      <button class="danger" type="button" :disabled="catalogBusy === 'mcp:' + s.name" @click="uninstallMCP(s)">
+                        {{ catalogBusy === 'mcp:' + s.name ? '移除中…' : '移除' }}
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </template>
+              <template v-else>
+                <div class="settings-section-title">MCP 官方 Registry</div>
+                <div class="settings-section-desc">浏览官方托管目录，只展示可由应用直接连接的 Streamable HTTP 服务；无需 Node、Python 或 npx。</div>
+                <div class="catalog-toolbar">
+                  <label class="catalog-search">
+                    <Icon icon="mdi:magnify" width="16" />
+                    <input v-model="mcpRegistryQuery" type="search" placeholder="搜索远程 MCP" @keyup.enter="loadMCPRegistry(true)" />
+                  </label>
+                  <button class="catalog-search-btn" type="button" @click="loadMCPRegistry(true)">搜索</button>
+                </div>
+                <div v-if="mcpRegistryLoading" class="settings-loading">正在连接 MCP 官方 Registry…</div>
+                <template v-else>
+                  <div v-if="!mcpRegistryItems.length" class="settings-empty">没有找到可直接连接的远程 MCP。</div>
+                  <div v-for="item in mcpRegistryItems" :key="item.name" class="catalog-card">
+                    <div class="catalog-card-main">
+                      <div class="entity-head">
+                        <Icon icon="mdi:server-network-outline" width="15" />
+                        <span class="entity-name">{{ item.title || item.name }}</span>
+                        <span class="entity-badge">v{{ item.version }}</span>
+                      </div>
+                      <div class="catalog-id">{{ item.name }}</div>
+                      <div class="catalog-desc">{{ item.description || '该服务未提供说明。' }}</div>
+                      <div class="entity-meta">{{ item.url }}</div>
+                    </div>
+                    <button
+                      class="catalog-install-btn"
+                      :class="{ installed: item.installed }"
+                      type="button"
+                      :disabled="item.installed || catalogBusy === 'mcp-install:' + item.name"
+                      @click="installMCP(item)"
+                    >{{ item.installed ? '已接入' : (catalogBusy === 'mcp-install:' + item.name ? '连接中…' : '接入') }}</button>
+                  </div>
+                </template>
               </template>
             </div>
 
             <!-- ========== Skills ========== -->
             <div v-show="activeTab === 'skills'" class="settings-panel">
-              <div class="settings-section-title">
-                技能库
-                <button class="inline-refresh" type="button" @click="loadSkills" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
-              </div>
-              <div class="settings-section-desc">
-                内置技能随客户端发布、无需额外运行时；Agent 也会在复杂且成功的工作流后学习并<strong>自动启用</strong>。外部 <code>SKILL.md</code> 仅展示。
-              </div>
-              <div v-if="skillsLoading" class="settings-loading">加载中...</div>
-              <template v-else>
-                <div v-if="!skills.length" class="settings-empty">还没有技能。完成一次复杂工作流后，Agent 会在后台自动学习。</div>
-                <div v-for="sk in skills" :key="(sk.source || '') + ':' + sk.name" class="entity-card">
-                  <div class="entity-head" @click="toggleSkill(sk.name)" style="cursor:pointer">
-                    <Icon :icon="sk.source === 'builtin' ? 'mdi:package-variant-closed' : (sk.source === 'external' ? 'mdi:puzzle-outline' : 'mdi:school-outline')" width="15" />
-                    <span class="entity-name">{{ sk.name }}</span>
-                    <span class="entity-badge" :class="sk.source === 'external' ? 'src-ext' : 'src-learned'">
-                      {{ sk.source === 'builtin' ? '内置' : (sk.source === 'external' ? '外部' : '自研') }}
-                    </span>
-                    <span v-if="sk.source !== 'external'" class="entity-badge skill-status" :class="'is-' + normalizedSkillStatus(sk)">{{ skillStatusLabel(sk) }}</span>
-                    <span v-if="sk.source !== 'external'" class="entity-badge">{{ (sk.steps || []).length }} 步</span>
-                    <Icon :icon="expandedSkill === sk.name ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="16" style="margin-left:auto" />
-                  </div>
-                  <div class="entity-meta">{{ sk.description }}</div>
-                  <ol v-if="expandedSkill === sk.name && sk.steps && sk.steps.length" class="skill-steps">
-                    <li v-for="(st, i) in sk.steps" :key="i">{{ st }}</li>
-                  </ol>
-                  <div v-if="expandedSkill === sk.name && sk.source !== 'external'" class="skill-detail">
-                    <div><b>何时使用</b> {{ sk.trigger || '旧版技能未填写' }}</div>
-                    <div><b>如何验证</b> {{ sk.verification || '旧版技能未填写' }}</div>
-                  </div>
-                  <pre v-else-if="expandedSkill === sk.name && sk.body" class="skill-body">{{ sk.body }}</pre>
-                  <div v-if="sk.source === 'learned'" class="skill-actions">
-                    <button v-if="isSkillActive(sk)" type="button" @click.stop="setSkillStatus(sk, 'archived')">关闭</button>
-                    <button v-else type="button" @click.stop="setSkillStatus(sk, 'active')">恢复启用</button>
-                    <button class="danger" type="button" @click.stop="removeSkill(sk)">删除</button>
-                  </div>
+              <template v-if="skillsSubTab === 'local'">
+                <div class="settings-section-title">
+                  本地技能库
+                  <button class="inline-refresh" type="button" @click="loadSkills(true)" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
                 </div>
+                <div class="settings-section-desc">
+                  内置技能随客户端发布；Agent 学到的技能与从外部安装的 <code>SKILL.md</code> 都保存在用户数据目录，并可离线使用。
+                </div>
+                <div v-if="skillsLoading" class="settings-loading">加载中...</div>
+                <template v-else>
+                  <div v-if="!skills.length" class="settings-empty">还没有技能。完成复杂工作流后 Agent 会自动学习，也可从「外部」安装。</div>
+                  <div v-for="sk in skills" :key="(sk.source || '') + ':' + sk.name" class="entity-card">
+                    <div class="entity-head" @click="toggleSkill(sk.name)" style="cursor:pointer">
+                      <Icon :icon="sk.source === 'builtin' ? 'mdi:package-variant-closed' : (sk.source === 'external' ? 'mdi:puzzle-outline' : 'mdi:school-outline')" width="15" />
+                      <span class="entity-name">{{ sk.name }}</span>
+                      <span class="entity-badge" :class="sk.source === 'external' ? 'src-ext' : 'src-learned'">
+                        {{ sk.source === 'builtin' ? '内置' : (sk.source === 'external' ? '外部' : '自研') }}
+                      </span>
+                      <span v-if="sk.source !== 'external'" class="entity-badge skill-status" :class="'is-' + normalizedSkillStatus(sk)">{{ skillStatusLabel(sk) }}</span>
+                      <span v-if="sk.source !== 'external'" class="entity-badge">{{ (sk.steps || []).length }} 步</span>
+                      <Icon :icon="expandedSkill === sk.name ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="16" style="margin-left:auto" />
+                    </div>
+                    <div class="entity-meta">{{ sk.description }}</div>
+                    <ol v-if="expandedSkill === sk.name && sk.steps && sk.steps.length" class="skill-steps">
+                      <li v-for="(st, i) in sk.steps" :key="i">{{ st }}</li>
+                    </ol>
+                    <div v-if="expandedSkill === sk.name && sk.source !== 'external'" class="skill-detail">
+                      <div><b>何时使用</b> {{ sk.trigger || '旧版技能未填写' }}</div>
+                      <div><b>如何验证</b> {{ sk.verification || '旧版技能未填写' }}</div>
+                    </div>
+                    <pre v-else-if="expandedSkill === sk.name && sk.body" class="skill-body">{{ sk.body }}</pre>
+                    <div v-if="sk.source === 'learned'" class="skill-actions">
+                      <button v-if="isSkillActive(sk)" type="button" @click.stop="setSkillStatus(sk, 'archived')">关闭</button>
+                      <button v-else type="button" @click.stop="setSkillStatus(sk, 'active')">恢复启用</button>
+                      <button class="danger" type="button" @click.stop="removeSkill(sk)">删除</button>
+                    </div>
+                  </div>
+                </template>
+              </template>
+              <template v-else>
+                <div class="settings-section-title">GitHub 技能仓库</div>
+                <div class="settings-section-desc">通过 GitHub 公共 API 浏览 Anthropic、OpenAI 与 Vercel Labs 的技能仓库；安装后文件会完整保存到本地。</div>
+                <div class="catalog-toolbar">
+                  <select v-model="skillRegistrySource" class="catalog-source" @change="loadSkillRegistry(true)">
+                    <option v-for="source in skillRegistrySources" :key="source.id" :value="source.id">{{ source.label }}</option>
+                  </select>
+                  <label class="catalog-search">
+                    <Icon icon="mdi:magnify" width="16" />
+                    <input v-model="skillRegistryQuery" type="search" placeholder="筛选技能" @keyup.enter="loadSkillRegistry(true)" />
+                  </label>
+                  <button class="catalog-search-btn" type="button" @click="loadSkillRegistry(true)">筛选</button>
+                </div>
+                <div v-if="skillRegistryLoading" class="settings-loading">正在读取 GitHub 技能仓库…</div>
+                <template v-else>
+                  <div v-if="!skillRegistryItems.length" class="settings-empty">该仓库中没有匹配的技能。</div>
+                  <div v-for="item in skillRegistryItems" :key="item.source + ':' + item.path" class="catalog-card">
+                    <div class="catalog-card-main">
+                      <div class="entity-head">
+                        <Icon icon="mdi:github" width="15" />
+                        <span class="entity-name">{{ item.name }}</span>
+                      </div>
+                      <div class="catalog-id">{{ item.path }}</div>
+                    </div>
+                    <button
+                      v-if="!item.installed"
+                      class="catalog-install-btn"
+                      type="button"
+                      :disabled="catalogBusy === 'skill-install:' + item.path"
+                      @click="installHostedSkill(item)"
+                    >{{ catalogBusy === 'skill-install:' + item.path ? '安装中…' : '安装' }}</button>
+                    <button
+                      v-else
+                      class="catalog-install-btn installed removable"
+                      type="button"
+                      :disabled="catalogBusy === 'skill-remove:' + item.external_id"
+                      @click="uninstallHostedSkill(item)"
+                    >{{ catalogBusy === 'skill-remove:' + item.external_id ? '移除中…' : '已安装 · 移除' }}</button>
+                  </div>
+                </template>
               </template>
             </div>
 
@@ -513,6 +623,8 @@ const emit = defineEmits(['close'])
 // 左侧边栏当前 tab
 const activeTab = ref('models')
 const providerSubTab = ref('free')
+const mcpSubTab = ref('local')
+const skillsSubTab = ref('local')
 
 // ============ 界面配色切换 ============
 const colorThemes = computed(() => Object.entries(THEME_PRESETS))
@@ -919,6 +1031,10 @@ watch(visionCapableChatList, (list) => {
 const mcpServers = ref([])
 const mcpLoading = ref(false)
 const mcpConfigPath = ref('')
+const mcpRegistryItems = ref([])
+const mcpRegistryLoading = ref(false)
+const mcpRegistryQuery = ref('')
+const catalogBusy = ref('')
 let mcpLoaded = false
 async function loadMCP(force = false) {
   if (mcpLoaded && !force) return
@@ -936,12 +1052,75 @@ async function loadMCP(force = false) {
   }
 }
 
+async function loadMCPRegistry(force = false) {
+  if (mcpRegistryLoading.value) return
+  if (mcpRegistryItems.value.length && !force) return
+  mcpRegistryLoading.value = true
+  errorMsg.value = ''
+  try {
+    const params = new URLSearchParams({ limit: '36' })
+    if (mcpRegistryQuery.value.trim()) params.set('q', mcpRegistryQuery.value.trim())
+    const res = await fetch('/api/mcp/registry?' + params)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'MCP Registry 加载失败')
+    mcpRegistryItems.value = data.items || []
+  } catch (e) {
+    mcpRegistryItems.value = []
+    errorMsg.value = e.message
+  } finally {
+    mcpRegistryLoading.value = false
+  }
+}
+
+async function installMCP(item) {
+  catalogBusy.value = 'mcp-install:' + item.name
+  errorMsg.value = ''
+  try {
+    const res = await fetch('/api/mcp/registry/install', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: item.name, title: item.title, url: item.url })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'MCP 接入失败')
+    await Promise.all([loadMCP(true), loadMCPRegistry(true)])
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    catalogBusy.value = ''
+  }
+}
+
+async function uninstallMCP(server) {
+  if (!window.confirm(`移除 MCP「${server.registry_name || server.name}」？`)) return
+  catalogBusy.value = 'mcp:' + server.name
+  errorMsg.value = ''
+  try {
+    const res = await fetch('/api/mcp/registry/' + encodeURIComponent(server.name), { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'MCP 移除失败')
+    await Promise.all([loadMCP(true), loadMCPRegistry(true)])
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    catalogBusy.value = ''
+  }
+}
+
 // ============ Skills ============
 const skills = ref([])
 const skillsLoading = ref(false)
 const skillsDir = ref('')
 const skillsExtDir = ref('')
 const expandedSkill = ref(null)
+const skillRegistryItems = ref([])
+const skillRegistryLoading = ref(false)
+const skillRegistryQuery = ref('')
+const skillRegistrySource = ref('anthropics/skills')
+const skillRegistrySources = ref([
+  { id: 'anthropics/skills', label: 'Anthropic Skills' },
+  { id: 'openai/skills', label: 'OpenAI Skills' },
+  { id: 'vercel-labs/skills', label: 'Vercel Labs Skills' }
+])
 let skillsLoaded = false
 function toggleSkill(name) { expandedSkill.value = expandedSkill.value === name ? null : name }
 function normalizedSkillStatus(skill) { return skill.status === 'archived' ? 'archived' : 'active' }
@@ -961,6 +1140,61 @@ async function loadSkills(force = false) {
     skills.value = []
   } finally {
     skillsLoading.value = false
+  }
+}
+
+async function loadSkillRegistry(force = false) {
+  if (skillRegistryLoading.value) return
+  if (skillRegistryItems.value.length && !force) return
+  skillRegistryLoading.value = true
+  errorMsg.value = ''
+  try {
+    const params = new URLSearchParams({ source: skillRegistrySource.value })
+    if (skillRegistryQuery.value.trim()) params.set('q', skillRegistryQuery.value.trim())
+    const res = await fetch('/api/skills/registry?' + params)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'GitHub 技能仓库加载失败')
+    skillRegistryItems.value = data.items || []
+    if (Array.isArray(data.sources) && data.sources.length) skillRegistrySources.value = data.sources
+  } catch (e) {
+    skillRegistryItems.value = []
+    errorMsg.value = e.message
+  } finally {
+    skillRegistryLoading.value = false
+  }
+}
+
+async function installHostedSkill(item) {
+  catalogBusy.value = 'skill-install:' + item.path
+  errorMsg.value = ''
+  try {
+    const res = await fetch('/api/skills/registry/install', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: item.source, path: item.path })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || '技能安装失败')
+    await Promise.all([loadSkills(true), loadSkillRegistry(true)])
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    catalogBusy.value = ''
+  }
+}
+
+async function uninstallHostedSkill(item) {
+  if (!window.confirm(`移除技能「${item.name}」？`)) return
+  catalogBusy.value = 'skill-remove:' + item.external_id
+  errorMsg.value = ''
+  try {
+    const res = await fetch('/api/skills/external/' + encodeURIComponent(item.external_id), { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || '技能移除失败')
+    await Promise.all([loadSkills(true), loadSkillRegistry(true)])
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    catalogBusy.value = ''
   }
 }
 async function setSkillStatus(skill, status) {
@@ -1349,6 +1583,48 @@ onUnmounted(() => {
 .entity-meta { margin-top: 5px; font-size: 11.5px; color: var(--app-text-faint); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; line-height: 1.5; word-break: break-all; }
 .entity-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .entity-tag { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 7px; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.mcp-state.is-connected { color: #047857; background: #d1fae5; }
+.mcp-state.is-unavailable { color: #b45309; background: #fef3c7; }
+.catalog-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.catalog-search {
+  flex: 1; min-width: 150px; height: 36px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 7px; padding: 0 10px;
+  color: var(--app-text-faint); background: var(--app-surface-2);
+  border: 1px solid var(--app-border); border-radius: 9px;
+}
+.catalog-search:focus-within { border-color: var(--app-accent); color: var(--app-accent); }
+.catalog-search input {
+  flex: 1; min-width: 0; border: none; outline: none; color: var(--app-text);
+  background: transparent; font: inherit; font-size: 12.5px;
+}
+.catalog-source {
+  height: 36px; max-width: 180px; padding: 0 28px 0 10px; color: var(--app-text);
+  background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 9px;
+  font: inherit; font-size: 12px; outline: none;
+}
+.catalog-source:focus { border-color: var(--app-accent); }
+.catalog-search-btn, .catalog-install-btn {
+  min-height: 36px; padding: 0 14px; border: 1px solid var(--app-accent);
+  border-radius: 9px; color: #fff; background: var(--app-accent);
+  font: inherit; font-size: 12px; font-weight: 650; cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+.catalog-search-btn:hover, .catalog-install-btn:not(:disabled):hover { transform: translateY(-1px); }
+.catalog-install-btn:disabled { opacity: 0.62; cursor: default; }
+.catalog-install-btn.installed { color: #047857; background: #d1fae5; border-color: #a7f3d0; }
+.catalog-install-btn.installed.removable { color: var(--app-text-soft); background: var(--app-surface-3); border-color: var(--app-border); cursor: pointer; }
+.catalog-card {
+  display: flex; align-items: center; gap: 14px; padding: 12px 13px; margin-bottom: 8px;
+  border: 1px solid var(--app-border); border-radius: 11px; background: var(--app-surface-2);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.catalog-card:hover { border-color: var(--app-accent-soft); transform: translateY(-1px); }
+.catalog-card-main { flex: 1; min-width: 0; }
+.catalog-id {
+  margin-top: 4px; overflow: hidden; color: var(--app-text-faint); font-size: 10.5px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap;
+}
+.catalog-desc { margin-top: 7px; color: var(--app-text-soft); font-size: 11.5px; line-height: 1.55; }
 .skill-steps { margin: 8px 0 2px; padding-left: 20px; font-size: 12px; color: var(--app-text-soft); line-height: 1.7; }
 /* 技能来源角标：自研走中性色，外部走强调色，一眼区分 */
 .entity-badge.src-learned { color: var(--app-text-soft); background: var(--app-surface-3); }
@@ -1363,6 +1639,12 @@ onUnmounted(() => {
 .skill-actions button.danger:hover { background: #dc2626; border-color: #dc2626; }
 /* 外部技能正文（SKILL.md markdown 原文，保留换行/缩进） */
 .skill-body { margin: 8px 0 2px; padding: 10px 12px; font-size: 12px; line-height: 1.65; color: var(--app-text-soft); background: var(--app-surface-3); border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-family: inherit; max-height: 320px; overflow-y: auto; }
+@media (max-width: 720px) {
+  .catalog-toolbar { align-items: stretch; flex-wrap: wrap; }
+  .catalog-source { max-width: none; flex: 1 1 100%; }
+  .catalog-card { align-items: flex-start; flex-direction: column; }
+  .catalog-install-btn { width: 100%; }
+}
 
 /* Profile（仿图2） */
 .profile-row { display: flex; align-items: center; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--app-border-soft); }

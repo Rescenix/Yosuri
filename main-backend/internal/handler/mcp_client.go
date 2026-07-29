@@ -20,10 +20,13 @@ package handler
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,9 +39,13 @@ import (
 )
 
 type mcpServerConfig struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-	Env     []string `json:"env"`
+	Command      string            `json:"command,omitempty"`
+	Args         []string          `json:"args,omitempty"`
+	Env          []string          `json:"env,omitempty"`
+	URL          string            `json:"url,omitempty"`
+	Headers      map[string]string `json:"headers,omitempty"`
+	Source       string            `json:"source,omitempty"`
+	RegistryName string            `json:"registry_name,omitempty"`
 }
 
 type mcpConfig struct {
@@ -46,12 +53,16 @@ type mcpConfig struct {
 }
 
 type mcpConn struct {
-	name    string
-	stdin   io.WriteCloser
-	mu      sync.Mutex // 串行化写入与 id 分配
-	nextID  int64
-	pending map[int64]chan json.RawMessage
-	pmu     sync.Mutex
+	name       string
+	stdin      io.WriteCloser
+	remoteURL  string
+	headers    map[string]string
+	sessionID  string
+	httpClient *http.Client
+	mu         sync.Mutex // 串行化写入、远程会话与 id 分配
+	nextID     int64
+	pending    map[int64]chan json.RawMessage
+	pmu        sync.Mutex
 }
 
 var (
@@ -206,7 +217,10 @@ func initMCPServers() {
 		// filesystem server 用自身 args 的 allowed dir，不受此变量影响。
 		env := append([]string{}, sc.Env...)
 		env = append(env, "MCP_ROOT="+root)
-		conn, tools, err := startMCPServer(name, mcpServerConfig{Command: sc.Command, Args: args, Env: env})
+		conn, tools, err := startMCPServer(name, mcpServerConfig{
+			Command: sc.Command, Args: args, Env: env, URL: sc.URL, Headers: sc.Headers,
+			Source: sc.Source, RegistryName: sc.RegistryName,
+		})
 		if err != nil {
 			log.Printf("⚠️ MCP server %q 启动失败: %v", name, err)
 			continue
@@ -235,6 +249,12 @@ func initMCPServers() {
 }
 
 func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefinition, error) {
+	if strings.TrimSpace(sc.URL) != "" {
+		return startRemoteMCPServer(name, sc)
+	}
+	if strings.TrimSpace(sc.Command) == "" {
+		return nil, nil, fmt.Errorf("缺少 command 或 url")
+	}
 	cmd := exec.Command(sc.Command, sc.Args...)
 	cmd.Env = append(os.Environ(), sc.Env...)
 	stdin, err := cmd.StdinPipe()
@@ -354,6 +374,75 @@ func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefin
 	return conn, defs, nil
 }
 
+// startRemoteMCPServer 使用 MCP Streamable HTTP 传输直连托管 server。
+// 只依赖 Go 标准库，Wails 打包后不需要用户额外安装 Node、Python 或 CLI。
+func startRemoteMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefinition, error) {
+	conn := &mcpConn{
+		name:       name,
+		remoteURL:  strings.TrimSpace(sc.URL),
+		headers:    sc.Headers,
+		httpClient: &http.Client{Timeout: 70 * time.Second},
+		pending:    map[int64]chan json.RawMessage{},
+	}
+	initParams := map[string]any{
+		"protocolVersion": "2025-06-18",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "rescene-wails", "version": "1.0.0"},
+	}
+	if _, err := conn.request("initialize", initParams, 20*time.Second); err != nil {
+		return nil, nil, fmt.Errorf("initialize 失败: %w", err)
+	}
+	conn.notify("notifications/initialized", map[string]any{})
+	raw, err := conn.request("tools/list", map[string]any{}, 20*time.Second)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tools/list 失败: %w", err)
+	}
+	return conn, decodeMCPToolDefinitions(raw), nil
+}
+
+func decodeMCPToolDefinitions(raw json.RawMessage) []core.ToolDefinition {
+	var listResult struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			InputSchema struct {
+				Type       string                    `json:"type"`
+				Properties map[string]map[string]any `json:"properties"`
+				Required   []string                  `json:"required"`
+			} `json:"inputSchema"`
+		} `json:"tools"`
+	}
+	if json.Unmarshal(raw, &listResult) != nil {
+		return nil
+	}
+	defs := make([]core.ToolDefinition, 0, len(listResult.Tools))
+	for _, t := range listResult.Tools {
+		props := map[string]core.ToolProperty{}
+		for propName, schema := range t.InputSchema.Properties {
+			p := core.ToolProperty{}
+			if typ, ok := schema["type"].(string); ok {
+				p.Type = typ
+			}
+			if desc, ok := schema["description"].(string); ok {
+				p.Description = desc
+			}
+			props[propName] = p
+		}
+		required := t.InputSchema.Required
+		if required == nil {
+			required = []string{}
+		}
+		defs = append(defs, core.ToolDefinition{
+			Type: "function",
+			Function: core.ToolFunctionDetail{
+				Name: t.Name, Description: t.Description,
+				Parameters: core.ToolParameters{Type: "object", Properties: props, Required: required},
+			},
+		})
+	}
+	return defs
+}
+
 // request 发送一个 JSON-RPC 请求并等待响应（带超时）。
 // mcpToolTimeouts 为耗时特征不同的工具单独配置硬上限。
 var mcpToolTimeouts = map[string]time.Duration{
@@ -372,6 +461,10 @@ func (c *mcpConn) request(method string, params any, timeout time.Duration) (jso
 	c.mu.Lock()
 	c.nextID++
 	id := c.nextID
+	if c.remoteURL != "" {
+		defer c.mu.Unlock()
+		return c.sendHTTP(id, method, params, timeout)
+	}
 	c.mu.Unlock()
 
 	ch := make(chan json.RawMessage, 1)
@@ -404,8 +497,116 @@ func (c *mcpConn) request(method string, params any, timeout time.Duration) (jso
 	}
 }
 
+// sendHTTP 完成一次 Streamable HTTP JSON-RPC 交换。响应既可能是 JSON，
+// 也可能是 text/event-stream；两种都在这里归一为 result。
+// 调用方持有 c.mu，保证同一个 MCP session 内请求顺序稳定。
+func (c *mcpConn) sendHTTP(id int64, method string, params any, timeout time.Duration) (json.RawMessage, error) {
+	payload := map[string]any{"jsonrpc": "2.0", "method": method, "params": params}
+	if id > 0 {
+		payload["id"] = id
+	}
+	body, _ := json.Marshal(payload)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.remoteURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-06-18")
+	if c.sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", c.sessionID)
+	}
+	for key, value := range c.headers {
+		if strings.TrimSpace(key) != "" {
+			req.Header.Set(key, value)
+		}
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if sid := strings.TrimSpace(resp.Header.Get("Mcp-Session-Id")); sid != "" {
+		c.sessionID = sid
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		rawBody, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+		message := strings.TrimSpace(string(rawBody))
+		if len(message) > 500 {
+			message = message[:500]
+		}
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, message)
+	}
+	if id == 0 || resp.StatusCode == http.StatusAccepted {
+		return nil, nil
+	}
+	var message []byte
+	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+		message, err = readFirstSSEData(resp.Body, 16<<20)
+	} else {
+		message, err = io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+		message = bytes.TrimSpace(message)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(message) == 0 {
+		return nil, fmt.Errorf("MCP HTTP 响应为空")
+	}
+	var rpc struct {
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(message, &rpc); err != nil {
+		return nil, fmt.Errorf("MCP HTTP 响应解析失败: %w", err)
+	}
+	if len(rpc.Error) > 0 && string(rpc.Error) != "null" {
+		return nil, fmt.Errorf("MCP 错误: %s", string(rpc.Error))
+	}
+	if rpc.Result == nil {
+		return nil, fmt.Errorf("MCP HTTP 响应缺少 result")
+	}
+	return rpc.Result, nil
+}
+
+func readFirstSSEData(reader io.Reader, maxBytes int) ([]byte, error) {
+	scanner := bufio.NewScanner(io.LimitReader(reader, int64(maxBytes)))
+	scanner.Buffer(make([]byte, 64*1024), maxBytes)
+	var data bytes.Buffer
+	for scanner.Scan() {
+		line := bytes.TrimSuffix(scanner.Bytes(), []byte("\r"))
+		if len(line) == 0 {
+			if data.Len() > 0 {
+				return bytes.TrimSpace(data.Bytes()), nil
+			}
+			continue
+		}
+		if bytes.HasPrefix(line, []byte("data:")) {
+			if data.Len() > 0 {
+				data.WriteByte('\n')
+			}
+			data.Write(bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:"))))
+		}
+	}
+	if data.Len() > 0 {
+		return bytes.TrimSpace(data.Bytes()), nil
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return nil, fmt.Errorf("MCP SSE 响应没有 data 事件")
+}
+
 // notify 发送不需要响应的通知。
 func (c *mcpConn) notify(method string, params any) {
+	if c.remoteURL != "" {
+		c.mu.Lock()
+		_, _ = c.sendHTTP(0, method, params, 15*time.Second)
+		c.mu.Unlock()
+		return
+	}
 	msg, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
 	c.mu.Lock()
 	c.stdin.Write(append(msg, '\n'))

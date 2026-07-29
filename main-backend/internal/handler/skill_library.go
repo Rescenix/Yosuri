@@ -34,8 +34,9 @@ type Skill struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Steps       []string `json:"steps,omitempty"`
-	Body        string   `json:"body,omitempty"`   // 外部 SKILL.md 正文（markdown）
-	Source      string   `json:"source,omitempty"` // builtin | learned | external
+	Body        string   `json:"body,omitempty"`        // 外部 SKILL.md 正文（markdown）
+	Source      string   `json:"source,omitempty"`      // builtin | learned | external
+	ExternalID  string   `json:"external_id,omitempty"` // 外部技能在 skills-ext 下的安全目录标识
 	// Status 只作用于自研技能：active 可按需加载，archived 保留在磁盘供恢复，
 	// 不再使用候选/审阅状态，避免把治理成本推给用户。
 	Status       string    `json:"status,omitempty"`
@@ -290,7 +291,10 @@ func loadExternalSkills() []Skill {
 		if name == "" {
 			return
 		}
-		skills = append(skills, Skill{Name: name, Description: desc, Body: body, Source: "external", Status: skillStatusActive})
+		skills = append(skills, Skill{
+			Name: name, Description: desc, Body: body, Source: "external",
+			Status: skillStatusActive, ExternalID: fallbackName,
+		})
 	}
 	for _, e := range entries {
 		if e.IsDir() {

@@ -77,7 +77,13 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/skills", HandleListSkills)
 	r.POST("/api/skills/:name/status", HandleUpdateSkillStatus)
 	r.DELETE("/api/skills/:name", HandleDeleteSkill)
+	r.GET("/api/skills/registry", HandleSkillRegistry)
+	r.POST("/api/skills/registry/install", HandleInstallHostedSkill)
+	r.DELETE("/api/skills/external/:id", HandleDeleteExternalSkill)
 	r.GET("/api/mcp", HandleMCPStatus)
+	r.GET("/api/mcp/registry", HandleMCPRegistry)
+	r.POST("/api/mcp/registry/install", HandleInstallRegistryMCP)
+	r.DELETE("/api/mcp/registry/:name", HandleUninstallRegistryMCP)
 	r.GET("/api/profile", HandleGetProfile)
 	r.POST("/api/profile", HandleSaveProfile)
 

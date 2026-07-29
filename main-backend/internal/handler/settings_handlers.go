@@ -65,10 +65,15 @@ func HandleDeleteSkill(c *gin.Context) {
 // ---------------- MCP 生态 ----------------
 
 type mcpServerView struct {
-	Name    string   `json:"name"`
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-	Tools   []string `json:"tools"` // 该 server 运行时注册的完整工具名
+	Name         string   `json:"name"`
+	Command      string   `json:"command,omitempty"`
+	Args         []string `json:"args,omitempty"`
+	URL          string   `json:"url,omitempty"`
+	Transport    string   `json:"transport"`
+	Source       string   `json:"source,omitempty"`
+	RegistryName string   `json:"registry_name,omitempty"`
+	Status       string   `json:"status"`
+	Tools        []string `json:"tools"` // 该 server 运行时注册的完整工具名
 }
 
 // HandleMCPStatus GET /api/mcp —— 读 mcp.json 配置 + 运行时已注册工具。
@@ -82,7 +87,15 @@ func HandleMCPStatus(c *gin.Context) {
 		var cfg mcpConfig
 		if json.Unmarshal(data, &cfg) == nil {
 			for name, sc := range cfg.Servers {
-				view := mcpServerView{Name: name, Command: sc.Command, Args: sc.Args, Tools: []string{}}
+				transport := "stdio"
+				if sc.URL != "" {
+					transport = "streamable-http"
+				}
+				view := mcpServerView{
+					Name: name, Command: sc.Command, Args: sc.Args, URL: sc.URL,
+					Transport: transport, Source: sc.Source, RegistryName: sc.RegistryName,
+					Status: "unavailable", Tools: []string{},
+				}
 				prefix := "mcp__" + name + "__"
 				for full := range mcpRoutes {
 					if strings.HasPrefix(full, prefix) {
@@ -90,6 +103,9 @@ func HandleMCPStatus(c *gin.Context) {
 					}
 				}
 				sort.Strings(view.Tools)
+				if mcpConns[name] != nil {
+					view.Status = "connected"
+				}
 				servers = append(servers, view)
 			}
 		}
