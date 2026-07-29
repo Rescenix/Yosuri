@@ -8,6 +8,8 @@ package handler
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"backend/internal/ai/core"
 )
@@ -18,7 +20,7 @@ type nativeToolResult struct {
 }
 
 func nativeOnDemandToolDefs() []core.ToolDefinition {
-	return []core.ToolDefinition{
+	defs := []core.ToolDefinition{
 		nativeTool("read_file", "按行读取文本文件，返回带行号的内容；一次最多 400 行。offset 从 1 开始，limit 是行数。", map[string]core.ToolProperty{
 			"path":   {Type: "string", Description: "文件路径；相对路径按当前工作目录解析"},
 			"offset": {Type: "integer", Description: "起始行号，1-indexed，默认 1"},
@@ -103,6 +105,18 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"block": {Type: "string", Description: "要追加的 Markdown 内容"},
 		}, []string{"block"}),
 	}
+	// 搜索服务需要密钥；没有 Key 时连 schema 都不暴露，模型不会选中后才失败。
+	if nativeWebSearchEnabled() {
+		defs = append(defs, nativeTool("web_search", "联网搜索并返回标题、URL 与摘要；结果可继续交给 web_fetch 读取正文。", map[string]core.ToolProperty{
+			"query": {Type: "string", Description: "搜索关键词"},
+			"count": {Type: "integer", Description: "返回结果数量，默认 5，最大 10"},
+		}, []string{"query"}))
+	}
+	return defs
+}
+
+func nativeWebSearchEnabled() bool {
+	return strings.TrimSpace(os.Getenv("BING_SEARCH_API_KEY")) != ""
 }
 
 func nativeTool(name, description string, properties map[string]core.ToolProperty, required []string) core.ToolDefinition {
@@ -143,6 +157,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callNativeCommand(ctx, argsJSON)
 	case "web_fetch":
 		return callNativeWebFetch(ctx, argsJSON)
+	case "web_search":
+		return callNativeWebSearch(ctx, argsJSON)
 	case "view_image":
 		return callNativeViewImage(ctx, argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",

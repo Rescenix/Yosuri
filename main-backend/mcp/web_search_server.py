@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # web_search_server.py —— re0 自研 MCP server（stdio / JSON-RPC 2.0）
 #
-# 提供一个工具：联网搜索。默认用 Bing Search API（稳定、每月 1000 次免费额度），
-# 通过环境变量 BING_SEARCH_API_KEY 配置；未配置时返回清晰错误。
+# 提供一个可选工具：联网搜索。请求/响应兼容 Bing Search v7，也可通过
+# BING_SEARCH_ENDPOINT 指向自建兼容网关；未配置 Key 时不注册工具。
 #
 # 协议：initialize -> notifications/initialized -> tools/list -> tools/call
 # 实现风格照抄同目录 web_fetch_server.py / grep_server.py。
@@ -13,7 +13,9 @@ import sys
 
 import httpx
 
-BING_ENDPOINT = "https://api.bing.microsoft.com/v7.0/search"
+BING_ENDPOINT = os.environ.get(
+    "BING_SEARCH_ENDPOINT", "https://api.bing.microsoft.com/v7.0/search"
+).strip()
 BING_KEY = os.environ.get("BING_SEARCH_API_KEY", "").strip()
 
 
@@ -65,29 +67,32 @@ def do_web_search(query: str, count: int = 5):
     return tool_result("\n".join(lines))
 
 
-TOOLS = [
-    {
-        "name": "web_search",
-        "description": (
-            "联网搜索。给定查询词，返回相关网页的标题、URL 和摘要。"
-            "用于获取最新信息、查证事实、查找文档或教程。"
-            "返回的结果可以用 web_fetch 工具进一步读取全文。"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "搜索关键词"},
-                "count": {"type": "integer", "description": "返回结果数量，默认 5，最大 10"},
-            },
-            "required": ["query"],
+SEARCH_TOOL = {
+    "name": "web_search",
+    "description": (
+        "联网搜索。给定查询词，返回相关网页的标题、URL 和摘要。"
+        "用于获取最新信息、查证事实、查找文档或教程。"
+        "返回的结果可以用 web_fetch 工具进一步读取全文。"
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "搜索关键词"},
+            "count": {"type": "integer", "description": "返回结果数量，默认 5，最大 10"},
         },
+        "required": ["query"],
     },
-]
+}
+
+# tools/list 决定模型能否看到工具。没有 Key 时，全局仍只保留免 Key 的 web_fetch。
+TOOLS = [SEARCH_TOOL] if BING_KEY else []
 
 
 def handle_call(name, args):
     args = args or {}
     if name == "web_search":
+        if not BING_KEY:
+            return tool_result("联网搜索未启用：未配置 BING_SEARCH_API_KEY。可改用 web_fetch 抓取已知 URL。", is_error=True)
         count = args.get("count", 5)
         try:
             count = int(count) if count else 5
