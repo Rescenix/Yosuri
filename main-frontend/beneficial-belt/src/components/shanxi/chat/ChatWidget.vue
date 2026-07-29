@@ -2873,14 +2873,14 @@ async function attachImageFile(file) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_base64: base64, mime_type: file.type || 'image/png', model: visionModel })
     })
-    if (!res.ok) throw new Error(`请求失败 (${res.status})`)
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `识图请求失败 (${res.status})`)
     if (!data.text) throw new Error('未返回分析文本')
     const item = attachments.value.find(a => a.id === id)
     if (item) { item.status = 'ready'; item.analysisText = data.text }
   } catch (err) {
     const item = attachments.value.find(a => a.id === id)
-    if (item) { item.status = 'error'; item.errorMsg = '分析失败' }
+    if (item) { item.status = 'error'; item.errorMsg = err?.message || '识图失败' }
   }
 }
 

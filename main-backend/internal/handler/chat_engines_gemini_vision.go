@@ -185,17 +185,20 @@ type aetherVisionRequest struct {
 }
 
 // analyzeImageWithModelID 走通用 OpenAI 兼容视觉路由（model_router.go 的 resolveExact +
-// openAIChatOnce），让设置面板选的任意 Vision 模型（含本地 llama-server）都能承接识图，
-// 不再被写死在 Gemini 一条路径上。mimeType 由调用方按上传文件的真实类型传入——不像
-// vision.go 的 analyzeImageViaRouter 那样固定 image/png（那是给截图链路用的，截图确定是 PNG）。
+// openAIChatOnce），让设置面板选中的主模型或独立识图模型（含本地 llama-server）承接识图。
+//
+// 不能用 b.Vision 做硬门禁：自定义 OpenAI 兼容提供方的 /models 通常不返回能力元数据，
+// 因而实际支持图片的模型也可能是 Vision=false。这里以用户选择和上游真实响应为准；
+// Vision 只用于 UI 提示与“分开配置”的候选筛选，不是调用许可。
 func analyzeImageWithModelID(ctx context.Context, modelID, imageBase64, mimeType, instruction string) (string, error) {
 	b := resolveExact("", modelID)
 	if b == nil {
 		return "", fmt.Errorf("模型 %s 未找到或未配置 Key", modelID)
 	}
-	if !b.Vision {
-		return "", fmt.Errorf("模型 %s 不支持视觉", modelID)
-	}
+	return analyzeImageWithBackend(ctx, *b, imageBase64, mimeType, instruction)
+}
+
+func analyzeImageWithBackend(ctx context.Context, b RouterBackend, imageBase64, mimeType, instruction string) (string, error) {
 	// 本地 llama-server：只有真正选中本地识图模型时才按需拉起（不占用内存直到用的时候）。
 	if b.IsLocal {
 		EnsureLocalLlamaServer()
@@ -210,6 +213,9 @@ func analyzeImageWithModelID(ctx context.Context, modelID, imageBase64, mimeType
 	if idx := strings.Index(clean, "base64,"); idx != -1 {
 		clean = clean[idx+7:]
 	}
+	if strings.TrimSpace(clean) == "" {
+		return "", fmt.Errorf("图片 base64 数据为空")
+	}
 	msgs := []map[string]any{{
 		"role": "user",
 		"content": []map[string]any{
@@ -221,7 +227,7 @@ func analyzeImageWithModelID(ctx context.Context, modelID, imageBase64, mimeType
 	// 给足 90s 而不是沿用 openAIChatOnce 默认的 45s catalog 超时太紧的场景交给调用方自行兜底。
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	content, _, err := openAIChatOnce(ctx, *b, msgs, nil)
+	content, _, err := openAIChatOnce(ctx, b, msgs, nil)
 	if err != nil {
 		return "", err
 	}

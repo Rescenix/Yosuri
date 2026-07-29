@@ -6,10 +6,12 @@ package handler
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,6 +20,42 @@ func TestAnalyzeImageWithModelID_UnknownModel(t *testing.T) {
 	_, err := analyzeImageWithModelID(context.Background(), "totally-bogus-model-id", "", "image/png", "")
 	if err == nil || !strings.Contains(err.Error(), "未找到") {
 		t.Fatalf("未知模型 ID 应报「未找到」，got: %v", err)
+	}
+}
+
+func TestAnalyzeImageWithBackend_DoesNotRejectUnknownVisionMetadata(t *testing.T) {
+	var requestBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		requestBody = string(raw)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"识图成功"}}]}`))
+	}))
+	defer upstream.Close()
+
+	backend := RouterBackend{
+		Name: "自定义多模态模型", BaseURL: upstream.URL, Model: "multimodal-model",
+		APIKey: "test-key", Timeout: time.Second,
+		// 模拟 /models 没有返回能力字段：实际支持识图，但目录元数据为 false。
+		Vision: false,
+	}
+	got, err := analyzeImageWithBackend(
+		context.Background(), backend, "aGVsbG8=", "image/png", "描述图片",
+	)
+	if err != nil {
+		t.Fatalf("未知视觉能力元数据不应阻止真实调用: %v", err)
+	}
+	if got != "识图成功" {
+		t.Fatalf("识图响应不匹配: %q", got)
+	}
+	for _, want := range []string{
+		`"model":"multimodal-model"`,
+		`"type":"image_url"`,
+		`data:image/png;base64,aGVsbG8=`,
+	} {
+		if !strings.Contains(requestBody, want) {
+			t.Errorf("上游请求缺少 %q: %s", want, requestBody)
+		}
 	}
 }
 
