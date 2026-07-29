@@ -2,21 +2,52 @@
 
 # ResceneAgent
 
-> 一个为 Vibe Coding 而生的二次元前端 Agent 工作台。
+> **国内首个为编程而生的真免费 Vibe Coding 工作台**：免费 Token、本地运行、功能齐全。
 
 ![ResceneAgent 工作台总览：审计痕迹、工作流图、对话与 Git Agent](./docs/screenshots/OverPlay.png)
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Cute%20UI-二次元主题-ff69b4" alt="Cute UI">
-  <img src="https://img.shields.io/badge/Free%20Models-No%20API%20Key%20Required-brightgreen" alt="Free Models, No API Key Required">
+  <img src="https://img.shields.io/badge/Free%20Token-无需订阅-brightgreen" alt="Free Token">
+  <img src="https://img.shields.io/badge/Local%20First-代码留在本机-blue" alt="Local First">
+  <img src="https://img.shields.io/badge/Full%20Stack-Agent%20IDE%20Browser-ff69b4" alt="Agent IDE Browser">
 </p>
 
-**ResceneAgent 首先是一款让人愿意打开的工具。**
+## Vibe Coding，不该是一场资格赛
 
-我们把它做成了一款支持用户自定义动态壁纸、灵动动画和主题配色的 Vibe Coding 工作台。写代码不需要再盯着枯燥的 IDE，只要打开氛围、描述想法，Agent 会生成项目、渲染预览、迭代设计；每次文件修改都有漂亮的流式反馈——从气泡到按钮，从 Diff 高亮到渐变瀑布，每个细节都打磨过。
+今天想认真用 AI 编程，开发者常常先被挡在代码之外：
 
-但好看不是花瓶。你可以像聊天一样对它说"帮我做一个可爱的待办页面"，它会生成项目、启动真实 Chromium 预览，你还能亲手点击验收；不满意就回滚，危险操作它会先问你。Vibe 归 Vibe，交付归交付。
+- **国外头部工具正在形成新的平台壁垒**：Claude Code、Codex 很强，但账号、地区、价格、配额和服务规则都掌握在厂商手里。地区不可用、账号被停、套餐调整，任何一项都可能让工作流突然中断。
+- **Agent 越强，安全边界越不能靠运气**：能读代码、跑 Shell、访问网络，就也可能遭遇提示词注入、依赖投毒、凭据泄露和误删文件。把整个项目交给闭源黑盒，开发者很难真正审计每一步。
+- **换成国内服务，常见的仍是限流、付费和排队**：免费额度只够试用，高峰期要等，真正能完成长任务的上下文、模型和工具又被放进更贵的套餐。
+- **很多所谓“免费 Coding”只是聊天框**：能回答问题，却没有文件树、终端、Diff、浏览器验收、回滚和多 Agent 编排，最后还是要你自己拼完交付链路。
+
+我不想让写代码变成“先买订阅、再抢额度、最后祈祷别封号”。
+
+所以我做了 **ResceneAgent**：一个面向国内开发者、真正为编程而生的 Vibe Coding 工作台。不是再套一层聊天 UI，而是把免费模型、Agent、IDE、终端、真实浏览器、Git、MCP、技能和安全审计放进同一个本地工作流。
+
+> **Clone 下来就能跑。不开会员，不绑信用卡，不购买 Token，也能开始 Vibe Coding。**
+
+<sub>这些风险不是危言耸听：OpenAI 官方说明，在不受支持的地区访问 API 可能导致账号被封禁或暂停；Anthropic 官方披露会依据支持地区与使用政策暂停或终止账号。两家公司也都在安全文档中明确提示 Coding Agent 的提示词注入、恶意代码与数据泄露风险。参见 [OpenAI 支持地区](https://help.openai.com/en/articles/5347006-openai-api-supported-countries-and-territories)、[Anthropic 透明度中心](https://www.anthropic.com/transparency/system-trust-reporting)、[Claude Code 沙箱说明](https://www.anthropic.com/engineering/claude-code-sandboxing) 与 [Codex 网络访问风险](https://deploymentsafety.openai.com/gpt-5-3-codex/cybersecurity)。</sub>
+
+## “真免费”具体是什么
+
+| 你真正关心的 | ResceneAgent 怎么做 |
+| --- | --- |
+| **免费 Token** | 内置免 Key 免费模型池，无需购买官方订阅即可开始；免费源失败时自动熔断并切换。你也可以接入自己的 Key。 |
+| **本地运行** | 前端、后端、工作区、会话和审计记录都运行并保存在本机；还可接入 Ollama / llama.cpp，让模型推理也留在本地。 |
+| **功能齐全** | Monaco 编辑器、文件树、终端、实时 Diff、TODO、多 Agent、MCP、技能市场、图片生成、真实 Chromium 预览与截图验收，一套工作台全部提供。 |
+| **不锁平台** | 模型与提供方可自由配置，云端免费模型、私有 API Key、本地模型可以并存；某一家不可用，不必连工具一起换掉。 |
+| **安全可控** | AgentFS 隔离改动并支持 Diff / 回滚；删除、移动等危险操作必须由人批准，YOLO 模式也不能绕过。 |
+
+> [!NOTE]
+> “免费”指 ResceneAgent 本身开源、无需订阅即可使用，并提供免 Key 免费模型入口；第三方免费模型的额度与可用性可能变化。本地模型不受第三方 Token 额度影响。
+
+## 好看不是花瓶
+
+ResceneAgent 支持自定义动态壁纸、灵动动画和主题配色。写代码不必再盯着枯燥的 IDE：打开氛围、描述想法，Agent 会生成项目、渲染预览并持续迭代；每次文件修改都有清晰的流式反馈——从 Diff 高亮到渐变瀑布，每个细节都经过打磨。
+
+你可以像聊天一样说“帮我做一个可爱的待办页面”，它会生成项目、启动真实 Chromium 预览，你还能亲手点击验收；不满意就回滚，危险操作它会先问你。**Vibe 归 Vibe，交付归交付。**
 
 ## 二次元与 UI 体验 First
 
