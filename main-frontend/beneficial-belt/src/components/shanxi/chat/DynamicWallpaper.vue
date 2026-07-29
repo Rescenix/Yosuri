@@ -86,9 +86,7 @@ onUnmounted(() => {
 .dynamic-wallpaper-shade {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(rgba(0, 0, 0, var(--wallpaper-dim, 0.24)), rgba(0, 0, 0, var(--wallpaper-dim, 0.24))),
-    radial-gradient(circle at 50% 0%, rgba(var(--app-surface-rgb), 0.02), rgba(var(--app-surface-rgb), 0.12));
+  background: rgba(0, 0, 0, var(--wallpaper-dim, 0.08));
 }
 
 [data-dynamic-wallpaper="on"] body {
@@ -97,31 +95,38 @@ onUnmounted(() => {
 
 [data-dynamic-wallpaper="on"] .app-shell,
 [data-dynamic-wallpaper="on"] .chat-page {
-  background: transparent;
+  background: transparent !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded {
-  background: transparent;
+  background: transparent !important;
   border-color: transparent;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-body-row {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-workspace-alpha, 0.6));
-  backdrop-filter: blur(var(--wallpaper-blur, 10px));
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 10px));
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-[data-dynamic-wallpaper="on"] .chat-window.expanded .chat-body.studio .chat-content,
+[data-dynamic-wallpaper="on"] .chat-window.expanded .chat-body.studio .chat-content {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 [data-dynamic-wallpaper="on"] .chat-window.expanded .gem-sidebar,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel-header,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .dock-pane {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.84));
-  backdrop-filter: blur(var(--wallpaper-blur, 10px));
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 10px));
+  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
+  backdrop-filter: blur(var(--wallpaper-blur, 0)) !important;
+  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 0)) !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-input-area {
-  background: transparent;
+  background: transparent !important;
 }
 
 </style>

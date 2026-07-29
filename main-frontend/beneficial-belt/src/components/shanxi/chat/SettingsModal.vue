@@ -294,7 +294,7 @@
                 </div>
                 <div class="param-row">
                   <span class="param-label">面板不透明度</span>
-                  <input class="param-range" type="range" min="35" max="96" step="1" v-model.number="dynamicWallpaperSettings.panelOpacity" />
+                  <input class="param-range" type="range" min="0" max="96" step="1" v-model.number="dynamicWallpaperSettings.panelOpacity" />
                   <span class="param-value">{{ dynamicWallpaperSettings.panelOpacity }}%</span>
                 </div>
                 <div class="param-row">
