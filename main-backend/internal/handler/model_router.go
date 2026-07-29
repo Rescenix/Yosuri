@@ -90,10 +90,6 @@ var freeModelCatalog = []FreeModelDef{
 	// 按本目录「未知者留 0，绝不伪造」的规矩不填。
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true},
 
-	// —— 硅基流动 SiliconFlow（api.siliconflow.cn；代金券余额可用，对终端用户免费）——
-	{ID: "free_sf_zai_org_glm_5_2", Vendor: "硅基流动 SiliconFlow", Name: "GLM-5.2（免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "zai-org/GLM-5.2", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
-	{ID: "free_sf_pro_moonshotai_kimi_k2_6", Vendor: "硅基流动 SiliconFlow", Name: "Pro/Kimi-K2.6（免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "Pro/moonshotai/Kimi-K2.6", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动（代金券）", Vision: true, ContextWindow: 128000, Reasoning: true},
-
 	// —— Agnes AI 免费多模态网关（apihub.agnes-ai.com/v1，OpenAI 兼容）——
 	// 2026-07-27 用户要求接入：文本 + 多模态理解（识图）走 /v1/chat/completions，
 	// 生图（/v1/images/generations）暂未接进本路由层（现有生图为 DASHSCOPE 专线）。

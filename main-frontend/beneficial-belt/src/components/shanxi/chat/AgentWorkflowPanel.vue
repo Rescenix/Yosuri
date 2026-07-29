@@ -724,9 +724,10 @@ function toolBodyText(b) {
   max-height: 800px;
 }
 
-/* 展开组本身不缩进：每一条思考 / 工具调用标题都要独占完整一行。 */
+/* 展开的思考 / 工具节点属于概要的子级，整体向右缩进；图标样式保持一致，
+   但不与概要左侧图标共用同一竖轴。 */
 .flow-body {
-  margin-top: 4px;
+  margin: 4px 0 0 24px;
 }
 /* 时间线里的标题：灰色小字、去卡片底 */
 .flow-body .flow-row-head,
@@ -742,8 +743,7 @@ function toolBodyText(b) {
 .flow-thinking-single .flow-row-head:hover {
   background: transparent;
 }
-/* 图标即节点：背后垫一层与聊天背景同色的圆底，把竖线遮住 */
-/* 只让展开详情缩进并显示竖线，标题仍和上层内容左对齐。 */
+/* 节点的详情再缩进一级并显示竖线。 */
 .flow-detail {
   margin: 4px 0 6px 24px;
   padding: 0 0 2px 16px;

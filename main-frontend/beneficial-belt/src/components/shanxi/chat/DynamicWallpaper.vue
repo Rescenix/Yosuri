@@ -129,4 +129,11 @@ onUnmounted(() => {
   background: transparent !important;
 }
 
+[data-dynamic-wallpaper="on"] .message-bubble.user {
+  background: transparent !important;
+  border-color: color-mix(in srgb, var(--app-accent) 78%, transparent) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 </style>
