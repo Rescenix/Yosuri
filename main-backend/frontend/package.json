@@ -1,0 +1,10 @@
+{
+  "name": "rescene-wails-frontend-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:app": "npm --prefix ../../main-frontend/beneficial-belt install",
+    "build": "npm --prefix ../../main-frontend/beneficial-belt run build && node copy-dist.mjs",
+    "dev": "npm --prefix ../../main-frontend/beneficial-belt run dev"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "product": "Chrome for Testing",
+  "version": "151.0.7922.47",
+  "platform": "win64",
+  "source": "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.47/win64/chrome-win64.zip",
+  "archiveSha256": "FC77BB98B550B7DA23B14EDFA282B59A022E7FDB075AC7625D2A5152CEB22396",
+  "downloadedAt": "2026-07-29"
+}

@@ -17,8 +17,18 @@ main-backend/shanxi-server
 # 构建目录
 /build/
 /dist/
+main-backend/build/
+main-backend/frontend/dist/*
+!main-backend/frontend/dist/.gitkeep
+main-backend/frontend/package.json.md5
+main-backend/frontend/wailsjs/
 /target/
 /bin/
+
+# 打包时下载的浏览器运行时体积很大，只保留来源与校验信息。
+runtime/chromium/*
+!runtime/chromium/README.md
+!runtime/chromium/RELEASE.json
 
 # IDE
 .idea/
@@ -72,6 +82,7 @@ opencode/
 
 # Go 构建缓存
 .gocache/
+main-backend/.codex-go-cache/
 
 # 临时测试文件
 login-test.html

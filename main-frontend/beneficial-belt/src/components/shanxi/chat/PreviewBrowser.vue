@@ -102,6 +102,7 @@
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { previewRequest } from '../composables/previewBus.js'
+import { backendURL } from '../../../desktopTransport.js'
 
 const servers = ref([])
 const serversLoading = ref(true)
@@ -150,11 +151,14 @@ async function fetchServers() {
 }
 
 function cdpRelayUrl(targetWS, targetURL) {
-  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const query = targetWS
     ? `ws=${encodeURIComponent(targetWS)}`
     : `url=${encodeURIComponent(targetURL)}`
-  return `${scheme}//${window.location.host}/api/preview/cdp?${query}`
+  const path = `/api/preview/cdp?${query}`
+  const relay = backendURL(path)
+  if (/^https?:\/\//i.test(relay)) return relay.replace(/^http/i, 'ws')
+  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${scheme}//${window.location.host}${relay}`
 }
 
 // 连接同源后端中转；CDP 命令、帧 ACK 和 9222 连接全部由后端负责。
