@@ -252,7 +252,7 @@ function groupSummaryTitle(group) {
     if (last?.type === 'thinking') return '正在思考…'
     return 'Agent 正在处理…'
   }
-  return '过程'
+  return '运行了多个命令'
 }
 
 // 收起态思考行的一行预览：取首个非空行、压掉空白、截断
