@@ -1,10 +1,14 @@
 <template>
-  <ChatWidget autoOpen sessionId="" />
+  <main class="chat-view-shell">
+    <DynamicWallpaper />
+    <ChatWidget autoOpen sessionId="" />
+  </main>
 </template>
 
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 import ChatWidget from '../components/shanxi/chat/ChatWidget.vue'
+import DynamicWallpaper from '../components/shanxi/chat/DynamicWallpaper.vue'
 
 let prevOverflow = ''
 
@@ -18,3 +22,11 @@ onUnmounted(() => {
   document.body.style.overflow = prevOverflow
 })
 </script>
+
+<style scoped>
+.chat-view-shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+}
+</style>
