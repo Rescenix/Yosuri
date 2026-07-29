@@ -356,6 +356,79 @@ func skillLibraryPrompt() string {
 	return "\n━━━ 技能库索引（按需加载，用 read_skill 取完整内容） ━━━\n" + strings.Join(lines, "\n") + "\n"
 }
 
+// autoLoadedSkillsPrompt 是“可发现”之外的确定性保障：宿主先按任务类型匹配，
+// 命中后直接把技能全文放进首轮 system prompt，不再依赖模型主动调用 read_skill。
+// 目前 frontend-design 属于高价值且触发边界清晰的技能；其他技能仍可通过在任务里
+// 显式写出技能名来强制加载，避免对所有技能做含糊的语义猜测和无上限 token 注入。
+func autoLoadedSkillsPrompt(task string) string {
+	task = strings.TrimSpace(task)
+	if task == "" {
+		return ""
+	}
+	lowerTask := strings.ToLower(task)
+	var matched []Skill
+	seen := map[string]bool{}
+	for _, skill := range loadSkills() {
+		name := strings.ToLower(strings.TrimSpace(skill.Name))
+		if name == "" || seen[name] {
+			continue
+		}
+		explicit := len(name) >= 4 && strings.Contains(lowerTask, name)
+		typed := name == "frontend-design" && isFrontendDesignTask(lowerTask)
+		if !explicit && !typed {
+			continue
+		}
+		seen[name] = true
+		matched = append(matched, skill)
+		if len(matched) == 3 {
+			break
+		}
+	}
+	if len(matched) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n━━━ 已自动加载的任务技能（宿主确定性匹配，必须遵循） ━━━\n")
+	b.WriteString("以下内容已由宿主在第一次模型调用前加载，不需要再调用 read_skill，也不得因未主动读取而忽略。\n")
+	for _, skill := range matched {
+		fmt.Fprintf(&b, "\n## %s\n用途：%s\n", skill.Name, skill.Description)
+		if skill.Trigger != "" {
+			fmt.Fprintf(&b, "触发条件：%s\n", skill.Trigger)
+		}
+		if skill.Verification != "" {
+			fmt.Fprintf(&b, "验证方式：%s\n", skill.Verification)
+		}
+		if len(skill.Steps) > 0 {
+			b.WriteString("执行步骤：\n")
+			for i, step := range skill.Steps {
+				fmt.Fprintf(&b, "%d. %s\n", i+1, step)
+			}
+		}
+		if skill.Body != "" {
+			b.WriteString(skill.Body)
+			if !strings.HasSuffix(skill.Body, "\n") {
+				b.WriteByte('\n')
+			}
+		}
+	}
+	return b.String()
+}
+
+var frontendDesignEnglishTokenPattern = regexp.MustCompile(`(^|[^a-z0-9])(ui|ux|css|html|vue|react|svelte|tailwind)([^a-z0-9]|$)`)
+
+func isFrontendDesignTask(lowerTask string) bool {
+	for _, keyword := range []string{
+		"前端", "界面", "网页", "网站", "页面设计", "组件设计", "视觉设计", "交互设计", "响应式",
+		"frontend", "front-end", "web app", "landing page", ".vue", ".tsx", ".jsx", ".css", ".html",
+	} {
+		if strings.Contains(lowerTask, keyword) {
+			return true
+		}
+	}
+	return frontendDesignEnglishTokenPattern.MatchString(lowerTask)
+}
+
 // readSkillToolName 是取回技能完整步骤的钥匙，跟 load_tools 一样必须常驻工具集。
 const readSkillToolName = "read_skill"
 

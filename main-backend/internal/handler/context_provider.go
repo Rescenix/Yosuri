@@ -66,13 +66,17 @@ type roundState struct {
 // 段落顺序即装配顺序，stable 的排前面——注意这不是随意排的：
 // system/subagent/工具索引在进程内基本不动，skill 每完成一个任务就可能变，
 // memory 每写一次记忆就变，把后两者放在最后，前面那一大段的缓存才活得下来。
-func newWorkflowContextProvider() *contextProvider {
+func newWorkflowContextProvider(tasks ...string) *contextProvider {
 	memoryInject := swiftnet.Default().UnconditionalInject()
 	memorySection := ""
 	if memoryInject != "" {
 		memorySection = "\n\n# 长期记忆（无条件注入，身份/工作态/收件箱）\n" + memoryInject
 	}
 	workdirSection := projectWorkdirPrompt()
+	task := ""
+	if len(tasks) > 0 {
+		task = tasks[0]
+	}
 
 	return &contextProvider{
 		activated: map[string]bool{},
@@ -91,9 +95,9 @@ func newWorkflowContextProvider() *contextProvider {
 			{key: "tools", content: mcpToolIndexPrompt() + nativeToolIndexPrompt(), stable: true},
 
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
-			{key: "skill", content: skillLibraryPrompt()}, // 每次任务成功后可能新增技能
-			{key: "memory", content: memorySection},       // 每写一次记忆就变
-			{key: "memory", content: workdirSection},      // 项目级 workdir.md，会话开始即注入，跨对话不失业
+			{key: "skill", content: skillLibraryPrompt() + autoLoadedSkillsPrompt(task)}, // 索引 + 当前任务确定性预加载
+			{key: "memory", content: memorySection},                                      // 每写一次记忆就变
+			{key: "memory", content: workdirSection},                                     // 项目级 workdir.md，会话开始即注入，跨对话不失业
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},

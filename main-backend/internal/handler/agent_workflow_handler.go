@@ -236,7 +236,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 上下文装配全部交给 ContextProvider（见 context_provider.go）：
 	// 系统提示词分段声明、稳定段排前面（前缀缓存友好）、分类占用与提示词同源、
 	// 按需加载的工具激活集也归它管。SwiftNet 的无条件记忆注入是其中一段。
-	provider := newWorkflowContextProvider()
+	provider := newWorkflowContextProvider(task)
 	contextBreakdown := provider.Breakdown()
 	staticSum := provider.StaticSum()
 	tools := provider.Tools()
