@@ -3299,6 +3299,25 @@ min-height: 90px !important;
   height: 32px;
   border-color: color-mix(in srgb, hsl(var(--node-hue, 330) 90% 65%) 58%, transparent);
 }
+.git-graph-node.current .agentfs-node-dot {
+  width: 25px;
+  height: 25px;
+  background: var(--app-accent);
+  border-color: #fff;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-accent) 22%, transparent), 0 0 18px color-mix(in srgb, var(--app-accent) 62%, transparent);
+}
+.git-graph-node.current::after {
+  content: "当前";
+  position: absolute;
+  top: -14px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--app-accent);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+}
 .agentfs-node-label { z-index: 4; }
 @keyframes agentfs-branch-grow {
   from { opacity: 0; stroke-dasharray: 1 140; stroke-dashoffset: 140; }

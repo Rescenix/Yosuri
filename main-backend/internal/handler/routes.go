@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -24,6 +23,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	})
 	r.GET("/api/git-status", gin.WrapH(http.HandlerFunc(GitStatusHandler)))
 	r.GET("/api/git/branches", GitBranches)
+	r.GET("/api/git/graph", GitGraph)
 	r.POST("/api/git/checkout", GitCheckout)
 	r.POST("/api/git/branches", GitCreateBranch)
 	// git 工作树全量 diff（Diff 面板）
@@ -38,10 +38,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/workdir", GetWorkdir)
 	r.POST("/api/workdir/pick", PickWorkdir)
 	r.POST("/api/workdir", SetWorkdir)
-	// AgentFS：写操作事务层 —— 影子 git 仓审计 / 回退
+	// AgentFS：本地文件历史时间线（VS Code Timeline 风格，无 git）
 	r.POST("/api/agentfs/open", AgentFSOpen)
 	r.GET("/api/agentfs/log", AgentFSLog)
-	r.POST("/api/agentfs/branches", AgentFSCreateBranch)
 	r.POST("/api/agentfs/diff", AgentFSDiff)
 	r.POST("/api/agentfs/restore", AgentFSRestore)
 	// 真实交互式终端：SSE 输出 + POST 写 stdin，会话按 id 常驻（详见 terminal_handler.go）
@@ -83,8 +82,6 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
 	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)
 
-	r.PATCH("/api/posts/:id", UpdatePostTags)
-	r.DELETE("/api/posts/:id", DeletePost)
 	r.GET("/api/sessions/:id", func(c *gin.Context) {
 		id := c.Param("id")
 		// 返回持久化视图而不是 []DSMessage：DSMessage 的 Timestamp/Blocks 打了 json:"-"
@@ -176,8 +173,6 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 		c.JSON(200, gin.H{"session_id": id})
 	})
 
-	r.GET("/api/posts", GetPosts)
-	r.POST("/api/posts", CreatePost)
 	r.POST("/api/login", CloudLoginProxy)
 	// GitHub OAuth 登录：流量转发到私有鉴权服务 ResceneCloud（/api/auth/github 发起，
 	// /api/auth/github/callback 接收回调并带回 JWT）。re0 不持有 OAuth 密钥。
@@ -190,23 +185,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)
 
-	r.GET("/api/book/list", ListBooks)
-	r.GET("/api/book/content", GetBookContent)
-	r.POST("/api/book/upload", UploadBook)
-	r.DELETE("/api/book/delete", DeleteBook)
-	r.GET("/api/admin/clear-redis", func(c *gin.Context) {
-		if redisEnabled {
-			ctx := context.Background()
-			redisClient.FlushAll(ctx)
-			c.JSON(200, gin.H{"status": "ok", "message": "Redis 缓存已清空"})
-		} else {
-			c.JSON(200, gin.H{"status": "disabled", "message": "Redis 未启用"})
-		}
-	})
 	// view_image MCP server（main-backend/mcp/view_image_server.py）的转发目标，
 	// Key/视觉模型调用只在这一处，见 HandleVisionAnalyze 头注释。
 	r.POST("/api/vision/analyze", HandleVisionAnalyze)
-	r.POST("/api/book/upload-cover", UploadCover)
 
 	// 用户自定义 API 接入配置（设置面板用，QQ 登录接入前先用固定 "default" 用户）
 	r.GET("/api/models/config", HandleGetModelConfig)

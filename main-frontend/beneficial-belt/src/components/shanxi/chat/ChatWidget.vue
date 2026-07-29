@@ -147,7 +147,7 @@
                   @mouseleave="closeRailUtilityPreviewDelayed"
                 >
                   <div v-if="railUtilityPreview === 'agentfs'" class="rail-agentfs-preview">
-                    <div v-if="agentFSTimeline.length" class="agentfs-tree">
+                    <div v-if="gitGraph.commits.length" class="agentfs-tree">
                       <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
                         <defs>
                           <linearGradient id="agentfs-preview-link-gradient" x1="0" y1="0" x2="0" y2="1">
@@ -156,7 +156,7 @@
                           </linearGradient>
                         </defs>
                         <path
-                          v-for="link in agentFSGraphLinks"
+                          v-for="link in gitGraphLinks"
                           :key="link.key"
                           :d="link.d"
                           class="agentfs-tree-link"
@@ -165,20 +165,19 @@
                         />
                       </svg>
                       <button
-                        v-for="node in agentFSGraphNodes"
-                        :key="`preview-${node.snapshot.commit}-${node.snapshot.seq}`"
-                        class="agentfs-node"
-                        :class="{ active: selectedAgentFSSnapshot?.commit === node.snapshot.commit, latest: node.index === 0, leaf: node.isLeaf, branch: node.isBranch }"
+                        v-for="node in gitGraphNodes"
+                        :key="`preview-${node.commit.hash}`"
+                        class="agentfs-node git-graph-node"
+                        :class="{ current: node.commit.current }"
                         :style="{ left: node.x + 'px', top: node.y + 'px', '--node-hue': node.hue, '--node-order': node.index }"
                         type="button"
-                        :title="`${node.snapshot.rel_path} · ${formatAgentFSTime(node.snapshot.ts)}`"
-                        @click.stop="openAgentFSFromRailPreview(node.snapshot, $event)"
+                        :title="`${node.commit.hash.slice(0, 8)} · ${node.commit.subject}`"
                       >
                         <span class="agentfs-node-dot"></span>
-                        <span class="agentfs-node-label">{{ node.shortName }}</span>
+                        <span class="agentfs-node-label">{{ node.label }}</span>
                       </button>
                     </div>
-                    <div v-else class="rail-utility-empty">当前会话还没有修改快照</div>
+                    <div v-else class="rail-utility-empty">当前仓库还没有提交记录</div>
                   </div>
                   <HarnessFlowRail v-else compact :flow="lastAgentFlow" />
                 </aside>
@@ -202,16 +201,6 @@
                       <em>−{{ agentFSDiffStats.removed }}</em>
                     </span>
                     <span class="agentfs-meta-time">{{ selectedAgentFSSnapshot.op === 'edit' ? '编辑' : '写入' }} · {{ formatAgentFSTime(selectedAgentFSSnapshot.ts) }}</span>
-                    <button
-                      type="button"
-                      class="agentfs-branch-btn"
-                      :disabled="agentFSBranchCreating"
-                      title="从此快照创建 AgentFS 分支"
-                      @click="createAgentFSBranch(selectedAgentFSSnapshot)"
-                    >
-                      <Icon icon="mdi:source-branch-plus" width="14" />
-                      {{ agentFSBranchCreating ? '创建中' : '建分支' }}
-                    </button>
                     <button type="button" class="agentfs-card-close" title="关闭" @click="closeAgentFSDiff">
                       <Icon icon="mdi:close" width="15" />
                     </button>
@@ -289,7 +278,7 @@
                 <span class="left-utility-card-hint">拖右边缘调宽</span>
               </header>
               <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
-              <div v-if="agentFSTimeline.length" ref="agentFSTreeRef" class="agentfs-tree">
+              <div v-if="gitGraph.commits.length" ref="agentFSTreeRef" class="agentfs-tree">
                 <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
                   <defs>
                     <linearGradient id="agentfs-link-gradient" x1="0" y1="0" x2="0" y2="1">
@@ -298,7 +287,7 @@
                     </linearGradient>
                   </defs>
                   <path
-                    v-for="link in agentFSGraphLinks"
+                    v-for="link in gitGraphLinks"
                     :key="link.key"
                     :d="link.d"
                     class="agentfs-tree-link"
@@ -307,20 +296,18 @@
                   />
                 </svg>
                 <button
-                  v-for="node in agentFSGraphNodes"
-                  :key="node.snapshot.commit + '-' + node.snapshot.seq"
-                  type="button"
-                  class="agentfs-node"
-                  :class="{ active: selectedAgentFSSnapshot?.commit === node.snapshot.commit, latest: node.index === 0, leaf: node.isLeaf, branch: node.isBranch }"
+                  v-for="node in gitGraphNodes"
+                  :key="node.commit.hash"
+                  class="agentfs-node git-graph-node"
+                  :class="{ current: node.commit.current }"
                   :style="{ left: `${node.x}px`, top: `${node.y}px`, '--node-hue': node.hue, '--node-order': node.index }"
-                  :title="`${node.snapshot.rel_path} · ${formatAgentFSTime(node.snapshot.ts)}`"
-                  @click.stop="openAgentFSSnapshot(node.snapshot, $event)"
+                  :title="`${node.commit.hash.slice(0, 8)} · ${node.commit.subject}`"
                 >
                   <span class="agentfs-node-dot"></span>
-                  <span class="agentfs-node-label">{{ node.shortName }}</span>
+                  <span class="agentfs-node-label">{{ node.label }}</span>
                 </button>
               </div>
-              <div v-else class="agentfs-empty-rail" aria-label="当前会话还没有 AgentFS 修改快照"></div>
+              <div v-else class="agentfs-empty-rail" aria-label="当前仓库还没有提交记录"></div>
               </div>
             </section>
             <section v-if="showHarnessWorkflow" class="left-utility-card harness-utility-card">
@@ -1506,8 +1493,6 @@ const workDirFolderInputRef = ref(null)
 // ==================== AgentFS 会话快照树 ====================
 const agentFSTimeline = ref([])
 const agentFSLoading = ref(false)
-const agentFSCurrentBranch = ref('main')
-const agentFSBranchCreating = ref(false)
 const selectedAgentFSSnapshot = ref(null)
 const agentFSDiffRaw = ref('')
 const agentFSDiffLoading = ref(false)
@@ -1518,6 +1503,7 @@ const agentFSViewportHeight = ref(620)
 let agentFSPollTimer = null
 let boundAgentFSKey = ''
 const agentFSGraphWidth = 260
+const gitGraph = ref({ commits: [], current_branch: '' })
 
 function syncAgentFSTreeViewport() {
   const height = agentFSTreeRef.value?.clientHeight
@@ -1578,6 +1564,28 @@ const agentFSGraphLinks = computed(() => {
       hue: node.hue
     }]
   })
+})
+
+const gitGraphNodes = computed(() => {
+  const lanes = []
+  return gitGraph.value.commits.map((commit, index) => {
+    let lane = lanes.indexOf(commit.hash)
+    if (lane < 0) { lane = 0; lanes.unshift(commit.hash) }
+    const parents = commit.parents || []
+    if (parents.length) lanes[lane] = parents[0]; else lanes.splice(lane, 1)
+    for (const parent of parents.slice(1)) if (!lanes.includes(parent)) lanes.push(parent)
+    const centerX = Math.round(agentFSGraphWidth / 2 - ((Math.max(lanes.length, lane + 1) - 1) * 28) / 2 + lane * 28)
+    return { commit, index, centerX, x: centerX - 12, y: 24 + index * 42, hue: (210 + lane * 62) % 360,
+      label: (commit.branches || []).join(', ') || `${commit.hash.slice(0, 7)} · ${commit.subject}` }
+  })
+})
+const gitGraphLinks = computed(() => {
+  const nodes = gitGraphNodes.value, byHash = new Map(nodes.map(n => [n.commit.hash, n]))
+  return nodes.flatMap(node => (node.commit.parents || []).flatMap(hash => {
+    const parent = byHash.get(hash); if (!parent) return []
+    const y1 = node.y + 12, y2 = parent.y + 12, mid = Math.round((y1 + y2) / 2)
+    return [{ key: `${node.commit.hash}-${hash}`, trunk: node.centerX === parent.centerX, hue: node.hue, d: `M ${node.centerX} ${y1} C ${node.centerX} ${mid}, ${parent.centerX} ${mid}, ${parent.centerX} ${y2}` }]
+  }))
 })
 
 const agentFSDiffLines = computed(() => {
@@ -1657,7 +1665,6 @@ async function refreshAgentFSTimeline() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || `读取失败 (${res.status})`)
     agentFSTimeline.value = (Array.isArray(data.log) ? data.log : []).slice().reverse().slice(0, 18)
-    agentFSCurrentBranch.value = data.current_branch || 'main'
     if (selectedAgentFSSnapshot.value &&
         !agentFSTimeline.value.some(item => item.commit === selectedAgentFSSnapshot.value.commit)) {
       closeAgentFSDiff()
@@ -1688,7 +1695,7 @@ async function openAgentFSSnapshot(snapshot, event) {
     const res = await fetch('/api/agentfs/diff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: currentWorkDir.value.name, commit: snapshot.commit })
+      body: JSON.stringify({ project: currentWorkDir.value.name, seq: snapshot.seq })
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || `Diff 读取失败 (${res.status})`)
@@ -1739,34 +1746,6 @@ function toggleWorkDirMenu() {
   if (showWorkDirMenu.value) workDirMenuView.value = 'recent'
 }
 
-async function createAgentFSBranch(snapshot) {
-  if (!snapshot?.commit || agentFSBranchCreating.value) return
-  const suggested = `branch-${snapshot.seq || Date.now()}`
-  const name = window.prompt('新 AgentFS 分支名称', suggested)?.trim()
-  if (!name) return
-  agentFSBranchCreating.value = true
-  try {
-    const res = await fetch('/api/agentfs/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        project: currentWorkDir.value.name,
-        commit: snapshot.commit,
-        name
-      })
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || `创建失败 (${res.status})`)
-    agentFSCurrentBranch.value = data.branch || name
-    showGitToast(`AgentFS 已切换到分支: ${agentFSCurrentBranch.value}`)
-    closeAgentFSDiff()
-    await refreshAgentFSTimeline()
-  } catch (err) {
-    showGitToast(err.message || '创建 AgentFS 分支失败')
-  } finally {
-    agentFSBranchCreating.value = false
-  }
-}
 function openSystemWorkDirPicker() {
   showWorkDirMenu.value = false
   // 清空旧值后，同一个目录也能再次触发 change。
@@ -2598,6 +2577,7 @@ function toggleSidebar() {
 }
 function toggleAgentFSAudit() {
   showAgentFSAudit.value = !showAgentFSAudit.value
+  if (showAgentFSAudit.value) refreshGitGraph()
   if (!showAgentFSAudit.value) closeAgentFSDiff()
 }
 function toggleHarnessWorkflow() {
@@ -2981,6 +2961,7 @@ watch(() => flowState.active, (active, wasActive) => {
 // ==================== 初始化 ====================
 onMounted(() => {
   fetchGitStatus()
+  refreshGitGraph()
   loadWorkDirState()
   syncWorkDirFromBackend()
   refreshAgentFSTimeline()
@@ -3002,6 +2983,17 @@ onUnmounted(() => {
   window.removeEventListener('resize', syncAgentFSTreeViewport)
   window.clearInterval(agentFSPollTimer)
 })
+async function refreshGitGraph() {
+  try {
+    const res = await fetch('/api/git/graph')
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '读取 Git 图失败')
+    gitGraph.value = { commits: Array.isArray(data.commits) ? data.commits : [], current_branch: data.current_branch || '' }
+  } catch (err) {
+    console.warn('读取 Git 分支图失败', err)
+    gitGraph.value = { commits: [], current_branch: '' }
+  }
+}
 </script>
 
 <style scoped>
@@ -3215,5 +3207,19 @@ onUnmounted(() => {
 }
 .msg-user-text:hover {
   filter: brightness(1.08);
+}
+
+/* 字体设置必须同时作用于机器人消息及其 Markdown 内容。
+ * 这里放在组件样式最后，覆盖 chat-window.css 中遗留的 16/17px 固定值。 */
+.chat-window .chat-messages .assistant-message,
+.chat-window .chat-messages .assistant-message .markdown-body {
+  font-size: var(--app-chat-font-size, 13px) !important;
+}
+.chat-window .chat-messages .assistant-message .markdown-body p,
+.chat-window .chat-messages .assistant-message .markdown-body li,
+.chat-window .chat-messages .assistant-message .markdown-body blockquote,
+.chat-window .chat-messages .assistant-message .markdown-body table,
+.chat-window .chat-messages .assistant-message .markdown-body pre {
+  font-size: inherit !important;
 }
 </style>

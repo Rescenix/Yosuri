@@ -24,6 +24,61 @@ type GitBranchRequest struct {
 	Branch string `json:"branch"`
 }
 
+// GitGraphCommit 是审计面板使用的真实本地 Git 提交拓扑。
+type GitGraphCommit struct {
+	Hash     string   `json:"hash"`
+	Parents  []string `json:"parents"`
+	Subject  string   `json:"subject"`
+	Time     string   `json:"time"`
+	Branches []string `json:"branches"`
+	Current  bool     `json:"current"`
+}
+
+func GitGraph(c *gin.Context) {
+	headCmd := exec.Command("git", "rev-parse", "HEAD")
+	headCmd.Dir = GitRepoRoot
+	headOut, err := headCmd.Output()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 Git HEAD 失败"})
+		return
+	}
+	head := strings.TrimSpace(string(headOut))
+	branchCmd := exec.Command("git", "branch", "--show-current")
+	branchCmd.Dir = GitRepoRoot
+	branchOut, _ := branchCmd.Output()
+	branch := strings.TrimSpace(string(branchOut))
+	refsCmd := exec.Command("git", "for-each-ref", "--format=%(objectname)%x1f%(refname:short)", "refs/heads")
+	refsCmd.Dir = GitRepoRoot
+	refsRaw, _ := refsCmd.Output()
+	branches := map[string][]string{}
+	for _, row := range strings.Split(strings.TrimSpace(string(refsRaw)), "\n") {
+		p := strings.SplitN(row, "\x1f", 2)
+		if len(p) == 2 {
+			branches[p[0]] = append(branches[p[0]], p[1])
+		}
+	}
+	cmd := exec.Command("git", "log", "--all", "--topo-order", "-n", "80", "--pretty=format:%H%x1f%P%x1f%aI%x1f%s%x1e")
+	cmd.Dir = GitRepoRoot
+	raw, err := cmd.Output()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	commits := make([]GitGraphCommit, 0)
+	for _, row := range strings.Split(string(raw), "\x1e") {
+		p := strings.SplitN(strings.TrimSpace(row), "\x1f", 4)
+		if len(p) != 4 {
+			continue
+		}
+		parents := []string{}
+		if p[1] != "" {
+			parents = strings.Fields(p[1])
+		}
+		commits = append(commits, GitGraphCommit{Hash: p[0], Parents: parents, Time: p[2], Subject: p[3], Branches: branches[p[0]], Current: p[0] == head})
+	}
+	c.JSON(http.StatusOK, gin.H{"current_branch": branch, "commits": commits})
+}
+
 var validBranchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
 
 func localGitBranches() ([]string, error) {
