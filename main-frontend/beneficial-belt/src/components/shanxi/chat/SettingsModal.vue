@@ -13,8 +13,29 @@
           <div class="settings-sidebar">
             <button class="settings-tab" :class="{ on: activeTab === 'models' }" @click="activeTab = 'models'">
               <Icon icon="mdi:brain" width="16" />模型</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'">
-              <Icon icon="mdi:server-network-outline" width="16" />提供方</button>
+            <div class="settings-tab-group">
+              <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'">
+                <Icon icon="mdi:server-network-outline" width="16" />提供方
+              </button>
+              <div v-show="activeTab === 'providers'" class="settings-subtabs">
+                <button
+                  class="settings-subtab"
+                  :class="{ on: providerSubTab === 'free' }"
+                  type="button"
+                  @click="providerSubTab = 'free'"
+                >
+                  <Icon icon="mdi:gift-outline" width="15" />免费模型
+                </button>
+                <button
+                  class="settings-subtab"
+                  :class="{ on: providerSubTab === 'custom' }"
+                  type="button"
+                  @click="providerSubTab = 'custom'"
+                >
+                  <Icon icon="mdi:key-outline" width="15" />自定义 API
+                </button>
+              </div>
+            </div>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
             <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()">
@@ -98,90 +119,95 @@
 
             <!-- ========== 提供方 ========== -->
             <div v-show="activeTab === 'providers'" class="settings-panel">
-              <div class="settings-section-title">免费模型提供商</div>
-              <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；免 Key 提供方可直接使用。</div>
+              <template v-if="providerSubTab === 'free'">
+                <div class="settings-section-title">免费模型</div>
+                <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；免 Key 提供方可直接使用。</div>
 
-              <div v-if="loading" class="settings-loading">加载中...</div>
-              <template v-else>
-                <div v-for="grp in vendorGroups" :key="grp.vendor" class="vendor-group">
-                  <div class="vendor-head">
-                    <span class="vendor-name">{{ grp.vendor }}</span>
-                    <span class="vendor-count">{{ grp.items.length }} 个模型</span>
-                    <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? '免 Key' : (grp.hasKey ? '已配 Key' : '未配 Key') }}</span>
-                    <button v-if="!grp.keyless && editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
-                    <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
+                <div v-if="loading" class="settings-loading">加载中...</div>
+                <template v-else>
+                  <div v-for="grp in vendorGroups" :key="grp.vendor" class="vendor-group">
+                    <div class="vendor-head">
+                      <span class="vendor-name">{{ grp.vendor }}</span>
+                      <span class="vendor-count">{{ grp.items.length }} 个模型</span>
+                      <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? '免 Key' : (grp.hasKey ? '已配 Key' : '未配 Key') }}</span>
+                      <button v-if="!grp.keyless && editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
+                      <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
+                    </div>
+                    <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
+                      <input
+                        v-model="vendorKeyDraft"
+                        type="password"
+                        class="vendor-key-input"
+                        :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
+                        @keyup.enter="saveVendorKey(grp)"
+                      />
+                      <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
+                      <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
+                    </div>
+                    <div class="vendor-model-hint">配置后自动加入：{{ grp.items.map(m => m.name).join('、') }}</div>
                   </div>
-                  <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
-                    <input
-                      v-model="vendorKeyDraft"
-                      type="password"
-                      class="vendor-key-input"
-                      :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
-                      @keyup.enter="saveVendorKey(grp)"
-                    />
-                    <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
-                    <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
-                  </div>
-                  <div class="vendor-model-hint">配置后自动加入：{{ grp.items.map(m => m.name).join('、') }}</div>
-                </div>
+                </template>
               </template>
 
-              <div class="settings-section-title" style="margin-top: 18px;">自定义 API 提供方</div>
-              <div class="settings-section-desc">一条配置对应一个提供方。保存时会读取它的 /models，并把该提供方的全部模型加入聊天下拉框。</div>
+              <template v-else>
+                <div class="settings-section-title">自定义 API</div>
+                <div class="settings-section-desc">一条配置对应一个提供方。保存时会读取它的 /models，并把该提供方的全部模型加入聊天下拉框。</div>
 
-              <template v-if="!loading">
-                <div v-for="cfg in configs" :key="cfg.id" class="api-config-card">
-                  <div class="api-config-row">
-                    <span class="api-config-name">{{ cfg.name || '未命名配置' }}</span>
-                    <span v-if="cfg.is_default" class="api-config-default-badge">默认</span>
-                    <div class="api-config-actions">
-                      <button class="api-config-action-btn" :disabled="!!configBusy" @click="refreshConfigModels(cfg)">
-                        {{ configBusy === cfg.id ? '获取中...' : '刷新模型' }}
-                      </button>
-                      <button v-if="!cfg.is_default" class="api-config-action-btn" @click="setDefault(cfg.id)">设为默认</button>
-                      <button class="api-config-action-btn" @click="startEdit(cfg)">编辑</button>
-                      <button class="api-config-action-btn danger" @click="removeConfig(cfg.id)">删除</button>
+                <div v-if="loading" class="settings-loading">加载中...</div>
+                <template v-else>
+                  <div v-for="cfg in configs" :key="cfg.id" class="api-config-card">
+                    <div class="api-config-row">
+                      <span class="api-config-name">{{ cfg.name || '未命名配置' }}</span>
+                      <span v-if="cfg.is_default" class="api-config-default-badge">默认</span>
+                      <div class="api-config-actions">
+                        <button class="api-config-action-btn" :disabled="!!configBusy" @click="refreshConfigModels(cfg)">
+                          {{ configBusy === cfg.id ? '获取中...' : '刷新模型' }}
+                        </button>
+                        <button v-if="!cfg.is_default" class="api-config-action-btn" @click="setDefault(cfg.id)">设为默认</button>
+                        <button class="api-config-action-btn" @click="startEdit(cfg)">编辑</button>
+                        <button class="api-config-action-btn danger" @click="removeConfig(cfg.id)">删除</button>
+                      </div>
+                    </div>
+                    <div class="api-config-meta">
+                      {{ cfg.endpoint }} · {{ providerModelCount(cfg) }} 个模型 · {{ cfg.api_key_set ? '已设置 Key' : '免 Key / 未设置 Key' }}
                     </div>
                   </div>
-                  <div class="api-config-meta">
-                    {{ cfg.endpoint }} · {{ providerModelCount(cfg) }} 个模型 · {{ cfg.api_key_set ? '已设置 Key' : '免 Key / 未设置 Key' }}
-                  </div>
-                </div>
 
-                <div v-if="!editingConfig" class="api-config-add-btn" @click="startAdd">
-                  <Icon icon="mdi:plus" width="15" /> 添加自定义提供方
-                </div>
+                  <div v-if="!editingConfig" class="api-config-add-btn" @click="startAdd">
+                    <Icon icon="mdi:plus" width="15" /> 添加自定义提供方
+                  </div>
 
-                <div v-else class="api-config-form">
-                  <div class="api-preset-row">
-                    <span class="api-preset-label">预设模板：</span>
-                    <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" type="button" @click="applyPreset(p)">{{ p.name }}</button>
+                  <div v-else class="api-config-form">
+                    <div class="api-preset-row">
+                      <span class="api-preset-label">预设模板：</span>
+                      <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" type="button" @click="applyPreset(p)">{{ p.name }}</button>
+                    </div>
+                    <label class="api-form-field">
+                      <span>提供方名称</span>
+                      <input v-model="editingConfig.name" type="text" placeholder="比如 DeepSeek" autocomplete="off" />
+                    </label>
+                    <label class="api-form-field">
+                      <span>Endpoint</span>
+                      <input v-model="editingConfig.endpoint" type="text" placeholder="https://api.example.com" autocomplete="off" />
+                    </label>
+                    <label class="api-form-field">
+                      <span>API Key</span>
+                      <input
+                        v-model="editingConfig.api_key"
+                        type="password"
+                        autocomplete="new-password"
+                        :placeholder="editingConfig.api_key_set ? '••••••••（留空则不修改）' : '输入 API Key'"
+                      />
+                    </label>
+                    <div class="api-form-hint">无需逐个填写模型名；系统会从 Endpoint 的 /models 自动获取全部模型。</div>
+                    <div class="api-form-actions">
+                      <button class="api-form-btn cancel" type="button" @click="cancelEdit">取消</button>
+                      <button class="api-form-btn save" type="button" :disabled="!!configBusy" @click="saveConfig">
+                        {{ configBusy ? '正在获取模型...' : '保存并添加全部模型' }}
+                      </button>
+                    </div>
                   </div>
-                  <label class="api-form-field">
-                    <span>提供方名称</span>
-                    <input v-model="editingConfig.name" type="text" placeholder="比如 DeepSeek" autocomplete="off" />
-                  </label>
-                  <label class="api-form-field">
-                    <span>Endpoint</span>
-                    <input v-model="editingConfig.endpoint" type="text" placeholder="https://api.example.com" autocomplete="off" />
-                  </label>
-                  <label class="api-form-field">
-                    <span>API Key</span>
-                    <input
-                      v-model="editingConfig.api_key"
-                      type="password"
-                      autocomplete="new-password"
-                      :placeholder="editingConfig.api_key_set ? '••••••••（留空则不修改）' : '输入 API Key'"
-                    />
-                  </label>
-                  <div class="api-form-hint">无需逐个填写模型名；系统会从 Endpoint 的 /models 自动获取全部模型。</div>
-                  <div class="api-form-actions">
-                    <button class="api-form-btn cancel" type="button" @click="cancelEdit">取消</button>
-                    <button class="api-form-btn save" type="button" :disabled="!!configBusy" @click="saveConfig">
-                      {{ configBusy ? '正在获取模型...' : '保存并添加全部模型' }}
-                    </button>
-                  </div>
-                </div>
+                </template>
               </template>
             </div>
 
@@ -486,6 +512,7 @@ const emit = defineEmits(['close'])
 
 // 左侧边栏当前 tab
 const activeTab = ref('models')
+const providerSubTab = ref('free')
 
 // ============ 界面配色切换 ============
 const colorThemes = computed(() => Object.entries(THEME_PRESETS))
@@ -1109,6 +1136,43 @@ onUnmounted(() => {
 }
 .settings-tab:hover { background: var(--app-surface-3); }
 .settings-tab.on { color: #fff; background: var(--app-accent); }
+.settings-tab-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-tab-group > .settings-tab { width: 100%; }
+.settings-subtabs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 20px;
+}
+.settings-subtab {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  color: var(--app-text-faint);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.settings-subtab:hover {
+  color: var(--app-text);
+  background: var(--app-surface-3);
+}
+.settings-subtab.on {
+  color: var(--app-text);
+  background: var(--app-surface-3);
+  font-weight: 650;
+}
 /* 右侧内容 */
 .settings-content {
   flex: 1;
