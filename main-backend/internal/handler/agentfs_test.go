@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,11 +8,11 @@ import (
 	"backend/internal/ai/core"
 )
 
-// TestAgentFSWriteEditRestore 端到端验证 AgentFS v1 影子事务层：
+// TestAgentFSWriteEditRestore 端到端验证 AgentFS 本地历史时间线：
 //  1. 开辟会话（OpenAgentFSSession）
-//  2. 模拟一次 write_file：OnBeforeWrite → 真实写盘 → OnAfterWrite
+//  2. 模拟一次 write_file：OnBeforeWrite → 真实写 → OnAfterWrite
 //  3. 审计时间线出现该笔记录（AgentFSLog）
-//  4. AgentFSRestore 把文件还原到写之前的内容，真实盘被回退
+//  4. 用 historyStore 还原到 before 状态，真实盘被回退
 //
 // 全部用 t.TempDir()，不污染 ~/rescene_data，也不碰 re0 主仓库。
 func TestAgentFSWriteEditRestore(t *testing.T) {
@@ -43,7 +42,7 @@ func TestAgentFSWriteEditRestore(t *testing.T) {
 	// 1) 开辟会话
 	sess := OpenAgentFSSession(project, tmpWork)
 	if sess == nil {
-		t.Fatal("OpenAgentFSSession 返回 nil（影子仓初始化失败）")
+		t.Fatal("OpenAgentFSSession 返回 nil（历史目录初始化失败）")
 	}
 	if sess.Project != project {
 		t.Fatalf("session.Project = %q, want %q", sess.Project, project)
@@ -59,21 +58,10 @@ func TestAgentFSWriteEditRestore(t *testing.T) {
 	OnAfterWrite("mcp__fs__write_file", args)
 
 	// 3) 审计时间线应含 1 条 write 记录
-	ap := agentfsAuditPath(project)
-	raw, err := os.ReadFile(ap)
+	store := newHistoryStore(project)
+	records, err := store.List("")
 	if err != nil {
-		t.Fatalf("读取 audit.jsonl 失败: %v", err)
-	}
-	var records []agentfsAudit
-	for _, line := range splitLines(string(raw)) {
-		if line == "" {
-			continue
-		}
-		var a agentfsAudit
-		if e := json.Unmarshal([]byte(line), &a); e != nil {
-			t.Fatalf("audit 行解析失败 %q: %v", line, e)
-		}
-		records = append(records, a)
+		t.Fatalf("读取审计日志失败: %v", err)
 	}
 	if len(records) != 1 {
 		t.Fatalf("审计记录数 = %d, want 1（got: %+v）", len(records), records)
@@ -88,10 +76,13 @@ func TestAgentFSWriteEditRestore(t *testing.T) {
 	if rec.BeforeHash == "" || rec.AfterHash == "" {
 		t.Errorf("before/after hash 不应为空: before=%q after=%q", rec.BeforeHash, rec.AfterHash)
 	}
-	if rec.Commit == "" {
-		t.Errorf("commit 短 hash 不应为空（git 未提交？）")
+	if rec.BeforeBlob == "" {
+		t.Errorf("before_blob 不应为空")
 	}
-	commitV1 := rec.Commit
+	if !rec.ExistsBefore {
+		t.Errorf("ExistsBefore 应为 true")
+	}
+	seqV1 := rec.Seq
 
 	// 4) 再模拟一次 edit（验证时间线增长 + 第二版内容）
 	editArgs := map[string]any{"path": fileRel, "edits": []map[string]any{
@@ -104,28 +95,30 @@ func TestAgentFSWriteEditRestore(t *testing.T) {
 	}
 	OnAfterWrite("mcp__fs__edit_file", editArgs)
 
-	raw2, _ := os.ReadFile(ap)
-	if n := len(splitLines(string(raw2))); n != 2 {
-		t.Fatalf("第二次写后审计记录数 = %d, want 2", n)
+	records2, err := store.List("")
+	if err != nil {
+		t.Fatalf("第二次写后读取审计日志失败: %v", err)
+	}
+	if len(records2) != 2 {
+		t.Fatalf("第二次写后审计记录数 = %d, want 2", len(records2))
 	}
 
-	// 5) 验证"时间旅行"：用 git show <commitV1>:<rel> 取回 v1 历史版本内容，
-	//    断言等于 newContent（v1），且不同于 v2。这证明影子仓能精确还原到任意提交。
-	repo := agentfsRepoDir(project)
-	histOut, err := gitRun(repo, "show", commitV1+":"+fileRel)
+	// 5) 验证"时间旅行"：用 historyStore 取回 seqV1 的 before 内容，
+	//    应等于 newContent（v1），且不同于 v2。
+	hist, err := store.Restore(seqV1)
 	if err != nil {
-		t.Fatalf("git show %s:%s 失败: %v (%s)", commitV1, fileRel, err, histOut)
+		t.Fatalf("Restore seq=%d 失败: %v", seqV1, err)
 	}
-	if histOut != string(newContent) {
-		t.Errorf("commitV1 历史内容 = %q, want v1 %q", histOut, string(newContent))
+	if string(hist) != string(newContent) {
+		t.Errorf("seqV1 before 内容 = %q, want v1 %q", string(hist), string(newContent))
 	}
 	// 当前真实盘应是 v2（第二次 edit 后）
 	cur, _ := os.ReadFile(fileAbs)
 	if string(cur) != string(edited) {
 		t.Errorf("当前真实盘 = %q, want v2 %q", string(cur), string(edited))
 	}
-	// 执行还原（等价 AgentFSRestore 内部逻辑）：把历史版本写回真实盘
-	if err := os.WriteFile(fileAbs, []byte(histOut), 0o644); err != nil {
+	// 执行还原：把 v1 写回真实盘
+	if err := os.WriteFile(fileAbs, hist, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	restored, _ := os.ReadFile(fileAbs)
@@ -134,7 +127,7 @@ func TestAgentFSWriteEditRestore(t *testing.T) {
 	}
 }
 
-// splitLines 按 \n 切分并清理末尾空行（与 OnAfterWrite 的写入格式对齐）。
+// splitLines 按 \n 切分并清理末尾空行（与历史写入格式对齐）。
 func splitLines(s string) []string {
 	var out []string
 	start := 0

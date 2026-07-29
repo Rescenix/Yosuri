@@ -9,14 +9,14 @@
     <div v-if="expanded" class="bgstep-action-detail">
       <!-- write_file：全新写入，没有 before 快照，DiffViewer 里 oldContent 传空
            字符串，jsdiff 会正确地把所有内容展示成新增行 -->
-      <template v-if="isFileWrite(tc) && readArgs(tc).path">
+      <template v-if="isFileWrite(tc) && toolPath(tc)">
         <div class="bgdiff-card">
           <div class="bgdiff-head">
             <Icon icon="mdi:file-outline" width="13" color="#a3a3a3" />
-            <span class="bgdiff-path">{{ readArgs(tc).path }}</span>
+            <span class="bgdiff-path">{{ toolPath(tc) }}</span>
             <span class="bgdiff-add-count">+{{ diffStats(tc).added }}</span>
           </div>
-          <DiffViewer :old-content="''" :new-content="readArgs(tc).content || ''" :path="readArgs(tc).path" />
+          <DiffViewer :old-content="''" :new-content="toolContent(tc)" :path="toolPath(tc)" />
         </div>
       </template>
 
@@ -85,8 +85,18 @@ function readArgs(tc) {
 // 文件写/编辑类工具：内置 write_file/edit_file，以及 MCP filesystem 的
 // mcp__fs__write_file / mcp__fs__edit_file。参数名：内置用 old_string/new_string，
 // MCP 用 oldText/newText（见 main-backend/skills/file-edit-with-retry.json）。
-function isFileWrite(tc) { return tc.name === 'write_file' || tc.name === 'mcp__fs__write_file' || tc.name === 'mcp__fs__create_file' }
+function isFileWrite(tc) {
+  return tc.name === 'write_file' || tc.name === 'mcp__fs__write_file' ||
+    tc.name === 'mcp__fs__create_file' || tc.name === 'inject_preview_js'
+}
 function isFileEdit(tc) { return tc.name === 'edit_file' || tc.name === 'mcp__fs__edit_file' }
+function toolPath(tc) {
+  return tc.name === 'inject_preview_js' ? 'preview/injected.js' : (readArgs(tc).path || '')
+}
+function toolContent(tc) {
+  const args = readArgs(tc)
+  return tc.name === 'inject_preview_js' ? (args.js || '') : (args.content || '')
+}
 // MCP filesystem 的 edit_file 真实 schema：{ path, edits:[{oldText,newText}] }（数组）。
 // 内置 edit_file 是 { path, old_string, new_string }（单数）。两者都兼容。
 function editOldStr(tc) {
@@ -121,7 +131,7 @@ function editStartLine(tc) {
 function diffStats(tc) {
   const args = readArgs(tc)
   const oldStr = isFileEdit(tc) ? editOldStr(tc) : ''
-  const newStr = isFileEdit(tc) ? editNewStr(tc) : (args.content || '')
+  const newStr = isFileEdit(tc) ? editNewStr(tc) : toolContent(tc)
   const parts = diffLines(oldStr, newStr)
   let added = 0, removed = 0
   for (const p of parts) {
@@ -135,8 +145,8 @@ function diffStats(tc) {
 
 function actionLabel(tc) {
   if (isFileWrite(tc)) {
-    const args = readArgs(tc)
-    return `编辑了 ${fileBaseName(args.path)} +${diffStats(tc).added}`
+    const verb = tc.name === 'inject_preview_js' ? '注入了' : '编辑了'
+    return `${verb} ${fileBaseName(toolPath(tc))} +${diffStats(tc).added}`
   }
   if (isFileEdit(tc)) {
     const args = readArgs(tc)

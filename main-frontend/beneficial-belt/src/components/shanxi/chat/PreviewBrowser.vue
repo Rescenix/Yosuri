@@ -16,13 +16,27 @@
       <div class="pb-url-wrap">
         <Icon icon="mdi:web" width="14" class="pb-url-icon" />
         <input
-          v-model="urlInput"
+          :value="displayedUrl"
           class="pb-url-input"
+          :class="{ 'is-hidden': addressHidden }"
           type="text"
-          placeholder="输入 URL"
+          :placeholder="addressHidden ? '地址已隐藏' : '输入 URL'"
+          :readonly="addressHidden"
           spellcheck="false"
+          @input="onUrlInput"
           @keydown.enter="navigateTo(urlInput)"
         />
+        <button
+          class="pb-url-privacy-btn"
+          type="button"
+          :class="{ active: addressHidden }"
+          :title="addressHidden ? '显示地址' : '隐藏地址'"
+          :aria-label="addressHidden ? '显示地址' : '隐藏地址'"
+          :aria-pressed="addressHidden"
+          @click="toggleAddressVisibility"
+        >
+          <Icon :icon="addressHidden ? 'mdi:eye-off-outline' : 'mdi:eye-outline'" width="15" />
+        </button>
       </div>
 
       <div class="pb-actions">
@@ -95,6 +109,7 @@ const history = ref([])
 const historyIndex = ref(-1)
 const currentUrl = ref('')
 const urlInput = ref('')
+const addressHidden = ref(false)
 const frameSrc = ref('')
 const frameRef = ref(null)
 const loading = ref(false)
@@ -107,6 +122,12 @@ let currentCDPTarget = ''
 let currentCDPUrl = ''
 let reloadSeq = 0
 const cdpCanvas = ref(null)       // 双向渲染画布（替代 <img>）
+const ADDRESS_VISIBILITY_KEY = 'preview-browser-address-hidden'
+
+const displayedUrl = computed(() => {
+  if (!addressHidden.value) return urlInput.value
+  return urlInput.value ? '地址已隐藏' : ''
+})
 
 function isFrontend(s) {
   if (s.category) return s.category === 'frontend'
@@ -202,6 +223,9 @@ function disconnectCDP() {
 }
 
 onMounted(() => {
+  try {
+    addressHidden.value = window.localStorage.getItem(ADDRESS_VISIBILITY_KEY) === '1'
+  } catch {}
   fetchServers()
   if (previewRequest.url) navigateTo(previewRequest.url, previewRequest.cdp_ws, previewRequest.cdp_error)
   window.addEventListener('keydown', onKeyDown)
@@ -233,6 +257,17 @@ function normalizeUrl(raw) {
   if (raw.startsWith('//')) return 'https:' + raw
   if (looksLikeLocalAddress(raw)) return 'http://' + raw
   return 'https://' + raw
+}
+
+function onUrlInput(event) {
+  if (!addressHidden.value) urlInput.value = event.target.value
+}
+
+function toggleAddressVisibility() {
+  addressHidden.value = !addressHidden.value
+  try {
+    window.localStorage.setItem(ADDRESS_VISIBILITY_KEY, addressHidden.value ? '1' : '0')
+  } catch {}
 }
 
 function navigateTo(raw, cdpWs, cdpStartupError) {
@@ -425,6 +460,39 @@ function openExternal() {
   background: transparent;
   font-size: 12.5px;
   color: var(--app-text);
+}
+
+.pb-url-input.is-hidden {
+  color: var(--app-text-faint);
+  cursor: default;
+  user-select: none;
+}
+
+.pb-url-privacy-btn {
+  width: 24px;
+  height: 24px;
+  margin-right: -5px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--app-text-faint);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pb-url-privacy-btn:hover,
+.pb-url-privacy-btn.active {
+  background: var(--app-surface-3);
+  color: var(--app-text);
+}
+
+.pb-url-privacy-btn:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 1px;
 }
 
 .pb-empty-shell {

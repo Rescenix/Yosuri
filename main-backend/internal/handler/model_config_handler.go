@@ -2,7 +2,7 @@
 //
 // 用户自定义 API 接入配置的存储。目前还没有接 QQ 登录，所有配置先按固定的
 // "default" 用户标识存一份；等 openid 落地后把 userKey 换成真实 openid 就行，
-// 存储路径本身已经按最终形态（~/.Aurora/user_configs/{openid}.json）写好了。
+// 存储路径本身已经按最终形态（~/rescene_data/user_configs/{openid}.json）写好了。
 //
 // ⚠️ 安全现状：这里存的是明文 JSON，AES-256 加密跟 QQ 登录一起放到下一阶段。
 // GET 接口不会把 API Key 原样吐回浏览器（只返回 api_key_set 布尔值），但这
@@ -47,7 +47,7 @@ func modelConfigFilePath(userKey string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(homeDir, ".Aurora", "user_configs")
+	dir := filepath.Join(homeDir, "rescene_data", "user_configs")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}

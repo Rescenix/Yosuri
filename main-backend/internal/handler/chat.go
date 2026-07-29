@@ -72,6 +72,5 @@ type DSResp struct {
 // ========== 核心处理函数 ==========
 
 func init() {
-	core.RegisterBlogFunc(generateBlogPost)
 	startNIMDailyRefresh()
 }

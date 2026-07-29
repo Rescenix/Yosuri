@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"crypto/md5"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,16 +27,6 @@ var htmlEscaper = strings.NewReplacer(
 	"<", "&lt;",
 	">", "&gt;",
 )
-
-// ---------- 缓存 key (使用文本前2048字符 + 参数) ----------
-func generateCacheKey(req PaginateRequest) string {
-	prefix := req.Text
-	if len(prefix) > 2048 {
-		prefix = prefix[:2048]
-	}
-	hash := md5.Sum([]byte(fmt.Sprintf("%s:%.2f:%.2f:%.2f", prefix, req.FontSize, req.PageWidth, req.PageHeight)))
-	return fmt.Sprintf("pages:%x", hash)
-}
 
 // ---------- 精确字符宽度表 (单位: 相对于 1px 字体大小) ----------
 // 实际宽度 = fontSize * widthFactor
@@ -365,16 +354,7 @@ func Paginate(c *gin.Context) {
 		return
 	}
 
-	// 1. Redis 缓存
-	if redisEnabled {
-		key := generateCacheKey(req)
-		if cachedPages, err := getPagesFromCache(key); err == nil {
-			c.JSON(http.StatusOK, PaginateResponse{Pages: cachedPages})
-			return
-		}
-	}
-
-	// 2. 选择分页算法
+	// 选择分页算法
 	var pages []string
 	textSize := len(req.Text)
 	if textSize > 500_000 {
@@ -402,16 +382,6 @@ func Paginate(c *gin.Context) {
 			fmt.Println("[WARN] 高质量分页超时，回退到极速模式")
 			pages = fastPaginate(req)
 		}
-	}
-
-	// 3. 异步写入 Redis
-	if redisEnabled && len(pages) > 0 {
-		key := generateCacheKey(req)
-		go func() {
-			if err := setPagesToCache(key, pages); err != nil {
-				fmt.Printf("[WARN] 写入 Redis 失败: %v\n", err)
-			}
-		}()
 	}
 
 	c.JSON(http.StatusOK, PaginateResponse{Pages: pages})

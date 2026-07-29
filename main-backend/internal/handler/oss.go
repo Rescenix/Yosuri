@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -381,28 +380,6 @@ func DeleteTag(c *gin.Context) {
 
 // RandomImageWithAI 随机返回一张图片及其 AI 评价（按日期缓存）
 func RandomImageWithAI(c *gin.Context) {
-	force := c.Query("force") == "true"
-	date := time.Now().Format("2006-01-02")
-	cacheKey := fmt.Sprintf("daily_ai:%s", date)
-
-	// 尝试从 Redis 读取缓存（如果启用了 Redis）
-	if !force && redisEnabled {
-		val, err := redisClient.Get(context.Background(), cacheKey).Result()
-		if err == nil {
-			var cached struct {
-				ImageURL string `json:"imageUrl"`
-				Comment  string `json:"comment"`
-			}
-			if json.Unmarshal([]byte(val), &cached) == nil {
-				c.JSON(http.StatusOK, gin.H{
-					"imageUrl": cached.ImageURL,
-					"comment":  cached.Comment,
-				})
-				return
-			}
-		}
-	}
-
 	// 获取所有图片记录
 	records := loadCache()
 	if len(records) == 0 {
@@ -418,20 +395,6 @@ func RandomImageWithAI(c *gin.Context) {
 	// 调用 AI 分析图片（复用你的 AnalyzeImage 函数）
 	question := "请模仿柳永的风格写一首青词,50字内"
 	aiComment := askDeepSeekSimple(question)
-
-	// 缓存到 Redis（有效期至次日零点）
-	if redisEnabled {
-		cacheData := struct {
-			ImageURL string `json:"imageUrl"`
-			Comment  string `json:"comment"`
-		}{ImageURL: imageURL, Comment: aiComment}
-		data, _ := json.Marshal(cacheData)
-		// 设置过期时间为第二天凌晨 0 点
-		tomorrow := time.Now().Add(24 * time.Hour)
-		nextMidnight := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 0, 0, 0, tomorrow.Location())
-		ttl := nextMidnight.Sub(time.Now())
-		redisClient.Set(context.Background(), cacheKey, data, ttl)
-	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"imageUrl": imageURL,

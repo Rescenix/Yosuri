@@ -8,4 +8,3 @@ export const API_BASE_URL = isLocal
   : ''; // 部署到服务器后，使用相对路径，由Nginx代理
 
 export const CHAT_API = `${API_BASE_URL}/api/chat`;
-export const POSTS_API = `${API_BASE_URL}/api/posts`;

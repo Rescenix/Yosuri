@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 
-	"backend/internal/database"
 	"backend/internal/handler"
 
 	"github.com/gin-contrib/cors"
@@ -19,9 +18,6 @@ func main() {
 
 	// 加载环境变量
 	_ = godotenv.Load()
-
-	// 初始化数据库连接
-	database.InitDB()
 
 	// CORS 配置
 	r.Use(cors.New(cors.Config{
@@ -51,4 +47,3 @@ func main() {
 		log.Fatalf("服务启动失败: %v", err)
 	}
 }
-

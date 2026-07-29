@@ -1,3 +1,9 @@
+.chat-content.studio,
+.chat-content.studio .chat-input-area,
+.chat-content.studio .chat-input-area textarea {
+  font-size: 16px;
+}
+
 .markdown-body {
   word-break: break-word;
   line-height: 1.68;
@@ -24,7 +30,19 @@
 
 /* AI 消息主容器字体跟随皮肤 */
 .assistant-message {
+  font-size: 16px !important;
   font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
+}
+
+.message-bubble.user,
+.reasoning-stream {
+  font-size: 16px !important;
+}
+
+.chat-messages .assistant-message .markdown-body,
+.chat-messages .assistant-message .reasoning-text,
+.chat-messages .message-bubble.user {
+  font-size: 16px !important;
 }
 
 .markdown-body a {

@@ -2,7 +2,7 @@ package core
 
 // 内置工具执行器（ExecuteToolCall）及全部文件/命令/记忆工具已整体退役——
 // 工具统一走 MCP（主 Agent 用 load_tools 按需加载，子代理用 MCP 只读子集）。
-// 本文件现在只剩：工具调用的数据结构 + 项目根路径管理 + 博客生成回调注册。
+// 本文件现在只剩：工具调用的数据结构 + 项目根路径管理。
 
 import (
 	"fmt"
@@ -25,13 +25,6 @@ type ToolCallFunc struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
 }
-
-// BlogFunc 博客生成回调（与工具执行无关，博客 HTTP 链路在用）。
-type BlogFunc func(topic string) string
-
-var registeredBlogFunc BlogFunc
-
-func RegisterBlogFunc(fn BlogFunc) { registeredBlogFunc = fn }
 
 // ----- 项目根路径：可运行时切换 + 落盘持久化，不再是启动时算一次就锁死 -----
 // 优先级：上次持久化的选择 > SHANXI_PROJECT_ROOT 环境变量 > 平台默认值。

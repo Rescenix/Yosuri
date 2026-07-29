@@ -1512,7 +1512,8 @@ function syncAgentFSTreeViewport() {
 
 // AgentFS 审计记录携带真实 branch / parent_commit。旧记录没有这两个字段时，
 // 按历史顺序兼容成 main 单主干，不伪造额外分叉。
-const agentFSGraphHeight = computed(() => Math.max(180, agentFSViewportHeight.value - 8))
+// Git 图的画布按提交数自然增高，外层树容器负责滚动，避免滚轮落到聊天区。
+const agentFSGraphHeight = computed(() => Math.max(180, agentFSViewportHeight.value - 8, gitGraph.value.commits.length * 42 + 60))
 const agentFSGraphNodes = computed(() => {
   const ordered = [...agentFSTimeline.value].sort((a, b) => (b.seq || 0) - (a.seq || 0))
   const spacing = Math.min(48, Math.max(30, (agentFSGraphHeight.value - 70) / Math.max(ordered.length + 1, 2)))
@@ -3213,7 +3214,7 @@ async function refreshGitGraph() {
  * 这里放在组件样式最后，覆盖 chat-window.css 中遗留的 16/17px 固定值。 */
 .chat-window .chat-messages .assistant-message,
 .chat-window .chat-messages .assistant-message .markdown-body {
-  font-size: var(--app-chat-font-size, 13px) !important;
+  font-size: 16px !important;
 }
 .chat-window .chat-messages .assistant-message .markdown-body p,
 .chat-window .chat-messages .assistant-message .markdown-body li,
@@ -3221,5 +3222,9 @@ async function refreshGitGraph() {
 .chat-window .chat-messages .assistant-message .markdown-body table,
 .chat-window .chat-messages .assistant-message .markdown-body pre {
   font-size: inherit !important;
+}
+.chat-window .chat-input-area textarea.chat-input {
+  font-size: 16px !important;
+  line-height: 1.6 !important;
 }
 </style>

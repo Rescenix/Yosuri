@@ -291,6 +291,7 @@ const VERBS = {
   mcp__fs__create_file: '新建',
   edit_file: '编辑',
   mcp__fs__edit_file: '编辑',
+  inject_preview_js: '注入',
   execute_command: '运行',
   search_codebase: '搜索代码库',
   codegraph_query: '分析调用链',
@@ -362,7 +363,10 @@ function computeDiffCounts(b) {
 }
 
 function isEdit(name) { return name === 'edit_file' || name === 'mcp__fs__edit_file' }
-function isWrite(name) { return name === 'write_file' || name === 'mcp__fs__write_file' || name === 'mcp__fs__create_file' }
+function isWrite(name) {
+  return name === 'write_file' || name === 'mcp__fs__write_file' ||
+    name === 'mcp__fs__create_file' || name === 'inject_preview_js'
+}
 function isRead(name) {
   return name === 'read_file' || name === 'mcp__fs__read_file' ||
     name === 'mcp__fs__read_text_file' || name === 'mcp__grep__read_range'
@@ -462,8 +466,13 @@ function editNew(b) {
   if (a.new_string) return a.new_string
   return argValue(b, 'new_string', 'newText')
 }
-function fileContent(b) { return argValue(b, 'content') }
-function filePath(b) { return argValue(b, 'path') }
+function fileContent(b) {
+  return b.name === 'inject_preview_js' ? argValue(b, 'js') : argValue(b, 'content')
+}
+function filePath(b) {
+  if (b.name === 'inject_preview_js') return 'preview/injected.js'
+  return argValue(b, 'path')
+}
 
 // 生成阶段使用纯文本、固定行数的轻量预览。禁止挂载 DiffViewer：后者会在每次
 // 流式刷新时对每一行执行 highlight.js，长 HTML 足以持续占满浏览器主线程。

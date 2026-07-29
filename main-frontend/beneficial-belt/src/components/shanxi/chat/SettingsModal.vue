@@ -211,7 +211,7 @@
               </div>
 
               <div class="settings-section-title" style="margin-top: 10px;">皮肤</div>
-              <div class="settings-section-desc">完整氛围皮肤；部分皮肤为会员专享。</div>
+              <div class="settings-section-desc">完整氛围皮肤，全部免费，点击即可切换。</div>
               <div class="param-row" style="align-items: flex-start;">
                 <span class="param-label">限定皮肤</span>
                 <div class="skin-groups">
@@ -222,7 +222,7 @@
                         v-for="[key, p] in items"
                         :key="key"
                         class="skin-card"
-                        :class="{ on: theme === key, locked: p.vip && !isVip }"
+                        :class="{ on: theme === key }"
                         type="button"
                         :title="p.label"
                         @click="selectTheme(key)"
@@ -234,10 +234,10 @@
                           <span class="skin-card-label">{{ p.label }}</span>
                           <span v-if="p.vip" class="skin-card-badge">
                             <Icon icon="mdi:crown-outline" width="11" />
-                            会员
+                            免费
                           </span>
                         </span>
-                        <span v-if="p.vip && !isVip" class="skin-card-lock">
+                        <span class="skin-card-lock" v-if="false">
                           <Icon icon="mdi:lock-outline" width="14" />
                         </span>
                       </button>
@@ -246,15 +246,7 @@
                 </div>
               </div>
 
-              <!-- VIP 解锁提示 -->
-              <div v-if="vipPromptSkin" class="vip-prompt">
-                <Icon icon="mdi:crown-outline" width="16" />
-                <span>「{{ THEME_PRESETS[vipPromptSkin]?.label }}」是会员专属皮肤，使用 GitHub 登录解锁后即可使用。</span>
-                <button class="vip-prompt-btn" type="button" @click="unlockVipByLogin">GitHub 登录解锁</button>
-                <button class="vip-prompt-close" type="button" @click="vipPromptSkin = ''">
-                  <Icon icon="mdi:close" width="14" />
-                </button>
-              </div>
+              <!-- 移除会员解锁提示 -->
 
               <div class="param-row">
                 <span class="param-label">亮度</span>
@@ -307,7 +299,7 @@
                 <button class="param-reset-btn" type="button" @click="resetStreamFadeConfig">恢复默认</button>
               </div>
 
-              <!-- 精简预览：专注 Markdown / 公式 / 表格，跟随主题，无滚动条 -->
+
               <div class="settings-section-title" style="margin-top: 18px;">实时预览</div>
               <div class="settings-section-desc">按当前主题与渐变配置循环重播，专注排版 / 公式 / 表格。</div>
               <div class="preview-stage">
@@ -384,20 +376,11 @@
             <!-- ========== 记忆（当前注入上下文的内容，仿 Claude Memory） ========== -->
             <div v-show="activeTab === 'memory'" class="settings-panel">
               <div class="settings-section-title">记忆</div>
-              <div class="settings-section-desc">以下内容是<span class="mem-emphasis">当前真正注入每次对话系统提示词</span>的记忆，分两段——<b>自定义指令</b>（昵称 / 身份 / 指令，归 system 桶）与 <b>长期记忆</b>（身份常驻 / 工作态交接 / 跨 agent 收件箱，归 memory 桶）。数据由后端 <code>/api/memory/inject</code> 实时返回，与上下文装配零漂移。</div>
-              <template v-if="memorySegments.length">
-                <div v-for="seg in memorySegments" :key="seg.key" class="memory-seg">
-                  <div class="memory-seg-title">
-                    <span class="mem-bucket">{{ seg.key }}</span>
-                    {{ seg.title }}
-                    <span v-if="!seg.enabled" class="mem-empty-tag">（空）</span>
-                  </div>
-                  <div v-if="seg.enabled" class="memory-md markdown-body" v-html="renderMarkdown(seg.raw)"></div>
-                  <div v-else class="memory-empty">该段尚未配置内容。</div>
-                </div>
+              <div v-if="memoryLoading" class="settings-loading">加载中…</div>
+              <template v-else-if="humanReadableMemoryMarkdown">
+                <div class="memory-md markdown-body" v-html="renderMarkdown(humanReadableMemoryMarkdown)"></div>
               </template>
-              <div v-else-if="!memoryLoading" class="memory-empty">尚未配置任何记忆。</div>
-              <div v-if="memoryLoading" class="memory-empty">加载中…</div>
+              <div v-else class="memory-empty">尚未配置任何记忆。</div>
             </div>
 
             <!-- ========== 我的（Profile + 自定义指令，仿 Claude Profile） ========== -->
@@ -440,7 +423,8 @@ import { Icon } from '@iconify/vue'
 import { chatModelList, setChatModelList, syncChatModelList } from '../composables/chatModelList.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS, initTheme } from '../composables/useTheme.js'
-import { useAuth } from '../../../composables/useAuth.js'
+
+
 import { renderMarkdown } from './markdownRenderer.js'
 
 // 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
@@ -467,11 +451,7 @@ const emit = defineEmits(['close'])
 // 左侧边栏当前 tab
 const activeTab = ref('models')
 
-// ============ 会员与皮肤 ============
-// isVip 以服务端鉴权为准（useAuth 从 /api/auth/me 的 JWT.is_vip 读取），
-// 游客恒为 false，且不再信任 localStorage（杜绝改本地存储白嫖会员皮肤）。
-const { isVip } = useAuth()
-const vipPromptSkin = ref('')
+// ============ 主题切换（已完全免费，无限制） ============
 const colorThemes = computed(() => Object.entries(THEME_PRESETS).filter(([, p]) => !p.fullSkin))
 const skinThemes = computed(() => {
   const groups = {}
@@ -485,29 +465,12 @@ const skinThemes = computed(() => {
   return Object.entries(groups)
 })
 
-function canUseTheme(key) {
-  const p = THEME_PRESETS[key]
-  return !p?.vip || isVip.value
-}
-
 function selectTheme(key) {
-  if (!canUseTheme(key)) {
-    vipPromptSkin.value = key
-    return
-  }
-  vipPromptSkin.value = ''
   theme.value = key
-  // 切到完整皮肤时强制暗色，避免亮色下氛围不对
   const p = THEME_PRESETS[key]
   if (p?.fullSkin && mode.value === 'light') {
     mode.value = 'dark'
   }
-}
-
-// 会员皮肤点不开时：已登录但非会员（理论上不会发生，GitHub/管理员登录即会员）、
-// 或未登录游客。统一引导走 GitHub 登录解锁，不再提供本地伪造入口。
-function unlockVipByLogin() {
-  window.location.href = '/api/auth/github'
 }
 
 // ============ 流式渐变无限循环预览（纯前端，不花 token） ============
@@ -910,6 +873,15 @@ const profile = ref({ full_name: '', work: '', instructions: '' })
 // 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
 const memorySegments = ref([])
 const memoryLoading = ref(false)
+const humanReadableMemoryMarkdown = computed(() => {
+  const parts = []
+  for (const seg of memorySegments.value) {
+    if (!seg || !seg.raw) continue
+    const title = (seg.title || '').trim() || seg.key
+    parts.push(`## ${title}\n\n${String(seg.raw).trim()}`)
+  }
+  return parts.join('\n\n').trim() || ''
+})
 async function loadMemoryInject() {
   memoryLoading.value = true
   try {
@@ -1283,7 +1255,7 @@ onUnmounted(() => {
   line-height: 1.75;
   color: var(--app-text);
 }
-.preview-bubble { word-break: break-word; }
+.preview-bubble { word-break: break-word; font-size: 16px; }
 .preview-bubble :deep(h2) { color: var(--app-text); font-size: 1.15rem; margin: 0 0 0.5em; }
 .preview-bubble :deep(p) { color: var(--app-text); margin: 0.4em 0; }
 .preview-bubble :deep(code) { background: var(--app-code-bg); color: var(--app-accent); padding: 1px 5px; border-radius: 4px; }
@@ -1293,7 +1265,11 @@ onUnmounted(() => {
 .preview-bubble :deep(.katex) { color: var(--app-text); }
 .api-form-btn.save:disabled { opacity: 0.6; cursor: default; }
 
-/* 记忆 tab：复用全局 .markdown-body 排版，这里只管容器与提示 */
+/* 记忆 tab：卡片化单块展示，移除不再使用的分段说明样式 */
+.memory-stack { display: flex; flex-direction: column; gap: 10px; }
+.memory-card { border: 1px solid var(--app-border); border-radius: 12px; padding: 14px 16px; background: var(--app-surface-2); }
+.memory-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.memory-card-title { font-size: 13px; font-weight: 700; color: var(--app-text); }
 .memory-seg { margin-top: 10px; }
 .memory-seg-title {
   font-size: 13px;
@@ -1316,7 +1292,7 @@ onUnmounted(() => {
 }
 .mem-empty-tag { color: var(--app-text-faint); font-weight: 400; font-size: 12px; }
 .memory-md {
-  margin-top: 6px;
+  margin-top: 0;
   padding: 14px 16px;
   background: var(--app-surface-2);
   border: 1px solid var(--app-border);
@@ -1326,7 +1302,6 @@ onUnmounted(() => {
 }
 .mem-emphasis { color: var(--app-accent); font-weight: 600; }
 .memory-empty {
-  margin-top: 6px;
   padding: 14px 16px;
   font-size: 12.5px;
   color: var(--app-text-faint);

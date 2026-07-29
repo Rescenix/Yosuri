@@ -111,7 +111,7 @@ func profileFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(homeDir, ".Aurora")
+	dir := filepath.Join(homeDir, "rescene_data")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}

@@ -3069,6 +3069,8 @@ min-height: 90px !important;
   margin-top: 10px;
   overflow-y: auto;
   overflow-x: visible;
+  overscroll-behavior: contain;
+  pointer-events: auto;
   scrollbar-width: none;
   pointer-events: none;
 }

@@ -60,7 +60,6 @@
             <span class="wd-group-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
             <span class="wd-group-name">{{ grp.name }}</span>
-            <span class="wd-group-count">{{ grp.sessions.length }}</span>
             <div class="wd-group-menu-wrap" v-if="folderHover === grp.name || openFolderMenu === grp.name">
               <button class="wd-group-menu-btn" @click.stop="openFolderMenuFn(grp.name, $event)" title="更多">
                 <Icon icon="mdi:dots-horizontal" width="16" />
@@ -503,16 +502,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 9px 18px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--app-text-faint), transparent 45%) transparent;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-.smc-session-area::-webkit-scrollbar { width: 5px; }
-.smc-session-area::-webkit-scrollbar-track { background: transparent; }
-.smc-session-area::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--app-text-faint), transparent 45%);
-}
-.smc-session-area::-webkit-scrollbar-thumb:hover { background: var(--app-text-faint); }
+.smc-session-area::-webkit-scrollbar { display: none; }
 
 .pin-folder-row, .wd-group { margin-bottom: 6px; }
 .pin-folder-head, .wd-group-head {
@@ -548,18 +541,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.wd-group-count {
-  min-width: 20px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: var(--app-text-faint);
-  background: color-mix(in srgb, var(--app-text, #202124), transparent 95%);
-  font-size: 10px;
-  line-height: 1.3;
-  text-align: center;
-}
-.wd-group-head:hover .wd-group-count,
-.wd-group-count:has(+ .wd-group-menu-wrap) { display: none; }
 .pin-folder-menu-wrap, .wd-group-menu-wrap { flex-shrink: 0; display: flex; }
 .pin-folder-menu-btn, .wd-group-menu-btn {
   width: 24px;
