@@ -88,7 +88,7 @@ func TestExpandFilesystemArgs(t *testing.T) {
 	}
 
 	// 非 filesystem server 原样不动
-	other := []string{`C:\Pro2026\re0\main-backend\mcp\grep_server.py`}
+	other := []string{`C:\tools\custom_mcp_server.py`}
 	if kept := expandFilesystemArgs(other); strings.Join(kept, "|") != strings.Join(other, "|") {
 		t.Errorf("非 filesystem server 的 args 被误改: %v", kept)
 	}

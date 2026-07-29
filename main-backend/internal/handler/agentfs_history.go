@@ -66,7 +66,7 @@ type agentfsAudit struct {
 	Commit       string    `json:"commit"`                // 伪提交标识，供前端时间线显示用
 	ParentCommit string    `json:"parent_commit,omitempty"`
 	Branch       string    `json:"branch,omitempty"`
-	Tool         string    `json:"tool"` // mcp__fs__write_file / mcp__fs__edit_file
+	Tool         string    `json:"tool"` // write_file / edit_file（兼容外部 mcp__fs__*）
 	SessionID    string    `json:"session_id"`
 	ExistsBefore bool      `json:"exists_before"`
 }

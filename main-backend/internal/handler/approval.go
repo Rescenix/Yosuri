@@ -148,12 +148,12 @@ func isIrreversibleTool(name string) bool {
 
 // ---- 工作目录越界判定 ----
 //
-// MCP 各 server 底层已不再锁死目录（见 mcp_client.go fsAllowedDirs / grep_server.py），
-// 「能不能碰工作目录以外的文件」改由这里判断：Ask 模式弹确认，Yolo 模式直接放行。
-// 以前底层硬拦，agent 只能把文件都往工作目录里塞。
+// 用户额外接入的 filesystem MCP 底层会放开可达根目录（见 mcp_client.go
+// fsAllowedDirs），「能不能碰工作目录以外的文件」由这里统一判断：
+// Ask 模式弹确认，Yolo 模式直接放行。
 
 // toolPathArgs 从工具参数 JSON 里挑出「看起来是文件路径」的字段值。
-// 覆盖 MCP filesystem 全家（path / source / destination / paths[]）与自研 grep server。
+// 覆盖 Go 内置文件工具和外部 MCP 常见的 path / source / destination / paths[]。
 // mcp__shell__run 的 command 不在此列——它本来就是危险工具，任何路径都要批。
 func toolPathArgs(argsJSON string) []string {
 	if argsJSON == "" {

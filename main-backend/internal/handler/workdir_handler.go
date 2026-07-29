@@ -126,8 +126,7 @@ func SetWorkdir(c *gin.Context) {
 		return
 	}
 
-	// 工作目录切换后重建 MCP 连接：filesystem server 的 allowed directory
-	// 必须跟随主页选中的项目移动，否则 mcp__fs__* 全部越界报错。
+	// 工作目录切换后重建用户额外配置的外部 MCP 连接，使其 cwd/MCP_ROOT 跟随项目。
 	ReinitMCP()
 
 	// AgentFS：为每个项目会话开辟可追踪可回退的影子快照区（旁路，失败不影响主流程）

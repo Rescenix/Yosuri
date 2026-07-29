@@ -206,10 +206,9 @@ type VisionAnalyzeRequest struct {
 	History     []VisionQA `json:"history"`
 }
 
-// HandleVisionAnalyze POST /api/vision/analyze —— 看图分析的唯一入口。
-// Key 和视觉模型调用都留在这一处：view_image MCP server（main-backend/mcp/
-// view_image_server.py）只是把 stdio JSON-RPC 转成对这个 HTTP 端点的调用，
-// 不在 Python 侧重复读一遍 DASHSCOPE_API_KEY，也不用两边分别适配 DashScope 的请求格式。
+// HandleVisionAnalyze POST /api/vision/analyze —— 前端看图分析入口。
+// Key 和视觉模型路由统一由 Go 管理；内置 view_image 工具直接调用 AnalyzeImage，
+// 不再通过 Python stdio MCP 转发。
 func HandleVisionAnalyze(c *gin.Context) {
 	var req VisionAnalyzeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

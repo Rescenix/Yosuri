@@ -185,8 +185,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)
 
-	// view_image MCP server（main-backend/mcp/view_image_server.py）的转发目标，
-	// Key/视觉模型调用只在这一处，见 HandleVisionAnalyze 头注释。
+	// 视觉分析 HTTP 入口，供前端上传/追问复用；Go 内置 view_image 直接复用同一模型路由。
 	r.POST("/api/vision/analyze", HandleVisionAnalyze)
 
 	// 用户自定义 API 接入配置（设置面板用，QQ 登录接入前先用固定 "default" 用户）

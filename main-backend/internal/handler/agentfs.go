@@ -11,10 +11,10 @@ package handler
 //
 // 关键约束：历史数据位于 ~/rescene_data/agentfs/history/<project>/，与用户项目 git
 // 完全隔离，绝不污染主仓库。AgentFS 是旁路——任何错误都降级静默跳过，绝不
-// 阻断正常的 mcp__fs__* 写盘主流程。
+// 阻断正常的 Go 内置写盘主流程；外部 mcp__fs__* 仍保留兼容埋点。
 //
-// 埋点：callMCPTool 在真实落盘前后分别调 OnBeforeWrite / OnAfterWrite（仅 write_file/
-// edit_file 两类），见 mcp_client.go。
+// 埋点：Go 内置写工具与兼容 MCP 写工具在真实落盘前后分别调用
+// OnBeforeWrite / OnAfterWrite（仅 write_file/edit_file 两类）。
 
 import (
 	"crypto/sha256"
@@ -127,7 +127,7 @@ func OpenAgentFSSession(project, workdir string, boundSessionID ...string) *agen
 	return sess
 }
 
-// OnBeforeWrite 在 mcp__fs__* 真实落盘前调用：捕获 before 内容，存进 pending。
+// OnBeforeWrite 在文件工具真实落盘前调用：捕获 before 内容，存进 pending。
 // 仅对 write_file / edit_file 生效；其余工具直接返回。
 func OnBeforeWrite(fullName string, args map[string]any) {
 	if fullName != "write_file" && fullName != "edit_file" &&
@@ -160,7 +160,7 @@ func OnBeforeWrite(fullName string, args map[string]any) {
 	agentfsPending.Store(sess.SessionID+"\x00"+rel, beforeHashEntry{hash: hash, exists: exists, data: before})
 }
 
-// OnAfterWrite 在 mcp__fs__* 真实落盘后调用：把 before 内容写入本地历史并记录审计。
+// OnAfterWrite 在文件工具真实落盘后调用：把 before 内容写入本地历史并记录审计。
 func OnAfterWrite(fullName string, args map[string]any) {
 	if fullName != "write_file" && fullName != "edit_file" &&
 		fullName != "mcp__fs__write_file" && fullName != "mcp__fs__edit_file" {

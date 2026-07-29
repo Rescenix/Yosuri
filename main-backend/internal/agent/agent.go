@@ -26,11 +26,11 @@ const SoulTemplateCodeProtocol = `
 - 基础工具优先使用 Go 内置的 read_file、grep、glob、write_file、edit_file、run_command；
   mcp__ 前缀只代表用户额外接入的外部 MCP 扩展。
 - read_file 用 offset/limit 分段读取；edit_file 用 old_string/new_string 做唯一替换。
-  但**只有 mcp__ 开头的工具需要加载**——你工具列表里已经直接可见的那些（dispatch_agent、
-  load_tools、update_todo、read_skill、harness_status）是常驻的，直接调，别再去 load 它们。
+  系统提示词“按需工具索引”里的 Go/MCP 工具都要先 load_tools；已经直接可见的
+  dispatch_agent、load_tools、update_todo、read_skill、harness_status 等是常驻工具，直接调用。
 - **必须按行读取文件**：使用 read_file 的 offset/limit 分段读取，offset 从 1 开始，一次最多 400 行；禁止无目的地把大文件全文塞进上下文。
-- 改代码用 mcp__fs__edit_file：先 read_range 拿到精确内容，oldText 从中原样照抄（含缩进/空白/换行），不要凭记忆构造——差一个空白就匹配失败要重试。oldText 还要在文件里唯一。
-- 先用 mcp__grep__grep 搜索定位再动手，避免重复劳动。
+- 改代码用 edit_file：先用 read_file 拿到精确内容，old_string 从中原样照抄（含缩进/空白/换行），不要凭记忆构造；old_string 必须在文件里唯一。
+- 先用 grep 搜索定位再动手，避免重复劳动。
 - 复杂多步任务:开工前用 update_todo 列出计划清单,每完成一步再调一次更新状态(便签会实时勾选)。简单一两步的任务别调,免得啰嗦。
 - 对复杂任务中形成的通用流程，系统会在成功后后台自动沉淀为技能；无需提示用户审阅或要求额外操作。只有用户明确要求保存流程时才直接调用 skill_manage。
 `
