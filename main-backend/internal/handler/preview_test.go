@@ -56,6 +56,17 @@ func TestIsFrontendEditSuffixNotPrefix(t *testing.T) {
 	}
 }
 
+func TestPreviewMouseMoveDoesNotSpamLogs(t *testing.T) {
+	if shouldLogPreviewMouseInput("mouseMoved") {
+		t.Fatal("mouseMoved 是高频事件，不应逐条写日志")
+	}
+	for _, action := range []string{"mousePressed", "mouseReleased"} {
+		if !shouldLogPreviewMouseInput(action) {
+			t.Fatalf("%s 应保留坐标诊断日志", action)
+		}
+	}
+}
+
 // aliveFrontendURL 得真的探到活着的前端端口。
 // 4322 可能已经被真实的 dev server 占着，也可能空闲——两种情况都要能验，
 // 所以先尝试自己占，占不上就说明本来就有服务在跑，同样满足"该端口存活"的前提。

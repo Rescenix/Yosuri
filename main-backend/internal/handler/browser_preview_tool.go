@@ -138,6 +138,10 @@ func writePreviewCDPError(conn *websocket.Conn, message string) {
 	_ = writePreviewClient(conn, map[string]string{"type": "error", "message": message})
 }
 
+func shouldLogPreviewMouseInput(action string) bool {
+	return action != "mouseMoved"
+}
+
 // HandlePreviewCDP GET /api/preview/cdp?ws=<targetWS>
 // 浏览器只连接这个同源端点；服务端连接真实 CDP、启动 screencast、ACK Chrome 帧，
 // 并只把 PNG base64 数据转发给浏览器。
@@ -260,11 +264,13 @@ func HandlePreviewCDP(c *gin.Context) {
 		switch m.Kind {
 		case "mouse":
 			px, py := toPageCoords(m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH)
-			// 诊断日志：把前端原始坐标 + rect/canvas 尺寸一起打出，
-			// 便于定位「坐标恒 (0,0)」是前端 x/y 本身就是 0，还是映射后落 0。
-			log.Printf("🖱️ [预览输入] mouse %s raw=(%.0f,%.0f) layout=(%.0fx%.0f) view=(%.0fx%.0f) dbg[rectL=%.0f rectT=%.0f cliX=%.0f cliY=%.0f] -> page(%.0f,%.0f) btn=%s",
-				m.Action, m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH,
-				m.DbgRectLeft, m.DbgRectTop, m.DbgClientX, m.DbgClientY, px, py, m.Button)
+			// mouseMoved 高频触发，逐事件打印会淹没日志并拖慢输入链；仅保留
+			// pressed/released 等离散操作的坐标诊断。
+			if shouldLogPreviewMouseInput(m.Action) {
+				log.Printf("🖱️ [预览输入] mouse %s raw=(%.0f,%.0f) layout=(%.0fx%.0f) view=(%.0fx%.0f) dbg[rectL=%.0f rectT=%.0f cliX=%.0f cliY=%.0f] -> page(%.0f,%.0f) btn=%s",
+					m.Action, m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH,
+					m.DbgRectLeft, m.DbgRectTop, m.DbgClientX, m.DbgClientY, px, py, m.Button)
+			}
 			_ = writeCDP(map[string]any{
 				"id":     nextPreviewReqID(),
 				"method": "Input.dispatchMouseEvent",
