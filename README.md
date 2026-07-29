@@ -95,7 +95,30 @@ ResceneAgent 支持自定义动态壁纸、灵动动画和主题配色。写代�
 
 ![免费模型提供方与自定义 API 配置](./docs/screenshots/FreeModelsRouter_AgentCapabilities.png)
 
-通过插件市场可接入 GitHub、Figma、Canvas 等 MCP 与技能扩展。
+### 全网 MCP + Skills 生态，一处富集
+
+模型决定 Agent 有多聪明，生态决定它到底能做多少事。ResceneAgent 不只内置几个演示插件，而是把 **MCP 官方 Registry** 与主流 **Skills 开源仓库**直接接进工作台：搜索、筛选、接入、安装、启用都在设置页完成。
+
+| 生态入口 | 你可以做什么 |
+| --- | --- |
+| **MCP 官方 Registry** | 实时搜索官方托管目录，一键接入可直接连接的 Streamable HTTP 服务；无需额外准备 Node、Python 或 `npx`，连接成功后立即成为 Agent 可调用的工具。 |
+| **GitHub Skills 仓库** | 直接浏览并筛选 Anthropic、OpenAI 与 Vercel Labs 的公开技能仓库；安装时连同 `SKILL.md` 和附属文件完整保存到本地。 |
+| **本地 MCP / Skills** | 自建 MCP、自写 Skill 与外部生态共存；可查看、启停和移除，不被任何单一平台锁定。 |
+| **按需加载** | Agent 只在任务需要时加载对应工具和技能，既扩展能力，也避免把整座生态一次性塞进上下文浪费 Token。 |
+
+#### MCP：从官方 Registry 搜索，点一下直接接入
+
+打开 `设置 → MCP → 外部`，即可搜索 MCP 官方 Registry。ResceneAgent 只展示可由应用直接连接的远程服务，并通过内置 Go Transport 运行，不要求用户额外安装一套 JavaScript 或 Python 运行时。
+
+![从 MCP 官方 Registry 搜索并一键接入远程服务](./docs/screenshots/MCP_OfficialRegistry.png)
+
+#### Skills：汇聚 Anthropic、OpenAI 与 Vercel Labs 技能仓库
+
+打开 `设置 → Skills → 外部`，即可切换不同 GitHub 技能源、搜索技能并一键安装。技能文件完整落盘到本地，既能直接使用，也方便审计、修改和二次创作。
+
+![浏览并安装 Anthropic、OpenAI 与 Vercel Labs 的公开 Skills](./docs/screenshots/Skills_GitHubRegistry.png)
+
+> **一个工作台，连接全网工具；一个本地技能库，持续沉淀你的 Agent 能力。**
 
 ![MCP 与技能插件市场](./docs/screenshots/MCPMarket.png)
 
