@@ -1,227 +1,215 @@
 [English](./README.en.md) · [中文](./README.md) · [正体中文](./README.zhtw.md) · [日本語](./README.ja.md) · [Tiếng Việt](./README.vi.md) · [தமிழ்](./README.ta.md)
 
-# ResceneAgent
+# ResceneAgent ✨
 
-> **国内首个为编程而生的真免费 Vibe Coding 工作台**：免费 Token、本地运行、功能齐全。
+> 你好呀，我是 **Rescene**，一位住在你电脑里的二次元魔法少女工程师。
+>
+> 你负责说出想法，我负责拆任务、写代码、启动预览，再陪你把 Bug 一只只抓出来 `( •̀ ω •́ )✧`
 
-![ResceneAgent 工作台总览：审计痕迹、工作流图、对话与 Git Agent](./docs/screenshots/OverPlay.png)
+![ResceneAgent 工作台：对话、代码、工作流与浏览器都在一起](./docs/screenshots/OverPlay.png)
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Free%20Token-无需订阅-brightgreen" alt="Free Token">
-  <img src="https://img.shields.io/badge/Local%20First-代码留在本机-blue" alt="Local First">
-  <img src="https://img.shields.io/badge/Full%20Stack-Agent%20IDE%20Browser-ff69b4" alt="Agent IDE Browser">
+  <img src="https://img.shields.io/badge/Free%20Models-不用买%20Token%20也能开工-brightgreen" alt="Free Models">
+  <img src="https://img.shields.io/badge/Local%20First-项目留在本机-blue" alt="Local First">
+  <img src="https://img.shields.io/badge/Rescene-会卖萌也会写代码-ff69b4" alt="Cute and Capable">
 </p>
 
-## Vibe Coding，不该是一场资格赛
+## 嗨，要一起写点东西吗？
 
-今天想认真用 AI 编程，开发者常常先被挡在代码之外：
+我不是只会在聊天框里贴代码片段的 AI。
 
-- **国外头部工具正在形成新的平台壁垒**：Claude Code、Codex 很强，但账号、地区、价格、配额和服务规则都掌握在厂商手里。地区不可用、账号被停、套餐调整，任何一项都可能让工作流突然中断。
-- **Agent 越强，安全边界越不能靠运气**：能读代码、跑 Shell、访问网络，就也可能遭遇提示词注入、依赖投毒、凭据泄露和误删文件。把整个项目交给闭源黑盒，开发者很难真正审计每一步。
-- **换成国内服务，常见的仍是限流、付费和排队**：免费额度只够试用，高峰期要等，真正能完成长任务的上下文、模型和工具又被放进更贵的套餐。
-- **很多所谓“免费 Coding”只是聊天框**：能回答问题，却没有文件树、终端、Diff、浏览器验收、回滚和多 Agent 编排，最后还是要你自己拼完交付链路。
+我的小房间里放着编辑器、文件树、终端、Diff、真实 Chromium，还有一群可以分工的 Agent。你把项目目录交给我，再说一句：
 
-我不想让写代码变成“先买订阅、再抢额度、最后祈祷别封号”。
+> **“帮我做一个可爱的待办页面，要能在手机上用。”**
 
-所以我做了 **ResceneAgent**：一个面向国内开发者、真正为编程而生的 Vibe Coding 工作台。不是再套一层聊天 UI，而是把免费模型、Agent、IDE、终端、真实浏览器、Git、MCP、技能和安全审计放进同一个本地工作流。
+接下来我会：
 
-> **Clone 下来就能跑。不开会员，不绑信用卡，不购买 Token，也能开始 Vibe Coding。**
+1. 先列一张小小的 TODO，免得做到一半忘记目标；
+2. 创建文件、安装依赖，把每次修改用 Diff 给你看；
+3. 启动真实浏览器，亲手点一点、滚一滚、截张图；
+4. 如果哪里不对就继续改，危险操作则停下来问你；
+5. 构建通过后再交作业——才、才不是随便生成完就跑掉呢。
 
-<sub>这些风险不是危言耸听：OpenAI 官方说明，在不受支持的地区访问 API 可能导致账号被封禁或暂停；Anthropic 官方披露会依据支持地区与使用政策暂停或终止账号。两家公司也都在安全文档中明确提示 Coding Agent 的提示词注入、恶意代码与数据泄露风险。参见 [OpenAI 支持地区](https://help.openai.com/en/articles/5347006-openai-api-supported-countries-and-territories)、[Anthropic 透明度中心](https://www.anthropic.com/transparency/system-trust-reporting)、[Claude Code 沙箱说明](https://www.anthropic.com/engineering/claude-code-sandboxing) 与 [Codex 网络访问风险](https://deploymentsafety.openai.com/gpt-5-3-codex/cybersecurity)。</sub>
+<table>
+  <thead>
+    <tr>
+      <th width="50%">写完就打开真实预览</th>
+      <th width="50%">网页也可以交给我操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><img src="./docs/screenshots/Preview.png" alt="在工作台里运行并操作真实 Chromium 预览" width="100%"></td>
+      <td><img src="./docs/screenshots/BrowserUse_OneClickCapture.png" alt="让 Rescene 打开网页、操作并回传截图" width="100%"></td>
+    </tr>
+  </tbody>
+</table>
 
-## “真免费”具体是什么
+## 我的魔法背包里有什么？
 
-| 你真正关心的 | ResceneAgent 怎么做 |
+| 你想做的事 | 我会怎么帮忙 |
 | --- | --- |
-| **免费 Token** | 内置免 Key 免费模型池，无需购买官方订阅即可开始；免费源失败时自动熔断并切换。你也可以接入自己的 Key。 |
-| **本地运行** | 前端、后端、工作区、会话和审计记录都运行并保存在本机；还可接入 Ollama / llama.cpp，让模型推理也留在本地。 |
-| **功能齐全** | Monaco 编辑器、文件树、终端、实时 Diff、TODO、多 Agent、MCP、技能市场、图片生成、真实 Chromium 预览与截图验收，一套工作台全部提供。 |
-| **不锁平台** | 模型与提供方可自由配置，云端免费模型、私有 API Key、本地模型可以并存；某一家不可用，不必连工具一起换掉。 |
-| **安全可控** | AgentFS 隔离改动并支持 Diff / 回滚；删除、移动等危险操作必须由人批准，YOLO 模式也不能绕过。 |
+| **从一句话开始做页面** | 创建项目、编写组件、调整样式，然后启动预览陪你一起看。 |
+| **接着改现有项目** | 读取代码、搜索调用关系、编辑文件、运行命令；修改过程会显示流式 Diff。 |
+| **真的操作网页** | 驱动 Chromium 点击、输入、滚动和读取 DOM，也能把截图作为交付证据放回对话。 |
+| **让几位 Agent 一起干活** | 给 Git、审计或其他专门 Agent 设置头像和提示词，再按工作流安排它们接力。 |
+| **换模型但不换工作台** | 免费模型、自己的 API Key、Ollama 和 llama.cpp 可以一起用；某个来源累了就自动切换。 |
+| **给我增加新技能** | 从 MCP 官方 Registry 接工具，也能安装 Anthropic、OpenAI、Vercel Labs 的公开 Skills。 |
+| **不小心改坏了怎么办** | AgentFS 会留下隔离快照和 Diff，可以检查、回滚；删除和移动文件必须由你点头。 |
+
+## “免费”这件事，我想认真说清楚
+
+ResceneAgent 本身以 [MIT License](./LICENSE) 开源，本地启动不需要先购买会员。
+
+- 设置里有**免 Key 免费模型入口**，Clone 下来就可以开始聊天和写代码；
+- 如果免费来源暂时忙不过来，路由器会尝试切换其他可用模型；
+- 你也可以填入自己的 API Key，不必被某一家提供方绑住；
+- 接入 Ollama / llama.cpp 后，模型推理也能留在本机，不受第三方 Token 额度影响。
 
 > [!NOTE]
-> “免费”指 ResceneAgent 本身开源、无需订阅即可使用，并提供免 Key 免费模型入口；第三方免费模型的额度与可用性可能变化。本地模型不受第三方 Token 额度影响。
+> 第三方免费模型的额度和可用性可能变化，所以我不想偷偷把“免费”说成“永远不限量”。不过，试用 ResceneAgent 本身不需要先绑卡或购买 Token，这一点可以放心。
 
-## 好看不是花瓶
+## 工作台也要有喜欢的样子嘛
 
-ResceneAgent 支持自定义动态壁纸、灵动动画和主题配色。写代码不必再盯着枯燥的 IDE：打开氛围、描述想法，Agent 会生成项目、渲染预览并持续迭代；每次文件修改都有清晰的流式反馈——从 Diff 高亮到渐变瀑布，每个细节都经过打磨。
+可以给我换动态壁纸、调整遮罩与透明度，也可以为不同 Agent 设置头像和性格。代码当然要认真写，但开发环境不一定非得灰扑扑的，对吧？
 
-你可以像聊天一样说“帮我做一个可爱的待办页面”，它会生成项目、启动真实 Chromium 预览，你还能亲手点击验收；不满意就回滚，危险操作它会先问你。**Vibe 归 Vibe，交付归交付。**
+<p align="center">
+  <img src="./docs/screenshots/CustomWallpaper.png" alt="自定义动态壁纸与透明工作区" width="88%">
+</p>
 
-## 二次元与 UI 体验 First
+Monaco 编辑器、递归文件树、终端、TODO、工作流节点和 Diff 都在同一个聊天界面里。少一点窗口切换，就能多留一点注意力给真正想做的东西。
 
-- **用户自定义壁纸**：选择本地动态视频作为工作台背景，自由调节遮罩、面板透明度与模糊
-- **丝滑动画**：文件编辑、Diff、TODO 进度、工作流节点都有渐变与流式反馈
-- ** Monaco + 文件树 + 终端**：聊天面板里直接集成完整的开发环境，不用跳来跳去
-- **可自定义 Agent 编排**：给不同 Agent 换上专属头像与系统提示词，让它们在一条工作流里接力
+## 给我学点新魔法
 
-![用户自定义动态壁纸与透明工作区效果](./docs/screenshots/CustomWallpaper.png)
+工具箱不够用时，不用等下个版本。打开设置页，我可以自己去找新的 MCP 和 Skill：
 
-![可配置的 Git Agent 与 Audit Agent](./docs/screenshots/MultiAgents.png)
-
-## 前端编程与设计
-
-- **一句话生成网页**：描述需求即可生成完整前端项目，自动构建并启动预览
-- **真实 Chromium 预览**：不是 iframe，是真实浏览器；你可以点击、输入、滚动，Agent 也能读取 DOM 状态
-- **设计迭代友好**：改颜色、改布局、加组件，说一句话就行；修改过程以 Diff 和截图证据呈现
-- **图片生成内嵌**：对话里直接生成素材，立刻用作前端资源
-
-![在工作台中运行真实 Chromium 预览并进行交互验收](./docs/screenshots/Preview.png)
-
-## Agent 内核：好看，也能打
-
-| 能力 | 常见对话式 Coding Agent | ResceneAgent |
-| --- | --- | --- |
-| 自定义 Agent 编排 | 通常单一 Agent 硬编码 | 创造多个专门 Agent，按名称与系统提示词编排，在工作流中调度接力 |
-| 任务计划 | 隐藏在模型内部 | 实时 `TODO`：`pending / doing / done`，前端同步展示 |
-| 主动向人确认 | 自由文本追问 | `ask_user` 结构化提问，回答原地回流工作流 |
-| 中断后的继续执行 | 依赖会话实现 | 每轮快照消息、工具、TODO 与 Token 计数，可断点续传 |
-| 文件 edit 过程 | 整段结果或黑盒调用 | SSE 流式瀑布 + 渐变呈现：新增/删除计数、流式内容与最终 Diff |
-| 运行后的网页验收 | 截图、iframe 或另开浏览器 | 真实 Chromium + CDP Screencast；鼠标、键盘可双向交互 |
-| 感知用户真实交互 | 只看到代码或另起截图 | 读取同一 live 预览页：点击、输入、滚动后的截图与 DOM 都可回流 Agent |
-| 交付证据 | 文字说明 | 页面截图按工具调用顺序成为 artifact，可按需展开 |
-| 安全交付闭环 | 依赖模型自觉或直写工作目录 | 危险操作系统门阀（YOLO 也无豁免）+ AgentFS 隔离/Diff/回滚 + 按改动类型构建与 CDP 验收 |
-| 多模型路由与故障转移 | 手动逐个配置切换 | 自动熔断、失败秒切、确定性失效自动跳过 |
-| 工作流可视化 | 较少提供 | Harness Flow 实时展示 Gateway / Memory / LLM / Tools / Reply 及 Trace / Eval / Release 链路 |
-
-![实时 TODO 任务清单与流式代码编辑反馈](./docs/screenshots/TODO.png)
-
-### 模型、提供方与扩展
-
-模型可按文字对话、识图和生图能力分开配置；免费模型池、用户自填 API Key 与本地模型均可并存，并由路由器按可用性自动选择和故障转移。
-
-![模型能力与免费模型选择](./docs/screenshots/ModelsFreeSelection.png)
-
-![免费模型提供方与自定义 API 配置](./docs/screenshots/FreeModelsRouter_AgentCapabilities.png)
-
-### 全网 MCP + Skills 生态，一处富集
-
-模型决定 Agent 有多聪明，生态决定它到底能做多少事。ResceneAgent 不只内置几个演示插件，而是把 **MCP 官方 Registry** 与主流 **Skills 开源仓库**直接接进工作台：搜索、筛选、接入、安装、启用都在设置页完成。
-
-| 生态入口 | 你可以做什么 |
+| 入口 | 能做什么 |
 | --- | --- |
-| **MCP 官方 Registry** | 实时搜索官方托管目录，一键接入可直接连接的 Streamable HTTP 服务；无需额外准备 Node、Python 或 `npx`，连接成功后立即成为 Agent 可调用的工具。 |
-| **GitHub Skills 仓库** | 直接浏览并筛选 Anthropic、OpenAI 与 Vercel Labs 的公开技能仓库；安装时连同 `SKILL.md` 和附属文件完整保存到本地。 |
-| **本地 MCP / Skills** | 自建 MCP、自写 Skill 与外部生态共存；可查看、启停和移除，不被任何单一平台锁定。 |
-| **按需加载** | Agent 只在任务需要时加载对应工具和技能，既扩展能力，也避免把整座生态一次性塞进上下文浪费 Token。 |
+| **MCP 官方 Registry** | 搜索可直连的 Streamable HTTP 服务，一键写入本地配置；内置 Go Transport，不要求额外安装 Node、Python 或 `npx`。 |
+| **GitHub Skills** | 浏览 Anthropic、OpenAI 与 Vercel Labs 的公开技能仓库，把 `SKILL.md` 和附属文件完整安装到本地。 |
+| **你自己的收藏** | 本地 MCP、自写 Skill 与外部生态可以共存，随时查看、启停和移除。 |
+| **按需加载** | 只有任务需要时才取出完整工具说明和技能正文，尽量不把 Token 浪费在背目录上。 |
 
 <table>
   <thead>
     <tr>
       <th width="50%">MCP 官方 Registry</th>
-      <th width="50%">GitHub Skills 生态</th>
+      <th width="50%">GitHub Skills 仓库</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td><img src="./docs/screenshots/MCP_OfficialRegistry.png" alt="从 MCP 官方 Registry 搜索并一键接入远程服务" width="100%"></td>
-      <td><img src="./docs/screenshots/Skills_GitHubRegistry.png" alt="浏览并安装 Anthropic、OpenAI 与 Vercel Labs 的公开 Skills" width="100%"></td>
+      <td><img src="./docs/screenshots/MCP_OfficialRegistry.png" alt="搜索并接入 MCP 官方 Registry 服务" width="100%"></td>
+      <td><img src="./docs/screenshots/Skills_GitHubRegistry.png" alt="浏览并安装公开 Skills" width="100%"></td>
     </tr>
     <tr>
-      <td valign="top"><code>设置 → MCP → 外部</code><br>搜索并接入可直连的远程服务；内置 Go Transport，无需额外安装 JavaScript 或 Python 运行时。</td>
-      <td valign="top"><code>设置 → Skills → 外部</code><br>切换 Anthropic、OpenAI、Vercel Labs 技能源；一键安装并完整保存到本地。</td>
+      <td valign="top"><code>设置 → MCP → 外部</code></td>
+      <td valign="top"><code>设置 → Skills → 外部</code></td>
     </tr>
   </tbody>
 </table>
 
-> **一个工作台，连接全网工具；一个本地技能库，持续沉淀你的 Agent 能力。**
+## 可爱归可爱，文件可不能乱删
 
-### 企业级安全门阀：能力越大，越不能越权
+Coding Agent 能运行命令、修改文件，也就值得认真看管。我的做法比较朴素：
 
-在 Coding IDE 里，`rm`、删除目录和移动文件不是“普通工具调用”。ResceneAgent 把它们视为不可逆边界：系统先拦截，再由用户决定是否放行；YOLO 模式只减少日常流程摩擦，绝不取消危险操作审批。再配合 AgentFS 的隔离快照，即使 Agent 的尝试失败，也不会把半成品或误操作直接写进你的工作目录。
+- 普通修改先进入 **AgentFS 隔离快照**，可以看 Diff，也可以回滚；
+- 删除目录、移动文件等危险操作会被系统拦住，必须由你批准；
+- 即使打开 YOLO 模式，危险操作也不能偷偷绕过审批；
+- 前端任务结束前要运行构建，并用真实 Chromium 渲染和截图验证；
+- 中途断开也会保存消息、工具记录、TODO 和 Token 统计，回来可以继续。
 
-### 交付不是“生成完就算完”
+卖萌是人设，保护你的项目是工作。这个顺序不能反过来 `(￣▽￣)／`
 
-ResceneAgent 的收尾有一层明确的自检护栏：Agent 需要运行构建，并用真实浏览器渲染和截图验证结果；截图成为会话中的交付证据。它的目标不是让 Agent 看起来更忙，而是减少“代码写了、页面却没跑起来”的空交付。
+## 五分钟召唤仪式
 
-## 系统架构
+准备好：
 
-```mermaid
-flowchart TB
-    User([用户]) --> ChatUI[聊天界面\nMonaco / 文件树 / Diff / 预览]
-    ChatUI --> Gateway[Gateway\ntask received]
+- Go >= 1.26
+- Node.js >= 22
+- Ollama / llama.cpp（可选，本地模型）
+- Docker（可选，代码沙箱）
 
-    Gateway --> WorkingMemory[Working Memory\nMEMORY.md + workdir.md\ncontext assembled]
-    WorkingMemory --> Planner[Planner\n实时 TODO 拆解]
-    Planner --> AgentLoop
-
-    subgraph AgentLoop [AGENT LOOP]
-        direction TB
-        LLMAgent[LLM Agent\nreasoning...]
-        ToolCall[Tool Call\nfile / shell / browser]
-        ToolResult[Tool Result\nevent + diff + screenshot]
-        ReplyDraft[Reply Draft]
-
-        LLMAgent -->|decide| ToolCall
-        ToolCall -->|execute| ToolResult
-        ToolResult -->|observe| LLMAgent
-        LLMAgent -->|respond| ReplyDraft
-    end
-
-    ReplyDraft --> Reply[Reply\nback to user]
-    Reply --> Trace[Trace\nevents / tokens / artifacts]
-
-    Trace -->|VERIFY| Eval[Eval\ndeterministic checks]
-    Eval --> Release[Release\nresult gets committed]
-
-    Release --> ChatUI
-    Release -->|next task| Gateway
-
-    LLMAgent --> LLMRouter[LLM Router\n内置免费模型池]
-    LLMRouter --> FreeModels[免费模型池]
-    LLMRouter --> LocalModels[本地模型\nOllama / llama.cpp]
-    LLMRouter --> PaidModels[私有模型\n用户自填 Key]
-
-    ToolCall --> FileEdit[File Edit]
-    ToolCall --> Shell[Shell / Terminal]
-    ToolCall --> Browser[Browser / CDP]
-    ToolCall --> AskUser[ask_user]
-    ToolCall --> ImageGen[Image Generate]
-
-    FileEdit --> AgentFS[AgentFS\n隔离快照 / Diff / 回滚]
-    Shell --> DangerGate{危险操作\n门阀审批}
-    Browser --> LivePreview[真实 Chromium\nlive preview]
-
-    DangerGate -->|需要审批| User
-    AskUser -->|用户回答| WorkingMemory
-
-    AgentFS --> Harness[Harness\nbuild + CDP 交互测试]
-    LivePreview --> Harness
-    Harness --> Screenshot[截图 Artifact]
-    Screenshot --> Trace
-```
-
-## 5 分钟运行
-
-需要 Go >= 1.26、Node.js >= 22；Ollama 和 Docker 为可选依赖。
+打开两个终端：
 
 ```bash
-# 终端 1：后端
+# 终端 1：启动魔法核心（后端）
 cd main-backend
 go run cmd/server/main.go
+```
 
-# 终端 2：前端
+```bash
+# 终端 2：打开工作台（前端）
 cd main-frontend/beneficial-belt
 npm install
 npm run dev
 ```
 
-访问 `http://localhost:4322`，即可体验二次元主题与默认免费模型池。
+访问 [`http://localhost:4322`](http://localhost:4322)，然后直接把想做的东西告诉我就好啦。
 
-## 开源
+## 初次见面，可以这样叫我
 
-核心前后端以 [MIT License](./LICENSE) 开源。
+```text
+帮我做一个带深色模式的个人主页，完成后打开浏览器给我看。
 
-## 深入了解
+检查这个项目为什么构建失败，先告诉我原因，再修好它。
 
-| 想了解 | 位置 |
+打开这个网页，帮我点击登录按钮并截一张图。
+
+把这次修改分给 Git Agent 和 Audit Agent，最后汇总风险。
+
+给我找一个适合处理文档的 Skill，安装后用它完成任务。
+```
+
+不用学习特殊咒语。像和一位队友说话那样描述目标就可以；信息不够时，我会自己举手提问。
+
+<details>
+<summary><strong>想看看工作台里面是怎么转的吗？</strong></summary>
+
+```mermaid
+flowchart TB
+    User([你的一句话]) --> Rescene[Rescene]
+    Rescene --> Memory[项目记忆与会话上下文]
+    Memory --> Plan[实时 TODO]
+    Plan --> Loop
+
+    subgraph Loop [Agent 工作循环]
+        Think[思考下一步] --> Tool[文件 / 终端 / 浏览器 / MCP]
+        Tool --> Evidence[Diff / 日志 / 截图]
+        Evidence --> Think
+    end
+
+    Loop --> Verify[构建与浏览器验收]
+    Verify --> Reply[把结果交给你]
+
+    Rescene --> Router[模型路由]
+    Router --> Free[免费模型]
+    Router --> Local[Ollama / llama.cpp]
+    Router --> Private[你自己的 API Key]
+
+    Tool --> AgentFS[AgentFS 隔离与回滚]
+    Tool --> Gate{危险操作审批}
+    Gate --> User
+```
+
+</details>
+
+## 项目住在哪里？
+
+| 想逛一逛 | 位置 |
 | --- | --- |
-| 前端与后端结构 | [`main-frontend/beneficial-belt`](./main-frontend/beneficial-belt) · [`main-backend`](./main-backend) |
-| 工作流/工具测试 | [`harness`](./harness) |
-| 项目文档资产 | [`docs`](./docs) |
-| 许可证 | [MIT](./LICENSE) |
+| 前端工作台 | [`main-frontend/beneficial-belt`](./main-frontend/beneficial-belt) |
+| Go 后端与 Agent 工作流 | [`main-backend`](./main-backend) |
+| 工作流与工具测试 | [`harness`](./harness) |
+| 截图和项目资料 | [`docs`](./docs) |
+| 开源许可证 | [MIT License](./LICENSE) |
 
+## 最后……
+
+如果 Rescene 恰好帮你把一个小想法做成了真正能跑的东西，欢迎留下一颗 Star。
+
+我会继续学习新技能、认识新工具，也会努力少犯一点笨笨的错误。下次见面时，说不定就更可靠了呢 `~(≧▽≦)/~`
 
 ---
 
