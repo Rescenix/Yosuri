@@ -2,33 +2,79 @@
 
 # ResceneAgent
 
-> 真正免费、无需 API Key 的前端 Agent 工作台：内置免费模型池，自动熔断、秒级故障转移。
+> 一个为 Vibe Coding 而生的二次元前端 Agent 工作台。
 
-一句需求，Agent 写代码、跑构建、启动真实 Chromium 预览，你还能亲手点击验收。ResceneAgent 内置多模型路由与自动故障转移，接入真实可用的免费模型池；模型失败时自动切换，无需私有 Key 就能跑完第一个工作流。
-
-你还可以创造并编排自己的专门 Agent——Git 审查、测试、文档、合规检查——让它们在一条工作流里接力。所有改动先进入 AgentFS 隔离快照，危险操作经系统门阀审批，不满意可一键回滚。
+![ResceneAgent 工作台总览：审计痕迹、工作流图、对话与 Git Agent](./docs/screenshots/OverPlay.png)
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Cute%20UI-二次元主题-ff69b4" alt="Cute UI">
   <img src="https://img.shields.io/badge/Free%20Models-No%20API%20Key%20Required-brightgreen" alt="Free Models, No API Key Required">
-  <img src="https://img.shields.io/badge/Local--first-Your%20keys%2C%20your%20control-5b5bd6" alt="Local first">
-  <img src="https://img.shields.io/badge/LLM-Multi--provider-ff69b4" alt="Multi-provider LLM">
 </p>
 
-## 先看它如何交付
+**ResceneAgent 首先是一款让人愿意打开的工具。**
 
-![ResceneAgent 一键生成交互测试站点，并在真实预览中自动操作和验收的演示占位图](./assets/agent-interaction-demo-placeholder.svg)
+我们把它做成了一款有二次元皮肤、灵动动画和主题系统的 Vibe Coding 工作台。写代码不需要再盯着枯燥的 IDE，只要打开氛围、描述想法，Agent 会生成项目、渲染预览、迭代设计；每次文件修改都有漂亮的流式反馈——从气泡到按钮，从 Diff 高亮到渐变瀑布，每个细节都打磨过。
 
-> **演示占位图**：这里将替换为真实 GIF。它展示的不是手工搭好的页面，而是 Agent 根据一句需求**一键生成**的交互测试站点；文件编辑在对话中以流式瀑布和渐变实时显现，随后 Agent 打开真实预览、亲自操作页面，并把验收结果写回任务流。
+但好看不是花瓶。你可以像聊天一样对它说"帮我做一个可爱的待办页面"，它会生成项目、启动真实 Chromium 预览，你还能亲手点击验收；不满意就回滚，危险操作它会先问你。Vibe 归 Vibe，交付归交付。
 
-```text
-一句需求
-  → 子 Agent 拆解任务，实时 TODO 可见
-  → 文件 edit 以 SSE 流式瀑布生成，新增/删除与最终 Diff 可审计
-  → 一键生成并启动完整交互网站
-  → Agent 通过真实 Chromium / CDP 点击、输入、触发 DOM 与 CSS 交互
-  → 构建、截图与验收结果成为交付证据；不满意可回滚
-```
+## 二次元与 UI 体验 First
+
+- **主题系统**：内置多款二次元/萌系主题，一键切换配色与氛围
+- **丝滑动画**：文件编辑、Diff、TODO 进度、工作流节点都有渐变与流式反馈
+- ** Monaco + 文件树 + 终端**：聊天面板里直接集成完整的开发环境，不用跳来跳去
+- **可自定义 Agent 编排**：给不同 Agent 换上专属头像与系统提示词，让它们在一条工作流里接力
+
+![多款二次元皮肤与深色主题](./docs/screenshots/Skins.png)
+
+![可配置的 Git Agent 与 Audit Agent](./docs/screenshots/MultiAgents.png)
+
+## 前端编程与设计
+
+- **一句话生成网页**：描述需求即可生成完整前端项目，自动构建并启动预览
+- **真实 Chromium 预览**：不是 iframe，是真实浏览器；你可以点击、输入、滚动，Agent 也能读取 DOM 状态
+- **设计迭代友好**：改颜色、改布局、加组件，说一句话就行；修改过程以 Diff 和截图证据呈现
+- **图片生成内嵌**：对话里直接生成素材，立刻用作前端资源
+
+![在工作台中运行真实 Chromium 预览并进行交互验收](./docs/screenshots/Preview.png)
+
+## Agent 内核：好看，也能打
+
+| 能力 | 常见对话式 Coding Agent | ResceneAgent |
+| --- | --- | --- |
+| 自定义 Agent 编排 | 通常单一 Agent 硬编码 | 创造多个专门 Agent，按名称与系统提示词编排，在工作流中调度接力 |
+| 任务计划 | 隐藏在模型内部 | 实时 `TODO`：`pending / doing / done`，前端同步展示 |
+| 主动向人确认 | 自由文本追问 | `ask_user` 结构化提问，回答原地回流工作流 |
+| 中断后的继续执行 | 依赖会话实现 | 每轮快照消息、工具、TODO 与 Token 计数，可断点续传 |
+| 文件 edit 过程 | 整段结果或黑盒调用 | SSE 流式瀑布 + 渐变呈现：新增/删除计数、流式内容与最终 Diff |
+| 运行后的网页验收 | 截图、iframe 或另开浏览器 | 真实 Chromium + CDP Screencast；鼠标、键盘可双向交互 |
+| 感知用户真实交互 | 只看到代码或另起截图 | 读取同一 live 预览页：点击、输入、滚动后的截图与 DOM 都可回流 Agent |
+| 交付证据 | 文字说明 | 页面截图按工具调用顺序成为 artifact，可按需展开 |
+| 安全交付闭环 | 依赖模型自觉或直写工作目录 | 危险操作系统门阀（YOLO 也无豁免）+ AgentFS 隔离/Diff/回滚 + 按改动类型构建与 CDP 验收 |
+| 多模型路由与故障转移 | 手动逐个配置切换 | 自动熔断、失败秒切、确定性失效自动跳过 |
+| 工作流可视化 | 较少提供 | Harness Flow 实时展示 Gateway / Memory / LLM / Tools / Reply 及 Trace / Eval / Release 链路 |
+
+![实时 TODO 任务清单与流式代码编辑反馈](./docs/screenshots/TODO.png)
+
+### 模型、提供方与扩展
+
+模型可按文字对话、识图和生图能力分开配置；免费模型池、用户自填 API Key 与本地模型均可并存，并由路由器按可用性自动选择和故障转移。
+
+![模型能力与免费模型选择](./docs/screenshots/ModelsFreeSelection.png)
+
+![免费模型提供方与自定义 API 配置](./docs/screenshots/FreeModelsRouter_AgentCapabilities.png)
+
+通过插件市场可接入 GitHub、Figma、Canvas 等 MCP 与技能扩展。
+
+![MCP 与技能插件市场](./docs/screenshots/MCPMarket.png)
+
+### 企业级安全门阀：能力越大，越不能越权
+
+在 Coding IDE 里，`rm`、删除目录和移动文件不是“普通工具调用”。ResceneAgent 把它们视为不可逆边界：系统先拦截，再由用户决定是否放行；YOLO 模式只减少日常流程摩擦，绝不取消危险操作审批。再配合 AgentFS 的隔离快照，即使 Agent 的尝试失败，也不会把半成品或误操作直接写进你的工作目录。
+
+### 交付不是“生成完就算完”
+
+ResceneAgent 的收尾有一层明确的自检护栏：Agent 需要运行构建，并用真实浏览器渲染和截图验证结果；截图成为会话中的交付证据。它的目标不是让 Agent 看起来更忙，而是减少“代码写了、页面却没跑起来”的空交付。
 
 ## 系统架构
 
@@ -87,68 +133,6 @@ flowchart TB
     Screenshot --> Trace
 ```
 
-## 能力对照
-
-ResceneAgent 不只是“AI 写完给你一段代码”。你对它说"做个能联机的贪吃蛇"，它会生成项目、启动真实 Chromium 预览，让你亲自点击、输入并根据用户网页交互改进、验收。模型与 API Key 完全由你掌控并存储本地；后端内置多模型路由，自动在可用模型间故障转移，无需私有 Key 也能启动第一个 Agent 工作流。
-
-下表逐项对比常见能力：
-
-| 能力 | 常见对话式 Coding Agent | ResceneAgent |
-| --- | --- | --- |
-| 自定义 Agent 编排 | 通常单一 Agent 硬编码 | 创造多个专门 Agent，按名称与系统提示词编排，在工作流中调度接力 |
-| 任务计划 | 隐藏在模型内部 | 实时 `TODO`：`pending / doing / done`，前端同步展示 |
-| 主动向人确认 | 自由文本追问 | `ask_user` 结构化提问，回答原地回流工作流 |
-| 中断后的继续执行 | 依赖会话实现 | 每轮快照消息、工具、TODO 与 Token 计数，可断点续传 |
-| 文件 edit 过程 | 整段结果或黑盒调用 | SSE 流式瀑布 + 渐变呈现：新增/删除计数、流式内容与最终 Diff |
-| 编辑、终端与 Diff | 依赖外部 IDE | Monaco、文件树、PowerShell、可审计 Diff 集成在聊天面板 |
-| 运行后的网页验收 | 截图、iframe 或另开浏览器 | 真实 Chromium + CDP Screencast；鼠标、键盘可双向交互 |
-| 感知用户真实交互 | 只看到代码或另起截图 | 读取同一 live 预览页：点击、输入、滚动后的截图与 DOM 都可回流 Agent |
-| 交付证据 | 文字说明 | 页面截图按工具调用顺序成为 artifact，可按需展开 |
-| 安全交付闭环 | 依赖模型自觉或直写工作目录 | 危险操作系统门阀（YOLO 也无豁免）+ AgentFS 隔离/Diff/回滚 + 按改动类型构建与 CDP 验收 |
-| 长期上下文 | 依赖会话或外部记忆 | 全局 `MEMORY.md` + 项目 `workdir.md` 双轨隔离，不污染仓库 |
-| 多模型路由与故障转移 | 手动逐个配置切换 | 自动熔断、失败秒切、确定性失效自动跳过 |
-| 工作流可视化 | 较少提供 | Harness Flow 实时展示 Gateway / Memory / LLM / Tools / Reply 及 Trace / Eval / Release 链路 |
-
-### 企业级安全门阀：能力越大，越不能越权
-
-在 Coding IDE 里，`rm`、删除目录和移动文件不是“普通工具调用”。ResceneAgent 把它们视为不可逆边界：系统先拦截，再由用户决定是否放行；YOLO 模式只减少日常流程摩擦，绝不取消危险操作审批。再配合 AgentFS 的隔离快照，即使 Agent 的尝试失败，也不会把半成品或误操作直接写进你的工作目录。
-
-### 交付不是“生成完就算完”
-
-ResceneAgent 的收尾有一层明确的自检护栏：Agent 需要运行构建，并用真实浏览器渲染和截图验证结果；截图成为会话中的交付证据。它的目标不是让 Agent 看起来更忙，而是减少“代码写了、页面却没跑起来”的空交付。
-
-### Harness：按改动类型自适应验收
-
-收尾校验只在 Agent 准备结束工作流时运行一次，不在每个步骤反复打断工作。它读取 AgentFS 审计轨迹，按本轮实际改动决定验证路径：改 Go 才构建 Go，改前端才构建前端；前端页面含可交互元素时，才在同一份真实 Chromium 预览中执行点击、输入并读取 DOM 反馈。纯展示页不会被强行执行交互测试。
-
-```mermaid
-flowchart TD
-    A["Agent 完成工作流"] --> B["verify.go 收尾校验"]
-    B --> C["读取 AgentFS 审计轨迹"]
-    C --> D{"本轮改动类型"}
-    D -->|"Go 文件"| E["go build ./..."]
-    D -->|"前端或 HTML"| F["npm run build"]
-    D -->|"无可构建文件"| G["记录跳过原因"]
-    F --> H["Harness 打开真实 Chromium 预览"]
-    H --> I["CDP 探测按钮、输入框、表单等元素"]
-    I --> J{"是否存在可交互元素"}
-    J -->|"是"| K["CDP 执行点击或输入"]
-    K --> L["读取 DOM 反馈"]
-    L --> M["交互后截图 Artifact"]
-    J -->|"否"| N["纯展示页截图 Artifact"]
-    E --> O["verification SSE 结果"]
-    G --> O
-    M --> O
-    N --> O
-    O --> P["聊天交付证据 + AgentFS 可审计轨迹"]
-```
-
-> 交互验证失败、构建失败或本机依赖缺失都会被记录在验收结果中，但不会粗暴阻断对话收尾；用户能看到证据与状态，再决定下一步。
-
-### AgentFS：让 AI 的改动可控、可回退
-
-每个会话都有自己的快照轨迹：文件修改先进入隔离的影子 Git 仓库，而不是立刻污染项目。你可以查看每次 Diff、回到之前能正常工作的节点，或从任意快照拉出探索分支。
-
 ## 5 分钟运行
 
 需要 Go >= 1.26、Node.js >= 22；Ollama 和 Docker 为可选依赖。
@@ -164,11 +148,11 @@ npm install
 npm run dev
 ```
 
-访问 `http://localhost:4322`，再在设置中填写你自己的 LLM 提供方、模型与 API Key。
+访问 `http://localhost:4322`，即可体验二次元主题与默认免费模型池。
 
 ## 开源
 
-核心前后端以 [MIT License](./LICENSE) 开源
+核心前后端以 [MIT License](./LICENSE) 开源。
 
 ## 深入了解
 
@@ -179,7 +163,6 @@ npm run dev
 | 项目文档资产 | [`docs`](./docs) |
 | 许可证 | [MIT](./LICENSE) |
 
-如果这个方向让你对“AI 不是只会聊天，而是能交付的东西”多一点期待，欢迎点一个 Star。
 
 ---
 
