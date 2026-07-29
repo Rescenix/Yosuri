@@ -4,7 +4,9 @@ package handler
 
 // 任务生命周期状态（DSMessage.Status，只对 role=="user" 有意义）。
 const (
-	taskStatusCompleted = "completed"
+	taskStatusCompleted   = "completed"
+	taskStatusFailed      = "failed"
+	taskStatusInterrupted = "interrupted"
 )
 
 // 历史任务的呈现前缀。
@@ -16,16 +18,21 @@ const (
 //
 // 加一个显式标记，把"已结题"这件事从模型的推断变成系统的断言。
 const completedTaskPrefix = "[历史任务·已完成，仅供参考，不要重新执行] "
+const failedTaskPrefix = "[历史任务·执行失败，仅供上下文，不要自行重试] "
+const interruptedTaskPrefix = "[历史任务·已中断，仅供上下文，不要自行续跑] "
+const unknownTaskPrefix = "[历史任务·状态未知，仅供上下文，不要自行执行] "
 
 // historyContractPrompt 把上面那个前缀的含义作为系统契约讲清楚。
 // 只有标记没有契约的话，模型仍可能把前缀当噪音略过去。
 const historyContractPrompt = `
 ━━━ 对话历史的读法 ━━━
-带「` + completedTaskPrefix + `」前缀的用户消息是**已经做完并结题**的历史任务，
-它们留在上下文里只为提供背景（改过哪些文件、做过什么决定）。
-不要重新执行它们，也不要把它们里面的待办当成你现在要做的事。
-本次唯一需要执行的任务，是整段对话**最后一条**没有该前缀的用户消息。
-如果历史任务确实有遗留问题需要处理，等用户明确提出，不要自作主张回头补做。
+历史用户消息会带明确状态：
+- 「` + completedTaskPrefix + `」表示已经完成；
+- 「` + failedTaskPrefix + `」表示当时执行失败；
+- 「` + interruptedTaskPrefix + `」表示当时被停止或连接中断。
+这些消息只提供背景。无论状态如何，都不要自行重试、续跑或补做。
+本次唯一需要执行的任务，是整段对话**最后一条没有历史状态前缀**的用户消息。
+如果用户明确要求继续旧任务，再结合对应的失败/中断摘要处理。
 `
 
 // taskDone 判断一条历史消息是不是"已经结题的任务"。
@@ -35,6 +42,22 @@ const historyContractPrompt = `
 // 按定义也全是已完成的，没有"空=未知"这种中间态。
 func taskDone(m DSMessage) bool {
 	return m.Role == "user" && (m.Status == "" || m.Status == taskStatusCompleted)
+}
+
+func historyTaskPrefix(m DSMessage) string {
+	if m.Role != "user" {
+		return ""
+	}
+	switch m.Status {
+	case "", taskStatusCompleted:
+		return completedTaskPrefix
+	case taskStatusFailed:
+		return failedTaskPrefix
+	case taskStatusInterrupted:
+		return interruptedTaskPrefix
+	default:
+		return unknownTaskPrefix
+	}
 }
 
 // 截断历史消息
@@ -53,8 +76,8 @@ func buildChatMessages(systemPrompt string, history []DSMessage, userMessage str
 	}
 	for _, msg := range history {
 		content := msg.Content
-		if taskDone(msg) && content != "" {
-			content = completedTaskPrefix + content
+		if prefix := historyTaskPrefix(msg); prefix != "" && content != "" {
+			content = prefix + content
 		}
 		msgs = append(msgs, map[string]string{"role": msg.Role, "content": content})
 	}

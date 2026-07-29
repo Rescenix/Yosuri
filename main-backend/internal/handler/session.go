@@ -34,9 +34,7 @@ type SessionStore struct {
 	forkMeta            map[string]forkInfo        // 分支会话 → 父会话与分岐点（根会话不入表）
 	domain              string
 	// path 在构造时就定死，之后不再重读 RESCENE_DATA_DIR。
-	// Append 的落盘是 fire-and-forget 的 goroutine，可能在环境变量被改掉之后才真正执行；
-	// 每次现算路径的话，那些迟到的 goroutine 会把内存状态写到另一个位置去
-	// （测试里 t.Setenv 恢复环境变量后，就正是这样把真实用户数据覆盖掉的）。
+	// 每次现算路径会让运行期切换环境/配置后把会话写进另一个位置。
 	path string
 
 	fileMu sync.Mutex // 串行化本地文件写入，避免并发重写互相踩踏
@@ -64,6 +62,8 @@ type persistedMessage struct {
 	// Status 任务生命周期状态（见 DSMessage.Status）。omitempty：旧存档没有这个字段，
 	// 解出来是空串，由 taskDone 统一按"已完成"解读——旧数据本来就只在成功时才落盘。
 	Status string `json:"status,omitempty"`
+	// WorkflowID 用于失败/停止后的续跑幂等更新；老存档没有时为空，继续按追加语义处理。
+	WorkflowID string `json:"workflow_id,omitempty"`
 }
 
 // sessionRecord 是单个会话在本地文件里的完整存储形态：
@@ -93,6 +93,7 @@ func toPersistedMessages(msgs []DSMessage) []persistedMessage {
 			Model:            m.Model,
 			Blocks:           m.Blocks,
 			Status:           m.Status,
+			WorkflowID:       m.WorkflowID,
 		}
 	}
 	return out
@@ -111,6 +112,7 @@ func fromPersistedMessages(msgs []persistedMessage) []DSMessage {
 			Model:            m.Model,
 			Blocks:           m.Blocks,
 			Status:           m.Status,
+			WorkflowID:       m.WorkflowID,
 		}
 	}
 	return out
@@ -230,6 +232,11 @@ func (s *SessionStore) migrateLegacyJSONFile() {
 
 // persistAll 把内存中该域的全部会话整份写入本地文件（原子替换，避免半写损坏）
 func (s *SessionStore) persistAll() error {
+	// 从取内存快照开始就串行化。若只在最终写文件时加锁，先取到的旧快照
+	// 可能晚于新快照落盘，把较新的会话状态反向覆盖。
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
+
 	s.mu.RLock()
 	records := make(map[string]sessionRecord, len(s.sessions))
 	for sid, msgs := range s.sessions {
@@ -261,19 +268,17 @@ func (s *SessionStore) persistAll() error {
 	}
 
 	path := s.path // 构造时定死，迟到的落盘 goroutine 也只会写这一个位置
-	s.fileMu.Lock()
-	defer s.fileMu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	// 复用文件工具的跨平台安全写入：Windows 的 os.Rename 无法可靠覆盖已有目标，
+	// 原实现会导致第二次会话落盘开始持续 Access is denied。
+	return atomicWriteNative(path, data, 0644)
 }
 
-// Append 追加消息，自动补时间戳，异步持久化到本地文件
+// Append 追加消息，自动补时间戳并同步持久化到本地文件。
+// 同步是有意的：异步整文件重写会出现旧 goroutine 晚到、测试/刷新立即读到半写 JSON，
+// 甚至客户端退出前最后一轮还没落盘。工作流主链已改为一次 Upsert 一组消息，写频率很低。
 func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	s.mu.Lock()
 	if msg.Timestamp.IsZero() {
@@ -282,11 +287,67 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	s.sessions[sessionID] = append(s.sessions[sessionID], msg)
 	s.mu.Unlock()
 
-	go func() {
-		if err := s.persistAll(); err != nil {
-			log.Printf("⚠️ 保存会话到本地文件失败: %v", err)
+	if err := s.persistAll(); err != nil {
+		log.Printf("⚠️ 保存会话到本地文件失败: %v", err)
+	}
+}
+
+// UpsertWorkflowPair 按 workflowID 原位写入一组 user/assistant 消息。
+//
+// 首次失败/停止时追加；同一 workflow 从检查点续跑后再次收尾时替换原来的两条，
+// 因而状态可以从 interrupted/failed 变成 completed，聊天历史不会出现重复任务。
+func (s *SessionStore) UpsertWorkflowPair(sessionID, workflowID string, user, assistant DSMessage) {
+	if sessionID == "" || workflowID == "" {
+		return
+	}
+	now := time.Now()
+	if user.Timestamp.IsZero() {
+		user.Timestamp = now
+	}
+	if assistant.Timestamp.IsZero() {
+		assistant.Timestamp = now
+	}
+	user.WorkflowID = workflowID
+	assistant.WorkflowID = workflowID
+
+	s.mu.Lock()
+	msgs := s.sessions[sessionID]
+	first := -1
+	existingCompleted := false
+	filtered := make([]DSMessage, 0, len(msgs)+2)
+	for _, msg := range msgs {
+		if msg.WorkflowID == workflowID {
+			if msg.Role == "user" && msg.Status == taskStatusCompleted {
+				existingCompleted = true
+			}
+			if first < 0 {
+				first = len(filtered)
+			}
+			continue
 		}
-	}()
+		filtered = append(filtered, msg)
+	}
+	// 极窄竞态：旧的中断请求还在 defer，新续跑已经完成。完成态是终局，
+	// 迟到的 failed/interrupted 绝不能把它降级回未完成。
+	if existingCompleted && user.Status != taskStatusCompleted {
+		s.mu.Unlock()
+		return
+	}
+	if first < 0 {
+		first = len(filtered)
+	}
+	filtered = append(filtered, DSMessage{}, DSMessage{})
+	copy(filtered[first+2:], filtered[first:len(filtered)-2])
+	filtered[first] = user
+	filtered[first+1] = assistant
+	s.sessions[sessionID] = filtered
+	s.mu.Unlock()
+
+	// 工作流已经进入终态，停止接口会等待这里完成后再返回；同步落盘确保用户随后
+	// 关闭客户端或立即发下一条消息时，失败/中断上下文已经可靠可见。
+	if err := s.persistAll(); err != nil {
+		log.Printf("⚠️ 保存工作流历史失败: %v", err)
+	}
 }
 
 // Fork 从 parentID 的前 keep 条消息拷出一条新分支会话，返回新会话 ID。
@@ -384,7 +445,7 @@ func (s *SessionStore) GetApprovalRule(sessionID, ruleKey string) bool {
 	return rules != nil && rules[ruleKey]
 }
 
-// SetApprovalRule 写入（或清除）该会话对某工具签名的「don't ask again」规则，异步落盘。
+// SetApprovalRule 写入（或清除）该会话对某工具签名的「don't ask again」规则并落盘。
 func (s *SessionStore) SetApprovalRule(sessionID, ruleKey string, val bool) {
 	s.mu.Lock()
 	if s.approvalRules[sessionID] == nil {
@@ -397,11 +458,9 @@ func (s *SessionStore) SetApprovalRule(sessionID, ruleKey string, val bool) {
 	}
 	s.mu.Unlock()
 
-	go func() {
-		if err := s.persistAll(); err != nil {
-			log.Printf("⚠️ 保存审批规则到本地文件失败: %v", err)
-		}
-	}()
+	if err := s.persistAll(); err != nil {
+		log.Printf("⚠️ 保存审批规则到本地文件失败: %v", err)
+	}
 }
 
 // Get 返回指定会话的消息切片（副本）
@@ -424,17 +483,15 @@ func (s *SessionStore) GetCompressIndex(sessionID string) int {
 	return s.lastCompressIndexes[sessionID]
 }
 
-// SetCompressIndex 更新压缩游标（通常在成功压缩后调用），异步持久化到本地文件
+// SetCompressIndex 更新压缩游标（通常在成功压缩后调用）并持久化到本地文件。
 func (s *SessionStore) SetCompressIndex(sessionID string, index int) {
 	s.mu.Lock()
 	s.lastCompressIndexes[sessionID] = index
 	s.mu.Unlock()
 
-	go func() {
-		if err := s.persistAll(); err != nil {
-			log.Printf("⚠️ 保存压缩游标到本地文件失败: %v", err)
-		}
-	}()
+	if err := s.persistAll(); err != nil {
+		log.Printf("⚠️ 保存压缩游标到本地文件失败: %v", err)
+	}
 }
 
 // AllSessions 返回所有会话消息的快照副本（按 sessionID 分组），供统计聚合使用

@@ -361,7 +361,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
                 t.status = d.ok ? 'ok' : 'error'
                 t.output = d.output || ''
                 t.elapsedMs = t.startTime ? (Date.now() - t.startTime) : 0
-                if (d.ok && /^(write_file|edit_file|mcp__fs__(write_file|edit_file|create_file))$/.test(d.name || t.name)) {
+                if (d.ok && /^(write_file|edit_file|apply_patch|mcp__fs__(write_file|edit_file|create_file))$/.test(d.name || t.name)) {
                     window.dispatchEvent(new CustomEvent('agent-working-diff-changed'))
                 }
             }
@@ -566,14 +566,42 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         }
     }
 
-    function stopCodeWorkflow() {
-        if (currentFlow && currentFlow.status === 'running') {
-            currentFlow.status = 'stopped'
-            currentFlow.endTime = Date.now()
-            settleSubagents(currentFlow, 'stopped')
-            currentFlow = null
+    async function stopCodeWorkflow() {
+        const flow = currentFlow
+        if (!flow || flow.status !== 'running') {
+            closeStream()
+            return
+        }
+        const workflowId = flow.workflowId
+        flow.status = 'stopped'
+        flow.endTime = Date.now()
+        settleSubagents(flow, 'stopped')
+        for (const block of flow.blocks || []) {
+            if (block.type === 'tool' && (block.status === 'generating' || block.status === 'running')) {
+                block.status = 'error'
+                block.output ||= '用户停止了工作流'
+                block.elapsedMs = block.startTime ? (Date.now() - block.startTime) : 0
+            }
+        }
+        questionState.pending = null
+        currentFlow = null
+        onStreamUpdate?.()
+
+        // 必须先通知后端收尾再关 EventSource。只关流时后端只能看到“网络断线”，
+        // 无法区分用户停止，也可能来不及把失败状态和部分工具轨迹写进会话上下文。
+        if (workflowId) {
+            try {
+                await fetch('/api/code/workflow/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ workflow_id: workflowId })
+                })
+            } catch (err) {
+                console.error('停止工作流请求失败', err)
+            }
         }
         closeStream()
+        refreshResumable()
     }
 
     // 中途插话：工作流跑着的时候塞一条消息，不用等它完全停下。

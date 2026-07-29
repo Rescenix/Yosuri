@@ -203,6 +203,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if resumed != nil {
 		workflowID = resumed.WorkflowID
 	}
+	workflowCtx, workflowControl := registerWorkflowControl(c.Request.Context(), workflowID)
+	c.Request = c.Request.WithContext(workflowCtx)
+	defer unregisterWorkflowControl(workflowID, workflowControl)
 	writeCodeSSE(c, "workflow_start", map[string]any{
 		"workflow_id": workflowID, "task": task, "mode": mode,
 		"resumed": resumed != nil, "resumed_round": func() int {
@@ -314,6 +317,28 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		log.Printf("🔁 [续跑] workflow=%s 从第 %d 轮恢复，历史 %d 条消息", workflowID, startRound, len(msgs))
 	}
 
+	// 会话历史不再只在成功分支写入。任何终止路径都通过这一个幂等闭包落盘：
+	// 失败/停止保留部分轨迹，续跑后按 workflow_id 原位覆盖成最新状态。
+	historyStatus := taskStatusInterrupted
+	historyFinal := ""
+	historyPersisted := false
+	persistHistory := func() {
+		if historyPersisted {
+			return
+		}
+		if workflowControl.stopped.Load() {
+			historyStatus = taskStatusInterrupted
+			if historyFinal == "" {
+				historyFinal = "用户主动停止了工作流。"
+			}
+		}
+		r.persistWorkflowHistory(
+			sessionID, workflowID, task, historyStatus, historyFinal, transcript, flowBlocks,
+		)
+		historyPersisted = true
+	}
+	defer persistHistory()
+
 	// Invoked 钩子：每轮收尾把状态落成检查点。启动参数（task/mode/model…）由这里的
 	// 闭包捕获，轮次内变化的 msgs/transcript/token 由 roundState 传入——
 	// provider 不假装拥有循环的状态，只提供"一轮结束了"这个落点。
@@ -348,9 +373,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// max_rounds/max_tokens resume 接着跑，而不是无条件判死刑。
 		if done, reason := codeWorkflowExhausted(round, inputTokens, outputTokens, maxRounds, tokenBudget); done {
 			outcome = "budget_exhausted"
+			historyStatus = taskStatusFailed
+			historyFinal = reason + "，任务中止（可续跑）。"
 			checkpoint(round)
+			persistHistory()
 			writeCodeSSE(c, "workflow_done", map[string]any{
-				"status": "failed", "final_output": reason + "，任务中止（可续跑）",
+				"status": "failed", "final_output": historyFinal,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 				"resumable":           true, "workflow_id": workflowID,
@@ -358,7 +386,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			return
 		}
 		if c.Request.Context().Err() != nil {
-			return // 客户端断开
+			outcome = "interrupted"
+			if workflowControl.stopped.Load() {
+				historyFinal = "用户主动停止了工作流。"
+			} else {
+				historyFinal = "工作流连接中断，任务未完成。"
+			}
+			checkpoint(round)
+			return
 		}
 
 		// 非阻塞取一条 steer 消息（如果有）：一轮最多消费一条，多条按发送顺序留在
@@ -422,11 +457,24 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		if err != nil {
 			// 上游挂了属于可恢复失败——保留检查点，前端可以带 resume=<id> 原地重试，
 			// 不必把已经跑完的十几轮工具再跑一遍。
-			outcome = "upstream_error"
 			checkpoint(round)
+			if c.Request.Context().Err() != nil {
+				outcome = "interrupted"
+				historyStatus = taskStatusInterrupted
+				if workflowControl.stopped.Load() {
+					historyFinal = "用户主动停止了工作流。"
+				} else {
+					historyFinal = "工作流连接中断，任务未完成。"
+				}
+				return
+			}
+			outcome = "upstream_error"
+			historyStatus = taskStatusFailed
+			historyFinal = workflowFailureText(err.Error())
+			persistHistory()
 			writeCodeSSE(c, "flow_error", map[string]any{"message": err.Error()})
 			writeCodeSSE(c, "workflow_done", map[string]any{
-				"status": "failed", "final_output": "任务执行失败: " + err.Error(),
+				"status": "failed", "final_output": historyFinal,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 				"resumable":           true, "workflow_id": workflowID,
@@ -437,6 +485,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 没有工具调用 → 最终回答，收尾
 		if len(calls) == 0 {
 			outcome = "completed"
+			historyStatus = taskStatusCompleted
+			historyFinal = content
+			if content != "" {
+				flowBlocks = append(flowBlocks, FlowBlock{Type: "intent", Text: content})
+			}
+			persistHistory()
 			deleteWorkflowCheckpoint(workflowID)
 			// agent 决定结束对话：跑一次 build + 截图校验（旁路，失败不阻断）
 			verifyOnWorkflowDone(c, workflowID)
@@ -445,20 +499,6 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 			})
-			if sessionID != "" {
-				if content != "" {
-					flowBlocks = append(flowBlocks, FlowBlock{Type: "intent", Text: content})
-				}
-				// 这里是全仓库唯一的历史落盘点，且只在工作流成功收尾时才走到，
-				// 所以落进历史的每条任务按定义都已经结题——显式标出来，别让下一次
-				// 对话把它读成"还没做的待办"（见 taskDone / buildChatMessages）。
-				r.chatHandler.sessionStore.Append(sessionID, DSMessage{
-					Role: "user", Content: task, Status: taskStatusCompleted,
-				})
-				r.chatHandler.sessionStore.Append(sessionID, DSMessage{
-					Role: "assistant", Content: content, Blocks: flowBlocks,
-				})
-			}
 			go generateSkillAsync(task, transcript)
 			return
 		}
@@ -707,9 +747,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 而不是陪它空转到 codeWorkflowMaxRounds。
 		if allBlocked {
 			outcome = "repeat_blocked"
+			historyStatus = taskStatusFailed
+			historyFinal = "检测到模型重复调用同一工具且无进展，已中止任务。"
+			persistHistory()
 			deleteWorkflowCheckpoint(workflowID)
 			writeCodeSSE(c, "workflow_done", map[string]any{
-				"status": "failed", "final_output": "检测到模型重复调用同一工具且无进展，已中止任务。",
+				"status": "failed", "final_output": historyFinal,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 			})

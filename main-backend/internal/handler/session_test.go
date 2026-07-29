@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // withIsolatedSessionDir 比同包已有的 withTempDataDir 隔离得更彻底：
@@ -20,22 +19,16 @@ func withIsolatedSessionDir(t *testing.T) {
 	t.Setenv("HOME", dir)        // 类 Unix 下读这个
 }
 
-// appendPair 追加一对 user+assistant，模拟一次完整往返（Append 只在往返成功时被调用）。
-// Append 是异步落盘的，用例结尾若还有在途 goroutine，Windows 上会撞到
-// TempDir 清理与 os.Rename 打架；settle 用来等它们落完。
+// appendPair 统一构造一组 user+assistant 往返。
 func appendPair(t *testing.T, s *SessionStore, sid, userText, botText string) {
 	t.Helper()
 	s.Append(sid, DSMessage{Role: "user", Content: userText})
 	s.Append(sid, DSMessage{Role: "assistant", Content: botText})
 }
 
-// settle 等异步落盘的 goroutine 收尾再让用例结束。Append 是 fire-and-forget
-// （go persistAll()，无生命周期句柄），所以只能先让出时间片给那些已经派生、
-// 但可能还没跑到 persistAll 的 goroutine，再同步落一次盘把队列排空——
-// 否则 Windows 上迟到的 tmp+rename 会跟 TempDir 清理打架（Access is denied /
-// directory is not empty）。纯测试用，不为它改生产代码的落盘策略。
+// settle 在用例退出前做一次最终一致性检查；Append/工作流 Upsert 已同步落盘，
+// 这里不再依赖 sleep 等待后台 goroutine。
 func settle(s *SessionStore) {
-	time.Sleep(50 * time.Millisecond)
 	_ = s.persistAll()
 }
 

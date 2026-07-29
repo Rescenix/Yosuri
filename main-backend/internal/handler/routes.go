@@ -55,6 +55,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	workflowRunner := NewWorkflowRunner(chatHandler)
 	// 四态机 Code 工作流（思考/意图/操作/结果，EventSource 直连）
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
+	// 主动停止：先通知后端取消并落盘部分上下文，再由前端关闭 EventSource。
+	r.POST("/api/code/workflow/stop", workflowRunner.HandleCodeWorkflowStop)
 	// 工具审批回调：Ask 模式下前端批准条「允许/拒绝」写回，恢复四态机执行
 	r.POST("/api/code/workflow/approve", workflowRunner.HandleCodeWorkflowApprove)
 	// 中途插话：工作流跑着的时候插一条消息，下一轮当作用户中途发言拼进上下文
