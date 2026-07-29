@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Release-v0.1.0-blue" alt="Release v0.1.0">
   <img src="https://img.shields.io/badge/Backend-Go%201.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
   <img src="https://img.shields.io/badge/Runtime-Node.js%2022-339933" alt="Node.js 22">
@@ -162,6 +163,10 @@ flowchart TB
 | **扩展** | MCP Streamable HTTP、GitHub Skills、内置技能库 |
 | **本地模型** | Ollama、llama.cpp、OpenAI-compatible API |
 | **验证** | Go Test、前端构建、Python Harness、浏览器截图验收 |
+
+## 下载
+
+前往 [https://rescene.shanca.me/](https://rescene.shanca.me/) 全速下载最新版本。
 
 ## 快速开始
 
