@@ -5,18 +5,26 @@ const DB_NAME = 'aurora_appearance'
 const DB_VERSION = 1
 const STORE_NAME = 'wallpapers'
 const ACTIVE_VIDEO_KEY = 'active-video'
+const SETTINGS_VERSION = 2
 
 const DEFAULT_SETTINGS = {
+  version: SETTINGS_VERSION,
   enabled: false,
   dim: 24,
-  panelOpacity: 84,
+  panelOpacity: 68,
   blur: 10,
   pauseWhenHidden: true,
 }
 
 function readSettings() {
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
+    // v1 的 84% 面板叠加 60% 工作区底色后接近纯白，动态画面几乎不可见。
+    // 仅迁移旧版本的默认值；用户以后主动设置的数值不会被覆盖。
+    if (saved.version !== SETTINGS_VERSION && saved.panelOpacity === 84) {
+      saved.panelOpacity = DEFAULT_SETTINGS.panelOpacity
+    }
+    return { ...DEFAULT_SETTINGS, ...saved, version: SETTINGS_VERSION }
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -101,7 +109,8 @@ export function applyDynamicWallpaper() {
   root.dataset.dynamicWallpaper = visible ? 'on' : 'off'
   root.style.setProperty('--wallpaper-dim', String(dynamicWallpaperSettings.dim / 100))
   root.style.setProperty('--wallpaper-panel-alpha', String(dynamicWallpaperSettings.panelOpacity / 100))
-  root.style.setProperty('--wallpaper-workspace-alpha', String((dynamicWallpaperSettings.panelOpacity / 100) * 0.72))
+  // 工作区是面板的外层，必须保持轻透；否则两层 alpha 叠加会把视频完全遮住。
+  root.style.setProperty('--wallpaper-workspace-alpha', String((dynamicWallpaperSettings.panelOpacity / 100) * 0.18))
   root.style.setProperty('--wallpaper-blur', `${dynamicWallpaperSettings.blur}px`)
 }
 

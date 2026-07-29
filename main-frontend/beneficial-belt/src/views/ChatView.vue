@@ -1,6 +1,5 @@
 <template>
   <main class="chat-view-shell">
-    <DynamicWallpaper />
     <ChatWidget autoOpen sessionId="" />
   </main>
 </template>
@@ -8,7 +7,6 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 import ChatWidget from '../components/shanxi/chat/ChatWidget.vue'
-import DynamicWallpaper from '../components/shanxi/chat/DynamicWallpaper.vue'
 
 let prevOverflow = ''
 

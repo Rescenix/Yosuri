@@ -10,6 +10,7 @@
       playsinline
       disablepictureinpicture
       @canplay="playIfAllowed"
+      @error="handleMediaError"
     ></video>
     <div class="dynamic-wallpaper-shade"></div>
   </div>
@@ -19,6 +20,7 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   dynamicWallpaperReady,
+  dynamicWallpaperError,
   dynamicWallpaperSettings,
   dynamicWallpaperUrl,
   initDynamicWallpaper,
@@ -29,6 +31,11 @@ const videoElement = ref(null)
 function playIfAllowed() {
   if (!dynamicWallpaperSettings.enabled || document.hidden) return
   videoElement.value?.play().catch(() => {})
+}
+
+function handleMediaError() {
+  const mediaError = videoElement.value?.error
+  dynamicWallpaperError.value = mediaError?.message || '浏览器无法解码该视频，请改用 H.264 MP4 或 WebM'
 }
 
 function syncPlayback() {
@@ -86,6 +93,11 @@ onUnmounted(() => {
 
 [data-dynamic-wallpaper="on"] body {
   background: #09090b;
+}
+
+[data-dynamic-wallpaper="on"] .app-shell,
+[data-dynamic-wallpaper="on"] .chat-page {
+  background: transparent;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded {
