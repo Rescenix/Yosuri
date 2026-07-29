@@ -247,8 +247,9 @@ function groupSummaryTitle(group) {
     if (last?.type === 'thinking') return '正在思考…'
     return 'Agent 正在处理…'
   }
-  const total = group.blocks.length
-  return total ? `已完成 · ${total} 步` : '已完成'
+  // 收起后的摘要说清最后完成的实际动作；"N 步"没有帮助用户判断 Agent 做了什么。
+  const lastTool = [...group.blocks].reverse().find(b => b.type === 'tool')
+  return lastTool ? `已完成 · ${actionText(lastTool)}` : '已完成'
 }
 
 // 收起态思考行的一行预览：取首个非空行、压掉空白、截断
@@ -605,12 +606,12 @@ function toolBodyText(b) {
 }
 .flow-summary-icon {
   flex-shrink: 0;
-  color: var(--app-accent);
+  color: var(--app-text-faint);
 }
 .flow-summary-text {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--app-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -657,7 +658,6 @@ function toolBodyText(b) {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(0.75); }
 }
-.flow-summary-icon { color: #8b5cf6; }
 
 /* 折叠/展开动画 */
 .flow-body-enter-active,
