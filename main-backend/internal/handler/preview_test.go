@@ -3,6 +3,9 @@ package handler
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -89,10 +92,21 @@ func TestFrontendCandidatesComeFirst(t *testing.T) {
 }
 
 func TestValidatePreviewTargetWS(t *testing.T) {
+	previewBrowserMu.Lock()
+	previous := previewBrowser
+	previewBrowser = &managedPreviewBrowser{port: "43117"}
+	previewBrowserMu.Unlock()
+	t.Cleanup(func() {
+		previewBrowserMu.Lock()
+		previewBrowser = previous
+		previewBrowserMu.Unlock()
+	})
+
 	valid := []string{
 		"ws://127.0.0.1:9222/devtools/page/abc",
 		"ws://localhost:9222/devtools/page/abc",
 		"ws://[::1]:9222/devtools/page/abc",
+		"ws://127.0.0.1:43117/devtools/page/managed",
 	}
 	for _, raw := range valid {
 		if _, err := validatePreviewTargetWS(raw); err != nil {
@@ -102,6 +116,7 @@ func TestValidatePreviewTargetWS(t *testing.T) {
 
 	invalid := []string{
 		"ws://127.0.0.1:9223/devtools/page/abc",
+		"ws://127.0.0.1:43118/devtools/page/unmanaged",
 		"ws://192.168.1.2:9222/devtools/page/abc",
 		"ws://127.0.0.1:9222/devtools/browser/abc",
 		"wss://127.0.0.1:9222/devtools/page/abc",
@@ -111,6 +126,32 @@ func TestValidatePreviewTargetWS(t *testing.T) {
 		if _, err := validatePreviewTargetWS(raw); err == nil {
 			t.Errorf("危险或无效的 CDP target 未被拒绝: %q", raw)
 		}
+	}
+}
+
+func TestBundledBrowserCandidatesAreRelativeToAppExecutable(t *testing.T) {
+	appPath := filepath.Join(t.TempDir(), "ResceneAgent.exe")
+	candidates := bundledBrowserCandidates(appPath)
+	if len(candidates) == 0 {
+		t.Fatal("随包 Chromium 候选路径不能为空")
+	}
+	wantRoot := filepath.Join(filepath.Dir(appPath), "runtime", "chromium") + string(os.PathSeparator)
+	if !strings.HasPrefix(candidates[0], wantRoot) {
+		t.Fatalf("首选随包 Chromium 应位于 %s，实得 %s", wantRoot, candidates[0])
+	}
+}
+
+func TestReadDevToolsActivePort(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "DevToolsActivePort"), []byte("43117\n/devtools/browser/test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	port, err := readDevToolsActivePort(dir)
+	if err != nil {
+		t.Fatalf("读取动态 CDP 端口失败: %v", err)
+	}
+	if port != "43117" {
+		t.Fatalf("动态 CDP 端口不符: %s", port)
 	}
 }
 

@@ -237,7 +237,8 @@ func RegisterLlamaCleanupOnExit() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		log.Println("🦙 收到退出信号，正在停止本地 llama-server（如有）...")
+		log.Println("🧹 收到退出信号，正在停止预览 Chromium 与本地 llama-server（如有）...")
+		_ = StopPreviewBrowser()
 		_ = StopLocalLlamaServer()
 		os.Exit(0)
 	}()

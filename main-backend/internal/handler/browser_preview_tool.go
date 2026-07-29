@@ -25,6 +25,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +38,19 @@ import (
 )
 
 var activePreviewClientWriteMu sync.Mutex
+
+type managedPreviewBrowser struct {
+	cmd        *exec.Cmd
+	port       string
+	profileDir string
+	done       chan struct{}
+}
+
+var (
+	previewBrowserMu      sync.RWMutex
+	previewBrowserStartMu sync.Mutex
+	previewBrowser        *managedPreviewBrowser
+)
 
 type previewClientWriter interface {
 	WriteJSON(v any) error
@@ -86,18 +101,18 @@ func requestHostname(r *http.Request) string {
 	return u.Hostname()
 }
 
-// validatePreviewTargetWS 只允许连接本机 Chrome 的 page target，避免把中转端点变成
+// validatePreviewTargetWS 只允许连接本机 Chrome/Chromium 的 page target，避免把中转端点变成
 // 可访问任意内网服务的 WebSocket 代理。
-// 预览专用端口 9223（隔离用户日常 Chrome 的 9222），同时兼容 9222 以不影响既有 MCP。
-const previewCDPPort = "9223"
+// 预览浏览器使用动态端口；9222 只用于兼容用户显式传入的既有本机 CDP target。
 
 func validatePreviewTargetWS(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "ws" {
 		return "", fmt.Errorf("CDP target 地址无效")
 	}
-	if !isLoopbackHost(u.Hostname()) || (u.Port() != "9222" && u.Port() != previewCDPPort) {
-		return "", fmt.Errorf("仅允许连接本机 Chrome CDP(9222/9223)")
+	activePort := currentPreviewCDPPort()
+	if !isLoopbackHost(u.Hostname()) || (u.Port() != "9222" && (activePort == "" || u.Port() != activePort)) {
+		return "", fmt.Errorf("仅允许连接本机受管 Chromium CDP 或兼容端口 9222")
 	}
 	if !strings.HasPrefix(u.Path, "/devtools/page/") {
 		return "", fmt.Errorf("仅允许连接 CDP page target")
@@ -346,11 +361,28 @@ func HandlePreviewCDP(c *gin.Context) {
 	}
 }
 
-// cdpBrowserWS 返回已运行的预览专用 Chrome（端口 9223）的 browser 级 WebSocket 调试地址。
-// 9223 与用户日常 Chrome 的 9222 隔离，预览永不借用/弹出用户的普通浏览器。
+// currentPreviewCDPPort 返回本进程拉起的预览浏览器端口。
+// 端口由 Chromium 动态分配，不接受外部任意 loopback 端口冒充受管浏览器。
+func currentPreviewCDPPort() string {
+	previewBrowserMu.RLock()
+	defer previewBrowserMu.RUnlock()
+	if previewBrowser == nil {
+		return ""
+	}
+	return previewBrowser.port
+}
+
+// cdpBrowserWS 返回受管预览浏览器的 browser 级 WebSocket 调试地址。
 func cdpBrowserWS() string {
+	return cdpBrowserWSAtPort(currentPreviewCDPPort())
+}
+
+func cdpBrowserWSAtPort(port string) string {
+	if port == "" {
+		return ""
+	}
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:" + previewCDPPort + "/json/version")
+	resp, err := client.Get("http://127.0.0.1:" + port + "/json/version")
 	if err != nil {
 		return ""
 	}
@@ -364,28 +396,90 @@ func cdpBrowserWS() string {
 	return v.WebSocketDebuggerURL
 }
 
-// findChromeExecutable 定位本机 Chrome/Chromium 可执行文件。
-// 优先读 CHROME_PATH 环境变量，否则在常见安装目录里找；最后回退到 PATH 查找。
+// bundledBrowserRelativePaths 是随包浏览器相对 ResceneAgent 可执行文件的目录约定。
+// Chromium 是多文件运行时，必须由安装器完整复制 runtime/chromium 目录，不能只放主程序。
+func bundledBrowserRelativePaths() []string {
+	switch runtime.GOOS {
+	case "windows":
+		return []string{
+			filepath.Join("runtime", "chromium", "chrome.exe"),
+			filepath.Join("chromium", "chrome.exe"),
+		}
+	case "darwin":
+		return []string{
+			filepath.Join("runtime", "chromium", "Chromium.app", "Contents", "MacOS", "Chromium"),
+			filepath.Join("chromium", "Chromium.app", "Contents", "MacOS", "Chromium"),
+		}
+	default:
+		return []string{
+			filepath.Join("runtime", "chromium", "chrome"),
+			filepath.Join("runtime", "chromium", "chromium"),
+			filepath.Join("chromium", "chrome"),
+		}
+	}
+}
+
+func bundledBrowserCandidates(appExecutable string) []string {
+	if appExecutable == "" {
+		return nil
+	}
+	appDir := filepath.Dir(appExecutable)
+	out := make([]string, 0, len(bundledBrowserRelativePaths()))
+	for _, rel := range bundledBrowserRelativePaths() {
+		out = append(out, filepath.Join(appDir, rel))
+	}
+	return out
+}
+
+func existingRegularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
+func browserInstallCandidate(base string, parts ...string) string {
+	if strings.TrimSpace(base) == "" {
+		return ""
+	}
+	return filepath.Join(append([]string{base}, parts...)...)
+}
+
+// findChromeExecutable 定位预览专用 Chromium 内核。
+// CHROME_PATH 是开发/诊断覆盖项；正式客户端优先使用 exe 旁的随包 Chromium，
+// 再回退系统 Edge、Chrome/Chromium 与 PATH。
 // 找不到返回空串（调用方据此走降级/报错路径）。
 func findChromeExecutable() string {
-	if p := os.Getenv("CHROME_PATH"); p != "" {
-		if _, err := os.Stat(p); err == nil {
+	if p := strings.TrimSpace(os.Getenv("CHROME_PATH")); p != "" {
+		if existingRegularFile(p) {
 			return p
 		}
 	}
+
+	appExecutable, _ := os.Executable()
+	for _, p := range bundledBrowserCandidates(appExecutable) {
+		if existingRegularFile(p) {
+			return p
+		}
+	}
+
 	candidates := []string{
+		browserInstallCandidate(os.Getenv("PROGRAMFILES"), "Microsoft", "Edge", "Application", "msedge.exe"),
+		browserInstallCandidate(os.Getenv("PROGRAMFILES(X86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
+		browserInstallCandidate(os.Getenv("LOCALAPPDATA"), "Microsoft", "Edge", "Application", "msedge.exe"),
 		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
 		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
 		`C:\Program Files\Google\Chrome Beta\Application\chrome.exe`,
-		`C:\Users\` + os.Getenv("USERNAME") + `\AppData\Local\Google\Chrome\Application\chrome.exe`,
+		browserInstallCandidate(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
 		`C:\Program Files\Chromium\Application\chrome.exe`,
 	}
 	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
+		if p != "" && existingRegularFile(p) {
 			return p
 		}
 	}
-	for _, name := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"} {
+	for _, name := range []string{
+		"msedge", "microsoft-edge", "microsoft-edge-stable",
+		"google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
+	} {
 		if p, err := exec.LookPath(name); err == nil {
 			return p
 		}
@@ -393,44 +487,140 @@ func findChromeExecutable() string {
 	return ""
 }
 
-// ensureChromeCDP 确保本机有一个以调试模式（预览专用端口 9223）运行的 headless Chrome 供预览用。
-// 9223 与用户日常 Chrome 的 9222 完全隔离 —— 预览永远只用这台无头实例，绝不借用/弹出
-// 用户自己打开的有头 Chrome。若 9223 已在监听则直接返回；否则自动拉起一个 headless Chrome
-// （独立 user-data-dir + HideWindow，Windows 下无窗口）。拉起失败则静默返回走降级/报错路径。
-func ensureChromeCDP() {
-	if cdpBrowserWS() != "" {
-		return // 9223 已经在跑（多半是上次拉的无头实例），别重复拉
+func newPreviewProfileDir() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil || strings.TrimSpace(cacheDir) == "" {
+		cacheDir = resceneUserDataDir()
 	}
-	exe := findChromeExecutable()
-	if exe == "" {
-		log.Printf("⚠️ [预览] 未找到 Chrome 可执行文件，无法自动拉起 CDP")
+	base := filepath.Join(cacheDir, "ResceneAgent", "Chromium")
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(base, "preview-")
+}
+
+func readDevToolsActivePort(profileDir string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(profileDir, "DevToolsActivePort"))
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 {
+		return "", fmt.Errorf("DevToolsActivePort 内容为空")
+	}
+	port := strings.TrimSpace(lines[0])
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return "", fmt.Errorf("DevToolsActivePort 端口无效: %q", port)
+	}
+	return port, nil
+}
+
+func trackPreviewBrowserExit(browser *managedPreviewBrowser) {
+	err := browser.cmd.Wait()
+	previewBrowserMu.Lock()
+	if previewBrowser == browser {
+		previewBrowser = nil
+	}
+	previewBrowserMu.Unlock()
+	close(browser.done)
+	if removeErr := os.RemoveAll(browser.profileDir); removeErr != nil {
+		log.Printf("⚠️ [预览] 清理 Chromium profile 失败: %v", removeErr)
+	}
+	if err != nil && browser.cmd.ProcessState != nil && !browser.cmd.ProcessState.Success() {
+		log.Printf("ℹ️ [预览] Chromium 已退出: %v", err)
+	}
+}
+
+// StopPreviewBrowser 停止本进程拉起的 Chromium/Edge 及其子进程，并清理独立 profile。
+// 幂等；Wails 的 OnShutdown 与当前 server 的信号退出路径都可以直接调用。
+func StopPreviewBrowser() error {
+	previewBrowserMu.Lock()
+	browser := previewBrowser
+	previewBrowser = nil
+	previewBrowserMu.Unlock()
+	if browser == nil {
+		return nil
+	}
+	err := stopPreviewProcess(browser.cmd)
+	select {
+	case <-browser.done:
+	case <-time.After(5 * time.Second):
+	}
+	if removeErr := os.RemoveAll(browser.profileDir); err == nil {
+		err = removeErr
+	}
+	return err
+}
+
+// ensureChromeCDP 确保本机有一个受管的无头 Chromium 供预览使用。
+// Chromium 以 --remote-debugging-port=0 自行选择端口，写入独立 profile 的
+// DevToolsActivePort；因此不会与用户浏览器或其他 Rescene 实例抢固定端口。
+func ensureChromeCDP() {
+	previewBrowserStartMu.Lock()
+	defer previewBrowserStartMu.Unlock()
+
+	if cdpBrowserWS() != "" {
 		return
 	}
-	userDataDir := filepath.Join(os.TempDir(), "aurora-cdp-profile")
+	_ = StopPreviewBrowser()
+
+	exe := findChromeExecutable()
+	if exe == "" {
+		log.Printf("⚠️ [预览] 未找到随包 Chromium、系统 Edge 或 Chrome，无法自动拉起 CDP")
+		return
+	}
+	userDataDir, err := newPreviewProfileDir()
+	if err != nil {
+		log.Printf("⚠️ [预览] 创建 Chromium profile 失败: %v", err)
+		return
+	}
 	cmd := exec.Command(exe,
 		"--headless=new",
-		"--remote-debugging-port="+previewCDPPort,
+		"--remote-debugging-address=127.0.0.1",
+		"--remote-debugging-port=0",
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--disable-background-networking",
 		"--user-data-dir="+userDataDir,
 		"about:blank",
 	)
-	// Windows 下隐藏可能闪现的窗口；其他平台 SysProcAttr 结构体无该字段，用 build tag 隔离。
-	setHideWindow(cmd)
+	configurePreviewProcess(cmd)
 	if err := cmd.Start(); err != nil {
+		_ = os.RemoveAll(userDataDir)
 		log.Printf("⚠️ [预览] 拉起 Chrome 失败: %v", err)
 		return
 	}
-	// 轮询 9223 直到就绪（最多 ~10s），不长时间阻塞调用方。
+
+	browser := &managedPreviewBrowser{
+		cmd:        cmd,
+		profileDir: userDataDir,
+		done:       make(chan struct{}),
+	}
+	previewBrowserMu.Lock()
+	previewBrowser = browser
+	previewBrowserMu.Unlock()
+	go trackPreviewBrowserExit(browser)
+
+	// 等 Chromium 写出动态端口并让 /json/version 就绪，最多约 10 秒。
 	for i := 0; i < 40; i++ {
 		time.Sleep(250 * time.Millisecond)
-		if cdpBrowserWS() != "" {
-			log.Printf("🖥️ [预览] 已自动拉起 headless Chrome CDP (pid=%d, port=%s)", cmd.Process.Pid, previewCDPPort)
+		port, portErr := readDevToolsActivePort(userDataDir)
+		if portErr != nil {
+			continue
+		}
+		previewBrowserMu.Lock()
+		if previewBrowser == browser {
+			browser.port = port
+		}
+		previewBrowserMu.Unlock()
+		if cdpBrowserWSAtPort(port) != "" {
+			log.Printf("🖥️ [预览] 已拉起受管 Chromium (pid=%d, port=%s, executable=%s)", cmd.Process.Pid, port, exe)
 			return
 		}
 	}
-	log.Printf("⚠️ [预览] Chrome 已拉起但 %s 未在超时内就绪", previewCDPPort)
+	log.Printf("⚠️ [预览] Chromium 已拉起但动态 CDP 端口未在超时内就绪")
+	_ = StopPreviewBrowser()
 }
 
 // cdpOpenTarget 在 Chrome 里开一个新标签页并导航到 targetURL，返回该标签页的
@@ -459,14 +649,15 @@ func cdpApplyViewport(tabWS string) {
 }
 
 func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) {
-	ensureChromeCDP() // 9223 没在跑就自动拉起 headless 实例，修复「Chrome CDP 未运行」
+	ensureChromeCDP()
+	port := currentPreviewCDPPort()
 	browserWS := cdpBrowserWS()
-	if browserWS == "" {
-		return "", "", fmt.Errorf("chrome CDP 未运行(预览端口 " + previewCDPPort + " 无响应)")
+	if browserWS == "" || port == "" {
+		return "", "", fmt.Errorf("Chromium CDP 未运行")
 	}
 	// 注意：Chrome 新版本（~109+）的 /json/new 只接受 PUT（GET/POST 返回 405），
 	// 所以这里用 PUT，而不是 client.Post。
-	newURL := "http://127.0.0.1:" + previewCDPPort + "/json/new"
+	newURL := "http://127.0.0.1:" + port + "/json/new"
 	if targetURL != "" {
 		newURL += "?" + url.QueryEscape(targetURL)
 	}
@@ -595,7 +786,7 @@ func getCurrentPreviewTarget() string {
 
 // capturePreviewScreenshot 截取「内嵌预览面板当前显示的那个页面」（用户正在看的活 target）。
 // url 为空 → 截 currentPreviewTargetWS（用户看到啥截到啥，含交互状态）；
-// url 非空 → 复用同一台 headless Chrome（预览端口 9223）开/复用 target 截 —— 仍由 harness 控制，
+// url 非空 → 复用同一台受管 headless Chromium（动态 CDP 端口）开/复用 target 截，
 // 不交给 LLM 自己开浏览器。返回的 PNG 字节可直接作为聊天图像工件发布。
 func capturePreviewScreenshot(url string) ([]byte, error) {
 	targetWS := ""
@@ -605,7 +796,7 @@ func capturePreviewScreenshot(url string) ([]byte, error) {
 			return nil, fmt.Errorf("当前没有正在预览的内嵌页面；可传 url 参数截指定页面")
 		}
 	} else {
-		// 在同一台 headless Chrome 里开 target 渲染该 url（仍是 harness 的 9223 实例）。
+		// 在同一台受管 headless Chromium 里开 target 渲染该 URL。
 		ws, _, err := cdpOpenTarget(url)
 		if err != nil {
 			return nil, fmt.Errorf("打开预览目标失败: %w", err)
@@ -686,7 +877,7 @@ func readCurrentPreviewText() (string, error) {
 	if err := conn.WriteJSON(map[string]any{
 		"id": id, "method": "Runtime.evaluate",
 		"params": map[string]any{
-			"expression":   "document.body ? document.body.innerText : ''",
+			"expression":    "document.body ? document.body.innerText : ''",
 			"returnByValue": true,
 		},
 	}); err != nil {
@@ -837,7 +1028,7 @@ var openPreviewToolDef = core.ToolDefinition{
 // openPreviewInPanel 把 agent 显式指定的页面弹进内嵌预览面板。
 // 返回 (预览地址, CDP target ws, error)。cdpWS 非空时前端走 CDP startScreencast 真实
 // 渲染（可交互）；复用 autoOpenBrowserPreview 的底层 CDP 通道，与 capture_preview /
-// 系统收尾自动预览共用同一台 harness headless Chrome（端口 9223）。
+// 系统收尾自动预览共用同一台受管 headless Chromium（动态 CDP 端口）。
 func openPreviewInPanel(argsJSON string) (string, string, error) {
 	var a struct {
 		Path string `json:"path"`
