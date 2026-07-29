@@ -19,8 +19,11 @@
       </button>
       <span v-else class="stn-chevron-spacer"></span>
 
-      <span class="stn-dot" :class="{ on: node.id === runningSession }"></span>
-      <span class="stn-name">{{ node.name }}</span>
+      <span class="stn-session-icon" :class="{ running: node.id === runningSession }">
+        <Icon icon="mdi:message-text-outline" width="14" />
+        <i v-if="node.id === runningSession"></i>
+      </span>
+      <span class="stn-name" :title="node.name">{{ node.name }}</span>
       <span v-if="node.children.length" class="stn-branch-count">{{ node.children.length }}</span>
 
       <div v-if="hoveredId === node.id || openMenuId === node.id" class="stn-menu-wrap">
@@ -78,19 +81,24 @@ const expanded = computed(() => props.isExpanded(props.node))
 /* 全部用主题变量：SessionMenuContent 那边的行样式硬编码了浅色值，暗色模式下是坏的，
    新代码不继承那个毛病 */
 .stn-row {
+  position: relative;
+  min-height: 36px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: 7px;
+  padding: 0 8px;
+  border-radius: 9px;
   cursor: pointer;
   font-size: 13px;
   color: var(--app-text);
-  transition: background 0.15s ease;
+  transition: background .15s ease, color .15s ease;
 }
-.stn-row:hover { background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 94%); }
-.stn-row.active { background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 92%); }
-.stn-row.running { background: var(--app-accent-soft, rgba(201, 100, 66, 0.12)); }
+.stn-row:hover { background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 95%); }
+.stn-row.active {
+  background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 92%);
+  font-weight: 600;
+}
+.stn-row.running { background: var(--app-accent-soft, rgba(201, 100, 66, 0.1)); }
 
 .stn-chevron,
 .stn-chevron-spacer {
@@ -111,15 +119,26 @@ const expanded = computed(() => props.isExpanded(props.node))
 }
 .stn-chevron.open { transform: rotate(90deg); }
 
-.stn-dot {
+.stn-session-icon {
+  position: relative;
   flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--app-text-faint);
+}
+.stn-row:hover .stn-session-icon,
+.stn-row.active .stn-session-icon { color: var(--app-text-soft); }
+.stn-session-icon.running { color: var(--app-accent); }
+.stn-session-icon i {
+  position: absolute;
+  right: -1px;
+  bottom: 0;
   width: 6px;
   height: 6px;
+  border: 2px solid var(--app-surface);
   border-radius: 50%;
-  background: transparent;
-}
-/* 运行中的脉冲点在任意深度都渲染，分支跑起来和根会话一样显眼 */
-.stn-dot.on {
   background: var(--app-accent, #c96442);
   animation: stn-dot-pulse 1.4s ease-in-out infinite;
 }
@@ -133,6 +152,7 @@ const expanded = computed(() => props.isExpanded(props.node))
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.35;
 }
 .stn-branch-count {
   flex: 0 0 auto;
@@ -145,21 +165,27 @@ const expanded = computed(() => props.isExpanded(props.node))
 
 .stn-menu-wrap { flex: 0 0 auto; display: flex; }
 .stn-menu-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border: none;
-  background: none;
-  padding: 0 2px;
+  border-radius: 7px;
+  background: transparent;
   cursor: pointer;
   color: var(--app-text-soft);
-  display: flex;
-  align-items: center;
 }
-.stn-menu-btn:hover { color: var(--app-text); }
+.stn-menu-btn:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 91%);
+}
 
 /* 导引线：一条左边框画出整棵子树的血缘 */
 .stn-children {
-  margin-left: 18px;
-  padding-left: 6px;
-  border-left: 1px solid color-mix(in srgb, var(--app-text-faint, #a3a3a3), transparent 50%);
+  margin-left: 20px;
+  padding-left: 7px;
+  border-left: 1px solid color-mix(in srgb, var(--app-text-faint, #a3a3a3), transparent 64%);
   animation: stn-expand 0.18s ease;
 }
 /* 太深就不再往右缩了，否则 260px 的侧栏会被吃光、名字没地方显示 */

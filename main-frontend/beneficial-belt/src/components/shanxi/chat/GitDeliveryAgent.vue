@@ -1,5 +1,22 @@
 <template>
-  <section class="git-delivery-agent" aria-label="交付 Agent">
+  <section class="git-delivery-agent" :class="{ minimized: isMinimized }" aria-label="交付 Agent">
+    <button
+      v-if="isMinimized"
+      type="button"
+      class="gda-minimized-bar"
+      title="恢复 Agent 工作台"
+      aria-label="恢复 Agent 工作台"
+      @click="isMinimized = false"
+    >
+      <span class="gda-minimized-icon">
+        <Icon icon="mdi:source-branch-check" width="17" />
+        <i v-if="reviewing" aria-label="正在运行"></i>
+      </span>
+      <span class="gda-minimized-name">{{ activeAgent.name }}</span>
+      <span v-if="reviewing" class="gda-minimized-status">{{ elapsedSeconds }}s</span>
+      <Icon icon="mdi:window-restore" width="17" />
+    </button>
+    <template v-else>
     <header class="gda-header">
       <div class="gda-tabs" role="tablist">
         <button
@@ -20,6 +37,7 @@
         </div>
       </div>
       <div class="gda-actions">
+        <button type="button" title="最小化" aria-label="最小化 Agent 工作台" @click="minimizeAgent"><Icon icon="mdi:window-minimize" width="18" /></button>
         <button type="button" title="管理 Agent" @click="showSettings = true"><Icon icon="mdi:cog-outline" width="17" /></button>
         <button type="button" title="关闭" @click="$emit('close')"><Icon icon="mdi:close" width="18" /></button>
       </div>
@@ -66,6 +84,7 @@
         </section>
       </div>
     </Teleport>
+    </template>
   </section>
 </template>
 
@@ -95,6 +114,7 @@ const elapsedSeconds = ref(0)
 const pendingApproval = ref(null)
 const showSettings = ref(false)
 const showAgentPicker = ref(false)
+const isMinimized = ref(false)
 const messagesRef = ref(null)
 let reviewStream = null
 let elapsedTimer = null
@@ -241,6 +261,11 @@ function removeAgent(id) {
   openAgentIds.value = openAgentIds.value.filter(agentId => agentId !== id)
   if (activeAgentId.value === id) activeAgentId.value = agents.value[0].id
 }
+function minimizeAgent() {
+  showAgentPicker.value = false
+  showSettings.value = false
+  isMinimized.value = true
+}
 onMounted(() => { draft.value = GIT_REVIEW_TASK })
 onUnmounted(stopReview)
 </script>
@@ -251,4 +276,63 @@ onUnmounted(stopReview)
 .gda-messages { flex:1; overflow:auto; padding:16px; background:#fff; }.gda-message { display:flex; gap:8px; margin:0 0 12px; }.gda-message.user { justify-content:flex-end; }.gda-message.activity { margin:4px 0 8px 34px; }.gda-activity { max-width:90%; display:flex; align-items:flex-start; gap:6px; color:#727272; font-size:11.5px; line-height:1.45; white-space:pre-wrap; }.gda-activity :deep(svg) { flex:0 0 auto; margin-top:1px; color:#8b6046; }.gda-avatar { width:26px; height:26px; flex:0 0 auto; display:grid; place-items:center; border-radius:8px; color:#79533c; background:#f6eee9; }.gda-bubble { max-width:82%; padding:9px 11px; border-radius:10px; color:#303030; background:#f5f5f5; font-size:12.5px; line-height:1.55; white-space:pre-wrap; }.gda-message.user .gda-bubble { color:#fff; background:#262626; }.gda-bubble.typing { display:flex; align-items:center; gap:4px; min-width:36px; }.typing i { width:4px; height:4px; border-radius:50%; background:#777; animation:blink 1.15s infinite ease-in-out; }.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
 .gda-input { display:flex; align-items:flex-end; gap:8px; padding:10px 12px; border-top:1px solid #ececec; background:#fff; }.gda-input textarea { flex:1; min-height:20px; max-height:110px; padding:7px 0; resize:none; border:0; outline:0; color:#242424; font:13px/1.45 inherit; }.gda-input textarea::placeholder { color:#999; }.gda-input button { width:28px; height:28px; display:grid; place-items:center; flex:0 0 auto; border:0; border-radius:8px; color:#fff; background:#242424; cursor:pointer; }.gda-input .gda-stop { color:#6f352f; background:#f6e9e7; }.gda-input button:disabled { opacity:.35; cursor:default; }
 .gda-approval { margin:4px 0 12px 34px; padding:10px; border:1px solid #e9cda9; border-radius:9px; background:#fff8ee; }.gda-approval strong,.gda-approval span { display:block; font-size:12px; }.gda-approval span { margin-top:3px; color:#754d25; font-family:ui-monospace,Consolas,monospace; }.gda-approval pre { max-height:90px; overflow:auto; margin:8px 0; padding:7px; border-radius:6px; color:#5b4b3b; background:rgba(255,255,255,.7); font:10px/1.4 ui-monospace,Consolas,monospace; white-space:pre-wrap; }.gda-approval div { display:flex; justify-content:flex-end; gap:7px; }.gda-approval button { border:0; border-radius:6px; padding:5px 9px; font-size:11px; cursor:pointer; }.gda-approval button:first-child { color:#753a34; background:#f6e9e7; }.gda-approval button:last-child { color:#fff; background:#262626; }.gda-settings-backdrop { position:fixed; inset:0; z-index:50000; display:grid; place-items:center; background:rgba(0,0,0,.22); }.gda-settings-dialog { width:min(520px,calc(100vw - 32px)); max-height:min(660px,calc(100vh - 32px)); display:flex; flex-direction:column; overflow:hidden; color:#292929; background:#fff; border-radius:14px; box-shadow:0 18px 56px rgba(0,0,0,.24); }.gda-settings-dialog > header,.gda-settings-dialog > footer { display:flex; align-items:center; justify-content:space-between; padding:13px 16px; border-bottom:1px solid #eee; }.gda-settings-dialog > header strong { font-size:14px; }.gda-settings-dialog > header button,.gda-agent-form-head button { border:0; color:#666; background:transparent; cursor:pointer; }.gda-agent-list { overflow:auto; padding:14px 16px; }.gda-agent-form { margin-bottom:14px; padding:12px; border:1px solid #e7e7e7; border-radius:10px; }.gda-agent-form-head { display:flex; justify-content:space-between; margin-bottom:10px; color:#555; font-size:12px; font-weight:650; }.gda-agent-form label { display:grid; gap:5px; margin-top:9px; color:#777; font-size:11px; }.gda-agent-form input,.gda-agent-form textarea { box-sizing:border-box; width:100%; padding:7px 8px; border:1px solid #ddd; border-radius:7px; color:#303030; font:12px/1.45 inherit; }.gda-agent-form textarea { resize:vertical; }.gda-settings-dialog > footer { border-top:1px solid #eee; border-bottom:0; }.gda-settings-dialog footer button { border:0; border-radius:8px; padding:7px 10px; cursor:pointer; font-size:12px; }.gda-add-agent { display:inline-flex; align-items:center; gap:5px; color:#60412f; background:#f5eee9; }.gda-settings-done { color:#fff; background:#242424; }.spin { animation:spin .9s linear infinite; }@keyframes spin { to { transform:rotate(360deg) } }@keyframes blink { 0%,80%,100%{opacity:.28}40%{opacity:1} }
+.git-delivery-agent.minimized {
+  right: 18px;
+  bottom: 16px;
+  width: min(232px, calc(100vw - 32px));
+  height: 48px;
+  border-color: #dedede;
+  border-radius: 14px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, .16);
+  transition: width .2s ease, height .2s ease, box-shadow .2s ease;
+}
+.gda-minimized-bar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 0;
+  color: #2d2d2d;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+}
+.gda-minimized-bar:hover { background: #f7f7f7; }
+.gda-minimized-bar:focus-visible { outline: 2px solid #555; outline-offset: -3px; }
+.gda-minimized-icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #704c36;
+  background: #f6eee9;
+}
+.gda-minimized-icon i {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #55a46c;
+  animation: blink 1.4s ease-in-out infinite;
+}
+.gda-minimized-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gda-minimized-status { color: #777; font-size: 11px; font-weight: 500; }
 </style>

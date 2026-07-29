@@ -2,15 +2,15 @@
   <div class="smc-root" :class="{ fill }">
     <!-- 顶部功能项：新建任务 / 搜索对话 / 插件市场 -->
     <div class="smc-nav">
-      <button class="smc-nav-item" @click="$emit('new-session')">
+      <button class="smc-nav-item primary" type="button" @click="$emit('new-session')">
         <Icon icon="mdi:plus-circle-outline" width="18" />
         <span>新建任务</span>
       </button>
-      <button class="smc-nav-item" @click="$emit('open-search')">
+      <button class="smc-nav-item" type="button" @click="$emit('open-search')">
         <Icon icon="mdi:magnify" width="18" />
         <span>搜索对话</span>
       </button>
-      <button class="smc-nav-item" @click="$emit('open-plugins')">
+      <button class="smc-nav-item" type="button" @click="$emit('open-plugins')">
         <Icon icon="mdi:puzzle-outline" width="18" />
         <span>插件市场</span>
       </button>
@@ -60,6 +60,7 @@
             <span class="wd-group-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
             <span class="wd-group-name">{{ grp.name }}</span>
+            <span class="wd-group-count">{{ grp.sessions.length }}</span>
             <div class="wd-group-menu-wrap" v-if="folderHover === grp.name || openFolderMenu === grp.name">
               <button class="wd-group-menu-btn" @click.stop="openFolderMenuFn(grp.name, $event)" title="更多">
                 <Icon icon="mdi:dots-horizontal" width="16" />
@@ -101,7 +102,9 @@
         <Icon v-else icon="mdi:account-circle" width="20" color="#6b6b6b" />
         <span>{{ auth.displayName.value }}</span>
       </div>
-      <Icon class="fm-footer-settings" icon="mdi:cog-outline" width="18" color="#6b6b6b" @click.stop="$emit('open-settings')" />
+      <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
+        <Icon icon="mdi:cog-outline" width="18" />
+      </button>
     </div>
 
     <!-- 用户卡片菜单：点头像悬浮白色卡片，含登录/退出 -->
@@ -402,81 +405,182 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 </script>
 
 <style scoped>
-.smc-root { display: flex; flex-direction: column; }
+.smc-root {
+  display: flex;
+  flex-direction: column;
+  color: var(--app-text);
+}
 .smc-root.fill { height: 100%; min-height: 0; }
-.smc-root.fill .smc-session-area { flex: 1; max-height: none; }
+.smc-root.fill .smc-section-projects {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.smc-root.fill .smc-section-projects .smc-session-area { flex: 1; max-height: none; }
 
 .smc-nav {
   flex-shrink: 0;
-  padding: 10px 8px 8px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 10px 10px;
 }
 .smc-nav-item {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 5px;
-  padding: 10px 4px; border: 1px solid var(--app-border); border-radius: 12px;
-  background: linear-gradient(180deg, var(--app-surface) 0%, var(--app-surface-2) 100%);
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
   color: var(--app-text);
-  font-size: 11.5px; font-weight: 600; cursor: pointer; text-align: center;
-  transition: all 0.15s ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: left;
+  transition: background .16s ease, color .16s ease, transform .16s ease;
 }
 .smc-nav-item:hover {
-  background: var(--app-surface);
-  border-color: var(--app-text-faint);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
+  transform: translateX(2px);
 }
-.smc-nav-item .iconify { color: var(--app-accent); }
+.smc-nav-item.primary {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 95%);
+  font-weight: 620;
+}
+.smc-nav-item:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
+}
+.smc-nav-item .iconify {
+  flex: 0 0 auto;
+  color: var(--app-text-soft);
+}
+.smc-nav-item.primary .iconify { color: var(--app-accent); }
 
 .smc-section { flex-shrink: 0; }
 .smc-section-label {
-  display: flex; align-items: center; gap: 8px;
-  padding: 16px 16px 6px; font-size: 12px; font-weight: 600; color: var(--app-text);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 16px 16px 6px;
+  color: var(--app-text-soft);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .015em;
 }
 .smc-project-add {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; margin-left: auto; margin-right: -6px;
-  border: 0; border-radius: 7px; background: transparent; color: var(--app-text-soft);
-  cursor: pointer; transition: background 0.15s ease, color 0.15s ease;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  margin-right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, transform .15s ease;
 }
-.smc-project-add:hover { background: var(--app-surface-3); color: var(--app-text); }
+.smc-project-add:hover {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 93%);
+  color: var(--app-text);
+  transform: rotate(90deg);
+}
+.smc-project-add:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
 .smc-count { margin-left: auto; font-weight: 400; color: var(--app-text-faint); font-size: 11px; }
 
-.smc-session-area { overflow-y: auto; overflow-x: visible; min-height: 0; padding: 4px 6px 14px; }
-.smc-session-area::-webkit-scrollbar { width: 6px; }
-.smc-session-area::-webkit-scrollbar-track { background: transparent; }
-.smc-session-area::-webkit-scrollbar-thumb { background: var(--app-surface-3); border-radius: 3px; }
-.smc-session-area::-webkit-scrollbar-thumb:hover { background: #c0c0c0; }
-.smc-session-area { scrollbar-width: thin; scrollbar-color: #d8d8d8 transparent; }
-
-.pin-folder-row { margin-bottom: 2px; }
-.pin-folder-head, .wd-group-head {
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 12px; border-radius: 8px; cursor: pointer;
-  transition: background 0.12s ease; position: relative;
+.smc-session-area {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 9px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-text-faint), transparent 45%) transparent;
 }
-.pin-folder-head:hover, .wd-group-head:hover { background: var(--app-surface-3); }
+.smc-session-area::-webkit-scrollbar { width: 5px; }
+.smc-session-area::-webkit-scrollbar-track { background: transparent; }
+.smc-session-area::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-faint), transparent 45%);
+}
+.smc-session-area::-webkit-scrollbar-thumb:hover { background: var(--app-text-faint); }
+
+.pin-folder-row, .wd-group { margin-bottom: 6px; }
+.pin-folder-head, .wd-group-head {
+  position: relative;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.pin-folder-head:hover, .wd-group-head:hover {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
+}
 .pin-folder-chevron, .wd-group-chevron {
-  font-size: 14px; color: var(--app-text-faint); transition: transform 0.15s ease;
-  width: 14px; text-align: center; flex-shrink: 0;
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--app-text-faint);
+  font-size: 14px;
+  text-align: center;
+  transition: transform .18s ease;
 }
 .pin-folder-chevron.open, .wd-group-chevron.open { transform: rotate(90deg); }
 .pin-folder-name, .wd-group-name {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--app-text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.pin-folder-menu-wrap, .wd-group-menu-wrap {
-  flex-shrink: 0; display: flex;
+.wd-group-count {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--app-text-faint);
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 95%);
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
 }
+.wd-group-head:hover .wd-group-count,
+.wd-group-count:has(+ .wd-group-menu-wrap) { display: none; }
+.pin-folder-menu-wrap, .wd-group-menu-wrap { flex-shrink: 0; display: flex; }
 .pin-folder-menu-btn, .wd-group-menu-btn {
-  border: none; background: none; padding: 0 2px; cursor: pointer;
-  color: var(--app-text-soft); display: flex;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
 }
-.pin-folder-menu-btn:hover, .wd-group-menu-btn:hover { color: var(--app-text); }
-.wd-group { margin-bottom: 2px; }
+.pin-folder-menu-btn:hover, .wd-group-menu-btn:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 91%);
+}
+.pin-folder-children, .wd-group-children {
+  margin-top: 2px;
+  padding-left: 12px;
+}
 
 .smc-row-dropdown {
   background: var(--app-surface);
@@ -492,15 +596,55 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-dropdown-item.danger { color: #d94834; }
 
 .fm-footer {
-  display: flex; align-items: center; gap: 10px; margin-top: auto;
-  padding: 8px 16px 14px; font-size: 13px; color: var(--app-text);
-  font-weight: 500; flex-shrink: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: auto 8px 8px;
+  padding: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--app-border), transparent 25%);
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
 }
-.fm-footer-settings { margin-left: auto; cursor: pointer; transition: color 0.15s ease; }
-.fm-footer-settings:hover { color: var(--app-text); }
-.fm-user { display: flex; align-items: center; gap: 10px; cursor: pointer; border-radius: 8px; }
-.fm-user:hover { opacity: 0.85; }
-.fm-user-avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid var(--app-accent); }
+.fm-footer-settings {
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  color: var(--app-text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.fm-footer-settings:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
+}
+.fm-user {
+  min-width: 0;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.fm-user:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 95%); }
+.fm-user span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-user-avatar {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--app-accent), transparent 42%);
+  border-radius: 50%;
+  object-fit: cover;
+}
 
 /* 用户卡片菜单：白色卡片浮层 */
 .smc-user-card {
