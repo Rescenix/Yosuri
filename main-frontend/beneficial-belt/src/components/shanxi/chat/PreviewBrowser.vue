@@ -274,11 +274,15 @@ function navigateTo(raw, cdpWs, cdpStartupError) {
   const url = normalizeUrl(raw)
   if (!url) return
   if (cdpStartupError) {
+    disconnectCDP()
     currentUrl.value = url
     urlInput.value = url
-    // 创建 target 当时失败可能只是 Chrome 尚未就绪；让同源后端按 URL
-    // 重新创建一次，失败仍会收到明确 error 消息，成功则直接显示首帧。
-    connectCDP('', url)
+    // 后端已经完整尝试过启动和创建 target。这里不立即自动重试，否则一次失败
+    // 会递归拉起多个 Edge；保留 URL，用户点刷新时再显式重试一次。
+    isCDPPreview.value = true
+    currentCDPUrl = url
+    cdpError.value = cdpStartupError
+    loading.value = false
     return
   }
   // 有 CDP ws → 走真实 Chromium 渲染（内嵌窗口）

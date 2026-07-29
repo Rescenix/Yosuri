@@ -3,10 +3,16 @@ package handler
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // 只有"会改文件内容的 fs 工具" + "前端后缀"两个条件同时成立才该弹预览。
@@ -152,6 +158,134 @@ func TestReadDevToolsActivePort(t *testing.T) {
 	}
 	if port != "43117" {
 		t.Fatalf("动态 CDP 端口不符: %s", port)
+	}
+}
+
+func TestPreviewBrowserSurvivesLauncherExitWhileCDPIsAlive(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/json/version" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"webSocketDebuggerUrl":"ws://%s/devtools/browser/test"}`, r.Host)
+	}))
+	parsed, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	browser := &managedPreviewBrowser{
+		port:         port,
+		browserWS:    "ws://" + parsed.Host + "/devtools/browser/test",
+		profileDir:   filepath.Join(t.TempDir(), "profile"),
+		launcherDone: make(chan struct{}),
+		stopCh:       make(chan struct{}),
+		done:         make(chan struct{}),
+	}
+	if err := os.MkdirAll(browser.profileDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// 模拟 Edge 启动器已经退出，但它派生的真正浏览器仍通过 CDP 提供服务。
+	close(browser.launcherDone)
+
+	previewBrowserMu.Lock()
+	previous := previewBrowser
+	previewBrowser = browser
+	previewBrowserMu.Unlock()
+	t.Cleanup(func() {
+		requestPreviewBrowserStop(browser)
+		previewBrowserMu.Lock()
+		previewBrowser = previous
+		previewBrowserMu.Unlock()
+	})
+
+	go monitorPreviewBrowserWithConfig(browser, 10*time.Millisecond, 2)
+	time.Sleep(60 * time.Millisecond)
+	previewBrowserMu.RLock()
+	stillManaged := previewBrowser == browser
+	previewBrowserMu.RUnlock()
+	if !stillManaged {
+		t.Fatal("启动器退出时 CDP 仍在线，不应清空受管浏览器状态")
+	}
+
+	server.Close()
+	select {
+	case <-browser.done:
+	case <-time.After(time.Second):
+		t.Fatal("CDP 真实离线后监控器没有清理受管浏览器")
+	}
+	previewBrowserMu.RLock()
+	cleared := previewBrowser == nil
+	previewBrowserMu.RUnlock()
+	if !cleared {
+		t.Fatal("CDP 连续离线后应清空受管浏览器状态")
+	}
+}
+
+func TestClosePreviewBrowserUsesBrowserClose(t *testing.T) {
+	received := make(chan string, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		var message struct {
+			Method string `json:"method"`
+		}
+		if conn.ReadJSON(&message) == nil {
+			received <- message.Method
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/devtools/browser/test"
+	if err := closePreviewBrowserCDP(wsURL); err != nil {
+		t.Fatalf("发送 Browser.close 失败: %v", err)
+	}
+	select {
+	case method := <-received:
+		if method != "Browser.close" {
+			t.Fatalf("关闭命令不正确: %s", method)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("CDP 服务未收到 Browser.close")
+	}
+}
+
+func TestManagedPreviewBrowserIntegration(t *testing.T) {
+	if os.Getenv("RESCENE_PREVIEW_INTEGRATION") != "1" {
+		t.Skip("设置 RESCENE_PREVIEW_INTEGRATION=1 后运行真实 Chromium 生命周期测试")
+	}
+	browser, err := ensureChromeCDP()
+	if err != nil {
+		t.Fatalf("启动受管 Chromium 失败: %v", err)
+	}
+	port := browser.port
+	t.Cleanup(func() {
+		_ = StopPreviewBrowser()
+	})
+	if cdpBrowserWSAtPort(port) == "" {
+		t.Fatalf("受管 Chromium 已返回但 CDP 端口 %s 不在线", port)
+	}
+	tabWS, _, err := cdpOpenTarget("about:blank")
+	if err != nil {
+		t.Fatalf("创建 CDP target 失败: %v", err)
+	}
+	if tabWS == "" {
+		t.Fatal("创建 CDP target 未返回 page WebSocket")
+	}
+	if err := StopPreviewBrowser(); err != nil {
+		t.Fatalf("关闭受管 Chromium 失败: %v", err)
+	}
+	if !waitPreviewCDPStopped(port, time.Second) {
+		t.Fatalf("Browser.close 后 CDP 端口 %s 仍在线", port)
 	}
 }
 

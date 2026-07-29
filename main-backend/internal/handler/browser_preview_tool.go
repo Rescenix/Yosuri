@@ -40,10 +40,15 @@ import (
 var activePreviewClientWriteMu sync.Mutex
 
 type managedPreviewBrowser struct {
-	cmd        *exec.Cmd
-	port       string
-	profileDir string
-	done       chan struct{}
+	cmd          *exec.Cmd
+	port         string
+	browserWS    string
+	profileDir   string
+	launcherDone chan struct{}
+	stopCh       chan struct{}
+	done         chan struct{}
+	stopOnce     sync.Once
+	finishOnce   sync.Once
 }
 
 var (
@@ -161,13 +166,13 @@ func HandlePreviewCDP(c *gin.Context) {
 			err = cdpNavigate(targetWS, targetURL)
 		}
 		if err != nil {
-			writePreviewCDPError(clientConn, "预览不可用：Chrome CDP 未运行")
+			writePreviewCDPError(clientConn, "预览不可用："+err.Error())
 			return
 		}
 	}
 	cdpConn, _, err := websocket.DefaultDialer.Dial(targetWS, nil)
 	if err != nil {
-		writePreviewCDPError(clientConn, "预览不可用：Chrome CDP 未运行")
+		writePreviewCDPError(clientConn, "预览不可用：连接 CDP target 失败")
 		return
 	}
 	defer cdpConn.Close()
@@ -387,6 +392,9 @@ func cdpBrowserWSAtPort(port string) string {
 		return ""
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ""
+	}
 	var v struct {
 		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 	}
@@ -516,20 +524,113 @@ func readDevToolsActivePort(profileDir string) (string, error) {
 	return port, nil
 }
 
-func trackPreviewBrowserExit(browser *managedPreviewBrowser) {
+func waitPreviewBrowserLauncher(browser *managedPreviewBrowser) {
 	err := browser.cmd.Wait()
-	previewBrowserMu.Lock()
-	if previewBrowser == browser {
-		previewBrowser = nil
-	}
-	previewBrowserMu.Unlock()
-	close(browser.done)
-	if removeErr := os.RemoveAll(browser.profileDir); removeErr != nil {
-		log.Printf("⚠️ [预览] 清理 Chromium profile 失败: %v", removeErr)
-	}
+	close(browser.launcherDone)
+	// Windows Edge 的启动器可能派生真正的浏览器进程后正常退出。这里不能据此
+	// 清空 previewBrowser；真实生命周期由动态 CDP 端口心跳负责。
 	if err != nil && browser.cmd.ProcessState != nil && !browser.cmd.ProcessState.Success() {
-		log.Printf("ℹ️ [预览] Chromium 已退出: %v", err)
+		log.Printf("ℹ️ [预览] Chromium 启动器已退出: %v", err)
 	}
+}
+
+func requestPreviewBrowserStop(browser *managedPreviewBrowser) {
+	if browser == nil {
+		return
+	}
+	browser.stopOnce.Do(func() {
+		close(browser.stopCh)
+	})
+}
+
+func finishPreviewBrowser(browser *managedPreviewBrowser) {
+	if browser == nil {
+		return
+	}
+	browser.finishOnce.Do(func() {
+		previewBrowserMu.Lock()
+		if previewBrowser == browser {
+			previewBrowser = nil
+		}
+		previewBrowserMu.Unlock()
+		close(browser.done)
+		if removeErr := os.RemoveAll(browser.profileDir); removeErr != nil {
+			log.Printf("⚠️ [预览] 清理 Chromium profile 失败: %v", removeErr)
+		}
+	})
+}
+
+func monitorPreviewBrowser(browser *managedPreviewBrowser) {
+	monitorPreviewBrowserWithConfig(browser, time.Second, 3)
+}
+
+func monitorPreviewBrowserWithConfig(browser *managedPreviewBrowser, interval time.Duration, maxFailures int) {
+	if browser == nil || browser.port == "" {
+		finishPreviewBrowser(browser)
+		return
+	}
+	if interval <= 0 {
+		interval = time.Second
+	}
+	if maxFailures < 1 {
+		maxFailures = 1
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	failures := 0
+	for {
+		select {
+		case <-browser.stopCh:
+			return
+		case <-ticker.C:
+			if cdpBrowserWSAtPort(browser.port) != "" {
+				failures = 0
+				continue
+			}
+			failures++
+			if failures < maxFailures {
+				continue
+			}
+			log.Printf("ℹ️ [预览] Chromium CDP 已离线 (port=%s)", browser.port)
+			requestPreviewBrowserStop(browser)
+			select {
+			case <-browser.launcherDone:
+			default:
+				_ = stopPreviewProcess(browser.cmd)
+			}
+			finishPreviewBrowser(browser)
+			return
+		}
+	}
+}
+
+func closePreviewBrowserCDP(browserWS string) error {
+	if browserWS == "" {
+		return fmt.Errorf("browser WebSocket 为空")
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(browserWS, nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return conn.WriteJSON(map[string]any{
+		"id":     nextPreviewReqID(),
+		"method": "Browser.close",
+	})
+}
+
+func waitPreviewCDPStopped(port string, timeout time.Duration) bool {
+	if port == "" {
+		return true
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cdpBrowserWSAtPort(port) == "" {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return cdpBrowserWSAtPort(port) == ""
 }
 
 // StopPreviewBrowser 停止本进程拉起的 Chromium/Edge 及其子进程，并清理独立 profile。
@@ -542,38 +643,78 @@ func StopPreviewBrowser() error {
 	if browser == nil {
 		return nil
 	}
-	err := stopPreviewProcess(browser.cmd)
+	requestPreviewBrowserStop(browser)
+
+	// Edge 的启动器 PID 可能早已退出，而真正的浏览器子进程仍持有 CDP 端口。
+	// Browser.close 才是跨平台、针对真实浏览器实例的首选关闭方式。
+	browserWS := browser.browserWS
+	if browserWS == "" {
+		browserWS = cdpBrowserWSAtPort(browser.port)
+	}
+	closeErr := closePreviewBrowserCDP(browserWS)
+	stopped := waitPreviewCDPStopped(browser.port, 3*time.Second)
+	var processErr error
+	if !stopped {
+		processErr = stopPreviewProcess(browser.cmd)
+		stopped = waitPreviewCDPStopped(browser.port, 2*time.Second)
+	}
+	launcherStopped := false
 	select {
-	case <-browser.done:
-	case <-time.After(5 * time.Second):
+	case <-browser.launcherDone:
+		launcherStopped = true
+	default:
 	}
-	if removeErr := os.RemoveAll(browser.profileDir); err == nil {
-		err = removeErr
+	if !launcherStopped {
+		if processErr == nil {
+			processErr = stopPreviewProcess(browser.cmd)
+		}
+		select {
+		case <-browser.launcherDone:
+		case <-time.After(2 * time.Second):
+		}
 	}
-	return err
+	finishPreviewBrowser(browser)
+	if !stopped {
+		if processErr != nil {
+			return fmt.Errorf("关闭 Chromium CDP 失败: %v；进程回收失败: %w", closeErr, processErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("关闭 Chromium CDP 失败: %w", closeErr)
+		}
+		return fmt.Errorf("关闭 Chromium CDP 失败：端口 %s 仍在线", browser.port)
+	}
+	return nil
 }
 
 // ensureChromeCDP 确保本机有一个受管的无头 Chromium 供预览使用。
 // Chromium 以 --remote-debugging-port=0 自行选择端口，写入独立 profile 的
 // DevToolsActivePort；因此不会与用户浏览器或其他 Rescene 实例抢固定端口。
-func ensureChromeCDP() {
+func ensureChromeCDP() (*managedPreviewBrowser, error) {
 	previewBrowserStartMu.Lock()
 	defer previewBrowserStartMu.Unlock()
 
-	if cdpBrowserWS() != "" {
-		return
+	previewBrowserMu.RLock()
+	existing := previewBrowser
+	previewBrowserMu.RUnlock()
+	if existing != nil && existing.port != "" {
+		if ws := cdpBrowserWSAtPort(existing.port); ws != "" {
+			previewBrowserMu.Lock()
+			if previewBrowser == existing {
+				existing.browserWS = ws
+			}
+			previewBrowserMu.Unlock()
+			return existing, nil
+		}
 	}
 	_ = StopPreviewBrowser()
 
 	exe := findChromeExecutable()
 	if exe == "" {
-		log.Printf("⚠️ [预览] 未找到随包 Chromium、系统 Edge 或 Chrome，无法自动拉起 CDP")
-		return
+		return nil, fmt.Errorf("未找到随包 Chromium、系统 Edge 或 Chrome")
 	}
 	userDataDir, err := newPreviewProfileDir()
 	if err != nil {
-		log.Printf("⚠️ [预览] 创建 Chromium profile 失败: %v", err)
-		return
+		return nil, fmt.Errorf("创建 Chromium profile 失败: %w", err)
 	}
 	cmd := exec.Command(exe,
 		"--headless=new",
@@ -588,19 +729,20 @@ func ensureChromeCDP() {
 	configurePreviewProcess(cmd)
 	if err := cmd.Start(); err != nil {
 		_ = os.RemoveAll(userDataDir)
-		log.Printf("⚠️ [预览] 拉起 Chrome 失败: %v", err)
-		return
+		return nil, fmt.Errorf("拉起 Chromium 失败: %w", err)
 	}
 
 	browser := &managedPreviewBrowser{
-		cmd:        cmd,
-		profileDir: userDataDir,
-		done:       make(chan struct{}),
+		cmd:          cmd,
+		profileDir:   userDataDir,
+		launcherDone: make(chan struct{}),
+		stopCh:       make(chan struct{}),
+		done:         make(chan struct{}),
 	}
 	previewBrowserMu.Lock()
 	previewBrowser = browser
 	previewBrowserMu.Unlock()
-	go trackPreviewBrowserExit(browser)
+	go waitPreviewBrowserLauncher(browser)
 
 	// 等 Chromium 写出动态端口并让 /json/version 就绪，最多约 10 秒。
 	for i := 0; i < 40; i++ {
@@ -609,18 +751,25 @@ func ensureChromeCDP() {
 		if portErr != nil {
 			continue
 		}
+		browserWS := cdpBrowserWSAtPort(port)
+		if browserWS == "" {
+			continue
+		}
 		previewBrowserMu.Lock()
 		if previewBrowser == browser {
 			browser.port = port
+			browser.browserWS = browserWS
+		} else {
+			previewBrowserMu.Unlock()
+			return nil, fmt.Errorf("Chromium 启动期间已被停止")
 		}
 		previewBrowserMu.Unlock()
-		if cdpBrowserWSAtPort(port) != "" {
-			log.Printf("🖥️ [预览] 已拉起受管 Chromium (pid=%d, port=%s, executable=%s)", cmd.Process.Pid, port, exe)
-			return
-		}
+		go monitorPreviewBrowser(browser)
+		log.Printf("🖥️ [预览] 已拉起受管 Chromium (pid=%d, port=%s, executable=%s)", cmd.Process.Pid, port, exe)
+		return browser, nil
 	}
-	log.Printf("⚠️ [预览] Chromium 已拉起但动态 CDP 端口未在超时内就绪")
 	_ = StopPreviewBrowser()
+	return nil, fmt.Errorf("Chromium 已拉起但动态 CDP 端口未在超时内就绪")
 }
 
 // cdpOpenTarget 在 Chrome 里开一个新标签页并导航到 targetURL，返回该标签页的
@@ -649,15 +798,16 @@ func cdpApplyViewport(tabWS string) {
 }
 
 func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) {
-	ensureChromeCDP()
-	port := currentPreviewCDPPort()
-	browserWS := cdpBrowserWS()
-	if browserWS == "" || port == "" {
-		return "", "", fmt.Errorf("Chromium CDP 未运行")
+	browser, err := ensureChromeCDP()
+	if err != nil {
+		return "", "", err
+	}
+	if browser == nil || browser.port == "" || browser.browserWS == "" {
+		return "", "", fmt.Errorf("Chromium CDP 状态不完整")
 	}
 	// 注意：Chrome 新版本（~109+）的 /json/new 只接受 PUT（GET/POST 返回 405），
 	// 所以这里用 PUT，而不是 client.Post。
-	newURL := "http://127.0.0.1:" + port + "/json/new"
+	newURL := "http://127.0.0.1:" + browser.port + "/json/new"
 	if targetURL != "" {
 		newURL += "?" + url.QueryEscape(targetURL)
 	}
@@ -672,18 +822,28 @@ func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) 
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 200 {
+			preview = preview[:200]
+		}
+		return "", "", fmt.Errorf("/json/new HTTP %d: %s", resp.StatusCode, preview)
+	}
 	var t struct {
 		ID                   string `json:"id"`
 		TargetID             string `json:"targetId"`
 		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 		URL                  string `json:"url"`
 	}
-	if json.Unmarshal(body, &t) != nil {
+	if unmarshalErr := json.Unmarshal(body, &t); unmarshalErr != nil {
 		preview := string(body)
 		if len(preview) > 200 {
 			preview = preview[:200]
 		}
 		return "", "", fmt.Errorf("解析 /json/new 响应失败: %s", preview)
+	}
+	if t.WebSocketDebuggerURL == "" {
+		return "", "", fmt.Errorf("/json/new 未返回 page WebSocket")
 	}
 	cdpApplyViewport(t.WebSocketDebuggerURL)
 	return t.WebSocketDebuggerURL, t.URL, nil
@@ -994,7 +1154,8 @@ func autoOpenBrowserPreview(editPath string) (url string, cdpWS string, cdpError
 	}
 	tabWS, _, err := cdpOpenTarget(target)
 	if err != nil {
-		return target, "", "预览不可用：Chrome CDP 未运行", false
+		log.Printf("🖥️ [预览] 创建 CDP target 失败: %v", err)
+		return target, "", "预览不可用：" + err.Error(), false
 	}
 	// file:// 在 /json/new? 里有时不导航，补一次 navigate 确保生效。
 	if strings.HasPrefix(target, "file://") {
