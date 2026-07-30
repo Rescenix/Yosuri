@@ -42,7 +42,7 @@ func workflowHistoryContent(status, final string, transcript []string, blocks []
 }
 
 func (r *WorkflowRunner) persistWorkflowHistory(
-	sessionID, workflowID, task, status, final string,
+	sessionID, workflowID, task, status, final, model string,
 	transcript []string, blocks []FlowBlock,
 ) {
 	if sessionID == "" || workflowID == "" || r.chatHandler == nil || r.chatHandler.sessionStore == nil {
@@ -61,7 +61,7 @@ func (r *WorkflowRunner) persistWorkflowHistory(
 			Role: "user", Content: task, Status: status, WorkflowID: workflowID,
 		},
 		DSMessage{
-			Role: "assistant", Content: content, Blocks: blocks, WorkflowID: workflowID,
+			Role: "assistant", Content: content, Model: model, Blocks: blocks, WorkflowID: workflowID,
 		},
 	)
 }

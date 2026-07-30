@@ -333,8 +333,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			}
 		}
 		r.persistWorkflowHistory(
-			sessionID, workflowID, task, historyStatus, historyFinal, transcript, flowBlocks,
-		)
+					sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
+				)
 		historyPersisted = true
 	}
 	defer persistHistory()
@@ -519,7 +519,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			})
 		}
 
-		// 执行：dispatch_agent 并行（雨燕群），其余顺序。
+		// 执行：dispatch_agent 并行，其余顺序。
 		// emit 回调把子代理生命周期事件实时写进 SSE 流（写入端有锁，跨 goroutine 安全）
 		emit := func(event string, data map[string]any) {
 			if c.Request.Context().Err() == nil {
@@ -865,7 +865,7 @@ func shouldBlockRepeat(counts map[string]int, name, args string, limit int) bool
 }
 
 // executeCodeCalls 执行一轮里的所有工具调用。
-// dispatch_agent（雨燕子代理）用 goroutine 并行跑，其余工具在当前 goroutine 顺序执行，
+// dispatch_agent 用 goroutine 并行跑，其余工具在当前 goroutine 顺序执行，
 // 全部完成后按原始顺序返回，保证 result 事件和 tool 消息的顺序稳定。
 //
 // 审批：mode=ask 且工具属于危险类（写盘/执行命令/MCP 文件写删）时，执行前通过 SSE 推
