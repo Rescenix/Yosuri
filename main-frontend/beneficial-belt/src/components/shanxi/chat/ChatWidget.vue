@@ -310,7 +310,7 @@
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
                  当 `messages` 为空时，它独占整个 Flex 空间，把输入区推到最底部。 -->
             <div v-if="messages.length === 0" class="home-container-for-layout">
-              <NewSessionHome :show-heatmap="showHeatmapPopup" />
+              <NewSessionHome :show-content="showHeatmapPopup" />
             </div>
 
             <!-- 普通聊天/工作流模式：当有消息时，滚动容器才接管整个区域 -->
@@ -2465,7 +2465,7 @@ watch(() => flowState.active, (now, was) => {
 const EFFORT_LEVELS = ['low', 'medium', 'high']
 const EFFORT_UI_LABELS = { low: 'Faster', medium: 'Balanced', high: 'Smarter' }
 const showEffortPanel = ref(false)
-const showHeatmapPopup = ref(false)
+const showHeatmapPopup = ref(true)
 const effortWidgetRef = ref(null)
 // 面板定位：打开时 nextTick 重新测量 pill 位置并做视口边界 clamp，
 // 避免 computed 惰性求值在 ref 未就绪时拿到错误坐标（表现为弹层掉到下方）。

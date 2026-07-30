@@ -1,5 +1,5 @@
 <template>
-  <div class="session-home">
+  <div v-if="showContent" class="session-home">
     <div class="home-greeting">
       <!-- 给图标加一个专门的 ref，方便我们在 JS 里操控它 -->
       <Icon ref="greetingIconRef" icon="majesticons:shooting-star-line" width="22" class="greeting-icon" />
@@ -33,7 +33,7 @@
             <div class="home-stat-value">{{ item.value }}</div>
           </div>
         </div>
-        <div v-if="showHeatmap" class="home-heatmap">
+        <div class="home-heatmap">
           <div
             v-for="(cell, i) in heatmapCells"
             :key="i"
@@ -41,7 +41,7 @@
             :style="{ gridColumn: cell.c + 1, gridRow: cell.r + 1, background: heatmapLevelColor(cell.level) }"
           ></div>
         </div>
-        <div v-if="showHeatmap" class="home-heatmap-caption">{{ heatmapCaption }}</div>
+        <div class="home-heatmap-caption">{{ heatmapCaption }}</div>
       </template>
 
       <template v-else>
@@ -67,7 +67,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from '../../../composables/useAuth.js'
 
-const props = defineProps({ showHeatmap: Boolean })
+const props = defineProps({ showContent: { type: Boolean, default: true } })
 
 const apiBase = import.meta.env.VITE_API_BASE || ''
 const auth = useAuth()
