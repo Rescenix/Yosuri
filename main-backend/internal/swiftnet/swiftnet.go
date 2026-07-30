@@ -369,6 +369,9 @@ func (n *Net) InboxWrite(text, fromAgent string) string {
 	return node.ID
 }
 
+// backlinkRe 匹配 [[链接关键词]]
+var backlinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+
 // ==================== 读：注入与召回 ====================
 
 // UnconditionalInject 返回无条件注入的文本块（pinned + handoff + inbox），
@@ -399,6 +402,17 @@ func (n *Net) UnconditionalInject() string {
 
 // Select 选择器召回：按 budget（token）严格截断，minOverlap 入选门槛。
 func (n *Net) Select(query string, budget int, minOverlap float64) []Node {
+	return n.selectWithLinks(query, budget, minOverlap, false)
+}
+
+// SelectWithLinks 在 Select 基础上自动展开命中节点中的 [[反向链接]]，
+// 1 跳扩散：命中 → 解析 [[关键词]] → 按关键词二次召回关联节点。
+// 联想用到的二次预算不超过 budget 的 40%。
+func (n *Net) SelectWithLinks(query string, budget int, minOverlap float64) []Node {
+	return n.selectWithLinks(query, budget, minOverlap, true)
+}
+
+func (n *Net) selectWithLinks(query string, budget int, minOverlap float64, follow bool) []Node {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	if strings.TrimSpace(query) == "" || len(n.mem) == 0 {
@@ -430,13 +444,76 @@ func (n *Net) Select(query string, budget int, minOverlap float64) []Node {
 	sort.Slice(hits, func(i, j int) bool { return hits[i].ov > hits[j].ov })
 	var out []Node
 	used := 0
+	seen := map[string]bool{}
 	for _, h := range hits {
 		line := fmt.Sprintf("%s|%s|%s", h.m.ID, h.m.Cluster, truncRunes(h.m.Text, 60))
-		if used+tok(line) > budget {
+		tokCount := tok(line)
+		if used+tokCount > budget {
 			break
 		}
 		out = append(out, h.m)
-		used += tok(line)
+		used += tokCount
+		seen[h.m.ID] = true
+
+		// 1 跳反向链接展开（联想预算不超过 budget 的 40%）
+		if follow {
+			linkBudget := budget * 40 / 100
+			for _, link := range n.linksOf(h.m) {
+				if seen[link.ID] {
+					continue
+				}
+				ll := fmt.Sprintf("%s|%s|%s", link.ID, link.Cluster, truncRunes(link.Text, 60))
+				ltok := tok(ll)
+				if used+ltok > budget || used+ltok > budget+linkBudget {
+					continue
+				}
+				out = append(out, link)
+				used += ltok
+				seen[link.ID] = true
+			}
+		}
+	}
+	return out
+}
+
+// LinksOf 返回节点 text 中 [[链接关键词]] 指向的记忆节点（逐字关键词匹配），
+// 供模型在阅读记忆后手动展开联想（例如在 tool call 中调 Expand 后再调 LinksOf）。
+func (n *Net) LinksOf(id string) []Node {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	for _, m := range n.mem {
+		if m.ID == id {
+			return n.linksOf(m)
+		}
+	}
+	return nil
+}
+
+// linksOf 内部实现：从节点文本中提取 [[关键词]] 并在 mem 中匹配
+func (n *Net) linksOf(m Node) []Node {
+	matches := backlinkRe.FindAllStringSubmatch(m.Text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	var out []Node
+	seen := map[string]bool{}
+	for _, mm := range matches {
+		keyword := strings.TrimSpace(mm[1])
+		if keyword == "" {
+			continue
+		}
+		// 在所有 mem 节点中匹配关键词
+		for _, candidate := range n.mem {
+			if seen[candidate.ID] {
+				continue
+			}
+			hay := candidate.Keywords + " " + candidate.Text
+			if strings.Contains(strings.ToLower(hay), strings.ToLower(keyword)) ||
+				overlap(hay, keyword) > 0.4 {
+				out = append(out, candidate)
+				seen[candidate.ID] = true
+			}
+		}
 	}
 	return out
 }

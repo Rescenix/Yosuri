@@ -33,6 +33,7 @@ import (
 
 	"backend/internal/agent"
 	"backend/internal/ai/core"
+	"backend/internal/swiftnet"
 
 	"github.com/gin-gonic/gin"
 )
@@ -335,10 +336,19 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		r.persistWorkflowHistory(
 					sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
 				)
-		// 记录用户画像
-		p := LoadProfile()
-		p.RecordWorkflow(model, inputTokens, outputTokens, historyStatus == taskStatusInterrupted)
-		p.Save()
+		// 记录到 SwiftNet 记忆系统
+		swiftnet.Default().MemAppend(
+			fmt.Sprintf("完成工作流「%s」，使用 %s，输入 %d / 输出 %d tokens",
+				task, model, inputTokens, outputTokens),
+			"wf_history",
+			fmt.Sprintf("工作流/任务/%s/模型", task),
+		)
+		// 用户通用偏好也记一条
+		swiftnet.Default().MemAppend(
+			fmt.Sprintf("常用模型 [[%s]]，已消耗 %d tokens", model, inputTokens+outputTokens),
+			"preference",
+			fmt.Sprintf("模型偏好/%s", model),
+		)
 		historyPersisted = true
 	}
 	defer persistHistory()

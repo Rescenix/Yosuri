@@ -77,6 +77,18 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 	if len(tasks) > 0 {
 		task = tasks[0]
 	}
+	// 反向链接联想召回：根据当前任务从事实库中召回相关记忆 + 1跳展开 [[链接]]
+	taskMemory := ""
+	if task != "" {
+		nodes := swiftnet.Default().SelectWithLinks(task, swiftnet.ProbeBudget, 0.15)
+		if len(nodes) > 0 {
+			var parts []string
+			for _, node := range nodes {
+				parts = append(parts, "• "+node.Text)
+			}
+			taskMemory = "\n\n# 关联记忆（从事实库联想召回）\n" + strings.Join(parts, "\n")
+		}
+	}
 
 	return &contextProvider{
 		activated: map[string]bool{},
@@ -98,7 +110,7 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 			{key: "skill", content: skillLibraryPrompt() + autoLoadedSkillsPrompt(task)}, // 索引 + 当前任务确定性预加载
 			{key: "memory", content: memorySection},                                      // 每写一次记忆就变
 			{key: "memory", content: workdirSection},                                     // 项目级 workdir.md，会话开始即注入，跨对话不失业
-			{key: "memory", content: LoadProfile().Prompt()},                            // 用户画像：从合作历史中萃取的了解
+			{key: "memory", content: taskMemory},                                         // 反向链接联想召回：命中 + 1跳展开
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},
