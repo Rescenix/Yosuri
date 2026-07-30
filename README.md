@@ -24,8 +24,6 @@ Rescene 不需要这些。从第一次对话开始，它就在自己记住你的
 
 ## 🎬 先看一眼
 
-<!-- 🚨 B站宣传前必做：把工作台截图或操作录屏放这里！没有截图的话整个 README 缺了最重要的视觉锚点 -->
-
 <p align="center">
   <i>（此处应有工作台截图或演示动图 —— 建议截一张「聊天 + 代码编辑 + 终端 + 浏览器预览」四合一的工作台全景图）</i>
 </p>
@@ -33,10 +31,6 @@ Rescene 不需要这些。从第一次对话开始，它就在自己记住你的
 <p align="center">
   <a href="https://rescene.shanca.me/">
     <b>⬇️ 立即下载 · 开箱即用 →</b>
-  </a>
-  &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="https://www.bilibili.com">
-    <b>▶️ 看演示视频（B站）</b>
   </a>
 </p>
 
