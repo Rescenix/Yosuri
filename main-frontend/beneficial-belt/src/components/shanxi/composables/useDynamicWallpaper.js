@@ -5,14 +5,14 @@ const DB_NAME = 'aurora_appearance'
 const DB_VERSION = 1
 const STORE_NAME = 'wallpapers'
 const ACTIVE_VIDEO_KEY = 'active-video'
-const SETTINGS_VERSION = 3
+const SETTINGS_VERSION = 4
 
 const DEFAULT_SETTINGS = {
   version: SETTINGS_VERSION,
   enabled: false,
   dim: 8,
   panelOpacity: 35,
-  blur: 0,
+  blur: 4,
   pauseWhenHidden: true,
 }
 
@@ -27,6 +27,8 @@ function readSettings() {
       }
       if (saved.dim === 24) saved.dim = DEFAULT_SETTINGS.dim
       if (saved.blur === 10) saved.blur = DEFAULT_SETTINGS.blur
+      // v4: 旧版 blur=0 升级为 4px 毛玻璃
+      if (saved.blur === 0) saved.blur = DEFAULT_SETTINGS.blur
     }
     return { ...DEFAULT_SETTINGS, ...saved, version: SETTINGS_VERSION }
   } catch {

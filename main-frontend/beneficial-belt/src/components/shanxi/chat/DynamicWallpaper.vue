@@ -99,16 +99,15 @@ onUnmounted(() => {
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded {
-  background: transparent !important;
-  border-color: transparent;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
+  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-body-row {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  background: rgba(var(--app-surface-rgb), calc(var(--wallpaper-panel-alpha, 0.35) - 0.05)) !important;
+  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-body.studio .chat-content {
@@ -126,14 +125,16 @@ onUnmounted(() => {
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-input-area {
-  background: transparent !important;
+  background: rgba(var(--app-surface-rgb), calc(var(--wallpaper-panel-alpha, 0.35) - 0.1)) !important;
+  backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
 }
 
 [data-dynamic-wallpaper="on"] .message-bubble.user {
-  background: transparent !important;
-  border-color: color-mix(in srgb, var(--app-accent) 78%, transparent) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
+  border-color: color-mix(in srgb, var(--app-accent) 40%, transparent) !important;
+  backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.75)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.75)) !important;
 }
 
 </style>
