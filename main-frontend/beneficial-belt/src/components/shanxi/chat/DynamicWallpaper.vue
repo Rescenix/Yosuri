@@ -147,6 +147,7 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .context-bar-widget,
 [data-dynamic-wallpaper="on"] .input-row,
 [data-dynamic-wallpaper="on"] .input-wrapper,
+[data-dynamic-wallpaper="on"] .input-wrapper:focus-within,
 [data-dynamic-wallpaper="on"] .floating-tools {
   background: transparent !important;
   border-color: transparent !important;
@@ -178,6 +179,14 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .sch-model {
   background: transparent !important;
   border: 1px solid color-mix(in srgb, var(--app-border) 40%, transparent) !important;
+}
+
+/* 输入框灰线边框 + 背景透明 */
+[data-dynamic-wallpaper="on"] .input-wrapper,
+[data-dynamic-wallpaper="on"] .input-wrapper:focus-within {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--app-border) 50%, transparent) !important;
 }
 
 /* 输入框底部工具栏 -> 全透明 */
