@@ -124,6 +124,13 @@ onUnmounted(() => {
   -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
 }
 
+/* 主页时侧边栏去毛玻璃 */
+[data-dynamic-wallpaper="on"] .chat-window.expanded:has(.home-container-for-layout) .gem-sidebar {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 [data-dynamic-wallpaper="on"] .message-bubble.user {
   background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
   border-color: color-mix(in srgb, var(--app-accent) 40%, transparent) !important;

@@ -838,6 +838,11 @@
                   <div v-if="currentCapability.reasoning" ref="effortWidgetRef" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
                     <span class="effort-value">{{ effortLabel }}</span>
                   </div>
+                  <!-- 热力图日历按钮 -->
+                  <button class="toolbar-icon-pill-btn" @click.stop="showHeatmapPopup = !showHeatmapPopup" title="活动热力图">
+                    <Icon icon="mdi:calendar-month-outline" width="15" />
+                  </button>
+                  <HeatmapPopup v-model:visible="showHeatmapPopup" />
                   <Teleport to="body">
                     <div v-if="showEffortPanel" class="effort-panel" :style="effortPanelPos" @click.stop>
                       <div class="effort-panel-title">
@@ -1048,6 +1053,7 @@ import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
+import HeatmapPopup from './HeatmapPopup.vue'
 import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
@@ -2461,6 +2467,7 @@ watch(() => flowState.active, (now, was) => {
 const EFFORT_LEVELS = ['low', 'medium', 'high']
 const EFFORT_UI_LABELS = { low: 'Faster', medium: 'Balanced', high: 'Smarter' }
 const showEffortPanel = ref(false)
+const showHeatmapPopup = ref(false)
 const effortWidgetRef = ref(null)
 // 面板定位：打开时 nextTick 重新测量 pill 位置并做视口边界 clamp，
 // 避免 computed 惰性求值在 ref 未就绪时拿到错误坐标（表现为弹层掉到下方）。
