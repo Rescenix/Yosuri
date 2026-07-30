@@ -214,17 +214,17 @@ onUnmounted(() => {
   background: transparent !important;
 }
 
-/* 消息气泡保持原有毛玻璃（排除在透明化之外） */
+/* 消息气泡 -> 完全透明 */
 [data-dynamic-wallpaper="on"] .message-bubble.user {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
-  border-color: color-mix(in srgb, var(--app-accent) 40%, transparent) !important;
-  backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.75)) !important;
-  -webkit-backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.75)) !important;
+  background: transparent !important;
+  border-color: color-mix(in srgb, var(--app-border) 30%, transparent) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-/* 热力图保持原样（排除在透明化之外） */
-[data-dynamic-wallpaper="on"] .home-heatmap-cell {
-  /* 保持原有颜色，不覆盖 */
+/* 消息气泡 active 态：去掉阴影 */
+[data-dynamic-wallpaper="on"] .message-bubble.user.active {
+  box-shadow: none !important;
 }
 
 </style>
