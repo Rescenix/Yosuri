@@ -853,7 +853,9 @@
             </div>
           </div>
 
-          <!-- ★ AIStudio 右：多面板停靠 -->
+                    <DeskPet />
+
+                    <!-- ★ AIStudio 右：多面板停靠 -->
           <aside
             class="tool-panel tool-panel-tabbed"
             v-if="isExpanded && dockPanels.length"
@@ -1023,6 +1025,7 @@ import { renderMarkdown } from './markdownRenderer.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
 import UserMessageRail from './UserMessageRail.vue'
+import DeskPet from './DeskPet.vue'
 import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'

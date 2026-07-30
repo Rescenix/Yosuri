@@ -2683,8 +2683,15 @@ min-height: 90px !important;
   min-width: 0;
   overflow: hidden;
   position: relative; /* 左下角坞(.left-corner-dock)的定位基准 */
-}
-/* 展开态下 chat-body-row 是三栏工作区容器：整体白底 + 内边距 + 栏间距。
+  }
+  /* 桌宠 Duro：右下角悬浮在 chat-body 区域内 */
+  .chat-body.studio > .duro-pet {
+    position: absolute;
+    bottom: 12px;
+    right: 8px;
+    z-index: 25;
+  }
+  /* 展开态下 chat-body-row 是三栏工作区容器：整体白底 + 内边距 + 栏间距。
    间隙是白色（与中间聊天区同色）不会割裂视觉，左右卡片靠自身边框+阴影浮起来。
    非展开的小窗气泡不受影响。 */
 .chat-window.expanded .chat-body-row {
