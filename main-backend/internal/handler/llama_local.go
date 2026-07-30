@@ -139,7 +139,7 @@ func EnsureLocalLlamaServer() {
 	}
 
 	log.Printf("🦙 按需启动本地 llama-server: %s %s", cfg.BinPath, strings.Join(args, " "))
-	cmd := exec.Command(cfg.BinPath, args...)
+	cmd := hiddenCommand(cfg.BinPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

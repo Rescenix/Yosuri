@@ -22,8 +22,8 @@ func main() {
 	}
 	err := wails.Run(&options.App{
 		Title:                    "Rescene Agent",
-		Width:                    1440,
-		Height:                   920,
+		Width:                    1200,
+		Height:                   800,
 		MinWidth:                 1024,
 		MinHeight:                720,
 		WindowStartState:         options.Maximised,

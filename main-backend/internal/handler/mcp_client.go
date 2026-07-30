@@ -28,7 +28,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -255,7 +254,7 @@ func startMCPServer(name string, sc mcpServerConfig) (*mcpConn, []core.ToolDefin
 	if strings.TrimSpace(sc.Command) == "" {
 		return nil, nil, fmt.Errorf("缺少 command 或 url")
 	}
-	cmd := exec.Command(sc.Command, sc.Args...)
+	cmd := hiddenCommand(sc.Command, sc.Args...)
 	cmd.Env = append(os.Environ(), sc.Env...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

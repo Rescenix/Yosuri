@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,7 +27,7 @@ type workingDiffFile struct {
 }
 
 func gitOut(args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := hiddenCommand("git", args...)
 	cmd.Dir = GitRepoRoot
 	out, err := cmd.Output()
 	return string(out), err

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,7 +34,7 @@ type GitGraphCommit struct {
 }
 
 func GitGraph(c *gin.Context) {
-	headCmd := exec.Command("git", "rev-parse", "HEAD")
+	headCmd := hiddenCommand("git", "rev-parse", "HEAD")
 	headCmd.Dir = GitRepoRoot
 	headOut, err := headCmd.Output()
 	if err != nil {
@@ -43,11 +42,11 @@ func GitGraph(c *gin.Context) {
 		return
 	}
 	head := strings.TrimSpace(string(headOut))
-	branchCmd := exec.Command("git", "branch", "--show-current")
+	branchCmd := hiddenCommand("git", "branch", "--show-current")
 	branchCmd.Dir = GitRepoRoot
 	branchOut, _ := branchCmd.Output()
 	branch := strings.TrimSpace(string(branchOut))
-	refsCmd := exec.Command("git", "for-each-ref", "--format=%(objectname)%x1f%(refname:short)", "refs/heads")
+	refsCmd := hiddenCommand("git", "for-each-ref", "--format=%(objectname)%x1f%(refname:short)", "refs/heads")
 	refsCmd.Dir = GitRepoRoot
 	refsRaw, _ := refsCmd.Output()
 	branches := map[string][]string{}
@@ -57,7 +56,7 @@ func GitGraph(c *gin.Context) {
 			branches[p[0]] = append(branches[p[0]], p[1])
 		}
 	}
-	cmd := exec.Command("git", "log", "--all", "--topo-order", "-n", "80", "--pretty=format:%H%x1f%P%x1f%aI%x1f%s%x1e")
+	cmd := hiddenCommand("git", "log", "--all", "--topo-order", "-n", "80", "--pretty=format:%H%x1f%P%x1f%aI%x1f%s%x1e")
 	cmd.Dir = GitRepoRoot
 	raw, err := cmd.Output()
 	if err != nil {
@@ -82,7 +81,7 @@ func GitGraph(c *gin.Context) {
 var validBranchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
 
 func localGitBranches() ([]string, error) {
-	cmd := exec.Command("git", "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	cmd := hiddenCommand("git", "for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	cmd.Dir = GitRepoRoot
 	out, err := cmd.Output()
 	if err != nil {
@@ -144,7 +143,7 @@ func GitCheckout(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "分支不存在"})
 		return
 	}
-	cmd := exec.Command("git", "switch", branch)
+	cmd := hiddenCommand("git", "switch", branch)
 	cmd.Dir = GitRepoRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": strings.TrimSpace(string(out))})
@@ -158,7 +157,7 @@ func GitCreateBranch(c *gin.Context) {
 	if !ok {
 		return
 	}
-	cmd := exec.Command("git", "switch", "-c", branch)
+	cmd := hiddenCommand("git", "switch", "-c", branch)
 	cmd.Dir = GitRepoRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("创建分支失败: %s", strings.TrimSpace(string(out)))})
@@ -173,7 +172,7 @@ var shortstatDelRe = regexp.MustCompile(`(\d+) deletion`)
 // PR 面板顶部的 +N/-N 用的就是这个：相对 HEAD 的合计增删行数（覆盖已暂存 + 未暂存的
 // 已跟踪文件改动），未跟踪的新文件不计入——跟 git diff 本身的语义保持一致
 func gitDiffShortstat() (added int, removed int) {
-	cmd := exec.Command("git", "diff", "HEAD", "--shortstat")
+	cmd := hiddenCommand("git", "diff", "HEAD", "--shortstat")
 	cmd.Dir = GitRepoRoot
 	out, _ := cmd.Output()
 	s := string(out)
@@ -187,12 +186,12 @@ func gitDiffShortstat() (added int, removed int) {
 }
 
 func GitStatusHandler(w http.ResponseWriter, r *http.Request) {
-	branchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := hiddenCommand("git", "rev-parse", "--abbrev-ref", "HEAD")
 	branchCmd.Dir = GitRepoRoot
 	branchBytes, _ := branchCmd.Output()
 	branch := strings.TrimSpace(string(branchBytes))
 
-	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusCmd := hiddenCommand("git", "status", "--porcelain")
 	statusCmd.Dir = GitRepoRoot
 	out, err := statusCmd.Output()
 	if err != nil {
@@ -239,16 +238,16 @@ func GitStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 func GitDiffHandler(w http.ResponseWriter, r *http.Request) {
 	file := r.URL.Query().Get("file")
-	out, _ := exec.Command("git", "diff", file).Output()
+	out, _ := hiddenCommand("git", "diff", file).Output()
 	json.NewEncoder(w).Encode(map[string]string{"diff": string(out)})
 }
 
 func GitStageAllHandler(w http.ResponseWriter, r *http.Request) {
-	exec.Command("git", "add", "-A").Run()
+	hiddenCommand("git", "add", "-A").Run()
 	w.WriteHeader(200)
 }
 func GitAddAll(c *gin.Context) {
-	cmd := exec.Command("git", "add", "-A")
+	cmd := hiddenCommand("git", "add", "-A")
 	cmd.Dir = GitRepoRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		c.String(http.StatusInternalServerError, "Add 失败:\n"+string(out))
@@ -267,7 +266,7 @@ func GitCommit(c *gin.Context) {
 	}
 
 	// 使用 git commit -F - 从标准输入读取，完美支持多行
-	cmd := exec.Command("git", "commit", "-F", "-")
+	cmd := hiddenCommand("git", "commit", "-F", "-")
 	cmd.Dir = GitRepoRoot
 	cmd.Stdin = strings.NewReader(body.Message)
 	out, err := cmd.CombinedOutput()
@@ -279,7 +278,7 @@ func GitCommit(c *gin.Context) {
 }
 
 func GitPush(c *gin.Context) {
-	cmd := exec.Command("git", "push", "origin", "main")
+	cmd := hiddenCommand("git", "push", "origin", "main")
 	cmd.Dir = GitRepoRoot
 	out, err := cmd.CombinedOutput()
 	if err != nil {

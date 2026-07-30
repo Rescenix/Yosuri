@@ -207,7 +207,7 @@ func runVerifyBuild(dir, name string, args ...string) (string, bool) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), verifyBuildTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := hiddenCommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
