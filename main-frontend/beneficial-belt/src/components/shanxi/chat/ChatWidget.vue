@@ -839,7 +839,7 @@
                     <span class="effort-value">{{ effortLabel }}</span>
                   </div>
                   <!-- 热力图日历按钮 -->
-                  <button class="toolbar-icon-pill-btn" @click.stop="showHeatmapPopup = !showHeatmapPopup" title="活动热力图">
+                  <button class="toolbar-icon-pill-btn heatmap-toggle-btn" @click.stop="showHeatmapPopup = !showHeatmapPopup" title="活动热力图">
                     <Icon icon="mdi:calendar-month-outline" width="15" />
                   </button>
                   <HeatmapPopup v-model:visible="showHeatmapPopup" />

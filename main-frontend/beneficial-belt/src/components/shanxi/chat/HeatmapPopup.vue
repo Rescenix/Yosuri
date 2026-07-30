@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="heatmap-fade">
-      <div v-if="visible" class="heatmap-popup" @click.stop @click.self="close">
+      <div v-if="visible" class="heatmap-popup" :style="popupStyle" @click.stop @click.self="close">
         <div class="heatmap-popup-header">
           <span class="heatmap-popup-title">活动热力图</span>
           <button class="heatmap-popup-close" @click="close">
@@ -25,7 +25,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, watch, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps({ visible: Boolean })
@@ -35,10 +35,24 @@ const HEATMAP_ROWS = 7
 const HEATMAP_DAYS = 26 * HEATMAP_ROWS
 
 const dailyStats = ref([])
+const popupStyle = ref({})
 
 function close() {
   emit('update:visible', false)
   emit('close')
+}
+
+function reposition() {
+  // 找日历按钮，在其上方定位
+  const btn = document.querySelector('.heatmap-toggle-btn')
+  if (!btn) return
+  const rect = btn.getBoundingClientRect()
+  const gap = 8
+  popupStyle.value = {
+    position: 'fixed',
+    right: `${Math.max(8, window.innerWidth - rect.right)}px`,
+    bottom: `${window.innerHeight - rect.top + gap}px`,
+  }
 }
 
 async function fetchDailyStats() {
@@ -100,16 +114,29 @@ const heatmapCaption = computed(() => {
   return `这些对话消耗的 token，抵得上手抄了${best.title}的 ${copies}%。`
 })
 
-watch(() => props.visible, (v) => {
-  if (v) fetchDailyStats()
+watch(() => props.visible, async (v) => {
+  if (v) {
+    fetchDailyStats()
+    await nextTick()
+    reposition()
+    document.addEventListener('click', handleOutsideClick)
+  } else {
+    document.removeEventListener('click', handleOutsideClick)
+  }
 })
+onUnmounted(() => document.removeEventListener('click', handleOutsideClick))
+
+function handleOutsideClick(e) {
+  const popup = document.querySelector('.heatmap-popup')
+  const btn = document.querySelector('.heatmap-toggle-btn')
+  if (popup && !popup.contains(e.target) && btn && !btn.contains(e.target)) {
+    close()
+  }
+}
 </script>
 
 <style scoped>
 .heatmap-popup {
-  position: fixed;
-  bottom: 72px;
-  right: 180px;
   z-index: 1000;
   background: var(--app-surface);
   border: 1px solid var(--app-border);
