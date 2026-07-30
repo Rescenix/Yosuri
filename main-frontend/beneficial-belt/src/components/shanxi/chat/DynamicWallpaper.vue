@@ -140,18 +140,42 @@ onUnmounted(() => {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   box-shadow: none !important;
+  border-color: transparent !important;
+}
+[data-dynamic-wallpaper="on"] .session-home .home-stats-header .home-range-group,
+[data-dynamic-wallpaper="on"] .session-home .home-range-btn.active {
+  background: transparent !important;
+}
+[data-dynamic-wallpaper="on"] .session-home .home-heatmap-cell {
+  background: rgba(var(--app-surface-rgb), 0.06) !important;
+}
+[data-dynamic-wallpaper="on"] .session-home .home-model-bar-track {
+  background: rgba(var(--app-surface-rgb), 0.08) !important;
+}
+[data-dynamic-wallpaper="on"] .session-home .home-model-bar-fill {
+  background: rgba(var(--app-accent-rgb), 0.35) !important;
 }
 
-/* 输入框白色背景卡片 → 变透明毛玻璃 */
+/* 输入区全透明：不需要毛玻璃，露出壁纸即可 */
+[data-dynamic-wallpaper="on"] .chat-input-area {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 [data-dynamic-wallpaper="on"] .input-wrapper {
   background: transparent !important;
-  border-color: color-mix(in srgb, var(--app-border) 50%, transparent) !important;
+  border-color: color-mix(in srgb, var(--app-border) 40%, transparent) !important;
   box-shadow: none !important;
 }
 [data-dynamic-wallpaper="on"] .input-dir-bar {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
-  backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
-  -webkit-backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: color-mix(in srgb, var(--app-border) 30%, transparent) !important;
+  box-shadow: none !important;
+}
+[data-dynamic-wallpaper="on"] .input-bottom-toolbar {
+  background: transparent !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .gem-sidebar,
