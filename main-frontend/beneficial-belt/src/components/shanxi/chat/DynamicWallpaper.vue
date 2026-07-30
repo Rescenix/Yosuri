@@ -118,6 +118,7 @@ onUnmounted(() => {
 
 /* 侧边栏 + 工具面板 -> 完全透明，不毛玻璃 */
 [data-dynamic-wallpaper="on"] .chat-window.expanded .gem-sidebar,
+[data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel-header,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .dock-pane {
   background: transparent !important;
@@ -145,6 +146,7 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .umr-node.active,
 [data-dynamic-wallpaper="on"] .context-bar-widget,
 [data-dynamic-wallpaper="on"] .input-row,
+[data-dynamic-wallpaper="on"] .input-wrapper,
 [data-dynamic-wallpaper="on"] .floating-tools {
   background: transparent !important;
   border-color: transparent !important;
