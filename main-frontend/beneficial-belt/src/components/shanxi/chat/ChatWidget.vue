@@ -310,7 +310,7 @@
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
                  当 `messages` 为空时，它独占整个 Flex 空间，把输入区推到最底部。 -->
             <div v-if="messages.length === 0" class="home-container-for-layout">
-              <NewSessionHome />
+              <NewSessionHome :show-heatmap="showHeatmapPopup" />
             </div>
 
             <!-- 普通聊天/工作流模式：当有消息时，滚动容器才接管整个区域 -->
@@ -838,11 +838,10 @@
                   <div v-if="currentCapability.reasoning" ref="effortWidgetRef" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
                     <span class="effort-value">{{ effortLabel }}</span>
                   </div>
-                  <!-- 热力图日历按钮 -->
-                  <button class="toolbar-icon-pill-btn heatmap-toggle-btn" @click.stop="showHeatmapPopup = !showHeatmapPopup" title="活动热力图">
+                  <!-- 热力图日历按钮（仅在主页显示） -->
+                  <button v-if="messages.length === 0" class="toolbar-icon-pill-btn" @click.stop="showHeatmapPopup = !showHeatmapPopup" title="活动热力图">
                     <Icon icon="mdi:calendar-month-outline" width="15" />
                   </button>
-                  <HeatmapPopup v-model:visible="showHeatmapPopup" />
                   <Teleport to="body">
                     <div v-if="showEffortPanel" class="effort-panel" :style="effortPanelPos" @click.stop>
                       <div class="effort-panel-title">
@@ -1053,7 +1052,6 @@ import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
-import HeatmapPopup from './HeatmapPopup.vue'
 import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
