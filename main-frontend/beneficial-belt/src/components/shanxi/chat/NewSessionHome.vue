@@ -1,5 +1,5 @@
 <template>
-  <div v-if="showContent" class="session-home">
+  <div class="session-home" :class="{ 'home-hidden': !showContent }">
     <div class="home-greeting">
       <!-- 给图标加一个专门的 ref，方便我们在 JS 里操控它 -->
       <Icon ref="greetingIconRef" icon="majesticons:shooting-star-line" width="22" class="greeting-icon" />
@@ -429,5 +429,11 @@ const heatmapCaption = computed(() => {
   transform: rotate(15deg) scale(1.1);
   /* 纯粹的发光阴影，不会覆盖或改变图标原来的颜色 */
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--app-accent) 50%, transparent));
+}
+
+/* 隐藏主页内容：保留占位空间但不显示 */
+.home-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 </style>
