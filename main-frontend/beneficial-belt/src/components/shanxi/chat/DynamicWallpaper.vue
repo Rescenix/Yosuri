@@ -195,6 +195,20 @@ onUnmounted(() => {
   box-shadow: none !important;
 }
 
+/* floating-tools：透明背景，去掉自带的毛玻璃和边框 */
+[data-dynamic-wallpaper="on"] .floating-tools {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: color-mix(in srgb, var(--app-border) 20%, transparent) !important;
+  box-shadow: none !important;
+}
+
+/* 消息气泡 active 态：去掉紫色高亮边框 */
+[data-dynamic-wallpaper="on"] .message-bubble.user.active {
+  box-shadow: none !important;
+}
+
 /* 输入框底部工具栏 -> 全透明 */
 [data-dynamic-wallpaper="on"] .input-bottom-toolbar {
   background: transparent !important;
