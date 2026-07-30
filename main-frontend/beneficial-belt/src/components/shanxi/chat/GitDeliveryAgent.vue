@@ -78,6 +78,20 @@
               <div class="gda-agent-form-head"><span>Agent {{ index + 1 }}</span><button v-if="agents.length > 1" type="button" title="删除 Agent" @click="removeAgent(agent.id)"><Icon icon="mdi:trash-can-outline" width="15" /></button></div>
               <label>名称<input v-model.trim="agent.name" maxlength="32" placeholder="Agent 名称" /></label>
               <label>系统提示词<textarea v-model="agent.prompt" rows="6" /></label>
+              <details class="gda-agent-ref">
+                <summary>
+                  <Icon icon="mdi:paperclip" width="14" /> 参考资料
+                  <span v-if="agent.refContent" class="gda-ref-badge">{{ agent.refFileName }}</span>
+                </summary>
+                <div class="gda-ref-file">
+                  <label class="gda-ref-file-btn">
+                    <Icon icon="mdi:file-plus-outline" width="13" /> {{ agent.refContent ? '更换文件' : '选择文件' }}
+                    <input type="file" class="gda-ref-file-input" accept=".txt,.md,.json,.yaml,.yml,.toml,.ini,.cfg,.cs,.xaml,.sln,.env" @change="onRefFileSelected(agent, $event)" />
+                  </label>
+                  <button v-if="agent.refContent" type="button" class="gda-ref-file-remove" @click="removeRefFile(agent)"><Icon icon="mdi:close" width="13" /></button>
+                </div>
+                <p class="gda-ref-hint">文件内容将作为可选参考资料随上下文提供给 Agent，由 Agent 自行决定是否需要参考。</p>
+              </details>
             </article>
           </div>
           <footer><button type="button" class="gda-add-agent" @click="addAgent"><Icon icon="mdi:plus" width="16" /> 添加 Agent</button><button type="button" class="gda-settings-done" @click="showSettings = false">完成</button></footer>
@@ -97,7 +111,7 @@ const STORAGE_KEY = 'gitDeliveryAgents'
 const DEFAULT_PROMPT = `你是 Git Agent，负责交付前的只读代码审查。必须使用当前工作树的 git diff 作为事实依据，绝不写入、暂存、提交、推送或删除文件。运行环境是 Windows PowerShell：多条命令必须用分号 ; 分隔，绝不能使用 && 或 ||。单条命令失败时先解释错误，不要原样重复失败命令。用简洁中文说明改动、风险和下一步；重点关注密钥、垃圾文件、二进制构建产物、危险脚本、回归和测试缺口。没有问题时明确说明可以交付，不要编造问题。`
 const GENERIC_PROMPT = `你是一个通用工作 Agent。先理解用户目标，再使用可用工具完成任务；执行命令前确认环境和参数，失败后解释原因并换用安全方案。用简洁中文汇报进展和结果。`
 const GIT_REVIEW_TASK = '请审查当前工作树这次改动，确认是否适合交付。'
-function defaultAgent() { return { id: 'git-agent', name: 'Git Agent', prompt: DEFAULT_PROMPT } }
+function defaultAgent() { return { id: 'git-agent', name: 'Git Agent', prompt: DEFAULT_PROMPT, refContent: '', refFileName: '' } }
 function readAgents() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
@@ -190,7 +204,11 @@ async function respondApproval(allow) {
   }
 }
 function taskFor(text) {
-  return `执行环境规则：当前命令终端是 Windows PowerShell。多条命令只允许用分号 ; 分隔，绝不能使用 && 或 ||；命令失败后不要原样重试。\n\n${activeAgent.value.prompt}\n\n用户请求：${text}`
+  let base = `执行环境规则：当前命令终端是 Windows PowerShell。多条命令只允许用分号 ; 分隔，绝不能使用 && 或 ||；命令失败后不要原样重试。\n\n${activeAgent.value.prompt}`
+  if (activeAgent.value.refContent) {
+    base += `\n\n---\n【可选参考资料 - 如需确认项目背景或规范时查阅，无关可忽略】\n${activeAgent.value.refContent}\n---`
+  }
+  return `${base}\n\n用户请求：${text}`
 }
 function sendMessage(initialText = '') {
   const text = (initialText || draft.value).trim()
@@ -252,7 +270,7 @@ function openAgentTab(id) {
   if (!(messagesByAgent.value[id] || []).length) draft.value = id === 'git-agent' ? GIT_REVIEW_TASK : '请协助我完成当前任务。'
 }
 function addAgent() {
-  const agent = { id: `agent-${Date.now()}`, name: '新 Agent', prompt: GENERIC_PROMPT }
+  const agent = { id: `agent-${Date.now()}`, name: '新 Agent', prompt: GENERIC_PROMPT, refContent: '', refFileName: '' }
   agents.value.push(agent)
 }
 function removeAgent(id) {
@@ -266,6 +284,19 @@ function minimizeAgent() {
   showSettings.value = false
   isMinimized.value = true
 }
+function onRefFileSelected(agent, event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  agent.refFileName = file.name
+  const reader = new FileReader()
+  reader.onload = e => { agent.refContent = e.target.result }
+  reader.readAsText(file)
+  event.target.value = ''
+}
+function removeRefFile(agent) {
+  agent.refContent = ''
+  agent.refFileName = ''
+}
 onMounted(() => { draft.value = GIT_REVIEW_TASK })
 onUnmounted(stopReview)
 </script>
@@ -276,6 +307,17 @@ onUnmounted(stopReview)
 .gda-messages { flex:1; overflow:auto; padding:16px; background:#fff; }.gda-message { display:flex; gap:8px; margin:0 0 12px; }.gda-message.user { justify-content:flex-end; }.gda-message.activity { margin:4px 0 8px 34px; }.gda-activity { max-width:90%; display:flex; align-items:flex-start; gap:6px; color:#727272; font-size:11.5px; line-height:1.45; white-space:pre-wrap; }.gda-activity :deep(svg) { flex:0 0 auto; margin-top:1px; color:#8b6046; }.gda-avatar { width:26px; height:26px; flex:0 0 auto; display:grid; place-items:center; border-radius:8px; color:#79533c; background:#f6eee9; }.gda-bubble { max-width:82%; padding:9px 11px; border-radius:10px; color:#303030; background:#f5f5f5; font-size:12.5px; line-height:1.55; white-space:pre-wrap; }.gda-message.user .gda-bubble { color:#fff; background:#262626; }.gda-bubble.typing { display:flex; align-items:center; gap:4px; min-width:36px; }.typing i { width:4px; height:4px; border-radius:50%; background:#777; animation:blink 1.15s infinite ease-in-out; }.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
 .gda-input { display:flex; align-items:flex-end; gap:8px; padding:10px 12px; border-top:1px solid #ececec; background:#fff; }.gda-input textarea { flex:1; min-height:20px; max-height:110px; padding:7px 0; resize:none; border:0; outline:0; color:#242424; font:13px/1.45 inherit; }.gda-input textarea::placeholder { color:#999; }.gda-input button { width:28px; height:28px; display:grid; place-items:center; flex:0 0 auto; border:0; border-radius:8px; color:#fff; background:#242424; cursor:pointer; }.gda-input .gda-stop { color:#6f352f; background:#f6e9e7; }.gda-input button:disabled { opacity:.35; cursor:default; }
 .gda-approval { margin:4px 0 12px 34px; padding:10px; border:1px solid #e9cda9; border-radius:9px; background:#fff8ee; }.gda-approval strong,.gda-approval span { display:block; font-size:12px; }.gda-approval span { margin-top:3px; color:#754d25; font-family:ui-monospace,Consolas,monospace; }.gda-approval pre { max-height:90px; overflow:auto; margin:8px 0; padding:7px; border-radius:6px; color:#5b4b3b; background:rgba(255,255,255,.7); font:10px/1.4 ui-monospace,Consolas,monospace; white-space:pre-wrap; }.gda-approval div { display:flex; justify-content:flex-end; gap:7px; }.gda-approval button { border:0; border-radius:6px; padding:5px 9px; font-size:11px; cursor:pointer; }.gda-approval button:first-child { color:#753a34; background:#f6e9e7; }.gda-approval button:last-child { color:#fff; background:#262626; }.gda-settings-backdrop { position:fixed; inset:0; z-index:50000; display:grid; place-items:center; background:rgba(0,0,0,.22); }.gda-settings-dialog { width:min(520px,calc(100vw - 32px)); max-height:min(660px,calc(100vh - 32px)); display:flex; flex-direction:column; overflow:hidden; color:#292929; background:#fff; border-radius:14px; box-shadow:0 18px 56px rgba(0,0,0,.24); }.gda-settings-dialog > header,.gda-settings-dialog > footer { display:flex; align-items:center; justify-content:space-between; padding:13px 16px; border-bottom:1px solid #eee; }.gda-settings-dialog > header strong { font-size:14px; }.gda-settings-dialog > header button,.gda-agent-form-head button { border:0; color:#666; background:transparent; cursor:pointer; }.gda-agent-list { overflow:auto; padding:14px 16px; }.gda-agent-form { margin-bottom:14px; padding:12px; border:1px solid #e7e7e7; border-radius:10px; }.gda-agent-form-head { display:flex; justify-content:space-between; margin-bottom:10px; color:#555; font-size:12px; font-weight:650; }.gda-agent-form label { display:grid; gap:5px; margin-top:9px; color:#777; font-size:11px; }.gda-agent-form input,.gda-agent-form textarea { box-sizing:border-box; width:100%; padding:7px 8px; border:1px solid #ddd; border-radius:7px; color:#303030; font:12px/1.45 inherit; }.gda-agent-form textarea { resize:vertical; }.gda-settings-dialog > footer { border-top:1px solid #eee; border-bottom:0; }.gda-settings-dialog footer button { border:0; border-radius:8px; padding:7px 10px; cursor:pointer; font-size:12px; }.gda-add-agent { display:inline-flex; align-items:center; gap:5px; color:#60412f; background:#f5eee9; }.gda-settings-done { color:#fff; background:#242424; }.spin { animation:spin .9s linear infinite; }@keyframes spin { to { transform:rotate(360deg) } }@keyframes blink { 0%,80%,100%{opacity:.28}40%{opacity:1} }
+.gda-agent-ref { margin-top:9px; border:1px solid #ececec; border-radius:7px; overflow:hidden; }
+.gda-agent-ref summary { display:flex; align-items:center; gap:6px; padding:6px 8px; color:#666; font-size:11px; cursor:pointer; user-select:none; }
+.gda-agent-ref summary:hover { background:#f6f6f6; }
+.gda-ref-file { display:flex; align-items:center; gap:6px; padding:6px 8px; border-top:1px solid #ececec; }
+.gda-ref-file-btn { display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border:1px solid #ddd; border-radius:6px; color:#555; background:#fafafa; font-size:11px; cursor:pointer; user-select:none; }
+.gda-ref-file-btn:hover { background:#f0f0f0; }
+.gda-ref-file-input { display:none; }
+.gda-ref-file-remove { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border:0; border-radius:4px; color:#999; background:transparent; cursor:pointer; }
+.gda-ref-file-remove:hover { color:#753a34; background:#f6e9e7; }
+.gda-ref-badge { margin-left:auto; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 6px; border-radius:5px; color:#6c4934; background:#f6eee9; font-size:10px; font-weight:500; }
+.gda-ref-hint { margin:4px 8px 6px; color:#999; font-size:10.5px; line-height:1.4; }
 .git-delivery-agent.minimized {
   right: 18px;
   bottom: 16px;

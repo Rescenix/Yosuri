@@ -91,7 +91,7 @@
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
                         @open-plugins="openPluginsMarket"
-                        @open-scheduled-tasks="showSettings = true"
+                        @open-scheduled-tasks="showScheduledTask = true"
                       />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
@@ -105,7 +105,7 @@
             <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
                           <Icon icon="mdi:puzzle-outline" width="18" />
                         </button>
-                        <button class="gem-icon-btn" @click="showSettings = true" title="定时任务">
+                        <button class="gem-icon-btn" @click="showScheduledTask = true" title="定时任务">
                           <Icon icon="mdi:clock-outline" width="18" />
                         </button>
             <!-- 会话横条：与 AgentFS 图谱完全分离，保留快速会话跳转 -->
@@ -970,6 +970,7 @@
       </div>
 
       <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
+      <ScheduledTaskModal v-if="showScheduledTask" @close="showScheduledTask = false" @create="onCreateScheduledTask" />
       <ModelManagerModal
         v-if="showModelManager"
         :free-models="freeModelsFull"
@@ -1029,6 +1030,7 @@ import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
+import ScheduledTaskModal from './ScheduledTaskModal.vue'
 import SettingsModal from './SettingsModal.vue'
 import ModelManagerModal from './ModelManagerModal.vue'
 import PluginsMarketModal from './PluginsMarketModal.vue'
@@ -2208,6 +2210,7 @@ const showModelManager = ref(false)
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
+const showScheduledTask = ref(false)
 function onSettingsClosed() {
   showSettings.value = false
   loadModelCapabilities()
@@ -2215,6 +2218,17 @@ function onSettingsClosed() {
   // 不经过本组件的 selectModel()，所以关闭时要主动拉回来，否则顶部下拉还显示旧值。
   const persisted = localStorage.getItem('selectedModel')
   if (persisted && persisted !== selectedModel.value) selectedModel.value = persisted
+}
+
+function onCreateScheduledTask(data) {
+  showScheduledTask.value = false
+  fetch('/api/cron/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).catch(() => {
+    console.log('定时任务数据:', data)
+  })
 }
 
 // ==================== 底部工具条：Yolo 模式 + "+" 附加菜单 + Command 切换器 ====================
