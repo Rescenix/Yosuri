@@ -117,18 +117,26 @@ onUnmounted(() => {
 }
 
 /* 主页统计卡片：不毛玻璃，无文字遮挡问题 */
+[data-dynamic-wallpaper="on"] .home-container-for-layout {
+  background: var(--app-surface) !important;
+}
 [data-dynamic-wallpaper="on"] .session-home {
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 } 
 [data-dynamic-wallpaper="on"] .session-home .home-stats-card {
-  background: rgba(var(--app-surface-rgb), 0.08) !important;
+  background: rgba(var(--app-surface-rgb), 0.05) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* 输入框上方目录栏：去掉白色卡片背景 */
+/* 输入框白色背景卡片 → 变透明毛玻璃 */
+[data-dynamic-wallpaper="on"] .input-wrapper {
+  background: transparent !important;
+  border-color: color-mix(in srgb, var(--app-border) 50%, transparent) !important;
+  box-shadow: none !important;
+}
 [data-dynamic-wallpaper="on"] .input-dir-bar {
   background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
   backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
