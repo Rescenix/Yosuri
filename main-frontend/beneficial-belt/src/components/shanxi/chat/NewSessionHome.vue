@@ -33,7 +33,6 @@
             <div class="home-stat-value">{{ item.value }}</div>
           </div>
         </div>
-        </div>
         <div v-if="showHeatmap" class="home-heatmap">
           <div
             v-for="(cell, i) in heatmapCells"
