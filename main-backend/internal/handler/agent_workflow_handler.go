@@ -335,6 +335,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		r.persistWorkflowHistory(
 					sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
 				)
+		// 记录用户画像
+		p := LoadProfile()
+		p.RecordWorkflow(model, inputTokens, outputTokens, historyStatus == taskStatusInterrupted)
+		p.Save()
 		historyPersisted = true
 	}
 	defer persistHistory()

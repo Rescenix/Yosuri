@@ -98,6 +98,7 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 			{key: "skill", content: skillLibraryPrompt() + autoLoadedSkillsPrompt(task)}, // 索引 + 当前任务确定性预加载
 			{key: "memory", content: memorySection},                                      // 每写一次记忆就变
 			{key: "memory", content: workdirSection},                                     // 项目级 workdir.md，会话开始即注入，跨对话不失业
+			{key: "memory", content: LoadProfile().Prompt()},                            // 用户画像：从合作历史中萃取的了解
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},
