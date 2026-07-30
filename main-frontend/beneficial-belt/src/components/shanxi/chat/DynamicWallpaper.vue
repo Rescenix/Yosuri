@@ -116,6 +116,25 @@ onUnmounted(() => {
   -webkit-backdrop-filter: none !important;
 }
 
+/* 主页统计卡片：不毛玻璃，无文字遮挡问题 */
+[data-dynamic-wallpaper="on"] .session-home {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+} 
+[data-dynamic-wallpaper="on"] .session-home .home-stats-card {
+  background: rgba(var(--app-surface-rgb), 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 输入框上方目录栏：去掉白色卡片背景 */
+[data-dynamic-wallpaper="on"] .input-dir-bar {
+  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
+  backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
+}
+
 [data-dynamic-wallpaper="on"] .chat-window.expanded .gem-sidebar,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel-header,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .dock-pane {
