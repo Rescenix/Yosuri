@@ -116,12 +116,15 @@ onUnmounted(() => {
   -webkit-backdrop-filter: none !important;
 }
 
+/* 侧边栏 + 工具面板 -> 玻璃透明，去掉实体边框和阴影 */
 [data-dynamic-wallpaper="on"] .chat-window.expanded .gem-sidebar,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel-header,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .dock-pane {
   background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
   backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
   -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  border-color: color-mix(in srgb, var(--app-border) 30%, transparent) !important;
+  box-shadow: none !important;
 }
 
 /* 主页时侧边栏去毛玻璃 */
@@ -169,6 +172,13 @@ onUnmounted(() => {
 /* 输入框底部工具栏 -> 全透明 */
 [data-dynamic-wallpaper="on"] .input-bottom-toolbar {
   background: transparent !important;
+}
+
+/* 聊天消息区 -> 毛玻璃，文字清晰可见 */
+[data-dynamic-wallpaper="on"] .chat-window.expanded .chat-messages {
+  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.25)) !important;
+  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
 }
 
 /* 消息气泡保持原有毛玻璃（排除在透明化之外） */
