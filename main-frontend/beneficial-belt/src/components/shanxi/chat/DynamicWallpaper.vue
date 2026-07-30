@@ -120,8 +120,8 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel-header,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .dock-pane {
   background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
-  backdrop-filter: blur(var(--wallpaper-blur, 0)) !important;
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 0)) !important;
+  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-input-area {
