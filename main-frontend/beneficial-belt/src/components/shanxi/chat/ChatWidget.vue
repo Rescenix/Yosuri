@@ -62,15 +62,18 @@
             </div>
           </Transition>
 
-          <!-- 顶部：展开态 汉堡+折叠toggle；折叠态只有 toggle -->
-          <div class="gem-top">
-            <a href="/" class="gem-icon-btn gem-home" title="首页">
-              <Icon icon="majesticons:shooting-star-line" width="18" />
-            </a>
-            <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'">
-              <Icon icon="lucide:sidebar" width="18" />
-            </button>
-          </div>
+          <!-- 顶部：品牌标识 + 折叠toggle -->
+                    <div class="gem-top">
+                                <div class="gem-brand-wrap">
+                                  <a href="/" class="gem-icon-btn gem-home" title="首页">
+                                    <Icon icon="majesticons:shooting-star-line" width="20" />
+                                  </a>
+                                  <span v-if="sidebarOpen" class="gem-brand-text">Rescene</span>
+                                </div>
+                                <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'">
+                                  <Icon icon="lucide:sidebar" width="18" />
+                                </button>
+                              </div>
 
           <!-- 展开态：复用会话面板（新对话/搜索/置顶/最近/底部账号+设置） -->
           <SessionMenuContent
@@ -85,8 +88,9 @@
             @delete-session="deleteSession"
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
-            @open-plugins="openPluginsMarket"
-          />
+                        @open-plugins="openPluginsMarket"
+                        @open-scheduled-tasks="showSettings = true"
+                      />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
           <template v-else>
@@ -97,8 +101,11 @@
               <Icon icon="mdi:magnify" width="18" />
             </button>
             <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
-              <Icon icon="mdi:puzzle-outline" width="18" />
-            </button>
+                          <Icon icon="mdi:puzzle-outline" width="18" />
+                        </button>
+                        <button class="gem-icon-btn" @click="showSettings = true" title="定时任务">
+                          <Icon icon="mdi:clock-outline" width="18" />
+                        </button>
             <!-- 会话横条：与 AgentFS 图谱完全分离，保留快速会话跳转 -->
             <div class="gem-rail-sessions" @mouseenter="openRailCard" @mouseleave="closeRailCardDelayed">
               <template v-if="railProject.length">
@@ -120,13 +127,7 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
-              <button class="gem-icon-btn" :class="{ active: showAgentFSAudit }" @click="toggleAgentFSAudit" :title="showAgentFSAudit ? '关闭审计痕迹' : '显示审计痕迹'">
-                <Icon icon="mdi:source-commit" width="18" />
-              </button>
-              <button class="gem-icon-btn" :class="{ active: showHarnessWorkflow }" @click="toggleHarnessWorkflow" :title="showHarnessWorkflow ? '关闭工作流图' : '显示工作流图'">
-                <Icon icon="mdi:transit-connection-variant" width="18" />
-              </button>
-              <button class="gem-icon-btn" :class="{ active: showGitDeliveryAgent }" @click="openGitDeliveryAgent" title="Agent 工作台">
+                          <button class="gem-icon-btn" :class="{ active: showGitDeliveryAgent }" @click="openGitDeliveryAgent" title="Agent 工作台">
                 <Icon icon="mdi:robot-outline" width="18" />
               </button>
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
@@ -179,8 +180,7 @@
                     </div>
                     <div v-else class="rail-utility-empty">当前仓库还没有提交记录</div>
                   </div>
-                  <HarnessFlowRail v-else compact :flow="lastAgentFlow" />
-                </aside>
+                                  </aside>
               </Transition>
             </Teleport>
 
@@ -265,62 +265,7 @@
           </template>
         </aside>
 
-        <Transition name="left-utility-card">
-          <aside
-            v-if="leftUtilityVisible"
-            class="left-utility-stack"
-            :style="{ '--left-utility-width': leftUtilityWidth + 'px' }"
-          >
-            <div class="left-utility-resize-handle" @mousedown="startLeftUtilityWidthDrag" title="拖动调整卡片宽度"></div>
-            <section v-if="showAgentFSAudit" class="left-utility-card agentfs-utility-card">
-              <header class="left-utility-card-head">
-                <span><Icon icon="mdi:source-commit" width="15" /> 审计痕迹</span>
-                <span class="left-utility-card-hint">拖右边缘调宽</span>
-              </header>
-              <div class="agentfs-rail" :class="{ loading: agentFSLoading }">
-              <div v-if="gitGraph.commits.length" ref="agentFSTreeRef" class="agentfs-tree">
-                <svg class="agentfs-tree-links" :width="agentFSGraphWidth" :height="agentFSGraphHeight" :viewBox="`0 0 ${agentFSGraphWidth} ${agentFSGraphHeight}`" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="agentfs-link-gradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="var(--app-accent)" stop-opacity=".72" />
-                      <stop offset="100%" stop-color="var(--app-accent)" stop-opacity=".16" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    v-for="link in gitGraphLinks"
-                    :key="link.key"
-                    :d="link.d"
-                    class="agentfs-tree-link"
-                    :class="link.trunk ? 'trunk-link' : 'branch-link'"
-                    :style="link.trunk ? {} : { '--link-hue': link.hue }"
-                  />
-                </svg>
-                <button
-                  v-for="node in gitGraphNodes"
-                  :key="node.commit.hash"
-                  class="agentfs-node git-graph-node"
-                  :class="{ current: node.commit.current }"
-                  :style="{ left: `${node.x}px`, top: `${node.y}px`, '--node-hue': node.hue, '--node-order': node.index }"
-                  :title="`${node.commit.hash.slice(0, 8)} · ${node.commit.subject}`"
-                >
-                  <span class="agentfs-node-dot"></span>
-                  <span class="agentfs-node-label">{{ node.label }}</span>
-                </button>
-              </div>
-              <div v-else class="agentfs-empty-rail" aria-label="当前仓库还没有提交记录"></div>
-              </div>
-            </section>
-            <section v-if="showHarnessWorkflow" class="left-utility-card harness-utility-card">
-              <header class="left-utility-card-head">
-                <span><Icon icon="mdi:transit-connection-variant" width="15" /> 工作流图</span>
-                <span class="left-utility-card-hint">拖右边缘调宽</span>
-              </header>
-              <HarnessFlowRail :flow="lastAgentFlow" compact />
-            </section>
-          </aside>
-        </Transition>
-
-        <div class="chat-body studio">
+                <div class="chat-body studio">
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
 
@@ -1096,7 +1041,6 @@ import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import ResceneStatusIcon from './ResceneStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
 import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
-import HarnessFlowRail from './HarnessFlowRail.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
@@ -1319,12 +1263,6 @@ loadContextBreakdown(localStorage.getItem('prism_session_id') || '')
 // 刷新时恢复当前会话的真实 input/output token（不丢，横条靠它显示实际值）
 sessionTokenStats.value = loadSessionTokenStats(localStorage.getItem('prism_session_id') || '')
 
-const lastAgentFlow = computed(() => {
-  for (let i = messages.value.length - 1; i >= 0; i--) {
-    if (messages.value[i].kind === 'agentflow') return messages.value[i]
-  }
-  return null
-})
 const lastUserMessageId = computed(() => {
   for (let i = messages.value.length - 1; i >= 0; i--) {
     const m = messages.value[i]
@@ -1334,7 +1272,6 @@ const lastUserMessageId = computed(() => {
 })
 const currentCapability = computed(() => {
   return modelCapabilities.value[selectedModel.value]
-    || lastAgentFlow.value?.modelInfo
     || { vision: false, context_window: 0, reasoning: false }
 })
 
@@ -2544,27 +2481,6 @@ const showParams = ref(false)
 
 // ==================== 左侧 Gemini 风侧栏：展开 vs 折叠竖条 ====================
 const sidebarOpen = ref(localStorage.getItem('sidebarOpen') !== '0')
-// 这两个视图是按需打开的辅助界面。每次进入默认关闭，且首页不渲染，避免挤压欢迎页。
-const showAgentFSAudit = ref(false)
-const showHarnessWorkflow = ref(false)
-const utilitySurfacesVisible = computed(() => messages.value.length > 0)
-// 折叠侧栏和聊天列之间的辅助卡片：它参与 flex 布局，绝不覆盖聊天正文。
-// 宽度持久化后，审计图与工作流图共享同一条左侧卡片栏，避免两张卡片抢占内容区。
-const leftUtilityWidth = ref(320)
-const { startDrag: startLeftUtilityWidthDrag } = useResizableWidth(leftUtilityWidth, {
-  min: 280,
-  max: 520,
-  edge: 'right',
-  persistKey: 'leftUtilityWidth'
-})
-const leftUtilityVisible = computed(() => (
-  isExpanded.value &&
-  utilitySurfacesVisible.value &&
-  !sidebarOpen.value &&
-  !dockExpanded.value &&
-  (!dockPanels.value.length || dockHidden.value) &&
-  (showAgentFSAudit.value || showHarnessWorkflow.value)
-))
 const sidebarWidth = ref(220)
 const { startDrag: startSidebarWidthDrag } = useResizableWidth(sidebarWidth, {
   min: 180,
@@ -2575,14 +2491,6 @@ const { startDrag: startSidebarWidthDrag } = useResizableWidth(sidebarWidth, {
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
   localStorage.setItem('sidebarOpen', sidebarOpen.value ? '1' : '0')
-}
-function toggleAgentFSAudit() {
-  showAgentFSAudit.value = !showAgentFSAudit.value
-  if (showAgentFSAudit.value) refreshGitGraph()
-  if (!showAgentFSAudit.value) closeAgentFSDiff()
-}
-function toggleHarnessWorkflow() {
-  showHarnessWorkflow.value = !showHarnessWorkflow.value
 }
 
 // ==================== Gemini 风格对话搜索面板 ====================

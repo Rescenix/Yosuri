@@ -2872,6 +2872,23 @@ min-height: 90px !important;
   box-sizing: border-box;
 }
 .gem-sidebar.collapsed .gem-top { justify-content: center; padding: 10px 0 4px; }
+/* 品牌容器：图标 + 文字横向排列 */
+.gem-brand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.gem-brand-wrap a { text-decoration: none; }
+/* 品牌文字 Rescene — 只展开态显示 */
+.gem-brand-text {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
+  white-space: nowrap;
+  line-height: 1;
+}
 /* 折叠态：顶部默认只露出主题色 logo，hover 才原地换成折叠/展开按钮（仿 Gemini）。
    两个按钮叠在同一位置做交叉淡入淡出，所以 gem-top 需要定位上下文 + 固定高度。 */
 .gem-sidebar.collapsed .gem-top {
@@ -2938,129 +2955,7 @@ min-height: 90px !important;
 }
 .gem-rail-sessions::-webkit-scrollbar { display: none; }
 
-/* ==================== 左侧辅助卡片：审计痕迹 / 工作流图 ====================
-   卡片只使用折叠边栏与 720px 聊天阅读列之间的自然留白，不参加 flex 排版，
-   这样聊天正文和输入框始终按原工作区中线居中。 */
-.left-utility-stack {
-  position: relative;
-  position: absolute;
-  z-index: 4;
-  top: 8px;
-  bottom: 8px;
-  left: 72px; /* 8px 工作区内边距 + 56px 折叠边栏 + 8px 栏间距 */
-  width: min(var(--left-utility-width, 320px), max(0px, calc((100% - 800px) / 2 - 8px)));
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-right: 2px;
-  box-sizing: border-box;
-}
-.left-utility-card {
-  position: relative;
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-border) 88%, white);
-  border-radius: 12px;
-  background: var(--app-surface);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10), 0 2px 7px rgba(15, 23, 42, 0.06);
-}
-.harness-utility-card .harness-flow-rail { flex: 1 1 auto; min-height: 0; }
-.left-utility-card-head {
-  height: 38px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--app-border);
-  color: var(--app-text-soft);
-  font-size: 12px;
-  font-weight: 700;
-}
-.left-utility-card-head > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
-.left-utility-card-hint { color: var(--app-text-faint); font-size: 10px; font-weight: 500; }
-.left-utility-resize-handle {
-  position: absolute;
-  z-index: 7;
-  top: 0;
-  right: -3px;
-  bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-}
-.left-utility-resize-handle:hover,
-.left-utility-resize-handle:active { background: color-mix(in srgb, var(--app-accent) 28%, transparent); }
-.left-utility-card-enter-active,
-.left-utility-card-leave-active {
-  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(.2,.8,.2,1);
-}
-.left-utility-card-enter-from,
-.left-utility-card-leave-to {
-  opacity: 0;
-  transform: translateX(-10px) scale(0.97);
-}
-@media (max-width: 1100px) {
-  .left-utility-stack { display: none; }
-}
-.agentfs-rail {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 10px 0 14px;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--app-accent) 8%, transparent), transparent 38%),
-    linear-gradient(color-mix(in srgb, var(--app-text) 4%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--app-text) 4%, transparent) 1px, transparent 1px),
-    transparent;
-  background-size: auto, 24px 24px, 24px 24px, auto;
-  box-shadow: none;
-  backdrop-filter: none;
-  pointer-events: none;
-}
-.agentfs-rail::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 0;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 4%, transparent), transparent 34%);
-  pointer-events: none;
-}
-.agentfs-rail-head {
-  position: relative;
-  z-index: 2;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
-  color: var(--app-accent);
-  cursor: pointer;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 12%, transparent);
-  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-  pointer-events: auto;
-}
-.agentfs-rail-head:hover {
-  transform: translateY(-1px);
-  background: color-mix(in srgb, var(--app-accent) 14%, var(--app-surface));
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--app-accent) 20%, transparent);
-}
-.agentfs-rail.loading .agentfs-rail-head svg { animation: agentfsPulse 1s ease-in-out infinite; }
+
 .agentfs-tree {
   position: relative;
   flex: 1;

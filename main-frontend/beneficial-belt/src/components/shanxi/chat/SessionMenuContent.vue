@@ -1,97 +1,193 @@
 <template>
   <div class="smc-root" :class="{ fill }">
-    <!-- 顶部功能项：新建任务 / 搜索对话 / 插件市场 -->
+    <!-- 顶部操作：新建会话 + 定时任务 -->
     <div class="smc-nav">
       <button class="smc-nav-item primary" type="button" @click="$emit('new-session')">
-        <Icon icon="mdi:plus-circle-outline" width="18" />
-        <span>新建任务</span>
+        <Icon icon="mdi:plus" width="18" />
+        <span>新建会话</span>
       </button>
-      <button class="smc-nav-item" type="button" @click="$emit('open-search')">
-        <Icon icon="mdi:magnify" width="18" />
-        <span>搜索对话</span>
-      </button>
-      <button class="smc-nav-item" type="button" @click="$emit('open-plugins')">
-        <Icon icon="mdi:puzzle-outline" width="18" />
-        <span>插件市场</span>
+      <button class="smc-nav-item" type="button" @click="$emit('open-scheduled-tasks')">
+        <Icon icon="mdi:clock-outline" width="18" />
+        <span>定时任务</span>
       </button>
     </div>
 
-    <!-- 置顶 = 收藏的项目文件夹（可展开） -->
-    <div v-if="pinnedFolders.length" class="smc-section">
-      <div class="smc-section-label">
-        <Icon icon="mdi:pin" width="14" color="var(--app-accent)" />
-        <span>置顶</span>
-      </div>
-      <div class="smc-session-area">
-        <div v-for="f in pinnedFolders" :key="'pin_' + f.name" class="pin-folder-row" :class="{ open: expandedPinned[f.name] }">
-        <div class="pin-folder-head" @click="togglePinnedFolder(f.name)" @mouseenter="folderHover = f.name" @mouseleave="folderHover = null">
-          <span class="pin-folder-chevron" :class="{ open: expandedPinned[f.name] }">›</span>
-          <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
-          <span class="pin-folder-name">{{ f.name }}</span>
-          <div class="pin-folder-menu-wrap" v-if="folderHover === f.name || openFolderMenu === f.name">
-            <button class="pin-folder-menu-btn" @click.stop="openFolderMenuFn(f.name, $event)" title="更多">
-              <Icon icon="mdi:dots-horizontal" width="16" />
-            </button>
-          </div>
-        </div>
-          <div v-if="expandedPinned[f.name]" class="pin-folder-children">
-            <SessionTreeNode v-for="s in f.sessions" :key="s.id" :node="s"
-              :active-session="activeSession" :running-session="runningSession"
-              :hovered-id="hoveredId" :open-menu-id="openMenuId"
-              :is-expanded="noopExpanded"
-              @select="onRowClick" @toggle="noop" @menu="toggleMenu"
-              @hover="hoveredId = $event" @hover-leave="onRowLeave" />
-          </div>
-        </div>
-      </div>
+    <!-- 搜索框 -->
+    <div class="smc-search-bar" @click="focusSearch">
+      <Icon icon="mdi:magnify" width="16" class="smc-search-icon" />
+      <input
+        ref="searchInputRef"
+        class="smc-search-input"
+        type="text"
+        placeholder="搜索会话..."
+        @focus="onSearchFocus"
+        @keydown.esc="onSearchBlur"
+      />
     </div>
 
-    <!-- 项目：按工作目录分组的会话 -->
-    <div class="smc-section smc-section-projects">
-      <div class="smc-section-label">
-        <span>项目</span>
-        <button class="smc-project-add" type="button" title="创建项目" @click="openCreateProject">
-          <Icon icon="mdi:plus" width="18" />
-        </button>
-      </div>
-      <div class="smc-session-area">
-        <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="wd-group" :class="{ open: isGroupOpen(grp.name) }">
-          <div class="wd-group-head" @click="toggleGroup(grp.name)" @mouseenter="folderHover = grp.name" @mouseleave="folderHover = null">
-            <span class="wd-group-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
+    <!-- 会话列表区 -->
+    <div class="smc-session-area">
+
+      <!-- 置顶项目文件夹 -->
+      <div v-if="pinnedFolders.length" class="smc-section">
+        <div class="smc-section-label">
+          <Icon icon="mdi:pin" width="14" color="var(--app-accent)" />
+          <span>置顶</span>
+        </div>
+        <div v-for="f in pinnedFolders" :key="'pin_' + f.name" class="smc-folder">
+          <div class="smc-folder-head" @click="togglePinnedFolder(f.name)">
+            <span class="smc-folder-chevron" :class="{ open: expandedPinned[f.name] }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
-            <span class="wd-group-name">{{ grp.name }}</span>
-            <div class="wd-group-menu-wrap" v-if="folderHover === grp.name || openFolderMenu === grp.name">
-              <button class="wd-group-menu-btn" @click.stop="openFolderMenuFn(grp.name, $event)" title="更多">
+            <span class="smc-folder-name">{{ f.name }}</span>
+          </div>
+          <div v-if="expandedPinned[f.name]" class="smc-folder-children">
+            <div
+              v-for="s in f.sessions"
+              :key="s.id"
+              class="smc-session-row"
+              :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+              @mouseenter="hoveredId = s.id"
+              @mouseleave="onRowLeave(s.id)"
+              @click="onRowClick(s)"
+            >
+              <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+              <input
+                v-if="editingId === s.id"
+                ref="renameInputRef"
+                v-model="editingValue"
+                class="smc-name-input"
+                @click.stop
+                @keydown.enter="commitRename"
+                @keydown.esc="cancelRename"
+                @blur="commitRename"
+              />
+              <span v-else class="smc-session-name">{{ s.name }}</span>
+              <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
+                  <Icon icon="mdi:dots-horizontal" width="16" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 项目：按工作目录分组 -->
+      <div class="smc-section">
+        <div class="smc-section-label">
+          <span>项目</span>
+          <button class="smc-project-add" type="button" title="创建项目" @click="openCreateProject">
+            <Icon icon="mdi:plus" width="18" />
+          </button>
+        </div>
+        <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder">
+          <div class="smc-folder-head" @click="toggleGroup(grp.name)">
+            <span class="smc-folder-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
+            <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
+            <span class="smc-folder-name">{{ grp.name }}</span>
+          </div>
+          <div v-if="isGroupOpen(grp.name)" class="smc-folder-children">
+            <div
+              v-for="s in grp.sessions"
+              :key="s.id"
+              class="smc-session-row"
+              :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+              @mouseenter="hoveredId = s.id"
+              @mouseleave="onRowLeave(s.id)"
+              @click="onRowClick(s)"
+            >
+              <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+              <input
+                v-if="editingId === s.id"
+                ref="renameInputRef"
+                v-model="editingValue"
+                class="smc-name-input"
+                @click.stop
+                @keydown.enter="commitRename"
+                @keydown.esc="cancelRename"
+                @blur="commitRename"
+              />
+              <span v-else class="smc-session-name">{{ s.name }}</span>
+              <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
+                  <Icon icon="mdi:dots-horizontal" width="16" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 未分组 -->
+        <div v-if="orphanSessions.length" class="smc-folder">
+          <div class="smc-folder-head" @click="toggleOrphan">
+            <span class="smc-folder-chevron" :class="{ open: showOrphan }">›</span>
+            <Icon icon="mdi:folder-outline" width="15" color="var(--app-text-faint)" />
+            <span class="smc-folder-name" style="color:var(--app-text-faint)">未分组</span>
+          </div>
+          <div v-if="showOrphan" class="smc-folder-children">
+            <div
+              v-for="s in orphanSessions"
+              :key="s.id"
+              class="smc-session-row"
+              :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+              @mouseenter="hoveredId = s.id"
+              @mouseleave="onRowLeave(s.id)"
+              @click="onRowClick(s)"
+            >
+              <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+              <input
+                v-if="editingId === s.id"
+                ref="renameInputRef"
+                v-model="editingValue"
+                class="smc-name-input"
+                @click.stop
+                @keydown.enter="commitRename"
+                @keydown.esc="cancelRename"
+                @blur="commitRename"
+              />
+              <span v-else class="smc-session-name">{{ s.name }}</span>
+              <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
+                  <Icon icon="mdi:dots-horizontal" width="16" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 时间分组会话（无工作目录的独立会话） -->
+      <template v-if="looseGroupedSessions.length">
+        <div v-for="group in looseGroupedSessions" :key="'t_' + group.label">
+          <div class="smc-time-label">{{ group.label }}</div>
+          <div
+            v-for="s in group.sessions"
+            :key="s.id"
+            class="smc-session-row"
+            :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+            @mouseenter="hoveredId = s.id"
+            @mouseleave="onRowLeave(s.id)"
+            @click="onRowClick(s)"
+          >
+            <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+            <input
+              v-if="editingId === s.id"
+              ref="renameInputRef"
+              v-model="editingValue"
+              class="smc-name-input"
+              @click.stop
+              @keydown.enter="commitRename"
+              @keydown.esc="cancelRename"
+              @blur="commitRename"
+            />
+            <span v-else class="smc-session-name">{{ s.name }}</span>
+            <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+              <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                 <Icon icon="mdi:dots-horizontal" width="16" />
               </button>
             </div>
           </div>
-          <div v-if="isGroupOpen(grp.name)" class="wd-group-children">
-            <SessionTreeNode v-for="s in grp.sessions" :key="s.id" :node="s"
-              :active-session="activeSession" :running-session="runningSession"
-              :hovered-id="hoveredId" :open-menu-id="openMenuId"
-              :is-expanded="noopExpanded"
-              @select="onRowClick" @toggle="noop" @menu="toggleMenu"
-              @hover="hoveredId = $event" @hover-leave="onRowLeave" />
-          </div>
         </div>
-        <!-- 未分组文件夹 -->
-        <div v-if="orphanSessions.length" class="wd-group">
-          <div class="wd-group-head" @click="toggleOrphan" @mouseenter="folderHover = 'orphan'" @mouseleave="folderHover = null">
-            <span class="wd-group-chevron" :class="{ open: showOrphan }">›</span>
-            <Icon icon="mdi:folder-outline" width="15" color="var(--app-text-faint)" />
-            <span class="wd-group-name" style="color:var(--app-text-faint)">未分组</span>
-          </div>
-          <div v-if="showOrphan" class="wd-group-children">
-            <SessionTreeNode v-for="s in orphanSessions" :key="s.id" :node="s"
-              :active-session="activeSession" :running-session="runningSession"
-              :hovered-id="hoveredId" :open-menu-id="openMenuId"
-              :is-expanded="noopExpanded"
-              @select="onRowClick" @toggle="noop" @menu="toggleMenu"
-              @hover="hoveredId = $event" @hover-leave="onRowLeave" />
-          </div>
-        </div>
-      </div>
+      </template>
     </div>
 
     <!-- footer -->
@@ -106,7 +202,7 @@
       </button>
     </div>
 
-    <!-- 用户卡片菜单：点头像悬浮白色卡片，含登录/退出 -->
+    <!-- 用户卡片菜单 -->
     <Teleport to="body">
       <div v-if="showUserMenu" ref="userCardRef" class="smc-user-card" :style="userMenuStyle" @click.stop>
         <template v-if="isLoggedIn">
@@ -127,13 +223,6 @@
       </div>
     </Teleport>
 
-    <!-- 文件夹三点菜单 -->
-    <Teleport to="body">
-      <div v-if="openFolderMenu" class="smc-row-dropdown" :style="folderMenuStyle" @click.stop>
-        <div class="smc-dropdown-item" @click="doPinFolder">{{ isPinned(openFolderMenu) ? '取消置顶' : '置顶' }}</div>
-      </div>
-    </Teleport>
-
     <!-- 会话三点菜单 -->
     <Teleport to="body">
       <div v-if="openMenuId" class="smc-row-dropdown" :style="dropdownStyle" @click.stop>
@@ -142,7 +231,7 @@
       </div>
     </Teleport>
 
-    <!-- 创建项目：不使用产品名文案，源文件夹由用户主动选择。 -->
+    <!-- 创建项目 -->
     <Teleport to="body">
       <Transition name="smc-modal">
         <div v-if="showCreateProject" class="smc-modal-backdrop" @click.self="closeCreateProject">
@@ -153,19 +242,16 @@
                 <Icon icon="mdi:close" width="20" />
               </button>
             </div>
-
             <label class="smc-project-name-field">
               <Icon icon="mdi:folder-outline" width="20" />
               <input ref="projectNameInput" v-model="newProjectName" placeholder="项目名称" maxlength="80" />
             </label>
-
             <div class="smc-source-label">源文件夹</div>
             <button type="button" class="smc-source-picker" @click="pickSourceFolder">
               <Icon icon="mdi:folder-plus-outline" width="25" />
               <span v-if="selectedSourceFolder">{{ selectedSourceFolder.name }}</span>
               <span v-else>添加可读取和编辑的文件夹</span>
             </button>
-
             <div class="smc-create-project-actions">
               <button type="button" class="smc-cancel-btn" @click="closeCreateProject">取消</button>
               <button type="submit" class="smc-create-btn" :disabled="!newProjectName.trim() || !selectedSourceFolder">创建项目</button>
@@ -180,7 +266,6 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import SessionTreeNode from './SessionTreeNode.vue'
 import { useAuth } from '../../../composables/useAuth.js'
 
 const auth = useAuth()
@@ -193,8 +278,15 @@ const props = defineProps({
   runningSession: { type: String, default: '' },
   fill: { type: Boolean, default: false }
 })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins', 'create-project'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks'])
 
+// ========== 搜索框 ==========
+const searchInputRef = ref(null)
+function focusSearch() { searchInputRef.value?.focus() }
+function onSearchFocus() { emit('open-search') }
+function onSearchBlur() { searchInputRef.value?.blur() }
+
+// ========== 创建项目 ==========
 const showCreateProject = ref(false)
 const newProjectName = ref('')
 const selectedSourceFolder = ref(null)
@@ -213,9 +305,7 @@ async function pickSourceFolder() {
     if (!res.ok) throw new Error('无法打开文件夹选择器')
     const data = await res.json()
     if (!data.cancelled && data.path) selectedSourceFolder.value = { name: data.name || data.path, path: data.path }
-  } catch {
-    // 选择器不可用或取消时，保留当前选择。
-  }
+  } catch {}
 }
 function createProject() {
   const name = newProjectName.value.trim()
@@ -223,8 +313,98 @@ function createProject() {
   emit('create-project', { name, sourceFolder: selectedSourceFolder.value })
   closeCreateProject()
 }
+defineExpose({ openCreateProject })
 
-// 用户卡片菜单（登录 / 退出）
+// ========== 置顶项目 ==========
+const pinnedProjectNames = ref([])
+function loadPinned() {
+  try { pinnedProjectNames.value = JSON.parse(localStorage.getItem(PIN_KEY) || '[]') } catch { pinnedProjectNames.value = [] }
+}
+function savePinned() {
+  try { localStorage.setItem(PIN_KEY, JSON.stringify(pinnedProjectNames.value)) } catch {}
+}
+function isPinned(name) { return pinnedProjectNames.value.includes(name) }
+function togglePinFolder(name) {
+  if (isPinned(name)) pinnedProjectNames.value = pinnedProjectNames.value.filter(f => f !== name)
+  else pinnedProjectNames.value.push(name)
+  savePinned()
+}
+
+// ========== 文件夹展开 ==========
+const expandedPinned = reactive({})
+const expandedGroups = reactive({})
+const showOrphan = ref(true)
+
+function togglePinnedFolder(name) { expandedPinned[name] = !expandedPinned[name] }
+function isGroupOpen(name) {
+  if (expandedGroups[name] !== undefined) return expandedGroups[name]
+  return true
+}
+function toggleGroup(name) { expandedGroups[name] = !isGroupOpen(name) }
+function toggleOrphan() { showOrphan.value = !showOrphan.value }
+
+// ========== 按 workdir 分组 ==========
+const workdirMap = computed(() => {
+  const map = new Map()
+  for (const s of props.sessions) {
+    const wd = s.workdir || ''
+    if (!wd) continue
+    if (!map.has(wd)) map.set(wd, [])
+    map.get(wd).push(s)
+  }
+  return map
+})
+
+const taskGroups = computed(() => {
+  const map = workdirMap.value
+  return Array.from(map.entries())
+    .sort((a, b) => {
+      const aP = isPinned(a[0]) ? 0 : 1
+      const bP = isPinned(b[0]) ? 0 : 1
+      if (aP !== bP) return aP - bP
+      return b[1].length - a[1].length
+    })
+    .map(([name, sessions]) => ({ name, sessions }))
+})
+
+const pinnedFolders = computed(() => {
+  const map = workdirMap.value
+  return pinnedProjectNames.value
+    .filter(name => map.has(name))
+    .map(name => ({ name, sessions: map.get(name) }))
+})
+
+const orphanSessions = computed(() => {
+  const have = new Set()
+  for (const [, sess] of workdirMap.value) {
+    for (const s of sess) have.add(s.id)
+  }
+  return props.sessions.filter(s => !have.has(s.id))
+})
+
+// ========== 时间分组（无 workdir 的会话） ==========
+function getTimeLabel(ts) {
+  if (!ts) return '更早'
+  const d = new Date(ts).getTime()
+  const todayStart = new Date().setHours(0, 0, 0, 0)
+  const yesterdayStart = todayStart - 86400000
+  if (d >= todayStart) return '今天'
+  if (d >= yesterdayStart) return '昨天'
+  return '更早'
+}
+
+const looseGroupedSessions = computed(() => {
+  const groups = new Map()
+  for (const s of orphanSessions.value) {
+    const label = getTimeLabel(s.updatedAt || s.createdAt)
+    if (!groups.has(label)) groups.set(label, [])
+    groups.get(label).push(s)
+  }
+  const order = ['今天', '昨天', '更早']
+  return order.filter(l => groups.has(l)).map(label => ({ label, sessions: groups.get(label) }))
+})
+
+// ========== 用户卡片 ==========
 const footerRef = ref(null)
 const userRef = ref(null)
 const userCardRef = ref(null)
@@ -262,97 +442,7 @@ function logout() {
   refreshLoginState()
 }
 
-// 置顶项目文件夹
-const pinnedProjectNames = ref([])
-function loadPinned() {
-  try { pinnedProjectNames.value = JSON.parse(localStorage.getItem(PIN_KEY) || '[]') } catch { pinnedProjectNames.value = [] }
-}
-function savePinned() {
-  try { localStorage.setItem(PIN_KEY, JSON.stringify(pinnedProjectNames.value)) } catch {}
-}
-function isPinned(name) { return pinnedProjectNames.value.includes(name) }
-function togglePinFolder(name) {
-  if (isPinned(name)) pinnedProjectNames.value = pinnedProjectNames.value.filter(f => f !== name)
-  else pinnedProjectNames.value.push(name)
-  savePinned()
-}
-
-// 置顶文件夹展开
-const expandedPinned = reactive({})
-function togglePinnedFolder(name) { expandedPinned[name] = !expandedPinned[name] }
-
-// 任务列表分组展开：默认全展开
-const expandedGroups = reactive({})
-function isGroupOpen(name) {
-  if (expandedGroups[name] !== undefined) return expandedGroups[name]
-  return true
-}
-function toggleGroup(name) { expandedGroups[name] = !isGroupOpen(name) }
-
-// 未分组展开
-const showOrphan = ref(true)
-function toggleOrphan() { showOrphan.value = !showOrphan.value }
-
-// 文件夹悬浮+三点菜单
-const folderHover = ref(null)
-const openFolderMenu = ref(null)
-const folderMenuStyle = ref({})
-function openFolderMenuFn(name, ev) {
-  if (openFolderMenu.value === name) { openFolderMenu.value = null; return }
-  openFolderMenu.value = name
-  const rect = ev.currentTarget.getBoundingClientRect()
-  folderMenuStyle.value = { position: 'fixed', left: (rect.right - 100) + 'px', top: (rect.bottom + 4) + 'px', width: '100px' }
-}
-function doPinFolder() {
-  const name = openFolderMenu.value
-  if (name) togglePinFolder(name)
-  openFolderMenu.value = null
-}
-
-// SessionTreeNode 辅助
-function noop() {}
-const noopExpanded = () => true
-
-// 按 workdir 分组
-const workdirMap = computed(() => {
-  const map = new Map()
-  for (const s of props.sessions) {
-    const wd = s.workdir || ''
-    if (!wd) continue
-    if (!map.has(wd)) map.set(wd, [])
-    map.get(wd).push({ ...s, children: [] })
-  }
-  return map
-})
-
-const taskGroups = computed(() => {
-  const map = workdirMap.value
-  return Array.from(map.entries())
-    .sort((a, b) => {
-      const aP = isPinned(a[0]) ? 0 : 1
-      const bP = isPinned(b[0]) ? 0 : 1
-      if (aP !== bP) return aP - bP
-      return b[1].length - a[1].length
-    })
-    .map(([name, sessions]) => ({ name, sessions }))
-})
-
-const pinnedFolders = computed(() => {
-  const map = workdirMap.value
-  return pinnedProjectNames.value
-    .filter(name => map.has(name))
-    .map(name => ({ name, sessions: map.get(name) }))
-})
-
-const orphanSessions = computed(() => {
-  const have = new Set()
-  for (const [, sess] of workdirMap.value) {
-    for (const s of sess) have.add(s.id)
-  }
-  return props.sessions.filter(s => !have.has(s.id)).map(s => ({ ...s, children: [] }))
-})
-
-// 会话菜单
+// ========== 会话交互 ==========
 const hoveredId = ref(null)
 const openMenuId = ref(null)
 const openMenuSession = ref(null)
@@ -397,7 +487,7 @@ function onDelete(s) {
   hoveredId.value = null
   emit('delete-session', s.id)
 }
-function onDocClick() { openMenuId.value = null; openFolderMenu.value = null; showUserMenu.value = false }
+function onDocClick() { openMenuId.value = null; showUserMenu.value = false }
 
 onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick); window.addEventListener('auth-change', refreshLoginState) })
 onUnmounted(() => { document.removeEventListener('click', onDocClick); window.removeEventListener('auth-change', refreshLoginState) })
@@ -410,27 +500,21 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   color: var(--app-text);
 }
 .smc-root.fill { height: 100%; min-height: 0; }
-.smc-root.fill .smc-section-projects {
-  min-height: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-.smc-root.fill .smc-section-projects .smc-session-area { flex: 1; max-height: none; }
 
+/* ===== Nav ===== */
 .smc-nav {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px 10px 10px;
+  padding: 8px 10px 4px;
 }
 .smc-nav-item {
   width: 100%;
-  min-height: 42px;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 12px;
   border: 0;
   border-radius: 10px;
@@ -442,19 +526,17 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   line-height: 1.2;
   cursor: pointer;
   text-align: left;
-  transition: background .16s ease, color .16s ease, transform .16s ease;
+  transition: background .16s ease, color .16s ease;
 }
 .smc-nav-item:hover {
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
-  transform: translateX(2px);
 }
 .smc-nav-item.primary {
-  background: color-mix(in srgb, var(--app-text, #202124), transparent 95%);
+  background: color-mix(in srgb, var(--app-accent), transparent 90%);
   font-weight: 620;
 }
-.smc-nav-item:focus-visible {
-  outline: 2px solid var(--app-accent);
-  outline-offset: -2px;
+.smc-nav-item.primary:hover {
+  background: color-mix(in srgb, var(--app-accent), transparent 80%);
 }
 .smc-nav-item .iconify {
   flex: 0 0 auto;
@@ -462,6 +544,42 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 }
 .smc-nav-item.primary .iconify { color: var(--app-accent); }
 
+/* ===== Search ===== */
+.smc-search-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 10px 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
+  cursor: text;
+  transition: background .16s ease;
+}
+.smc-search-bar:focus-within {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 90%);
+}
+.smc-search-icon {
+  flex: 0 0 auto;
+  color: var(--app-text-faint);
+}
+.smc-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+}
+.smc-search-input::placeholder {
+  color: var(--app-text-faint);
+}
+
+/* ===== Section labels ===== */
 .smc-section { flex-shrink: 0; }
 .smc-section-label {
   min-height: 32px;
@@ -494,23 +612,11 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   color: var(--app-text);
   transform: rotate(90deg);
 }
-.smc-project-add:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
-.smc-count { margin-left: auto; font-weight: 400; color: var(--app-text-faint); font-size: 11px; }
 
-.smc-session-area {
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 4px 9px 18px;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.smc-session-area::-webkit-scrollbar { display: none; }
-
-.pin-folder-row, .wd-group { margin-bottom: 6px; }
-.pin-folder-head, .wd-group-head {
-  position: relative;
-  min-height: 38px;
+/* ===== Folder ===== */
+.smc-folder { margin-bottom: 4px; }
+.smc-folder-head {
+  min-height: 36px;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -519,10 +625,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   cursor: pointer;
   transition: background .15s ease;
 }
-.pin-folder-head:hover, .wd-group-head:hover {
+.smc-folder-head:hover {
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
 }
-.pin-folder-chevron, .wd-group-chevron {
+.smc-folder-chevron {
   width: 14px;
   flex-shrink: 0;
   color: var(--app-text-faint);
@@ -530,8 +636,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   text-align: center;
   transition: transform .18s ease;
 }
-.pin-folder-chevron.open, .wd-group-chevron.open { transform: rotate(90deg); }
-.pin-folder-name, .wd-group-name {
+.smc-folder-chevron.open { transform: rotate(90deg); }
+.smc-folder-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -541,41 +647,137 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pin-folder-menu-wrap, .wd-group-menu-wrap { flex-shrink: 0; display: flex; }
-.pin-folder-menu-btn, .wd-group-menu-btn {
+.smc-folder-children {
+  /* 不要缩进 —— 会话与文件夹平级 */
+  margin-top: 1px;
+}
+
+/* ===== Session list area ===== */
+.smc-session-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding: 2px 6px 10px;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.smc-session-area::-webkit-scrollbar { display: none; }
+
+/* ===== Session row ===== */
+.smc-session-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  margin: 1px 2px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.smc-session-row:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 95%); }
+.smc-session-row.active {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 92%);
+  font-weight: 600;
+}
+.smc-session-row.running {
+  background: color-mix(in srgb, var(--app-accent), transparent 94%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 50%);
+}
+
+/* 运行指示灯 */
+.smc-session-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c4c4c4;
+  transition: background 0.2s ease;
+}
+.smc-session-dot.on {
+  background: var(--app-accent);
+  animation: smc-dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes smc-dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent), transparent 45%); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent), transparent 100%); }
+}
+
+.smc-session-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text);
+}
+.smc-name-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--app-text);
+  font-family: inherit;
+  background: var(--app-surface);
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.smc-row-menu-wrap { position: relative; flex-shrink: 0; display: flex; }
+.smc-row-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
+  border: none;
   background: transparent;
+  border-radius: 7px;
   color: var(--app-text-soft);
   cursor: pointer;
 }
-.pin-folder-menu-btn:hover, .wd-group-menu-btn:hover {
+.smc-row-menu-btn:hover {
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text, #202124), transparent 91%);
-}
-.pin-folder-children, .wd-group-children {
-  margin-top: 2px;
-  padding-left: 12px;
+  background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 91%);
 }
 
+/* ===== Time label ===== */
+.smc-time-label {
+  padding: 10px 14px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--app-text-faint);
+  flex-shrink: 0;
+}
+
+/* ===== Dropdown ===== */
 .smc-row-dropdown {
   background: var(--app-surface);
-  border: 1px solid var(--app-border); border-radius: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
   box-shadow: 0 12px 28px rgba(0,0,0,0.16);
-  padding: 6px 0; z-index: 9999;
+  padding: 6px 0;
+  z-index: 9999;
 }
 .smc-dropdown-item {
-  padding: 7px 14px; font-size: 12.5px; font-weight: 500;
-  color: var(--app-text); cursor: pointer;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--app-text);
+  cursor: pointer;
 }
 .smc-dropdown-item:hover { background: var(--app-surface-3); }
 .smc-dropdown-item.danger { color: #d94834; }
 
+/* ===== Footer ===== */
 .fm-footer {
   flex-shrink: 0;
   display: flex;
@@ -627,7 +829,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   object-fit: cover;
 }
 
-/* 用户卡片菜单：白色卡片浮层 */
+/* ===== User card ===== */
 .smc-user-card {
   background: #ffffff;
   border: 1px solid var(--app-border);
@@ -658,6 +860,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-user-card-item.danger { color: #d94834; }
 .smc-user-card-item.danger:hover { background: rgba(217, 72, 52, 0.08); }
 
+/* ===== Create project modal ===== */
 .smc-modal-backdrop {
   position: fixed; inset: 0; z-index: 10020;
   display: flex; align-items: center; justify-content: center;
