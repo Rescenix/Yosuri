@@ -68,6 +68,8 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		openPreviewToolDef,
 		// 通用页面注入：供前端设计 Agent 在当前预览页执行交互或验证脚本。
 		injectPreviewToolDef,
+		// remember：用户说「记住」时写入长期记忆文件。
+		rememberToolDef,
 	}
 }
 

@@ -33,7 +33,6 @@ import (
 
 	"backend/internal/agent"
 	"backend/internal/ai/core"
-	"backend/internal/swiftnet"
 
 	"github.com/gin-gonic/gin"
 )
@@ -336,19 +335,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		r.persistWorkflowHistory(
 					sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
 				)
-		// 记录到 SwiftNet 记忆系统
-		swiftnet.Default().MemAppend(
-			fmt.Sprintf("完成工作流「%s」，使用 %s，输入 %d / 输出 %d tokens",
-				task, model, inputTokens, outputTokens),
-			"wf_history",
-			fmt.Sprintf("工作流/任务/%s/模型", task),
-		)
-		// 用户通用偏好也记一条
-		swiftnet.Default().MemAppend(
-			fmt.Sprintf("常用模型 [[%s]]，已消耗 %d tokens", model, inputTokens+outputTokens),
-			"preference",
-			fmt.Sprintf("模型偏好/%s", model),
-		)
+		// 用户通过 remember 工具主动写入 MEMORY.md，此处不自动写
 		historyPersisted = true
 	}
 	defer persistHistory()
@@ -605,6 +592,11 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			// mcp__ 前缀被 872 行误判为「未知工具」。提前 continue 掉，避免被塞进 toRun。
 			if tc.Function.Name == "capture_preview" || tc.Function.Name == "open_preview" ||
 				tc.Function.Name == "inject_preview_js" {
+				continue
+			}
+			// remember：用户说「记住」时写入长期记忆。
+			if tc.Function.Name == rememberToolName {
+				handled[i] = handleRemember(tc.Function.Arguments)
 				continue
 			}
 			toRun = append(toRun, calls[i])

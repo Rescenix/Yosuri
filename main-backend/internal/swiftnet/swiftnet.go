@@ -47,7 +47,6 @@ type Net struct {
 	pinned  []Node // pinned 不用 Keywords 字段
 	handoff string
 	mem     []Node
-	inbox   []Node
 }
 
 // ==================== 单例 ====================
@@ -186,10 +185,6 @@ func (n *Net) load() {
 			if trimmed != "" {
 				n.mem = append(n.mem, parseMemLine(trimmed))
 			}
-		case "inbox":
-			if trimmed != "" {
-				n.inbox = append(n.inbox, parseMemLine(trimmed))
-			}
 		}
 	}
 	n.handoff = strings.TrimSpace(strings.Join(handoffLines, "\n"))
@@ -197,7 +192,7 @@ func (n *Net) load() {
 
 func (n *Net) render() string {
 	var out []string
-	out = append(out, "# MEMORY.md — 雨燕神经网络：一个文件，四个区，一个写入者", "")
+	out = append(out, "# MEMORY.md — 雨燕神经网络：一个文件，三个区，一个写入者", "")
 	out = append(out, fmt.Sprintf("[pinned] ← 无条件注入，≤%d tok，只改不删", PinnedBudget))
 	for _, p := range n.pinned {
 		out = append(out, fmt.Sprintf("%s|%s|%s", p.ID, p.Cluster, p.Text))
@@ -206,11 +201,6 @@ func (n *Net) render() string {
 	out = append(out, fmt.Sprintf("[handoff] ← 无条件注入，会话末尾整段重写，硬上限 %d tok", HandoffBudget))
 	if n.handoff != "" {
 		out = append(out, n.handoff)
-	}
-	out = append(out, "")
-	out = append(out, "[inbox] ← 跨agent收件箱，无条件注入，不靠语义召回（解决'每次都要说'）")
-	for _, m := range n.inbox {
-		out = append(out, fmt.Sprintf("%s|%s|%s|%s", m.ID, m.Cluster, m.Keywords, m.Text))
 	}
 	out = append(out, "")
 	out = append(out, "[mem] ← 选择器召回，追加+原位touch；Expand 按需")
@@ -241,7 +231,7 @@ func newID(text string) string {
 	return fmt.Sprintf("0x%x", (uint32(time.Now().Unix())&0xffff)^(hashStr(text)&0xffff))
 }
 
-// ==================== 写：四区 API ====================
+// ==================== 写：三区 API ====================
 
 // Pin 身份记忆：无条件注入，只改不删。pid 形如 P01/P02。
 func (n *Net) Pin(pid, cluster, text string) {
@@ -359,16 +349,7 @@ func (n *Net) MemAppend(text, cluster, keywords string) AppendResult {
 	return AppendResult{OK: true, ID: node.ID}
 }
 
-// InboxWrite 跨 agent 收件箱：无条件注入，不靠语义召回。
-func (n *Net) InboxWrite(text, fromAgent string) string {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	node := Node{ID: newID(text), Cluster: "from:" + fromAgent, Keywords: text, Text: strings.TrimSpace(text)}
-	n.inbox = append(n.inbox, node)
-	n.save()
-	return node.ID
-}
-
+// ==================== 读：注入与召回 ====================
 // backlinkRe 匹配 [[链接关键词]]
 var backlinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
 
@@ -389,13 +370,6 @@ func (n *Net) UnconditionalInject() string {
 	}
 	if n.handoff != "" {
 		parts = append(parts, "# 工作态（上次会话交接）\n"+n.handoff)
-	}
-	if len(n.inbox) > 0 {
-		var lines []string
-		for _, m := range n.inbox {
-			lines = append(lines, fmt.Sprintf("• [%s] %s", m.Cluster, m.Text))
-		}
-		parts = append(parts, "# 跨agent收件箱\n"+strings.Join(lines, "\n"))
 	}
 	return strings.Join(parts, "\n\n")
 }
@@ -537,7 +511,6 @@ func (n *Net) Stats() map[string]int {
 	return map[string]int{
 		"pinned":   len(n.pinned),
 		"mem":      len(n.mem),
-		"inbox":    len(n.inbox),
 		"file_tok": tok(n.render()),
 	}
 }

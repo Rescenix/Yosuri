@@ -73,12 +73,11 @@ func TestPersistAndReload(t *testing.T) {
 	n1.Pin("P01", "UserBase", "身份一号")
 	n1.HandoffWrite("上次做到一半的事")
 	appended := n1.MemAppend("一条事实", "CodeWork", "事实/fact")
-	n1.InboxWrite("给下个agent的话", "hermes")
 
 	// 重新加载同一文件
 	n2 := New(path)
 	stats := n2.Stats()
-	if stats["pinned"] != 1 || stats["mem"] != 1 || stats["inbox"] != 1 {
+	if stats["pinned"] != 1 || stats["mem"] != 1 {
 		t.Fatalf("reload lost data: %+v", stats)
 	}
 	if node, ok := n2.Expand(appended.ID); !ok || node.Text != "一条事实" {
@@ -88,9 +87,9 @@ func TestPersistAndReload(t *testing.T) {
 		t.Fatalf("handoff not reloaded")
 	}
 
-	// 文件格式检查：四个区标记都在（与 Python 版兼容的关键）
+	// 文件格式检查：三个区标记都在（与 Python 版兼容的关键）
 	data, _ := os.ReadFile(path)
-	for _, zone := range []string{"[pinned]", "[handoff]", "[inbox]", "[mem]"} {
+	for _, zone := range []string{"[pinned]", "[handoff]", "[mem]"} {
 		if !strings.Contains(string(data), zone) {
 			t.Fatalf("zone %s missing in rendered file", zone)
 		}
