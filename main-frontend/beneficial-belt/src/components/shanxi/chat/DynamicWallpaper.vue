@@ -99,15 +99,15 @@ onUnmounted(() => {
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
-  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-body-row {
-  background: rgba(var(--app-surface-rgb), calc(var(--wallpaper-panel-alpha, 0.35) - 0.05)) !important;
-  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 [data-dynamic-wallpaper="on"] .chat-window.expanded .chat-body.studio .chat-content {
@@ -116,80 +116,12 @@ onUnmounted(() => {
   -webkit-backdrop-filter: none !important;
 }
 
-/* 主页全透明：不要毛玻璃，动态壁纸完全露出来 */
-[data-dynamic-wallpaper="on"] .chat-window.expanded:has(.home-container-for-layout) {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-[data-dynamic-wallpaper="on"] .chat-window.expanded:has(.home-container-for-layout) .chat-body-row {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-[data-dynamic-wallpaper="on"] .home-container-for-layout {
-  background: transparent !important;
-}
-[data-dynamic-wallpaper="on"] .session-home {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-} 
-[data-dynamic-wallpaper="on"] .session-home .home-stats-card {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
-  border-color: transparent !important;
-}
-[data-dynamic-wallpaper="on"] .session-home .home-stats-header .home-range-group,
-[data-dynamic-wallpaper="on"] .session-home .home-range-btn.active {
-  background: transparent !important;
-}
-[data-dynamic-wallpaper="on"] .session-home .home-heatmap-cell {
-  background: rgba(var(--app-surface-rgb), 0.06) !important;
-}
-[data-dynamic-wallpaper="on"] .session-home .home-model-bar-track {
-  background: rgba(var(--app-surface-rgb), 0.08) !important;
-}
-[data-dynamic-wallpaper="on"] .session-home .home-model-bar-fill {
-  background: rgba(var(--app-accent-rgb), 0.35) !important;
-}
-
-/* 输入区全透明：不需要毛玻璃，露出壁纸即可 */
-[data-dynamic-wallpaper="on"] .chat-input-area {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-[data-dynamic-wallpaper="on"] .input-wrapper {
-  background: transparent !important;
-  border-color: color-mix(in srgb, var(--app-border) 40%, transparent) !important;
-  box-shadow: none !important;
-}
-[data-dynamic-wallpaper="on"] .input-dir-bar {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  border-color: color-mix(in srgb, var(--app-border) 30%, transparent) !important;
-  box-shadow: none !important;
-}
-[data-dynamic-wallpaper="on"] .input-bottom-toolbar {
-  background: transparent !important;
-}
-
 [data-dynamic-wallpaper="on"] .chat-window.expanded .gem-sidebar,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel-header,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .dock-pane {
   background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
   backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
   -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
-}
-
-[data-dynamic-wallpaper="on"] .chat-window.expanded .chat-input-area {
-  background: rgba(var(--app-surface-rgb), calc(var(--wallpaper-panel-alpha, 0.35) - 0.1)) !important;
-  backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
-  -webkit-backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.6)) !important;
 }
 
 [data-dynamic-wallpaper="on"] .message-bubble.user {
