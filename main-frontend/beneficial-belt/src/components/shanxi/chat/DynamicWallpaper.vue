@@ -131,11 +131,57 @@ onUnmounted(() => {
   -webkit-backdrop-filter: none !important;
 }
 
+/* ========== 全局灰色图标 + 透明玻璃（排除消息气泡和热力图） ========== */
+
+/* 工具栏所有图标 -> 灰色 */
+[data-dynamic-wallpaper="on"] .toolbar-pill-btn,
+[data-dynamic-wallpaper="on"] .toolbar-icon-pill-btn,
+[data-dynamic-wallpaper="on"] .gem-icon-btn,
+[data-dynamic-wallpaper="on"] .sch-model,
+[data-dynamic-wallpaper="on"] .effort-widget {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--app-text-faint) !important;
+}
+[data-dynamic-wallpaper="on"] .toolbar-pill-btn .iconify,
+[data-dynamic-wallpaper="on"] .toolbar-icon-pill-btn .iconify,
+[data-dynamic-wallpaper="on"] .gem-icon-btn .iconify,
+[data-dynamic-wallpaper="on"] .mode-pill .iconify,
+[data-dynamic-wallpaper="on"] .sch-model .iconify,
+[data-dynamic-wallpaper="on"] .input-inner-btn .iconify {
+  color: var(--app-text-faint) !important;
+}
+
+/* 模式按钮（Yolo/Balanced）-> 透明 */
+[data-dynamic-wallpaper="on"] .mode-pill,
+[data-dynamic-wallpaper="on"] .toolbar-pill-btn.mode-pill {
+  background: transparent !important;
+  border: 1px solid color-mix(in srgb, var(--app-border) 40%, transparent) !important;
+  color: var(--app-text-soft) !important;
+}
+
+/* 模型选择pill -> 透明 */
+[data-dynamic-wallpaper="on"] .sch-model {
+  background: transparent !important;
+  border: 1px solid color-mix(in srgb, var(--app-border) 40%, transparent) !important;
+}
+
+/* 输入框底部工具栏 -> 全透明 */
+[data-dynamic-wallpaper="on"] .input-bottom-toolbar {
+  background: transparent !important;
+}
+
+/* 消息气泡保持原有毛玻璃（排除在透明化之外） */
 [data-dynamic-wallpaper="on"] .message-bubble.user {
   background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
   border-color: color-mix(in srgb, var(--app-accent) 40%, transparent) !important;
   backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.75)) !important;
   -webkit-backdrop-filter: blur(calc(var(--wallpaper-blur, 4px) * 0.75)) !important;
+}
+
+/* 热力图保持原样（排除在透明化之外） */
+[data-dynamic-wallpaper="on"] .home-heatmap-cell {
+  /* 保持原有颜色，不覆盖 */
 }
 
 </style>
