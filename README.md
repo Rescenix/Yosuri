@@ -20,6 +20,40 @@ Rescene 不需要这些。从第一次对话开始，它就在自己记住你的
 
 ---
 
+## 开发者日志：关于这个项目的进化史
+
+> **"这个项目目前只有一个 Star，也是我自己点的。但这并不妨碍它承载了我全部的 AI 开发人生。"**
+
+我不打算在这里写堆砌名词的刻板技术报告，我想给你讲个关于孤独摸索、后知后觉，却又弥足珍贵的故事：
+
+*   **第一层：从"传话筒"到【暗号拦截】**
+   最开始，它只是一个平平无奇的 Chatbot。在没有任何现成框架参考的时期，我自己琢磨出了一个"土办法"：让 Agent 在输出时强行带上特殊的暗号——形如 `【demand:xx】`。后端 Go 程序通过字符串匹配拦截这个后缀，从而去触发识图、写博客等一系列外部工具调用。虽然原始，但它活了过来。
+*   **第二层：原生 Go 的解构与"见字如面"**
+   为了让它拥有真正的思维逻辑，我开始抛弃暗号，**纯手工用原生 Go 语言去解构和实现真正的 Function Calling（工具调用）**。我引导 Agent 开始隐式输出标准的 JSON 格式，由后端进行精准解析。在跑通的那天晚上，它通过解析数据，悄悄在我的桌面生成了一封写给我的信。看着屏幕上跳出的字，那种无中生有的创造感让我瞬间泪流满面。
+*   **蓦然回首：关于 MCP 与我的 AI 人生**
+   后来随着视野的开阔，我发现市面上已经有了成熟的 **MCP (Model Context Protocol)** 协议。回看自己手写的字符串匹配和原生 Go 解析，有时觉得自己像个在蒸汽机时代闭门造车的木匠。但每当想到在没有这些标准定义之前，我自己一个人在黑夜里摸索出前两层架构的那些瞬间，我都觉得无比自豪。感谢这段经历，感谢我的 AI 开发人生。
+
+---
+
+## 4 + 4 + 2 原则
+
+在 Rescene 的设计中，我们坚信任何一个 AI 编程项目都严格遵守 **4+4+2 原则**：
+
+```
+
+┌───────────────────────────────────┬───────────────────────────────────┬───────────┐
+│          40% 明确需求与计划        │           40% 真实执行与验证       │  20% 编码 │
+│       (Demand & TODO Planner)     │       (Browser & Test Harness)    │  (Coding) │
+└───────────────────────────────────┴───────────────────────────────────┴───────────┘
+
+```
+
+*   **40% 明确需求与计划**：AI 生成代码的成败，在写下第一行代码前就决定了，错误的方向只会引导死胡同。Rescene 将近一半的工程重心放在构建结构化 TODO、任务中断恢复与上下文精准对齐上。
+*   **40% 真实验证与交付**：代码是否真的写入项目？能否编译通过？页面跑起来到底长什么样？Rescene Harness 从始至终极度注重"闭环验收"，通过真实 Chromium 自动化操作与截图回传，拒绝对齐缺失的"纸上谈兵"。
+*   **20% 纯编码 (权重最低)**：单纯的静态代码片段生成在整个研发周期中仅占两成。AI 必须长出手脚，自己去跑编译、自己去点页面。
+
+---
+
 ## 发育轨迹
 
 Rescene 不是一开始就全知的。它随时间成长：
@@ -79,39 +113,39 @@ Rescene 不是一开始就全知的。它随时间成长：
 
 ```mermaid
 flowchart TB
-    User([User]) --> UI[Vue 3 Workbench<br/>Chat / Monaco / Terminal / Browser]
-    UI --> Gateway[Go / Gin Gateway]
-    Gateway --> Context[Memory & Context Provider]
-    Context --> Planner[TODO Planner (40% Plan)]
+    User([User]) --> UI["Vue 3 Workbench<br/>Chat / Monaco / Terminal / Browser"]
+    UI --> Gateway["Go / Gin Gateway"]
+    Gateway --> Context["Memory & Context Provider"]
+    Context --> Planner["TODO Planner (40% Plan)"]
     Planner --> AgentLoop
 
-    subgraph AgentLoop [Agent Loop (20% Code)]
-        LLM[LLM Reasoning] --> ToolCall[Tool Call]
-        ToolCall --> ToolResult[Result / Diff / Artifact]
+    subgraph AgentLoop ["Agent Loop (20% Code)"]
+        LLM["LLM Reasoning"] --> ToolCall["Tool Call"]
+        ToolCall --> ToolResult["Result / Diff / Artifact"]
         ToolResult --> LLM
     end
 
-    AgentLoop --> Verify[Build & Browser Verification (40% Verify)]
-    Verify --> Trace[Trace / Token / Screenshot]
+    AgentLoop --> Verify["Build & Browser Verification (40% Verify)"]
+    Verify --> Trace["Trace / Token / Screenshot"]
     Trace --> UI
 
-    LLM --> Router[Multi-provider Model Router]
-    Router --> Free[Free Models]
-    Router --> Local[Ollama / llama.cpp]
-    Router --> Private[Custom Providers]
+    LLM --> Router["Multi-provider Model Router"]
+    Router --> Free["Free Models"]
+    Router --> Local["Ollama / llama.cpp"]
+    Router --> Private["Custom Providers"]
 
-    ToolCall --> Files[File & Shell]
-    ToolCall --> Browser[Chromium / CDP]
-    ToolCall --> Extensions[MCP / Skills]
+    ToolCall --> Files["File & Shell"]
+    ToolCall --> Browser["Chromium / CDP"]
+    ToolCall --> Extensions["MCP / Skills"]
 
-    Files --> AgentFS[AgentFS Snapshot / Diff / Rollback]
-    Files --> Gate{Dangerous Operation Approval}
+    Files --> AgentFS["AgentFS Snapshot / Diff / Rollback"]
+    Files --> Gate{"Dangerous Operation Approval"}
     Gate --> User
 
-    subgraph Growth [Memory & Growth Layer]
-        Profile[User Profile]
-        Lexicon[Project Lexicon]
-        Stats[Interaction Stats]
+    subgraph Growth ["Memory & Growth Layer"]
+        Profile["User Profile"]
+        Lexicon["Project Lexicon"]
+        Stats["Interaction Stats"]
     end
     AgentLoop --> Growth
     Growth --> Context
