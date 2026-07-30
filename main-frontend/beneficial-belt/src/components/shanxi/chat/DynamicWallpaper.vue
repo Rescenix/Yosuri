@@ -116,7 +116,7 @@ onUnmounted(() => {
   -webkit-backdrop-filter: none !important;
 }
 
-/* 主页统计卡片：靠父级 blur 提供毛玻璃，自身只半透明露底 */
+/* 主页全透明：不要毛玻璃，动态壁纸完全露出来 */
 [data-dynamic-wallpaper="on"] .home-container-for-layout {
   background: transparent !important;
 }
@@ -126,9 +126,10 @@ onUnmounted(() => {
   -webkit-backdrop-filter: none !important;
 } 
 [data-dynamic-wallpaper="on"] .session-home .home-stats-card {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
+  background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
 }
 
 /* 输入框白色背景卡片 → 变透明毛玻璃 */
