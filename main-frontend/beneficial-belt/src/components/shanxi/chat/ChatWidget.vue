@@ -77,11 +77,13 @@
 
           <!-- 展开态：复用会话面板（新对话/搜索/置顶/最近/底部账号+设置） -->
           <SessionMenuContent
-            v-if="sidebarOpen"
-            fill
-            :sessions="sessionList"
-            :active-session="activeSession"
-            :running-session="runningSession"
+                      v-if="sidebarOpen"
+                      fill
+                      :sessions="sessionList"
+                      :active-session="activeSession"
+                      :running-session="runningSession"
+                      :completed-sessions="completedSessions"
+                      :question-session="questionSession"
             @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
@@ -853,8 +855,6 @@
             </div>
           </div>
 
-                    <DeskPet />
-
                     <!-- ★ AIStudio 右：多面板停靠 -->
           <aside
             class="tool-panel tool-panel-tabbed"
@@ -1025,7 +1025,6 @@ import { renderMarkdown } from './markdownRenderer.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
 import UserMessageRail from './UserMessageRail.vue'
-import DeskPet from './DeskPet.vue'
 import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
@@ -1071,6 +1070,16 @@ const activeSessionObj = computed(
 // 当前正在跑 agent 的会话 id：工作流活跃时就是当前选中的会话，否则为空。
 // 会话列表据此在对应会话左侧点亮蓝色指示灯。
 const runningSession = computed(() => (flowState.active ? activeSession.value : ''))
+
+// 已完成的工作流会话：工作流从活跃 → 停止时把当时活跃的会话记入集合
+const completedSessions = ref(new Set())
+// 有未决问题的会话：approval/resume/question 任一 pending 即认为该会话在提问
+const questionSession = computed(() => {
+  if (approvalState.pending.length > 0 || resumeState.pending || questionState.pending) {
+    return activeSession.value
+  }
+  return ''
+})
 
 function shortTitle(title) {
   title = (title || '新对话').trim()
@@ -2425,7 +2434,11 @@ watch(lastUserMessageId, () => { manualActiveId.value = null })
 // 必须放在上面的解构之后：watch 的 getter 是立即求值的，写在解构之前会命中 TDZ
 // （同一文件里 runningSession 那个 computed 能放在前面，只是因为 computed 是惰性的）。
 watch(() => flowState.active, (now, was) => {
-  if (was && !now) loadSessionList()
+  if (was && !now) {
+    completedSessions.value.add(activeSession.value)
+    completedSessions.value = new Set(completedSessions.value)
+    loadSessionList()
+  }
 })
 
 // ==================== 思考强度（Effort）：Faster(low) ↔ Smarter(high) ====================

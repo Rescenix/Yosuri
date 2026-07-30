@@ -50,7 +50,7 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+              <span class="smc-session-dot" :class="dotClass(s)"></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -96,7 +96,7 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+              <span class="smc-session-dot" :class="dotClass(s)"></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -133,7 +133,7 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+              <span class="smc-session-dot" :class="dotClass(s)"></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -168,7 +168,7 @@
             @mouseleave="onRowLeave(s.id)"
             @click="onRowClick(s)"
           >
-            <span class="smc-session-dot" :class="{ on: s.id === runningSession }"></span>
+            <span class="smc-session-dot" :class="dotClass(s)"></span>
             <input
               v-if="editingId === s.id"
               ref="renameInputRef"
@@ -276,6 +276,8 @@ const props = defineProps({
   sessions: { type: Array, default: () => [] },
   activeSession: { type: String, default: '' },
   runningSession: { type: String, default: '' },
+  completedSessions: { type: Set, default: () => new Set() },
+  questionSession: { type: String, default: '' },
   fill: { type: Boolean, default: false }
 })
 const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks'])
@@ -450,6 +452,13 @@ const dropdownStyle = ref({})
 const editingId = ref(null)
 const editingValue = ref('')
 const renameInputRef = ref(null)
+
+function dotClass(s) {
+  if (s.id === props.runningSession) return 'running'
+  if (props.completedSessions.has(s.id)) return 'completed'
+  if (s.id === props.questionSession) return 'question'
+  return ''
+}
 
 function toggleMenu(s, ev) {
   if (openMenuId.value === s.id) { openMenuId.value = null; return }
@@ -687,7 +696,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 50%);
 }
 
-/* 运行指示灯 */
+/* 运行指示灯：灰色空闲 → running(accent脉冲) / completed(绿) / question(橙) */
 .smc-session-dot {
   flex-shrink: 0;
   width: 7px;
@@ -696,9 +705,17 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: #c4c4c4;
   transition: background 0.2s ease;
 }
-.smc-session-dot.on {
+.smc-session-dot.running {
   background: var(--app-accent);
   animation: smc-dot-pulse 1.4s ease-in-out infinite;
+}
+.smc-session-dot.completed {
+  background: #22c55e;
+  box-shadow: 0 0 0 0 #22c55e;
+}
+.smc-session-dot.question {
+  background: #f59e0b;
+  box-shadow: 0 0 0 0 #f59e0b;
 }
 @keyframes smc-dot-pulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent), transparent 45%); }
