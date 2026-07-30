@@ -188,6 +188,12 @@ onUnmounted(() => {
   box-shadow: none !important;
   border-color: color-mix(in srgb, var(--app-border) 50%, transparent) !important;
 }
+[data-dynamic-wallpaper="on"] textarea.chat-input,
+[data-dynamic-wallpaper="on"] textarea.chat-input:focus {
+  background: transparent !important;
+  border-color: color-mix(in srgb, var(--app-border) 40%, transparent) !important;
+  box-shadow: none !important;
+}
 
 /* 输入框底部工具栏 -> 全透明 */
 [data-dynamic-wallpaper="on"] .input-bottom-toolbar {
