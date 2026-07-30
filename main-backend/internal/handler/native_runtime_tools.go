@@ -1,4 +1,4 @@
-package handler
+﻿package handler
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	nethtml "golang.org/x/net/html"
@@ -42,6 +43,7 @@ func callNativeCommand(parent context.Context, argsJSON string) (nativeToolResul
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = exec.CommandContext(ctx, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", args.Command)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	} else {
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-lc", args.Command)
 	}

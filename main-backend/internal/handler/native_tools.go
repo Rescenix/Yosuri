@@ -112,6 +112,8 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"count": {Type: "integer", Description: "返回结果数量，默认 5，最大 10"},
 		}, []string{"query"}))
 	}
+	// Computer Use：桌面操作工具
+	defs = append(defs, computerUseToolDefs()...)
 	return defs
 }
 
@@ -168,6 +170,10 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
 		"workdir_read", "workdir_write", "workdir_append":
 		return callNativeMemoryTool(name, argsJSON)
+	case "computer_screenshot", "computer_mouse_move", "computer_mouse_click",
+		"computer_mouse_drag", "computer_type", "computer_key",
+		"computer_screen_size", "computer_scroll":
+		return callComputerUseTool(ctx, name, argsJSON)
 	default:
 		return nativeToolResult{}, fmt.Errorf("未知的内置工具: %s", name)
 	}

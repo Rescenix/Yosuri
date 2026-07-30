@@ -1,9 +1,9 @@
 package handler
 
-// 雨燕子代理 —— 仿 Hermes 子代理系统。
+// 调研子代理 —— 仿 Hermes 子代理系统。
 //
 // 主 Agent 通过 dispatch_agent 工具派发只读调研子任务（读代码/搜索/分析），
-// 一轮内的多个 dispatch_agent 调用由 executeCodeCalls 并行执行（雨燕群）。
+// 一轮内的多个 dispatch_agent 调用由 executeCodeCalls 并行执行。
 // 子代理走非流式 DS 调用（结果只回给主 Agent，不需要打字机效果），
 // 工具集锁死为只读白名单，天然无法越权改文件。
 
@@ -20,7 +20,7 @@ const subAgentMaxRounds = 6
 const subAgentResultMaxChars = 8000
 
 const subAgentUsagePrompt = `
-━━━ 子代理（雨燕） ━━━
+━━━ 子代理（调研代理） ━━━
 遇到需要大量阅读/检索的复杂任务，可用 dispatch_agent 把独立的只读调研子任务
 （读代码、搜索、分析结构、抓取网页、看图）派发给子代理，一轮内多个 dispatch_agent 会并行执行。
 子代理只有只读工具（含 grep 全文检索、web_fetch 抓网页、view_image 看图），无法修改文件——
@@ -31,7 +31,7 @@ var dispatchAgentToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name:        "dispatch_agent",
-		Description: "派发一个只读调研子代理（雨燕）去独立完成子任务：读代码、搜索代码库、分析结构等。子代理无法修改文件。一轮内多个 dispatch_agent 调用会并行执行，适合把大调研拆成几块同时跑。",
+		Description: "派发一个只读调研子代理去独立完成子任务：读代码、搜索代码库、分析结构等。子代理无法修改文件。一轮内多个 dispatch_agent 调用会并行执行，适合把大调研拆成几块同时跑。",
 		Parameters: core.ToolParameters{
 			Type: "object",
 			Properties: map[string]core.ToolProperty{
@@ -133,7 +133,7 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 	}
 
 	msgs := []map[string]any{
-		{"role": "system", "content": fmt.Sprintf(`你是雨燕子代理，负责独立完成一个只读调研子任务。
+		{"role": "system", "content": fmt.Sprintf(`你是一个调研子代理，负责独立完成一个只读调研子任务。
 用最少的工具调用拿到答案，然后输出简明结论（要点式，不要铺陈）——你的输出会直接回给主 Agent 当调研结果用，token 是成本。
 你只有只读工具：读文件用 read_file，列目录用 list_directory，全文检索用 grep。
 不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
