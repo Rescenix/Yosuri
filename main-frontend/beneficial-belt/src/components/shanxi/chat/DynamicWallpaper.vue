@@ -146,6 +146,7 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .umr-node.active,
 [data-dynamic-wallpaper="on"] .context-bar-widget,
 [data-dynamic-wallpaper="on"] .input-row,
+[data-dynamic-wallpaper="on"] .input-dir-bar,
 [data-dynamic-wallpaper="on"] .input-wrapper,
 [data-dynamic-wallpaper="on"] .input-wrapper:focus-within,
 [data-dynamic-wallpaper="on"] .floating-tools {
@@ -220,6 +221,11 @@ onUnmounted(() => {
   border-color: color-mix(in srgb, var(--app-border) 30%, transparent) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+/* 聊天区上下 blur 条 -> 去掉，壁纸完全露出 */
+[data-dynamic-wallpaper="on"] .msg-edge-blur {
+  display: none !important;
 }
 
 /* 消息气泡 active 态：去掉阴影 */
