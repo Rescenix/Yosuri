@@ -2,9 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"strings"
 
 	"backend/internal/ai/core"
-	"backend/internal/swiftnet"
+	"backend/internal/memorydir"
 )
 
 const rememberToolName = "remember"
@@ -17,72 +18,66 @@ var rememberToolDef = core.ToolDefinition{
 			"把用户想让你记住的内容写进你的长期记忆文件，下次对话你还能读到。\n" +
 			"【必须调用的场景】用户明确说「记住我喜欢XXX」「记一下这个约定」「别忘了XXX」「记下来」。\n" +
 			"【不要调用的场景】普通对话、用户没说「记住」、工作流步骤摘要——那些不用记。\n" +
-			"keywords 参数填写该记忆相关的 [[反向链接关键词]]，多个用 / 分隔，方便联想召回。",
+			"file 参数指定写入哪个文件（不含 .md），summary 参数指定 index.md 中这行的摘要描述。",
 		Parameters: core.ToolParameters{
 			Type: "object",
 			Properties: map[string]core.ToolProperty{
 				"text": {
 					Type:        "string",
-					Description: "要记住的内容。用自然语言，一句话说清楚（如「用户偏好简短回复，不喜欢啰嗦」）。",
+					Description: "要记住的内容。用自然语言写清楚。",
 				},
-				"cluster": {
+				"file": {
 					Type:        "string",
-					Description: "分类，可选值：preference（用户偏好）/ project（项目知识）/ interaction（重要互动）。默认为 preference。",
+					Description: "文件名（不含 .md），如「preferences」「project-re0」「session-jul30」。相同 file 的内容会合并到同一个文件。",
 				},
-				"keywords": {
+				"summary": {
 					Type:        "string",
-					Description: "相关的 [[反向链接关键词]]，用 / 分隔。例如「简短/精炼/风格偏好」。写进去后这些词之间会自动建立关联，下次提到任意一个都能联想召回本条。",
+					Description: "index.md 中该条目的摘要，一句话说清本条关联什么。例如「用户偏好：简短回复，常用 deepseek」。不提供则自动从 text 截取前 40 字。",
 				},
 			},
-			Required: []string{"text"},
+			Required: []string{"text", "file"},
 		},
 	},
 }
 
-// handleRemember 处理 remember 工具调用，写入 SwiftNet 记忆系统。
+// handleRemember 处理 remember 工具调用，写入 memory/ 目录。
 func handleRemember(argsJSON string) string {
 	var args struct {
-		Text     string `json:"text"`
-		Cluster  string `json:"cluster"`
-		Keywords string `json:"keywords"`
+		Text    string `json:"text"`
+		File    string `json:"file"`
+		Summary string `json:"summary"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return "参数解析失败: " + err.Error()
 	}
-	args.Text = trimSpaces(args.Text)
+	args.Text = strings.TrimSpace(args.Text)
 	if args.Text == "" {
 		return "text 不能为空，请带上要记住的内容。"
 	}
-	if args.Cluster == "" {
-		args.Cluster = "preference"
+	if args.File == "" {
+		return "file 不能为空，请指定文件名（不含 .md）。"
+	}
+	// 防路径穿越
+	args.File = strings.TrimSpace(args.File)
+	args.File = strings.ReplaceAll(args.File, "/", "")
+	args.File = strings.ReplaceAll(args.File, "\\", "")
+	args.File = strings.ReplaceAll(args.File, "..", "")
+	if args.File == "" {
+		return "文件名无效。"
 	}
 
-	// 如果 keywords 为空但 text 里有 [[...]]，自动提取
-	kw := args.Keywords
-	if kw == "" {
-		kw = args.Text
-	}
-
-	result := swiftnet.Default().MemAppend(args.Text, args.Cluster, kw)
-	if !result.OK {
-		if result.MergedID != "" {
-			return "已记住。该内容与已有记忆相似，已合并更新。"
+	if args.Summary == "" {
+		// 自动截取前 40 个字
+		runes := []rune(args.Text)
+		if len(runes) > 40 {
+			args.Summary = string(runes[:40]) + "…"
+		} else {
+			args.Summary = args.Text
 		}
-		return "写入失败: " + result.Err
 	}
-	return "已记住 ✅ 下次对话时我会自动想起这条。"
-}
 
-func trimSpaces(s string) string {
-	start, end := 0, len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
-		start++
+	if err := memorydir.Remember(args.File, args.Summary, args.Text); err != nil {
+		return "写入失败: " + err.Error()
 	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
-		end--
-	}
-	if start >= end {
-		return ""
-	}
-	return s[start:end]
+	return "已记住 ✅ 已写入 memory/" + args.File + ".md，下次对话时我会自动想起。"
 }

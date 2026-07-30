@@ -26,7 +26,7 @@ import (
 
 	"backend/internal/agent"
 	"backend/internal/ai/core"
-	"backend/internal/swiftnet"
+	"backend/internal/memorydir"
 )
 
 // contextSection 系统提示词里的一段。
@@ -67,26 +67,22 @@ type roundState struct {
 // system/subagent/工具索引在进程内基本不动，skill 每完成一个任务就可能变，
 // memory 每写一次记忆就变，把后两者放在最后，前面那一大段的缓存才活得下来。
 func newWorkflowContextProvider(tasks ...string) *contextProvider {
-	memoryInject := swiftnet.Default().UnconditionalInject()
 	memorySection := ""
-	if memoryInject != "" {
-		memorySection = "\n\n# 长期记忆（无条件注入，身份/工作态/收件箱）\n" + memoryInject
+	inject := memorydir.ReadIndex()
+	if inject != "" {
+		memorySection = "\n\n# 长期记忆索引\n" + inject
 	}
 	workdirSection := projectWorkdirPrompt()
 	task := ""
 	if len(tasks) > 0 {
 		task = tasks[0]
 	}
-	// 反向链接联想召回：根据当前任务从事实库中召回相关记忆 + 1跳展开 [[链接]]
+	// 反向链接联想召回：根据当前任务匹配 index.md 中的行，
+	// 命中的 [[文件]] 自动读取对应文件内容
 	taskMemory := ""
 	if task != "" {
-		nodes := swiftnet.Default().SelectWithLinks(task, swiftnet.ProbeBudget, 0.15)
-		if len(nodes) > 0 {
-			var parts []string
-			for _, node := range nodes {
-				parts = append(parts, "• "+node.Text)
-			}
-			taskMemory = "\n\n# 关联记忆（从事实库联想召回）\n" + strings.Join(parts, "\n")
+		if linked := memorydir.ReadWithLinks(task); linked != "" && linked != inject {
+			taskMemory = "\n\n# 关联记忆（按任务联想读取）\n" + linked
 		}
 	}
 
