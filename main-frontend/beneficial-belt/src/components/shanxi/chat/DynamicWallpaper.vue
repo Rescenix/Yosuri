@@ -147,6 +147,7 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .context-bar-widget,
 [data-dynamic-wallpaper="on"] .input-row,
 [data-dynamic-wallpaper="on"] .input-dir-bar,
+[data-dynamic-wallpaper="on"] .input-dir-add-btn,
 [data-dynamic-wallpaper="on"] .input-wrapper,
 [data-dynamic-wallpaper="on"] .input-wrapper:focus-within,
 [data-dynamic-wallpaper="on"] .floating-tools {
