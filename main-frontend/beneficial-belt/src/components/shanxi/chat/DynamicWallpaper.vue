@@ -116,22 +116,15 @@ onUnmounted(() => {
   -webkit-backdrop-filter: none !important;
 }
 
-/* 侧边栏 + 工具面板 -> 玻璃透明，去掉实体边框和阴影 */
+/* 侧边栏 + 工具面板 -> 完全透明，不毛玻璃 */
 [data-dynamic-wallpaper="on"] .chat-window.expanded .gem-sidebar,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .tool-panel-header,
 [data-dynamic-wallpaper="on"] .chat-window.expanded .dock-pane {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.35)) !important;
-  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
-  border-color: color-mix(in srgb, var(--app-border) 30%, transparent) !important;
-  box-shadow: none !important;
-}
-
-/* 主页时侧边栏去毛玻璃 */
-[data-dynamic-wallpaper="on"] .chat-window.expanded:has(.home-container-for-layout) .gem-sidebar {
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 /* ========== 全局灰色图标 + 透明玻璃（排除消息气泡和热力图） ========== */
@@ -141,7 +134,13 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .toolbar-icon-pill-btn,
 [data-dynamic-wallpaper="on"] .gem-icon-btn,
 [data-dynamic-wallpaper="on"] .sch-model,
-[data-dynamic-wallpaper="on"] .effort-widget {
+[data-dynamic-wallpaper="on"] .effort-widget,
+[data-dynamic-wallpaper="on"] .gem-rail-bar,
+[data-dynamic-wallpaper="on"] .gem-rail-bottom,
+[data-dynamic-wallpaper="on"] .gem-rail-avatar,
+[data-dynamic-wallpaper="on"] .UserMessageRail,
+[data-dynamic-wallpaper="on"] .UserMessageRail button,
+[data-dynamic-wallpaper="on"] .context-bar-widget {
   background: transparent !important;
   border-color: transparent !important;
   color: var(--app-text-faint) !important;
@@ -151,7 +150,10 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .gem-icon-btn .iconify,
 [data-dynamic-wallpaper="on"] .mode-pill .iconify,
 [data-dynamic-wallpaper="on"] .sch-model .iconify,
-[data-dynamic-wallpaper="on"] .input-inner-btn .iconify {
+[data-dynamic-wallpaper="on"] .input-inner-btn .iconify,
+[data-dynamic-wallpaper="on"] .gem-rail-bar .iconify,
+[data-dynamic-wallpaper="on"] .gem-rail-bottom .iconify,
+[data-dynamic-wallpaper="on"] .UserMessageRail .iconify {
   color: var(--app-text-faint) !important;
 }
 
@@ -179,6 +181,8 @@ onUnmounted(() => {
   background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.25)) !important;
   backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
   -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
+  border-radius: 14px !important;
+  margin: 0 8px 2px !important;
 }
 
 /* 消息气泡保持原有毛玻璃（排除在透明化之外） */
