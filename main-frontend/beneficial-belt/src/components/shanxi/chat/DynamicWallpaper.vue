@@ -135,12 +135,17 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .gem-icon-btn,
 [data-dynamic-wallpaper="on"] .sch-model,
 [data-dynamic-wallpaper="on"] .effort-widget,
+[data-dynamic-wallpaper="on"] .effort-value,
 [data-dynamic-wallpaper="on"] .gem-rail-bar,
 [data-dynamic-wallpaper="on"] .gem-rail-bottom,
 [data-dynamic-wallpaper="on"] .gem-rail-avatar,
 [data-dynamic-wallpaper="on"] .UserMessageRail,
 [data-dynamic-wallpaper="on"] .UserMessageRail button,
-[data-dynamic-wallpaper="on"] .context-bar-widget {
+[data-dynamic-wallpaper="on"] .umr-node,
+[data-dynamic-wallpaper="on"] .umr-node.active,
+[data-dynamic-wallpaper="on"] .context-bar-widget,
+[data-dynamic-wallpaper="on"] .input-row,
+[data-dynamic-wallpaper="on"] .floating-tools {
   background: transparent !important;
   border-color: transparent !important;
   color: var(--app-text-faint) !important;
@@ -153,7 +158,9 @@ onUnmounted(() => {
 [data-dynamic-wallpaper="on"] .input-inner-btn .iconify,
 [data-dynamic-wallpaper="on"] .gem-rail-bar .iconify,
 [data-dynamic-wallpaper="on"] .gem-rail-bottom .iconify,
-[data-dynamic-wallpaper="on"] .UserMessageRail .iconify {
+[data-dynamic-wallpaper="on"] .UserMessageRail .iconify,
+[data-dynamic-wallpaper="on"] .umr-node .iconify,
+[data-dynamic-wallpaper="on"] .floating-tools .iconify {
   color: var(--app-text-faint) !important;
 }
 
@@ -174,15 +181,6 @@ onUnmounted(() => {
 /* 输入框底部工具栏 -> 全透明 */
 [data-dynamic-wallpaper="on"] .input-bottom-toolbar {
   background: transparent !important;
-}
-
-/* 聊天消息区 -> 毛玻璃，文字清晰可见 */
-[data-dynamic-wallpaper="on"] .chat-window.expanded .chat-messages {
-  background: rgba(var(--app-surface-rgb), var(--wallpaper-panel-alpha, 0.25)) !important;
-  backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
-  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 4px)) !important;
-  border-radius: 14px !important;
-  margin: 0 8px 2px !important;
 }
 
 /* 消息气泡保持原有毛玻璃（排除在透明化之外） */
