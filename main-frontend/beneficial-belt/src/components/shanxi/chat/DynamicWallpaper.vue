@@ -117,6 +117,16 @@ onUnmounted(() => {
 }
 
 /* 主页全透明：不要毛玻璃，动态壁纸完全露出来 */
+[data-dynamic-wallpaper="on"] .chat-window.expanded:has(.home-container-for-layout) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+[data-dynamic-wallpaper="on"] .chat-window.expanded:has(.home-container-for-layout) .chat-body-row {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 [data-dynamic-wallpaper="on"] .home-container-for-layout {
   background: transparent !important;
 }
