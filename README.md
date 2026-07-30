@@ -1,4 +1,4 @@
-[English](./README.en.md) · [中文](./README.md) · [正体中文](./README.zhtw.md) · [日本語](./README.ja.md) · [Tiếng Việt](./README.vi.md) · [தமிழ்](./README.ta.md)
+[中文](./README.md)
 
 # Rescene 🧬
 
