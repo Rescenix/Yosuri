@@ -61,8 +61,6 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// ask_user：让 agent 在工作流中途向用户提问并暂停等待回答（human-in-the-loop）。
 		// 常驻是因为它是交互控制面工具，需要用时再 load_tools 就打断节奏了。
 		askUserToolDef,
-		// capture_preview：截「用户正在看的内嵌预览页」发聊天，harness 内置、常驻。
-		capturePreviewToolDef,
 		// open_preview：agent 主动把指定页面弹进内嵌预览面板（harness CDP 通道），
 		// 区别于系统收尾自动弹——主动权在 agent。常驻，无需 load_tools。
 		openPreviewToolDef,

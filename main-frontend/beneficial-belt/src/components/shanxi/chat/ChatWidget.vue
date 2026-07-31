@@ -129,9 +129,6 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
-                          <button class="gem-icon-btn" :class="{ active: showGitDeliveryAgent }" @click="openGitDeliveryAgent" title="Agent 工作台">
-                <Icon icon="mdi:robot-outline" width="18" />
-              </button>
               <button class="gem-icon-btn" @click="showSettings = true" title="设置">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
@@ -643,10 +640,6 @@
                       <span class="sch-caret">▾</span>
                     </button>
                     <div v-if="showPrMenu" class="pr-menu-dropdown" @click.stop>
-                      <div class="pr-menu-item" @click="openGitDeliveryAgent">
-                        <Icon icon="mdi:robot-outline" width="15" />
-                        <span>交付 Agent Git</span>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -983,7 +976,6 @@
         @add-provider="showModelManager = false; showSettings = true"
       />
       <div v-if="gitActionMessage" class="git-action-toast">{{ gitActionMessage }}</div>
-      <GitDeliveryAgent v-if="showGitDeliveryAgent" @close="showGitDeliveryAgent = false" />
 
       <!-- Git Commit 的毛玻璃浮层：居中悬浮，跟侧边栏抽屉一样挂在 chat-window 根下
            避免被内部 transform 影响定位 -->
@@ -1021,7 +1013,6 @@
 
 <script setup>
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
-import GitDeliveryAgent from './GitDeliveryAgent.vue'
 import { Icon } from '@iconify/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
@@ -1891,11 +1882,6 @@ async function fetchGitStatus() {
 }
 
 const showPrMenu = ref(false)
-const showGitDeliveryAgent = ref(false)
-function openGitDeliveryAgent() {
-  showPrMenu.value = false
-  showGitDeliveryAgent.value = true
-}
 const gitActionMessage = ref('')
 let gitToastTimer = null
 function showGitToast(msg) {

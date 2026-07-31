@@ -114,6 +114,10 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	}
 	// Computer Use：桌面操作工具
 	defs = append(defs, computerUseToolDefs()...)
+	// capture_preview：截「用户正在看的内嵌预览页」发聊天。按需加载而非常驻——
+	// 默认不给模型截图能力，避免每轮都截一堆垃圾图；用户明确要看效果时，
+	// 模型用 load_tools 激活后照常调用。
+	defs = append(defs, capturePreviewToolDef)
 	return defs
 }
 

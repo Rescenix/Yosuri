@@ -270,30 +270,42 @@ func HandlePreviewCDP(c *gin.Context) {
 		switch m.Kind {
 		case "mouse":
 			px, py := toPageCoords(m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH)
-			// mouseMoved 高频触发，逐事件打印会淹没日志并拖慢输入链；仅保留
-			// pressed/released 等离散操作的坐标诊断。
-			if shouldLogPreviewMouseInput(m.Action) {
+			// 不再逐事件打印坐标日志：每次点击都写 stdout 会拖慢交互链（高频 I/O）。
+			// 需要诊断坐标时用 CHROME_DEBUG_PREVIEW=1 环境变量临时打开。
+			if os.Getenv("CHROME_DEBUG_PREVIEW") != "" && shouldLogPreviewMouseInput(m.Action) {
 				log.Printf("🖱️ [预览输入] mouse %s raw=(%.0f,%.0f) layout=(%.0fx%.0f) view=(%.0fx%.0f) dbg[rectL=%.0f rectT=%.0f cliX=%.0f cliY=%.0f] -> page(%.0f,%.0f) btn=%s",
 					m.Action, m.X, m.Y, m.LayoutW, m.LayoutH, m.ViewW, m.ViewH,
 					m.DbgRectLeft, m.DbgRectTop, m.DbgClientX, m.DbgClientY, px, py, m.Button)
 			}
-			_ = writeCDP(map[string]any{
+			// CDP 规范：一次完整点击 = mousePressed(clickCount=1) + mouseReleased(clickCount=1)；
+			// mouseMoved 的 button 必须是 "none" 且 clickCount=0（hover/拖拽依赖它）。
+			// 旧代码 released 传 clickCount=0、moved 传了按钮值，Edge 会判定点击不完整或忽略 hover。
+			params := map[string]any{
+				"type": m.Action,
+				"x":    px,
+				"y":    py,
+			}
+			if m.Action == "mouseMoved" {
+				params["button"] = "none"
+				params["clickCount"] = 0
+			} else {
+				params["button"] = m.Button
+				params["clickCount"] = 1
+			}
+			if err := writeCDP(map[string]any{
 				"id":     nextPreviewReqID(),
 				"method": "Input.dispatchMouseEvent",
-				"params": map[string]any{
-					"type":       m.Action,
-					"x":          px,
-					"y":          py,
-					"button":     m.Button,
-					"clickCount": boolToInt(m.Action == "mousePressed"),
-				},
-			})
+				"params": params,
+			}); err != nil {
+				log.Printf("🖱️ [预览输入] writeCDP 发送失败: %v", err)
+				writePreviewCDPError(clientConn, "预览输入发送失败："+err.Error())
+			}
 		case "key":
 			ka := m.KeyAction
 			if ka == "" {
 				ka = "keyDown"
 			}
-			_ = writeCDP(map[string]any{
+			if err := writeCDP(map[string]any{
 				"id":     nextPreviewReqID(),
 				"method": "Input.dispatchKeyEvent",
 				"params": map[string]any{
@@ -302,7 +314,10 @@ func HandlePreviewCDP(c *gin.Context) {
 					"code":  m.Code,
 					"ascii": int(m.Key[0]),
 				},
-			})
+			}); err != nil {
+				log.Printf("⌨️ [预览输入] writeCDP 发送失败: %v", err)
+				writePreviewCDPError(clientConn, "预览输入发送失败："+err.Error())
+			}
 		}
 	}
 
@@ -332,6 +347,20 @@ func HandlePreviewCDP(c *gin.Context) {
 			if int64(message.ID) == startScreencastID && len(message.Error) > 0 {
 				writePreviewCDPError(clientConn, "预览不可用：Chrome 拒绝启动截屏")
 				return
+			}
+			// 其它命令（Input/Emulation/Page.navigate 等）的 CDP 异步错误必须可见：
+			// writeCDP 只检查 socket 写入，Edge 侧的命令错误是异步返回的，不检查就会
+			// 出现「点击没反应但没有任何报错」（错误全被 continue 吞掉）。
+			if len(message.Error) > 0 {
+				var errInfo struct {
+					Message string `json:"message"`
+				}
+				_ = json.Unmarshal(message.Error, &errInfo)
+				if errInfo.Message == "" {
+					errInfo.Message = string(message.Error)
+				}
+				log.Printf("🖥️ [预览] CDP 命令 #%d 返回错误: %s", message.ID, errInfo.Message)
+				writePreviewCDPError(clientConn, "预览操作失败："+errInfo.Message)
 			}
 			if message.Method != "Page.screencastFrame" || message.Params.Data == "" {
 				continue
@@ -797,7 +826,10 @@ func cdpApplyViewport(tabWS string) {
 		return
 	}
 	defer conn.Close()
-	_ = conn.WriteJSON(map[string]any{
+	// 短连接发完立即 Close 会被 CDP 丢弃（命令是异步处理的），必须等响应确认。
+	// 旧代码 WriteJSON 后直接 return，视口设置经常静默失败 -> 页面仍是默认视口，
+	// 前端按 1280x720 换算坐标就全偏了（点击落在页面外 = "交互没反应"）。
+	if err := conn.WriteJSON(map[string]any{
 		"id":     100,
 		"method": "Emulation.setDeviceMetricsOverride",
 		"params": map[string]any{
@@ -806,7 +838,18 @@ func cdpApplyViewport(tabWS string) {
 			"deviceScaleFactor": 1,
 			"mobile":            false,
 		},
-	})
+	}); err != nil {
+		log.Printf("🖥️ [预览] 设置视口发送失败: %v", err)
+		return
+	}
+	// 等 CDP 确认命令已执行（最多 3 秒），期间连接保持打开。
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	for {
+		_, _, e := conn.ReadMessage()
+		if e != nil {
+			return // 超时或断开：命令已写入，通常已生效
+		}
+	}
 }
 
 func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) {
@@ -899,14 +942,6 @@ var previewReqSeq atomic.Int64
 
 func nextPreviewReqID() int64 {
 	return previewReqSeq.Add(1)
-}
-
-// boolToInt 供 CDP 鼠标事件 clickCount 字段使用（按下=1，其它=0）。
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // resolvePreviewURL 把 agent 给的路径/url 规整成前端能导航的地址。

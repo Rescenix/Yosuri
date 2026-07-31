@@ -270,73 +270,6 @@
                 </div>
               </div>
 
-              <div class="settings-section-title" style="margin-top: 18px;">动态背景</div>
-              <div class="settings-section-desc">
-                选择 MP4 / WebM 视频作为 IDE 循环背景。Wallpaper Engine 的视频壁纸通常位于
-                <code>steamapps/workshop/content/431960/作品ID</code>；场景壁纸需先录制为视频。
-              </div>
-
-              <div class="wallpaper-picker">
-                <input
-                  ref="wallpaperFileInput"
-                  class="wallpaper-file-input"
-                  type="file"
-                  accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.webm,.ogg,.mov,.m4v"
-                  @change="onDynamicWallpaperSelected"
-                />
-                <div class="wallpaper-file-state">
-                  <span class="wallpaper-file-icon">
-                    <Icon :icon="dynamicWallpaperReady ? 'mdi:movie-open-play-outline' : 'mdi:movie-open-plus-outline'" width="20" />
-                  </span>
-                  <span class="wallpaper-file-copy">
-                    <strong>{{ dynamicWallpaperReady ? dynamicWallpaperFileName : '尚未选择动态壁纸' }}</strong>
-                    <small>{{ dynamicWallpaperReady ? '已保存在当前浏览器，刷新后仍会保留' : '建议使用 H.264 MP4 或 WebM，兼容性最好' }}</small>
-                  </span>
-                  <button class="wallpaper-btn primary" type="button" :disabled="dynamicWallpaperLoading" @click="chooseDynamicWallpaper">
-                    {{ dynamicWallpaperLoading ? '处理中…' : (dynamicWallpaperReady ? '更换' : '选择视频') }}
-                  </button>
-                  <button v-if="dynamicWallpaperReady" class="wallpaper-btn" type="button" :disabled="dynamicWallpaperLoading" @click="clearDynamicWallpaper">
-                    移除
-                  </button>
-                </div>
-                <div v-if="dynamicWallpaperError" class="wallpaper-error">{{ dynamicWallpaperError }}</div>
-              </div>
-
-              <template v-if="dynamicWallpaperReady">
-                <div class="param-row">
-                  <span class="param-label">显示背景</span>
-                  <label class="param-switch">
-                    <input type="checkbox" v-model="dynamicWallpaperSettings.enabled" />
-                    <span class="param-switch-track"></span>
-                  </label>
-                </div>
-                <div class="param-row">
-                  <span class="param-label">背景暗度</span>
-                  <input class="param-range" type="range" min="0" max="70" step="1" v-model.number="dynamicWallpaperSettings.dim" />
-                  <span class="param-value">{{ dynamicWallpaperSettings.dim }}%</span>
-                </div>
-                <div class="param-row">
-                  <span class="param-label">面板不透明度</span>
-                  <input class="param-range" type="range" min="0" max="96" step="1" v-model.number="dynamicWallpaperSettings.panelOpacity" />
-                  <span class="param-value">{{ dynamicWallpaperSettings.panelOpacity }}%</span>
-                </div>
-                <div class="param-row">
-                  <span class="param-label">玻璃模糊</span>
-                  <input class="param-range" type="range" min="0" max="24" step="1" v-model.number="dynamicWallpaperSettings.blur" />
-                  <span class="param-value">{{ dynamicWallpaperSettings.blur }} px</span>
-                </div>
-                <div class="param-row">
-                  <span class="param-label">失焦暂停</span>
-                  <label class="param-switch">
-                    <input type="checkbox" v-model="dynamicWallpaperSettings.pauseWhenHidden" />
-                    <span class="param-switch-track"></span>
-                  </label>
-                </div>
-                <div class="param-reset-row">
-                  <button class="param-reset-btn" type="button" @click="resetDynamicWallpaperAppearance">恢复默认观感</button>
-                </div>
-              </template>
-
               <div class="settings-section-title" style="margin-top: 18px;">流式渐变</div>
               <div class="settings-section-desc">AI 回复逐字级联淡入的"瀑布"效果（仿 ChatGPT/Gemini）。改动即时生效并自动保存。</div>
 
@@ -585,18 +518,6 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
-import {
-  clearDynamicWallpaper,
-  dynamicWallpaperError,
-  dynamicWallpaperFileName,
-  dynamicWallpaperLoading,
-  dynamicWallpaperReady,
-  dynamicWallpaperSettings,
-  initDynamicWallpaper,
-  resetDynamicWallpaperAppearance,
-  setDynamicWallpaperFile,
-} from '../composables/useDynamicWallpaper.js'
-
 
 import { renderMarkdown } from './markdownRenderer.js'
 
@@ -632,26 +553,6 @@ const colorThemes = computed(() => Object.entries(THEME_PRESETS))
 
 function selectTheme(key) {
   theme.value = key
-}
-
-// ============ 动态视频壁纸 ============
-const wallpaperFileInput = ref(null)
-
-function chooseDynamicWallpaper() {
-  wallpaperFileInput.value?.click()
-}
-
-async function onDynamicWallpaperSelected(event) {
-  const input = event.target
-  const file = input.files?.[0]
-  if (!file) return
-  try {
-    await setDynamicWallpaperFile(file)
-  } catch {
-    // 错误已由 composable 写入 dynamicWallpaperError，在设置页原位展示。
-  } finally {
-    input.value = ''
-  }
 }
 
 // ============ 流式渐变无限循环预览（纯前端，不花 token） ============
@@ -1287,7 +1188,6 @@ function handleEsc(e) {
 
 
 onMounted(() => {
-  initDynamicWallpaper()
   loadConfigs()
   loadProfile()
   document.addEventListener('keydown', handleEsc)
@@ -1528,42 +1428,6 @@ onUnmounted(() => {
 .param-reset-row { display: flex; justify-content: flex-end; margin-top: 6px; }
 .param-reset-btn { padding: 4px 14px; font-size: 12px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 999px; cursor: pointer; transition: background 0.15s ease; }
 .param-reset-btn:hover { background: var(--app-border); }
-
-/* 动态视频壁纸 */
-.wallpaper-picker {
-  margin: 10px 0 8px;
-  padding: 10px;
-  border: 1px solid var(--app-border);
-  border-radius: 12px;
-  background: var(--app-surface-2);
-}
-.wallpaper-file-input { display: none; }
-.wallpaper-file-state { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.wallpaper-file-icon {
-  width: 36px; height: 36px; flex: 0 0 36px;
-  display: grid; place-items: center;
-  color: var(--app-accent); border-radius: 10px; background: var(--app-accent-soft);
-}
-.wallpaper-file-copy {
-  flex: 1; min-width: 0;
-  display: flex; flex-direction: column; gap: 3px;
-}
-.wallpaper-file-copy strong {
-  overflow: hidden; color: var(--app-text); font-size: 12.5px; font-weight: 650;
-  text-overflow: ellipsis; white-space: nowrap;
-}
-.wallpaper-file-copy small { color: var(--app-text-faint); font-size: 10.5px; line-height: 1.4; }
-.wallpaper-btn {
-  flex-shrink: 0; min-height: 32px; padding: 5px 11px;
-  border: 1px solid var(--app-border); border-radius: 8px;
-  background: var(--app-surface); color: var(--app-text-soft);
-  font-size: 11.5px; font-weight: 600; cursor: pointer;
-}
-.wallpaper-btn:hover:not(:disabled) { color: var(--app-text); background: var(--app-surface-3); }
-.wallpaper-btn.primary { color: #fff; background: var(--app-accent); border-color: transparent; }
-.wallpaper-btn.primary:hover:not(:disabled) { color: #fff; background: var(--app-accent-hover); }
-.wallpaper-btn:disabled { opacity: 0.55; cursor: wait; }
-.wallpaper-error { margin-top: 8px; color: #d94834; font-size: 11px; line-height: 1.5; }
 
 /* 主题分段控件（仿图1 的 Small/Medium/Large 分段） */
 .seg-control { margin-left: auto; display: inline-flex; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 2px; }
