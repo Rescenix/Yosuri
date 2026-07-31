@@ -13,7 +13,6 @@ package handler
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -95,6 +94,8 @@ func verifyOnWorkflowDone(c *gin.Context, workflowID string) {
 	}
 
 	// 截图校验：改了前端入口时复用已有真实 Chromium 预览能力
+	// 只打开预览面板（用户可见可交互），不自动截图推送——截图时机由 LLM 用
+	// capture_preview 工具自行判断（如全部完成后再截），不绑定预览/收尾。
 	if (hasFrontend || hasHTML) && frontendEntry != "" {
 		ran = true
 		abs := filepath.Join(sess.Workdir, frontendEntry)
@@ -102,20 +103,6 @@ func verifyOnWorkflowDone(c *gin.Context, workflowID string) {
 			url, _, cdpErr, ok := autoOpenBrowserPreview(abs)
 			if ok {
 				result["screenshot"] = map[string]any{"status": "opened", "url": url}
-				// 收尾截图：截「当前内嵌预览活 target」作为交付凭证发聊天（harness 控制，
-				// 不另开浏览器）。与 capture_preview 工具共用同一底层截图能力。
-				if png, serr := capturePreviewScreenshot(""); serr == nil && len(png) > 0 {
-					mime := "image/png"
-					writeCodeSSE(c, "artifact", map[string]any{
-						"id":         fmt.Sprintf("verify_%s_screenshot", workflowID),
-						"kind":       "image",
-						"tool":       "verify_screenshot",
-						"image":      "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(png),
-						"source_url": url,
-						"caption":    "收尾校验：当前内嵌预览页面截图。",
-					})
-					result["screenshot"] = map[string]any{"status": "captured", "url": url}
-				}
 			} else {
 				result["screenshot"] = map[string]any{"status": "skip", "reason": cdpErr}
 			}
@@ -167,17 +154,6 @@ func verifyOnWorkflowDone(c *gin.Context, workflowID string) {
 						detail["error"] = aerr.Error()
 					}
 					result["interaction"] = detail
-					// 交互后截图作为交付凭证
-					if png, serr := capturePreviewScreenshot(""); serr == nil && len(png) > 0 {
-						mime := "image/png"
-						writeCodeSSE(c, "artifact", map[string]any{
-							"id":      fmt.Sprintf("verify_%s_interaction", workflowID),
-							"kind":    "image",
-							"tool":    "verify_interaction",
-							"image":   "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(png),
-							"caption": "收尾校验：交互实测后的预览页面（已触发点击/输入）。",
-						})
-					}
 				}
 			}
 		} else {

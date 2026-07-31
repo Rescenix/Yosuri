@@ -2,11 +2,10 @@
 
 # Rescene 🧬
 
-> **Everyone's Agent —— 你的 AI 开发伙伴，了解你的习惯、项目、代码风格。**
+> 专攻**前端设计**、**浏览器自动化**、**Computer Use** 的二次元 Agent。
+> 每天实时更新能跑 Agent 的免费模型。
 
-从第一次对话起，Rescene 就在自主萃取你的使用模式：模型偏好、技术栈倾向、代码风格、项目架构。
-每一次工作流完成后，这些经验自动沉淀为结构化记忆，融入下一次上下文。
-不需要写自定义指令，不需要填配置表单，不需要每轮对话前喂一遍背景。
+国外 Agent 一个月顶我三年饭钱，国内免费的全是限流垃圾？那我干脆自己写了个。
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
@@ -40,26 +39,27 @@
 
 | 能力 | 说明 |
 | --- | --- |
-| **🧠 成长中的记忆** | 每次工作流完成后自动萃取经验：你的模型偏好、项目技术栈、代码风格，下次自动融入上下文 |
-| **🔧 Agent 开发工作流** | 深度践行 4+4+2 原则，支持实时 TODO 编排、多轮工具调用、任务中断恢复与全链路交付验证 |
-| **💻 集成开发环境** | 在聊天界面中无缝提供 Monaco 编辑器、递归文件树、终端、流式 Diff 与工作流状态视图 |
-| **🌐 真实浏览器自动化** | 基于 Chromium 与 CDP 实现真实页面渲染、点击、输入、滚动、DOM 读取、截图和双向交互验证 |
-| **🔌 零依赖 MCP 扩展** | 接入 MCP 官方 Registry。内置 Go 语言底层 Transport，无需为了运行远程 MCP 服务而在本地额外安装 Node、Python 或运行 `npx` |
-| **🛡️ AgentFS 变更审计** | 通过隔离快照、Diff 和回滚管理 AI 文件修改，设置系统级安全门阀，危险操作必须经用户批准 |
-| **🚦 多模型混合路由** | 免费模型、自定义 API Key、本地 Ollama / llama.cpp 可并存，支持失败熔断与自动切换 |
-| **🎨 多引擎设计系统** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），根据任务类型自动匹配设计风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风 |
+| **🎨 专攻前端设计** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），按任务类型自动匹配风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风。Agent 写完直接真实渲染给你看 |
+| **🌐 真实浏览器自动化** | 基于 Chromium 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
+| **🖱️ Computer Use** | 不止会改代码——能操作桌面：截图、移动鼠标、点击、键入、拖拽、滚动，接管整台机器干活 |
+| **🔋 免费模型每日更新** | 每天自动探测各厂商免费档模型（NVIDIA NIM 等）可用性，跑不了的自动标记退役，能用的自动恢复——免费池永远是真能跑的 |
+| **🧠 成长中的记忆** | 每次工作流完成后自动萃取经验：模型偏好、技术栈倾向、代码风格、项目架构，下次自动融入上下文，不需要写自定义指令 |
+| **🔧 4+4+2 Agent 工作流** | 40% 计划 → 40% 验证 → 20% 编码，实时 TODO 编排、多轮工具调用、中断恢复、全链路交付验证 |
+| **💻 集成工作台** | 聊天界面内嵌 Monaco 编辑器、递归文件树、终端、流式 Diff、浏览器预览面板 |
+| **🔌 零依赖 MCP 扩展** | 纯 Go 实现的 MCP 客户端，跑远程 MCP 服务不需要在本地装 Node / Python / npx |
+| **🛡️ AgentFS 变更审计** | 快照 / Diff / 回滚管理 AI 文件修改，危险操作必须经用户批准 |
 
-|---
+---
 
 ## 🧭 4 + 4 + 2 原则
 
-在 Rescene 的设计中，任何一个 AI 编程任务都应严格遵守 **4+4+2 原则**：
+Rescene 的 Agent 工作流严格遵守 **4+4+2 原则**：
 
 | 阶段 | 占比 | 说明 |
 | --- | --- | --- |
-| **🗺️ 明确需求与计划** | **40%** | AI 生成代码的成败，在写下第一行代码前就决定了。Rescene 将近一半的工程重心放在构建结构化 TODO、任务中断恢复与上下文精准对齐上。 |
-| **✅ 真实执行与验证** | **40%** | 代码是否真的写入项目？能否编译通过？页面跑起来到底长什么样？Rescene Harness 通过真实 Chromium 自动化操作与截图回传，拒绝对齐缺失的"纸上谈兵"。 |
-| **💻 纯编码** | **20%** | 单纯的静态代码片段生成在整个研发周期中仅占两成。AI 必须长出手脚，自己去跑编译、自己去点页面。 |
+| **🗺️ 明确需求与计划** | **40%** | 成败在写第一行代码前就决定了。结构化 TODO、任务中断恢复、上下文精准对齐。 |
+| **✅ 真实执行与验证** | **40%** | 代码能不能编译？页面跑起来长什么样？真实 Chromium 自动化 + Computer Use 实测，拒绝对齐缺失的"纸上谈兵"。 |
+| **💻 纯编码** | **20%** | 静态代码片段只占两成。AI 必须长出手脚，自己去跑编译、自己去点页面、自己去操作桌面。 |
 
 ---
 
@@ -75,20 +75,19 @@ Rescene 不是一开始就全知的。它随时间成长：
 | 审批过危险操作 | 知道你对哪些工具放心 |
 | 长期协作 | 知道你的项目架构、常用模式、领域术语 |
 
-它不是通过你"告诉"它来了解你的 —— 是通过每一次真实的协作。
+它通过每一次真实的协作了解你，而不是你"告诉"它。
 
 ---
+
 ## 🔄 从生成代码到验证结果
 
-一次典型的前端任务会经过以下阶段：
+一次典型的前端任务会经过：
 
 1. 根据用户目标创建结构化 TODO
 2. 搜索项目上下文并修改文件
 3. 运行依赖安装、构建或测试命令
-4. 启动真实 Chromium 预览并执行交互检查
-5. 将 Diff、日志和页面截图作为交付证据返回
-
-<!-- TODO: 后续加了截图后在这放双栏对比图 -->
+4. 启动真实 Chromium 预览，Agent 自行决定何时截图交付
+5. 将 Diff、日志、截图作为交付证据返回
 
 ---
 
@@ -113,12 +112,13 @@ flowchart TB
     Trace --> UI
 
     LLM --> Router["Multi-provider Model Router"]
-    Router --> Free["Free Models"]
+    Router --> Free["Free Models (Daily Probe)"]
     Router --> Local["Ollama / llama.cpp"]
     Router --> Private["Custom Providers"]
 
     ToolCall --> Files["File & Shell"]
     ToolCall --> Browser["Chromium / CDP"]
+    ToolCall --> Computer["Computer Use"]
     ToolCall --> Extensions["MCP / Skills"]
 
     Files --> AgentFS["AgentFS Snapshot / Diff / Rollback"]
@@ -143,16 +143,15 @@ flowchart TB
 | **💻 前端** | Vue 3、Vite、Naive UI、Monaco Editor、GSAP、PixiJS |
 | **⚙️ 后端** | Go 1.26、Gin、WebSocket、SSE（纯原生工具解析与路由） |
 | **🌐 浏览器** | 内置独立 Chromium 运行时、Chrome DevTools Protocol、Screencast |
+| **🖱️ Computer Use** | Windows 原生桌面操作（截图 / 鼠标 / 键盘 / 剪贴板） |
 | **🔌 扩展系统** | 纯 Go 实现的 MCP Streamable HTTP 客户端（无需 Node/Python 运行环境） |
 
 ---
 
 ## 🚀 下载（开箱即用）
 
-Rescene 目前已提供编译完成的独立发行版。
-
-- **零外部依赖**：你的电脑上不需要预先配置 Node.js、Python 环境，也不需要执行复杂的 npm/pip 安装。
-- **小白开箱可用**：解压即用，双击直接运行前端工作台与后端 Agent 核心。
+- **零外部依赖**：不需要预装 Node.js、Python，不需要跑 npm/pip 安装。
+- **解压即用**：双击直接运行工作台 + Agent 核心 + 内置 Chromium 运行时。
 
 👉 **[https://rescene.shanca.me/](https://rescene.shanca.me/)** 👈 全速下载最新发行版。
 
@@ -160,7 +159,7 @@ Rescene 目前已提供编译完成的独立发行版。
 
 ## 🛠️ 源码编译（面向贡献者）
 
-如果你希望基于源码进行二次开发，请确保本地有 Go 环境：
+需要本地 Go 环境：
 
 ### 启动后端
 ```bash
@@ -179,10 +178,9 @@ npm run dev
 
 ---
 
-## 💬 加入社区
+## 💬 反馈
 
-- 🐛 **反馈与建议**：[GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
-- ⭐ **Star**：[ResceneAgent](https://github.com/Rescenix/ResceneAgent) — 觉得项目有意思的话给个 Star
+- 🐛 **Bug / 建议**：[GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
 
 ---
 

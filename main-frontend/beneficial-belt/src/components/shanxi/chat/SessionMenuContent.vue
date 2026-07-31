@@ -218,7 +218,7 @@
             <Icon icon="mdi:account-circle" width="26" color="var(--app-accent)" />
             <div class="smc-user-card-name">{{ auth.displayName.value }}</div>
           </div>
-          <a class="smc-user-card-item" href="/api/auth/github">使用 GitHub 登录</a>
+          <a class="smc-user-card-item" :href="githubAuthUrl">使用 GitHub 登录</a>
         </template>
       </div>
     </Teleport>
@@ -269,6 +269,12 @@ import { Icon } from '@iconify/vue'
 import { useAuth } from '../../../composables/useAuth.js'
 
 const auth = useAuth()
+
+// GitHub 登录链接：桌面发行版需带后端端口前缀（否则 Wails AssetServer 不认识 /api 路由）
+const githubAuthUrl = computed(() => {
+  const base = globalThis.__RESCENE_BACKEND_URL__ || ''
+  return base + '/api/auth/github'
+})
 
 const PIN_KEY = 'shanxi_pinned_projects'
 

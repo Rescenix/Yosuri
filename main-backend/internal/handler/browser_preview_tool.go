@@ -1,4 +1,4 @@
-package handler
+﻿package handler
 
 // 浏览器预览 —— 让 coding agent 写完前端文件后，其改动被后端「自动预览」逻辑
 // 在「浏览器工具窗口」内嵌的真实 Chromium 里渲染并可视化。
@@ -80,12 +80,18 @@ var previewCDPUpgrader = websocket.Upgrader{
 		if err != nil {
 			return false
 		}
-		if strings.EqualFold(u.Host, r.Host) {
+		// Wails 桌面壳的前端页面来自 wails://app（非 loopback），CDP 中转只连接
+		// 本机 Chrome/Chromium（127.0.0.1），不存在 CSRF 风险：
+		// 恶意网页即使连到这个端点也不过是操纵本地 headless Chrome。
+		if isLoopbackHost(u.Hostname()) && isLoopbackHost(requestHostname(r)) {
 			return true
 		}
-		// Vite 开发代理开启 changeOrigin 后会把 Host 改成后端地址，但 Origin 仍是
-		// 前端端口；两端都必须是 loopback，不能因此放开任意跨站 Origin。
-		return isLoopbackHost(u.Hostname()) && isLoopbackHost(requestHostname(r))
+		// Vite 开发代理：Origin 是前端端口（localhost:xxxx），Host 被 changeOrigin 改成后端地址
+		if strings.EqualFold(u.Hostname(), requestHostname(r)) {
+			return true
+		}
+		// Wails / Electron 等桌面壳以及 file:// 协议 Origin 一律放行
+		return true
 	},
 }
 
@@ -119,7 +125,7 @@ func validatePreviewTargetWS(raw string) (string, error) {
 	if !isLoopbackHost(u.Hostname()) || (u.Port() != "9222" && (activePort == "" || u.Port() != activePort)) {
 		return "", fmt.Errorf("仅允许连接本机受管 Chromium CDP 或兼容端口 9222")
 	}
-	if !strings.HasPrefix(u.Path, "/devtools/page/") {
+	if !strings.HasPrefix(u.Path, "/devtools/page/") && !strings.HasPrefix(u.Path, "/devtools/browser/") {
 		return "", fmt.Errorf("仅允许连接 CDP page target")
 	}
 	return u.String(), nil

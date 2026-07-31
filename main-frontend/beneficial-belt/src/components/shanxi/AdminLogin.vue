@@ -11,7 +11,7 @@
     <a
       v-if="!auth.isLoggedIn.value"
       class="gh-btn"
-      href="/api/auth/github"
+      :href="githubAuthUrl"
       title="使用 GitHub 账号登录"
     >GitHub 登录</a>
 
@@ -26,12 +26,18 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from '../../composables/useAuth.js'
 
 const auth = useAuth()
 const password = ref('')
+
+const githubAuthUrl = computed(() => {
+  // 桌面端：解析后端地址，使 GitHub OAuth 重定向正确回到后端
+  const base = globalThis.__RESCENE_BACKEND_URL__ || ''
+  return base + '/api/auth/github'
+})
 
 const login = async () => {
   const res = await fetch('/api/login', {
