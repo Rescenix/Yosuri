@@ -3,9 +3,9 @@
 # Rescene 🧬
 
 > 专攻**前端设计**、**浏览器自动化**、**Computer Use** 的二次元 Agent。
-> 每天实时更新能跑 Agent 的免费模型。
+> 每日自动更新可用的免费模型。
 
-国外 Agent 一个月顶我三年饭钱，国内免费的全是限流垃圾？那我干脆自己写了个。
+付费 Agent 太贵，免费的总在限流？那就自己写一个。
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  🔒 所有数据存本地，不上云 · 💰 永久免费 · 📦 解压即用
+  🔒 所有数据存本地，不上云 · 💰 永久免费 · 🪶 轻量 Agent（发行包约 10M，不内置浏览器） · 📦 解压即用 · 🪟 Windows 10+
 </p>
 
 ---
@@ -26,9 +26,9 @@
 | 能力 | 说明 |
 | --- | --- |
 | **🎨 专攻前端设计** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），按任务类型自动匹配风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风。Agent 写完直接真实渲染给你看 |
-| **🌐 真实浏览器自动化** | 基于 Chromium 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
+| **🌐 真实浏览器自动化** | 复用系统 Edge/Chrome 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
 | **🖱️ Computer Use** | 不止会改代码——能操作桌面：截图、移动鼠标、点击、键入、拖拽、滚动，接管整台机器干活 |
-| **🔋 免费模型每日更新** | 每天自动探测各厂商免费档模型（NVIDIA NIM 等）可用性，跑不了的自动标记退役，能用的自动恢复——免费池永远是真能跑的 |
+| **🔋 免费模型每日更新** | 每天自动探测各厂商免费档模型可用性，跑不了的自动标记退役，能用的自动恢复——免费池永远是真能跑的 |
 | **🧠 成长中的记忆** | 每次工作流完成后自动萃取经验：模型偏好、技术栈倾向、代码风格、项目架构，下次自动融入上下文，不需要写自定义指令 |
 | **🔧 4+4+2 Agent 工作流** | 40% 计划 → 40% 验证 → 20% 编码，实时 TODO 编排、多轮工具调用、中断恢复、全链路交付验证 |
 | **💻 集成工作台** | 聊天界面内嵌 Monaco 编辑器、递归文件树、终端、流式 Diff、浏览器预览面板 |
@@ -44,7 +44,7 @@ Rescene 的 Agent 工作流严格遵守 **4+4+2 原则**：
 | 阶段 | 占比 | 说明 |
 | --- | --- | --- |
 | **🗺️ 明确需求与计划** | **40%** | 成败在写第一行代码前就决定了。结构化 TODO、任务中断恢复、上下文精准对齐。 |
-| **✅ 真实执行与验证** | **40%** | 代码能不能编译？页面跑起来长什么样？真实 Chromium 自动化 + Computer Use 实测，拒绝对齐缺失的"纸上谈兵"。 |
+| **✅ 真实执行与验证** | **40%** | 代码能不能编译？页面跑起来长什么样？真实浏览器自动化（复用系统 Edge/Chrome）+ Computer Use 实测，拒绝没有实测验证的纸上谈兵。 |
 | **💻 纯编码** | **20%** | 静态代码片段只占两成。AI 必须长出手脚，自己去跑编译、自己去点页面、自己去操作桌面。 |
 
 ---
@@ -72,7 +72,7 @@ Rescene 不是一开始就全知的。它随时间成长：
 1. 根据用户目标创建结构化 TODO
 2. 搜索项目上下文并修改文件
 3. 运行依赖安装、构建或测试命令
-4. 启动真实 Chromium 预览，Agent 自行决定何时截图交付
+4. 启动真实浏览器预览（复用系统 Edge/Chrome），Agent 自行决定何时截图交付
 5. 将 Diff、日志、截图作为交付证据返回
 
 ---
@@ -97,13 +97,13 @@ flowchart TB
     Verify --> Trace["Trace / Token / Screenshot"]
     Trace --> UI
 
-    LLM --> Router["Multi-provider Model Router"]
+    AgentLoop -->|选模型| Router["Multi-provider Model Router"]
     Router --> Free["Free Models (Daily Probe)"]
     Router --> Local["Ollama / llama.cpp"]
     Router --> Private["Custom Providers"]
 
     ToolCall --> Files["File & Shell"]
-    ToolCall --> Browser["Chromium / CDP"]
+    ToolCall --> Browser["Browser / CDP (系统 Edge/Chrome)"]
     ToolCall --> Computer["Computer Use"]
     ToolCall --> Extensions["MCP / Skills"]
 
@@ -128,7 +128,7 @@ flowchart TB
 | --- | --- |
 | **💻 前端** | Vue 3、Vite、Naive UI、Monaco Editor、GSAP、PixiJS |
 | **⚙️ 后端** | Go 1.26、Gin、WebSocket、SSE（纯原生工具解析与路由） |
-| **🌐 浏览器** | 内置独立 Chromium 运行时、Chrome DevTools Protocol、Screencast |
+| **🌐 浏览器** | 复用系统 Edge/Chrome（不内置浏览器，发行包更轻）、Chrome DevTools Protocol、Screencast |
 | **🖱️ Computer Use** | Windows 原生桌面操作（截图 / 鼠标 / 键盘 / 剪贴板） |
 | **🔌 扩展系统** | 纯 Go 实现的 MCP Streamable HTTP 客户端（无需 Node/Python 运行环境） |
 
@@ -136,10 +136,21 @@ flowchart TB
 
 ## 🚀 下载（开箱即用）
 
+- **极致轻量**：发行包约 10M，不内置浏览器（预览复用系统自带 Edge/Chrome）。
 - **零外部依赖**：不需要预装 Node.js、Python，不需要跑 npm/pip 安装。
-- **解压即用**：双击直接运行工作台 + Agent 核心 + 内置 Chromium 运行时。
+- **解压即用**：双击直接运行工作台 + Agent 核心。
 
 👉 **[https://rescene.shanca.me/](https://rescene.shanca.me/)** 👈 全速下载最新发行版。
+
+---
+
+## ⚙️ 首次使用
+
+1. 打开工作台，在**设置面板 → 模型**填入至少一个 API Key；免费池中也有免 Key 的源（如 OpenCode Zen），可以直接选。
+2. 或用环境变量配置模型源：参考 `main-backend/.env.example`。
+3. 免费池每日自动探测可用性，跑不了的自动退役——但部分免费源需要对应环境变量 Key 才会进池。
+
+> 💡 一个 Key 都不配时，Agent 会提示「没有可用的模型源」——这是正常的，填好 Key 即恢复。
 
 ---
 
