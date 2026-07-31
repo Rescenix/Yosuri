@@ -937,36 +937,19 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 		return allowed
 	}
 
-	for i, tc := range calls {
-		if tc.Function.Name == "dispatch_agent" {
-			wg.Add(1)
-			go func(i int, tc core.ToolCall) {
-				defer wg.Done()
-				out, err := runSubAgent(c.Request.Context(), backends, tc.ID, tc.Function.Arguments, emit)
-				if err != nil {
-					results[i] = codeExecResult{output: "子代理执行失败: " + err.Error(), failed: true}
-					return
-				}
-				results[i] = codeExecResult{output: out}
-			}(i, tc)
-		}
-	}
-
-	// 主循环：顺序执行非 dispatch_agent 的工具调用
-	for i, tc := range calls {
+	// runOne 执行单个工具调用（审批 + 分发）。并行段与顺序段共用，
+	// 保证两类执行路径的行为完全一致。
+	runOne := func(i int, tc core.ToolCall) {
 		name := tc.Function.Name
-		if name == "dispatch_agent" {
-			continue
-		}
 		if !maybeRequestApproval(tc) {
 			results[i] = codeExecResult{output: "用户未批准执行 " + name + "，已跳过", failed: true}
-			continue
+			return
 		}
 		if isNativeExecutableTool(name) {
 			var args map[string]any
 			if err := json.Unmarshal([]byte(defaultJSONObject(tc.Function.Arguments)), &args); err != nil {
 				results[i] = codeExecResult{output: "内置工具参数失败: " + err.Error(), failed: true}
-				continue
+				return
 			}
 			var preEditLine int
 			if name == "edit_file" {
@@ -984,21 +967,21 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			nativeResult, err := callNativeTool(c.Request.Context(), name, tc.Function.Arguments)
 			if err != nil {
 				results[i] = codeExecResult{output: "内置工具失败: " + err.Error(), failed: true}
-			} else {
-				if name == "apply_patch" {
-					for _, patchArg := range patchArgs {
-						OnAfterWrite(name, patchArg)
-					}
-				} else if name == "write_file" || name == "edit_file" {
-					OnAfterWrite(name, args)
-				}
-				out := nativeResult.Text
-				if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
-					out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
-				}
-				results[i] = codeExecResult{output: out, images: nativeResult.Images}
+				return
 			}
-			continue
+			if name == "apply_patch" {
+				for _, patchArg := range patchArgs {
+					OnAfterWrite(name, patchArg)
+				}
+			} else if name == "write_file" || name == "edit_file" {
+				OnAfterWrite(name, args)
+			}
+			out := nativeResult.Text
+			if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
+				out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
+			}
+			results[i] = codeExecResult{output: out, images: nativeResult.Images}
+			return
 		}
 		if strings.HasPrefix(name, "mcp__") {
 			// MCP edit_file：执行前读文件记下行号，执行后补到结果里
@@ -1009,19 +992,70 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			mcpResult, err := callMCPToolWithArtifacts(name, tc.Function.Arguments)
 			if err != nil {
 				results[i] = codeExecResult{output: "MCP 工具失败: " + err.Error(), failed: true}
-			} else {
-				out := mcpResult.Text
-				if name == "mcp__fs__edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
-					out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
-				}
-				results[i] = codeExecResult{output: out, images: mcpResult.Images}
+				return
 			}
-			continue
+			out := mcpResult.Text
+			if name == "mcp__fs__edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
+				out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
+			}
+			results[i] = codeExecResult{output: out, images: mcpResult.Images}
+			return
 		}
 		// 到这里说明是个既非 Go 内置/MCP、也非编排类的工具名。
 		results[i] = codeExecResult{
 			output: fmt.Sprintf("未知工具 %s：请对照按需工具索引，先用 load_tools 加载再调用。", name),
 			failed: true,
+		}
+	}
+
+	// 1. dispatch_agent 保持既有行为：多个子代理全部 goroutine 并行。
+	for i, tc := range calls {
+		if tc.Function.Name == "dispatch_agent" {
+			wg.Add(1)
+			go func(i int, tc core.ToolCall) {
+				defer wg.Done()
+				out, err := runSubAgent(c.Request.Context(), backends, tc.ID, tc.Function.Arguments, emit)
+				if err != nil {
+					results[i] = codeExecResult{output: "子代理执行失败: " + err.Error(), failed: true}
+					return
+				}
+				results[i] = codeExecResult{output: out}
+			}(i, tc)
+		}
+	}
+
+	// 2. 其余工具：读类并发、写类屏障，按原始索引保序收拢。
+	type idxCall struct {
+		idx int
+		tc  core.ToolCall
+	}
+	var others []idxCall
+	for i, tc := range calls {
+		if tc.Function.Name != "dispatch_agent" {
+			others = append(others, idxCall{i, tc})
+		}
+	}
+	if len(others) > 0 {
+		restCalls := make([]core.ToolCall, len(others))
+		for k, oc := range others {
+			restCalls[k] = oc.tc
+		}
+		for _, seg := range planParallelSegments(restCalls) {
+			if seg.parallel {
+				var segWG sync.WaitGroup
+				for k, tc := range seg.calls {
+					segWG.Add(1)
+					go func(k int, tc core.ToolCall) {
+						defer segWG.Done()
+						runOne(others[k].idx, tc)
+					}(k, tc)
+				}
+				segWG.Wait()
+			} else {
+				for k, tc := range seg.calls {
+					runOne(others[k].idx, tc)
+				}
+			}
 		}
 	}
 

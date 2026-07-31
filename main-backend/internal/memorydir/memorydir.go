@@ -199,6 +199,112 @@ func Remember(file, summary, content string) error {
 	return os.WriteFile(idxPath, []byte(idxContent+"\n"), 0644)
 }
 
+// ── 常驻 / 交接 / 搜索（SwiftNet 记忆工具的 memorydir 落点） ──
+
+func pinnedPath() string { return filepath.Join(path(), "pinned.md") }
+func handoffPath() string { return filepath.Join(path(), "handoff.md") }
+
+// ReadPinned 读取常驻记忆 pinned.md 全文，供每轮无条件注入。
+func ReadPinned() string {
+	data, err := os.ReadFile(pinnedPath())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// Pin 写入/覆盖一条常驻记忆：同 pid 的行替换，新 pid 追加。返回是否写入成功。
+func Pin(pid, text string) error {
+	dir := path()
+	os.MkdirAll(dir, 0755)
+	pid = strings.TrimSpace(pid)
+	if pid == "" || strings.TrimSpace(text) == "" {
+		return fmt.Errorf("pid 和 text 不能为空")
+	}
+	lines := []string{}
+	if data, err := os.ReadFile(pinnedPath()); err == nil {
+		lines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	}
+	newLine := fmt.Sprintf("- **%s** %s", pid, strings.TrimSpace(text))
+	replaced := false
+	var out []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- **"+pid+"**") {
+			out = append(out, newLine)
+			replaced = true
+		} else if trimmed != "" {
+			out = append(out, line)
+		}
+	}
+	if !replaced {
+		out = append(out, newLine)
+	}
+	return os.WriteFile(pinnedPath(), []byte(strings.Join(out, "\n")+"\n"), 0644)
+}
+
+// HandoffWrite 覆盖式写入会话交接工作态 handoff.md。
+func HandoffWrite(block string) error {
+	dir := path()
+	os.MkdirAll(dir, 0755)
+	block = strings.TrimSpace(block)
+	if block == "" {
+		return fmt.Errorf("block 不能为空")
+	}
+	return os.WriteFile(handoffPath(), []byte(block+"\n"), 0644)
+}
+
+// ReadHandoff 读取会话交接工作态。
+func ReadHandoff() string {
+	data, err := os.ReadFile(handoffPath())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// Search 全库扫描：对 index 每行 bigram 打分，命中则读对应文件内容。
+// 与 ReadWithLinks 同算法，但显式返回 "未命中" 语义（调用方判断空串即可）。
+func Search(query string) string {
+	if strings.TrimSpace(query) == "" {
+		return ""
+	}
+	lines := ParseIndex()
+	if len(lines) == 0 {
+		return ""
+	}
+	type scored struct {
+		score float64
+		file  string
+	}
+	var hits []scored
+	dir := path()
+	for _, line := range lines {
+		ov := overlap(line.Summary+" "+line.File, query)
+		if ov > 0.15 {
+			hits = append(hits, scored{ov, line.File})
+		}
+	}
+	sort.Slice(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
+	var parts []string
+	maxFiles := 3
+	for i, h := range hits {
+		if i >= maxFiles {
+			break
+		}
+		data, err := os.ReadFile(filepath.Join(dir, h.file+".md"))
+		if err != nil || strings.TrimSpace(string(data)) == "" {
+			continue
+		}
+		parts = append(parts, "━━━ "+h.file+" ━━━")
+		parts = append(parts, strings.TrimSpace(string(data)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 // ── bigram 选择器（精简版，与 swiftnet 同算法） ──
 
 func norm(s string) []string {

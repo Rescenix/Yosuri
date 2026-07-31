@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"backend/internal/ai/core"
-	"backend/internal/swiftnet"
+	"backend/internal/memorydir"
 )
 
 func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
@@ -22,38 +22,44 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 		if query == "" {
 			return nativeToolResult{}, fmt.Errorf("query 不能为空")
 		}
-		hits := swiftnet.Default().Select(query, 1200, 0)
-		if len(hits) == 0 {
+		hits := memorydir.Search(query)
+		if hits == "" {
 			return nativeToolResult{Text: fmt.Sprintf("未找到与 %q 相关的记忆。", query)}, nil
 		}
-		lines := make([]string, 0, len(hits))
-		for _, hit := range hits {
-			lines = append(lines, fmt.Sprintf("%s|%s|%s|%s", hit.ID, hit.Cluster, hit.Keywords, hit.Text))
-		}
-		return nativeToolResult{Text: strings.Join(lines, "\n")}, nil
+		return nativeToolResult{Text: hits}, nil
 	case "memory_append":
-		res := swiftnet.Default().MemAppend(stringArg(args, "text"), stringArg(args, "cluster"), stringArg(args, "keywords"))
-		if res.Err != "" {
-			return nativeToolResult{}, fmt.Errorf("%s", res.Err)
+		text := strings.TrimSpace(stringArg(args, "text"))
+		if text == "" {
+			return nativeToolResult{}, fmt.Errorf("text 不能为空")
 		}
-		if res.MergedID != "" {
-			return nativeToolResult{Text: "已合并到已有记忆 " + res.MergedID}, nil
+		file := memoryFileForCluster(stringArg(args, "cluster"))
+		// 摘要：取前 40 字，与 remember 工具一致
+		summary := text
+		if runes := []rune(text); len(runes) > 40 {
+			summary = string(runes[:40]) + "…"
 		}
-		return nativeToolResult{Text: "已写入记忆 " + res.ID}, nil
+		if err := memorydir.Remember(file, summary, text); err != nil {
+			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)
+		}
+		return nativeToolResult{Text: fmt.Sprintf("已写入记忆 %s（memory/%s.md）", file, file)}, nil
 	case "memory_pin":
 		pid, text := stringArg(args, "pid"), stringArg(args, "text")
 		if pid == "" || text == "" {
 			return nativeToolResult{}, fmt.Errorf("pid 和 text 不能为空")
 		}
-		swiftnet.Default().Pin(pid, stringArg(args, "cluster"), text)
-		return nativeToolResult{Text: "已写入常驻记忆 " + pid}, nil
+		if err := memorydir.Pin(pid, text); err != nil {
+			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)
+		}
+		return nativeToolResult{Text: fmt.Sprintf("已写入常驻记忆 %s（每轮无条件注入 pinned.md）", pid)}, nil
 	case "memory_handoff":
 		block := stringArg(args, "block")
 		if block == "" {
 			return nativeToolResult{}, fmt.Errorf("block 不能为空")
 		}
-		swiftnet.Default().HandoffWrite(block)
-		return nativeToolResult{Text: "已更新会话交接工作态"}, nil
+		if err := memorydir.HandoffWrite(block); err != nil {
+			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)
+		}
+		return nativeToolResult{Text: "已更新会话交接工作态（handoff.md）"}, nil
 	case "workdir_read":
 		path, err := nativeWorkdirNotePath()
 		if err != nil {
@@ -74,6 +80,25 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 	default:
 		return nativeToolResult{}, fmt.Errorf("未知记忆工具: %s", name)
 	}
+}
+
+// memoryFileForCluster 把 memory_append 的 cluster 分类映射到 memorydir 文件名。
+// 大小写不敏感 + 中文别名；未知名归到 memories.md，避免每个新分类都建一个文件。
+func memoryFileForCluster(cluster string) string {
+	switch strings.ToLower(strings.TrimSpace(cluster)) {
+	case "userbase", "用户", "偏好":
+		return "preferences"
+	case "codework", "项目", "代码", "工程":
+		return "project"
+	case "decisions", "决策", "决定":
+		return "decisions"
+	case "work", "工作", "工作态":
+		return "handoff"
+	}
+	if strings.TrimSpace(cluster) == "" {
+		return "memories"
+	}
+	return "memories"
 }
 
 func nativeWorkdirNotePath() (string, error) {

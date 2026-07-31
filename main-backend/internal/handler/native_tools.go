@@ -75,7 +75,7 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"url":       {Type: "string", Description: "http(s) URL"},
 			"max_chars": {Type: "integer", Description: "最大返回字符数，默认 8000，最大 30000"},
 		}, []string{"url"}),
-		nativeTool("view_image", "分析图片内容。可传本地路径、图片 URL 或 base64；视觉请求直接复用内置 Go 模型路由。", map[string]core.ToolProperty{
+		nativeTool("view_image", "分析图片内容（主动识图）。用户贴图、截图（capture_preview / computer_screenshot）或预览页出现图片后，需要了解图中内容时主动调用本工具。可传本地路径、图片 URL 或 base64；视觉请求直接复用内置 Go 模型路由。", map[string]core.ToolProperty{
 			"path":         {Type: "string", Description: "可选，本地图片路径"},
 			"image_url":    {Type: "string", Description: "可选，http(s) 图片 URL"},
 			"image_base64": {Type: "string", Description: "可选，图片 base64"},

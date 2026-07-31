@@ -65,32 +65,17 @@
       <template v-else>
         <div
           class="flow-summary"
-          :class="{ settled: !groupHasActiveTool(group) }"
           @click="toggleSummary(group, gIdx)"
         >
           <div class="flow-summary-main">
-            <Icon icon="mdi:star-four-points" width="16" class="flow-summary-icon" />
+            <Icon icon="mdi:console" width="13" class="flow-summary-icon" />
             <span class="flow-summary-text">{{ groupSummaryTitle(group) }}</span>
           </div>
-          <div class="flow-summary-badges">
-            <span v-if="groupRunningCount(group)" class="flow-summary-badge running">
-              <span class="flow-summary-dot"></span>{{ groupRunningCount(group) }} 进行中
-            </span>
-            <span v-if="groupThinkingCount(group)" class="flow-summary-badge think">
-              <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" /> {{ groupThinkingCount(group) }} 思考
-            </span>
-            <span v-if="groupToolCount(group)" class="flow-summary-badge tool">
-              <Icon icon="mynaui:tool" width="11" /> {{ groupToolCount(group) }} 操作
-            </span>
-            <span v-if="groupReadCount(group)" class="flow-summary-badge read">{{ groupReadCount(group) }} 读</span>
-            <span v-if="groupWriteCount(group)" class="flow-summary-badge write">{{ groupWriteCount(group) }} 写</span>
-            <span v-if="groupEditCount(group)" class="flow-summary-badge edit">{{ groupEditCount(group) }} 改</span>
-          </div>
-          <span class="flow-chevron" :class="{ open: isSummaryExpanded(group, gIdx) }">›</span>
+          <span class="flow-chevron" :class="{ open: isSummaryExpanded(gIdx) }">›</span>
         </div>
 
         <Transition name="flow-body">
-          <div v-show="isSummaryExpanded(group, gIdx)" class="flow-body">
+          <div v-show="isSummaryExpanded(gIdx)" class="flow-body">
             <template v-for="(b, i) in group.blocks" :key="`${gIdx}-${i}`">
               <!-- 思考 -->
               <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
@@ -221,28 +206,17 @@ const blockGroups = computed(() => {
 // 每个 summary 组的展开状态
 const summaryExpanded = reactive({})
 
-// 正在生成参数或正在执行的工具组默认展开，方便实时看增量 diff；
-// 只有该组的工具都收尾后才默认收起。用户点击后的选择优先。
-function groupHasActiveTool(group) {
-  return group.blocks.some(block => block.type === 'tool' &&
-    (block.status === 'generating' || block.status === 'running'))
-}
-function isSummaryExpanded(group, index) {
-  return summaryExpanded[index] ?? groupHasActiveTool(group)
+// 概要时间线默认收起，不随运行/收尾状态自动展开收起——用户点击才展开，
+// 选择会记住；避免运行时卡片突然弹开又合上的突兀感。
+function isSummaryExpanded(index) {
+  return summaryExpanded[index] ?? false
 }
 function toggleSummary(group, index) {
-  summaryExpanded[index] = !isSummaryExpanded(group, index)
+  summaryExpanded[index] = !isSummaryExpanded(index)
 }
 
 // 各类型 block 统计（按组）
-const groupToolBlocks = (g) => g.blocks.filter(b => b.type === 'tool')
-const groupThinkingBlocks = (g) => g.blocks.filter(b => b.type === 'thinking')
-const groupRunningCount = (g) => groupToolBlocks(g).filter(b => b.status === 'generating' || b.status === 'running').length
-const groupThinkingCount = (g) => groupThinkingBlocks(g).length
-const groupToolCount = (g) => groupToolBlocks(g).length
-const groupReadCount = (g) => groupToolBlocks(g).filter(b => isRead(b.name)).length
-const groupWriteCount = (g) => groupToolBlocks(g).filter(b => isWrite(b.name)).length
-const groupEditCount = (g) => groupToolBlocks(g).filter(b => isEdit(b.name)).length
+// 概要栏徽章已移除，计数函数一并删除；展开/收起只由用户点击控制。
 
 function groupSummaryTitle(group) {
   const running = group.blocks.some(b => b.status === 'running')
@@ -606,44 +580,26 @@ function toolBodyText(b) {
   text-overflow: ellipsis;
 }
 
-/* ---------- 概要栏：把一次 agent 回复之间的思考和工具调用都收纳进来 ---------- */
+/* ---------- 概要栏：把一次 agent 回复之间的思考和工具调用都收纳进来 ----------
+   扁平行、无卡片底：跟思考/操作行同一套视觉语言，运行/已结束不再区分卡片，
+   运行中靠文字高光扫描动画（reasonShimmer）表达状态。 */
 .flow-summary {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--app-surface-2);
-  border: 1px solid var(--app-border-soft);
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.14s ease, border-color 0.14s ease;
-}
-.flow-summary:hover {
-  background: var(--app-surface-3);
-  border-color: var(--app-border);
-}
-/* 已结束的分段仍按时间顺序留在 intent 之间，但退化成轻量折叠行，不让一串
-   “完成卡片”抢走正文空间；正在运行的分段继续使用上面的卡片样式强调状态。 */
-.flow-summary.settled {
   gap: 7px;
   margin: 1px 0;
   padding: 4px 2px;
-  border-color: transparent;
   border-radius: 6px;
-  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.14s ease;
 }
-.flow-summary.settled:hover {
-  border-color: transparent;
+.flow-summary:hover {
   background: var(--app-surface-2);
 }
-.flow-summary.settled .flow-summary-icon {
-  width: 13px;
-  height: 13px;
-}
-.flow-summary.settled .flow-summary-text {
-  font-size: 11.5px;
-  color: var(--app-text-faint);
+/* 徽章已移除，让 chevron 靠右 */
+.flow-summary > .flow-chevron {
+  margin-left: auto;
 }
 .flow-summary-main {
   display: flex;
@@ -654,57 +610,26 @@ function toolBodyText(b) {
 }
 .flow-summary-icon {
   flex-shrink: 0;
+  width: 13px;
+  height: 13px;
   color: var(--app-text-faint);
 }
 .flow-summary-text {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 400;
   color: var(--app-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.flow-summary-badges {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.flow-summary-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 999px;
-}
-.flow-summary-badge.running {
-  color: var(--app-accent);
-  background: var(--app-accent-soft);
-}
-.flow-summary-badge.think {
-  color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.1);
-}
-.flow-summary-badge.tool {
-  color: var(--app-text-soft);
-  background: rgba(100, 116, 139, 0.1);
-}
-.flow-summary-badge.read { color: #0ea5e9; background: rgba(14, 165, 233, 0.1); }
-.flow-summary-badge.write { color: #12b76a; background: rgba(18, 183, 106, 0.1); }
-.flow-summary-badge.edit { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
-.flow-summary-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: flowSummaryPulse 1.2s ease-in-out infinite;
-}
-@keyframes flowSummaryPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.75); }
+/* 运行中：跟思考标签一样的高光扫描动画（keyframes 在 chat-global.css） */
+.agent-flow.streaming .flow-summary-text {
+  animation: reasonShimmer 3s linear infinite;
+  background: linear-gradient(100deg, var(--app-text-soft) 40%, var(--app-text) 50%, var(--app-text-soft) 60%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* 折叠/展开动画 */

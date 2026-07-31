@@ -73,6 +73,16 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 		memorySection = "\n\n# 长期记忆索引\n" + inject
 	}
 	workdirSection := projectWorkdirPrompt()
+	// 常驻记忆 pinned.md：memory_pin 写入，每轮无条件注入（等价于身份常驻）。
+	pinnedSection := ""
+	if pinned := memorydir.ReadPinned(); pinned != "" {
+		pinnedSection = "\n\n# 常驻记忆\n" + pinned
+	}
+	// 会话交接 handoff.md：memory_handoff 写入，跨对话不失业。
+	handoffSection := ""
+	if handoff := memorydir.ReadHandoff(); handoff != "" {
+		handoffSection = "\n\n# 会话交接（上次留下的工作态）\n" + handoff
+	}
 	task := ""
 	if len(tasks) > 0 {
 		task = tasks[0]
@@ -105,6 +115,8 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
 			{key: "skill", content: skillLibraryPrompt() + autoLoadedSkillsPrompt(task)}, // 索引 + 当前任务确定性预加载
 			{key: "memory", content: memorySection},                                      // 每写一次记忆就变
+			{key: "memory", content: pinnedSection},                                      // 常驻记忆：memory_pin 写入，跨对话常驻
+			{key: "memory", content: handoffSection},                                     // 会话交接工作态：memory_handoff 写入
 			{key: "memory", content: workdirSection},                                     // 项目级 workdir.md，会话开始即注入，跨对话不失业
 			{key: "memory", content: taskMemory},                                         // 反向链接联想召回：命中 + 1跳展开
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
