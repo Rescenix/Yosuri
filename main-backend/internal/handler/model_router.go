@@ -110,6 +110,13 @@ var freeModelCatalog = []FreeModelDef{
 
 	// —— 本地 llama.cpp 服务（需安装 llama-server 并在环境变量中配置 n_gpu_layers）——
 	{ID: "local_llama_qwen2_5_vl_7b", Vendor: "本地 Local", Name: "Qwen2.5-VL-7B-Instruct (llama.cpp)（免费）", Endpoint: "http://127.0.0.1:8081/v1", Model: "qwen2.5-vl-7b-instruct", KeyEnv: "", ParamsB: 7, Note: "本地 llama-server，可配置 LLAMA_N_GPU_LAYERS", Vision: true, ContextWindow: 32768, Local: true},
+
+	// —— Ollama Cloud 云端（OpenAI 兼容端点 ollama.com/v1）——
+	// 2026-07-31 接入：云端免费档（无需本地跑 ollama）。实测 /v1/models 与
+	// /v1/chat/completions 均可用；需要 OLLAMA_API_KEY（ollama.com 注册获取）。
+	// 仅收录用户实测可用的 gpt-oss:120b；20b 档连对话质量都不够，不收录。
+	// ContextWindow 未知者留 0，绝不伪造（目录规矩）。
+	{ID: "cloud_ollama_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B（免费·云端）", Endpoint: "https://ollama.com/v1", Model: "gpt-oss:120b", KeyEnv: "OLLAMA_API_KEY", ParamsB: 120, Note: "Ollama Cloud 免费档大模型", Reasoning: true},
 }
 
 func isFreeCatalogID(id string) bool {

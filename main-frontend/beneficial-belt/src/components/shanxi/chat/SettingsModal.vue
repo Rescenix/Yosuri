@@ -168,6 +168,7 @@
                     </div>
                     <div class="vendor-model-hint">配置后自动加入：{{ grp.items.map(m => m.name).join('、') }}</div>
                   </div>
+                  <div class="vendor-thanks">💙 感谢所有免费模型提供方的赞助支持</div>
                 </template>
               </template>
 
@@ -1482,6 +1483,13 @@ onUnmounted(() => {
 .vendor-key-btn { font-size: 11px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 3px 10px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-btn:hover { background: var(--app-surface-3); }
 .vendor-model-hint { margin-top: 6px; font-size: 11px; color: var(--app-text-faint); line-height: 1.5; padding-left: 2px; }
+.vendor-thanks {
+  margin-top: 12px; padding-top: 10px;
+  font-size: 11px; color: var(--app-text-faint);
+  text-align: center;
+  border-top: 1px solid var(--app-border-soft);
+  user-select: none;
+}
 .vendor-key-inline { display: flex; align-items: center; gap: 8px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
 .vendor-key-input { flex: 1; min-width: 0; font-size: 12.5px; color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 10px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 .vendor-key-input:focus { outline: none; border-color: #c0c0c0; }

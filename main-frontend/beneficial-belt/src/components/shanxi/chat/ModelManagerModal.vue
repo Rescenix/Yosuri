@@ -35,6 +35,7 @@
             </div>
           </template>
         </div>
+        <div class="mm-thanks">💙 感谢所有免费模型提供方的赞助支持</div>
         <div class="mm-footer" @click="$emit('add-provider')">
           <Icon icon="mdi:plus" width="14" /> 添加提供方...
         </div>
@@ -152,6 +153,14 @@ function toggleVendor(grp) {
 }
 .mm-switch input:checked + .mm-switch-track { background: var(--app-accent); border-color: var(--app-accent); }
 .mm-switch input:checked + .mm-switch-track::after { transform: translateX(16px); }
+.mm-thanks {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--app-text-faint);
+  text-align: center;
+  border-top: 1px solid var(--app-border-soft);
+  user-select: none;
+}
 .mm-footer {
   display: flex; align-items: center; gap: 6px; padding: 12px 16px;
   border-top: 1px solid var(--app-border); font-size: 13px;
