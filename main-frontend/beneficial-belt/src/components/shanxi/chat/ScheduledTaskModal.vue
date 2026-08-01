@@ -11,7 +11,7 @@
         </div>
 
         <p class="stm-desc">
-          排程一个提示词以自动运行。使用 cron 语法或类似"每 15 分钟"的自然语言。
+          排程一个提示词，到点就会在右下角弹出系统通知提醒你。
         </p>
 
         <div class="stm-body">
@@ -62,6 +62,22 @@
             </div>
           </div>
 
+          <!-- 时间：左小时 + 右分钟（仅每天/工作日/每周/每月需要，每小时类自动整点触发） -->
+          <div v-if="needsTime" class="stm-row">
+            <div class="stm-field stm-half">
+              <label class="stm-label">小时</label>
+              <select v-model="form.hour" class="stm-select">
+                <option v-for="h in HOUR_OPTIONS" :key="h" :value="h">{{ h }}</option>
+              </select>
+            </div>
+            <div class="stm-field stm-half">
+              <label class="stm-label">分钟</label>
+              <select v-model="form.minute" class="stm-select">
+                <option v-for="m in MINUTE_OPTIONS" :key="m" :value="m">{{ m }}</option>
+              </select>
+            </div>
+          </div>
+
           <!-- 模型 -->
           <div class="stm-field">
             <label class="stm-label">模型 <span class="stm-optional">可选</span></label>
@@ -73,10 +89,9 @@
             </select>
           </div>
 
-          <!-- 时间反馈 -->
+          <!-- 时间反馈：大白话描述，如"每天 9:00" -->
           <div class="stm-schedule-preview">
-            <span class="stm-schedule-text">{{ scheduleText }}</span>
-            <code class="stm-schedule-cron">{{ cronExpr }}</code>
+            <span class="stm-schedule-text">🕐 {{ scheduleText }}</span>
           </div>
         </div>
 
@@ -100,23 +115,50 @@ const form = reactive({
   prompt: '',
   frequency: 'daily',
   deliverTo: 'desktop',
-  model: ''
+  model: '',
+  hour: '09',
+  minute: '00'
 })
 
+// 小时/分钟下拉选项（每 15 分钟一档，小学生也容易选）
+const HOUR_OPTIONS = []
+for (let h = 0; h < 24; h++) HOUR_OPTIONS.push(String(h).padStart(2, '0'))
+const MINUTE_OPTIONS = []
+for (let m = 0; m < 60; m++) MINUTE_OPTIONS.push(String(m).padStart(2, '0'))
+
+// 需要手动选时间的频率（每小时类自动整点触发，不显示时间下拉）
+const needsTime = computed(() => ['daily', 'weekdays', 'weekly', 'monthly'].includes(form.frequency))
+
+// 频率 → 时间占位格式（{t} 会被替换为 HH:MM）
 const FREQ_MAP = {
-  every_1h:  { text: '每小时', cron: '0 * * * *', timeText: '每小时的 0 分' },
-  every_2h:  { text: '每 2 小时', cron: '0 */2 * * *', timeText: '每 2 小时的 0 分' },
-  every_6h:  { text: '每 6 小时', cron: '0 */6 * * *', timeText: '每 6 小时的 0 分' },
-  every_12h: { text: '每 12 小时', cron: '0 */12 * * *', timeText: '每 12 小时的 0 分' },
-  daily:     { text: '每天', cron: '0 9 * * *', timeText: '每天 9:00' },
-  weekdays:  { text: '工作日', cron: '0 9 * * 1-5', timeText: '工作日 9:00' },
-  weekly:    { text: '每周', cron: '0 9 * * 1', timeText: '每周一 9:00' },
-  monthly:   { text: '每月', cron: '0 9 1 * *', timeText: '每月 1 日 9:00' }
+  every_1h:  { text: '每小时', cron: () => '0 * * * *',       timeText: () => '每小时的整点' },
+  every_2h:  { text: '每 2 小时', cron: () => '0 */2 * * *',   timeText: () => '每 2 小时的整点' },
+  every_6h:  { text: '每 6 小时', cron: () => '0 */6 * * *',   timeText: () => '每 6 小时的整点' },
+  every_12h: { text: '每 12 小时', cron: () => '0 */12 * * *', timeText: () => '每 12 小时的整点' },
+  daily:     { text: '每天',   cron: t => `${t.m} ${t.h} * * *`,   timeText: t => `每天 ${t.t}` },
+  weekdays:  { text: '工作日', cron: t => `${t.m} ${t.h} * * 1-5`, timeText: t => `工作日 ${t.t}` },
+  weekly:    { text: '每周',   cron: t => `${t.m} ${t.h} * * 1`,   timeText: t => `每周一 ${t.t}` },
+  monthly:   { text: '每月',   cron: t => `${t.m} ${t.h} 1 * *`,   timeText: t => `每月 1 日 ${t.t}` }
 }
 
 const freqMeta = computed(() => FREQ_MAP[form.frequency] || FREQ_MAP.daily)
-const scheduleText = computed(() => freqMeta.value.timeText)
-const cronExpr = computed(() => freqMeta.value.cron)
+// 把 form.hour / form.minute 合成对象，cron 用去前导零的小时/分钟，描述用完整 HH:MM
+function timeParts() {
+  const h = (form.hour || '09').replace(/^0/, '')
+  const m = (form.minute || '00').replace(/^0/, '')
+  const t = (form.hour || '00') + ':' + (form.minute || '00')
+  return { h, m, t }
+}
+const cronExpr = computed(() => {
+  const p = timeParts()
+  const fn = freqMeta.value.cron
+  return typeof fn === 'function' ? fn(p) : fn
+})
+const scheduleText = computed(() => {
+  const p = timeParts()
+  const fn = freqMeta.value.timeText
+  return typeof fn === 'function' ? fn(p) : fn
+})
 
 function onCreate() {
   if (!form.prompt.trim()) return
@@ -264,14 +306,6 @@ function onCreate() {
   font-size: 13px;
   font-weight: 600;
   color: #1a1a1a;
-}
-.stm-schedule-cron {
-  font-size: 12px;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  color: #666;
-  background: #e8e8e8;
-  padding: 2px 8px;
-  border-radius: 4px;
 }
 
 .stm-footer {

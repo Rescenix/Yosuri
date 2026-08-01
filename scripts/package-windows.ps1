@@ -30,7 +30,9 @@ $env:TMP = $goTemp
 
 Push-Location $backendDir
 try {
-    & $wailsPath build -clean -webview2 embed
+    # 从 wails.json 读版本号并注入 Go（updater 的 AppVersion），保持单一版本源
+    $appVersion = (Get-Content -Raw (Join-Path $backendDir 'wails.json') | ConvertFrom-Json).info.productVersion
+    & $wailsPath build -clean -webview2 embed -ldflags "-X backend/internal/handler.AppVersion=$appVersion"
     if ($LASTEXITCODE -ne 0) { throw "wails build 失败，退出码 $LASTEXITCODE" }
 } finally {
     Pop-Location

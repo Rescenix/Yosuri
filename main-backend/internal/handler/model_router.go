@@ -59,6 +59,9 @@ type FreeModelDef struct {
 	KeyEnv   string  `json:"-"`
 	ParamsB  float64 `json:"params_b"`
 	Note     string  `json:"note"`
+	// KeyURL 是提供方官网的 API Key 申请/管理页面（前端「官网获取 Key」按钮的跳转地址，
+	// 打开登录即可免费领取 API Key，粘贴输入框即用）。免 Key 网关（Keyless=true）留空。
+	KeyURL string `json:"key_url,omitempty"`
 	// 能力元数据（公开已知值；未知者留 0/false，绝不伪造）
 	Vision        bool `json:"vision"`
 	ContextWindow int  `json:"context_window"`
@@ -95,13 +98,13 @@ var freeModelCatalog = []FreeModelDef{
 	// step-2x-large 在该 key 下返回「does not exist or you do not have access」，故未收录。
 	// ContextWindow 一律留 0：/v1/models 只返回 id/created/owned_by，拿不到窗口大小，
 	// 按本目录「未知者留 0，绝不伪造」的规矩不填。
-	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true},
+	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
 
 	// —— Agnes AI 免费多模态网关（apihub.agnes-ai.com/v1，OpenAI 兼容）——
 	// 2026-07-27 用户要求接入：文本 + 多模态理解（识图）走 /v1/chat/completions，
 	// 生图（/v1/images/generations）暂未接进本路由层（现有生图为 DASHSCOPE 专线）。
 	// KeyEnv=AGNES_API_KEY，用户需自备（设置面板填写或环境变量）。
-	{ID: "free_agnes", Vendor: "Agnes AI", Name: "Agnes 2.0 Flash (多模态)（免费）", Endpoint: "https://apihub.agnes-ai.com/v1", Model: "agnes-2.0-flash", KeyEnv: "Agnes_API_KEY", ParamsB: 0, Note: "Agnes AI 免费多模态网关（文本/识图）", Vision: true, Reasoning: true},
+	{ID: "free_agnes", Vendor: "Agnes AI", Name: "Agnes 2.0 Flash (多模态)（免费）", Endpoint: "https://apihub.agnes-ai.com/v1", Model: "agnes-2.0-flash", KeyEnv: "Agnes_API_KEY", ParamsB: 0, Note: "Agnes AI 免费多模态网关（文本/识图）", Vision: true, Reasoning: true, KeyURL: "https://agnes-ai.com/"},
 
 	// —— OpenCode Zen 免 key 网关（opencode.ai/zen/v1，OpenAI 兼容）——
 	// 2026-07-28 用户实测接入：全程免 key，鉴权由域名承载；/v1/models 与
@@ -122,7 +125,7 @@ var freeModelCatalog = []FreeModelDef{
 	// /v1/chat/completions 均可用；需要 OLLAMA_API_KEY（ollama.com 注册获取）。
 	// 仅收录用户实测可用的 gpt-oss:120b；20b 档连对话质量都不够，不收录。
 	// ContextWindow 未知者留 0，绝不伪造（目录规矩）。
-	{ID: "cloud_ollama_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B（免费·云端）", Endpoint: "https://ollama.com/v1", Model: "gpt-oss:120b", KeyEnv: "OLLAMA_API_KEY", ParamsB: 120, Note: "Ollama Cloud 免费档大模型", Reasoning: true},
+	{ID: "cloud_ollama_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B（免费·云端）", Endpoint: "https://ollama.com/v1", Model: "gpt-oss:120b", KeyEnv: "OLLAMA_API_KEY", ParamsB: 120, Note: "Ollama Cloud 免费档大模型", Reasoning: true, KeyURL: "https://ollama.com/settings/keys"},
 }
 
 func isFreeCatalogID(id string) bool {

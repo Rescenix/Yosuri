@@ -50,7 +50,10 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span class="smc-session-dot" :class="dotClass(s)"></span>
+              <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
+                <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
+              </span>
+              <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -62,7 +65,7 @@
                 @blur="commitRename"
               />
               <span v-else class="smc-session-name">{{ s.name }}</span>
-              <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+              <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
@@ -76,6 +79,9 @@
       <div class="smc-section">
         <div class="smc-section-label">
           <span>项目</span>
+          <button class="smc-project-bulk" type="button" :title="bulkMode ? '退出批量管理' : '批量管理会话'" :class="{ active: bulkMode }" @click="toggleBulkMode">
+            <Icon icon="mdi:playlist-edit" width="18" />
+          </button>
           <button class="smc-project-add" type="button" title="创建项目" @click="openCreateProject">
             <Icon icon="mdi:plus" width="18" />
           </button>
@@ -96,7 +102,10 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span class="smc-session-dot" :class="dotClass(s)"></span>
+              <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
+                <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
+              </span>
+              <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -108,7 +117,7 @@
                 @blur="commitRename"
               />
               <span v-else class="smc-session-name">{{ s.name }}</span>
-              <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+              <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
@@ -133,7 +142,10 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span class="smc-session-dot" :class="dotClass(s)"></span>
+              <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
+                <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
+              </span>
+              <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -145,7 +157,7 @@
                 @blur="commitRename"
               />
               <span v-else class="smc-session-name">{{ s.name }}</span>
-              <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+              <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
@@ -167,8 +179,11 @@
             @mouseenter="hoveredId = s.id"
             @mouseleave="onRowLeave(s.id)"
             @click="onRowClick(s)"
-          >
-            <span class="smc-session-dot" :class="dotClass(s)"></span>
+            >
+            <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
+              <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
+            </span>
+            <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
             <input
               v-if="editingId === s.id"
               ref="renameInputRef"
@@ -180,7 +195,7 @@
               @blur="commitRename"
             />
             <span v-else class="smc-session-name">{{ s.name }}</span>
-            <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+            <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
               <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                 <Icon icon="mdi:dots-horizontal" width="16" />
               </button>
@@ -188,6 +203,16 @@
           </div>
         </div>
       </template>
+    </div>
+
+    <!-- 批量管理操作条 -->
+    <div v-if="bulkMode" class="smc-bulk-bar">
+      <button class="smc-bulk-action" type="button" @click="toggleSelectAllBulk">
+        {{ allBulkSelected ? '取消全选' : '全选' }}
+      </button>
+      <span class="smc-bulk-count">{{ bulkSelected.size }} 个已选</span>
+      <button class="smc-bulk-action danger" type="button" :disabled="!bulkSelected.size" @click="onBulkDelete">删除</button>
+      <button class="smc-bulk-action" type="button" @click="toggleBulkMode">完成</button>
     </div>
 
     <!-- footer -->
@@ -286,7 +311,7 @@ const props = defineProps({
   questionSession: { type: String, default: '' },
   fill: { type: Boolean, default: false }
 })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks'])
 
 // ========== 搜索框 ==========
 const searchInputRef = ref(null)
@@ -479,7 +504,11 @@ function toggleMenu(s, ev) {
   dropdownStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: menuW + 'px' }
 }
 function onRowLeave(id) { if (openMenuId.value !== id) hoveredId.value = null }
-function onRowClick(s) { if (editingId.value === s.id) return; emit('select-session', s.id) }
+function onRowClick(s) {
+  if (editingId.value === s.id) return
+  if (bulkMode.value) { toggleBulkSelect(s); return }
+  emit('select-session', s.id)
+}
 function startRename(s) {
   openMenuId.value = null
   editingId.value = s.id
@@ -501,6 +530,34 @@ function onDelete(s) {
   openMenuId.value = null
   hoveredId.value = null
   emit('delete-session', s.id)
+}
+
+// ========== 批量管理 ==========
+const bulkMode = ref(false)
+const bulkSelected = ref(new Set())
+
+function toggleBulkMode() {
+  bulkMode.value = !bulkMode.value
+  bulkSelected.value = new Set()
+  openMenuId.value = null
+  hoveredId.value = null
+  editingId.value = null
+}
+function toggleBulkSelect(s) {
+  const set = new Set(bulkSelected.value)
+  if (set.has(s.id)) set.delete(s.id)
+  else set.add(s.id)
+  bulkSelected.value = set
+}
+const allBulkSelected = computed(() => props.sessions.length > 0 && bulkSelected.value.size === props.sessions.length)
+function toggleSelectAllBulk() {
+  bulkSelected.value = allBulkSelected.value ? new Set() : new Set(props.sessions.map(s => s.id))
+}
+function onBulkDelete() {
+  const ids = [...bulkSelected.value]
+  if (!ids.length) return
+  emit('delete-sessions', ids)
+  toggleBulkMode()
 }
 function onDocClick() { openMenuId.value = null; showUserMenu.value = false }
 
@@ -610,7 +667,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-project-add {
   width: 28px;
   height: 28px;
-  margin-left: auto;
   margin-right: -6px;
   display: inline-flex;
   align-items: center;
@@ -626,6 +682,76 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: color-mix(in srgb, var(--app-text, #202124), transparent 93%);
   color: var(--app-text);
   transform: rotate(90deg);
+}
+.smc-project-bulk {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.smc-project-bulk:hover {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 93%);
+  color: var(--app-text);
+}
+.smc-project-bulk.active {
+  background: color-mix(in srgb, var(--app-accent), transparent 88%);
+  color: var(--app-accent);
+}
+
+/* ===== 批量管理 ===== */
+.smc-bulk-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 8px 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--app-accent), transparent 62%);
+  background: color-mix(in srgb, var(--app-accent), transparent 92%);
+}
+.smc-bulk-count {
+  flex: 1;
+  min-width: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smc-bulk-action {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--app-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.smc-bulk-action:hover { background: color-mix(in srgb, var(--app-accent), transparent 86%); }
+.smc-bulk-action.danger { color: #d94834; }
+.smc-bulk-action.danger:hover { background: rgba(217, 72, 52, 0.1); }
+.smc-bulk-action:disabled { color: var(--app-text-faint); cursor: default; background: transparent; }
+.smc-bulk-check {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--app-text-soft);
 }
 
 /* ===== Folder ===== */

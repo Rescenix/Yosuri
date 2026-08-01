@@ -219,6 +219,11 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	workflowCtx, workflowControl := registerWorkflowControl(c.Request.Context(), workflowID)
 	c.Request = c.Request.WithContext(workflowCtx)
 	defer unregisterWorkflowControl(workflowID, workflowControl)
+	// 后台任务完成通知通道：run_task 启动的任务退出时往这里推，收尾点 select 到后注入新一轮。
+	// 工具执行链通过 context 里的 workflow_id 找到它（见 withWorkflowID）。
+	bgNotifyCh := registerBgNotify(workflowID)
+	defer unregisterBgNotify(workflowID)
+	c.Request = c.Request.WithContext(withWorkflowID(c.Request.Context(), workflowID))
 	writeCodeSSE(c, "workflow_start", map[string]any{
 		"workflow_id": workflowID, "task": task, "mode": mode,
 		"resumed": resumed != nil, "resumed_round": func() int {
@@ -420,6 +425,18 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		default:
 		}
 
+		// 后台任务完成通知 drain（Hermes completion_queue 语义）：run_task 启动的任务
+		// 可能在 agent 干别的活的中途就退出了，通知先进缓冲 channel。这里每轮开头
+		// 把已完成的全部注入消息历史（一轮至多注入一条，避免一轮塞太多让模型抓瞎；
+		// 多条排队到后续轮次，与 steer 同一节奏）。收尾点等待分支只处理「还在跑」的任务。
+		select {
+		case res := <-bgNotifyCh:
+			msgs = append(msgs, bgTaskDoneMessage(res))
+			writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
+			checkpoint(round) // 注入已入历史，断线续跑能接上
+		default:
+		}
+
 		// 上下文感知压缩：真实 prompt_tokens 超窗口 80% 时，把早期轮次折叠成任务相关
 		// 摘要，腾出预算继续跑（见 context_compress.go）。inputTokens 是上一轮上游返回的
 		// 真实 prompt_tokens，比字符估算准。压缩失败会原样返回，不影响主流程。
@@ -504,6 +521,27 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			historyFinal = content
 			if content != "" {
 				flowBlocks = append(flowBlocks, FlowBlock{Type: "intent", Text: content})
+			}
+			// Hermes 式后台任务：还有后台任务在跑时不真正收尾——
+			// 发 workflow_paused（agent 回答照常送达、turn 正常结束，但连接不关），
+			// 等完成通知后注入新一轮继续（completion 唤醒 agent）。
+			// 注意：paused 分支不调 persistHistory——它是幂等的，在这里落盘会让
+			// 后续真正收尾时的更新被跳过。历史只在工作流真正结束时写。
+			if n := pendingBgTaskCount(workflowID); n > 0 {
+				writeCodeSSE(c, "workflow_paused", map[string]any{
+					"final_output":  content,
+					"pending_tasks": n,
+				})
+				select {
+				case res := <-bgNotifyCh:
+					msgs = append(msgs, bgTaskDoneMessage(res))
+					writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
+					checkpoint(round + 1) // 完成通知已入历史，断线续跑能接上
+					continue
+				case <-c.Request.Context().Done():
+					// 等待期间用户停止/断线：保留检查点（上面 checkpoint 过），可续跑
+					return
+				}
 			}
 			persistHistory()
 			deleteWorkflowCheckpoint(workflowID)

@@ -16,7 +16,7 @@
       <div v-else-if="group.type === 'single-thinking'" class="flow-thinking flow-thinking-single">
         <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`)">
           <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
-          <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考' }}</span>
+          <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : (flow.status === 'waiting' ? '等待后台任务' : '思考') }}</span>
           <span v-if="!(thinkOpen[`single-${gIdx}`] ?? true) && group.block.text" class="flow-row-preview">{{ onelinePreview(group.block.text) }}</span>
           <span v-else class="flow-spacer"></span>
           <span class="flow-chevron" :class="{ open: thinkOpen[`single-${gIdx}`] ?? true }">›</span>
@@ -105,7 +105,7 @@
               <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
                 <div class="flow-row-head" @click.stop="toggleThink(`${gIdx}-${i}`)">
                   <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
-                  <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : '思考' }}</span>
+                  <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : (flow.status === 'waiting' ? '等待后台任务' : '思考') }}</span>
                   <span v-if="!(thinkOpen[`${gIdx}-${i}`] ?? true) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
                   <span v-else class="flow-spacer"></span>
                   <span class="flow-chevron" :class="{ open: thinkOpen[`${gIdx}-${i}`] ?? true }">›</span>

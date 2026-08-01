@@ -68,6 +68,8 @@
               <Icon icon="mdi:brain" width="16" />记忆</button>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion()">
+              <Icon icon="mdi:update" width="16" />版本</button>
           </div>
 
           <!-- 右侧内容区 -->
@@ -207,7 +209,7 @@
             <div v-show="activeTab === 'providers'" class="settings-panel">
               <template v-if="providerSubTab === 'free'">
                 <div class="settings-section-title">免费模型</div>
-                <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；免 Key 提供方可直接使用。</div>
+                <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；点击「官网获取 Key」打开官网登录即可免费领取 API Key，粘贴输入框即可使用；免 Key 提供方无需配置。</div>
 
                 <div v-if="loading" class="settings-loading">加载中...</div>
                 <template v-else>
@@ -216,6 +218,7 @@
                       <span class="vendor-name">{{ grp.vendor }}</span>
                       <span class="vendor-count">{{ grp.items.length }} 个模型</span>
                       <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? '免 Key' : (grp.hasKey ? '已配 Key' : '未配 Key') }}</span>
+                      <a v-if="grp.keyUrl && !grp.keyless" class="vendor-key-btn vendor-key-link" :href="grp.keyUrl" target="_blank" rel="noopener" title="打开官网登录即可免费获取 API Key">官网获取 Key ↗</a>
                       <button v-if="!grp.keyless && editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
                       <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
                     </div>
@@ -568,6 +571,44 @@
                 <button class="api-form-btn save" type="button" @click="saveProfile" :disabled="profileSaving">{{ profileSaving ? '保存中…' : '保存' }}</button>
               </div>
             </div>
+
+            <!-- ========== 版本与更新 ========== -->
+            <div v-show="activeTab === 'version'" class="settings-panel">
+              <div class="settings-section-title">版本与更新</div>
+              <div class="settings-section-desc">版本以 GitHub Release 为基准，下载走官网直链。</div>
+
+              <div class="param-row">
+                <span class="param-label">当前版本</span>
+                <span class="version-value">{{ versionInfo.current_version ? 'v' + versionInfo.current_version : (versionLoading ? '检查中…' : '未知') }}</span>
+              </div>
+              <div class="param-row">
+                <span class="param-label">最新版本</span>
+                <span v-if="versionLoading" class="version-value">检查中…</span>
+                <span v-else-if="versionInfo.has_update" class="version-value version-new">{{ versionInfo.latest_version }}</span>
+                <span v-else class="version-value">已是最新版本</span>
+              </div>
+
+              <div class="param-row" style="align-items: flex-start;">
+                <span class="param-label">更新内容</span>
+                <div v-if="versionLoading" class="settings-loading">检查中…</div>
+                <div v-else-if="versionInfo.release_notes" class="update-notes" v-html="renderMarkdown(versionInfo.release_notes)"></div>
+                <div v-else class="memory-empty">{{ versionInfo.has_update ? '本次更新没有附带更新说明。' : '—' }}</div>
+              </div>
+
+              <div class="profile-actions" style="margin-top: 14px;">
+                <button
+                  class="api-form-btn save"
+                  type="button"
+                  @click="openUpdate"
+                  :disabled="!versionInfo.has_update || versionOpening"
+                >{{ versionOpening ? '正在打开…' : '去官网更新' }}</button>
+                <label class="param-switch" style="margin-left: auto;" title="关闭后启动不再检查/弹窗提示更新">
+                  <input type="checkbox" v-model="notifyDisabled" @change="onNotifyDisabledChange" />
+                  <span class="param-switch-track"></span>
+                </label>
+                <span class="param-value">不提示版本更新</span>
+              </div>
+            </div>
           </div>
 
           <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
@@ -584,6 +625,7 @@ import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFa
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
+import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
 
 // 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
 const PREVIEW_MD =
@@ -706,12 +748,14 @@ const vendorGroups = computed(() => {
     // 而是自动进入模型候选，做到"配置即用"。
     if (fm.local) continue
     const v = fm.vendor || '其他'
-    if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false, keyless: false })
+    if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false, keyless: false, keyUrl: '' })
     const g = map.get(v)
     g.items.push(fm)
     if (fm.api_key_set) g.hasKey = true
     // 该提供方下任一模型是免 key 网关（如 opencode zen），整组标记免 Key
     if (fm.keyless) g.keyless = true
+    // 官网 API Key 申请页（组内任一模型带 URL 即用）
+    if (!g.keyUrl && fm.key_url) g.keyUrl = fm.key_url
   }
   return Array.from(map.values())
 })
@@ -1290,6 +1334,49 @@ async function saveProfile() {
   }
 }
 
+// ============ 版本与更新 ============
+const versionLoading = ref(false)
+const versionOpening = ref(false)
+const versionInfo = ref({})
+const notifyDisabled = ref(isUpdateNotifyDisabled())
+
+async function loadVersion() {
+  versionLoading.value = true
+  try {
+    const res = await fetch('/api/update/check')
+    if (res.ok) {
+      const data = await res.json()
+      versionInfo.value = data.ok && data.update ? data.update : {}
+    }
+  } catch (e) {
+    versionInfo.value = {}
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+function onNotifyDisabledChange() {
+  setUpdateNotifyDisabled(notifyDisabled.value)
+}
+
+async function openUpdate() {
+  const url = versionInfo.value.download_url || versionInfo.value.release_url
+  if (!url) return
+  versionOpening.value = true
+  try {
+    const res = await fetch('/api/update/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    })
+    if (!res.ok) window.open(url, '_blank')
+  } catch (e) {
+    window.open(url, '_blank')
+  } finally {
+    versionOpening.value = false
+  }
+}
+
 function handleEsc(e) {
   if (e.key === 'Escape') emit('close')
 }
@@ -1490,6 +1577,8 @@ onUnmounted(() => {
 .vendor-keystate.free { color: var(--app-accent); }
 .vendor-key-btn { font-size: 11px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 3px 10px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-btn:hover { background: var(--app-surface-3); }
+.vendor-key-link { color: var(--app-accent); text-decoration: none; }
+.vendor-key-link:hover { text-decoration: underline; }
 .vendor-model-hint { margin-top: 6px; font-size: 11px; color: var(--app-text-faint); line-height: 1.5; padding-left: 2px; }
 .vendor-thanks {
   margin-top: 12px; padding-top: 10px;
@@ -1702,4 +1791,39 @@ onUnmounted(() => {
   border: 1px dashed var(--app-border);
   border-radius: 12px;
 }
+.version-value { color: var(--app-text); font-size: 12.5px; font-weight: 600; }
+.version-new { color: var(--app-accent); }
+.update-notes {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  color: var(--app-text-soft);
+  font-size: 12.5px;
+  line-height: 1.65;
+  word-break: break-word;
+  max-height: 220px;
+}
+.update-notes :deep(h1),
+.update-notes :deep(h2),
+.update-notes :deep(h3) {
+  margin: 12px 0 6px;
+  font-size: 13.5px;
+  color: var(--app-text);
+}
+.update-notes :deep(h1:first-child),
+.update-notes :deep(h2:first-child),
+.update-notes :deep(h3:first-child) { margin-top: 0; }
+.update-notes :deep(p) { margin: 6px 0; }
+.update-notes :deep(ul),
+.update-notes :deep(ol) { margin: 6px 0; padding-left: 20px; }
+.update-notes :deep(code) {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--app-code-bg);
+  font-family: var(--app-font);
+  font-size: 11.5px;
+}
+.update-notes :deep(pre) { padding: 10px 12px; border-radius: 8px; background: var(--app-code-bg); overflow: auto; }
+.update-notes :deep(pre code) { padding: 0; background: none; }
+.update-notes :deep(a) { color: var(--app-accent); }
 </style>

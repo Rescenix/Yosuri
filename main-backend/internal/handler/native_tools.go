@@ -69,6 +69,24 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"command": {Type: "string", Description: "要执行的命令"},
 			"timeout": {Type: "integer", Description: "超时秒数，默认 120，最大 600"},
 		}, []string{"command"}),
+		nativeTool("run_task", "在后台启动一条命令并立即返回 task_id，不阻塞当前工作流。进程退出时会自动通知你（工作流被唤醒继续处理）。适合长耗时任务（构建/下载/批量脚本）。配套 task_status / task_log / task_wait / task_kill 管理。", map[string]core.ToolProperty{
+			"command": {Type: "string", Description: "要在后台执行的命令"},
+		}, []string{"command"}),
+		nativeTool("task_status", "查询后台任务的运行状态和输出预览。", map[string]core.ToolProperty{
+			"task_id": {Type: "string", Description: "run_task 返回的 task_id"},
+		}, []string{"task_id"}),
+		nativeTool("task_log", "按行分页读取后台任务的完整输出。", map[string]core.ToolProperty{
+			"task_id": {Type: "string", Description: "run_task 返回的 task_id"},
+			"offset":  {Type: "integer", Description: "起始行号，0 表示从最早开始"},
+			"limit":   {Type: "integer", Description: "返回行数，默认 200"},
+		}, []string{"task_id"}),
+		nativeTool("task_wait", "阻塞等待后台任务完成并返回退出码和输出尾部；超时返回 timeout。需要立即拿到结果时用。", map[string]core.ToolProperty{
+			"task_id": {Type: "string", Description: "run_task 返回的 task_id"},
+			"timeout": {Type: "integer", Description: "等待秒数，默认 180，最大 600"},
+		}, []string{"task_id"}),
+		nativeTool("task_kill", "终止后台任务（树杀，含子进程）。", map[string]core.ToolProperty{
+			"task_id": {Type: "string", Description: "run_task 返回的 task_id"},
+		}, []string{"task_id"}),
 		nativeTool("web_fetch", "通过 Go HTTP 客户端抓取网页并提取可读文本，不依赖 Python。", map[string]core.ToolProperty{
 			"url":       {Type: "string", Description: "http(s) URL"},
 			"max_chars": {Type: "integer", Description: "最大返回字符数，默认 8000，最大 30000"},
@@ -152,6 +170,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callNativeFileTool(name, argsJSON)
 	case "run_command":
 		return callNativeCommand(ctx, argsJSON)
+	case "run_task", "task_status", "task_log", "task_wait", "task_kill":
+		return callBgTaskTool(ctx, name, argsJSON, workflowIDFromCtx(ctx))
 	case "web_fetch":
 		return callNativeWebFetch(ctx, argsJSON)
 	case "view_image":

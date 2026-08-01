@@ -558,10 +558,41 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             if (d.resumable) refreshResumable()
         })
 
+        // Hermes 式后台任务：agent 回答已送达但后台任务还在跑——不关流，
+        // 卡片进入「等待后台任务」状态，任务完成时后端发 bg_task_done 唤醒同一工作流。
+        es.addEventListener('workflow_paused', e => {
+            const d = JSON.parse(e.data)
+            flow.status = 'waiting'
+            flow.endTime = null
+            flow.blocks.push({
+                type: 'steer',
+                text: `⏳ ${d.pending_tasks || 1} 个后台任务运行中，完成时自动继续…`
+            })
+            onStreamUpdate?.()
+        })
+
+        // 后台任务完成：恢复 running 状态 + 在后台任务面板登记一条完成记录。
+        es.addEventListener('bg_task_done', e => {
+            const d = JSON.parse(e.data)
+            flow.status = 'running'
+            flow.endTime = null
+            flow.subagents.push({
+                id: d.task_id,
+                task: `[后台任务] ${d.command || ''}`,
+                status: d.exit_code === 0 ? 'completed' : 'failed',
+                rounds: 0,
+                tools: [],
+                output: d.output || '',
+                startTime: Date.now(),
+                endTime: Date.now()
+            })
+            onStreamUpdate?.()
+        })
+
         // 服务端正常结束响应也会触发 onerror（EventSource 会尝试重连），
         // workflow_done 已把 es 置 null，这里只兜底异常断开
         es.onerror = () => {
-            if (currentFlow && currentFlow.status === 'running') {
+            if (currentFlow && (currentFlow.status === 'running' || currentFlow.status === 'waiting')) {
                 currentFlow.status = 'failed'
                 currentFlow.endTime = Date.now()
                 settlePendingTools('error', '连接已断开，工具调用未完成')
@@ -587,7 +618,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
 
     async function stopCodeWorkflow() {
         const flow = currentFlow
-        if (!flow || flow.status !== 'running') {
+        if (!flow || (flow.status !== 'running' && flow.status !== 'waiting')) {
             closeStream()
             return
         }

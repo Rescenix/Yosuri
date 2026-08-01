@@ -26,7 +26,7 @@
 | 能力 | 说明 |
 | --- | --- |
 | **🎨 专攻前端设计** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），按任务类型自动匹配风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风。Agent 写完直接真实渲染给你看 |
-| **🌐 真实浏览器自动化** | 复用系统 Edge/Chrome 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
+| **🌐 真实浏览器自动化** | 复用系统 Edge 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
 | **🖱️ Computer Use** | 不止会改代码——能操作桌面：截图、移动鼠标、点击、键入、拖拽、滚动，接管整台机器干活 |
 | **🔋 免费模型每日更新** | 每天自动探测各厂商免费档模型可用性，跑不了的自动标记退役，能用的自动恢复——免费池永远是真能跑的 |
 | **🧠 成长中的记忆** | 每次工作流完成后自动萃取经验：模型偏好、技术栈倾向、代码风格、项目架构，下次自动融入上下文，不需要写自定义指令 |
@@ -44,7 +44,7 @@ Rescene 的 Agent 工作流严格遵守 **4+4+2 原则**：
 | 阶段 | 占比 | 说明 |
 | --- | --- | --- |
 | **🗺️ 明确需求与计划** | **40%** | 成败在写第一行代码前就决定了。结构化 TODO、任务中断恢复、上下文精准对齐。 |
-| **✅ 真实执行与验证** | **40%** | 代码能不能编译？页面跑起来长什么样？真实浏览器自动化（复用系统 Edge/Chrome）+ Computer Use 实测，拒绝没有实测验证的纸上谈兵。 |
+| **✅ 真实执行与验证** | **40%** | 代码能不能编译？页面跑起来长什么样？真实浏览器自动化（复用系统 Edge）+ Computer Use 实测，拒绝没有实测验证的纸上谈兵。 |
 | **💻 纯编码** | **20%** | 静态代码片段只占两成。AI 必须长出手脚，自己去跑编译、自己去点页面、自己去操作桌面。 |
 
 ---
@@ -72,7 +72,7 @@ Rescene 不是一开始就全知的。它随时间成长：
 1. 根据用户目标创建结构化 TODO
 2. 搜索项目上下文并修改文件
 3. 运行依赖安装、构建或测试命令
-4. 启动真实浏览器预览（复用系统 Edge/Chrome），Agent 自行决定何时截图交付
+4. 启动真实浏览器预览（复用系统 Edge），Agent 自行决定何时截图交付
 5. 将 Diff、日志、截图作为交付证据返回
 
 ---
@@ -103,7 +103,7 @@ flowchart TB
     Router --> Private["Custom Providers"]
 
     ToolCall --> Files["File & Shell"]
-    ToolCall --> Browser["Browser / CDP (系统 Edge/Chrome)"]
+    ToolCall --> Browser["Browser / CDP (系统 Edge)"]
     ToolCall --> Computer["Computer Use"]
     ToolCall --> Extensions["MCP / Skills"]
 
@@ -128,7 +128,7 @@ flowchart TB
 | --- | --- |
 | **💻 前端** | Vue 3、Vite、Naive UI、Monaco Editor、GSAP、PixiJS |
 | **⚙️ 后端** | Go 1.26、Gin、WebSocket、SSE（纯原生工具解析与路由） |
-| **🌐 浏览器** | 复用系统 Edge/Chrome（不内置浏览器，发行包更轻）、Chrome DevTools Protocol、Screencast |
+| **🌐 浏览器** | 复用系统 Edge（不内置浏览器，发行包更轻）、DevTools Protocol、Screencast |
 | **🖱️ Computer Use** | Windows 原生桌面操作（截图 / 鼠标 / 键盘 / 剪贴板） |
 | **🔌 扩展系统** | 纯 Go 实现的 MCP Streamable HTTP 客户端（无需 Node/Python 运行环境） |
 
@@ -136,7 +136,7 @@ flowchart TB
 
 ## 🚀 下载（开箱即用）
 
-- **极致轻量**：发行包约 10M，不内置浏览器（预览复用系统自带 Edge/Chrome）。
+- **极致轻量**：发行包约 10M，不内置浏览器（预览复用系统自带 Edge）。
 - **零外部依赖**：不需要预装 Node.js、Python，不需要跑 npm/pip 安装。
 - **解压即用**：双击直接运行工作台 + Agent 核心。
 

@@ -88,6 +88,7 @@
             @new-session="newSession"
             @rename-session="renameSession"
             @delete-session="deleteSession"
+            @delete-sessions="deleteSessions"
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
                         @open-plugins="openPluginsMarket"
@@ -1164,12 +1165,33 @@ async function deleteSession(id) {
   delete wm[id]
   saveWorkdirMapping(wm)
   // 重新拉而不是本地 filter：被删会话的分支在后端会被提升为根会话，
-  // 本地 filter 的话那些分支还挂着指向已删父会话的 parentId，在树里会变成孤儿
-  await loadSessionList()
+  // 本地 filter 的话那些分支还挂着指向已删父会话的 parentId，在树里会变成孤儿。
+  // 先切走当前会话再拉列表：loadSessionList 有"当前会话必须出现在列表里"的
+  // 保护逻辑，若删的是当前会话而没先切换，它会把已删会话又插回列表顶部
   if (activeSession.value === id) {
     const next = sessionList.value.find(s => s.id !== id)?.id || ('sess_' + Date.now().toString(36))
     switchSession(next)
   }
+  await loadSessionList()
+}
+async function deleteSessions(ids) {
+  for (const id of ids) {
+    try {
+      await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
+    } catch (e) {
+      console.warn('删除会话失败', id, e)
+    }
+    const wm = loadWorkdirMapping()
+    delete wm[id]
+    saveWorkdirMapping(wm)
+  }
+  // 先切走当前会话再拉列表：loadSessionList 有"当前会话必须出现在列表里"的
+  // 保护逻辑，若删的是当前会话而没先切换，它会把已删会话又插回列表顶部
+  if (ids.includes(activeSession.value)) {
+    const next = sessionList.value.find(s => !ids.includes(s.id))?.id || ('sess_' + Date.now().toString(36))
+    switchSession(next)
+  }
+  await loadSessionList()
 }
 const toggleTokenPanel = () => {
   showTokenPanel.value = !showTokenPanel.value
@@ -2216,9 +2238,13 @@ function onCreateScheduledTask(data) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
-  }).catch(() => {
-    console.log('定时任务数据:', data)
   })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(() => showGitToast('✅ 定时任务已创建，到点会弹系统通知'))
+    .catch(e => {
+      console.log('定时任务数据:', data, e)
+      showGitToast('❌ 定时任务创建失败：' + (e.message || '网络错误'))
+    })
 }
 
 // ==================== 底部工具条：Yolo 模式 + "+" 附加菜单 + Command 切换器 ====================

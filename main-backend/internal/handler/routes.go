@@ -195,6 +195,16 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 新闻标题抓取代理：DS 搜索 open_page 只给 URL，前端要显示标题走这里（防 CORS）
 	r.GET("/api/fetch-title", HandleFetchTitle)
 
+	// 自动更新：启动时检查 GitHub 最新 release，有新版则前端弹窗提示更新内容
+	r.GET("/api/update/check", HandleCheckUpdate)
+	r.POST("/api/update/open", HandleOpenUpdateDownload)
+
+	// 定时任务：前端 ScheduledTaskModal 创建 → 调度器到点弹 Windows 原生通知（右下角）
+	r.POST("/api/cron/create", HandleCronCreate)
+	r.GET("/api/cron/list", HandleCronList)
+	r.DELETE("/api/cron/delete/:id", HandleCronDelete)
+	r.POST("/api/cron/test", HandleCronTest)
+
 	// 视觉分析 HTTP 入口，供前端上传/追问复用；Go 内置 view_image 直接复用同一模型路由。
 	r.POST("/api/vision/analyze", HandleVisionAnalyze)
 
