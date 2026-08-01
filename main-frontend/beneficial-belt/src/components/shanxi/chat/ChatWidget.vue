@@ -2770,6 +2770,8 @@ function jumpToGroup(id) {
 // 不需要工具时就是普通对话回复，agent 两件事都能干，用户不用先选模式。
 function handleSend() {
   if (hasPendingAttachments.value) return
+  // 亲密度 +1（fire-and-forget，失败静默不阻断发送）
+  railAuth.incIntimacy()
   // 工作流跑着的时候，回车不再是"发一条新消息"（之前会在 startCodeWorkflow 里
   // 被 flowState.active 静默挡掉），而是把这句话当中途插话塞进正在跑的那个工作流。
   if (flowState.active) {

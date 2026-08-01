@@ -222,7 +222,7 @@
         <Icon v-else icon="mdi:account-circle" width="20" color="#6b6b6b" />
         <span class="fm-user-id">
           <span class="fm-user-name">{{ auth.displayName.value }}</span>
-          <span v-if="auth.uid.value" class="fm-user-uid">UID {{ auth.uid.value }}</span>
+          <span v-if="auth.uid.value" class="fm-user-uid">UID {{ auth.uid.value }} · 亲密等级 {{ levelText }}</span>
         </span>
       </div>
       <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
@@ -239,7 +239,7 @@
             <Icon v-else icon="mdi:account-circle" width="26" color="var(--app-accent)" />
             <div class="smc-user-card-name">
               <div>{{ auth.name.value || auth.login.value || 'GitHub 用户' }}</div>
-              <div v-if="auth.uid.value" class="smc-user-uid">UID {{ auth.uid.value }}</div>
+              <div v-if="auth.uid.value" class="smc-user-uid">UID {{ auth.uid.value }} · 亲密等级 {{ levelText }}</div>
             </div>
           </div>
           <button class="smc-user-card-item danger" @click="logout">退出登录</button>
@@ -249,7 +249,7 @@
             <Icon icon="mdi:account-circle" width="26" color="var(--app-accent)" />
             <div class="smc-user-card-name">
               <div>{{ auth.displayName.value }}</div>
-              <div v-if="auth.uid.value" class="smc-user-uid">登录后永久保留 UID {{ auth.uid.value }}</div>
+              <div v-if="auth.uid.value" class="smc-user-uid">登录后永久保留 UID {{ auth.uid.value }} · 亲密等级 {{ levelText }}</div>
               <div v-else class="smc-user-uid">登录后永久保留 UID</div>
             </div>
           </div>
@@ -309,6 +309,12 @@ const auth = useAuth()
 const githubAuthUrl = computed(() => {
   const base = globalThis.__RESCENE_BACKEND_URL__ || ''
   return base + '/api/auth/github'
+})
+
+// 亲密等级展示：外显 Lv.N（无上限）。无缓存时显示 Lv.1。
+const levelText = computed(() => {
+  const lv = auth.intimacyLevel.value
+  return lv ? 'Lv.' + lv : 'Lv.1'
 })
 
 const PIN_KEY = 'shanxi_pinned_projects'

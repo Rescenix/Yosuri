@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -82,8 +83,14 @@ func ParseIndex() []IndexLine {
 
 // ReadWithLinks 读取 index.md + 根据 task 用 bigram 匹配命中行，
 // 命中的行附带 [[]] 文件 → 读取对应文件内容。
-// 返回拼接后的字符串（index.md + 命中的文件内容）。
+// 返回拼接后的字符串（index.md + 命中的文件内容）。默认最多读 3 个文件。
 func ReadWithLinks(task string) string {
+	return ReadWithLinksLimit(task, 3)
+}
+
+// ReadWithLinksLimit 同 ReadWithLinks，但可指定最多读取的文件数。
+// 亲密度驱动：亲密越高召回越深（context_provider 按阈值 3→5）。
+func ReadWithLinksLimit(task string, maxFiles int) string {
 	if task == "" {
 		return ReadIndex()
 	}
@@ -95,8 +102,8 @@ func ReadWithLinks(task string) string {
 
 	// 对每行用 bigram 打分
 	type scored struct {
-		idx int
-		ov  float64
+		idx  int
+		ov   float64
 		file string
 	}
 	var hits []scored
@@ -122,13 +129,12 @@ func ReadWithLinks(task string) string {
 	}
 	sort.Slice(hits, func(i, j int) bool { return hits[i].ov > hits[j].ov })
 
-	// 最多取 3 个文件（预算控制）
+	// 最多取 maxFiles 个文件（预算控制；默认 3，高亲密度 5）
 	var parts []string
 	parts = append(parts, "📇 记忆索引")
 	parts = append(parts, ReadIndex())
 	parts = append(parts, "")
 
-	maxFiles := 3
 	for i, h := range hits {
 		if i >= maxFiles {
 			break
@@ -352,4 +358,68 @@ func overlap(a, b string) float64 {
 		return contain
 	}
 	return jacc
+}
+
+// ReadRaw 读取 memory/<file>.md 的原始内容（无匹配逻辑，供"偏好自动回填"等
+// 无条件注入场景）。文件不存在或为空返回空串。
+func ReadRaw(file string) string {
+	file = strings.TrimSpace(file)
+	if file == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(path(), file+".md"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// ── 亲密度（无上限互动值）：云端权威 + 本地缓存 ──
+//
+// 亲密度随 UID 账号存 ResceneCloud（跨设备保留），re0 侧代理读写时把最新值
+// 同步到 memory/intimacy.md 本地缓存（单行 `<uid>: <value>`），供 context_provider
+// 每轮注入系统提示词 —— 离线时也能注入最近一次的值，不依赖网络。
+
+func intimacyPath() string { return filepath.Join(path(), "intimacy.md") }
+
+// WriteIntimacy 写本地亲密度缓存（幂等覆盖当前 UID 的行）。
+func WriteIntimacy(uid, value int64) error {
+	if uid <= 0 {
+		return fmt.Errorf("uid 非法")
+	}
+	dir := path()
+	os.MkdirAll(dir, 0755)
+	return os.WriteFile(intimacyPath(), []byte(fmt.Sprintf("%d: %d\n", uid, value)), 0644)
+}
+
+// ReadIntimacy 读本地亲密度缓存，返回 (uid, value)。无缓存/格式错返回 (0, 0)。
+func ReadIntimacy() (int64, int64) {
+	data, err := os.ReadFile(intimacyPath())
+	if err != nil {
+		return 0, 0
+	}
+	parts := strings.SplitN(strings.TrimSpace(string(data)), ":", 2)
+	if len(parts) != 2 {
+		return 0, 0
+	}
+	uid, err1 := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 64)
+	val, err2 := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64)
+	if err1 != nil || err2 != nil {
+		return 0, 0
+	}
+	return uid, val
+}
+
+// IntimacyLevel 亲密值 → 亲密等级（与 ResceneCloud intimacy.go 同一公式）。
+// 外显等级：界面只显示 Lv.N，不暴露裸数值。QQ 宠物式曲线 —— 越高越难升，无上限：
+//
+//	升到 Lv.N 所需总亲密值 = 100 * N * (N-1) / 2
+//	例：Lv1:0  Lv2:100  Lv3:300  Lv4:600  Lv10:4500  Lv20:19000
+func IntimacyLevel(v int64) int64 {
+	if v <= 0 {
+		return 1
+	}
+	x := float64(v) / 100.0
+	n := (1 + math.Sqrt(1+8*x)) / 2
+	return int64(math.Floor(n))
 }

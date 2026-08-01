@@ -12,10 +12,13 @@ package handler
 // 这样开源的 re0 不含任何付费/鉴权密钥，商业闭环留在私有 ResceneCloud。
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+
+	"backend/internal/memorydir"
 
 	"github.com/gin-gonic/gin"
 )
@@ -128,6 +131,65 @@ func AuthMe(c *gin.Context) {
 		"uid":           uid,
 		"is_vip":        isVip,
 	})
+}
+
+// ── 亲密度（无上限互动值）薄代理 ──
+//
+// 亲密度随 UID 账号存 ResceneCloud（云端权威、跨设备保留）。re0 只做透传，
+// 并在成功响应时把最新值同步到本地缓存 memory/intimacy.md —— context_provider
+// 每轮从缓存注入系统提示词，离线也能用最近一次的值。
+
+// CloudIntimacyIncProxy 亲密度 +1 上报：转发到 ResceneCloud 的 /api/auth/intimacy/inc。
+func CloudIntimacyIncProxy(c *gin.Context) {
+	proxyIntimacyToCloud(c, "/api/auth/intimacy/inc")
+}
+
+// CloudIntimacyGetProxy 亲密度查询：转发到 ResceneCloud 的 /api/auth/intimacy（带 uid 查询参数）。
+func CloudIntimacyGetProxy(c *gin.Context) {
+	q := c.Request.URL.Query()
+	proxyIntimacyToCloud(c, "/api/auth/intimacy?"+q.Encode())
+}
+
+// proxyIntimacyToCloud 转发亲密度请求到云端，成功后解析 {uid, intimacy} 写本地缓存。
+func proxyIntimacyToCloud(c *gin.Context, targetPath string) {
+	target := cloudAuthBase() + targetPath
+
+	var body io.Reader
+	if c.Request.Body != nil {
+		if b, err := io.ReadAll(c.Request.Body); err == nil {
+			body = strings.NewReader(string(b))
+		}
+	}
+
+	req, err := http.NewRequest(c.Request.Method, target, body)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "构造亲密度请求失败: " + err.Error()})
+		return
+	}
+	if ct := c.GetHeader("Content-Type"); ct != "" {
+		req.Header.Set("Content-Type", ct)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "连接 ResceneCloud 失败: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+
+	// 云端权威值 → 本地缓存（供每轮注入；失败静默不影响响应）
+	if resp.StatusCode == http.StatusOK {
+		var parsed struct {
+			UID      int64 `json:"uid"`
+			Intimacy int64 `json:"intimacy"`
+		}
+		if json.Unmarshal(respBody, &parsed) == nil && parsed.UID > 0 {
+			memorydir.WriteIntimacy(parsed.UID, parsed.Intimacy)
+		}
+	}
 }
 
 // CloudAuthConfig 把 ResceneCloud 基址暴露给前端，供其直接发起 GitHub 登录跳转。

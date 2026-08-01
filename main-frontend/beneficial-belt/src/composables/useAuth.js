@@ -14,10 +14,12 @@ const name = ref('')    // GitHub 显示名
 const avatar = ref('')  // GitHub 头像 URL
 const uid = ref(null)   // cloud 分发的账号 UID（游客/登录都有）
 const isVip = ref(false) // 会员标识：仅由服务端 JWT 的 is_vip 决定，绝不读 localStorage（堵住游客伪造）
+const intimacy = ref(0) // 亲密度：无上限互动值（云端权威，随 UID 账号存储、跨设备保留）
 let refreshing = false
 
 const DEVICE_KEY = 'aurora_device_id'
 const UID_KEY = 'aurora_uid'
+const INTIMACY_KEY = 'aurora_intimacy'
 
 // 设备指纹：首次生成 UUID 存 localStorage（同一设备恒定；换设备/清缓存 = 新游客号）
 function getDeviceId() {
@@ -65,12 +67,65 @@ async function bindUid() {
       if (data.uid) {
         uid.value = data.uid
         localStorage.setItem(UID_KEY, String(data.uid))
+        // UID 变化（并入正式账号）后重新拉取亲密度
+        fetchIntimacy()
       }
     }
   } catch {
     // 绑定失败不阻断登录，下次启动 refresh 时重试
   }
 }
+
+// 亲密度：无上限互动值，云端权威（随 UID 账号存储，跨设备保留）。
+// 每次用户发消息 +1（incIntimacy），启动时 fetchIntimacy 校准。
+// 拉取当前亲密度：失败保留本地缓存值，不阻断启动。
+async function fetchIntimacy() {
+  const u = uid.value
+  if (!u) return
+  try {
+    const res = await fetch('/api/auth/intimacy?uid=' + u)
+    if (res.ok) {
+      const data = await res.json()
+      if (typeof data.intimacy === 'number') {
+        intimacy.value = data.intimacy
+        localStorage.setItem(INTIMACY_KEY, String(data.intimacy))
+      }
+    }
+  } catch {
+    // 云端不可达：保留本地缓存值（离线也能展示最近一次）
+  }
+}
+
+// 亲密度 +1（用户发消息时调用）。fire-and-forget：失败静默，绝不阻断发送。
+async function incIntimacy() {
+  const u = uid.value
+  if (!u) return
+  try {
+    const res = await fetch('/api/auth/intimacy/inc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: u, delta: 1 })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (typeof data.intimacy === 'number') {
+        intimacy.value = data.intimacy
+        localStorage.setItem(INTIMACY_KEY, String(data.intimacy))
+      }
+    }
+  } catch {
+    // 离线也照常聊天，亲密度下次在线时校准
+  }
+}
+
+// 亲密等级：外显 Lv.N（无上限，QQ 宠物式曲线——越高越难升）。
+// 与后端同公式：升到 Lv.N 需总亲密值 100*N*(N-1)/2。
+const intimacyLevel = computed(() => {
+  const v = intimacy.value
+  if (!v) return 0
+  const x = v / 100
+  return Math.floor((1 + Math.sqrt(1 + 8 * x)) / 2)
+})
 
 // 展示名：登录用 GitHub 名，未登录用 cloud 分发的 UID
 const displayName = computed(() => {
@@ -141,10 +196,13 @@ function logout() {
 // 首帧先读本地缓存的 UID（避免闪烁"未登录"），再向 cloud 校准
 const cachedUid = localStorage.getItem(UID_KEY)
 if (cachedUid) uid.value = Number(cachedUid)
+// 首帧先读本地缓存的亲密度（避免闪烁 0），UID 到位后再向 cloud 校准
+const cachedIntimacy = localStorage.getItem(INTIMACY_KEY)
+if (cachedIntimacy) intimacy.value = Number(cachedIntimacy)
 
 // 首次加载即验真；并监听登录态变化事件自动刷新
 refresh()
-fetchUid()
+fetchUid().then(() => fetchIntimacy())
 if (typeof window !== 'undefined') {
   window.addEventListener('auth-change', refresh)
 }
@@ -157,9 +215,13 @@ export function useAuth() {
     avatar: readonly(avatar),
     uid: readonly(uid),
     isVip: readonly(isVip),
+    intimacy: readonly(intimacy),
+    intimacyLevel: readonly(intimacyLevel),
     displayName: readonly(displayName),
     displayAvatar: readonly(displayAvatar),
     refresh,
-    logout
+    logout,
+    fetchIntimacy,
+    incIntimacy
   }
 }

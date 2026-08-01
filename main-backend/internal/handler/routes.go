@@ -207,6 +207,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 游客持设备指纹换 UID；登录后 bind 把游客号升级为正式账号（永久保留）。
 	r.POST("/api/auth/uid", CloudUidProxy)
 	r.POST("/api/auth/uid/bind", CloudUidBindProxy)
+	// 亲密度（无上限互动值）：云端权威存储，re0 透传 + 本地缓存
+	r.POST("/api/auth/intimacy/inc", CloudIntimacyIncProxy)
+	r.GET("/api/auth/intimacy", CloudIntimacyGetProxy)
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)

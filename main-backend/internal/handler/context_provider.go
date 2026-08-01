@@ -20,6 +20,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,11 +88,36 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 	if len(tasks) > 0 {
 		task = tasks[0]
 	}
+
+	// ── 亲密等级（外显等级，无上限）：驱动记忆机制 ──
+	// 云端权威（随 UID 账号存 ResceneCloud），本地缓存 memory/intimacy.md 供每轮注入：
+	//   - 注入亲密等级 → 模型感知与用户的关系亲疏，语气自然调整（越熟越自然）
+	//   - Lv≥2（100 互动）：偏好自动回填 —— 无条件注入 preferences.md，不用等 bigram 命中
+	//   - Lv≥5（1000 互动）：关联记忆召回加深 —— 命中文件数 3 → 5（更深的记忆展开）
+	// 等级换算用 QQ 宠物式曲线（越高越难升），本身无上限，能一直升。
+	_, intimacyVal := memorydir.ReadIntimacy()
+	level := memorydir.IntimacyLevel(intimacyVal)
+
+	intimacySection := ""
+	if intimacyVal > 0 {
+		intimacySection = fmt.Sprintf("\n\n# 亲密等级（与用户的关系等级，无上限）\n你和当前用户的亲密等级是 Lv.%d。\n等级反映你们相处的时间与互动积累：等级越高代表你们越熟、越有默契（升级会越来越慢，但永不封顶）。\n- 低等级：保持礼貌、简洁、专业。\n- 高等级：可以更自然、亲切、体贴，像熟悉的朋友一样主动分享想法。\n自然地融入语气即可，不要刻意提及等级数字。", level)
+	}
+	prefSection := ""
+	if level >= 2 {
+		if pref := memorydir.ReadRaw("preferences"); pref != "" {
+			prefSection = "\n\n# 用户偏好（亲密等级解锁自动回填）\n" + pref
+		}
+	}
+
 	// 反向链接联想召回：根据当前任务匹配 index.md 中的行，
-	// 命中的 [[文件]] 自动读取对应文件内容
+	// 命中的 [[文件]] 自动读取对应文件内容（亲密等级越高召回越深）
 	taskMemory := ""
 	if task != "" {
-		if linked := memorydir.ReadWithLinks(task); linked != "" && linked != inject {
+		maxFiles := 3
+		if level >= 5 {
+			maxFiles = 5
+		}
+		if linked := memorydir.ReadWithLinksLimit(task, maxFiles); linked != "" && linked != inject {
 			taskMemory = "\n\n# 关联记忆（按任务联想读取）\n" + linked
 		}
 	}
@@ -117,6 +143,8 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 			{key: "memory", content: memorySection},                                      // 每写一次记忆就变
 			{key: "memory", content: pinnedSection},                                      // 常驻记忆：memory_pin 写入，跨对话常驻
 			{key: "memory", content: handoffSection},                                     // 会话交接工作态：memory_handoff 写入
+			{key: "memory", content: intimacySection},                                    // 亲密等级：关系等级注入，驱动语气与记忆行为
+			{key: "memory", content: prefSection},                                        // 偏好自动回填：亲密度 ≥100 无条件注入
 			{key: "memory", content: workdirSection},                                     // 项目级 workdir.md，会话开始即注入，跨对话不失业
 			{key: "memory", content: taskMemory},                                         // 反向链接联想召回：命中 + 1跳展开
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
