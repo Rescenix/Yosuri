@@ -203,6 +203,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 校验当前 token 真伪（复用 middleware.AuthRequired 本地验 JWT_SECRET）：
 	// 仅当 token 有效时返回 200，否则 401。前端用它区分“真登录”与“伪造/过期 token”。
 	r.GET("/api/auth/me", middleware.AuthRequired(), AuthMe)
+	// UID 账号体系（薄代理）：由 ResceneCloud 验证并分发，前端不可伪造。
+	// 游客持设备指纹换 UID；登录后 bind 把游客号升级为正式账号（永久保留）。
+	r.POST("/api/auth/uid", CloudUidProxy)
+	r.POST("/api/auth/uid/bind", CloudUidBindProxy)
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)

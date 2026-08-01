@@ -220,7 +220,10 @@
       <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" title="点击查看账户">
         <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
         <Icon v-else icon="mdi:account-circle" width="20" color="#6b6b6b" />
-        <span>{{ auth.displayName.value }}</span>
+        <span class="fm-user-id">
+          <span class="fm-user-name">{{ auth.displayName.value }}</span>
+          <span v-if="auth.uid.value" class="fm-user-uid">UID {{ auth.uid.value }}</span>
+        </span>
       </div>
       <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
         <Icon icon="mdi:cog-outline" width="18" />
@@ -234,14 +237,21 @@
           <div class="smc-user-card-head">
             <img v-if="auth.avatar.value" :src="auth.avatar.value" class="smc-user-avatar" alt="avatar" />
             <Icon v-else icon="mdi:account-circle" width="26" color="var(--app-accent)" />
-            <div class="smc-user-card-name">{{ auth.name.value || auth.login.value || 'GitHub 用户' }}</div>
+            <div class="smc-user-card-name">
+              <div>{{ auth.name.value || auth.login.value || 'GitHub 用户' }}</div>
+              <div v-if="auth.uid.value" class="smc-user-uid">UID {{ auth.uid.value }}</div>
+            </div>
           </div>
           <button class="smc-user-card-item danger" @click="logout">退出登录</button>
         </template>
         <template v-else>
           <div class="smc-user-card-head">
             <Icon icon="mdi:account-circle" width="26" color="var(--app-accent)" />
-            <div class="smc-user-card-name">{{ auth.displayName.value }}</div>
+            <div class="smc-user-card-name">
+              <div>{{ auth.displayName.value }}</div>
+              <div v-if="auth.uid.value" class="smc-user-uid">登录后永久保留 UID {{ auth.uid.value }}</div>
+              <div v-else class="smc-user-uid">登录后永久保留 UID</div>
+            </div>
           </div>
           <a class="smc-user-card-item" :href="githubAuthUrl">使用 GitHub 登录</a>
         </template>
@@ -982,6 +992,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 }
 .fm-user:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 95%); }
 .fm-user span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-user-id {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  line-height: 1.3;
+}
+.fm-user-name { font-size: 13px; color: var(--app-text); }
+.fm-user-uid { font-size: 12px; font-weight: 600; color: var(--app-accent); }
 .fm-user-avatar {
   width: 24px;
   height: 24px;
@@ -1010,6 +1029,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   border: 1px solid var(--app-accent);
 }
 .smc-user-card-name { font-size: 13px; font-weight: 600; color: var(--app-text); }
+.smc-user-card-name .smc-user-uid { font-size: 11px; font-weight: 400; color: var(--app-text-secondary, #8a8a8a); margin-top: 2px; }
 .smc-user-card-item {
   display: block; width: 100%; box-sizing: border-box;
   padding: 9px 12px; border: none; border-radius: 8px;

@@ -32,6 +32,16 @@ func cloudAuthBase() string {
 // proxyToCloud 把当前请求（方法/查询/body/特定头）转发到 ResceneCloud 的 targetPath，
 // 并把响应原样写回。用于 /api/login 与 /api/auth/github/callback。
 func proxyToCloud(c *gin.Context, targetPath string) {
+	proxyToCloudOpt(c, targetPath, false)
+}
+
+// proxyToCloudAuth 同 proxyToCloud，但额外透传 Authorization 头
+// （供需要携带用户 JWT 的端点使用，如 /api/auth/uid/bind）。
+func proxyToCloudAuth(c *gin.Context, targetPath string) {
+	proxyToCloudOpt(c, targetPath, true)
+}
+
+func proxyToCloudOpt(c *gin.Context, targetPath string, forwardAuth bool) {
 	target := cloudAuthBase() + targetPath
 
 	var body io.Reader
@@ -46,9 +56,14 @@ func proxyToCloud(c *gin.Context, targetPath string) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "构造鉴权请求失败: " + err.Error()})
 		return
 	}
-	// 透传 Content-Type；Authorization 不转发（登录/OAuth 不需要）
+	// 透传 Content-Type；Authorization 仅在 forwardAuth 时转发（登录/OAuth 不需要）
 	if ct := c.GetHeader("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
+	}
+	if forwardAuth {
+		if auth := c.GetHeader("Authorization"); auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -82,6 +97,17 @@ func CloudGitHubCallback(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, target)
 }
 
+// CloudUidProxy 游客 UID 分发：转发到 ResceneCloud 统一验证并签发（前端不可伪造）。
+// 同一 device_id 恒定返回同一 UID；换设备/清缓存 = 新游客号，登录 bind 后永久保留。
+func CloudUidProxy(c *gin.Context) {
+	proxyToCloud(c, "/api/auth/uid")
+}
+
+// CloudUidBindProxy 登录后 UID 绑定：把游客 UID 升级为正式账号（需透传用户 JWT）。
+func CloudUidBindProxy(c *gin.Context) {
+	proxyToCloudAuth(c, "/api/auth/uid/bind")
+}
+
 // AuthMe 本地验 JWT（复用 middleware.AuthRequired 透传的 claims），回传 is_vip。
 // 这是薄中间件：不信任网络，只信本地用 JWT_SECRET 验过的 token。
 func AuthMe(c *gin.Context) {
@@ -90,6 +116,7 @@ func AuthMe(c *gin.Context) {
 	login, _ := c.Get("login")
 	name, _ := c.Get("name")
 	avatar, _ := c.Get("avatar")
+	uid, _ := c.Get("uid")
 	isVip, _ := c.Get("is_vip")
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": true,
@@ -98,6 +125,7 @@ func AuthMe(c *gin.Context) {
 		"login":         login,
 		"name":          name,
 		"avatar":        avatar,
+		"uid":           uid,
 		"is_vip":        isVip,
 	})
 }
