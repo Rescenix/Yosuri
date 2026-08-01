@@ -518,13 +518,14 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 .message-bubble.user {
   width: 100%;
   max-width: 100%;
-  background: var(--app-surface);
-  color: var(--app-text);
-  border: 1px solid #e5e7eb;
-  padding: 10px 16px;
-  border-radius: 10px;
-  text-align: left;
-  box-shadow:0 1px 2px rgba(0,0,0,0.04);
+  padding: 3px 0 3px 12px;
+  border-left: 2px solid var(--app-accent, #6366f1);
+  font-size: 12px;
+  color: var(--app-text-faint);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 .message-bubble.user .attach-chip-row { margin-bottom: 8px; }
 .chat-input-area {

@@ -405,15 +405,27 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			return
 		}
 		if c.Request.Context().Err() != nil {
-			outcome = "interrupted"
-			if workflowControl.stopped.Load() {
-				historyFinal = "用户主动停止了工作流。"
-			} else {
-				historyFinal = "工作流连接中断，任务未完成。"
-			}
-			checkpoint(round)
-			return
-		}
+					outcome = "interrupted"
+					if workflowControl.stopped.Load() {
+						// 用户主动停止：不存检查点、发 workflow_done(resumable=false)，
+						// 前端就不会弹续跑提示了
+						historyFinal = "用户主动停止了工作流。"
+						persistHistory()
+						writeCodeSSE(c, "workflow_done", map[string]any{
+							"status":            "stopped",
+							"final_output":      historyFinal,
+							"input_tokens":      inputTokens,
+							"output_tokens":     outputTokens,
+							"conversation_tokens": conversationTokens(inputTokens, staticSum),
+							"resumable":         false,
+							"workflow_id":       workflowID,
+						})
+					} else {
+						historyFinal = "工作流连接中断，任务未完成。"
+						checkpoint(round)
+					}
+					return
+				}
 
 		// 非阻塞取一条 steer 消息（如果有）：一轮最多消费一条，多条按发送顺序留在
 		// channel 里排队到下一轮，避免把用户连续几句不同的话糊成一坨塞给模型。
@@ -487,32 +499,45 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			})
 		}
 		if err != nil {
-			// 上游挂了属于可恢复失败——保留检查点，前端可以带 resume=<id> 原地重试，
-			// 不必把已经跑完的十几轮工具再跑一遍。
-			checkpoint(round)
-			if c.Request.Context().Err() != nil {
-				outcome = "interrupted"
-				historyStatus = taskStatusInterrupted
-				if workflowControl.stopped.Load() {
-					historyFinal = "用户主动停止了工作流。"
-				} else {
-					historyFinal = "工作流连接中断，任务未完成。"
+					// 上游挂了属于可恢复失败——保留检查点，前端可以带 resume=<id> 原地重试，
+					// 不必把已经跑完的十几轮工具再跑一遍。
+					checkpoint(round)
+					if c.Request.Context().Err() != nil {
+						outcome = "interrupted"
+						historyStatus = taskStatusInterrupted
+						if workflowControl.stopped.Load() {
+							// 用户主动停止：不存检查点、发 workflow_done(resumable=false)
+							// （这里已经存过 checkpoint，删掉它；发 workflow_done 覆盖前端感知）
+							deleteWorkflowCheckpoint(workflowID)
+							historyFinal = "用户主动停止了工作流。"
+							persistHistory()
+							writeCodeSSE(c, "workflow_done", map[string]any{
+								"status":             "stopped",
+								"final_output":       historyFinal,
+								"input_tokens":       inputTokens,
+								"output_tokens":      outputTokens,
+								"conversation_tokens": conversationTokens(inputTokens, staticSum),
+								"resumable":          false,
+								"workflow_id":        workflowID,
+							})
+						} else {
+							historyFinal = "工作流连接中断，任务未完成。"
+						}
+						return
+					}
+					outcome = "upstream_error"
+					historyStatus = taskStatusFailed
+					historyFinal = workflowFailureText(err.Error())
+					persistHistory()
+					writeCodeSSE(c, "flow_error", map[string]any{"message": err.Error()})
+					writeCodeSSE(c, "workflow_done", map[string]any{
+						"status": "failed", "final_output": historyFinal,
+						"input_tokens": inputTokens, "output_tokens": outputTokens,
+						"conversation_tokens": conversationTokens(inputTokens, staticSum),
+						"resumable":           true, "workflow_id": workflowID,
+					})
+					return
 				}
-				return
-			}
-			outcome = "upstream_error"
-			historyStatus = taskStatusFailed
-			historyFinal = workflowFailureText(err.Error())
-			persistHistory()
-			writeCodeSSE(c, "flow_error", map[string]any{"message": err.Error()})
-			writeCodeSSE(c, "workflow_done", map[string]any{
-				"status": "failed", "final_output": historyFinal,
-				"input_tokens": inputTokens, "output_tokens": outputTokens,
-				"conversation_tokens": conversationTokens(inputTokens, staticSum),
-				"resumable":           true, "workflow_id": workflowID,
-			})
-			return
-		}
 
 		// 没有工具调用 → 最终回答，收尾
 		if len(calls) == 0 {
@@ -528,21 +553,41 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			// 注意：paused 分支不调 persistHistory——它是幂等的，在这里落盘会让
 			// 后续真正收尾时的更新被跳过。历史只在工作流真正结束时写。
 			if n := pendingBgTaskCount(workflowID); n > 0 {
-				writeCodeSSE(c, "workflow_paused", map[string]any{
-					"final_output":  content,
-					"pending_tasks": n,
-				})
-				select {
-				case res := <-bgNotifyCh:
-					msgs = append(msgs, bgTaskDoneMessage(res))
-					writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
-					checkpoint(round + 1) // 完成通知已入历史，断线续跑能接上
-					continue
-				case <-c.Request.Context().Done():
-					// 等待期间用户停止/断线：保留检查点（上面 checkpoint 过），可续跑
-					return
-				}
-			}
+						writeCodeSSE(c, "workflow_paused", map[string]any{
+							"final_output":  content,
+							"pending_tasks": n,
+						})
+						select {
+						case res := <-bgNotifyCh:
+							msgs = append(msgs, bgTaskDoneMessage(res))
+							writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
+							checkpoint(round + 1) // 完成通知已入历史，断线续跑能接上
+							continue
+						case <-c.Request.Context().Done():
+							// 等待期间用户停止/断线
+							if workflowControl.stopped.Load() {
+								// 用户主动停止：不存检查点、发 workflow_done(resumable=false)
+								historyFinal = "用户主动停止了工作流。"
+								outcome = "stopped"
+								persistHistory()
+								writeCodeSSE(c, "workflow_done", map[string]any{
+									"status":             "stopped",
+									"final_output":       historyFinal,
+									"input_tokens":       inputTokens,
+									"output_tokens":      outputTokens,
+									"conversation_tokens": conversationTokens(inputTokens, staticSum),
+									"resumable":          false,
+									"workflow_id":        workflowID,
+								})
+							} else {
+								// 网络断线：保留检查点，可续跑
+								historyFinal = "工作流连接中断，任务未完成。"
+								outcome = "interrupted"
+								checkpoint(round + 1)
+							}
+							return
+						}
+					}
 			persistHistory()
 			deleteWorkflowCheckpoint(workflowID)
 			// agent 决定结束对话：跑一次 build + 截图校验（旁路，失败不阻断）

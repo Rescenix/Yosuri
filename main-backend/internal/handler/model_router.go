@@ -117,6 +117,7 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·最快）", Keyless: true, Reasoning: true},
+	{ID: "free_zen_nemotron_3_ultra", Vendor: "OpenCode Zen", Name: "Nemotron 3 Ultra（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "nemotron-3-ultra-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档）", Keyless: true, Reasoning: true},
 
 	// —— 本地 llama.cpp 已移除：维护 Vision 标签成本高于收益，识图模型由用户自行选择 ——
 

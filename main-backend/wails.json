@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "ResceneAgent",
-  "outputfilename": "ResceneAgent",
+  "name": "rescene",
+  "outputfilename": "rescene",
   "frontend:install": "npm run install:app",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
@@ -13,7 +13,7 @@
   "info": {
     "companyName": "Rescenix",
     "productName": "Rescene Agent",
-    "productVersion": "1.0.0",
+    "productVersion": "0.1.2-alpha.3",
     "copyright": "Copyright 2026 Rescenix",
     "comments": "Zero-friction local AI agent client"
   }

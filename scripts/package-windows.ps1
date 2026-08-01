@@ -42,7 +42,7 @@ if (Test-Path -LiteralPath $portableDir) {
     Remove-Item -LiteralPath $portableDir -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
-Copy-Item -LiteralPath (Join-Path $backendDir 'build\bin\ResceneAgent.exe') -Destination $portableDir
+Copy-Item -LiteralPath (Join-Path $backendDir 'build\bin\rescene.exe') -Destination $portableDir
 
 $chromiumSource = Join-Path $repoRoot 'runtime\chromium'
 $chromiumExe = Join-Path $chromiumSource 'chrome.exe'

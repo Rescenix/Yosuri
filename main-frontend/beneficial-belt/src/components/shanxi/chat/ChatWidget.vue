@@ -2714,13 +2714,26 @@ function handleSend() {
   // 工作流跑着的时候，回车不再是"发一条新消息"（之前会在 startCodeWorkflow 里
   // 被 flowState.active 静默挡掉），而是把这句话当中途插话塞进正在跑的那个工作流。
   if (flowState.active) {
-    const steerText = userInput.value.trim()
-    if (!steerText) return
-    userInput.value = ''
-    nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-    sendSteerMessage(steerText)
-    return
-  }
+      const steerText = userInput.value.trim()
+      if (!steerText) return
+      userInput.value = ''
+      nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
+      const ok = sendSteerMessage(steerText)
+      if (!ok) {
+        // workflowId 还没回填或队列已满——在聊天里加一条即时的本地反馈
+        const sid = localStorage.getItem('prism_session_id') || ''
+        messages.value.push({
+          id: `steer-fail-${Date.now()}`,
+          kind: 'text',
+          sender: 'user',
+          content: steerText,
+          status: 'steered-fail',
+          timestamp: new Date()
+        })
+        onStreamUpdate?.()
+      }
+      return
+    }
   const combined = buildOutgoingMessage()
   if (!combined) return
   const displayText = userInput.value.trim()

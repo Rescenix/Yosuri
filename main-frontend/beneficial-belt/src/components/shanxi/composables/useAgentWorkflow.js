@@ -661,6 +661,12 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         message = (message || '').trim()
         const wfId = currentFlow?.workflowId
         if (!message || !wfId) return false
+        // 乐观更新：先把插话渲染到当前工作流里，不等后端确认——用户按回车就该立刻
+        // 看到自己的消息出现在对话流中，而不是等后端消费完 channel 再推 steering_injected。
+        // 后端消费后会再推一条 steering_injected，到那时再 push 一条也没关系（steer 块成对出现，
+        // 视觉上就是"用户插话 → 模型下一轮回复"）。
+        currentFlow?.blocks?.push({ type: 'steer', text: message })
+        onStreamUpdate?.()
         try {
             const res = await fetch('/api/code/workflow/steer', {
                 method: 'POST',

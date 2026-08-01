@@ -85,6 +85,17 @@
         <img :src="group.block.image" :alt="group.block.content || 'Agent 截图'" />
       </button>
 
+      <!-- 中途插话：轻量提示条，用户插话后模型会按此转向 -->
+      <div v-else-if="group.type === 'steer'" class="flow-steer">
+        <span class="flow-steer-text">{{ group.block.text }}</span>
+      </div>
+
+      <!-- 自动预览提示：弱化条，不抢正文注意力 -->
+      <div v-else-if="group.type === 'preview'" class="flow-preview">
+        <Icon icon="mdi:eye-outline" class="flow-preview-icon" width="14" />
+        <span class="flow-preview-text">{{ group.block.text }}</span>
+      </div>
+
       <!-- 收纳起来的工具/思考时间线 -->
       <template v-else>
         <div
@@ -243,10 +254,16 @@ const blockGroups = computed(() => {
       } else if (b.type === 'image') {
         groups.push({ type: 'image', block: b })
       } else if (b.type === 'tool' && b.name === 'web_search') {
-        // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
-        groups.push({ type: 'search-tool', block: b })
+              // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
+              groups.push({ type: 'search-tool', block: b })
+            } else if (b.type === 'steer') {
+        // 中途插话：轻量提示条，用户插话后模型会按此转向，给个可见反馈
+        groups.push({ type: 'steer', block: b })
+      } else if (b.type === 'preview') {
+        // 自动预览提示：弱化条，不抢正文注意力
+        groups.push({ type: 'preview', block: b })
       }
-      // 其他类型（compressed/steer/preview）暂不收纳也不平铺，避免污染回复
+      // 其他类型（compressed）暂不收纳也不平铺，避免污染回复
     }
   }
   if (current) groups.push(current)
@@ -909,8 +926,7 @@ function toolBodyText(b) {
   color: var(--app-text-faint);
 }
 .flow-compressed-icon { font-size: 12px; opacity: 0.8; }
-/* 中途插话提示：跟压缩提示同样"轻"，但左侧竖线用强调色——这是用户自己
-   插的一句话，比系统后台动作稍微值得多看一眼，但依然不该抢正文注意力。 */
+/* 中途插话提示：用户插话——左侧强调色竖线 + 正文，不做卡片。 */
 .flow-steer {
   display: flex;
   align-items: center;
@@ -921,7 +937,7 @@ function toolBodyText(b) {
   font-size: 12px;
   color: var(--app-text-faint);
 }
-.flow-steer-icon { font-size: 12px; opacity: 0.8; }
+.flow-steer-text { flex: 1; min-width: 0; }
 /* 自动预览提示：跟插话提示同款弱化条 */
 .flow-preview {
   display: flex;
@@ -935,6 +951,7 @@ function toolBodyText(b) {
   word-break: break-all;
 }
 .flow-preview-icon { font-size: 12px; opacity: 0.8; }
+.flow-preview-text { flex: 1; min-width: 0; word-break: break-all; }
 /* ---------- 卡片行（思考/工具共用）：仿图1 的一行小卡片 ---------- */
 .flow-row-head {
   display: flex;
