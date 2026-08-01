@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { requestPreview } from './previewBus.js'
+import { generatePptxFile, generatePptxHtml } from '../../../utils/pptx.js'
 import { contextBreakdown, setContextBreakdownFromBackend, setConversationTokens } from './contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from './sessionTokenStats.js'
 
@@ -173,11 +174,14 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         // 生图提供商：设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
         // 不走提示词——跟识图模型路由一个思路，模型不感知、不浪费 token
         const imageProvider = localStorage.getItem('imageProvider') || 'pollinations'
+        // 联网搜索模型：「模型」tab 独立配置的搜索模型 ID（'' = 不启用）。
+        // 后端收到后主链改用该 backend（Responses 协议 + 服务端 web_search）。
+        const searchModel = localStorage.getItem('searchModel') || ''
         // 续跑：只带 resume=<workflow_id>，task/model/mode/effort 后端全从检查点取，
         // 免得前端此刻的模型选择跟中断前不一致（换模型会让已有 tool_calls 历史串味）
         const url = opts.resumeId
             ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}`
-            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}`
+            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}&search_model=${encodeURIComponent(searchModel)}`
         es = new EventSource(url)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
@@ -345,9 +349,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
                 t.args = args
                 t._rawArgs = d.args || ''
                 t.status = 'running'
-                t.expanded = false
+                // web_search（服务端搜索）默认展开——引用来源就是它的价值，
+                // 折叠起来用户看不到搜到了什么；其它工具执行时收起。
+                t.expanded = d.name === 'web_search'
             } else {
-                flow.blocks.push({ type: 'tool', id: d.id, name: d.name, args, _rawArgs: d.args || '', status: 'running', output: '', expanded: false, startTime: Date.now(), elapsedMs: 0 })
+                flow.blocks.push({ type: 'tool', id: d.id, name: d.name, args, _rawArgs: d.args || '', status: 'running', output: '', expanded: d.name === 'web_search', startTime: Date.now(), elapsedMs: 0 })
             }
             onStreamUpdate?.()
         })
@@ -358,13 +364,20 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             const t = findPendingTool(d.id, d.name)
             if (t) {
                 t.id = d.id
-                t.status = d.ok ? 'ok' : 'error'
+                // web_search 的 result 事件后端会带 status（searching/completed）：
+                // 搜索中必须保持 running，前端才有扫描线（否则被 ok 映射成 'ok'，
+                // 搜索进行中会错误显示「无输出」）。
+                t.status = (t.name === 'web_search' && d.status === 'searching')
+                    ? 'running'
+                    : (d.ok ? 'ok' : 'error')
                 t.output = d.output || ''
                 t.elapsedMs = t.startTime ? (Date.now() - t.startTime) : 0
                 if (d.ok && /^(write_file|edit_file|apply_patch|mcp__fs__(write_file|edit_file|create_file))$/.test(d.name || t.name)) {
                     window.dispatchEvent(new CustomEvent('agent-working-diff-changed'))
                 }
             }
+            // Agent 调用了 generate_pptx → 自动渲染 .pptx + 预览窗口
+            maybeAutoPptx(d)
             onStreamUpdate?.()
         })
 
@@ -662,5 +675,24 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow,
         resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable,
         todoState, sendSteerMessage, questionState, answerQuestion
+    }
+}
+
+// Agent 调用 generate_pptx 工具后，后端在 result 事件里回传结构化 JSON；
+// 这里检测到该工具后自动渲染 .pptx（下载）并打开预览窗口，不需要用户点按钮。
+async function maybeAutoPptx(d) {
+    const name = d.name || ''
+    if (name !== 'generate_pptx') return
+    try {
+        let slideData = {}
+        try { slideData = JSON.parse(d.output || '{}') } catch { slideData = { title: 'PPT', slides: [] } }
+        const html = generatePptxHtml(slideData)
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        requestPreview(url)
+        const filename = `rescene-${Date.now()}.pptx`
+        await generatePptxFile(slideData, filename)
+    } catch (e) {
+        console.error('auto pptx failed', e)
     }
 }

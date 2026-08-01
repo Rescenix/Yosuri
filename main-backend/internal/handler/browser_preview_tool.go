@@ -24,12 +24,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"backend/internal/ai/core"
@@ -725,6 +727,20 @@ func StopPreviewBrowser() error {
 		return fmt.Errorf("关闭 Chromium CDP 失败：端口 %s 仍在线", browser.port)
 	}
 	return nil
+}
+
+// RegisterCleanupOnExit 注册退出信号监听：主进程收到 SIGINT/SIGTERM 时，
+// 显式停掉预览 Chromium/Edge，避免子进程变孤儿继续占内存。
+// （本地 llama-server 已移除，2026-08-01；原先这里同时清理 llama。）
+func RegisterCleanupOnExit() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("🧹 收到退出信号，正在停止预览 Chromium（如有）...")
+		_ = StopPreviewBrowser()
+		os.Exit(0)
+	}()
 }
 
 // ensureChromeCDP 确保本机有一个受管的无头 Chromium 供预览使用。

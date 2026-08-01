@@ -26,6 +26,56 @@
         </div>
       </div>
 
+      <!-- 联网搜索：极简状态卡——head 显示「联网搜索 + 概要」，body 展开显示
+           搜索词（queries）与引用来源（open_page URL）。全部数据来自后端
+           SSE 的 args.query/args.urls，纯前端渲染，零 token 成本。 -->
+      <div v-else-if="group.type === 'search-tool'" class="flow-search-card">
+        <div class="flow-search-head">
+          <Icon icon="mdi:magnify" class="flow-search-icon" width="14" />
+          <span class="flow-search-summary">{{ searchSummary(group.block) }}</span>
+          <span class="flow-spacer"></span>
+          <span v-if="group.block.status === 'running' || group.block.status === 'generating'" class="flow-search-scan"></span>
+        </div>
+        <div class="flow-search-body">
+          <!-- 搜索词（queries）：后端聚合的 args.query，非 LLM 生成 -->
+          <div v-if="searchQuery(group.block)" class="flow-search-query">
+            <Icon icon="mdi:magnify" class="flow-search-query-icon" width="12" />
+            <span class="flow-search-query-text">{{ searchQuery(group.block) }}</span>
+          </div>
+          <!-- 流式加载中：三行扫描线骨架 -->
+          <div v-if="group.block.status === 'running' || group.block.status === 'generating'" class="flow-search-loading">
+            <span class="flow-search-loading-line"></span>
+            <span class="flow-search-loading-line"></span>
+            <span class="flow-search-loading-line"></span>
+          </div>
+          <!-- 引用来源（open_page URL）：favicon + 中文站名 + 域名 -->
+          <template v-else-if="searchSources(group.block).length">
+            <a
+              v-for="u in searchSources(group.block)"
+              :key="u"
+              class="flow-search-source"
+              :href="u"
+              target="_blank"
+              rel="noopener"
+            >
+              <span class="flow-search-badge">
+                <img
+                  v-if="faviconOK(u)"
+                  :src="searchFavicon(u)"
+                  class="flow-search-favicon"
+                  alt=""
+                  @error="onFaviconError($event, u)"
+                />
+                <span v-else class="flow-search-badge-fallback">{{ searchInitial(u) }}</span>
+              </span>
+              <span class="flow-search-title">{{ searchTitle(u, group.block) }}</span>
+              <span class="flow-search-url">{{ searchHost(u) }}</span>
+            </a>
+          </template>
+          <div v-else class="flow-search-empty">未找到相关来源</div>
+        </div>
+      </div>
+
       <!-- ask_user 提问：平铺显示「问了什么 / 答了什么」 -->
       <div v-else-if="group.type === 'question'" class="flow-question">
         <div class="flow-question-head">
@@ -162,14 +212,15 @@ const props = defineProps({
   flow: { type: Object, required: true }
 })
 
-// ★ 把连续的工具调用和思考收进一组；回复(intent)单独平铺，不收纳
-// 例外：只有 1 步且是思考时，不收束，直接平铺
+// ★ 工具调用收进概要组；回复(intent)单独平铺，不收纳
+// thinking（思考）与 web_search（联网搜索）也不收束——思考是推理轨迹要
+// 全程可见，搜索卡片自带引用来源，收进概要卡片会被折叠看不见。
 const blockGroups = computed(() => {
   const groups = []
   let current = null
   for (const b of props.flow?.blocks || []) {
-    if (b.type === 'thinking' || b.type === 'tool') {
-      if (!current || current.type === 'visible' || current.type === 'single-thinking') {
+    if (b.type === 'tool' && b.name !== 'web_search') {
+      if (!current || current.type === 'visible' || current.type === 'single-thinking' || current.type === 'search-tool') {
         if (current) groups.push(current)
         current = { type: 'summary', blocks: [b] }
       } else {
@@ -182,25 +233,23 @@ const blockGroups = computed(() => {
       }
       if (b.type === 'intent') {
         groups.push({ type: 'visible', text: b.text })
+      } else if (b.type === 'thinking') {
+        // 思考：单步平铺，不收束（推理轨迹全程可见）
+        groups.push({ type: 'single-thinking', block: b })
       } else if (b.type === 'question') {
         // ask_user 提问：单独平铺，让用户直接看到「问了什么 / 答了什么」
         groups.push({ type: 'question', block: b })
       } else if (b.type === 'image') {
         groups.push({ type: 'image', block: b })
+      } else if (b.type === 'tool' && b.name === 'web_search') {
+        // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
+        groups.push({ type: 'search-tool', block: b })
       }
       // 其他类型（compressed/steer/preview）暂不收纳也不平铺，避免污染回复
     }
   }
   if (current) groups.push(current)
-
-  // 后处理：单步思考不收束。不同工具流之间可能穿插 intent，必须留在各自
-  // 的时间位置，不能跨 intent 合并，否则展开后的执行顺序会被改写。
-  return groups.map(g => {
-    if (g.type === 'summary' && g.blocks.length === 1 && g.blocks[0].type === 'thinking') {
-      return { type: 'single-thinking', block: g.blocks[0] }
-    }
-    return g
-  })
+  return groups
 })
 
 // 每个 summary 组的展开状态
@@ -315,6 +364,14 @@ function actionText(b) {
   // load_tools 只是按需取 MCP 工具 schema 的内部动作，把一串 mcp__fs__read_file,
   // mcp__fs__edit_file 摊开念出来对用户没有信息量，只有噪音——统一成一句轻量提示
   if (b.name === 'load_tools') return b.status === 'running' ? '加载 MCP 工具中…' : '加载了 MCP 工具'
+  // 联网搜索（DeepSeek 服务端搜索）：显示「搜索到 N 个来源」而不是把一堆
+  // 搜索词原样摊开——图2 那种「搜索到 35 个网页」摘要形态。
+  if (isWebSearch(b.name)) {
+    const n = searchSources(b).length
+    const label = n > 0 ? `搜索到 ${n} 个来源` : (b.status === 'running' ? '联网搜索中…' : '联网搜索')
+    const q = (b.args && b.args.query) || ''
+    return q ? `${label} · ${String(q).slice(0, 30)}${String(q).length > 30 ? '…' : ''}` : label
+  }
   const verb = VERBS[b.name] || (b.name.startsWith('mcp__') ? b.name.split('__').slice(1).join(' · ') : b.name)
   const obj = target(b)
   const running = b.status === 'running' || b.status === 'generating'
@@ -363,6 +420,82 @@ function isWrite(name) {
 function isRead(name) {
   return name === 'read_file' || name === 'mcp__fs__read_file' ||
     name === 'mcp__fs__read_text_file' || name === 'mcp__grep__read_range'
+}
+// DeepSeek 服务端搜索的 web_search 卡片（Responses API web_search_call 映射而来）
+function isWebSearch(name) {
+  return name === 'web_search' || name === 'mcp__web_search__web_search'
+}
+// 引用来源列表：DeepSeek 服务端搜索返回的 URL（后端透出在 args.urls）
+function searchSources(b) {
+  const a = b.args || {}
+  const urls = Array.isArray(a.urls) ? a.urls : []
+  return urls.filter(Boolean)
+}
+function searchHost(u) {
+  try { return new URL(u).hostname.replace(/^www\./, '') } catch { return u }
+}
+// 常见中文站点域名 → 中文名（图2 那种「图标 + 中文名」的引用来源形态；
+// 未知域名回退显示域名本身）
+const SEARCH_SITE_NAMES = {
+  'thepaper.cn': '澎湃新闻', 'm.jiemian.com': '界面新闻', 'jiemian.com': '界面新闻',
+  'yicai.com': '第一财经', '36kr.com': '36氪', 'qq.com': '腾讯新闻',
+  '163.com': '网易新闻', 'ifeng.com': '凤凰网', 'news.cn': '新华网',
+  'people.com.cn': '人民网', 'cctv.com': '央视网', 'cntv.cn': '央视网',
+  'huanqiu.com': '环球网', 'chinanews.com.cn': '中新网', 'xinhuanet.com': '新华网',
+  'hgdaily.com.cn': '黄冈日报', 'cngold.org': '金投网', 'sina.com.cn': '新浪新闻',
+  'zhihu.com': '知乎', 'bilibili.com': '哔哩哔哩', 'sohu.com': '搜狐新闻',
+  'thecover.cn': '封面新闻', 'stdaily.com': '科技日报', 'ce.cn': '中国经济网',
+  'gov.cn': '中国政府网', 'cnr.cn': '央广网', '12371.cn': '共产党员网',
+  'gmw.cn': '光明网', 'china.com.cn': '中国网', 'cnstock.com': '上海证券报',
+}
+// 站点中文名/图标：不请求任何外部 favicon 服务（Google 在大陆会挂起超时，
+// 每张图卡几秒整个 UI 卡死）。用站点名首字生成本地圆形徽标，零网络依赖。
+function searchSiteName(u) {
+  const host = searchHost(u)
+  // 去掉端口和子域细节，匹配主域名表；支持 m.xx.com → xx.com
+  for (const [domain, name] of Object.entries(SEARCH_SITE_NAMES)) {
+    if (host === domain || host.endsWith('.' + domain)) return name
+  }
+  return host
+}
+// 本地首字图标（替代 favicon）：取中文站点名首字符，未知域名取域名首字母大写
+function searchInitial(u) {
+  const name = searchSiteName(u)
+  const c = name.trim().charAt(0)
+  return c ? c.toUpperCase() : '网'
+}
+// 站点 favicon：favicon.im（国内可直连，实测 1.3s 返回真实图标）。
+// 不用 Google s2/favicons——大陆访问 Google 挂起超时（实测 HTTP 000 + 8s），
+// 每个来源卡几秒整个 UI 卡死。
+function searchFavicon(u) {
+  const host = searchHost(u)
+  return `https://favicon.im/${encodeURIComponent(host)}`
+}
+// favicon 加载状态：加载失败回退本地首字徽标（faviconFailed 是 Set）
+const faviconFailed = new Set()
+// faviconBump 是响应式计数器：img error 时自增，让 faviconOK 重新求值
+// （Set 本身不触发 Vue 依赖，纯 ref 变化才能驱动模板重渲染）
+const faviconBump = ref(0)
+function faviconOK(u) {
+  void faviconBump.value // 建立响应式依赖
+  return !faviconFailed.has(u)
+}
+function onFaviconError(e, u) {
+  faviconFailed.add(u)
+  faviconBump.value++
+}
+// 来源行显示主网站（中文站名）——按用户要求不显示抓取的新闻标题
+function searchTitle(u, b) {
+  return searchSiteName(u)
+}
+// 搜索词（queries）：后端 SSE args.query 已聚合（过滤了 ws_call_id 尾巴）
+function searchQuery(b) {
+  return (b.args && b.args.query) || ''
+}
+// 搜索卡概要：head 显示「搜索词摘要」，body 展开来源列表
+function searchSummary(b) {
+  const q = searchQuery(b)
+  return q ? `搜索：${q}` : ((b.status === 'running' || b.status === 'generating') ? '正在联网搜索…' : '联网搜索完成')
 }
 
 // 把各种"读一段"的参数翻成人话贴在动作行尾（offset=起点, limit=实际行数）。
@@ -740,7 +873,159 @@ function toolBodyText(b) {
 }
 .flow-row-icon { flex-shrink: 0; }
 .icon-think { color: #8b5cf6; }
+.icon-search { color: #8b5cf6; }
 .icon-tool { color: var(--app-text-soft); }
+
+/* ---------- 联网搜索独立卡片（透明背景，非工具卡片） ---------- */
+.flow-search-card {
+  margin: 2px 0;
+  background: transparent;
+  border: none;
+}
+.flow-search-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--app-border-soft, rgba(0,0,0,0.06));
+}
+.flow-search-icon {
+  flex-shrink: 0;
+  color: #8b5cf6;
+}
+.flow-search-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--app-text);
+}
+/* 搜索进行中：右侧呼吸圆点（扫描线动画） */
+.flow-search-scan {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  animation: flow-search-pulse 1.1s ease-in-out infinite;
+}
+@keyframes flow-search-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.flow-search-body {
+  padding: 6px 2px 2px;
+}
+/* 搜索词（queries）行：放大镜 + 搜索词，多词用「；」分隔 */
+.flow-search-query {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 4px 6px;
+  font-size: 12px;
+  color: var(--app-text-faint);
+}
+.flow-search-query-icon {
+  flex-shrink: 0;
+  color: #8b5cf6;
+  opacity: 0.7;
+}
+.flow-search-query-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 流式加载占位：三行扫描线骨架 */
+.flow-search-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+.flow-search-loading-line {
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, rgba(139,92,246,0.08) 25%, rgba(139,92,246,0.22) 50%, rgba(139,92,246,0.08) 75%);
+  background-size: 200% 100%;
+  animation: flow-search-shimmer 1.4s linear infinite;
+}
+.flow-search-loading-line:nth-child(2) { width: 85%; }
+.flow-search-loading-line:nth-child(3) { width: 60%; }
+@keyframes flow-search-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.flow-search-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--app-text);
+  font-size: 12.5px;
+}
+.flow-search-source:hover {
+  background: var(--app-surface-2, rgba(0,0,0,0.04));
+}
+/* 站点图标徽标：优先 favicon.im 真实图标，失败回退本地首字 */
+.flow-search-badge {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  background: #8b5cf6;
+}
+.flow-search-favicon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.flow-search-badge-fallback {
+  line-height: 1;
+}
+.flow-search-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text);
+  font-weight: 500;
+  /* 新闻标题带浅色下划线：可点击链接感（图2 那种来源列表形态） */
+  text-decoration: underline;
+  text-decoration-color: rgba(100, 116, 139, 0.35);
+  text-underline-offset: 3px;
+}
+.flow-search-url {
+  flex-shrink: 0;
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text-faint);
+  font-size: 11.5px;
+}
+.flow-search-empty {
+  padding: 6px 2px;
+  color: var(--app-text-faint);
+  font-size: 12px;
+}
 .flow-row-preview {
   flex: 1;
   min-width: 0;

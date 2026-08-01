@@ -44,6 +44,7 @@
     "page-flip": "^2.0.7",
     "pixi-live2d-display": "^0.4.0",
     "pixi.js": "^6.5.10",
+    "pptxgenjs": "^4.0.1",
     "reader-layout": "^1.1.1",
     "three": "^0.184.0",
     "tsparticles": "^3.9.1",

@@ -118,6 +118,7 @@ type customModelView struct {
 	Vision        bool   `json:"vision,omitempty"`
 	ContextWindow int    `json:"context_window,omitempty"`
 	Reasoning     bool   `json:"reasoning,omitempty"`
+	Responses     bool   `json:"responses,omitempty"` // 走 Responses 协议（服务端联网搜索）
 }
 
 const customModelIDPrefix = "custom::"
@@ -210,10 +211,28 @@ func HandleGetModelConfig(c *gin.Context) {
 		freeModels = append(freeModels, v)
 	}
 
+	// 内置联网搜索模型（「模型」tab 独立配置，不走免费模型池）。
+	// key 状态 = user_configs 里同名 ID 条目有 key，或环境变量兜底。
+	searchModels := make([]map[string]any, 0, len(builtinSearchModels))
+	for _, s := range builtinSearchModels {
+		keySet := false
+		if e, ok := entryByID[s.ID]; ok && e.APIKey != "" {
+			keySet = true
+		}
+		if !keySet && os.Getenv(s.KeyEnv) != "" {
+			keySet = true
+		}
+		searchModels = append(searchModels, map[string]any{
+			"id": s.ID, "vendor": s.Vendor, "name": s.Name,
+			"model": s.Model, "api_key_set": keySet,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"configs":       safe,
-		"free_models":   freeModels,
-		"custom_models": customModels,
+		"configs":        safe,
+		"free_models":    freeModels,
+		"custom_models":  customModels,
+		"search_models":  searchModels,
 	})
 }
 

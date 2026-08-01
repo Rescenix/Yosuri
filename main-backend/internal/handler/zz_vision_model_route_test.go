@@ -2,7 +2,7 @@ package handler
 
 // 识图模型路由测试（chat_engines_gemini_vision.go 的 analyzeImageWithModelID +
 // HandleAetherVisionPreprocess 的回退链）。不打网络：resolveExact 对未知 ID 直接
-// 返回 nil，Gemini 路径在拿到空 GEMINI_API_KEY 时也在发请求前就短路返回错误。
+// 返回 nil，默认视觉模型路径在没有可用 Vision 模型时也会在发请求前就短路返回错误。
 
 import (
 	"context"
@@ -59,23 +59,28 @@ func TestAnalyzeImageWithBackend_DoesNotRejectUnknownVisionMetadata(t *testing.T
 	}
 }
 
-// 设置面板「模型」页把本地 llama.cpp 识图模型接进来的落点就是这个 catalog 条目——
-// 确认它在路由层确实解析得到、且带 Vision=true，否则前端选了也白选。
-func TestLocalLlamaVisionModelResolvesInCatalog(t *testing.T) {
-	b := resolveExact("", "local_llama_qwen2_5_vl_7b")
+// 设置面板「模型」页把识图模型接进来的落点是 model_router 的 resolveExact——
+// 确认免费池里 Vision 标记的条目能解析出 backend（本地 llama 已移除，2026-08-01）。
+func TestVisionModelResolvesInCatalog(t *testing.T) {
+	b := resolveExact("", "free_step_1o_turbo_vision")
 	if b == nil {
-		t.Fatal("local_llama_qwen2_5_vl_7b 应能被 resolveExact 解析（Local=true 不需要 Key）")
+		// 没配 STEP_API_KEY 时 resolveExact 返回 nil 属正常，跳过断言
+		t.Skip("无 STEP_API_KEY 环境变量，跳过精确命中断言")
 	}
 	if !b.Vision {
-		t.Errorf("本地 llama 识图模型的 Vision 标记应为 true，got false")
+		t.Errorf("free_step_1o_turbo_vision 的 Vision 标记应为 true，got false")
 	}
 	if b.BaseURL == "" {
-		t.Errorf("本地 llama 识图模型缺少 BaseURL")
+		t.Errorf("识图模型缺少 BaseURL")
 	}
 }
 
-func TestHandleAetherVisionPreprocess_FallsBackToGeminiOnBadModel(t *testing.T) {
-	t.Setenv("GEMINI_API_KEY", "") // 强制 Gemini 回退路径也短路失败，隔离网络依赖
+func TestHandleAetherVisionPreprocess_AllPathsFail(t *testing.T) {
+	// 不设置任何视觉模型相关环境变量，且指定模型是未知 ID——
+	// 两条路径（指定模型 + 默认视觉模型）都该短路失败，返回 502，而不是 panic 或挂起。
+	// 注意：若测试环境恰好配了 STEP_API_KEY 等，visionBackends 会真的发起网络调用，
+	// 本测试通过 unknown model 分支独立验证回退链的错误处理（不打网络）。
+	t.Setenv("VISION_MODEL_ID", "totally-bogus-vision-id") // 强制默认视觉模型解析失败
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -87,11 +92,14 @@ func TestHandleAetherVisionPreprocess_FallsBackToGeminiOnBadModel(t *testing.T) 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	// 两条路径（指定模型 + Gemini 回退）都该失败，返回 502，而不是 panic 或挂起
+	// 指定模型失败 + 默认视觉模型失败（VISION_MODEL_ID 无效）→ 502
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("预期 502（两条路径都失败），got %d: %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), "视觉预处理失败") {
 		t.Errorf("响应体应包含失败提示，got: %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "GEMINI_API_KEY") {
+		t.Errorf("错误提示不应再指向 GEMINI_API_KEY（Gemini 已移除），got: %s", w.Body.String())
 	}
 }

@@ -57,7 +57,6 @@ func (a *DesktopApp) BackendURL() string {
 
 func (a *DesktopApp) Shutdown(ctx context.Context) {
 	_ = handler.StopPreviewBrowser()
-	_ = handler.StopLocalLlamaServer()
 	a.mu.RLock()
 	server := a.server
 	a.mu.RUnlock()

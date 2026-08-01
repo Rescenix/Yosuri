@@ -13,10 +13,9 @@ func main() {
 	// 加载环境变量
 	_ = godotenv.Load()
 
-	// 注册退出清理：主进程收到 SIGINT/SIGTERM 时显式停掉本地 llama-server（如有），
-	// 避免子进程变孤儿继续吃内存。本地 llama 不再随后端启动无条件拉起，
-	// 改为选中本地识图模型时按需启动（见 EnsureLocalLlamaServer）。
-	handler.RegisterLlamaCleanupOnExit()
+	// 注册退出清理：主进程收到 SIGINT/SIGTERM 时显式停掉预览 Chromium/Edge（如有），
+	// 避免子进程变孤儿继续占内存。（本地 llama-server 已移除，2026-08-01。）
+	handler.RegisterCleanupOnExit()
 
 	r := handler.NewAPIRouter()
 

@@ -8,8 +8,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 
 	"backend/internal/ai/core"
 )
@@ -105,13 +103,6 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"block": {Type: "string", Description: "要追加的 Markdown 内容"},
 		}, []string{"block"}),
 	}
-	// 搜索服务需要密钥；没有 Key 时连 schema 都不暴露，模型不会选中后才失败。
-	if nativeWebSearchEnabled() {
-		defs = append(defs, nativeTool("web_search", "联网搜索并返回标题、URL 与摘要；结果可继续交给 web_fetch 读取正文。", map[string]core.ToolProperty{
-			"query": {Type: "string", Description: "搜索关键词"},
-			"count": {Type: "integer", Description: "返回结果数量，默认 5，最大 10"},
-		}, []string{"query"}))
-	}
 	// Computer Use：桌面操作工具
 	defs = append(defs, computerUseToolDefs()...)
 	// capture_preview：截「用户正在看的内嵌预览页」发聊天。按需加载而非常驻——
@@ -119,10 +110,6 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	// 模型用 load_tools 激活后照常调用。
 	defs = append(defs, capturePreviewToolDef)
 	return defs
-}
-
-func nativeWebSearchEnabled() bool {
-	return strings.TrimSpace(os.Getenv("BING_SEARCH_API_KEY")) != ""
 }
 
 func nativeTool(name, description string, properties map[string]core.ToolProperty, required []string) core.ToolDefinition {
@@ -167,8 +154,6 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callNativeCommand(ctx, argsJSON)
 	case "web_fetch":
 		return callNativeWebFetch(ctx, argsJSON)
-	case "web_search":
-		return callNativeWebSearch(ctx, argsJSON)
 	case "view_image":
 		return callNativeViewImage(ctx, argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",

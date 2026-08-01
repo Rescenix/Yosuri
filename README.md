@@ -99,7 +99,7 @@ flowchart TB
 
     AgentLoop -->|选模型| Router["Multi-provider Model Router"]
     Router --> Free["Free Models (Daily Probe)"]
-    Router --> Local["Ollama / llama.cpp"]
+    Router --> Local["Ollama Cloud"]
     Router --> Private["Custom Providers"]
 
     ToolCall --> Files["File & Shell"]

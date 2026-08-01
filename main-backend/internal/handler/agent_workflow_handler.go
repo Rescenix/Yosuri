@@ -178,6 +178,19 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	}
 	backends := resolveBackends(openID, model)
 
+	// 联网搜索模型：「模型」tab 独立配置（search_model=search_deepseek_v4_flash）。
+	// 选中且 key 可用时，主链改用该 backend（Responses 协议 + 服务端 web_search，
+	// 搜索结果以 web_search_call 事件透出引用）；未选/无 key 则回退正常路由链。
+	searchModel := c.Query("search_model")
+	if searchModel != "" {
+		if sb := searchBackend(openID, searchModel); sb != nil {
+			backends = []RouterBackend{*sb}
+			fmt.Printf("🔎 [搜索模型] 主链改用 %s（服务端搜索）\n", sb.Name)
+		} else {
+			fmt.Printf("🔎 [搜索模型] %s 无可用 Key，回退正常路由链\n", searchModel)
+		}
+	}
+
 	// 生图提供商：前端设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
 	// 不走提示词——跟识图模型路由一个思路
 	SetImageProvider(c.Query("image_provider"))
@@ -438,7 +451,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		}
 
 		finalRound = round // 账本落盘用（defer 里读的是最终值）
-		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, roundMsgs, tools, effort, staticSum)
+		var reasoningOut []map[string]any
+		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, roundMsgs, tools, effort, staticSum, &reasoningOut)
 		// inTok 优先用上游真实 prompt_tokens；为 0 时退化为历史字符/4 估算（与四态机口径一致）
 		if inTok > 0 {
 			inputTokens = inTok
@@ -677,7 +691,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"function": map[string]any{"name": tc.Function.Name, "arguments": tc.Function.Arguments},
 			})
 		}
-		msgs = append(msgs, map[string]any{"role": "assistant", "content": content, "tool_calls": dsCalls})
+		assistantMsg := map[string]any{"role": "assistant", "content": content, "tool_calls": dsCalls}
+		// DeepSeek 思考模式：reasoning item 必须随工具调用一起回传，否则下一轮
+		// 400 "reasoning_text in the thinking mode must be passed back"。
+		// toResponsesInput 会把 reasoning_items 转回 input items。
+		if len(reasoningOut) > 0 {
+			assistantMsg["reasoning_items"] = reasoningOut
+		}
+		msgs = append(msgs, assistantMsg)
 
 		// result 事件 + tool 消息
 		for i, tc := range calls {

@@ -58,7 +58,6 @@ var subAgentNativeTools = map[string]bool{
 	"directory_tree": true,
 	"get_file_info":  true,
 	"web_fetch":      true,
-	"web_search":     true,
 	"view_image":     true,
 	"memory_search":  true,
 	"workdir_read":   true,

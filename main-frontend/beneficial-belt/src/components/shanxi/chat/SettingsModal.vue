@@ -77,7 +77,7 @@
               <div class="settings-section-title">模型配置</div>
               <div class="settings-section-desc">
                 统一模型：一个模型同时处理对话与识图。分开配置：文字对话、识图分析各用各的模型
-                （比如聊天走云端大模型、识图走本地 llama.cpp）。候选来自「提供方」里选为可用的模型。
+                （识图模型由你自己选，选错了换成能识图的即可）。候选来自「提供方」里选为可用的模型。
               </div>
 
               <div class="param-row">
@@ -94,12 +94,12 @@
                   <select class="model-select" v-model="unifiedModelDraft" @change="setUnifiedModel(unifiedModelDraft)">
                     <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
                     <option v-for="m in chatList" :key="m.value" :value="m.value">
-                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}
+                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}{{ webSearchByID[m.value] ? ' · 联网搜索' : '' }}
                     </option>
                   </select>
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
-                  标注"识图"的模型支持视觉分析；未标注的模型不处理图片。
+                  标注"识图"的模型声明支持视觉分析（仅供参考）；未标注的也可能能识图，以实际效果为准。
                 </div>
                 <div class="param-row">
                   <span class="param-label">生图提供商</span>
@@ -108,6 +108,37 @@
                     <option value="agnes">Agnes（免费，需 key，质量高）</option>
                   </select>
                 </div>
+                <div class="param-row">
+                  <span class="param-label">联网搜索模型</span>
+                  <div class="search-model-row">
+                    <select class="model-select" v-model="searchModelDraft" @change="setSearchModel(searchModelDraft)">
+                      <option value="">不启用</option>
+                      <option v-for="s in searchModels" :key="s.id" :value="s.id">
+                        {{ s.name }}{{ s.api_key_set ? '（已配 Key）' : '（需 Key）' }}
+                      </option>
+                    </select>
+                    <button
+                      v-if="searchModelDraft && searchKeyMissing"
+                      class="vendor-key-btn"
+                      type="button"
+                      @click.stop="searchKeyEditing = !searchKeyEditing"
+                    >{{ searchKeyEditing ? '收起' : '填 Key' }}</button>
+                  </div>
+                  <div v-if="searchKeyEditing" class="vendor-key-inline">
+                    <input
+                      v-model="searchKeyDraft"
+                      type="password"
+                      class="vendor-key-input"
+                      placeholder="输入 DeepSeek API Key（sk- 开头）"
+                      @keyup.enter="saveSearchKey"
+                    />
+                    <button class="vendor-key-save" type="button" @click="saveSearchKey">保存</button>
+                    <button class="vendor-key-cancel" type="button" @click="searchKeyEditing = false">取消</button>
+                  </div>
+                </div>
+                <div class="settings-section-desc" style="margin-top:6px">
+                  联网搜索模型负责服务端搜索（搜索+引用来源由上游完成），当前内置 DeepSeek V4 Flash。
+                </div>
               </template>
 
               <template v-else>
@@ -115,7 +146,9 @@
                   <span class="param-label">文字模型</span>
                   <select class="model-select" v-model="textModelDraft" @change="setTextModel(textModelDraft)">
                     <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
-                    <option v-for="m in chatList" :key="m.value" :value="m.value">{{ m.label }}</option>
+                    <option v-for="m in chatList" :key="m.value" :value="m.value">
+                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}{{ webSearchByID[m.value] ? ' · 联网搜索' : '' }}
+                    </option>
                   </select>
                 </div>
                 <div class="param-row">
@@ -126,7 +159,7 @@
                   </select>
                 </div>
                 <div v-if="!visionCapableChatList.length" class="settings-section-desc" style="margin-top:6px">
-                  未检测到可用识图模型。本地模型需确保 llama-server 已启动且模型文件存在；云端模型请到「提供方」选择。
+                  未检测到可用模型。请先到「提供方」添加并启用至少一个模型。
                 </div>
                 <div class="param-row">
                   <span class="param-label">生图提供商</span>
@@ -135,6 +168,37 @@
                     <option value="agnes">Agnes（免费，需 key，质量高）</option>
                     <option value="siliconflow">SiliconFlow（免费额度，需 key）</option>
                   </select>
+                </div>
+                <div class="param-row">
+                  <span class="param-label">联网搜索模型</span>
+                  <div class="search-model-row">
+                    <select class="model-select" v-model="searchModelDraft" @change="setSearchModel(searchModelDraft)">
+                      <option value="">不启用</option>
+                      <option v-for="s in searchModels" :key="s.id" :value="s.id">
+                        {{ s.name }}{{ s.api_key_set ? '（已配 Key）' : '（需 Key）' }}
+                      </option>
+                    </select>
+                    <button
+                      v-if="searchModelDraft && searchKeyMissing"
+                      class="vendor-key-btn"
+                      type="button"
+                      @click.stop="searchKeyEditing = !searchKeyEditing"
+                    >{{ searchKeyEditing ? '收起' : '填 Key' }}</button>
+                  </div>
+                  <div v-if="searchKeyEditing" class="vendor-key-inline">
+                    <input
+                      v-model="searchKeyDraft"
+                      type="password"
+                      class="vendor-key-input"
+                      placeholder="输入 DeepSeek API Key（sk- 开头）"
+                      @keyup.enter="saveSearchKey"
+                    />
+                    <button class="vendor-key-save" type="button" @click="saveSearchKey">保存</button>
+                    <button class="vendor-key-cancel" type="button" @click="searchKeyEditing = false">取消</button>
+                  </div>
+                </div>
+                <div class="settings-section-desc" style="margin-top:6px">
+                  联网搜索模型负责服务端搜索（搜索+引用来源由上游完成），当前内置 DeepSeek V4 Flash。
                 </div>
               </template>
             </div>
@@ -638,8 +702,8 @@ const configBusy = ref('')
 const vendorGroups = computed(() => {
   const map = new Map()
   for (const fm of freeModels.value) {
-    // 本地模型（llama.cpp / Local=true）不放在提供方里手动勾选，
-    // 而是自动进入识图模型候选，做到"下载即用"。
+    // 本地模型（Local=true）不放在提供方里手动勾选，
+    // 而是自动进入模型候选，做到"配置即用"。
     if (fm.local) continue
     const v = fm.vendor || '其他'
     if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false, keyless: false })
@@ -670,6 +734,7 @@ async function loadConfigs() {
     configs.value = data.configs || []
     freeModels.value = data.free_models || []
     customModels.value = data.custom_models || []
+    searchModels.value = data.search_models || []
   } catch (e) {
     errorMsg.value = '加载配置失败，请稍后再试'
   } finally {
@@ -902,28 +967,71 @@ function setImageProvider(provider) {
   localStorage.setItem(IMAGE_PROVIDER_KEY, provider || 'pollinations')
 }
 
-// id → 是否支持识图，合并免费池 + 自定义配置两个来源（/api/models/config 都带 vision 字段）
+// ============ 联网搜索模型（「模型」tab 独立配置，走 Responses 协议） ============
+const SEARCH_MODEL_KEY = 'searchModel'
+// 内置联网搜索模型目录（后端 /api/models/config 的 search_models 字段返回）
+const searchModels = ref([])
+// 选中的联网搜索模型 ID（'' = 不启用）；默认从 localStorage 恢复
+const searchModelDraft = ref(localStorage.getItem(SEARCH_MODEL_KEY) || '')
+const searchKeyEditing = ref(false)
+const searchKeyDraft = ref('')
+function setSearchModel(id) {
+  searchModelDraft.value = id || ''
+  localStorage.setItem(SEARCH_MODEL_KEY, searchModelDraft.value)
+}
+// 选中的搜索模型缺 Key → 显示「填 Key」按钮
+const searchKeyMissing = computed(() => {
+  const s = searchModels.value.find(x => x.id === searchModelDraft.value)
+  return !!s && !s.api_key_set
+})
+async function saveSearchKey() {
+  const key = searchKeyDraft.value
+  if (!key || !key.trim()) {
+    errorMsg.value = '请输入 API Key'
+    return
+  }
+  errorMsg.value = ''
+  const s = searchModels.value.find(x => x.id === searchModelDraft.value)
+  if (!s) return
+  const untouched = configs.value
+    .filter(c => c.id !== s.id)
+    .map(c => ({ ...c, api_key: MASKED }))
+  await persist([...untouched, {
+    id: s.id, name: s.vendor, endpoint: 'https://api.deepseek.com',
+    api_key: key, default_model: s.model, is_default: false
+  }])
+  await loadConfigs()
+  searchKeyEditing.value = false
+  searchKeyDraft.value = ''
+}
+
+// id → 是否支持识图，合并免费池 + 自定义配置两个来源（/api/models/config 都带 vision 字段）。
+// 注意：这【只】用于 UI 上的“· 识图”角标提示，不再参与候选过滤——
+// 识图模型由用户自己选，不需要维护“哪个模型能识图”的标签。
 const visionByID = computed(() => {
   const map = {}
   for (const fm of freeModels.value) map[fm.id] = !!fm.vision
   for (const model of customModels.value) map[model.id] = !!model.vision
   return map
 })
-// 识图模型候选：当前全部可用模型里声明支持识图的条目。
+// id → 是否支持联网搜索（服务端搜索，如 DeepSeek Responses 协议）。同样只用于
+// UI 角标提示，不参与候选过滤——模型能不能搜由上游说了算。
+const webSearchByID = computed(() => {
+  const map = {}
+  for (const fm of freeModels.value) map[fm.id] = !!fm.responses
+  for (const model of customModels.value) map[model.id] = !!model.responses
+  return map
+})
+// 识图模型候选 = 全部可用模型，用户自己挑（不按 vision 标签过滤，
+// 免得我们得一直维护哪个模型支持识图）。
 const visionCapableChatList = computed(() => {
-  return chatList.value.filter(m => visionByID.value[m.value])
+  return chatList.value
 })
 
-// 当用户没有显式选过识图模型，且当前有可用识图模型时，自动默认选中第一个。
-// 本地模型优先级最高：用户下载了本地模型，就默认用它识图。
+// 当用户没有显式选过识图模型，且当前有可用模型时，自动默认选中第一个。
 watch(visionCapableChatList, (list) => {
   if (!visionModelDraft.value && list.length) {
-    // 优先本地模型；没有本地模型时取第一个可用识图模型。
-    const local = list.find(m => {
-      const fm = freeModels.value.find(f => f.id === m.value)
-      return fm && fm.local
-    })
-    const pick = local || list[0]
+    const pick = list[0]
     visionModelDraft.value = pick.value
     localStorage.setItem(VISION_MODEL_KEY, pick.value)
   }

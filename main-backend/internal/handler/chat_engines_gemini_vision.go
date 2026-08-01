@@ -178,18 +178,18 @@ type aetherVisionRequest struct {
 	MimeType              string `json:"mime_type"`
 	Instruction           string `json:"instruction"`
 	PreviousInteractionID string `json:"previous_interaction_id"`
-	// Model 是设置面板「模型」页选出的识图模型 ID（免费池/自定义配置/本地 llama.cpp 均可，
-	// 只要该条目 Vision=true）。留空则走原有的 Gemini Interactions 路径（向后兼容）；
-	// 指定了但解析/调用失败也会自动回退 Gemini，不让一次模型抽风打断识图。
+	// Model 是设置面板「模型」页选出的识图模型 ID（免费池/自定义配置均可，
+	// 不强制 Vision 标签——用户自己选的模型，成不成由上游说了算）。
+	// 留空则走默认视觉模型（向后兼容）。
 	Model string `json:"model"`
 }
 
 // analyzeImageWithModelID 走通用 OpenAI 兼容视觉路由（model_router.go 的 resolveExact +
-// openAIChatOnce），让设置面板选中的主模型或独立识图模型（含本地 llama-server）承接识图。
+// openAIChatOnce），让设置面板选中的主模型或独立识图模型承接识图。
 //
-// 不能用 b.Vision 做硬门禁：自定义 OpenAI 兼容提供方的 /models 通常不返回能力元数据，
+// 不强制 b.Vision 门禁：自定义 OpenAI 兼容提供方的 /models 通常不返回能力元数据，
 // 因而实际支持图片的模型也可能是 Vision=false。这里以用户选择和上游真实响应为准；
-// Vision 只用于 UI 提示与“分开配置”的候选筛选，不是调用许可。
+// Vision 只用于 UI 提示，不是调用许可。
 func analyzeImageWithModelID(ctx context.Context, modelID, imageBase64, mimeType, instruction string) (string, error) {
 	b := resolveExact("", modelID)
 	if b == nil {
@@ -199,10 +199,6 @@ func analyzeImageWithModelID(ctx context.Context, modelID, imageBase64, mimeType
 }
 
 func analyzeImageWithBackend(ctx context.Context, b RouterBackend, imageBase64, mimeType, instruction string) (string, error) {
-	// 本地 llama-server：只有真正选中本地识图模型时才按需拉起（不占用内存直到用的时候）。
-	if b.IsLocal {
-		EnsureLocalLlamaServer()
-	}
 	if instruction == "" {
 		instruction = geminiDefaultInstruction
 	}
@@ -223,8 +219,8 @@ func analyzeImageWithBackend(ctx context.Context, b RouterBackend, imageBase64, 
 			{"type": "image_url", "image_url": map[string]any{"url": "data:" + mimeType + ";base64," + clean}},
 		},
 	}}
-	// 本地 llama-server 在小显存卡上可能比云端慢不少（见 llama_local.go 的调参注释），
-	// 给足 90s 而不是沿用 openAIChatOnce 默认的 45s catalog 超时太紧的场景交给调用方自行兜底。
+	// 识图涉及图片 base64 传输，云端模型也可能偏慢，给足 90s 而不是沿用
+	// openAIChatOnce 默认的 45s catalog 超时；太紧的场景交给调用方自行兜底。
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	content, _, err := openAIChatOnce(ctx, b, msgs, nil)
@@ -239,9 +235,10 @@ func analyzeImageWithBackend(ctx context.Context, b RouterBackend, imageBase64, 
 
 // HandleAetherVisionPreprocess POST /api/aether/vision-preprocess
 // 接收前端上传的图片，优先用请求里指定的 model（设置面板「模型」页选的识图模型）分析；
-// 没指定或该模型调用失败时，回退到原有的 Gemini Interactions 路径。把分析出的中文文本
-// 连同这次的 interaction id（仅 Gemini 路径有）一起回传给前端；前端后续把这段文本
-// 作为上下文塞进 Agent 流水线（/api/workflow/run 的 task 里）即可。
+// 没指定或该模型调用失败时，回退到默认视觉模型（visionBackends：VISION_MODEL_ID 指定，
+// 否则免费池里第一个 Vision=true 的条目）。
+// 把分析出的中文文本回传给前端；前端后续把这段文本作为上下文塞进 Agent 流水线
+// （/api/workflow/run 的 task 里）即可。
 func HandleAetherVisionPreprocess(c *gin.Context) {
 	var req aetherVisionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -249,29 +246,29 @@ func HandleAetherVisionPreprocess(c *gin.Context) {
 		return
 	}
 
+	// 1. 显式指定的识图模型（设置面板「模型」页选的）
 	if req.Model != "" {
 		text, err := analyzeImageWithModelID(c.Request.Context(), req.Model, req.ImageBase64, req.MimeType, req.Instruction)
 		if err == nil {
 			c.JSON(http.StatusOK, gin.H{"text": text, "interaction_id": ""})
 			return
 		}
-		fmt.Printf("⚠️ [Aether] 指定视觉模型 %s 失败，回退 Gemini: %v\n", req.Model, err)
+		fmt.Printf("⚠️ [Aether] 指定视觉模型 %s 失败，回退默认视觉模型: %v\n", req.Model, err)
 	}
 
-	outputText, interactionID, err := analyzeImageWithGemini(
-		c.Request.Context(),
-		req.ImageBase64,
-		req.MimeType,
-		req.Instruction,
-		req.PreviousInteractionID,
-	)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "视觉预处理失败: " + err.Error()})
-		return
+	// 2. 默认视觉模型（VISION_MODEL_ID 或免费池首个 Vision=true）。
+	//    不再回退 Gemini——Gemini 已从免费池移除（2026-07-21 实测大陆不可达），
+	//    报「缺少 GEMINI_API_KEY」只会误导用户去配一个早已淘汰的 Key。
+	if backends := visionBackends(); len(backends) > 0 {
+		text, err := analyzeImageWithBackend(c.Request.Context(), backends[0], req.ImageBase64, req.MimeType, req.Instruction)
+		if err == nil {
+			fmt.Printf("👁️ [Aether] 默认视觉模型 %s (%s) 完成识图\n", backends[0].Name, backends[0].Model)
+			c.JSON(http.StatusOK, gin.H{"text": text, "interaction_id": ""})
+			return
+		}
+		fmt.Printf("⚠️ [Aether] 默认视觉模型 %s 失败: %v\n", backends[0].Name, err)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"text":           outputText,
-		"interaction_id": interactionID,
-	})
+	// 3. 全部失败：给出可行动的提示，而不是让人去配 GEMINI_API_KEY
+	c.JSON(http.StatusBadGateway, gin.H{"error": "视觉预处理失败: 没有可用的识图模型（请检查 VISION_MODEL_ID，或设置面板「模型」页选择识图模型）"})
 }

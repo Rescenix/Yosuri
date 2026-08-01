@@ -2732,7 +2732,7 @@ function fileToBase64(file) {
 }
 // 粘贴图片跟"+"菜单选图走同一条路：只当附件加进 attachments（复用 attachImageFile
 // 的分析逻辑），发不发由用户自己按发送/回车决定。之前这里分析一完成就无条件
-// handleSend()——分析本身是异步的（本地 llama.cpp 在小显存卡上可能要几十秒），
+// handleSend()——分析本身是异步的（云端识图模型可能要几十秒），
 // 用户趁等待打字问问题时，分析一结束就把这句话连同图一起抢发出去，用户根本没
 // 机会确认。跟"+"菜单选图（onAttachFilesSelected）保持一致："先附加，用户自己
 // 决定何时发送"，不再有这个隐藏的自动发送时机。
@@ -2792,7 +2792,7 @@ async function attachImageFile(file) {
   try {
     const base64 = await fileToBase64(file)
     // 设置面板「模型」页：统一模式下主模型兼管识图，分开模式下用单独配的识图模型；
-    // 未配置时会默认使用首个可用的识图模型（本地 llama.cpp / GLM-5.2 / Kimi 等）。
+    // 未配置时会自动默认选中第一个可用模型，用户可自行更换。
     const modelMode = localStorage.getItem('modelMode') === 'split' ? 'split' : 'unified'
     const visionModel = modelMode === 'split'
       ? (localStorage.getItem('visionModel') || '')
