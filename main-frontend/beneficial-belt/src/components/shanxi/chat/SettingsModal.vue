@@ -539,6 +539,17 @@
             <!-- ========== 记忆（当前注入上下文的内容，仿 Claude Memory） ========== -->
             <div v-show="activeTab === 'memory'" class="settings-panel">
               <div class="settings-section-title">记忆</div>
+              <div class="param-row" style="align-items: center;">
+                <span class="param-label">云端记忆同步</span>
+                <label class="param-switch">
+                  <input type="checkbox" v-model="memorySyncEnabled" :disabled="memorySyncEnvOverride" @change="saveMemorySyncSetting" />
+                  <span class="param-switch-track"></span>
+                </label>
+                <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
+                  开启后，记忆（偏好 / 决策 / 索引）会随账号存到云端，换设备登录自动恢复。
+                  <template v-if="memorySyncEnvOverride">（当前被部署环境变量 RESCENE_MEMORY_SYNC=off 强制关闭）</template>
+                </span>
+              </div>
               <div v-if="memoryLoading" class="settings-loading">加载中…</div>
               <template v-else-if="humanReadableMemoryMarkdown">
                 <div class="memory-md markdown-body" v-html="renderMarkdown(humanReadableMemoryMarkdown)"></div>
@@ -1276,6 +1287,9 @@ const profile = ref({ full_name: '', work: '', instructions: '' })
 // 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
 const memorySegments = ref([])
 const memoryLoading = ref(false)
+// 云端记忆同步开关（记忆 tab）：默认开；env_override 时禁用（部署级强制关闭）
+const memorySyncEnabled = ref(true)
+const memorySyncEnvOverride = ref(false)
 const humanReadableMemoryMarkdown = computed(() => {
   const parts = []
   for (const seg of memorySegments.value) {
@@ -1287,6 +1301,7 @@ const humanReadableMemoryMarkdown = computed(() => {
 })
 async function loadMemoryInject() {
   memoryLoading.value = true
+  loadMemorySyncSetting()
   try {
     const res = await fetch('/api/memory/inject')
     if (res.ok) {
@@ -1303,6 +1318,27 @@ async function loadMemoryInject() {
 }
 const profileSaving = ref(false)
 const profileSaved = ref(false)
+
+// 云端记忆同步开关：读取当前状态 + 切换保存（记忆 tab 开关）
+async function loadMemorySyncSetting() {
+  try {
+    const res = await fetch('/api/memory/sync/settings')
+    if (res.ok) {
+      const data = await res.json()
+      memorySyncEnabled.value = data.enabled !== false
+      memorySyncEnvOverride.value = !!data.env_override
+    }
+  } catch (e) {}
+}
+async function saveMemorySyncSetting() {
+  try {
+    await fetch('/api/memory/sync/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: memorySyncEnabled.value })
+    })
+  } catch (e) {}
+}
 async function loadProfile() {
   try {
     const res = await fetch('/api/profile')

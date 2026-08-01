@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -28,9 +29,65 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// memorySyncEnabled 云端记忆同步总开关（RESCENE_MEMORY_SYNC=off 关闭，默认开）。
+// memorySyncEnabled 云端记忆同步开关：
+//   - 环境变量 RESCENE_MEMORY_SYNC=off → 强制关闭（部署级，前端开关同时禁用）
+//   - 本地设置文件 ~/rescene_data/cloud_sync_enabled.md 内容为 off → 关闭（前端"记忆"tab 可切换）
+//   - 默认开启
 func memorySyncEnabled() bool {
-	return strings.ToLower(os.Getenv("RESCENE_MEMORY_SYNC")) != "off"
+	if strings.ToLower(os.Getenv("RESCENE_MEMORY_SYNC")) == "off" {
+		return false
+	}
+	if p := memorySyncSettingPath(); p != "" {
+		if data, err := os.ReadFile(p); err == nil && strings.TrimSpace(strings.ToLower(string(data))) == "off" {
+			return false
+		}
+	}
+	return true
+}
+
+// memorySyncSettingPath 前端记忆 tab 开关的本地落盘位置。
+func memorySyncSettingPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "rescene_data", "cloud_sync_enabled.md")
+}
+
+// HandleMemorySyncSettings GET /api/memory/sync/settings → {enabled, env_override}
+// env_override=true 表示部署级 RESCENE_MEMORY_SYNC=off 强制关闭，前端开关应禁用。
+func HandleMemorySyncSettings(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"enabled":      memorySyncEnabled(),
+		"env_override": strings.ToLower(os.Getenv("RESCENE_MEMORY_SYNC")) == "off",
+	})
+}
+
+// HandleMemorySyncSettingsUpdate POST /api/memory/sync/settings {enabled}
+// 前端记忆 tab 开关：写本地设置文件，即时生效（push 每次调用都检查）。
+func HandleMemorySyncSettingsUpdate(c *gin.Context) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	p := memorySyncSettingPath()
+	if p == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户目录不可用"})
+		return
+	}
+	os.MkdirAll(filepath.Dir(p), 0o755)
+	val := "on"
+	if !req.Enabled {
+		val = "off"
+	}
+	if err := os.WriteFile(p, []byte(val+"\n"), 0o644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"enabled": req.Enabled})
 }
 
 // memorySyncPayload 打包白名单记忆文件为 JSON map（文件名含 .md → 内容）。

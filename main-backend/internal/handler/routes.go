@@ -216,6 +216,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 云端记忆同步（可选）：记忆包按 uid 存储；pull/push 供前端显式触发
 	r.POST("/api/memory/sync/pull", HandleMemorySyncPull)
 	r.POST("/api/memory/sync/push", HandleMemorySyncPush)
+	// 云端记忆同步开关（前端"记忆"tab 控制；env 可强制关闭）
+	r.GET("/api/memory/sync/settings", HandleMemorySyncSettings)
+	r.POST("/api/memory/sync/settings", HandleMemorySyncSettingsUpdate)
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)
