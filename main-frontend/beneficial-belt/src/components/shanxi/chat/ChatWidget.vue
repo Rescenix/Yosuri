@@ -1143,16 +1143,41 @@ function recordSessionWorkdir(sid) {
 function newSession() {
   const id = 'sess_' + Date.now().toString(36)
   sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0 }, ...sessionList.value]
-  // 记录当前工作目录到会话映射
   recordSessionWorkdir(id)
   switchSession(id)
 }
-// 重命名目前只改侧栏显示，不持久化到后端——SessionStore 的标题是从首条用户消息
-// 派生的，没有独立的标题字段可写；要做到重启后记得住改过的名字，需要后端加一个
-// 显式的标题存储字段，这轮先不做（这轮只被明确问到"新增/删除/聊天记录"）。
+function updateSessionTitle(title, fallback) {
+  if (!title) return
+  const sid = sessionId.value
+  const current = sessionList.value.find(s => s.id === sid)
+  // 只覆盖「默认标题」：新对话，或等于用户首条消息原文（后端 SessionTitle 会把
+  // 首条用户消息派生为标题，侧栏刷新后就不是"新对话"了）。用户手动改过的标题
+  // （跟原文不同）绝不覆盖。
+  const name = (current?.name || '').trim()
+  const isDefault = !current
+    || /^(新对话|New conversation)$/i.test(name)
+    || (fallback && name === shortTitle(fallback))
+  if (!isDefault) return
+  const trimmed = (title || '').trim()
+  if (!trimmed) return
+  const safe = shortTitle(trimmed)
+  const prev = current?.name || ''
+  if (prev === safe) return
+  sessionList.value = sessionList.value.map(s => s.id === sid ? { ...s, name: safe } : s)
+  fetch(`/api/sessions/${encodeURIComponent(sid)}/title`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: trimmed })
+  }).catch(() => {})
+}
 function renameSession({ id, name }) {
   const target = sessionList.value.find(s => s.id === id)
-  if (target) target.name = name
+  if (target) target.name = shortTitle(name)
+  fetch(`/api/sessions/${encodeURIComponent(id)}/title`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: name })
+  }).catch(() => {})
 }
 async function deleteSession(id) {
   try {
@@ -2471,6 +2496,12 @@ watch(() => flowState.active, (now, was) => {
   }
 })
 
+function onSessionTitleUpdate(e) {
+  const d = e?.detail
+  if (!d || !d.title) return
+  updateSessionTitle(d.title, d.fallback)
+}
+
 // ==================== 思考强度（Effort）：Faster(low) ↔ Smarter(high) ====================
 // 注意：debugReasoning 来自上面的 useChatWidget 解构，本段必须放在解构之后，
 // 否则 setup 阶段会命中暂时性死区（TDZ）报 "Cannot access before initialization"。
@@ -2743,7 +2774,9 @@ function handleSend() {
   // 发送后内容必空，直接把高度交回 CSS（min-height:40px 兜底成单行），
   // 不依赖 adjustInputHeight 的 scrollHeight 测量——它会在 v-model 未同步时量到旧高度而卡两行
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-  startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments })
+  // opts.model = 下拉框当前选中的模型（响应式 ref，watch 保证非空），
+  // 标题生成请求和后端路由都用它，而不是滞后的 localStorage
+  startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
 }
 // Token 环状进度条
 const showTokenPanel = ref(false)
@@ -2946,11 +2979,14 @@ onMounted(() => {
   window.addEventListener('keydown', onGlobalDockShortcut)
   window.addEventListener('resize', syncAgentFSTreeViewport)
   nextTick(syncAgentFSTreeViewport)
+  // 监听会话标题更新事件（来自 useAgentWorkflow 的 onTitleUpdate）
+  window.addEventListener('session-title-update', onSessionTitleUpdate)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalDockShortcut)
   window.removeEventListener('resize', syncAgentFSTreeViewport)
   window.clearInterval(agentFSPollTimer)
+  window.removeEventListener('session-title-update', onSessionTitleUpdate)
 })
 async function refreshGitGraph() {
   try {

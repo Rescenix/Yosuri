@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"backend/internal/middleware"
@@ -180,6 +181,19 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 		id := fmt.Sprintf("sess_%d", time.Now().UnixNano())
 		c.JSON(200, gin.H{"session_id": id})
 	})
+	r.PUT("/api/sessions/:id/title", func(c *gin.Context) {
+		id := c.Param("id")
+		var body struct {
+			Title string `json:"title"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+			return
+		}
+		sessionStore.SetSessionTitle(id, strings.TrimSpace(body.Title))
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+	r.POST("/api/title/generate", HandleGenerateTitle)
 
 	r.POST("/api/login", CloudLoginProxy)
 	// GitHub OAuth 登录：流量转发到私有鉴权服务 ResceneCloud（/api/auth/github 发起，

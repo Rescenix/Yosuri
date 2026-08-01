@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,8 @@ type SessionStore struct {
 	// path 在构造时就定死，之后不再重读 RESCENE_DATA_DIR。
 	// 每次现算路径会让运行期切换环境/配置后把会话写进另一个位置。
 	path string
+	// 用户显式设置的会话标题；未设置时前端用首条用户消息当标题。
+	sessionTitles map[string]string
 
 	fileMu sync.Mutex // 串行化本地文件写入，避免并发重写互相踩踏
 }
@@ -78,6 +81,8 @@ type sessionRecord struct {
 	// 所以老记录读进来是根会话、重写后也不会平白多出这两个键。
 	ParentID  string `json:"parent_id,omitempty"`
 	ForkIndex int    `json:"fork_index,omitempty"`
+	// SessionTitle 是用户显式设置的会话标题；空表示未设置，回退到首条用户消息。
+	SessionTitle string `json:"session_title,omitempty"`
 }
 
 func toPersistedMessages(msgs []DSMessage) []persistedMessage {
@@ -133,6 +138,7 @@ func NewSessionStore(domain string) *SessionStore {
 		lastCompressIndexes: make(map[string]int),
 		approvalRules:       make(map[string]map[string]bool),
 		forkMeta:            make(map[string]forkInfo),
+		sessionTitles:       make(map[string]string),
 		domain:              domain,
 		path:                sessionsFilePath(domain),
 	}
@@ -186,6 +192,9 @@ func (s *SessionStore) loadFromFile() error {
 		// 但仍要记住"自己的内容从第几条开始"，否则重启后标题会跳回拷贝来的前缀那句
 		if rec.ParentID != "" || rec.ForkIndex > 0 {
 			s.forkMeta[sid] = forkInfo{ParentID: rec.ParentID, ForkIndex: rec.ForkIndex}
+		}
+		if rec.SessionTitle != "" {
+			s.sessionTitles[sid] = rec.SessionTitle
 		}
 	}
 	return nil
@@ -258,6 +267,7 @@ func (s *SessionStore) persistAll() error {
 			ApprovalRules: rules,
 			ParentID:      fm.ParentID,
 			ForkIndex:     fm.ForkIndex,
+			SessionTitle:  s.sessionTitles[sid],
 		}
 	}
 	s.mu.RUnlock()
@@ -494,6 +504,42 @@ func (s *SessionStore) SetCompressIndex(sessionID string, index int) {
 	}
 }
 
+// SetSessionTitle 设置用户显式标题；空字符串表示清除显式标题，回退到默认。
+func (s *SessionStore) SetSessionTitle(sessionID, title string) {
+	if sessionID == "" {
+		return
+	}
+	s.mu.Lock()
+	if title == "" {
+		delete(s.sessionTitles, sessionID)
+	} else {
+		s.sessionTitles[sessionID] = title
+	}
+	s.mu.Unlock()
+
+	if err := s.persistAll(); err != nil {
+		log.Printf("⚠️ 保存会话标题失败: %v", err)
+	}
+}
+
+// SessionTitle 返回会话标题：显式设置优先，否则从首条用户消息派生。
+func (s *SessionStore) SessionTitle(sessionID string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if t, ok := s.sessionTitles[sessionID]; ok && t != "" {
+		return t
+	}
+	msgs := s.sessions[sessionID]
+	fm := s.forkMeta[sessionID]
+	start := min(fm.ForkIndex, len(msgs))
+	for _, m := range msgs[start:] {
+		if m.Role == "user" && strings.TrimSpace(m.Content) != "" {
+			return strings.TrimSpace(m.Content)
+		}
+	}
+	return "新对话"
+}
+
 // AllSessions 返回所有会话消息的快照副本（按 sessionID 分组），供统计聚合使用
 func (s *SessionStore) AllSessions() map[string][]DSMessage {
 	s.mu.RLock()
@@ -519,15 +565,8 @@ func (s *SessionStore) List() []SessionInfo {
 		// 分支标题从分岐点之后开始找：分支共享父会话的前缀，从头扫的话
 		// 所有分支的标题会跟父会话一模一样，侧边栏根本分不出谁是谁。
 		fm := s.forkMeta[id]
-		// 钳制是防手改文件；msgs[len(msgs):] 本身是合法空切片，不会 panic
-		start := min(fm.ForkIndex, len(msgs))
-		title := "新对话"
-		for _, m := range msgs[start:] {
-			if m.Role == "user" {
-				title = m.Content
-				break
-			}
-		}
+		// 钳制是防手改文件；标题派生在 SessionTitle 里处理
+		title := s.SessionTitle(id)
 		infos = append(infos, SessionInfo{
 			ID:        id,
 			Title:     title,

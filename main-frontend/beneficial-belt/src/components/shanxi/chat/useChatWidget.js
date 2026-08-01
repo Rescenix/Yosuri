@@ -98,19 +98,24 @@ function adjustInputHeight() {
   // 流式期间用 forceScrollToBottom：长工作流流式中持续跟底，无视用户是否上滑，
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
   const {
-    flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow,
-    resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
-    questionState, answerQuestion
-  } = useAgentWorkflow({
-    messages,
-    onNewMessage: forceScrollToBottom,
-    // 流式增量用 smartScrollAndRefresh：尊重 userScrolledUp，用户上滑时不再被强制拉回底部
-    onStreamUpdate: smartScrollAndRefresh
-  })
+      flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow,
+      resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
+      questionState, answerQuestion
+    } = useAgentWorkflow({
+      messages,
+      onNewMessage: forceScrollToBottom,
+      // 流式增量用 smartScrollAndRefresh：尊重 userScrolledUp，用户上滑时不再被强制拉回底部
+      onStreamUpdate: smartScrollAndRefresh,
+      onTitleUpdate: (title) => {
+        // 这里直接调用 ChatWidget 里的 updateSessionTitle（通过 props 或全局）
+        // 由于 useChatWidget 不暴露 updateSessionTitle，改为发事件供 ChatWidget 监听
+        window.dispatchEvent(new CustomEvent('session-title-update', { detail: title }))
+      }
+    })
   // display 透传给 startFlow——之前这里漏了第二个参数，附件 chip/纯文本气泡的展示信息
   // 全部在这层被吞掉，气泡又会退回显示拍平后的 task 全文
-  function startCodeWorkflow(task, display) {
-    startFlow(task, display)
+  function startCodeWorkflow(task, display, opts) {
+    startFlow(task, display, opts)
     userInput.value = ''
   }
 

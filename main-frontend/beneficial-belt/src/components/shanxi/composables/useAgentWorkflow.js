@@ -11,10 +11,11 @@ import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from '
 
 let msgSeq = 0
 
-export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
+export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTitleUpdate }) {
     const flowState = reactive({ active: false })
     let es = null
     let currentFlow = null
+    let titleTimer = null
 
     // 审批状态：Ask 模式下后端推 approval_request 时压入；用户点允许/拒绝后该条消失。
     // 同一次工作流可能连续多个危险工具待批，所以用数组挂多个。
@@ -111,11 +112,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     }
 
     function closeStream() {
-        if (es) { es.close(); es = null }
-        flowState.active = false
-        clearAllApprovals() // 流结束清掉残留审批条与倒计时
-        onStreamUpdate?.()
-    }
+            if (es) { es.close(); es = null }
+            flowState.active = false
+            clearAllApprovals() // 流结束清掉残留审批条与倒计时
+            onStreamUpdate?.()
+        }
 
     // display 可选：{ text, attachments } —— 气泡展示用的"用户实际打的字 + 附件 chip"，
     // 跟真正发给模型的 task（附件内容已经拍平拼接）分开，不然气泡里会把图片解析原文/
@@ -123,19 +124,25 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
     // opts.resumeId：从后端检查点续跑（见 resumeCodeWorkflow）。续跑时这条任务的
     // 用户消息上次已经上过屏、也已在后端历史里，不再重复插入用户气泡。
     function startCodeWorkflow(task, display, opts = {}) {
-        task = (task || '').trim()
-        if (!task || flowState.active) return
-        flowState.active = true
+            task = (task || '').trim()
+            if (!task || flowState.active) return
+            flowState.active = true
 
-        if (!opts.resumeId) {
-            messages.value.push({
-                id: `afu_${Date.now()}_${msgSeq++}`,
-                sender: 'user',
-                content: display?.text ?? task,
-                attachments: display?.attachments ?? [],
-                timestamp: new Date()
-            })
-        }
+            // 捕获用户原始提问（display.text 优先，回退到 task），用于首个 intent 到达时设标题
+            // 只在非 resume、且会话标题仍为默认时生效
+            const userQuestionForTitle = (!opts.resumeId && (display?.text || task)) ? (display?.text ?? task) : null
+            let titleTimer = null
+            let titleEmitted = false
+
+            if (!opts.resumeId) {
+                messages.value.push({
+                    id: `afu_${Date.now()}_${msgSeq++}`,
+                    sender: 'user',
+                    content: display?.text ?? task,
+                    attachments: display?.attachments ?? [],
+                    timestamp: new Date()
+                })
+            }
 
         const flow = reactive({
             id: `af_${Date.now()}_${msgSeq++}`,
@@ -163,9 +170,10 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         onNewMessage?.()
 
         const sid = localStorage.getItem('prism_session_id') || ''
-        // model 直接透传前端选好的模型 ID，命中 freeModelCatalog 就精确路由到那一个
-        // （见 model_router.go resolveBackends），不再是"选了也白选"
-        const model = localStorage.getItem('selectedModel') || ''
+        // model 直接透传前端下拉框当前选中的模型 ID（ChatWidget 通过 opts.model 传入，
+        // 优先于 localStorage——下拉框 ref 有 watch 保证永远落在可见模型列表里，非空），
+        // 命中 freeModelCatalog 就精确路由到那一个（见 model_router.go resolveBackends）
+        const model = opts.model || localStorage.getItem('selectedModel') || ''
         // effort 只有当前 backend 真支持 reasoning 时后端才会真的采用（否则安静忽略），
         // 前端不需要自己先判断"这个模型支不支持"再决定发不发
         const effort = localStorage.getItem('debugReasoning') || ''
@@ -215,18 +223,44 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
         }
 
         // 之前这个事件完全没人听——workflow_id 从没进过前端状态，sendSteerMessage
-        // 也就无从知道该往哪个工作流投消息。
-        es.addEventListener('workflow_start', e => {
-            flow.workflowId = JSON.parse(e.data).workflow_id
-        })
+                // 也就无从知道该往哪个工作流投消息。
+                es.addEventListener('workflow_start', e => {
+                    flow.workflowId = JSON.parse(e.data).workflow_id
+                })
 
-        es.addEventListener('model_info', e => {
-            flow.modelInfo = JSON.parse(e.data)
-            // 后端回传的分类上下文占用（system/subagent/skill/memory/tools），落盘持久化
-            setContextBreakdownFromBackend(flow.modelInfo.context_breakdown, flow.modelInfo.context_window)
-        })
-        es.addEventListener('thinking', e => appendText('thinking', JSON.parse(e.data).content))
-        es.addEventListener('intent', e => appendText('intent', JSON.parse(e.data).content))
+                es.addEventListener('model_info', e => {
+                    flow.modelInfo = JSON.parse(e.data)
+                    // 后端回传的分类上下文占用（system/subagent/skill/memory/tools），落盘持久化
+                    setContextBreakdownFromBackend(flow.modelInfo.context_breakdown, flow.modelInfo.context_window)
+                })
+                // 第一条 intent 增量到达 = 模型开始给最终回答；此时用当前选中模型
+                // 根据用户第一条消息 AI 生成语义化标题（"你好"→"友好的问候"），
+                // 失败/超时回退用户原始提问（去掉附件前缀）
+                es.addEventListener('intent', e => {
+                    const d = JSON.parse(e.data)
+                    if (!d.content) return
+                    appendText('intent', d.content)
+                    if (!titleEmitted && userQuestionForTitle) {
+                        titleEmitted = true
+                        const fallback = userQuestionForTitle.trim().split('\n').pop()?.trim() || userQuestionForTitle.trim()
+                        if (!fallback || !onTitleUpdate) return
+                        const ac = new AbortController()
+                        const timer = setTimeout(() => ac.abort(), 15000)
+                        fetch('/api/title/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: fallback, model }),
+                            signal: ac.signal
+                        }).then(r => r.json()).then(res => {
+                            const ai = (res && res.title || '').trim()
+                            // 传 {title, fallback}：ChatWidget 据此判断是否覆盖
+                            // （新对话 或 等于原文才覆盖，手动改过的不动）
+                            onTitleUpdate({ title: ai || fallback, fallback })
+                        }).catch(() => onTitleUpdate({ title: fallback, fallback }))
+                          .finally(() => clearTimeout(timer))
+                    }
+                })
+                es.addEventListener('thinking', e => appendText('thinking', JSON.parse(e.data).content))
 
         // 工具参数同样是流式生成的，但绝不能把不断增长的完整 JSON 每个 token 都塞进
         // Vue 响应式状态：长 HTML 会导致整棵消息树反复渲染，DiffViewer 还会反复做

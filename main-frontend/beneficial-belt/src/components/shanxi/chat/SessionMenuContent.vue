@@ -64,7 +64,7 @@
                 @keydown.esc="cancelRename"
                 @blur="commitRename"
               />
-              <span v-else class="smc-session-name">{{ s.name }}</span>
+              <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
@@ -116,7 +116,7 @@
                 @keydown.esc="cancelRename"
                 @blur="commitRename"
               />
-              <span v-else class="smc-session-name">{{ s.name }}</span>
+              <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
@@ -156,7 +156,7 @@
                 @keydown.esc="cancelRename"
                 @blur="commitRename"
               />
-              <span v-else class="smc-session-name">{{ s.name }}</span>
+              <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
@@ -194,7 +194,7 @@
               @keydown.esc="cancelRename"
               @blur="commitRename"
             />
-            <span v-else class="smc-session-name">{{ s.name }}</span>
+            <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
             <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
               <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                 <Icon icon="mdi:dots-horizontal" width="16" />
@@ -863,6 +863,19 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--app-text);
+}
+/* 标题渐变替换：旧标题淡出上滑，新标题淡入下滑（AI 生成标题替换默认标题时） */
+.smc-title-swap-enter-active,
+.smc-title-swap-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.smc-title-swap-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.smc-title-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 .smc-name-input {
   flex: 1;
