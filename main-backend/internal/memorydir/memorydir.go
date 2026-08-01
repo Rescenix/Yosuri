@@ -374,6 +374,24 @@ func ReadRaw(file string) string {
 	return strings.TrimSpace(string(data))
 }
 
+// SyncableFiles 参与云端记忆同步的文件白名单（不含 handoff 工作态 / intimacy 缓存）。
+var SyncableFiles = map[string]bool{
+	"index": true, "pinned": true, "preferences": true,
+	"project": true, "decisions": true, "memories": true,
+}
+
+// WriteRaw 覆盖写 memory/<file>.md（仅限 SyncableFiles 白名单，防云端记忆包路径穿越）。
+// 供云端记忆同步恢复使用；白名单外返回错误。
+func WriteRaw(file, content string) error {
+	file = strings.TrimSpace(file)
+	if !SyncableFiles[file] {
+		return fmt.Errorf("不允许写入的文件: %s", file)
+	}
+	dir := path()
+	os.MkdirAll(dir, 0755)
+	return os.WriteFile(filepath.Join(dir, file+".md"), []byte(content), 0644)
+}
+
 // ── 亲密度（无上限互动值）：云端权威 + 本地缓存 ──
 //
 // 亲密度随 UID 账号存 ResceneCloud（跨设备保留），re0 侧代理读写时把最新值

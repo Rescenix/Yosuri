@@ -192,6 +192,18 @@ func proxyIntimacyToCloud(c *gin.Context, targetPath string) {
 	}
 }
 
+// CloudStatsIncProxy 主页统计增量上报：转发到 ResceneCloud 的 /api/stats/inc。
+// uid 由前端/后端随 body 携带，re0 只透传（不需要知道 uid）。
+func CloudStatsIncProxy(c *gin.Context) {
+	proxyToCloud(c, "/api/stats/inc")
+}
+
+// CloudStatsGetProxy 主页统计查询：转发到 ResceneCloud 的 /api/stats（带 uid 查询参数）。
+func CloudStatsGetProxy(c *gin.Context) {
+	q := c.Request.URL.Query()
+	proxyToCloud(c, "/api/stats?"+q.Encode())
+}
+
 // CloudAuthConfig 把 ResceneCloud 基址暴露给前端，供其直接发起 GitHub 登录跳转。
 func CloudAuthConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{

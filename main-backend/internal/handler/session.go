@@ -300,6 +300,8 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	if err := s.persistAll(); err != nil {
 		log.Printf("⚠️ 保存会话到本地文件失败: %v", err)
 	}
+	// 主页统计云端同步：异步上报增量（不阻塞落盘/对话）
+	reportStatsAsync(msg)
 }
 
 // UpsertWorkflowPair 按 workflowID 原位写入一组 user/assistant 消息。
@@ -358,6 +360,9 @@ func (s *SessionStore) UpsertWorkflowPair(sessionID, workflowID string, user, as
 	if err := s.persistAll(); err != nil {
 		log.Printf("⚠️ 保存工作流历史失败: %v", err)
 	}
+	// 主页统计云端同步：user + assistant 两条都上报（异步，不阻塞）
+	reportStatsAsync(user)
+	reportStatsAsync(assistant)
 }
 
 // Fork 从 parentID 的前 keep 条消息拷出一条新分支会话，返回新会话 ID。

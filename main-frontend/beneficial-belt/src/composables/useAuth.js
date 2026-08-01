@@ -127,6 +127,22 @@ const intimacyLevel = computed(() => {
   return Math.floor((1 + Math.sqrt(1 + 8 * x)) / 2)
 })
 
+// 云端记忆同步（可选）：uid 到位后显式拉取一次，跨设备即时恢复记忆。
+// 与 re0 启动自动拉取互补：启动拉覆盖重启场景，这里覆盖首次登录场景。
+async function pullCloudMemory() {
+  const u = uid.value
+  if (!u) return
+  try {
+    await fetch('/api/memory/sync/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: u })
+    })
+  } catch {
+    // 云端不可达：下次启动自动拉取再补
+  }
+}
+
 // 展示名：登录用 GitHub 名，未登录用 cloud 分发的 UID
 const displayName = computed(() => {
   if (isLoggedIn.value) return name.value || login.value || 'GitHub 用户'
@@ -202,7 +218,10 @@ if (cachedIntimacy) intimacy.value = Number(cachedIntimacy)
 
 // 首次加载即验真；并监听登录态变化事件自动刷新
 refresh()
-fetchUid().then(() => fetchIntimacy())
+fetchUid().then(() => {
+  fetchIntimacy()
+  pullCloudMemory()
+})
 if (typeof window !== 'undefined') {
   window.addEventListener('auth-change', refresh)
 }

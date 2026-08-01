@@ -41,6 +41,8 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 		if err := memorydir.Remember(file, summary, text); err != nil {
 			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)
 		}
+		// 云端记忆同步（可选）：记忆变了，异步推送
+		pushMemorySync()
 		return nativeToolResult{Text: fmt.Sprintf("已写入记忆 %s（memory/%s.md）", file, file)}, nil
 	case "memory_pin":
 		pid, text := stringArg(args, "pid"), stringArg(args, "text")
@@ -50,6 +52,8 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 		if err := memorydir.Pin(pid, text); err != nil {
 			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)
 		}
+		// 云端记忆同步（可选）：常驻记忆变了，异步推送
+		pushMemorySync()
 		return nativeToolResult{Text: fmt.Sprintf("已写入常驻记忆 %s（每轮无条件注入 pinned.md）", pid)}, nil
 	case "memory_handoff":
 		block := stringArg(args, "block")
@@ -59,6 +63,8 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 		if err := memorydir.HandoffWrite(block); err != nil {
 			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)
 		}
+		// 云端记忆同步（可选）：交接工作态变了，异步推送（handoff 不进白名单，但推送无害）
+		pushMemorySync()
 		return nativeToolResult{Text: "已更新会话交接工作态（handoff.md）"}, nil
 	case "workdir_read":
 		path, err := nativeWorkdirNotePath()

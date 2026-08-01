@@ -210,6 +210,12 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 亲密度（无上限互动值）：云端权威存储，re0 透传 + 本地缓存
 	r.POST("/api/auth/intimacy/inc", CloudIntimacyIncProxy)
 	r.GET("/api/auth/intimacy", CloudIntimacyGetProxy)
+	// 主页统计云端账本（热力图 + 模型数据，按 uid 累计）：re0 透传
+	r.POST("/api/stats/inc", CloudStatsIncProxy)
+	r.GET("/api/stats", CloudStatsGetProxy)
+	// 云端记忆同步（可选）：记忆包按 uid 存储；pull/push 供前端显式触发
+	r.POST("/api/memory/sync/pull", HandleMemorySyncPull)
+	r.POST("/api/memory/sync/push", HandleMemorySyncPush)
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"backend/internal/memorydir"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -244,11 +246,21 @@ func computeWindow(msgs []statMessage, since time.Time, now time.Time) StatsWind
 	}
 }
 
-// HandleOverview GET /api/stats/overview — 总览卡片所需的全部数据，按 总共/30天/7天 分层
+// HandleOverview GET /api/stats/overview — 总览卡片所需的全部数据，按 总共/30天/7天 分层。
+// 云端优先：账号（uid）有云端统计时用云端聚合重算（跨设备累计）；云端不可达或无 uid 时
+// 回退本地会话历史实时聚合（现状）。
 func (h *StatsHandler) HandleOverview(c *gin.Context) {
 	now := time.Now()
-	msgs := h.flattenMessages()
 
+	uid, _ := memorydir.ReadIntimacy()
+	if uid > 0 {
+		if resp, ok := fetchCloudStats(uid); ok {
+			c.JSON(http.StatusOK, computeOverviewFromCloud(resp, now))
+			return
+		}
+	}
+
+	msgs := h.flattenMessages()
 	overview := StatsOverview{
 		Total:   computeWindow(msgs, time.Time{}, now),
 		Last30d: computeWindow(msgs, now.AddDate(0, 0, -30), now),
@@ -257,7 +269,89 @@ func (h *StatsHandler) HandleOverview(c *gin.Context) {
 	c.JSON(http.StatusOK, overview)
 }
 
-// HandleDailyStats GET /api/stats/daily?days=30 — 按天聚合的消息数与Token消耗，供热力图使用
+// computeOverviewFromCloud 从云端聚合（daily/models/hours）重算总览窗口指标。
+// 派生逻辑与本地 computeWindow 同一套口径：streak/峰值时段/常用模型/模型 token 占比。
+// TotalSessions 云端不存会话维度，返回 0（前端显示 0，不影响热力图与模型数据）。
+func computeOverviewFromCloud(resp cloudStatsResp, now time.Time) StatsOverview {
+	window := func(since time.Time) StatsWindow {
+		hasSince := !since.IsZero()
+		dayActive := make(map[string]bool)
+		var totalMessages, totalTokens int64
+		for _, d := range resp.Daily {
+			if hasSince {
+				t, err := time.Parse("2006-01-02", d.Date)
+				if err != nil || t.Before(since) {
+					continue
+				}
+			}
+			totalMessages += d.Messages
+			totalTokens += d.Tokens
+			if d.Messages > 0 {
+				dayActive[d.Date] = true
+			}
+		}
+		activeDaysList := make([]string, 0, len(dayActive))
+		for d := range dayActive {
+			activeDaysList = append(activeDaysList, d)
+		}
+		sort.Strings(activeDaysList)
+
+		peakHour := "-"
+		if totalMessages > 0 {
+			bestHour, bestCount := -1, int64(0)
+			for _, h := range resp.Hours {
+				if h.Messages > bestCount || (h.Messages == bestCount && (bestHour == -1 || h.Hour < bestHour)) {
+					bestHour, bestCount = h.Hour, h.Messages
+				}
+			}
+			if bestHour >= 0 {
+				peakHour = chineseHourLabel(bestHour)
+			}
+		}
+
+		favoriteModel := "-"
+		{
+			bestModel, bestCount := "", int64(0)
+			for _, m := range resp.Models {
+				if m.Messages > bestCount {
+					bestModel, bestCount = m.Model, m.Messages
+				}
+			}
+			if bestModel != "" {
+				favoriteModel = bestModel
+			}
+		}
+
+		modelTokensList := make([]ModelTokenStat, 0, len(resp.Models))
+		for _, m := range resp.Models {
+			modelTokensList = append(modelTokensList, ModelTokenStat{Model: m.Model, Tokens: int(m.Tokens)})
+		}
+		if len(modelTokensList) > 5 {
+			modelTokensList = modelTokensList[:5]
+		}
+
+		return StatsWindow{
+			TotalSessions: 0, // 云端不存会话维度
+			TotalMessages: int(totalMessages),
+			TotalTokens:   int(totalTokens),
+			ActiveDays:    len(dayActive),
+			CurrentStreak: computeCurrentStreak(dayActive, now),
+			LongestStreak: computeLongestStreak(activeDaysList),
+			PeakHour:      peakHour,
+			FavoriteModel: favoriteModel,
+			ModelTokens:   modelTokensList,
+		}
+	}
+
+	return StatsOverview{
+		Total:   window(time.Time{}),
+		Last30d: window(now.AddDate(0, 0, -30)),
+		Last7d:  window(now.AddDate(0, 0, -7)),
+	}
+}
+
+// HandleDailyStats GET /api/stats/daily?days=30 — 按天聚合的消息数与Token消耗，供热力图使用。
+// 云端优先：账号有云端统计时用云端按天数据填充；否则回退本地会话历史聚合。
 func (h *StatsHandler) HandleDailyStats(c *gin.Context) {
 	days := 30
 	if q := c.Query("days"); q != "" {
@@ -267,6 +361,28 @@ func (h *StatsHandler) HandleDailyStats(c *gin.Context) {
 	}
 
 	now := time.Now()
+
+	uid, _ := memorydir.ReadIntimacy()
+	if uid > 0 {
+		if resp, ok := fetchCloudStats(uid); ok {
+			byDate := make(map[string]cloudDailyStat, len(resp.Daily))
+			for _, d := range resp.Daily {
+				byDate[d.Date] = d
+			}
+			result := make([]DailyStat, 0, days)
+			for i := days - 1; i >= 0; i-- {
+				key := now.AddDate(0, 0, -i).Format("2006-01-02")
+				if s, ok := byDate[key]; ok {
+					result = append(result, DailyStat{Date: key, Count: int(s.Messages), Tokens: int(s.Tokens)})
+				} else {
+					result = append(result, DailyStat{Date: key, Count: 0, Tokens: 0})
+				}
+			}
+			c.JSON(http.StatusOK, result)
+			return
+		}
+	}
+
 	msgs := h.flattenMessages()
 
 	dayMap := make(map[string]*DailyStat)
