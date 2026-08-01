@@ -1250,7 +1250,14 @@ func drainResponsesStream(c *gin.Context, resp *http.Response, msgs []map[string
 				}
 				// 实测：DeepSeek 的 URL 在 output_item.done 的 open_page 动作里。
 				// 聚合后写完整卡片（主网站列表）；searching 状态保持扫描线。
-				writeSearch(searchAgg, searchAgg.status)
+				// 注意：search 动作的 done 只有 queries 没有 urls，此时不能发
+				// completed——前端会渲染「未找到相关来源」；必须等 open_page
+				// 动作的 URL 聚合到再一次性展示（2026-08-01 实测踩坑）。
+				if len(searchAgg.urls) == 0 {
+					writeSearch(searchAgg, "searching")
+				} else {
+					writeSearch(searchAgg, searchAgg.status)
+				}
 			case "function_call":
 					id, _ := item["id"].(string)
 					if st, ok := fnMap[id]; ok {
@@ -1284,6 +1291,12 @@ func drainResponsesStream(c *gin.Context, resp *http.Response, msgs []map[string
 					outTok = int(ot)
 				}
 				gotUsage = true
+			}
+			// 收尾：搜索已开始但 urls 始终为空（模型只 search 未 open_page，
+			// 直接基于注入摘要作答）——补发一次 completed，否则前端永远停在
+			// searching 扫描线。此时「未找到相关来源」是真实状态而非中间态。
+			if searchStarted && len(searchAgg.urls) == 0 {
+				writeSearch(searchAgg, "completed")
 			}
 		case "response.incomplete":
 			// 截断（如 max_output_tokens 到顶），语义同 chat/completions 的 finish_reason=length

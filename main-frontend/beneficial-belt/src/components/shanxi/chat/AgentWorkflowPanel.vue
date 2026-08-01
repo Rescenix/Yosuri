@@ -72,7 +72,7 @@
               <span class="flow-search-url">{{ searchHost(u) }}</span>
             </a>
           </template>
-          <div v-else class="flow-search-empty">未找到相关来源</div>
+          <div v-else class="flow-search-empty">基于搜索结果作答（未展开来源页面）</div>
         </div>
       </div>
 
@@ -484,18 +484,37 @@ function onFaviconError(e, u) {
   faviconFailed.add(u)
   faviconBump.value++
 }
-// 来源行显示主网站（中文站名）——按用户要求不显示抓取的新闻标题
+// 来源标题：默认显示中文站名（轻量）；异步抓真实新闻标题，成功后替换。
+// DS open_page 只给 URL 不给 title，标题走后端 /api/fetch-title 代理抓 <title>。
+// 抓取失败（超时/反爬/非新闻页）保持站名，不阻塞 UI。
+const searchTitleCache = new Map() // url → title
+const searchTitleFetching = new Set()
 function searchTitle(u, b) {
+  const cached = searchTitleCache.get(u)
+  if (cached) return cached
+  // 未抓过则发起异步抓取（同一 URL 只抓一次）
+  if (!searchTitleFetching.has(u)) {
+    searchTitleFetching.add(u)
+    fetch(`/api/fetch-title?url=${encodeURIComponent(u)}`, { signal: AbortSignal.timeout(4000) })
+      .then(r => r.json())
+      .then(d => { if (d && d.title) searchTitleCache.set(u, d.title) })
+      .catch(() => { /* 抓取失败保持站名 */ })
+      .finally(() => {
+        searchTitleFetching.delete(u)
+        searchTitleBump.value++
+      })
+  }
   return searchSiteName(u)
 }
+const searchTitleBump = ref(0)
+void searchTitleBump // 建立响应式依赖：fetch 完成时重渲染标题
 // 搜索词（queries）：后端 SSE args.query 已聚合（过滤了 ws_call_id 尾巴）
 function searchQuery(b) {
   return (b.args && b.args.query) || ''
 }
-// 搜索卡概要：head 显示「搜索词摘要」，body 展开来源列表
+// 搜索卡概要：head 只显示状态，不重复搜索词（搜索词在 body 完整展示）
 function searchSummary(b) {
-  const q = searchQuery(b)
-  return q ? `搜索：${q}` : ((b.status === 'running' || b.status === 'generating') ? '正在联网搜索…' : '联网搜索完成')
+  return (b.status === 'running' || b.status === 'generating') ? '正在联网搜索…' : '联网搜索完成'
 }
 
 // 把各种"读一段"的参数翻成人话贴在动作行尾（offset=起点, limit=实际行数）。
@@ -973,7 +992,8 @@ function toolBodyText(b) {
 .flow-search-source:hover {
   background: var(--app-surface-2, rgba(0,0,0,0.04));
 }
-/* 站点图标徽标：优先 favicon.im 真实图标，失败回退本地首字 */
+/* 站点图标徽标：白底（favicon 透出真实图标），加载失败回退本地首字
+   （主题紫文字，白底可读；不用主题色背景——favicon 会被染成紫色） */
 .flow-search-badge {
   flex-shrink: 0;
   width: 18px;
@@ -986,8 +1006,8 @@ function toolBodyText(b) {
   overflow: hidden;
   font-size: 10.5px;
   font-weight: 700;
-  color: #fff;
-  background: #8b5cf6;
+  color: #8b5cf6;
+  background: #fff;
 }
 .flow-search-favicon {
   position: absolute;

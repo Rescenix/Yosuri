@@ -192,6 +192,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)
+	// 新闻标题抓取代理：DS 搜索 open_page 只给 URL，前端要显示标题走这里（防 CORS）
+	r.GET("/api/fetch-title", HandleFetchTitle)
 
 	// 视觉分析 HTTP 入口，供前端上传/追问复用；Go 内置 view_image 直接复用同一模型路由。
 	r.POST("/api/vision/analyze", HandleVisionAnalyze)
