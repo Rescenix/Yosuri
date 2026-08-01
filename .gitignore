@@ -100,3 +100,7 @@ main-backend/models/
 # 编译产物
 main-backend/aurora-server-bin
 .cache/
+
+# 专栏文章与调试产物不入库
+columns/
+main-backend/ds3.txt

@@ -92,7 +92,7 @@
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
                         @open-plugins="openPluginsMarket"
-                        @open-scheduled-tasks="showScheduledTask = true"
+                        @open-scheduled-tasks="showScheduledTaskManager = true"
                       />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
@@ -106,7 +106,7 @@
             <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
                           <Icon icon="mdi:puzzle-outline" width="18" />
                         </button>
-                        <button class="gem-icon-btn" @click="showScheduledTask = true" title="定时任务">
+                        <button class="gem-icon-btn" @click="showScheduledTaskManager = true" title="定时任务">
                           <Icon icon="mdi:clock-outline" width="18" />
                         </button>
             <!-- 会话横条：与 AgentFS 图谱完全分离，保留快速会话跳转 -->
@@ -968,7 +968,13 @@
       </div>
 
       <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
-      <ScheduledTaskModal v-if="showScheduledTask" @close="showScheduledTask = false" @create="onCreateScheduledTask" />
+      <ScheduledTaskManager
+        v-if="showScheduledTaskManager"
+        @close="showScheduledTaskManager = false"
+        @create="openScheduledTaskCreate"
+        @toast="showGitToast"
+      />
+      <ScheduledTaskModal v-if="showScheduledTask" @close="closeScheduledTask" @create="onCreateScheduledTask" />
       <ModelManagerModal
         v-if="showModelManager"
         :free-models="freeModelsFull"
@@ -1027,6 +1033,7 @@ import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
 import ScheduledTaskModal from './ScheduledTaskModal.vue'
+import ScheduledTaskManager from './ScheduledTaskManager.vue'
 import SettingsModal from './SettingsModal.vue'
 import ModelManagerModal from './ModelManagerModal.vue'
 import PluginsMarketModal from './PluginsMarketModal.vue'
@@ -2248,6 +2255,23 @@ const showModelManager = ref(false)
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
 const showScheduledTask = ref(false)
+const showScheduledTaskManager = ref(false)
+// 新建弹窗是否从管理面板进入（取消/关闭时回到管理面板）
+const scheduledTaskFromManager = ref(false)
+function openScheduledTaskCreate() {
+  // 管理面板点「新建」→ 关管理面板，打开新建弹窗
+  scheduledTaskFromManager.value = true
+  showScheduledTaskManager.value = false
+  showScheduledTask.value = true
+}
+function closeScheduledTask() {
+  showScheduledTask.value = false
+  // 从管理面板进来时，取消/关闭后回到管理面板（v-if 重新挂载自动刷新列表）
+  if (scheduledTaskFromManager.value) {
+    scheduledTaskFromManager.value = false
+    showScheduledTaskManager.value = true
+  }
+}
 function onSettingsClosed() {
   showSettings.value = false
   loadModelCapabilities()
@@ -2265,7 +2289,11 @@ function onCreateScheduledTask(data) {
     body: JSON.stringify(data)
   })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
-    .then(() => showGitToast('✅ 定时任务已创建，到点会弹系统通知'))
+    .then(() => {
+      showGitToast('✅ 定时任务已创建，到点会弹系统通知')
+      // 创建完回到管理面板（v-if 重新挂载 → onMounted 自动刷新列表）
+      showScheduledTaskManager.value = true
+    })
     .catch(e => {
       console.log('定时任务数据:', data, e)
       showGitToast('❌ 定时任务创建失败：' + (e.message || '网络错误'))
