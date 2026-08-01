@@ -341,6 +341,12 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate }) {
             actionDeltaProgress.delete(d.id)
             let args = {}
             try { args = JSON.parse(d.args || '{}') } catch { /* 参数留空对象，卡片仍可显示工具名 */ }
+            // 【诊断】联网搜索：打印后端实际下发的 action args，确认 urls 有没有到
+            if (d.name === 'web_search') {
+                console.log('[refs] SSE action →', d.args, '| urls =', args.urls ? args.urls.length : 0)
+                window.__refsDebug = window.__refsDebug || { log: [] }
+                window.__refsDebug.log.push({ t: Date.now(), ev: 'action', name: d.name, args })
+            }
             // startTime：记下发起时刻，result 到达时算耗时（图1 那种「完成 41ms」徽章）
             const t = findPendingTool(d.id, d.name)
             if (t) {

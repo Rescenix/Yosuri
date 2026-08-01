@@ -965,6 +965,11 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 	reqBody := map[string]any{
 		"model": b.Model, "input": toResponsesInput(msgs), "stream": true,
 		"max_output_tokens": 16384,
+		// 引导模型执行 open_page：DS 服务端搜索的 URL 只在 open_page 动作里暴露，
+		// 不 open_page 则客户端拿不到任何引用来源（2026-08-01 实测：纯 search
+		// 动作只有 queries 无 url）。宣传期开放 4 个页面供视频/宣传素材引用，
+		// 宣传结束后改回 1 个或关闭（见「宣传完就关」备注）。
+		"instructions": "当需要引用来源时，搜索后必须使用 open_page 打开 2-4 个最相关的页面作为引用来源；不要打开超过 4 个页面，不要为了展示而重复搜索。",
 	}
 	if len(tools) > 0 {
 		reqBody["tools"] = toResponsesTools(tools)

@@ -26,9 +26,8 @@
         </div>
       </div>
 
-      <!-- 联网搜索：极简状态卡——head 显示「联网搜索 + 概要」，body 展开显示
-           搜索词（queries）与引用来源（open_page URL）。全部数据来自后端
-           SSE 的 args.query/args.urls，纯前端渲染，零 token 成本。 -->
+      <!-- 联网搜索：状态卡——head 显示「联网搜索 + 扫描线」，body 只显示搜索词；
+           引用来源暂存到 searchRefs，回复结束后在末尾紫色区块流式渐变展示 -->
       <div v-else-if="group.type === 'search-tool'" class="flow-search-card">
         <div class="flow-search-head">
           <Icon icon="mdi:magnify" class="flow-search-icon" width="14" />
@@ -42,37 +41,12 @@
             <Icon icon="mdi:magnify" class="flow-search-query-icon" width="12" />
             <span class="flow-search-query-text">{{ searchQuery(group.block) }}</span>
           </div>
-          <!-- 流式加载中：三行扫描线骨架 -->
+          <!-- 搜索进行中：三行扫描线骨架 -->
           <div v-if="group.block.status === 'running' || group.block.status === 'generating'" class="flow-search-loading">
             <span class="flow-search-loading-line"></span>
             <span class="flow-search-loading-line"></span>
             <span class="flow-search-loading-line"></span>
           </div>
-          <!-- 引用来源（open_page URL）：favicon + 中文站名 + 域名 -->
-          <template v-else-if="searchSources(group.block).length">
-            <a
-              v-for="u in searchSources(group.block)"
-              :key="u"
-              class="flow-search-source"
-              :href="u"
-              target="_blank"
-              rel="noopener"
-            >
-              <span class="flow-search-badge">
-                <img
-                  v-if="faviconOK(u)"
-                  :src="searchFavicon(u)"
-                  class="flow-search-favicon"
-                  alt=""
-                  @error="onFaviconError($event, u)"
-                />
-                <span v-else class="flow-search-badge-fallback">{{ searchInitial(u) }}</span>
-              </span>
-              <span class="flow-search-title">{{ searchTitle(u, group.block) }}</span>
-              <span class="flow-search-url">{{ searchHost(u) }}</span>
-            </a>
-          </template>
-          <div v-else class="flow-search-empty">基于搜索结果作答（未展开来源页面）</div>
         </div>
       </div>
 
@@ -198,11 +172,38 @@
         </Transition>
       </template>
     </template>
+
+    <!-- 引用来源：回复结束后在末尾展示。思考卡片样式（灰底+左虚线），
+         每条【N】编号 + 白底首字徽标 + 标题 + 虚线分隔的网址。
+         生产者（搜索时暂存 searchRefs）→ 消费者（回复结束 visibleRefs
+         逐条递增，TransitionGroup 流式渐变渲染）。 -->
+    <div v-if="searchRefs.length && flow.status !== 'running'" class="flow-refs">
+      <div class="flow-refs-title">引用来源</div>
+      <TransitionGroup name="flow-ref" tag="div" class="flow-refs-list">
+        <a
+          v-for="(u, idx) in visibleRefs"
+          :key="u"
+          class="flow-ref-item"
+          :href="u"
+          target="_blank"
+          rel="noopener"
+        >
+          <span class="flow-ref-no">{{ idx + 1 }}</span>
+          <span class="flow-ref-content">
+            <span class="flow-ref-head">
+              <span class="flow-search-badge">{{ searchInitial(u) }}</span>
+              <span class="flow-search-title">{{ searchTitle(u, null) }}</span>
+            </span>
+            <span class="flow-search-url">{{ searchHost(u) }}</span>
+          </span>
+        </a>
+      </TransitionGroup>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, computed, ref } from 'vue'
+import { reactive, computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
@@ -251,6 +252,65 @@ const blockGroups = computed(() => {
   if (current) groups.push(current)
   return groups
 })
+
+// ==================== 引用来源（生产者-消费者） ====================
+// 生产者：搜索期间（web_search 块到达）持续收集 open_page URL 到 searchRefs，
+// 不渲染。消费者：回复结束（flow.status !== 'running'）后 visibleRefs 逐条递增，
+// TransitionGroup 流式渐变渲染。解决「图标/标题与 LLM 回答抢渲染」的错位感。
+// 【诊断】window.__refsDebug 记录实际数据，排查「结尾不渲染」时看这里。
+const searchRefs = computed(() => {
+  const seen = new Set()
+  const out = []
+  for (const b of props.flow?.blocks || []) {
+    if (b.type !== 'tool' || b.name !== 'web_search') continue
+    for (const u of searchSources(b)) {
+      if (!seen.has(u)) {
+        seen.add(u)
+        out.push(u)
+      }
+    }
+  }
+  if (out.length || !window.__refsDebug) {
+    window.__refsDebug = window.__refsDebug || { log: [] }
+    window.__refsDebug.log.push({
+      t: Date.now(), ev: 'searchRefs', count: out.length, urls: [...out],
+      flowStatus: props.flow?.status, blocks: (props.flow?.blocks || []).length
+    })
+    if (window.__refsDebug.log.length > 50) window.__refsDebug.log.shift()
+    console.log('[refs] searchRefs computed →', out.length, 'urls, flow.status =', props.flow?.status)
+  }
+  return out
+})
+// 消费者：当前已渲染条数，回复结束后由 watch 逐条递增
+const refsVisible = ref(0)
+let refsTimer = null
+const visibleRefs = computed(() => searchRefs.value.slice(0, refsVisible.value))
+// 回复结束（status 非 running）触发流式渲染：每 260ms 放出一条。
+// immediate + 不依赖 prev：组件可能在任何时序挂载（历史消息/续跑），
+// 只要当前已非 running 就立即开始逐条渲染，绝不漏触发。
+function startRefsStream() {
+  refsVisible.value = 0
+  if (refsTimer) clearInterval(refsTimer)
+  const total = searchRefs.value.length
+  // 【诊断】
+  console.log('[refs] startRefsStream → total =', total, ', status =', props.flow?.status)
+  if (window.__refsDebug) window.__refsDebug.log.push({ t: Date.now(), ev: 'startRefsStream', total, status: props.flow?.status })
+  if (total > 0) {
+    refsTimer = setInterval(() => {
+      refsVisible.value++
+      if (refsVisible.value >= total) clearInterval(refsTimer)
+    }, 260)
+  }
+}
+watch(
+  () => props.flow?.status,
+  (st) => {
+    // 【诊断】
+    console.log('[refs] watch status →', st, ', prev urls =', searchRefs.value.length)
+    if (st && st !== 'running') startRefsStream()
+  },
+  { immediate: true }
+)
 
 // 每个 summary 组的展开状态
 const summaryExpanded = reactive({})
@@ -484,30 +544,33 @@ function onFaviconError(e, u) {
   faviconFailed.add(u)
   faviconBump.value++
 }
-// 来源标题：默认显示中文站名（轻量）；异步抓真实新闻标题，成功后替换。
-// DS open_page 只给 URL 不给 title，标题走后端 /api/fetch-title 代理抓 <title>。
-// 抓取失败（超时/反爬/非新闻页）保持站名，不阻塞 UI。
+// 来源标题：白底首字徽标旁显示真实新闻标题。DS open_page 只给 URL，
+// 标题走后端 /api/fetch-title 代理抓 <title>。抓取失败保持站名不阻塞 UI。
+// 预热：URL 进入 searchRefs 后立即抓（不等渲染），渲染时多数已命中缓存。
 const searchTitleCache = new Map() // url → title
 const searchTitleFetching = new Set()
-function searchTitle(u, b) {
+const searchTitleBump = ref(0)
+function searchTitle(u) {
+  void searchTitleBump.value // 建立响应式依赖：fetch 完成时 bump 触发重渲染
   const cached = searchTitleCache.get(u)
   if (cached) return cached
-  // 未抓过则发起异步抓取（同一 URL 只抓一次）
-  if (!searchTitleFetching.has(u)) {
-    searchTitleFetching.add(u)
-    fetch(`/api/fetch-title?url=${encodeURIComponent(u)}`, { signal: AbortSignal.timeout(4000) })
-      .then(r => r.json())
-      .then(d => { if (d && d.title) searchTitleCache.set(u, d.title) })
-      .catch(() => { /* 抓取失败保持站名 */ })
-      .finally(() => {
-        searchTitleFetching.delete(u)
-        searchTitleBump.value++
-      })
-  }
+  fetchTitle(u)
   return searchSiteName(u)
 }
-const searchTitleBump = ref(0)
-void searchTitleBump // 建立响应式依赖：fetch 完成时重渲染标题
+function fetchTitle(u) {
+  if (searchTitleCache.has(u) || searchTitleFetching.has(u)) return
+  searchTitleFetching.add(u)
+  fetch(`/api/fetch-title?url=${encodeURIComponent(u)}`, { signal: AbortSignal.timeout(6000) })
+    .then(r => r.json())
+    .then(d => { if (d && d.title) searchTitleCache.set(u, d.title) })
+    .catch(() => { /* 抓取失败保持站名 */ })
+    .finally(() => {
+      searchTitleFetching.delete(u)
+      searchTitleBump.value++
+    })
+}
+// 预热：引用收集到就抓标题（渲染在回复结束后，标题先到缓存）
+watch(searchRefs, (urls) => { for (const u of urls) fetchTitle(u) }, { immediate: true })
 // 搜索词（queries）：后端 SSE args.query 已聚合（过滤了 ws_call_id 尾巴）
 function searchQuery(b) {
   return (b.args && b.args.query) || ''
@@ -901,6 +964,120 @@ function toolBodyText(b) {
   background: transparent;
   border: none;
 }
+/* 引用来源（回复末尾）：思考卡片样式——灰色背景 + 左边虚线，与工作流区分 */
+.flow-refs {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--app-surface-2, var(--app-code-bg));
+  border: 1px solid var(--app-border-soft, #ededf0);
+}
+.flow-refs-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-text-soft);
+  padding: 0 2px 6px;
+}
+.flow-refs-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 10px;
+}
+/* 左侧竖直线：整根连续线贯穿整个列表（容器级伪元素，非每条各自画） */
+.flow-refs-list::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--app-border-strong, #c9c9d1);
+}
+/* 单条引用：编号 + 内容（标题行 / 网址行分隔） */
+.flow-ref-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 2px;
+  text-decoration: none;
+  color: var(--app-text);
+}
+.flow-ref-item:hover {
+  background: var(--app-surface-3, rgba(0,0,0,0.04));
+  border-radius: 6px;
+}
+.flow-ref-no {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b5cf6;
+  padding-top: 1px;
+}
+.flow-ref-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.flow-ref-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* 白底首字徽标（替代 favicon：零网络依赖、不等待加载） */
+.flow-search-badge {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #8b5cf6;
+  background: #fff;
+  border: 1px solid var(--app-border-soft, #e5e5ea);
+}
+.flow-search-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--app-text);
+}
+/* 网址：虚线分隔，灰色小字 */
+.flow-search-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text-faint);
+  font-size: 11.5px;
+  border-top: 1px dashed var(--app-border-soft, #e2e2e8);
+  padding-top: 2px;
+}
+/* 每条引用渐变出现：淡入 + 轻微下移 */
+.flow-ref-enter-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.flow-ref-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.flow-ref-leave-active {
+  transition: opacity 0.2s ease;
+}
+.flow-ref-leave-to {
+  opacity: 0;
+}
+/* 搜索卡 head：联网搜索 + 扫描线 */
 .flow-search-head {
   display: flex;
   align-items: center;
