@@ -932,10 +932,11 @@ function toolBodyText(b) {
   align-items: center;
   gap: 6px;
   margin: 6px 0;
-  padding: 3px 0 3px 12px;
-  border-left: 2px solid var(--app-accent, #6366f1);
-  font-size: 12px;
-  color: var(--app-text-faint);
+  padding: 6px 0 6px 14px;
+  border-left: 3px solid var(--app-accent, #6366f1);
+  font-size: 16px;
+  color: var(--app-text);
+  line-height: 1.6;
 }
 .flow-steer-text { flex: 1; min-width: 0; }
 /* 自动预览提示：跟插话提示同款弱化条 */

@@ -505,30 +505,22 @@ min-height: 90px !important;
   border-radius: 18px;
 }
 
-/* 用户气泡 — 主题色渐变边框 + 入场动画 */
+/* 用户气泡 — 左侧竖线风格，不做卡片 */
 .message-bubble.user {
   --_accent: var(--app-accent);
   width: 100%;
   max-width: 100%;
   color: var(--app-text);
   border: none;
-  padding: 11px 17px;
-  border-radius: 12px;
+  padding: 6px 0 6px 14px;
+  border-left: 3px solid var(--app-accent, #6366f1);
+  border-radius: 0;
   line-height: 1.6;
   text-align: left;
   position: relative;
-  background:
-    linear-gradient(var(--app-surface), var(--app-surface)) padding-box,
-    linear-gradient(135deg,
-      var(--_accent) 0%,
-      color-mix(in srgb, var(--_accent) 25%, transparent) 50%,
-      var(--_accent) 100%) border-box;
-  border: 2px solid transparent;
-  box-shadow:
-    0 1px 3px rgba(0,0,0,0.04),
-    0 0 0 1px color-mix(in srgb, var(--_accent) 12%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--_accent) 6%, transparent);
-  animation: userMsgIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
 }
 
 /* 导航轴选中用户消息：柔和主题色光晕，无硬线圈、无动画、不跳动 */
