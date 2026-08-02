@@ -236,6 +236,13 @@ func (s *SessionStore) migrateLegacyJSONFile() {
 		log.Printf("⚠️ 迁移会话到本地文件失败: %v", err)
 		return
 	}
+	// 迁移成功后把旧文件改名为 .migrated 收尾，否则会留下一个隐蔽的「删不掉」陷阱：
+	// 用户之后删光本域会话（sessions_<domain>.json 变空），下次启动时
+	// NewSessionStore 看到 len(store.sessions)==0 又会触发一次迁移，刚删掉的旧对话全部复活。
+	// 改名而非删除：原始数据保留一份可手动找回，但 migrate 不会再读到它。
+	if err := os.Rename(legacyPath, legacyPath+".migrated"); err != nil {
+		log.Printf("⚠️ 迁移后清理旧版会话文件失败（不影响迁移结果）: %v", err)
+	}
 	log.Printf("✅ 会话迁移完成")
 }
 

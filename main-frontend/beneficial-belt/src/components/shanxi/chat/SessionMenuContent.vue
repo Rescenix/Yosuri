@@ -167,42 +167,6 @@
         </div>
       </div>
 
-      <!-- 时间分组会话（无工作目录的独立会话） -->
-      <template v-if="looseGroupedSessions.length">
-        <div v-for="group in looseGroupedSessions" :key="'t_' + group.label">
-          <div class="smc-time-label">{{ group.label }}</div>
-          <div
-            v-for="s in group.sessions"
-            :key="s.id"
-            class="smc-session-row"
-            :class="{ active: s.id === activeSession, running: s.id === runningSession }"
-            @mouseenter="hoveredId = s.id"
-            @mouseleave="onRowLeave(s.id)"
-            @click="onRowClick(s)"
-            >
-            <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
-              <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
-            </span>
-            <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
-            <input
-              v-if="editingId === s.id"
-              ref="renameInputRef"
-              v-model="editingValue"
-              class="smc-name-input"
-              @click.stop
-              @keydown.enter="commitRename"
-              @keydown.esc="cancelRename"
-              @blur="commitRename"
-            />
-            <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
-            <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
-              <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
-                <Icon icon="mdi:dots-horizontal" width="16" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </template>
     </div>
 
     <!-- 批量管理操作条 -->
@@ -221,8 +185,7 @@
         <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
         <Icon v-else icon="mdi:account-circle" width="20" color="#6b6b6b" />
         <span class="fm-user-id">
-          <span class="fm-user-name">{{ auth.displayName.value }}</span>
-          <span v-if="auth.uid.value" class="fm-user-uid">UID {{ auth.uid.value }} · 亲密等级 {{ levelText }}</span>
+          <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : '未登录' }}</span>
         </span>
       </div>
       <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
@@ -239,7 +202,7 @@
             <Icon v-else icon="mdi:account-circle" width="26" color="var(--app-accent)" />
             <div class="smc-user-card-name">
               <div>{{ auth.name.value || auth.login.value || 'GitHub 用户' }}</div>
-              <div v-if="auth.uid.value" class="smc-user-uid">UID {{ auth.uid.value }} · 亲密等级 {{ levelText }}</div>
+              <div v-if="auth.uid.value" class="smc-user-uid">UID {{ auth.uid.value }}</div>
             </div>
           </div>
           <button class="smc-user-card-item danger" @click="logout">退出登录</button>
@@ -249,7 +212,7 @@
             <Icon icon="mdi:account-circle" width="26" color="var(--app-accent)" />
             <div class="smc-user-card-name">
               <div>{{ auth.displayName.value }}</div>
-              <div v-if="auth.uid.value" class="smc-user-uid">登录后永久保留 UID {{ auth.uid.value }} · 亲密等级 {{ levelText }}</div>
+              <div v-if="auth.uid.value" class="smc-user-uid">登录后永久保留 UID {{ auth.uid.value }}</div>
               <div v-else class="smc-user-uid">登录后永久保留 UID</div>
             </div>
           </div>
@@ -311,11 +274,7 @@ const githubAuthUrl = computed(() => {
   return base + '/api/auth/github'
 })
 
-// 亲密等级展示：外显 Lv.N（无上限）。无缓存时显示 Lv.1。
-const levelText = computed(() => {
-  const lv = auth.intimacyLevel.value
-  return lv ? 'Lv.' + lv : 'Lv.1'
-})
+// UID 与亲密等级已移到「设置 → 我的」tab 展示，侧栏 footer 只保留头像和名字。
 
 const PIN_KEY = 'shanxi_pinned_projects'
 
@@ -429,28 +388,6 @@ const orphanSessions = computed(() => {
     for (const s of sess) have.add(s.id)
   }
   return props.sessions.filter(s => !have.has(s.id))
-})
-
-// ========== 时间分组（无 workdir 的会话） ==========
-function getTimeLabel(ts) {
-  if (!ts) return '更早'
-  const d = new Date(ts).getTime()
-  const todayStart = new Date().setHours(0, 0, 0, 0)
-  const yesterdayStart = todayStart - 86400000
-  if (d >= todayStart) return '今天'
-  if (d >= yesterdayStart) return '昨天'
-  return '更早'
-}
-
-const looseGroupedSessions = computed(() => {
-  const groups = new Map()
-  for (const s of orphanSessions.value) {
-    const label = getTimeLabel(s.updatedAt || s.createdAt)
-    if (!groups.has(label)) groups.set(label, [])
-    groups.get(label).push(s)
-  }
-  const order = ['今天', '昨天', '更早']
-  return order.filter(l => groups.has(l)).map(label => ({ label, sessions: groups.get(label) }))
 })
 
 // ========== 用户卡片 ==========
@@ -703,6 +640,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   width: 28px;
   height: 28px;
   margin-left: auto;
+  margin-right: -5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -925,17 +863,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 91%);
 }
 
-/* ===== Time label ===== */
-.smc-time-label {
-  padding: 10px 14px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--app-text-faint);
-  flex-shrink: 0;
-}
-
 /* ===== Dropdown ===== */
 .smc-row-dropdown {
   background: var(--app-surface);
@@ -1006,7 +933,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   line-height: 1.3;
 }
 .fm-user-name { font-size: 13px; color: var(--app-text); }
-.fm-user-uid { font-size: 12px; font-weight: 600; color: var(--app-accent); }
 .fm-user-avatar {
   width: 24px;
   height: 24px;

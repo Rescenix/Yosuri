@@ -1106,7 +1106,7 @@ async function loadSessionList() {
     // 注意别把刚分叉出来的分支覆盖成无名根——confirmEdit 已经乐观插入过带血缘的条目了
     if (!real.some(s => s.id === sessionId.value)) {
       const optimistic = sessionList.value.find(s => s.id === sessionId.value)
-      real.unshift(optimistic || { id: sessionId.value, name: '新对话', parentId: '', forkIndex: 0 })
+      real.unshift(optimistic || { id: sessionId.value, name: '新对话', parentId: '', forkIndex: 0, workdir: getSessionWorkdir(sessionId.value) })
     }
     sessionList.value = real
   } catch (e) {
