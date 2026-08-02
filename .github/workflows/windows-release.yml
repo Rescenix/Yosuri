@@ -1,0 +1,168 @@
+name: Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      unsigned_only:
+        description: Build an unsigned installer for SignPath onboarding without publishing a release
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "v*"
+      - "*_v*"
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SETUP_NAME: ResceneAgent-windows-amd64-setup.exe
+
+jobs:
+  build-sign-release:
+    name: Build, sign, and release
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: main-backend/go.mod
+          cache-dependency-path: main-backend/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: main-frontend/beneficial-belt/package-lock.json
+
+      - name: Install Wails and NSIS
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+          choco install nsis --yes --no-progress
+
+      - name: Build unsigned Windows installer
+        shell: pwsh
+        run: ./scripts/package-windows.ps1
+
+      - name: Verify unsigned build contract
+        shell: pwsh
+        run: |
+          $setupPath = Join-Path $PWD "dist/$env:SETUP_NAME"
+          if (-not (Test-Path -LiteralPath $setupPath)) {
+            throw "Missing installer: $setupPath"
+          }
+          if (Test-Path -LiteralPath (Join-Path $PWD "dist/ResceneAgent-windows-amd64.zip")) {
+            throw "Portable ZIP must not be produced"
+          }
+
+      - name: Upload unsigned installer
+        id: upload-unsigned
+        uses: actions/upload-artifact@v7
+        with:
+          name: rescene-windows-unsigned
+          path: dist/${{ env.SETUP_NAME }}
+          archive: false
+          if-no-files-found: error
+
+      - name: Validate SignPath configuration
+        if: github.event_name == 'push' || inputs.unsigned_only == false
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          $missing = @()
+          foreach ($name in @(
+            'SIGNPATH_API_TOKEN',
+            'SIGNPATH_ORGANIZATION_ID',
+            'SIGNPATH_PROJECT_SLUG',
+            'SIGNPATH_SIGNING_POLICY_SLUG'
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              $missing += $name
+            }
+          }
+          if ($missing.Count -gt 0) {
+            throw "Missing SignPath repository configuration: $($missing -join ', ')"
+          }
+
+      - name: Submit SignPath signing request
+        if: github.event_name == 'push' || inputs.unsigned_only == false
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: ${{ github.workspace }}/dist/signed
+
+      - name: Verify signed installer and write checksum
+        if: github.event_name == 'push' || inputs.unsigned_only == false
+        shell: pwsh
+        run: |
+          $signedDir = Join-Path $PWD 'dist/signed'
+          $signedSetup = Join-Path $signedDir $env:SETUP_NAME
+          if (-not (Test-Path -LiteralPath $signedSetup)) {
+            throw "SignPath did not return the expected installer: $signedSetup"
+          }
+
+          $signature = Get-AuthenticodeSignature -LiteralPath $signedSetup
+          if ($signature.Status -ne 'Valid') {
+            throw "Installer signature is not valid: $($signature.Status) $($signature.StatusMessage)"
+          }
+
+          $hash = (Get-FileHash -LiteralPath $signedSetup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksumPath = Join-Path $signedDir 'SHA256SUMS.txt'
+          [System.IO.File]::WriteAllText(
+            $checksumPath,
+            "$hash  $env:SETUP_NAME`n",
+            (New-Object System.Text.UTF8Encoding($false))
+          )
+
+      - name: Upload signed installer
+        if: github.event_name == 'push' || inputs.unsigned_only == false
+        uses: actions/upload-artifact@v7
+        with:
+          name: rescene-windows-signed
+          path: |
+            dist/signed/${{ env.SETUP_NAME }}
+            dist/signed/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish signed GitHub release assets
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $signedSetup = Join-Path $PWD "dist/signed/$env:SETUP_NAME"
+          $checksums = Join-Path $PWD 'dist/signed/SHA256SUMS.txt'
+
+          & gh release view $tag *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          if ($releaseExists) {
+            & gh release upload $tag $signedSetup $checksums --clobber
+          } else {
+            & gh release create $tag $signedSetup $checksums --verify-tag --title $tag --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to publish signed assets for $tag"
+          }

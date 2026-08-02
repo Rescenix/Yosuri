@@ -189,6 +189,14 @@ npm run dev
 
 ---
 
+## Code signing policy
+
+Windows 正式发行版将通过 GitHub Actions 构建，并在 SignPath 审批后发布；工作流不会把未签名安装器或便携 ZIP 上传为正式 Release 资产。项目当前正在申请 SignPath Foundation 开源代码签名，获批前已有发行文件仍可能显示为未签名。
+
+完整的签名流程、团队职责、隐私与网络披露见 [Code signing policy](./docs/CODE_SIGNING_POLICY.md)。
+
+---
+
 ## 开源协议
 
 核心前后端代码以 [MIT License](./LICENSE) 协议开源。
