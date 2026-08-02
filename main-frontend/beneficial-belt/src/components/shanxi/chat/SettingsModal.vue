@@ -27,13 +27,12 @@
                   <Icon icon="mdi:gift-outline" width="15" />免费模型
                 </button>
                 <button
-                  class="settings-subtab"
-                  :class="{ on: providerSubTab === 'custom' }"
-                  type="button"
-                  @click="providerSubTab = 'custom'"
-                >
-                  <Icon icon="mdi:key-outline" width="15" />自定义 API
-                </button>
+                                  class="settings-subtab locked"
+                                  type="button"
+                                  @click="showCustomLockModal = true"
+                                >
+                                  <Icon icon="mdi:lock-outline" width="15" />自定义 API
+                                </button>
               </div>
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'aggapi' }" @click="activeTab = 'aggapi'">
@@ -689,7 +688,31 @@
       </div>
     </div>
     <FreeOrderModal v-if="showFreeOrderModal" :openid="props.openid" @close="showFreeOrderModal = false" />
-  </Teleport>
+      </Teleport>
+
+      <!-- 自定义 API 解锁弹窗 -->
+      <Teleport to="body">
+        <div v-if="showCustomLockModal" class="mm-backdrop" @click.self="showCustomLockModal = false">
+          <div class="mm-card" style="max-width:380px;text-align:center">
+            <div style="font-size:20px;margin-bottom:4px">🔒</div>
+            <div class="mm-title">答应我，不白嫖的请划走</div>
+            <div style="margin:12px 0">
+              <input
+                v-model="customLockKey"
+                type="password"
+                class="mm-input"
+                placeholder="开发者密码"
+                @keyup.enter="unlockCustom"
+              />
+            </div>
+            <div v-if="customLockError" class="mm-error">{{ customLockError }}</div>
+            <div class="mm-actions">
+              <button class="mm-btn mm-btn-cancel" type="button" @click="showCustomLockModal = false">划走</button>
+              <button class="mm-btn mm-btn-primary" type="button" @click="unlockCustom">解锁</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
 </template>
 
 <script setup>
@@ -853,6 +876,22 @@ function fmtCtx(n) {
 function copyAggText(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).catch(() => {})
+  }
+}
+
+// 自定义 API 解锁弹窗
+const showCustomLockModal = ref(false)
+const customLockKey = ref('')
+const customLockError = ref('')
+const CUSTOM_API_UNLOCK_KEY = 'rescene' // ← 开发者密码，改这里
+function unlockCustom() {
+  customLockError.value = ''
+  if (customLockKey.value === CUSTOM_API_UNLOCK_KEY) {
+    showCustomLockModal.value = false
+    customLockKey.value = ''
+    providerSubTab.value = 'custom'
+  } else {
+    customLockError.value = '密码不对，划走吧'
   }
 }
 
@@ -1730,6 +1769,19 @@ onUnmounted(() => {
 .agg-api-copy { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
 .agg-api-copy:hover { background: var(--app-surface-3); }
 .agg-api-tip { font-size: 10.5px; color: var(--app-text-faint); margin-top: 6px; line-height: 1.5; }
+/* 自定义 API 锁 + 解锁弹窗 */
+.locked { opacity: 0.5; cursor: pointer; }
+.locked:hover { opacity: 0.7; }
+.mm-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 99999; }
+.mm-card { width: 420px; max-width:90vw; max-height: 80vh; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden; padding:24px; }
+.mm-input { width:100%; padding:8px 12px; border:1px solid var(--app-border); border-radius:8px; background:var(--app-surface); color:var(--app-text); font-size:13px; outline:none; box-sizing:border-box; }
+.mm-input:focus { border-color:var(--app-accent); }
+.mm-error { font-size:12px; color:#e74c3c; margin-bottom:8px; }
+.mm-actions { display:flex; gap:8px; justify-content:center; }
+.mm-btn { padding:6px 16px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid var(--app-border); background:var(--app-surface); color:var(--app-text); }
+.mm-btn-primary { background:var(--app-accent); color:#fff; border-color:var(--app-accent); }
+.mm-btn-cancel { color:var(--app-text-soft); }
+.mm-title { font-size:14px; font-weight:700; color:var(--app-text); }
 .vendor-model-cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .fm-card {
   display: inline-flex; align-items: center; gap: 6px;
