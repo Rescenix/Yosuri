@@ -65,7 +65,7 @@
               </div>
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'memory' }" @click="activeTab = 'memory'; loadMemoryInject()">
-              <Icon icon="mdi:brain" width="16" />记忆</button>
+              <Icon icon="mdi:notebook-outline" width="16" />记忆</button>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
             <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion()">
@@ -208,7 +208,12 @@
             <!-- ========== 提供方 ========== -->
             <div v-show="activeTab === 'providers'" class="settings-panel">
               <template v-if="providerSubTab === 'free'">
-                <div class="settings-section-title">免费模型</div>
+                <div class="settings-section-title settings-section-title-row">
+                  <span>免费模型</span>
+                  <button class="auto-sort-btn" type="button" @click="showFreeOrderModal = true">
+                    <Icon icon="mdi:auto-fix" width="13" /> Auto 自定义排序
+                  </button>
+                </div>
                 <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；点击「官网获取 Key」打开官网登录即可免费领取 API Key，粘贴输入框即可使用；免 Key 提供方无需配置。</div>
 
                 <div v-if="loading" class="settings-loading">加载中...</div>
@@ -572,6 +577,18 @@
                 <span class="profile-label">你的职业 / 身份</span>
                 <input class="profile-input" v-model="profile.work" type="text" placeholder="比如 软件工程师" />
               </div>
+              <div class="profile-row">
+                <span class="profile-label">账号 UID</span>
+                <span v-if="auth.uid.value" class="profile-uid">UID {{ auth.uid.value }}</span>
+                <span v-else class="profile-uid faint">登录后永久保留</span>
+              </div>
+              <div class="profile-row">
+                <span class="profile-label">亲密等级</span>
+                <div class="profile-intimacy">
+                  <span class="intimacy-hearts">{{ heartsText }}</span>
+                  <span class="intimacy-level">Lv.{{ intimacyLevel }}</span>
+                </div>
+              </div>
 
               <div class="settings-section-title" style="margin-top: 18px;">给 AI 的自定义指令</div>
               <div class="settings-section-desc">这些会跨对话注入系统提示词，影响 AI 的语气与行为。</div>
@@ -626,6 +643,7 @@
         </div>
       </div>
     </div>
+    <FreeOrderModal v-if="showFreeOrderModal" :openid="props.openid" @close="showFreeOrderModal = false" />
   </Teleport>
 </template>
 
@@ -637,6 +655,8 @@ import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useThem
 
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
+import { useAuth } from '../../../composables/useAuth.js'
+import FreeOrderModal from './FreeOrderModal.vue'
 
 // 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
 const PREVIEW_MD =
@@ -664,6 +684,13 @@ const activeTab = ref('models')
 const providerSubTab = ref('free')
 const mcpSubTab = ref('local')
 const skillsSubTab = ref('local')
+
+// ============ 亲密等级（我的 tab，爱心表示） ============
+const auth = useAuth()
+// 亲密等级：外显 Lv.N（无上限）。无缓存时显示 Lv.1。
+const intimacyLevel = computed(() => auth.intimacyLevel.value || 1)
+// 爱心表示：每个等级一颗爱心（Lv.3 = ♥♥♥）
+const heartsText = computed(() => '♥'.repeat(intimacyLevel.value))
 
 // ============ 界面配色切换 ============
 const colorThemes = computed(() => Object.entries(THEME_PRESETS))
@@ -770,6 +797,9 @@ const vendorGroups = computed(() => {
   }
   return Array.from(map.values())
 })
+
+// 「Auto 自定义排序」弹窗（提供方 → 免费模型 → 标题行按钮打开）
+const showFreeOrderModal = ref(false)
 
 function configUrl() {
   return `/api/models/config${props.openid ? '?openid=' + encodeURIComponent(props.openid) : ''}`
@@ -984,7 +1014,8 @@ const chatList = computed(() => {
   const custom = customModels.value
     .filter(model => model.keyless || model.api_key_set)
     .map(model => ({ label: `${model.vendor} · ${model.name}`, value: model.id }))
-  return [...builtIn, ...custom]
+  // Auto 智能路由置顶：按免费模型池排序逐个尝试 + 熔断
+  return [{ label: 'Auto 智能路由', value: 'auto' }, ...builtIn, ...custom]
 })
 
 // ============ 模型：统一 / 分开配置（文字 vs 识图） ============
@@ -1079,8 +1110,9 @@ const webSearchByID = computed(() => {
 })
 // 识图模型候选 = 全部可用模型，用户自己挑（不按 vision 标签过滤，
 // 免得我们得一直维护哪个模型支持识图）。
+// Auto 是虚拟路由 ID（后端识图按具体模型解析），排除在识图候选外。
 const visionCapableChatList = computed(() => {
-  return chatList.value
+  return chatList.value.filter(m => m.value !== 'auto')
 })
 
 // 当用户没有显式选过识图模型，且当前有可用模型时，自动默认选中第一个。
@@ -1423,9 +1455,12 @@ onMounted(() => {
   loadProfile()
   document.addEventListener('keydown', handleEsc)
   nextTick(startPreviewLoop)
+  // 其他入口改了模型配置（如 FreeOrderModal 拖拽排序）→ 设置页也刷新顺序
+  window.addEventListener('model-config-changed', loadConfigs)
 })
 onUnmounted(() => {
   document.removeEventListener('keydown', handleEsc)
+  window.removeEventListener('model-config-changed', loadConfigs)
   stopPreviewLoop()
 })
 </script>
@@ -1616,6 +1651,15 @@ onUnmounted(() => {
 .vendor-key-link { color: var(--app-accent); text-decoration: none; }
 .vendor-key-link:hover { text-decoration: underline; }
 .vendor-model-hint { margin-top: 6px; font-size: 11px; color: var(--app-text-faint); line-height: 1.5; padding-left: 2px; }
+.settings-section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.auto-sort-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; color: var(--app-accent);
+  background: var(--app-accent-soft); border: 1px solid var(--app-accent);
+  border-radius: 999px; padding: 3px 10px; cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.auto-sort-btn:hover { background: var(--app-surface-3); }
 .vendor-thanks {
   margin-top: 12px; padding-top: 10px;
   font-size: 11px; color: var(--app-text-faint);
@@ -1757,6 +1801,13 @@ onUnmounted(() => {
 .profile-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--app-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; }
 .profile-input { flex: 1; min-width: 0; font-size: 13px; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 12px; }
 .profile-input:focus { outline: none; border-color: var(--app-accent); }
+/* 账号 UID：灰色小字 */
+.profile-uid { font-size: 13px; color: var(--app-text-soft); }
+.profile-uid.faint { color: var(--app-text-faint); }
+/* 亲密等级：爱心表示 */
+.profile-intimacy { display: flex; align-items: center; gap: 8px; }
+.intimacy-hearts { font-size: 15px; line-height: 1; letter-spacing: 2px; color: #ff5d7e; }
+.intimacy-level { font-size: 13px; font-weight: 600; color: var(--app-accent); }
 .profile-instructions { width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.6; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; resize: vertical; font-family: inherit; }
 .profile-instructions:focus { outline: none; border-color: var(--app-accent); }
 .profile-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 14px; }

@@ -818,18 +818,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   white-space: nowrap;
   color: var(--app-text);
 }
-/* 标题渐变替换：旧标题淡出上滑，新标题淡入下滑（AI 生成标题替换默认标题时） */
+/* 标题渐变替换：旧标题淡出、新标题淡入（AI 生成标题替换默认标题时）。
+   纯透明度渐变，不加位移——之前的 translateY 会让标题看起来在跳 */
 .smc-title-swap-enter-active,
 .smc-title-swap-leave-active {
-  transition: opacity 0.28s ease, transform 0.28s ease;
+  transition: opacity 0.2s ease;
 }
-.smc-title-swap-enter-from {
-  opacity: 0;
-  transform: translateY(4px);
-}
+.smc-title-swap-enter-from,
 .smc-title-swap-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
 }
 .smc-name-input {
   flex: 1;

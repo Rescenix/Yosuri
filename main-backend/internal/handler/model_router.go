@@ -30,6 +30,7 @@ import (
 )
 
 type RouterBackend struct {
+	ID      string // 免费池条目 ID（free_xxx）——Auto 排序 / 熔断追踪用；自定义源为空
 	Name    string
 	BaseURL string
 	Model   string
@@ -268,6 +269,11 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
 			IsLocal: f.Local, Keyless: f.Keyless, WireResponses: f.Responses,
 		}
+		b.ID = f.ID
+		if circuitOpen(b) {
+			// 熔断冷却期：Auto 路由跳过该条目，秒切下一个（精确手选不受影响）
+			continue
+		}
 		if isDefault {
 			// 用户显式把某个免费模型设为默认 → 提到链头
 			userChain = append([]RouterBackend{b}, userChain...)
@@ -275,16 +281,17 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 		}
 		freeChain = append(freeChain, b)
 	}
-	// 参数规模降序，未知(0)排末
+	// Auto 智能路由顺序 = 免费模型池排序（设置面板「模型」页调整，
+	// 存 ~/rescene_data/free_model_order.json）。目录里没排到的条目
+	// （新加/未保存过）按目录声明顺序排在末尾，保持稳定。
+	orderRank := freeOrderRank()
 	sort.SliceStable(freeChain, func(i, j int) bool {
-		wi, wj := freeChain[i].ParamsB, freeChain[j].ParamsB
-		if wi == 0 {
-			wi = -1
+		ri, iok := orderRank[freeChain[i].ID]
+		rj, jok := orderRank[freeChain[j].ID]
+		if iok && jok {
+			return ri < rj
 		}
-		if wj == 0 {
-			wj = -1
-		}
-		return wi > wj
+		return iok // 有排序的在前，没排序的（目录顺序）在后
 	})
 
 	out := userChain
@@ -549,6 +556,8 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 	client := &http.Client{Timeout: b.Timeout}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		// 连接失败/超时：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
+		circuitFail(b)
 		return "", nil, err
 	}
 	defer resp.Body.Close()
@@ -557,9 +566,14 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 		// 仅 401(鉴权)/403(额度) 确定性不可用才标记禁用；400 属请求格式/上游解析 bug，不禁用
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			disableFreeModel(b.Model)
+		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+			// 限流 / 服务端故障：暂时性，计入熔断
+			circuitFail(b)
 		}
 		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 	}
+	// 拿到 200：上游可用，清零失败计数
+	circuitSuccess(b)
 
 	var parsed struct {
 		Choices []struct {
@@ -620,6 +634,8 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 	client := &http.Client{Timeout: b.Timeout}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		// 连接失败/超时：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
+		circuitFail(b)
 		return "", nil, err
 	}
 	defer resp.Body.Close()
@@ -628,9 +644,14 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 		// 仅 401(鉴权)/403(额度) 确定性不可用才标记禁用；400 属请求格式/上游解析 bug，不禁用
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			disableFreeModel(b.Model)
+		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+			// 限流 / 服务端故障：暂时性，计入熔断
+			circuitFail(b)
 		}
 		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 	}
+	// 拿到 200：上游可用，清零失败计数
+	circuitSuccess(b)
 
 	var parsed struct {
 		Output []struct {
@@ -785,6 +806,7 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		if err != nil {
 			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
 			fmt.Printf("🔀 [路由] %s 连接失败，秒切下一个\n", b.Name)
+			circuitFail(b)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
@@ -795,11 +817,15 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 			// 否则一棍子打死整个免费档。
 			if resp.StatusCode == 401 || resp.StatusCode == 403 {
 				disableFreeModel(b.Model)
+			} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+				// 限流 / 服务端故障：暂时性，计入熔断
+				circuitFail(b)
 			}
 			tried = append(tried, fmt.Sprintf("%s: HTTP %d", b.Name, resp.StatusCode))
 			fmt.Printf("🔀 [路由] %s HTTP %d，秒切下一个: %s\n", b.Name, resp.StatusCode, truncateChars(string(raw), 120))
 			continue
 		}
+		circuitSuccess(b)
 
 		if len(tried) > 0 {
 			fmt.Printf("🔀 [路由] 流式请求由 %s 承接（此前 %d 个源失败）\n", b.Name, len(tried))
@@ -996,6 +1022,8 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 	client := streamHTTPClient()
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		// 连接失败/超时：暂时性故障，计入熔断
+		circuitFail(b)
 		return "", nil, 0, 0, err
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -1005,9 +1033,14 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 		// 400 是请求格式/上游解析问题，属客户端侧，不该永久禁用模型。
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			disableFreeModel(b.Model)
+		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+			// 限流 / 服务端故障：暂时性，计入熔断
+			circuitFail(b)
 		}
 		return "", nil, 0, 0, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 	}
+	// 拿到 200：上游可用，清零失败计数
+	circuitSuccess(b)
 	defer resp.Body.Close()
 
 	content, calls, inTok, outTok, err := drainResponsesStream(c, resp, msgs, staticSum, reasoningOut)

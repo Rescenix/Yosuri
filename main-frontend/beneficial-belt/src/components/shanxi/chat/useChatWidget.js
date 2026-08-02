@@ -2,7 +2,6 @@ import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 
 import { useWelcome } from '../composables/useWelcome.js'
 import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
-import { useVoicePlay } from '../composables/useVoicePlay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 import { loadContextBreakdown } from '../composables/contextBreakdown.js'
@@ -118,8 +117,6 @@ function adjustInputHeight() {
     startFlow(task, display, opts)
     userInput.value = ''
   }
-
-  const { playVoice } = useVoicePlay()
 
   function toggleExpand() {
     isExpanded.value = !isExpanded.value
@@ -391,7 +388,7 @@ async function switchSession(id) {
     welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
     messagesContainer, chatInputRef, userScrolledUp,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
-    backgroundTaskList, playVoice,
+    backgroundTaskList,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
     questionState, answerQuestion,

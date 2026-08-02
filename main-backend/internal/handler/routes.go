@@ -156,21 +156,6 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 		}
 		c.JSON(200, gin.H{"status": status})
 	})
-	r.POST("/api/tts", func(c *gin.Context) {
-		var req struct {
-			Text string `json:"text" binding:"required"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
-			return
-		}
-		audio, err := SynthesizeSpeech(req.Text)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "语音合成失败"})
-			return
-		}
-		c.Data(http.StatusOK, "audio/wav", audio)
-	})
 	r.GET("/api/images/random", RandomImageWithAI)
 	r.DELETE("/api/tags", DeleteTag)
 	r.GET("/api/sessions", func(c *gin.Context) {
@@ -242,6 +227,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/models/config", HandleGetModelConfig)
 	r.PUT("/api/models/config", HandlePutModelConfig)
 	r.POST("/api/models/discover", HandleDiscoverProviderModels)
+	r.PUT("/api/models/free-order", HandlePutFreeModelOrder)
 
 	r.Static("/images", "./public/images")
 }

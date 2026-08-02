@@ -2,11 +2,13 @@ package handler
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -167,10 +169,6 @@ func nativeGrep(args map[string]any) (nativeToolResult, error) {
 	if pattern == "" {
 		return nativeToolResult{}, fmt.Errorf("pattern 不能为空")
 	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nativeToolResult{}, fmt.Errorf("正则无效: %w", err)
-	}
 	rootRaw := stringArg(args, "path")
 	if rootRaw == "" {
 		rootRaw = "."
@@ -180,63 +178,49 @@ func nativeGrep(args map[string]any) (nativeToolResult, error) {
 		return nativeToolResult{}, err
 	}
 	exts := nativeTypeExtensions(stringArg(args, "type"))
-	var hits []string
-	visited := 0
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if path != root && nativeIgnoredDirs[d.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		visited++
-		if visited > nativeWalkMaxFiles || len(hits) >= nativeGrepMaxHits {
-			return io.EOF
-		}
-		if len(exts) > 0 && !exts[strings.ToLower(filepath.Ext(path))] {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil || info.Size() > 5*1024*1024 {
-			return nil
-		}
-		f, err := os.Open(path)
-		if err != nil {
-			return nil
-		}
-		defer f.Close()
-		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
-		lineNo := 0
-		for scanner.Scan() {
-			lineNo++
-			line := scanner.Text()
-			if strings.IndexByte(line, 0) >= 0 {
-				break
-			}
-			if re.MatchString(line) {
-				hits = append(hits, fmt.Sprintf("%s:%d:%s", displayNativePath(path), lineNo, line))
-				if len(hits) >= nativeGrepMaxHits {
-					break
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil && err != io.EOF {
-		return nativeToolResult{}, err
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "rg", "-n", "--no-heading", "--smart-case", pattern)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "RG_CONFIG_PATH=/dev/null")
+
+	var argFiles []string
+	for ext := range exts {
+		argFiles = append(argFiles, "*"+ext)
 	}
-	if len(hits) == 0 {
+	if len(argFiles) > 0 {
+		cmd.Args = append(cmd.Args, argFiles...)
+	}
+
+	out, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return nativeToolResult{}, fmt.Errorf("rg 搜索超时（30s）")
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+		// rg exit code 1 = no matches
 		return nativeToolResult{Text: fmt.Sprintf("在 %s 下未找到匹配 %q 的内容。", displayNativePath(root), pattern)}, nil
 	}
-	suffix := ""
-	if len(hits) >= nativeGrepMaxHits {
-		suffix = "\n（结果已截断到 200 条，请缩小 path 或增加 type）"
+	if err != nil {
+		return nativeToolResult{}, fmt.Errorf("rg 调用失败: %w", err)
 	}
-	return nativeToolResult{Text: strings.Join(hits, "\n") + suffix}, nil
+
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return nativeToolResult{Text: fmt.Sprintf("在 %s 下未找到匹配 %q 的内容。", displayNativePath(root), pattern)}, nil
+	}
+
+	lines := strings.Split(raw, "\n")
+	hits := make([]string, 0, len(lines))
+	for _, line := range lines {
+		hits = append(hits, displayNativePath(root)+"/"+line)
+	}
+	if len(hits) >= nativeGrepMaxHits {
+		hits = hits[:nativeGrepMaxHits]
+		hits = append(hits, fmt.Sprintf("（结果已截断到 %d 条，请缩小 path 或增加 type）", nativeGrepMaxHits))
+	}
+	return nativeToolResult{Text: strings.Join(hits, "\n")}, nil
 }
 
 func nativeTypeExtensions(name string) map[string]bool {

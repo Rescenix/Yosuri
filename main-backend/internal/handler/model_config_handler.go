@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -153,6 +154,93 @@ func configuredProviderModels(e ModelConfigEntry) []ModelConfigModel {
 	return nil
 }
 
+// ==================== 免费模型池排序（Auto 智能路由顺序） ====================
+// 排序存 ~/rescene_data/free_model_order.json（与 sessions/cron_tasks 同目录，
+// 全局共享、不分用户），格式为按优先顺序排列的免费模型 ID 数组。
+// 前端「编辑模型」弹窗可上移/下移调整；顺序即 Auto 模式路由链中免费池的尝试顺序。
+
+func freeModelOrderPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, "rescene_data", "free_model_order.json"), nil
+}
+
+func loadFreeModelOrder() []string {
+	path, err := freeModelOrderPath()
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil // 不存在/读失败 = 未排序，走目录默认顺序
+	}
+	var order []string
+	if json.Unmarshal(data, &order) != nil {
+		return nil
+	}
+	// 过滤掉目录里已不存在的 ID（如条目被移除），避免脏数据
+	valid := make([]string, 0, len(order))
+	for _, id := range order {
+		if isFreeCatalogID(id) {
+			valid = append(valid, id)
+		}
+	}
+	return valid
+}
+
+func saveFreeModelOrder(order []string) error {
+	path, err := freeModelOrderPath()
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(order, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
+// freeOrderRank 返回 freeModelCatalog ID → 排序位次（0 开始）的映射。
+// 路由链与 free_models 视图共用它做排序，保证「设置面板看到的顺序 = Auto 路由顺序」。
+func freeOrderRank() map[string]int {
+	order := loadFreeModelOrder()
+	rank := make(map[string]int, len(order))
+	for i, id := range order {
+		rank[id] = i
+	}
+	return rank
+}
+
+// HandlePutFreeModelOrder PUT /api/models/free-order
+// 请求体：{"order": ["free_xxx", ...]}——免费模型池的完整排序（含所有目录条目）。
+// 校验：必须全是 freeModelCatalog 里的 ID；允许子集（缺失的按目录顺序排在末尾）。
+func HandlePutFreeModelOrder(c *gin.Context) {
+	var req struct {
+		Order []string `json:"order"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		return
+	}
+	seen := map[string]bool{}
+	clean := make([]string, 0, len(req.Order))
+	for _, id := range req.Order {
+		id = strings.TrimSpace(id)
+		if id == "" || !isFreeCatalogID(id) || seen[id] {
+			continue
+		}
+		seen[id] = true
+		clean = append(clean, id)
+	}
+	if err := saveFreeModelOrder(clean); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存排序失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 // HandleGetModelConfig GET /api/models/config?openid=...
 // 返回用户自定义配置 + 内置免费模型池（设置面板默认展示后者）。
 func HandleGetModelConfig(c *gin.Context) {
@@ -210,6 +298,21 @@ func HandleGetModelConfig(c *gin.Context) {
 		}
 		freeModels = append(freeModels, v)
 	}
+	// 免费池显示顺序 = Auto 智能路由顺序（用户可在「编辑模型」弹窗调整）；
+	// 没保存过排序时保持目录声明顺序。
+	orderRank := freeOrderRank()
+	sort.SliceStable(freeModels, func(i, j int) bool {
+		ri, iok := orderRank[freeModels[i].ID]
+		rj, jok := orderRank[freeModels[j].ID]
+		if iok && jok {
+			return ri < rj
+		}
+		return iok // 有排序的在前，没排序的（目录顺序）在后
+	})
+	freeModelOrder := make([]string, 0, len(freeModels))
+	for _, fm := range freeModels {
+		freeModelOrder = append(freeModelOrder, fm.ID)
+	}
 
 	// 内置联网搜索模型（「模型」tab 独立配置，不走免费模型池）。
 	// key 状态 = user_configs 里同名 ID 条目有 key，或环境变量兜底。
@@ -229,10 +332,11 @@ func HandleGetModelConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"configs":        safe,
-		"free_models":    freeModels,
-		"custom_models":  customModels,
-		"search_models":  searchModels,
+		"configs":         safe,
+		"free_models":     freeModels,
+		"custom_models":   customModels,
+		"search_models":   searchModels,
+		"free_model_order": freeModelOrder,
 	})
 }
 

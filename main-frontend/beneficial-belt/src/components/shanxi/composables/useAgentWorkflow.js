@@ -244,6 +244,9 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
                         titleEmitted = true
                         const fallback = userQuestionForTitle.trim().split('\n').pop()?.trim() || userQuestionForTitle.trim()
                         if (!fallback || !onTitleUpdate) return
+                        // 通知侧栏：本会话 AI 标题生成中，列表刷新时别用后端派生的
+                        // 用户原文标题（「你好」）抢先替换，等 AI 标题到达一次性替换
+                        window.dispatchEvent(new CustomEvent('session-title-pending', { detail: { sid } }))
                         const ac = new AbortController()
                         const timer = setTimeout(() => ac.abort(), 15000)
                         fetch('/api/title/generate', {
@@ -253,10 +256,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
                             signal: ac.signal
                         }).then(r => r.json()).then(res => {
                             const ai = (res && res.title || '').trim()
-                            // 传 {title, fallback}：ChatWidget 据此判断是否覆盖
-                            // （新对话 或 等于原文才覆盖，手动改过的不动）
-                            onTitleUpdate({ title: ai || fallback, fallback })
-                        }).catch(() => onTitleUpdate({ title: fallback, fallback }))
+                            // 传 {title, fallback, sid}：ChatWidget 据此判断是否覆盖
+                            // （新对话 或 等于原文才覆盖，手动改过的不动），并精确作用到
+                            // 发起标题生成的那个会话（用户可能在生成期间切走）
+                            onTitleUpdate({ title: ai || fallback, fallback, sid })
+                        }).catch(() => onTitleUpdate({ title: fallback, fallback, sid }))
                           .finally(() => clearTimeout(timer))
                     }
                 })

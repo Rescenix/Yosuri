@@ -376,13 +376,10 @@
                          面板和工具栏平铺进去的话工具栏会变成"面板右边被拉满高的一竖条" -->
                     <div v-else-if="item.kind === 'agentflow'" class="agentflow-wrap">
                       <AgentWorkflowPanel :id="'group-' + item.id" :flow="item" />
-                      <!-- 朗读/复制那一栏：以前只挂在纯文本 assistant 气泡上，而现在所有回复
+                      <!-- 复制栏：以前只挂在纯文本 assistant 气泡上，而现在所有回复
                            都走四态机(agentflow)，等于这一栏彻底消失了。跑完再显示，跑的过程中
                            内容还在变，复制没意义。 -->
                       <div v-if="item.status === 'completed' && flowFinalText(item)" class="flow-tools">
-                        <button class="tool-btn" @click="playVoice(flowFinalText(item))" title="朗读">
-                          <Icon icon="mdi:volume-high" width="16" />
-                        </button>
                         <button class="tool-btn" @click="copyText(flowFinalText(item))" title="复制">
                           <Icon icon="mdi:content-copy" width="16" />
                         </button>
@@ -402,9 +399,6 @@
                       </div>
                       <div class="markdown-body" v-html="renderMarkdown(item.content, true)"></div>
                       <div class="assistant-tools">
-                        <button class="tool-btn" @click="playVoice(item.content)" title="朗读">
-                          <Icon icon="mdi:volume-high" width="16" />
-                        </button>
                         <button class="tool-btn" @click="copyText(item.content)" title="复制">
                           <Icon icon="mdi:content-copy" width="16" />
                         </button>
@@ -809,7 +803,7 @@
 
                   <!-- 模型名 pill -->
                   <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
-                    <span>{{ modelOptions.find(m => m.value === selectedModel)?.label || (hasModels ? '模型' : '无可用模型') }}</span>
+                    <span>{{ selectedModelLabel }}</span>
                     <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
                       <div class="model-menu-search">
@@ -820,6 +814,16 @@
                         <Icon icon="mdi:cog-outline" width="14" /> 编辑模型...
                       </div>
                       <div v-if="!hasModels" class="model-menu-empty">没有可用模型（去设置填 Key 或选免 Key 模型）</div>
+                      <!-- Auto 智能路由：固定置顶，选中后按免费模型池排序逐个尝试 + 熔断 -->
+                      <div
+                        class="model-menu-item model-menu-auto"
+                        :class="{ active: selectedModel === 'auto' }"
+                        @click="selectModel('auto')"
+                      >
+                        <span class="model-menu-check" v-if="selectedModel === 'auto'">✓</span>
+                        <span>Auto 智能路由</span>
+                      </div>
+                      <div class="model-menu-divider"></div>
                       <template v-for="grp in filteredGroupedOptions" :key="grp.vendor">
                         <div class="model-menu-group-title">{{ grp.vendor }}</div>
                         <div
@@ -1096,16 +1100,27 @@ function shortTitle(title) {
   return title.length > 24 ? title.slice(0, 24) + '…' : title
 }
 
+// AI 标题生成中的会话集合：/api/title/generate 请求已发出但还没回来期间，
+// 列表刷新时保持当前显示名（「新对话」），别让后端派生的用户原文标题（「你好」）
+// 抢先刷出来再被 AI 标题替换——那是标题跳动的元凶。请求结算（成功/失败/超时）即移除。
+const pendingTitleSessions = new Set()
+
 async function loadSessionList() {
   try {
     const res = await fetch('/api/sessions')
     const data = await res.json()
     // parentId/forkIndex 是侧栏拼分支树用的血缘（后端 SessionInfo 带下来，根会话为空）
-    const real = (data || []).map(s => ({
-      id: s.id, name: shortTitle(s.title),
-      parentId: s.parent_id || '', forkIndex: s.fork_index || 0, updatedAt: s.updated_at,
-      workdir: getSessionWorkdir(s.id)
-    }))
+    const real = (data || []).map(s => {
+      const old = sessionList.value.find(x => x.id === s.id)
+      let name = shortTitle(s.title)
+      // AI 标题生成中：保持当前显示名，等 AI 标题到达由 updateSessionTitle 一次性替换
+      if (pendingTitleSessions.has(s.id) && old) name = old.name
+      return {
+        id: s.id, name,
+        parentId: s.parent_id || '', forkIndex: s.fork_index || 0, updatedAt: s.updated_at,
+        workdir: getSessionWorkdir(s.id)
+      }
+    })
     // 当前会话哪怕还一条消息都没有（刚新建/刚打开应用）也要出现在列表里，
     // 不然侧栏在"发第一条消息之前"会看不到自己正在哪个会话上。
     // 注意别把刚分叉出来的分支覆盖成无名根——confirmEdit 已经乐观插入过带血缘的条目了
@@ -1158,10 +1173,13 @@ function newSession() {
   recordSessionWorkdir(id)
   switchSession(id)
 }
-function updateSessionTitle(title, fallback) {
+function updateSessionTitle(title, fallback, sid) {
+  // 标题请求已结算（成功/失败/超时），解除「AI 标题生成中保持显示名」的保护
+  if (sid) pendingTitleSessions.delete(sid)
   if (!title) return
-  const sid = sessionId.value
-  const current = sessionList.value.find(s => s.id === sid)
+  // 精确作用到发起标题生成的会话：用户可能在生成期间切到别的会话，标题不能安错家
+  const targetId = sid || sessionId.value
+  const current = sessionList.value.find(s => s.id === targetId)
   // 只覆盖「默认标题」：新对话，或等于用户首条消息原文（后端 SessionTitle 会把
   // 首条用户消息派生为标题，侧栏刷新后就不是"新对话"了）。用户手动改过的标题
   // （跟原文不同）绝不覆盖。
@@ -1175,8 +1193,8 @@ function updateSessionTitle(title, fallback) {
   const safe = shortTitle(trimmed)
   const prev = current?.name || ''
   if (prev === safe) return
-  sessionList.value = sessionList.value.map(s => s.id === sid ? { ...s, name: safe } : s)
-  fetch(`/api/sessions/${encodeURIComponent(sid)}/title`, {
+  sessionList.value = sessionList.value.map(s => s.id === targetId ? { ...s, name: safe } : s)
+  fetch(`/api/sessions/${encodeURIComponent(targetId)}/title`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: trimmed })
@@ -2068,7 +2086,7 @@ function jumpToMessage(id) {
 function cleanContent(content) { return content ? content.replace(/\[(action|emotion):[^\]]*\]/g, '') : '' }
 
 // 一次工作流的「最终回答」= 最后一个 intent 块（工具调用之间的叙述也是 intent，
-// 但最终答复必然是最后一条）。朗读/复制按钮拿它当内容。
+// 但最终答复必然是最后一条）。复制按钮拿它当内容。
 function flowFinalText(flow) {
   const blocks = flow?.blocks || []
   for (let i = blocks.length - 1; i >= 0; i--) {
@@ -2212,11 +2230,17 @@ async function copyText(text) {
 const isModelVisible = (fm) => (fm.keyless || fm.api_key_set) && !hiddenModelIds.value.has(fm.id)
 
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
+// 模型 pill 的显示名：Auto 模式固定文案；其他取下拉里的 label，找不到回退占位。
+const selectedModelLabel = computed(() => {
+  if (selectedModel.value === 'auto') return 'Auto 智能路由'
+  return modelOptions.value.find(m => m.value === selectedModel.value)?.label || (hasModels.value ? '模型' : '无可用模型')
+})
 // 列表为空时下拉无选项；选中项若不在真实可见列表里则定位到第一个。
+// Auto 模式是虚拟选项（不在可见列表里），永不强制切走。
 watch([freeModelsFull, hiddenModelIds], () => {
   const ids = visibleModelIds.value
   if (ids.length === 0) return
-  if (!ids.includes(selectedModel.value)) {
+  if (selectedModel.value !== 'auto' && !ids.includes(selectedModel.value)) {
     selectedModel.value = ids[0]
     localStorage.setItem('selectedModel', ids[0])
   }
@@ -2482,7 +2506,7 @@ const {
   currentStatus, statusDotColor,
   messagesContainer, chatInputRef, userScrolledUp,
   forceScrollToBottom, adjustInputHeight, switchSession,
-  backgroundTaskList, playVoice,
+  backgroundTaskList,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
   questionState, answerQuestion,
@@ -2532,7 +2556,12 @@ watch(() => flowState.active, (now, was) => {
 function onSessionTitleUpdate(e) {
   const d = e?.detail
   if (!d || !d.title) return
-  updateSessionTitle(d.title, d.fallback)
+  updateSessionTitle(d.title, d.fallback, d.sid)
+}
+
+function onSessionTitlePending(e) {
+  const sid = e?.detail?.sid
+  if (sid) pendingTitleSessions.add(sid)
 }
 
 // ==================== 思考强度（Effort）：Faster(low) ↔ Smarter(high) ====================
@@ -3016,12 +3045,15 @@ onMounted(() => {
   nextTick(syncAgentFSTreeViewport)
   // 监听会话标题更新事件（来自 useAgentWorkflow 的 onTitleUpdate）
   window.addEventListener('session-title-update', onSessionTitleUpdate)
+  // 监听 AI 标题生成中事件：列表刷新时保持「新对话」，避免后端派生的原文标题抢先替换
+  window.addEventListener('session-title-pending', onSessionTitlePending)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalDockShortcut)
   window.removeEventListener('resize', syncAgentFSTreeViewport)
   window.clearInterval(agentFSPollTimer)
   window.removeEventListener('session-title-update', onSessionTitleUpdate)
+  window.removeEventListener('session-title-pending', onSessionTitlePending)
 })
 async function refreshGitGraph() {
   try {

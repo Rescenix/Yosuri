@@ -921,7 +921,13 @@ min-height: 90px !important;
   transition: opacity 0.15s ease, background 0.15s ease;
 }
 
-.assistant-message:hover .tool-btn {
+/* 朗读/复制按钮只在悬浮到「bot 消息本体」时出现，不是悬浮到那一栏/整行就出现：
+   - 纯文本回复：hover markdown 正文（.assistant-message 是全宽块，悬到行尾空白不该触发）
+   - agentflow 回复：hover 工作流面板（flow-tools 就是面板正下方的工具栏栏）
+   按钮自身悬浮时保持显示（.tool-btn:hover 会提到 1，两条规则叠加不冲突）。 */
+.assistant-message .markdown-body:hover ~ .assistant-tools .tool-btn,
+.assistant-tools:hover .tool-btn,
+.agentflow-wrap:hover .tool-btn {
   opacity: 0.6;
 }
 
@@ -2005,6 +2011,14 @@ min-height: 90px !important;
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; color: var(--app-text); }
 .model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
+
+/* Auto 智能路由置顶项 + 分隔线：选中态 = 主题色文字标识（与加粗无关，粗体保持和其他项一致） */
+.model-menu-auto.active {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+  font-weight: 500;
+}
+.model-menu-divider { height: 1px; margin: 4px 0; background: var(--app-border-soft); }
 
 /* ---------- 思考强度（Effort）：模型选择器右边的小胶囊 + 点开的 Faster↔Smarter 滑块 ---------- */
 .effort-widget {
