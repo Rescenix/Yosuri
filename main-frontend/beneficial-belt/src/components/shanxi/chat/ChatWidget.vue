@@ -2887,24 +2887,17 @@ function handleSend() {
         if (ok) {
           startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
         } else {
-          // 配额已用完，显示提示
-          const flow = {
-            id: `sp_quota_${Date.now()}`,
-            kind: 'agentflow',
-            sender: 'bot',
-            status: 'failed',
-            task: combined,
-            blocks: [{ type: 'text', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' }],
-            startTime: Date.now(), endTime: Date.now(),
-            modelInfo: null, timestamp: new Date()
-          }
-          messages.value.push(flow)
-          onStreamUpdate?.()
+          // 配额检查失败（网络错误/端点不存在）：不阻断，直接走本地工作流
+          // 服务端会返回 429 或错误，前端正常显示
+          startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
         }
+      }).catch(() => {
+        // 配额检查异常：同样不阻断，直接发送
+        startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
       })
       return
     }
-  // opts.model = 下拉框当前选中的模型（响应式 ref，watch 保证非空）
+    // opts.model = 下拉框当前选中的模型（响应式 ref，watch 保证非空）
     startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
   }
 
@@ -2919,8 +2912,7 @@ function handleSend() {
         return false
       }
     }
-  }
-const showTokenPanel = ref(false)
+  const showTokenPanel = ref(false)
 function formatTok(n) {
   n = n || 0
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
