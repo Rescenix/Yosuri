@@ -2553,6 +2553,7 @@ const {
   currentStatus, statusDotColor,
   messagesContainer, chatInputRef, userScrolledUp,
   forceScrollToBottom, adjustInputHeight, switchSession,
+  onStreamUpdate,
   backgroundTaskList,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
@@ -2962,11 +2963,14 @@ function handleSend() {
       })
     }).then(async res => {
       if (res.status === 429) {
-        const err = await res.json()
+        const err = await res.json().catch(() => ({}))
+        const used = err.quota?.used, limit = err.quota?.limit
         flow.status = 'failed'
         flow.blocks.push({
           type: 'text',
-          text: `😅 公益免费额度已用完（今日 ${err.quota?.used || '?'}/${err.quota?.limit || '?'} 次）\n\n填自己的 Key 继续使用，无限制～`
+          text: used != null
+            ? `😅 公益免费额度已用完（今日 ${used}/${limit} 次）\n\n填自己的 Key 继续使用，无限制～`
+            : `😅 上游免费模型暂时繁忙（429），稍等几分钟再试试～`
         })
         flow.endTime = Date.now()
         onStreamUpdate?.()
