@@ -128,6 +128,37 @@ var freeModelCatalog = []FreeModelDef{
 	// 仅收录用户实测可用的 gpt-oss:120b；20b 档连对话质量都不够，不收录。
 	// ContextWindow 未知者留 0，绝不伪造（目录规矩）。
 	{ID: "cloud_ollama_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B（免费·云端）", Endpoint: "https://ollama.com/v1", Model: "gpt-oss:120b", KeyEnv: "OLLAMA_API_KEY", ParamsB: 120, Note: "Ollama Cloud 免费档大模型", Reasoning: true, KeyURL: "https://ollama.com/settings/keys"},
+
+	// —— Modal 官方免费 GLM-5 endpoint（api.us-west-2.modal.direct/v1，OpenAI 兼容）——
+	// 2026-08-02 用户要求接入。Modal 官方 blog（modal.com/blog/try-glm-5）公开的免费
+	// 托管端点，模型 zai-org/GLM-5-FP8，官方 OpenClaw 配置 cost 全 0、reasoning=true、
+	// context 192000。Key 在 modal.com/glm-5-endpoint 页面免费领取。
+	{ID: "free_modal_glm5", Vendor: "Modal", Name: "GLM-5（免费）", Endpoint: "https://api.us-west-2.modal.direct/v1", Model: "zai-org/GLM-5-FP8", KeyEnv: "MODAL_API_KEY", ParamsB: 0, Note: "Modal 官方免费 GLM-5 端点", ContextWindow: 192000, Reasoning: true, KeyURL: "https://modal.com/glm-5-endpoint"},
+
+	// —— Novita AI（api.novita.ai/openai/v1，OpenAI 兼容）——
+	// 2026-08-02 用户要求接入。官方模型页标注 TIME LIMITED FREE 的模型；
+	// deepseek/deepseek-v3.2 官方详情页确认：context 163840 / max output 65536 /
+	// function calling / reasoning 均支持，限时免费（$0）。
+	{ID: "free_novita_deepseek_v3_2", Vendor: "Novita AI", Name: "DeepSeek V3.2（限时免费）", Endpoint: "https://api.novita.ai/openai/v1", Model: "deepseek/deepseek-v3.2", KeyEnv: "NOVITA_API_KEY", ParamsB: 0, Note: "Novita 限时免费（TIME LIMITED FREE）", ContextWindow: 163840, Reasoning: true, KeyURL: "https://novita.ai"},
+
+	// —— SenseNova 商汤（token.sensenova.cn/v1，OpenAI 兼容）——
+	// 2026-08-02 用户要求接入。官方文档确认免费额度：sensenova-6.7-flash-lite 每 5 小时
+	// 1500 次（256K 上下文 / 64K 输出，原生多模态支持图像输入）；deepseek-v4-flash 每 5 小时
+	// 500 次（1M 上下文，支持思考模式）。Key 在 platform.sensenova.cn 控制台创建 sk- 密钥。
+	{ID: "free_sensenova_6_7_flash_lite", Vendor: "SenseNova", Name: "SenseNova 6.7 Flash-Lite（免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "sensenova-6.7-flash-lite", KeyEnv: "SENSENOVA_API_KEY", ParamsB: 0, Note: "商汤免费·5h/1500 次·多模态", Vision: true, ContextWindow: 262144, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
+	{ID: "free_sensenova_deepseek_v4_flash", Vendor: "SenseNova", Name: "DeepSeek V4 Flash（商汤·免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "deepseek-v4-flash", KeyEnv: "SENSENOVA_API_KEY", ParamsB: 0, Note: "商汤免费·5h/500 次·1M 上下文", ContextWindow: 1048576, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
+
+	// —— ModelScope 魔搭（api-inference.modelscope.cn/v1，OpenAI 兼容）——
+	// 2026-08-02 用户要求接入。官方：注册即送每日 2000 次免费调用（Qwen3-Coder 单独 500 次），
+	// 用 SDK Token 作为 API Key。模型 ID 是 ModelScope 命名空间格式（Qwen/Qwen2.5-VL-72B-Instruct，
+	// 官方示例模型，多模态支持图像输入）。
+	{ID: "free_modelscope_qwen2_5_vl", Vendor: "ModelScope 魔搭", Name: "Qwen2.5-VL-72B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen2.5-VL-72B-Instruct", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 72, Note: "魔搭免费·2000次/天·多模态", Vision: true, ContextWindow: 131072, KeyURL: "https://modelscope.cn"},
+
+	// —— NVIDIA NIM（integrate.api.nvidia.com/v1，OpenAI 兼容）——
+	// 2026-08-02 用户要求接入。build.nvidia.com 免费注册即得 API Key，80+ 免费 serverless 模型
+	// （gpt-oss-120b 等）。⚠️ 此前 2026-07-23 曾因免费档限流 429 严重整体移除，本次按用户
+	// 明确要求重新收录；如再次出现高频 429 可整体下架（nim_refresh.go 探测骨架仍保留）。
+	{ID: "free_nvidia_gpt_oss_120b", Vendor: "NVIDIA NIM", Name: "GPT-OSS 120B（英伟达·免费）", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "openai/gpt-oss-120b", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 120, Note: "NVIDIA 免费 serverless（注意限流）", ContextWindow: 131072, KeyURL: "https://build.nvidia.com/settings/api-keys"},
 }
 
 func isFreeCatalogID(id string) bool {
