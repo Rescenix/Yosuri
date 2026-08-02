@@ -230,8 +230,12 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.PUT("/api/models/free-order", HandlePutFreeModelOrder)
 
 	// Rescene 聚合 API：OpenAI 兼容端点，聚合免费模型池 + 自定义提供方
-	r.POST("/v1/chat/completions", HandleAggregateChat)
-	r.GET("/v1/models", HandleAggregateModels)
+		r.POST("/v1/chat/completions", HandleAggregateChat)
+		r.GET("/v1/models", HandleAggregateModels)
+
+		// 共享池（免费试用）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
+		r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)
+		r.POST("/api/chat/shared-pool", HandleSharedPoolChat)
 
 	r.Static("/images", "./public/images")
 }

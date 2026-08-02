@@ -832,7 +832,7 @@
                           class="model-menu-item"
                           :class="{ active: selectedModel === m.value }"
                           @click="selectModel(m.value)"
-                        ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span></div>
+                        ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">免费试用</span></div>
                       </template>
                     </div>
                   </div>
@@ -1322,6 +1322,8 @@ const modelCapabilities = ref({}) // { [modelId]: {vision, context_window, reaso
 const modelLabels = ref({}) // { [modelId]: 显示名 }
 // 全量免费模型目录（含 vendor 字段），用于聊天下拉按提供方分组渲染
 const freeModelsFull = ref([]) // [{ id, vendor, name, ... }]
+const sharedPoolModelIds = ref(new Set()) // 共享池模型的 ID 集合
+const sharedPoolQuota = ref(null) // { used, limit, remaining } 从云端返回
 async function loadModelCapabilities() {
   try {
     const res = await fetch('/api/models/config')
@@ -1337,6 +1339,33 @@ async function loadModelCapabilities() {
     modelLabels.value = labels
   } catch (e) {
     console.warn('加载模型能力失败', e)
+  }
+  // 同时拉取共享池模型（免费试用）
+  try {
+    const spRes = await fetch('/api/models/shared-pool')
+    if (spRes.ok) {
+      const spData = await spRes.json()
+      const spModels = spData.free_models || []
+      const spIds = new Set()
+      for (const sp of spModels) {
+              spIds.add(sp.id)
+              // 如果本地已有同名模型，覆盖成共享池版本（标记 sharedPool）
+              const idx = freeModelsFull.value.findIndex(m => m.id === sp.id)
+              const modelWithFlag = { ...sp, sharedPool: true, api_key_set: true }
+              if (idx >= 0) {
+                freeModelsFull.value[idx] = modelWithFlag
+              } else {
+                freeModelsFull.value.push(modelWithFlag)
+              }
+        modelCapabilities.value[sp.id] = { vision: sp.vision, context_window: sp.context_window, reasoning: sp.reasoning }
+        modelLabels.value[sp.id] = sp.name
+      }
+      sharedPoolModelIds.value = spIds
+      sharedPoolQuota.value = spData.quota || null
+    }
+  } catch (e) {
+    // 共享池不可用时不阻塞（用户可能没登录）
+    console.warn('共享池不可用', e)
   }
 }
 onMounted(() => {
@@ -2802,12 +2831,12 @@ function jumpToGroup(id) {
 // 之前 Chat/Code 是两个模式两条路——Chat 走轻量流式，Code 走四态机能调工具。
 // 合并成一条：永远走四态机（startCodeWorkflow），模型自己判断要不要调工具，
 // 不需要工具时就是普通对话回复，agent 两件事都能干，用户不用先选模式。
+// 共享池模型（免费试用）走简单聊天/POST 流式，无 agent 工作流。
 function handleSend() {
   if (hasPendingAttachments.value) return
   // 亲密度 +1（fire-and-forget，失败静默不阻断发送）
   railAuth.incIntimacy()
-  // 工作流跑着的时候，回车不再是"发一条新消息"（之前会在 startCodeWorkflow 里
-  // 被 flowState.active 静默挡掉），而是把这句话当中途插话塞进正在跑的那个工作流。
+  // 工作流跑着的时候，回车不再是"发一条新消息"
   if (flowState.active) {
       const steerText = userInput.value.trim()
       if (!steerText) return
@@ -2815,8 +2844,6 @@ function handleSend() {
       nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
       const ok = sendSteerMessage(steerText)
       if (!ok) {
-        // workflowId 还没回填或队列已满——在聊天里加一条即时的本地反馈
-        const sid = localStorage.getItem('prism_session_id') || ''
         messages.value.push({
           id: `steer-fail-${Date.now()}`,
           kind: 'text',
@@ -2835,13 +2862,111 @@ function handleSend() {
   const displayAttachments = attachments.value.filter(a => a.status === 'ready').map(a => ({ ...a }))
   clearAttachments()
   userInput.value = ''
-  // 发送后内容必空，直接把高度交回 CSS（min-height:40px 兜底成单行），
-  // 不依赖 adjustInputHeight 的 scrollHeight 测量——它会在 v-model 未同步时量到旧高度而卡两行
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-  // opts.model = 下拉框当前选中的模型（响应式 ref，watch 保证非空），
-  // 标题生成请求和后端路由都用它，而不是滞后的 localStorage
-  startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
-}
+  // 共享池模型走简单聊天（无 agent 工作流）
+  if (sharedPoolModelIds.value.has(selectedModel.value)) {
+    sendSharedPoolChat(combined, displayText, displayAttachments)
+    return
+  }
+  // opts.model = 下拉框当前选中的模型（响应式 ref，watch 保证非空）
+    startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
+  }
+
+  // 共享池模型：简单聊天（无 agent 工作流，POST 流式直接返回）
+  function sendSharedPoolChat(combined, displayText, displayAttachments) {
+    const userMsg = {
+      id: `sp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      sender: 'user',
+      content: displayText,
+      attachments: displayAttachments || [],
+      timestamp: new Date()
+    }
+    messages.value.push(userMsg)
+    onStreamUpdate?.()
+
+    const flow = {
+      id: `sp_flow_${Date.now()}`,
+      kind: 'agentflow',
+      sender: 'bot',
+      status: 'running',
+      task: combined,
+      blocks: [],
+      startTime: Date.now(),
+      endTime: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      modelInfo: null,
+      timestamp: new Date()
+    }
+    messages.value.push(flow)
+    onStreamUpdate?.()
+
+    const model = selectedModel.value
+
+    fetch('/api/chat/shared-pool', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: combined }],
+        stream: true
+      })
+    }).then(async res => {
+      if (res.status === 429) {
+        const err = await res.json()
+        flow.status = 'failed'
+        flow.blocks.push({
+          type: 'text',
+          text: `😅 免费试用额度已用完（今日 ${err.quota?.used || '?'}/${err.quota?.limit || '?'} 次）\n\n填自己的 Key 继续使用，无限制～`
+        })
+        flow.endTime = Date.now()
+        onStreamUpdate?.()
+        return
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: '请求失败' }))
+        flow.status = 'failed'
+        flow.blocks.push({ type: 'text', text: `共享池错误：${err.error || '未知错误'}` })
+        flow.endTime = Date.now()
+        onStreamUpdate?.()
+        return
+      }
+      // 流式读取 SSE
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6)
+          if (data === '[DONE]') { flow.status = 'completed'; break }
+          try {
+            const parsed = JSON.parse(data)
+            const content = parsed.choices?.[0]?.delta?.content || ''
+            if (content) {
+              const last = flow.blocks[flow.blocks.length - 1]
+              if (last?.type === 'text') last.text += content
+              else flow.blocks.push({ type: 'text', text: content })
+              onStreamUpdate?.()
+            }
+          } catch {}
+        }
+      }
+      flow.status = 'completed'
+      flow.endTime = Date.now()
+      onStreamUpdate?.()
+    }).catch(err => {
+      flow.status = 'failed'
+      flow.blocks.push({ type: 'text', text: `网络错误：${err.message}` })
+      flow.endTime = Date.now()
+      onStreamUpdate?.()
+    })
+  }
 // Token 环状进度条
 const showTokenPanel = ref(false)
 function formatTok(n) {

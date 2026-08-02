@@ -37,6 +37,9 @@
         </div>
         <div class="fo-footer">
           <button class="fo-reset" type="button" :disabled="saving" @click="resetOrder">恢复默认顺序</button>
+          <button class="fo-pin-ds" type="button" :disabled="saving" @click="pinDeepSeekTop" title="将 DeepSeek（小鲸鱼）模型置顶">
+            <Icon icon="mdi:pin" width="13" /> 小鲸鱼置顶
+          </button>
           <span class="fo-save-state">{{ saving ? '保存中...' : saveError }}</span>
           <button class="fo-done" type="button" @click="$emit('close')">完成</button>
         </div>
@@ -65,6 +68,15 @@ function configUrl() {
   return `/api/models/config${props.openid ? '?openid=' + encodeURIComponent(props.openid) : ''}`
 }
 
+const FREE_ORDER_KEY = 'freeModelOrder'
+
+function loadOrderFromStorage() {
+  try { return JSON.parse(localStorage.getItem(FREE_ORDER_KEY) || '[]') } catch { return [] }
+}
+function saveOrderToStorage(order) {
+  localStorage.setItem(FREE_ORDER_KEY, JSON.stringify(order))
+}
+
 async function load() {
   loading.value = true
   saveError.value = ''
@@ -72,7 +84,16 @@ async function load() {
     const res = await fetch(configUrl())
     if (!res.ok) throw new Error('HTTP ' + res.status)
     const data = await res.json()
-    list.value = data.free_models || []
+    let models = data.free_models || []
+    // 优先用 localStorage 里的排序（用户保存的顺序），后端按信号/最近使用重排了
+    const savedOrder = loadOrderFromStorage()
+    if (savedOrder.length) {
+      const byId = new Map(models.map(m => [m.id, m]))
+      const ordered = savedOrder.map(id => byId.get(id)).filter(Boolean)
+      const rest = models.filter(m => !savedOrder.includes(m.id))
+      models = [...ordered, ...rest]
+    }
+    list.value = models
   } catch (e) {
     saveError.value = '加载失败：' + (e.message || '网络错误')
   } finally {
@@ -115,6 +136,7 @@ async function onDrop(targetId) {
 async function saveOrder(arr) {
   saving.value = true
   saveError.value = ''
+  saveOrderToStorage(arr) // 先存本地，关掉重开弹窗时恢复
   try {
     const res = await fetch('/api/models/free-order', {
       method: 'PUT',
@@ -135,6 +157,7 @@ async function saveOrder(arr) {
 async function resetOrder() {
   saving.value = true
   saveError.value = ''
+  saveOrderToStorage([]) // 清空本地排序
   try {
     const res = await fetch('/api/models/free-order', {
       method: 'PUT',
@@ -146,6 +169,28 @@ async function resetOrder() {
     await load() // 重新按目录顺序展示
   } catch (e) {
     saveError.value = '恢复失败：' + (e.message || '网络错误')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 小鲸鱼一键置顶：将名称含「DeepSeek」的模型全部提到列表最前面
+async function pinDeepSeekTop() {
+  saving.value = true
+  saveError.value = ''
+  try {
+    const arr = list.value.map(m => m.id)
+    const dsIds = list.value.filter(m => m.name.includes('DeepSeek')).map(m => m.id)
+    // 将 DeepSeek 模型移到最前面，非 DeepSeek 保持相对顺序
+    const rest = arr.filter(id => !dsIds.includes(id))
+    const newOrder = [...dsIds, ...rest]
+    // 本地立即重排
+    const byId = new Map(list.value.map(m => [m.id, m]))
+    list.value = newOrder.map(id => byId.get(id)).filter(Boolean)
+    await saveOrder(newOrder)
+  } catch (e) {
+    saveError.value = '置顶失败：' + (e.message || '网络错误')
+    await load()
   } finally {
     saving.value = false
   }
@@ -209,6 +254,13 @@ async function resetOrder() {
 }
 .fo-reset:hover:not(:disabled) { color: var(--app-accent); border-color: var(--app-accent); }
 .fo-reset:disabled { opacity: 0.5; cursor: default; }
+.fo-pin-ds {
+  font-size: 12px; color: var(--app-accent); background: var(--app-accent-soft);
+  border: 1px solid var(--app-accent); border-radius: 999px; padding: 4px 12px;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.fo-pin-ds:hover:not(:disabled) { opacity: 0.85; }
+.fo-pin-ds:disabled { opacity: 0.5; cursor: default; }
 .fo-save-state { flex: 1; font-size: 11px; color: var(--app-text-faint); }
 .fo-done {
   font-size: 12px; font-weight: 600; color: #fff;

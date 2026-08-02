@@ -1709,6 +1709,13 @@ min-height: 90px !important;
   flex-shrink: 0;
 }
 
+.model-menu-tag-free {
+  font-size: 10px; font-weight: 600;
+  color: #fff; background: var(--app-accent);
+  padding: 1px 6px; border-radius: 999px;
+  margin-left: 6px; flex-shrink: 0;
+}
+
 .header-left {
   flex: 1;
   min-width: 0;
