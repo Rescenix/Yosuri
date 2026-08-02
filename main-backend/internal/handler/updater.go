@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -151,44 +150,164 @@ func HandleOpenUpdateDownload(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// versionRe 匹配 v 前缀或裸的 x.y.z 版本号（tag 可能带代号前缀，如 ginnungagap_v0.0.4）。
-var versionRe = regexp.MustCompile(`v?\d+\.\d+\.\d+`)
+// versionRe 匹配完整 SemVer（含预发布与构建元数据）。tag 可能带代号前缀，
+// 如 ginnungagap_v0.0.4，因此不能只接受整串版本号。
+var versionRe = regexp.MustCompile(`(?i:v?)\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?`)
 
-// extractVersion 从 tag/name 字符串里提取第一个 x.y.z 版本号；提取不到返回原串。
+// extractVersion 从 tag/name 字符串里提取第一个完整 SemVer；提取不到返回原串。
 func extractVersion(s string) string {
 	m := versionRe.FindString(s)
 	if m == "" {
 		return s
 	}
-	return strings.TrimPrefix(m, "v")
+	return strings.TrimPrefix(strings.TrimPrefix(m, "v"), "V")
 }
 
-// compareVersions 返回 latest 是否严格大于 cur（三段数字 semver，忽略 v 前缀与 -pre/+build 后缀）。
+type semVersion struct {
+	core       [3]string
+	prerelease []string
+}
+
+// compareVersions 返回 latest 是否严格大于 cur，遵循 SemVer 2.0.0 的优先级规则。
+// 构建元数据不参与比较；正式版高于同版本的预发布版。
 func compareVersions(cur, latest string) bool {
-	c := versionParts(cur)
-	l := versionParts(latest)
-	for i := 0; i < 3; i++ {
-		if l[i] > c[i] {
-			return true
+	c, cOK := parseSemVersion(cur)
+	l, lOK := parseSemVersion(latest)
+	if !cOK || !lOK {
+		return false
+	}
+	return compareSemVersions(l, c) > 0
+}
+
+func parseSemVersion(v string) (semVersion, bool) {
+	v = strings.TrimPrefix(strings.TrimPrefix(v, "v"), "V")
+	if v == "" {
+		return semVersion{}, false
+	}
+
+	precedence := v
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		if !validIdentifiers(v[i+1:], true) {
+			return semVersion{}, false
 		}
-		if l[i] < c[i] {
+		precedence = v[:i]
+	}
+
+	var prerelease []string
+	if i := strings.IndexByte(precedence, '-'); i >= 0 {
+		pre := precedence[i+1:]
+		if !validIdentifiers(pre, false) {
+			return semVersion{}, false
+		}
+		prerelease = strings.Split(pre, ".")
+		precedence = precedence[:i]
+	}
+
+	parts := strings.Split(precedence, ".")
+	if len(parts) != 3 {
+		return semVersion{}, false
+	}
+	var parsed semVersion
+	for i, part := range parts {
+		if !validNumericIdentifier(part) {
+			return semVersion{}, false
+		}
+		parsed.core[i] = part
+	}
+	parsed.prerelease = prerelease
+	return parsed, true
+}
+
+func validIdentifiers(s string, build bool) bool {
+	if s == "" {
+		return false
+	}
+	for _, identifier := range strings.Split(s, ".") {
+		if identifier == "" {
+			return false
+		}
+		numeric := true
+		for _, r := range identifier {
+			if !((r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '-') {
+				return false
+			}
+			if r < '0' || r > '9' {
+				numeric = false
+			}
+		}
+		if !build && numeric && len(identifier) > 1 && identifier[0] == '0' {
 			return false
 		}
 	}
-	return false
+	return true
 }
 
-func versionParts(v string) [3]int {
-	v = strings.TrimPrefix(strings.TrimPrefix(v, "v"), "V")
-	if i := strings.IndexAny(v, "-+"); i >= 0 {
-		v = v[:i]
+func validNumericIdentifier(s string) bool {
+	if s == "" || (len(s) > 1 && s[0] == '0') {
+		return false
 	}
-	parts := strings.Split(v, ".")
-	var out [3]int
-	for i := 0; i < len(parts) && i < 3; i++ {
-		if n, err := strconv.Atoi(parts[i]); err == nil {
-			out[i] = n
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
 		}
 	}
-	return out
+	return true
+}
+
+func compareSemVersions(a, b semVersion) int {
+	for i := 0; i < 3; i++ {
+		if cmp := compareNumericIdentifier(a.core[i], b.core[i]); cmp != 0 {
+			return cmp
+		}
+	}
+	if len(a.prerelease) == 0 && len(b.prerelease) == 0 {
+		return 0
+	}
+	if len(a.prerelease) == 0 {
+		return 1
+	}
+	if len(b.prerelease) == 0 {
+		return -1
+	}
+
+	limit := len(a.prerelease)
+	if len(b.prerelease) < limit {
+		limit = len(b.prerelease)
+	}
+	for i := 0; i < limit; i++ {
+		aID, bID := a.prerelease[i], b.prerelease[i]
+		aNumeric, bNumeric := isNumeric(aID), isNumeric(bID)
+		if aNumeric && bNumeric {
+			if cmp := compareNumericIdentifier(aID, bID); cmp != 0 {
+				return cmp
+			}
+			continue
+		}
+		if aNumeric {
+			return -1
+		}
+		if bNumeric {
+			return 1
+		}
+		if cmp := strings.Compare(aID, bID); cmp != 0 {
+			return cmp
+		}
+	}
+	return len(a.prerelease) - len(b.prerelease)
+}
+
+func compareNumericIdentifier(a, b string) int {
+	if len(a) != len(b) {
+		return len(a) - len(b)
+	}
+	return strings.Compare(a, b)
+}
+
+func isNumeric(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
