@@ -4136,19 +4136,17 @@ img.gem-rail-avatar {
   box-sizing: border-box;
 }
 
-/* Agent TODO：输入框上方的可读进度卡片，保持与输入框同宽同轴 */
+/* Agent TODO：克制的任务轨迹，信息层级向 IDE/终端工作台靠拢。 */
 .todo-bar {
   position: relative;
-  margin-bottom: 8px;
-  padding: 10px 12px 11px;
+  margin-bottom: 6px;
+  padding: 9px 14px 11px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 20%, var(--app-border));
-  border-radius: 13px;
-  background:
-    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--app-accent) 14%, transparent), transparent 42%),
-    var(--app-surface);
-  box-shadow: 0 5px 18px color-mix(in srgb, var(--app-accent) 8%, transparent);
-  animation: todo-bar-in 0.2s ease-out;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  box-shadow: none;
+  animation: todo-bar-in 0.16s ease-out;
 }
 /* 全部完成后整条淡出（配合 <Transition name="todo-fade">） */
 .todo-fade-leave-active {
@@ -4159,35 +4157,25 @@ img.gem-rail-avatar {
   transform: translateY(6px);
   margin-bottom: 0;
 }
-.todo-bar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(var(--app-accent), color-mix(in srgb, var(--app-accent) 45%, transparent));
-}
-.todo-bar-head { display: flex; align-items: center; gap: 7px; padding-left: 2px; }
-.todo-bar-icon { color: var(--app-accent); }
-.todo-bar-title { color: var(--app-text); font-size: 12px; font-weight: 700; letter-spacing: .01em; }
+.todo-bar-head { display: flex; align-items: center; gap: 5px; min-height: 18px; }
+.todo-bar-chevron,
+.todo-bar-icon { color: var(--app-text-faint); flex-shrink: 0; }
+.todo-bar-title,
 .todo-bar-progress {
-  margin-left: auto;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--app-accent-soft);
-  color: var(--app-accent);
-  font: 700 10px/1.2 "JetBrains Mono", ui-monospace, monospace;
+  color: var(--app-text-soft);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
 }
-.todo-bar-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 0; padding: 0 2px; list-style: none; }
-.todo-bar-item { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--app-text-soft); font-size: 12px; line-height: 1.45; }
-.todo-bar-mark { width: 14px; flex-shrink: 0; color: var(--app-text-faint); text-align: center; font-size: 12px; }
+.todo-bar-list { display: flex; flex-direction: column; gap: 5px; margin: 7px 0 0; padding: 0; list-style: none; }
+.todo-bar-item { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--app-text-faint); font-size: 12px; line-height: 1.45; }
+.todo-bar-mark { width: 14px; flex: 0 0 14px; color: var(--app-text-faint); }
 .todo-bar-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.todo-doing { color: var(--app-text); font-weight: 650; }
-.todo-doing .todo-bar-mark { color: var(--app-accent); text-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 36%, transparent); }
-.todo-done { color: var(--app-text-faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--app-text-faint) 52%, transparent); }
-.todo-done .todo-bar-mark { color: #22a36a; }
-@keyframes todo-bar-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.todo-doing { color: var(--app-text); font-weight: 600; }
+.todo-doing .todo-bar-mark { color: var(--app-text-soft); }
+.todo-done { color: var(--app-text-faint); }
+.todo-done .todo-bar-mark { color: #35b98a; }
+@keyframes todo-bar-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
 
 .input-bottom-toolbar {
   display: flex;

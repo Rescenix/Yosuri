@@ -431,23 +431,28 @@
                    让用户先看到 N/N 再整条消失；中途出现新/未完成项则取消淡出。 -->
               <Transition name="todo-fade">
                 <div v-if="todoState.items.length" class="todo-bar">
-                <div class="todo-bar-head">
-                  <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
-                  <span class="todo-bar-title">任务清单</span>
-                  <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
+                  <div class="todo-bar-head">
+                    <Icon icon="mdi:chevron-down" width="14" class="todo-bar-chevron" />
+                    <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
+                    <span class="todo-bar-title">任务</span>
+                    <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
+                  </div>
+                  <ul class="todo-bar-list">
+                    <li
+                      v-for="(it, i) in todoState.items"
+                      :key="i"
+                      class="todo-bar-item"
+                      :class="'todo-' + it.status"
+                    >
+                      <Icon
+                        :icon="it.status === 'done' ? 'mdi:check-circle' : it.status === 'doing' ? 'mdi:dots-vertical' : 'mdi:circle-outline'"
+                        width="14"
+                        class="todo-bar-mark"
+                      />
+                      <span class="todo-bar-text">{{ it.text }}</span>
+                    </li>
+                  </ul>
                 </div>
-                <ul class="todo-bar-list">
-                  <li
-                    v-for="(it, i) in todoState.items"
-                    :key="i"
-                    class="todo-bar-item"
-                    :class="'todo-' + it.status"
-                  >
-                    <span class="todo-bar-mark">{{ it.status === 'done' ? '☑' : it.status === 'doing' ? '▶' : '☐' }}</span>
-                    <span class="todo-bar-text">{{ it.text }}</span>
-                  </li>
-                </ul>
-              </div>
               </Transition>
 
               <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
