@@ -228,16 +228,34 @@
                       <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
                     </div>
                     <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
-                      <input
-                        v-model="vendorKeyDraft"
-                        type="password"
-                        class="vendor-key-input"
-                        :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
-                        @keyup.enter="saveVendorKey(grp)"
-                      />
-                      <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
-                      <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
-                    </div>
+                                          <template v-if="grp.dualKey">
+                                            <input
+                                              v-model="vendorKeyDraft"
+                                              type="password"
+                                              class="vendor-key-input"
+                                              placeholder="Token ID"
+                                              @keyup.enter="saveVendorKey(grp)"
+                                            />
+                                            <input
+                                              v-model="vendorKeySecretDraft"
+                                              type="password"
+                                              class="vendor-key-input"
+                                              placeholder="Token Secret"
+                                              @keyup.enter="saveVendorKey(grp)"
+                                            />
+                                          </template>
+                                          <template v-else>
+                                            <input
+                                              v-model="vendorKeyDraft"
+                                              type="password"
+                                              class="vendor-key-input"
+                                              :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
+                                              @keyup.enter="saveVendorKey(grp)"
+                                            />
+                                          </template>
+                                          <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
+                                          <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
+                                        </div>
                     <div class="vendor-model-cards">
                       <div v-for="m in grp.items" :key="m.id" class="fm-card" :title="m.note || m.name">
                         <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
@@ -803,24 +821,22 @@ const errorMsg = ref('')
 const editingConfig = ref(null)
 const editingVendor = ref(null)
 const vendorKeyDraft = ref('')
+const vendorKeySecretDraft = ref('')
 const isNew = ref(false)
 const configBusy = ref('')
 
 const vendorGroups = computed(() => {
   const map = new Map()
   for (const fm of freeModels.value) {
-    // 本地模型（Local=true）不放在提供方里手动勾选，
-    // 而是自动进入模型候选，做到"配置即用"。
     if (fm.local) continue
     const v = fm.vendor || '其他'
-    if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false, keyless: false, keyUrl: '' })
+    if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false, keyless: false, keyUrl: '', dualKey: false })
     const g = map.get(v)
     g.items.push(fm)
     if (fm.api_key_set) g.hasKey = true
-    // 该提供方下任一模型是免 key 网关（如 opencode zen），整组标记免 Key
     if (fm.keyless) g.keyless = true
-    // 官网 API Key 申请页（组内任一模型带 URL 即用）
     if (!g.keyUrl && fm.key_url) g.keyUrl = fm.key_url
+    if (fm.vendor === 'Modal') g.dualKey = true
   }
   return Array.from(map.values())
 })
@@ -898,14 +914,18 @@ function startEdit(cfg) {
 }
 function startEditVendor(grp) {
   editingVendor.value = grp.vendor
-  vendorKeyDraft.value = ''
+    vendorKeyDraft.value = ''
+    vendorKeySecretDraft.value = ''
 }
 function cancelVendorEdit() {
   editingVendor.value = null
   vendorKeyDraft.value = ''
+  vendorKeySecretDraft.value = ''
 }
 async function saveVendorKey(grp) {
-  const key = vendorKeyDraft.value
+  const key = grp.dualKey
+    ? (vendorKeyDraft.value + ':' + vendorKeySecretDraft.value)
+    : vendorKeyDraft.value
   if (!key || !key.trim()) {
     errorMsg.value = '请输入 API Key'
     return
