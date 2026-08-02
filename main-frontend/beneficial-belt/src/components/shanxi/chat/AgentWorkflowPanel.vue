@@ -174,6 +174,8 @@
                         <code class="flow-read-code">{{ row.text || ' ' }}</code>
                       </div>
                     </div>
+                    <!-- arXiv 论文检索：可视化卡片预览 -->
+                    <ArxivPaperCard v-else-if="b.name === 'arxiv_search'" :output="b.output || ''" />
                     <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
                   </div>
                 </div>
@@ -218,6 +220,7 @@ import { reactive, computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
+import ArxivPaperCard from './ArxivPaperCard.vue'
 import { renderMarkdown } from './markdownRenderer.js'
 
 const props = defineProps({

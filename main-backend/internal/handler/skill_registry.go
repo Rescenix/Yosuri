@@ -32,6 +32,7 @@ var hostedSkillSources = []struct {
 	{ID: "anthropics/skills", Label: "Anthropic Skills"},
 	{ID: "openai/skills", Label: "OpenAI Skills"},
 	{ID: "vercel-labs/skills", Label: "Vercel Labs Skills"},
+	{ID: "rescene-cloud", Label: "ResceneCloud 插件库"},
 }
 
 type githubTreeEntry struct {
@@ -147,6 +148,11 @@ func isHostedSkillSource(source string) bool {
 func listHostedSkills(source, query string) ([]hostedSkillItem, error) {
 	if !isHostedSkillSource(source) {
 		return nil, fmt.Errorf("不支持的技能托管源")
+	}
+	// ResceneCloud 插件库由前端直接通过 /api/plugins 访问，
+	// 这里只处理 GitHub 源（anthropics/skills、openai/skills、vercel-labs/skills）。
+	if source == "rescene-cloud" {
+		return nil, fmt.Errorf("ResceneCloud 插件库请通过前端插件市场访问")
 	}
 	tree, _, err := loadGitHubSkillTree(source)
 	if err != nil {

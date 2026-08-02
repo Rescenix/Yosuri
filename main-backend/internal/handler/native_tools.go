@@ -127,6 +127,8 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	// 默认不给模型截图能力，避免每轮都截一堆垃圾图；用户明确要看效果时，
 	// 模型用 load_tools 激活后照常调用。
 	defs = append(defs, capturePreviewToolDef)
+	// arxiv_search：arXiv 论文检索/预览（alphaXiv 风格），Go 直连 API 免外部依赖
+	defs = append(defs, arxivToolDef)
 	return defs
 }
 
@@ -174,6 +176,12 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callBgTaskTool(ctx, name, argsJSON, workflowIDFromCtx(ctx))
 	case "web_fetch":
 		return callNativeWebFetch(ctx, argsJSON)
+	case "arxiv_search":
+		text, err := callArxivSearch(ctx, argsJSON)
+		if err != nil {
+			return nativeToolResult{}, err
+		}
+		return nativeToolResult{Text: text}, nil
 	case "view_image":
 		return callNativeViewImage(ctx, argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
