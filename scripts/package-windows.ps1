@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $backendDir = Join-Path $repoRoot 'main-backend'
 $outputRoot = Join-Path $repoRoot 'dist'
-$installerName = 'ResceneAgent-windows-amd64-setup.exe'
+$installerName = 'Rescene-windows-amd64-setup.exe'
 $installerPath = Join-Path $outputRoot $installerName
 $checksumPath = Join-Path $outputRoot 'SHA256SUMS.txt'
 $wailsConfigPath = Join-Path $backendDir 'wails.json'
@@ -82,11 +82,15 @@ Copy-Item -LiteralPath $wailsInstallerPath -Destination $installerPath -Force
 # 成功生成安装器后清理旧便携产物，避免误上传到 Release。
 $obsoletePortableDir = Join-Path $outputRoot 'ResceneAgent-windows-amd64'
 $obsoleteZipPath = Join-Path $outputRoot 'ResceneAgent-windows-amd64.zip'
+$obsoleteInstallerPath = Join-Path $outputRoot 'ResceneAgent-windows-amd64-setup.exe'
 if (Test-Path -LiteralPath $obsoletePortableDir) {
     Remove-Item -LiteralPath $obsoletePortableDir -Recurse -Force
 }
 if (Test-Path -LiteralPath $obsoleteZipPath) {
     Remove-Item -LiteralPath $obsoleteZipPath -Force
+}
+if (Test-Path -LiteralPath $obsoleteInstallerPath) {
+    Remove-Item -LiteralPath $obsoleteInstallerPath -Force
 }
 
 $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()

@@ -49,8 +49,8 @@ API keys and other credentials must not be included in release artifacts or buil
 On Windows, verify the Authenticode signature and SHA-256 checksum before installation:
 
 ```powershell
-Get-AuthenticodeSignature .\ResceneAgent-windows-amd64-setup.exe
-Get-FileHash .\ResceneAgent-windows-amd64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\Rescene-windows-amd64-setup.exe
+Get-FileHash .\Rescene-windows-amd64-setup.exe -Algorithm SHA256
 ```
 
 For a signed production release, `Get-AuthenticodeSignature` must report `Valid`, and the calculated hash must match `SHA256SUMS.txt` from the same GitHub Release.

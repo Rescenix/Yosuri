@@ -24,7 +24,7 @@ const (
 	updateRepoName  = "ResceneAgent"
 	updateCacheTTL  = time.Hour // GitHub 未认证 API 限 60 次/小时/IP，内存缓存避免每次启动都打
 	// 下载走官网安装器直链（GitHub 仅作版本/更新内容基准，用户流量不引到 GitHub）
-	updateDownloadURL = "https://download.shanca.me/ResceneAgent-windows-amd64-setup.exe"
+	updateDownloadURL = "https://download.shanca.me/Rescene-windows-amd64-setup.exe"
 )
 
 // githubRelease 是 GitHub /releases/latest 响应里用到的字段子集。

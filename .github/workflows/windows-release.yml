@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SETUP_NAME: ResceneAgent-windows-amd64-setup.exe
+  SETUP_NAME: Rescene-windows-amd64-setup.exe
 
 jobs:
   build-sign-release:
@@ -64,7 +64,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $setupPath)) {
             throw "Missing installer: $setupPath"
           }
-          if (Test-Path -LiteralPath (Join-Path $PWD "dist/ResceneAgent-windows-amd64.zip")) {
+          if (Test-Path -LiteralPath (Join-Path $PWD "dist/Rescene-windows-amd64.zip")) {
             throw "Portable ZIP must not be produced"
           }
 
