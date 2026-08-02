@@ -2895,7 +2895,7 @@ function handleSend() {
             sender: 'bot',
             status: 'failed',
             task: combined,
-            blocks: [{ type: 'text', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' }],
+            blocks: [{ type: 'intent', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' }],
             startTime: Date.now(), endTime: Date.now(),
             modelInfo: null, timestamp: new Date()
           }
@@ -2967,7 +2967,7 @@ function handleSend() {
         const used = err.quota?.used, limit = err.quota?.limit
         flow.status = 'failed'
         flow.blocks.push({
-          type: 'text',
+          type: 'intent',
           text: used != null
             ? `😅 公益免费额度已用完（今日 ${used}/${limit} 次）\n\n填自己的 Key 继续使用，无限制～`
             : `😅 上游免费模型暂时繁忙（429），稍等几分钟再试试～`
@@ -2979,7 +2979,7 @@ function handleSend() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: '请求失败' }))
         flow.status = 'failed'
-        flow.blocks.push({ type: 'text', text: `共享池错误：${err.error || '未知错误'}` })
+        flow.blocks.push({ type: 'intent', text: `共享池错误：${err.error || '未知错误'}` })
         flow.endTime = Date.now()
         onStreamUpdate?.()
         return
@@ -3003,8 +3003,8 @@ function handleSend() {
             const content = parsed.choices?.[0]?.delta?.content || ''
             if (content) {
               const last = flow.blocks[flow.blocks.length - 1]
-              if (last?.type === 'text') last.text += content
-              else flow.blocks.push({ type: 'text', text: content })
+              if (last?.type === 'intent') last.text += content
+              else flow.blocks.push({ type: 'intent', text: content })
               onStreamUpdate?.()
             }
           } catch {}
@@ -3015,7 +3015,7 @@ function handleSend() {
       onStreamUpdate?.()
     }).catch(err => {
       flow.status = 'failed'
-      flow.blocks.push({ type: 'text', text: `网络错误：${err.message}` })
+      flow.blocks.push({ type: 'intent', text: `网络错误：${err.message}` })
       flow.endTime = Date.now()
       onStreamUpdate?.()
     })
