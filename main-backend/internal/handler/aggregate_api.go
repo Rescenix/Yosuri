@@ -302,8 +302,12 @@ func HandleAggregateModels(c *gin.Context) {
 	if !aggregateAuth(c) {
 		return
 	}
-	data := make([]map[string]any, 0, len(freeModelCatalog))
-	seen := map[string]bool{}
+	data := make([]map[string]any, 0, len(freeModelCatalog)+1)
+	// 伪装一个 auto 条目：Hermes 等工具自动探测模型列表后，选它即走 Auto 智能路由
+	data = append(data, map[string]any{
+		"id": "auto", "object": "model", "owned_by": "Rescene", "created": 0,
+	})
+	seen := map[string]bool{"auto": true}
 	for _, f := range freeModelCatalog {
 		if f.Disabled {
 			continue
