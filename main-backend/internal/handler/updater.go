@@ -23,8 +23,8 @@ const (
 	updateRepoOwner = "Rescenix"
 	updateRepoName  = "ResceneAgent"
 	updateCacheTTL  = time.Hour // GitHub 未认证 API 限 60 次/小时/IP，内存缓存避免每次启动都打
-	// 下载走官网直链（GitHub 仅作版本/更新内容基准，用户流量不引到 GitHub）
-	updateDownloadURL = "https://download.shanca.me/ResceneAgent-windows-amd64.zip"
+	// 下载走官网安装器直链（GitHub 仅作版本/更新内容基准，用户流量不引到 GitHub）
+	updateDownloadURL = "https://download.shanca.me/ResceneAgent-windows-amd64-setup.exe"
 )
 
 // githubRelease 是 GitHub /releases/latest 响应里用到的字段子集。
@@ -44,7 +44,7 @@ type updateInfo struct {
 	ReleaseName    string `json:"release_name"`
 	ReleaseNotes   string `json:"release_notes"`
 	ReleaseURL     string `json:"release_url"`
-	DownloadURL    string `json:"download_url"` // 官网 zip 直链
+	DownloadURL    string `json:"download_url"` // 官网安装器直链
 	PublishedAt    string `json:"published_at"`
 }
 
@@ -121,7 +121,7 @@ func checkUpdate() (*updateInfo, error) {
 		ReleaseName:    rel.Name,
 		ReleaseNotes:   rel.Body,
 		ReleaseURL:     rel.HTMLURL,
-		DownloadURL:    updateDownloadURL, // 官网直链下载，不经 GitHub
+		DownloadURL:    updateDownloadURL, // 官网安装器直链，不经 GitHub
 		PublishedAt:    rel.PublishedAt,
 	}
 
@@ -129,7 +129,7 @@ func checkUpdate() (*updateInfo, error) {
 	return info, nil
 }
 
-// HandleOpenUpdateDownload 让系统浏览器打开下载地址（zip 直链优先，回退 release 页面）。
+// HandleOpenUpdateDownload 让系统浏览器打开安装器下载地址（失败时前端回退 release 页面）。
 // 走后端 exec 而非前端 window.open：Wails WebView2 里 window.open 不可靠。
 func HandleOpenUpdateDownload(c *gin.Context) {
 	var req struct {

@@ -59,7 +59,7 @@ function onSkip() {
 async function onDownload() {
   opening.value = true
   try {
-    // zip 直链优先，无 asset 时回退 release 页面；由后端打开系统浏览器
+    // 安装器直链优先，无直链时回退 release 页面；由后端打开系统浏览器
     const url = props.update.download_url || props.update.release_url
     const res = await fetch('/api/update/open', {
       method: 'POST',
