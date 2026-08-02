@@ -124,12 +124,6 @@ var freeModelCatalog = []FreeModelDef{
 	// ContextWindow 未知者留 0，绝不伪造（目录规矩）。
 	{ID: "cloud_ollama_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B（免费·云端）", Endpoint: "https://ollama.com/v1", Model: "gpt-oss:120b", KeyEnv: "OLLAMA_API_KEY", ParamsB: 120, Note: "Ollama Cloud 免费档大模型", Reasoning: true, KeyURL: "https://ollama.com/settings/keys"},
 
-	// —— Modal 官方免费 GLM-5 endpoint（api.us-west-2.modal.direct/v1，OpenAI 兼容）——
-	// 2026-08-02 用户要求接入。Modal 官方 blog（modal.com/blog/try-glm-5）公开的免费
-	// 托管端点，模型 zai-org/GLM-5-FP8，官方 OpenClaw 配置 cost 全 0、reasoning=true、
-	// context 192000。Key 在 modal.com/glm-5-endpoint 页面免费领取。
-	{ID: "free_modal_glm5", Vendor: "Modal", Name: "GLM-5（免费）", Endpoint: "https://api.us-west-2.modal.direct/v1", Model: "zai-org/GLM-5-FP8", KeyEnv: "MODAL_API_KEY", ParamsB: 0, Note: "Modal 官方免费 GLM-5 端点", ContextWindow: 192000, Reasoning: true, KeyURL: "https://modal.com/glm-5-endpoint"},
-
 	// —— SenseNova 商汤（token.sensenova.cn/v1，OpenAI 兼容）——
 	// 2026-08-02 用户要求接入。官方文档确认免费额度：sensenova-6.7-flash-lite 每 5 小时
 	// 1500 次（256K 上下文 / 64K 输出，原生多模态支持图像输入）；deepseek-v4-flash 每 5 小时
