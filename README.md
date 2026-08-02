@@ -3,9 +3,9 @@
 # Rescene 🧬
 
 > 专攻**前端设计**、**浏览器自动化**、**Computer Use** 的二次元 Agent。
-> 每日自动更新可用的免费模型。
+> 免费模型智能路由：7 家免费提供方、30 分钟探活、熔断自愈——永不缺模型，永不浪费钱。
 
-付费 Agent 太贵，免费的总在限流？那就自己写一个。
+付费 Agent 太贵，免费的总在限流？那就自己写一个——顺便把免费模型做成一套带智能路由的聚合 API。
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
@@ -32,7 +32,8 @@
 | **🎨 专攻前端设计** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），按任务类型自动匹配风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风。Agent 写完直接真实渲染给你看 |
 | **🌐 真实浏览器自动化** | 复用系统 Edge 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
 | **🖱️ Computer Use** | 不止会改代码——能操作桌面：截图、移动鼠标、点击、键入、拖拽、滚动，接管整台机器干活 |
-| **🔋 免费模型每日更新** | 每天自动探测各厂商免费档模型可用性，跑不了的自动标记退役，能用的自动恢复——免费池永远是真能跑的 |
+| **🔋 免费模型智能池** | 聚合 7 家免费提供方 18 个模型条目（SenseNova / ModelScope / NVIDIA / StepFun / Zen / Ollama Cloud…），30 分钟探活出信号、每日列表重探防下架、熔断自动跳过限流源、LRU 权重优先最近可用的——免费池永远是真能跑的，跑不了的自动退役 |
+| **🧲 聚合 API** | 你填的所有 Key 聚合成一个 OpenAI 兼容端点：Claude Code / Cursor / Codex 填一个 Base URL + 一个 Key 就能用全部免费模型，自动路由到信号最好的那家 |
 | **🧠 成长中的记忆** | 每次工作流完成后自动萃取经验：模型偏好、技术栈倾向、代码风格、项目架构，下次自动融入上下文，不需要写自定义指令 |
 | **🆔 唯一 UID 账号** | 打开即由 ResceneCloud 分配全局唯一 UID（每用户一个），GitHub 登录后跨设备永久保留——账号由云端权威签发，前端不可伪造 |
 | **💗 亲密等级（无上限）** | 每句互动积累亲密值，等级越高越难升、永不封顶；随账号云端持久化，换设备不丢，越用越懂你 |
@@ -41,6 +42,28 @@
 | **💻 集成工作台** | 聊天界面内嵌 Monaco 编辑器、递归文件树、终端、流式 Diff、浏览器预览面板 |
 | **🔌 零依赖 MCP 扩展** | 纯 Go 实现的 MCP 客户端，跑远程 MCP 服务不需要在本地装 Node / Python / npx |
 | **🛡️ AgentFS 变更审计** | 快照 / Diff / 回滚管理 AI 文件修改，危险操作必须经用户批准 |
+
+---
+
+## 🧲 聚合 API —— 一个 Key，用全部免费模型
+
+免费模型不是「填进去就完事」——Rescene 把它们做成了一套带智能路由的聚合体系：
+
+| 机制 | 干什么 |
+| --- | --- |
+| **🛰️ 30 分钟探活** | 每个模型定时发最小请求，测出 0-4 格「信号」：延迟低又稳的 4 格，限流的 2 格，挂了的 0 格 |
+| **📋 每日列表重探** | 每天拉各提供方模型列表：下架的自动退役、恢复的自动归队——限流/过载不会被误判成「模型没了」 |
+| **⛑️ 熔断自愈** | 连续失败自动冷却 60s 跳过，秒切下一个可用源，绝不重试死源、不死磕限流 |
+| **⚖️ LRU 权重** | 最近真实用过的模型权重更高，Auto 路由自动收敛到「最近用得动」的那批 |
+| **🧲 聚合 API** | 所有 Key 聚合成 OpenAI 兼容端点（Base URL + 一个 Key），Claude Code / Cursor / Codex 直接填 |
+
+设置 → **聚合 API** 一键复制 Base URL 和 Key；model 填 `auto` 自动路由，或填任意模型 ID 精确指定。
+
+| 聚合 API 设置页 | 免费模型信号卡片 |
+| --- | --- |
+| <img src="./assets/settings-agg-api.png" alt="聚合 API 设置页" width="420"> | <img src="./assets/settings-free-models-signals.png" alt="免费模型信号卡片" width="420"> |
+
+每个免费模型自带 0-4 格信号条：4 格 = 又快又稳，2 格 = 限流中，0 格 = 挂了沉底——权重一眼可见。
 
 ---
 
@@ -105,9 +128,10 @@ flowchart TB
     Trace --> UI
 
     AgentLoop -->|选模型| Router["Multi-provider Model Router"]
-    Router --> Free["Free Models (Daily Probe)"]
+    Router --> Free["Free Models (Signal Probe)"]
     Router --> Local["Ollama Cloud"]
     Router --> Private["Custom Providers"]
+    Router -->|聚合| AggAPI["OpenAI 兼容聚合 API（一个 Key 全免费池）"]
 
     ToolCall --> Files["File & Shell"]
     ToolCall --> Browser["Browser / CDP (系统 Edge)"]
@@ -156,7 +180,7 @@ flowchart TB
 
 1. 打开工作台，在**设置面板 → 模型**填入至少一个 API Key；免费池中也有免 Key 的源（如 OpenCode Zen），可以直接选。
 2. 或用环境变量配置模型源：参考 `main-backend/.env.example`。
-3. 免费池每日自动探测可用性，跑不了的自动退役——但部分免费源需要对应环境变量 Key 才会进池。
+3. 免费池每 30 分钟探活一次、每日重探各提供方模型列表：限流的自动降权、下架的自动退役——但部分免费源需要对应环境变量 Key 才会进池。
 
 > 💡 一个 Key 都不配时，Agent 会提示「没有可用的模型源」——这是正常的，填好 Key 即恢复。
 

@@ -77,5 +77,7 @@ type DSResp struct {
 // ========== 核心处理函数 ==========
 
 func init() {
-	startNIMDailyRefresh()
+	// 每日提供方模型列表重探（存在性：下架/恢复）+ 30 分钟免费池探活（可用性信号）
+	startProviderDailyRefresh()
+	startFreeProbeLoop()
 }

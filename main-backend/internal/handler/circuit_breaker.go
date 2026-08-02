@@ -83,10 +83,13 @@ func circuitFail(b RouterBackend) {
 }
 
 // circuitSuccess 记录一次成功，清零失败计数（上游已恢复）。
+// 同时更新 LRU 使用新鲜度（markFreeUsed）——真实请求成功 = 该免费模型
+// 「最近被用上」，Auto 排序里权重更高（见 free_probe.go）。
 func circuitSuccess(b RouterBackend) {
 	if b.Source != "free" {
 		return
 	}
+	markFreeUsed(b)
 	circuitMu.Lock()
 	defer circuitMu.Unlock()
 	if st, ok := circuitStates[circuitKey(b)]; ok && st.failures > 0 {

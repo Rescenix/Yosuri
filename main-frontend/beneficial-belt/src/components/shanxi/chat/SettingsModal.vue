@@ -36,6 +36,8 @@
                 </button>
               </div>
             </div>
+            <button class="settings-tab" :class="{ on: activeTab === 'aggapi' }" @click="activeTab = 'aggapi'">
+              <Icon icon="mdi:api" width="16" />聚合 API</button>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
             <div class="settings-tab-group">
@@ -107,7 +109,6 @@
                   <span class="param-label">生图提供商</span>
                   <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
                     <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
-                    <option value="agnes">Agnes（免费，需 key，质量高）</option>
                   </select>
                 </div>
                 <div class="param-row">
@@ -167,7 +168,6 @@
                   <span class="param-label">生图提供商</span>
                   <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
                     <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
-                    <option value="agnes">Agnes（免费，需 key，质量高）</option>
                     <option value="siliconflow">SiliconFlow（免费额度，需 key）</option>
                   </select>
                 </div>
@@ -238,7 +238,15 @@
                       <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
                       <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
                     </div>
-                    <div class="vendor-model-hint">配置后自动加入：{{ grp.items.map(m => m.name).join('、') }}</div>
+                    <div class="vendor-model-cards">
+                      <div v-for="m in grp.items" :key="m.id" class="fm-card" :title="m.note || m.name">
+                        <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
+                          <i v-for="n in 4" :key="n" :class="{ on: (m.signal == null ? -1 : m.signal) >= n || n === 1 }"></i>
+                        </span>
+                        <span class="fm-name">{{ m.name }}</span>
+                        <span v-if="m.context_window" class="fm-tag">{{ fmtCtx(m.context_window) }}</span>
+                      </div>
+                    </div>
                   </div>
                   <div class="vendor-thanks">💙 感谢所有免费模型提供方的赞助支持</div>
                 </template>
@@ -304,6 +312,25 @@
                   </div>
                 </template>
               </template>
+            </div>
+
+            <!-- ========== 聚合 API ========== -->
+            <div v-show="activeTab === 'aggapi'" class="settings-panel">
+              <div class="settings-section-title">聚合 API</div>
+              <div class="settings-section-desc">你配置的所有模型 key 聚合成一个 OpenAI 兼容端点，任何支持 OpenAI 兼容配置的客户端（Claude Code / Cursor / Codex）填上 Base URL 和 Key 即可使用，自动路由到信号最好的免费模型。</div>
+              <div class="agg-api-card" style="margin-top:10px">
+                <div class="agg-api-row">
+                  <span class="agg-api-label">Base URL</span>
+                  <code class="agg-api-code">http://localhost:8080/v1</code>
+                  <button class="agg-api-copy" type="button" @click="copyAggText('http://localhost:8080/v1')">复制</button>
+                </div>
+                <div class="agg-api-row">
+                  <span class="agg-api-label">API Key</span>
+                  <code class="agg-api-code">sk-rescene-local</code>
+                  <button class="agg-api-copy" type="button" @click="copyAggText('sk-rescene-local')">复制</button>
+                </div>
+              </div>
+              <div class="agg-api-tip">已聚合 {{ freeModels.length + customModels.length }} 个模型（免费池 + 自定义）。model 填 <code class="agg-api-code">auto</code> 自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。</div>
             </div>
 
             <!-- ========== 外观 ========== -->
@@ -797,6 +824,21 @@ const vendorGroups = computed(() => {
   }
   return Array.from(map.values())
 })
+
+// 上下文窗口展示：262144 → 256K，1048576 → 1M
+function fmtCtx(n) {
+  if (!n) return ''
+  if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M'
+  if (n >= 1000) return Math.round(n / 1000) + 'K'
+  return String(n)
+}
+
+// 聚合 API 卡片：复制 base_url / key 到剪贴板
+function copyAggText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {})
+  }
+}
 
 // 「Auto 自定义排序」弹窗（提供方 → 免费模型 → 标题行按钮打开）
 const showFreeOrderModal = ref(false)
@@ -1650,7 +1692,6 @@ onUnmounted(() => {
 .vendor-key-btn:hover { background: var(--app-surface-3); }
 .vendor-key-link { color: var(--app-accent); text-decoration: none; }
 .vendor-key-link:hover { text-decoration: underline; }
-.vendor-model-hint { margin-top: 6px; font-size: 11px; color: var(--app-text-faint); line-height: 1.5; padding-left: 2px; }
 .settings-section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .auto-sort-btn {
   display: inline-flex; align-items: center; gap: 4px;
@@ -1660,6 +1701,32 @@ onUnmounted(() => {
   transition: background 0.15s;
 }
 .auto-sort-btn:hover { background: var(--app-surface-3); }
+.agg-api-card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.agg-api-head { font-size: 12px; font-weight: 700; color: var(--app-text); margin-bottom: 8px; }
+.agg-api-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.agg-api-row:last-of-type { margin-bottom: 0; }
+.agg-api-label { font-size: 11px; color: var(--app-text-soft); width: 62px; flex: none; }
+.agg-api-code { font-size: 11.5px; font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace); color: var(--app-accent); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; }
+.agg-api-copy { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
+.agg-api-copy:hover { background: var(--app-surface-3); }
+.agg-api-tip { font-size: 10.5px; color: var(--app-text-faint); margin-top: 6px; line-height: 1.5; }
+.vendor-model-cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.fm-card {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 8px;
+  background: var(--app-surface); border: 1px solid var(--app-border-soft);
+  font-size: 12px; color: var(--app-text); max-width: 100%;
+}
+.fm-signal { display: inline-flex; align-items: flex-end; gap: 1.5px; flex: none; }
+.fm-signal i { width: 3px; border-radius: 1px; background: var(--app-surface-3); }
+.fm-signal i:nth-child(1) { height: 4px; }
+.fm-signal i:nth-child(2) { height: 6px; }
+.fm-signal i:nth-child(3) { height: 8px; }
+.fm-signal i:nth-child(4) { height: 10px; }
+.fm-signal i.on { background: var(--app-accent); }
+.fm-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-card.sig-0 .fm-name { color: var(--app-text-faint); }
+.fm-tag { flex: none; font-size: 10px; line-height: 1.4; padding: 1px 5px; border-radius: 4px; background: var(--app-surface-3); color: var(--app-text-soft); }
 .vendor-thanks {
   margin-top: 12px; padding-top: 10px;
   font-size: 11px; color: var(--app-text-faint);

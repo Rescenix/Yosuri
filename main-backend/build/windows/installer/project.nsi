@@ -38,6 +38,10 @@ Unicode true
   !define INFO_DISPLAYVERSION "${INFO_PRODUCTVERSION}"
 !endif
 
+# Keep the installed application name for metadata and migration, while using
+# the shorter customer-facing name for Start menu and desktop shortcuts.
+!define SHORTCUT_NAME "Rescene"
+
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
@@ -58,6 +62,7 @@ ManifestDPIAware true
 !define MUI_UNICON "..\icon.ico"
 # !define MUI_WELCOMEFINISHPAGE_BITMAP "resources\leftimage.bmp" #Include this to add a bitmap on the left side of the Welcome Page. Must be a size of 164x314
 !define MUI_FINISHPAGE_NOAUTOCLOSE # Wait on the INSTFILES page so the user can take a look into the details of the installation steps
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}" # Offer to launch Rescene immediately; checked by default.
 !define MUI_ABORTWARNING # This will warn the user if they exit from the installer.
 
 !insertmacro MUI_PAGE_WELCOME # Welcome to the installer page.
@@ -114,6 +119,8 @@ Section
     # upgrades do not leave an old name and icon next to the installed app.
     Delete "$SMPROGRAMS\ResceneAgent.lnk"
     Delete "$DESKTOP\ResceneAgent.lnk"
+    Delete "$SMPROGRAMS\Rescene.lnk"
+    Delete "$DESKTOP\Rescene.lnk"
     Delete "$INSTDIR\ResceneAgent.exe"
     Delete "$INSTDIR\server.exe"
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
@@ -121,8 +128,8 @@ Section
 
     !insertmacro wails.files
 
-    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
-    CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    CreateShortcut "$SMPROGRAMS\${SHORTCUT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    CreateShortCut "$DESKTOP\${SHORTCUT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
     # Notify Explorer that shortcut/icon data changed. Without this, Windows can
     # keep displaying the icon cached for a previous executable at the same path.
@@ -155,6 +162,8 @@ Section "uninstall"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
+    Delete "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
+    Delete "$DESKTOP\${SHORTCUT_NAME}.lnk"
     Delete "$SMPROGRAMS\ResceneAgent.lnk"
     Delete "$DESKTOP\ResceneAgent.lnk"
 

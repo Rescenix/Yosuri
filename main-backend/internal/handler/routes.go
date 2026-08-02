@@ -229,5 +229,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/models/discover", HandleDiscoverProviderModels)
 	r.PUT("/api/models/free-order", HandlePutFreeModelOrder)
 
+	// Rescene 聚合 API：OpenAI 兼容端点，聚合免费模型池 + 自定义提供方
+	r.POST("/v1/chat/completions", HandleAggregateChat)
+	r.GET("/v1/models", HandleAggregateModels)
+
 	r.Static("/images", "./public/images")
 }

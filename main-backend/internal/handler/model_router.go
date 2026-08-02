@@ -100,12 +100,7 @@ var freeModelCatalog = []FreeModelDef{
 	// ContextWindow 一律留 0：/v1/models 只返回 id/created/owned_by，拿不到窗口大小，
 	// 按本目录「未知者留 0，绝不伪造」的规矩不填。
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
-
-	// —— Agnes AI 免费多模态网关（apihub.agnes-ai.com/v1，OpenAI 兼容）——
-	// 2026-07-27 用户要求接入：文本 + 多模态理解（识图）走 /v1/chat/completions，
-	// 生图（/v1/images/generations）暂未接进本路由层（现有生图为 DASHSCOPE 专线）。
-	// KeyEnv=AGNES_API_KEY，用户需自备（设置面板填写或环境变量）。
-	{ID: "free_agnes", Vendor: "Agnes AI", Name: "Agnes 2.0 Flash (多模态)（免费）", Endpoint: "https://apihub.agnes-ai.com/v1", Model: "agnes-2.0-flash", KeyEnv: "Agnes_API_KEY", ParamsB: 0, Note: "Agnes AI 免费多模态网关（文本/识图）", Vision: true, Reasoning: true, KeyURL: "https://agnes-ai.com/"},
+	{ID: "free_step_3_7_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.7-flash（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰免费档·agent 可用（实测 2026-08-02）", KeyURL: "https://platform.stepfun.com/"},
 
 	// —— OpenCode Zen 免 key 网关（opencode.ai/zen/v1，OpenAI 兼容）——
 	// 2026-07-28 用户实测接入：全程免 key，鉴权由域名承载；/v1/models 与
@@ -135,30 +130,30 @@ var freeModelCatalog = []FreeModelDef{
 	// context 192000。Key 在 modal.com/glm-5-endpoint 页面免费领取。
 	{ID: "free_modal_glm5", Vendor: "Modal", Name: "GLM-5（免费）", Endpoint: "https://api.us-west-2.modal.direct/v1", Model: "zai-org/GLM-5-FP8", KeyEnv: "MODAL_API_KEY", ParamsB: 0, Note: "Modal 官方免费 GLM-5 端点", ContextWindow: 192000, Reasoning: true, KeyURL: "https://modal.com/glm-5-endpoint"},
 
-	// —— Novita AI（api.novita.ai/openai/v1，OpenAI 兼容）——
-	// 2026-08-02 用户要求接入。官方模型页标注 TIME LIMITED FREE 的模型；
-	// deepseek/deepseek-v3.2 官方详情页确认：context 163840 / max output 65536 /
-	// function calling / reasoning 均支持，限时免费（$0）。
-	{ID: "free_novita_deepseek_v3_2", Vendor: "Novita AI", Name: "DeepSeek V3.2（限时免费）", Endpoint: "https://api.novita.ai/openai/v1", Model: "deepseek/deepseek-v3.2", KeyEnv: "NOVITA_API_KEY", ParamsB: 0, Note: "Novita 限时免费（TIME LIMITED FREE）", ContextWindow: 163840, Reasoning: true, KeyURL: "https://novita.ai"},
-
 	// —— SenseNova 商汤（token.sensenova.cn/v1，OpenAI 兼容）——
 	// 2026-08-02 用户要求接入。官方文档确认免费额度：sensenova-6.7-flash-lite 每 5 小时
 	// 1500 次（256K 上下文 / 64K 输出，原生多模态支持图像输入）；deepseek-v4-flash 每 5 小时
 	// 500 次（1M 上下文，支持思考模式）。Key 在 platform.sensenova.cn 控制台创建 sk- 密钥。
-	{ID: "free_sensenova_6_7_flash_lite", Vendor: "SenseNova", Name: "SenseNova 6.7 Flash-Lite（免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "sensenova-6.7-flash-lite", KeyEnv: "SENSENOVA_API_KEY", ParamsB: 0, Note: "商汤免费·5h/1500 次·多模态", Vision: true, ContextWindow: 262144, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
-	{ID: "free_sensenova_deepseek_v4_flash", Vendor: "SenseNova", Name: "DeepSeek V4 Flash（商汤·免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "deepseek-v4-flash", KeyEnv: "SENSENOVA_API_KEY", ParamsB: 0, Note: "商汤免费·5h/500 次·1M 上下文", ContextWindow: 1048576, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
+	{ID: "free_sensenova_6_7_flash_lite", Vendor: "SenseNova", Name: "SenseNova 6.7 Flash-Lite（免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "sensenova-6.7-flash-lite", KeyEnv: "SENSENOVA_API_KEY", ParamsB: 0, Note: "商汤免费·每模型 1500 次调用/5 小时·多模态", Vision: true, ContextWindow: 262144, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
+	{ID: "free_sensenova_deepseek_v4_flash", Vendor: "SenseNova", Name: "DeepSeek V4 Flash（商汤·免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "deepseek-v4-flash", KeyEnv: "SENSENOVA_API_KEY", ParamsB: 0, Note: "商汤免费·每模型 500 次调用/5 小时·1M 上下文", ContextWindow: 1048576, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
+	{ID: "free_sensenova_glm_5_2", Vendor: "SenseNova", Name: "GLM-5.2（商汤·免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "glm-5.2", KeyEnv: "SENSENOVA_API_KEY", ParamsB: 0, Note: "商汤免费档·agent 可用（实测 2026-08-02）", Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
 
 	// —— ModelScope 魔搭（api-inference.modelscope.cn/v1，OpenAI 兼容）——
 	// 2026-08-02 用户要求接入。官方：注册即送每日 2000 次免费调用（Qwen3-Coder 单独 500 次），
-	// 用 SDK Token 作为 API Key。模型 ID 是 ModelScope 命名空间格式（Qwen/Qwen2.5-VL-72B-Instruct，
-	// 官方示例模型，多模态支持图像输入）。
-	{ID: "free_modelscope_qwen2_5_vl", Vendor: "ModelScope 魔搭", Name: "Qwen2.5-VL-72B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen2.5-VL-72B-Instruct", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 72, Note: "魔搭免费·2000次/天·多模态", Vision: true, ContextWindow: 131072, KeyURL: "https://modelscope.cn"},
+	// 支持访问令牌（SDK Token）调用，模型 ID 是 ModelScope 命名空间格式
+	// （Qwen/Qwen2.5-VL-72B-Instruct，官方示例模型，多模态支持图像输入）。
+	{ID: "free_modelscope_qwen2_5_vl", Vendor: "ModelScope 魔搭", Name: "Qwen2.5-VL-72B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen2.5-VL-72B-Instruct", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 72, Note: "魔搭免费·访问令牌调用·2000次/天·多模态", Vision: true, ContextWindow: 131072, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_5_397b", Vendor: "ModelScope 魔搭", Name: "Qwen3.5-397B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3.5-397B-A17B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 397, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_235b", Vendor: "ModelScope 魔搭", Name: "Qwen3-235B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-235B-A22B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 235, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_glm_5_2", Vendor: "ModelScope 魔搭", Name: "GLM-5.2（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "ZhipuAI/GLM-5.2", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_deepseek_v4_flash", Vendor: "ModelScope 魔搭", Name: "DeepSeek V4 Flash（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "deepseek-ai/DeepSeek-V4-Flash", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
 
 	// —— NVIDIA NIM（integrate.api.nvidia.com/v1，OpenAI 兼容）——
 	// 2026-08-02 用户要求接入。build.nvidia.com 免费注册即得 API Key，80+ 免费 serverless 模型
 	// （gpt-oss-120b 等）。⚠️ 此前 2026-07-23 曾因免费档限流 429 严重整体移除，本次按用户
 	// 明确要求重新收录；如再次出现高频 429 可整体下架（nim_refresh.go 探测骨架仍保留）。
 	{ID: "free_nvidia_gpt_oss_120b", Vendor: "NVIDIA NIM", Name: "GPT-OSS 120B（英伟达·免费）", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "openai/gpt-oss-120b", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 120, Note: "NVIDIA 免费 serverless（注意限流）", ContextWindow: 131072, KeyURL: "https://build.nvidia.com/settings/api-keys"},
+	{ID: "free_nvidia_glm_5_2", Vendor: "NVIDIA NIM", Name: "GLM-5.2（英伟达·免费）", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "z-ai/glm-5.2", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NVIDIA 免费 serverless·响应偏慢（实测 2026-08-02）", Reasoning: true, KeyURL: "https://build.nvidia.com/settings/api-keys"},
 }
 
 func isFreeCatalogID(id string) bool {
@@ -312,11 +307,32 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 		}
 		freeChain = append(freeChain, b)
 	}
-	// Auto 智能路由顺序 = 免费模型池排序（设置面板「模型」页调整，
-	// 存 ~/rescene_data/free_model_order.json）。目录里没排到的条目
-	// （新加/未保存过）按目录声明顺序排在末尾，保持稳定。
+	// Auto 智能路由顺序 = 探活信号降序 → LRU 使用新鲜度 → 免费模型池排序
+	// （设置面板「模型」页调整，存 ~/rescene_data/free_model_order.json）。
+	// 目录里没排到的条目（新加/未保存过）按目录声明顺序排在末尾，保持稳定。
+	// 信号：探活 4/3/2/1/0（-1 未探测沉底）；LRU：最近真实成功用过的排前。
 	orderRank := freeOrderRank()
 	sort.SliceStable(freeChain, func(i, j int) bool {
+		si, sj := probeSignal(freeChain[i]), probeSignal(freeChain[j])
+		if si != sj {
+			if si == -1 {
+				return false
+			}
+			if sj == -1 {
+				return true
+			}
+			return si > sj
+		}
+		ui, uj := freeLastUsed(freeChain[i]), freeLastUsed(freeChain[j])
+		if !ui.IsZero() && !uj.IsZero() {
+			if !ui.Equal(uj) {
+				return ui.After(uj)
+			}
+		} else if !ui.IsZero() {
+			return true
+		} else if !uj.IsZero() {
+			return false
+		}
 		ri, iok := orderRank[freeChain[i].ID]
 		rj, jok := orderRank[freeChain[j].ID]
 		if iok && jok {

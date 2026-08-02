@@ -26,7 +26,7 @@ func main() {
 		Height:                   800,
 		MinWidth:                 1024,
 		MinHeight:                720,
-		WindowStartState:         options.Maximised,
+		WindowStartState:         options.Normal,
 		BackgroundColour:         &options.RGBA{R: 248, G: 247, B: 252, A: 255},
 		AssetServer:              &assetserver.Options{Assets: frontendAssets},
 		OnShutdown:               app.Shutdown,

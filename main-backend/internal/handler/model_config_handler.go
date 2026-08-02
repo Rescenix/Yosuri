@@ -106,6 +106,9 @@ type freeModelView struct {
 	FreeModelDef
 	APIKeySet bool `json:"api_key_set"` // 用户存过 Key 或服务端环境变量里有
 	IsDefault bool `json:"is_default"`
+	// Signal 是探活信号格（0-4，-1 = 尚未探测），前端每模型小卡片画信号条
+	// 直观显示 Auto 路由权重（见 free_probe.go）。
+	Signal int `json:"signal"`
 }
 
 // customModelView 与 freeModelView 保持前端需要的公共字段，让聊天下拉框可以把
@@ -289,6 +292,7 @@ func HandleGetModelConfig(c *gin.Context) {
 	freeModels := make([]freeModelView, 0, len(freeModelCatalog))
 	for _, f := range freeModelCatalog {
 		v := freeModelView{FreeModelDef: f}
+		v.Signal = probeSignalByDef(f)
 		if e, ok := entryByID[f.ID]; ok {
 			v.APIKeySet = e.APIKey != ""
 			v.IsDefault = e.IsDefault
@@ -299,9 +303,30 @@ func HandleGetModelConfig(c *gin.Context) {
 		freeModels = append(freeModels, v)
 	}
 	// 免费池显示顺序 = Auto 智能路由顺序（用户可在「编辑模型」弹窗调整）；
-	// 没保存过排序时保持目录声明顺序。
+	// 没保存过排序时保持目录声明顺序。信号格高的、最近成功用过的排前面。
 	orderRank := freeOrderRank()
 	sort.SliceStable(freeModels, func(i, j int) bool {
+		si, sj := freeModels[i].Signal, freeModels[j].Signal
+		if si != sj {
+			if si == -1 {
+				return false // 未探测的沉底（排在 0 信号后面）
+			}
+			if sj == -1 {
+				return true
+			}
+			return si > sj // 信号高的在前
+		}
+		// 同信号：最近成功用过的（LRU 新鲜）在前
+		ui, uj := freeLastUsedByDef(freeModels[i].FreeModelDef), freeLastUsedByDef(freeModels[j].FreeModelDef)
+		if !ui.IsZero() && !uj.IsZero() {
+			if !ui.Equal(uj) {
+				return ui.After(uj)
+			}
+		} else if !ui.IsZero() {
+			return true
+		} else if !uj.IsZero() {
+			return false
+		}
 		ri, iok := orderRank[freeModels[i].ID]
 		rj, jok := orderRank[freeModels[j].ID]
 		if iok && jok {
