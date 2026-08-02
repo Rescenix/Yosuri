@@ -6,6 +6,7 @@ $installerName = 'Rescene-windows-amd64-setup.exe'
 $installerPath = Join-Path $outputRoot $installerName
 $checksumPath = Join-Path $outputRoot 'SHA256SUMS.txt'
 $wailsConfigPath = Join-Path $backendDir 'wails.json'
+$installerSourceDir = Join-Path $backendDir 'build\windows\installer'
 $wailsCommand = Get-Command wails -ErrorAction SilentlyContinue
 $wailsPath = if ($wailsCommand) { $wailsCommand.Source } else { $null }
 if (-not $wailsPath) {
@@ -64,6 +65,21 @@ try {
 
     & $wailsPath build -clean -nsis -installscope user -webview2 embed -ldflags "-X backend/internal/handler.AppVersion=$appVersion"
     if ($LASTEXITCODE -ne 0) { throw "wails build 失败，退出码 $LASTEXITCODE" }
+
+    # Wails/Windows resources require a numeric file version. Recompile only the
+    # lightweight NSIS wrapper so its display metadata can retain the full SemVer.
+    Push-Location $installerSourceDir
+    try {
+        & $makensisCommand.Source `
+            '-DARG_WAILS_AMD64_BINARY=..\..\bin\rescene.exe' `
+            '-DWAILS_INSTALL_SCOPE=user' `
+            '-DREQUEST_EXECUTION_LEVEL=user' `
+            "-DINFO_DISPLAYVERSION=$appVersion" `
+            'project.nsi'
+        if ($LASTEXITCODE -ne 0) { throw "NSIS 重编译失败，退出码 $LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
 } finally {
     if ($null -ne $wailsConfigRaw) {
         [System.IO.File]::WriteAllText($wailsConfigPath, $wailsConfigRaw, $utf8NoBom)
