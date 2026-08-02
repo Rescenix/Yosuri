@@ -985,12 +985,13 @@
       />
       <ScheduledTaskModal v-if="showScheduledTask" @close="closeScheduledTask" @create="onCreateScheduledTask" />
       <ModelManagerModal
-        v-if="showModelManager"
-        :free-models="freeModelsFull"
-        :loading="false"
-        @close="showModelManager = false"
-        @add-provider="showModelManager = false; showSettings = true"
-      />
+              v-if="showModelManager"
+              :free-models="freeModelsFull"
+              :loading="false"
+              @close="showModelManager = false"
+              @add-provider="showModelManager = false; showSettings = true"
+              @delete-key="onDeleteModelKey"
+            />
       <div v-if="gitActionMessage" class="git-action-toast">{{ gitActionMessage }}</div>
 
       <!-- Git Commit 的毛玻璃浮层：居中悬浮，跟侧边栏抽屉一样挂在 chat-window 根下
@@ -2309,6 +2310,23 @@ const filteredGroupedOptions = computed(() => {
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
 // 图2「编辑模型」弹窗开关
 const showModelManager = ref(false)
+// 删除模型密钥
+async function onDeleteModelKey(modelId) {
+  try {
+    const res = await fetch('/api/models/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        configs: [{ id: modelId, api_key: '' }]
+      })
+    })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    // 重新加载模型列表
+    loadModelCapabilities()
+  } catch (e) {
+    console.warn('删除密钥失败', e)
+  }
+}
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)

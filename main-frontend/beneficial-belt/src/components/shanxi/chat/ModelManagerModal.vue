@@ -24,14 +24,15 @@
                 </label>
               </div>
               <div v-for="m in grp.items" :key="m.id" class="mm-model-row">
-                <span class="mm-model-name">{{ m.name }}</span>
-                <span v-if="m.keyless" class="mm-tag mm-tag-free">免 Key</span>
-                <span v-else-if="!m.api_key_set" class="mm-tag mm-tag-nkey">未配 Key</span>
-                <label class="mm-switch" @click.prevent="toggleHidden(m.id)">
-                  <input type="checkbox" :checked="!isHidden(m.id)" />
-                  <span class="mm-switch-track"></span>
-                </label>
-              </div>
+                              <span class="mm-model-name">{{ m.name }}</span>
+                              <span v-if="m.keyless" class="mm-tag mm-tag-free">免 Key</span>
+                              <span v-else-if="!m.api_key_set" class="mm-tag mm-tag-nkey">未配 Key</span>
+                              <button v-else class="mm-delkey" @click.stop="$emit('delete-key', m.id)" title="删除密钥">删除密钥</button>
+                              <label class="mm-switch" @click.prevent="toggleHidden(m.id)">
+                                <input type="checkbox" :checked="!isHidden(m.id)" />
+                                <span class="mm-switch-track"></span>
+                              </label>
+                            </div>
             </div>
           </template>
         </div>
@@ -52,7 +53,7 @@ const props = defineProps({
   freeModels: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false }
 })
-defineEmits(['close', 'add-provider'])
+defineEmits(['close', 'add-provider', 'delete-key'])
 
 const q = ref('')
 
@@ -134,11 +135,15 @@ function toggleVendor(grp) {
 }
 .mm-model-row:hover { background: var(--app-surface-3); }
 .mm-model-name { flex: 1; font-size: 13px; color: var(--app-text); }
-.mm-tag {
-  font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px; flex-shrink: 0;
-}
+.mm-tag { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px; flex-shrink: 0; }
 .mm-tag-free { color: var(--app-accent); background: var(--app-accent-soft); }
 .mm-tag-nkey { color: var(--app-text-faint); background: var(--app-surface-3); }
+.mm-delkey {
+  font-size: 10px; color: #e74c3c; background: none;
+  border: 1px solid #e74c3c; border-radius: 999px; padding: 1px 8px;
+  cursor: pointer; flex-shrink: 0;
+}
+.mm-delkey:hover { background: #e74c3c; color: #fff; }
 .mm-switch { position: relative; display: inline-flex; cursor: pointer; flex-shrink: 0; }
 .mm-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 .mm-switch-track {
