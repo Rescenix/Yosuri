@@ -1,13 +1,16 @@
 package handler
 
-// shared_pool.go —— Rescene 共享池（2026-08-02）。
+// shared_pool.go —— Rescene 共享池代理（2026-08-02）。
 //
-// 把用户的共享 Key 放在 ResceneCloud 云端，用户注册后即可免费试用，
+// 把用户的共享 Key 放在 ResceneCloud 云端，用户注册后即可公益免费使用，
 // 无需自己填 Key。限流在云端执行，开源 re0 无法绕过。
 //
-// 两个端点：
-//   GET  /api/models/shared-pool       → 返回云端共享池可用模型列表
-//   POST /api/chat/shared-pool          → 代理聊天请求到云端（流式 SSE）
+// 公益免费模型走本地 Agent 网关（完整工作流），路由前先检查云端配额。
+//
+// 端点：
+//   GET  /api/models/shared-pool   → 返回云端共享池可用模型列表
+//   POST /api/chat/shared-pool     → 代理聊天请求到云端（轻量聊天，备用）
+//   GET  /api/shared-pool/quota    → 代理配额查询到云端（本地网关路由前检查）
 //
 // 共享池模式切换：
 //   前端发起聊天时，如果用户选了「免费模式」，走 /api/chat/shared-pool；
@@ -157,4 +160,29 @@ func HandleSharedPoolChat(c *gin.Context) {
 		}
 		c.Data(resp.StatusCode, ct, body)
 	}
+}
+
+// HandleSharedPoolQuotaProxy GET /api/shared-pool/quota
+// 代理配额查询到 ResceneCloud，本地网关路由前检查公益免费模型配额。
+func HandleSharedPoolQuotaProxy(c *gin.Context) {
+	cloudURL := os.Getenv("RESCENE_CLOUD_URL")
+	if cloudURL == "" {
+		cloudURL = "https://rescenecloud.onrender.com"
+	}
+	cloudURL = strings.TrimRight(cloudURL, "/")
+
+	req, _ := http.NewRequest("GET", cloudURL+"/api/shared-pool/quota", nil)
+	if auth := c.GetHeader("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "连接共享池配额服务失败: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
 }

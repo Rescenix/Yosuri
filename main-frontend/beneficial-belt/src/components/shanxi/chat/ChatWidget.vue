@@ -2881,111 +2881,45 @@ function handleSend() {
   clearAttachments()
   userInput.value = ''
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-  // 共享池模型走简单聊天（无 agent 工作流）
-  if (sharedPoolModelIds.value.has(selectedModel.value)) {
-    sendSharedPoolChat(combined, displayText, displayAttachments)
-    return
-  }
+  // 公益免费模型：先查配额，通过后走本地完整 Agent 工作流
+    if (sharedPoolModelIds.value.has(selectedModel.value)) {
+      checkSharedPoolQuota().then(ok => {
+        if (ok) {
+          startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
+        } else {
+          // 配额已用完，显示提示
+          const flow = {
+            id: `sp_quota_${Date.now()}`,
+            kind: 'agentflow',
+            sender: 'bot',
+            status: 'failed',
+            task: combined,
+            blocks: [{ type: 'text', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' }],
+            startTime: Date.now(), endTime: Date.now(),
+            modelInfo: null, timestamp: new Date()
+          }
+          messages.value.push(flow)
+          onStreamUpdate?.()
+        }
+      })
+      return
+    }
   // opts.model = 下拉框当前选中的模型（响应式 ref，watch 保证非空）
     startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
   }
 
-  // 共享池模型：简单聊天（无 agent 工作流，POST 流式直接返回）
-  function sendSharedPoolChat(combined, displayText, displayAttachments) {
-    const userMsg = {
-      id: `sp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      sender: 'user',
-      content: displayText,
-      attachments: displayAttachments || [],
-      timestamp: new Date()
+  // 公益免费配额检查
+    async function checkSharedPoolQuota() {
+      try {
+        const res = await fetch('/api/shared-pool/quota')
+        if (!res.ok) return false
+        const data = await res.json()
+        return (data.quota?.remaining || 0) > 0
+      } catch {
+        return false
+      }
     }
-    messages.value.push(userMsg)
-    onStreamUpdate?.()
-
-    const flow = {
-      id: `sp_flow_${Date.now()}`,
-      kind: 'agentflow',
-      sender: 'bot',
-      status: 'running',
-      task: combined,
-      blocks: [],
-      startTime: Date.now(),
-      endTime: null,
-      inputTokens: 0,
-      outputTokens: 0,
-      modelInfo: null,
-      timestamp: new Date()
-    }
-    messages.value.push(flow)
-    onStreamUpdate?.()
-
-    const model = selectedModel.value
-
-    fetch('/api/chat/shared-pool', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: combined }],
-        stream: true
-      })
-    }).then(async res => {
-      if (res.status === 429) {
-        const err = await res.json()
-        flow.status = 'failed'
-        flow.blocks.push({
-          type: 'text',
-          text: `😅 公益免费额度已用完（今日 ${err.quota?.used || '?'}/${err.quota?.limit || '?'} 次）\n\n填自己的 Key 继续使用，无限制～`
-        })
-        flow.endTime = Date.now()
-        onStreamUpdate?.()
-        return
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: '请求失败' }))
-        flow.status = 'failed'
-        flow.blocks.push({ type: 'text', text: `共享池错误：${err.error || '未知错误'}` })
-        flow.endTime = Date.now()
-        onStreamUpdate?.()
-        return
-      }
-      // 流式读取 SSE
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6)
-          if (data === '[DONE]') { flow.status = 'completed'; break }
-          try {
-            const parsed = JSON.parse(data)
-            const content = parsed.choices?.[0]?.delta?.content || ''
-            if (content) {
-              const last = flow.blocks[flow.blocks.length - 1]
-              if (last?.type === 'text') last.text += content
-              else flow.blocks.push({ type: 'text', text: content })
-              onStreamUpdate?.()
-            }
-          } catch {}
-        }
-      }
-      flow.status = 'completed'
-      flow.endTime = Date.now()
-      onStreamUpdate?.()
-    }).catch(err => {
-      flow.status = 'failed'
-      flow.blocks.push({ type: 'text', text: `网络错误：${err.message}` })
-      flow.endTime = Date.now()
-      onStreamUpdate?.()
-    })
   }
-// Token 环状进度条
 const showTokenPanel = ref(false)
 function formatTok(n) {
   n = n || 0

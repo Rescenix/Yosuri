@@ -233,9 +233,11 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 		r.POST("/v1/chat/completions", HandleAggregateChat)
 		r.GET("/v1/models", HandleAggregateModels)
 
-		// 共享池（免费试用）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
-		r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)
-		r.POST("/api/chat/shared-pool", HandleSharedPoolChat)
+		// 共享池（公益免费）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
+			r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)
+			r.POST("/api/chat/shared-pool", HandleSharedPoolChat)
+			// 配额查询：本地网关路由前检查公益免费模型配额
+			r.GET("/api/shared-pool/quota", HandleSharedPoolQuotaProxy)
 
 	r.Static("/images", "./public/images")
 }
