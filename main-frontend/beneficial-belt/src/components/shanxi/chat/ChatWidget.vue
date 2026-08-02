@@ -2914,7 +2914,9 @@ function handleSend() {
   // 公益免费配额检查
   async function checkSharedPoolQuota() {
     try {
-      const res = await fetch('/api/shared-pool/quota')
+      const res = await fetch('/api/shared-pool/quota', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      })
       if (!res.ok) return false
       const data = await res.json()
       return (data.quota?.remaining || 0) > 0
@@ -2951,8 +2953,8 @@ function handleSend() {
     onStreamUpdate?.()
 
     fetch('/api/chat/shared-pool', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       body: JSON.stringify({
         model: selectedModel.value,
         messages: [{ role: 'user', content: combined }],
