@@ -19,6 +19,10 @@
   🔒 本地优先 · 可选云端账号同步 · 💰 永久免费 · 🪶 轻量 Agent（安装包约 20M，不内置浏览器） · 📦 安装即用 · 🪟 Windows 10+
 </p>
 
+<p align="center">
+  <img src="./assets/rescene-agent-workflow.png" alt="Rescene Agent 工作台与实时任务清单" width="100%">
+</p>
+
 ---
 
 ## ⚡ 核心能力
