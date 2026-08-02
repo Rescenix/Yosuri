@@ -832,7 +832,7 @@
                           class="model-menu-item"
                           :class="{ active: selectedModel === m.value }"
                           @click="selectModel(m.value)"
-                        ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">免费试用</span></div>
+                        ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">公益免费</span></div>
                       </template>
                     </div>
                   </div>
@@ -2935,7 +2935,7 @@ function handleSend() {
         flow.status = 'failed'
         flow.blocks.push({
           type: 'text',
-          text: `😅 免费试用额度已用完（今日 ${err.quota?.used || '?'}/${err.quota?.limit || '?'} 次）\n\n填自己的 Key 继续使用，无限制～`
+          text: `😅 公益免费额度已用完（今日 ${err.quota?.used || '?'}/${err.quota?.limit || '?'} 次）\n\n填自己的 Key 继续使用，无限制～`
         })
         flow.endTime = Date.now()
         onStreamUpdate?.()
