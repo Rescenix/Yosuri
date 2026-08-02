@@ -1029,7 +1029,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onUnmounted, reactive } from 'vue'
 import { Icon } from '@iconify/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
@@ -2938,7 +2938,9 @@ function handleSend() {
     messages.value.push(userMsg)
     onStreamUpdate?.()
 
-    const flow = {
+    // reactive：push 进 messages 后继续改 flow.blocks/status 必须触发响应式渲染
+    // （普通对象 push 后被 Vue 代理，改原始对象不触发更新 → 回复延迟到发下一条才显示）
+    const flow = reactive({
       id: `sp_flow_${Date.now()}`,
       kind: 'agentflow',
       sender: 'bot',
@@ -2949,7 +2951,7 @@ function handleSend() {
       endTime: null,
       modelInfo: null,
       timestamp: new Date()
-    }
+    })
     messages.value.push(flow)
     onStreamUpdate?.()
 
