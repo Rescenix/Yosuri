@@ -2881,19 +2881,29 @@ function handleSend() {
   clearAttachments()
   userInput.value = ''
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-  // 公益免费模型：先查配额，通过后走本地完整 Agent 工作流
+  // 公益免费模型：先查配额，通过后代理到 ResceneCloud（云端有 Key）
     if (sharedPoolModelIds.value.has(selectedModel.value)) {
       checkSharedPoolQuota().then(ok => {
         if (ok) {
-          startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
+          sendSharedPoolChat(combined, displayText, displayAttachments)
         } else {
-          // 配额检查失败（网络错误/端点不存在）：不阻断，直接走本地工作流
-          // 服务端会返回 429 或错误，前端正常显示
-          startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
+          // 配额已用完，显示提示
+          const flow = {
+            id: `sp_quota_${Date.now()}`,
+            kind: 'agentflow',
+            sender: 'bot',
+            status: 'failed',
+            task: combined,
+            blocks: [{ type: 'text', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' }],
+            startTime: Date.now(), endTime: Date.now(),
+            modelInfo: null, timestamp: new Date()
+          }
+          messages.value.push(flow)
+          onStreamUpdate?.()
         }
       }).catch(() => {
-        // 配额检查异常：同样不阻断，直接发送
-        startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
+        // 配额检查异常：不阻断，直接代理到云端
+        sendSharedPoolChat(combined, displayText, displayAttachments)
       })
       return
     }
@@ -2902,16 +2912,109 @@ function handleSend() {
   }
 
   // 公益免费配额检查
-    async function checkSharedPoolQuota() {
-      try {
-        const res = await fetch('/api/shared-pool/quota')
-        if (!res.ok) return false
-        const data = await res.json()
-        return (data.quota?.remaining || 0) > 0
-      } catch {
-        return false
-      }
+  async function checkSharedPoolQuota() {
+    try {
+      const res = await fetch('/api/shared-pool/quota')
+      if (!res.ok) return false
+      const data = await res.json()
+      return (data.quota?.remaining || 0) > 0
+    } catch {
+      return false
     }
+  }
+
+  // 公益免费聊天：代理到 ResceneCloud（云端有共享 Key）
+  function sendSharedPoolChat(combined, displayText, displayAttachments) {
+    const userMsg = {
+      id: `sp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      sender: 'user',
+      content: displayText,
+      attachments: displayAttachments || [],
+      timestamp: new Date()
+    }
+    messages.value.push(userMsg)
+    onStreamUpdate?.()
+
+    const flow = {
+      id: `sp_flow_${Date.now()}`,
+      kind: 'agentflow',
+      sender: 'bot',
+      status: 'running',
+      task: combined,
+      blocks: [],
+      startTime: Date.now(),
+      endTime: null,
+      modelInfo: null,
+      timestamp: new Date()
+    }
+    messages.value.push(flow)
+    onStreamUpdate?.()
+
+    fetch('/api/chat/shared-pool', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: selectedModel.value,
+        messages: [{ role: 'user', content: combined }],
+        stream: true
+      })
+    }).then(async res => {
+      if (res.status === 429) {
+        const err = await res.json()
+        flow.status = 'failed'
+        flow.blocks.push({
+          type: 'text',
+          text: `😅 公益免费额度已用完（今日 ${err.quota?.used || '?'}/${err.quota?.limit || '?'} 次）\n\n填自己的 Key 继续使用，无限制～`
+        })
+        flow.endTime = Date.now()
+        onStreamUpdate?.()
+        return
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: '请求失败' }))
+        flow.status = 'failed'
+        flow.blocks.push({ type: 'text', text: `共享池错误：${err.error || '未知错误'}` })
+        flow.endTime = Date.now()
+        onStreamUpdate?.()
+        return
+      }
+      // 流式读取 SSE
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6)
+          if (data === '[DONE]') { flow.status = 'completed'; break }
+          try {
+            const parsed = JSON.parse(data)
+            const content = parsed.choices?.[0]?.delta?.content || ''
+            if (content) {
+              const last = flow.blocks[flow.blocks.length - 1]
+              if (last?.type === 'text') last.text += content
+              else flow.blocks.push({ type: 'text', text: content })
+              onStreamUpdate?.()
+            }
+          } catch {}
+        }
+      }
+      flow.status = 'completed'
+      flow.endTime = Date.now()
+      onStreamUpdate?.()
+    }).catch(err => {
+      flow.status = 'failed'
+      flow.blocks.push({ type: 'text', text: `网络错误：${err.message}` })
+      flow.endTime = Date.now()
+      onStreamUpdate?.()
+    })
+  }
+
   const showTokenPanel = ref(false)
 function formatTok(n) {
   n = n || 0
