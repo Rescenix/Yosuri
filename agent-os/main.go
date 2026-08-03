@@ -22,6 +22,12 @@ func main() {
 			}
 			oneShot(cmd)
 			return
+		case "marathon", "m", "run24":
+			runMarathon(os.Args[2:])
+			return
+		case "report", "rep":
+			showReport(os.Args[2:])
+			return
 		case "update", "upgrade", "self-update":
 			doUpdate()
 			return
@@ -45,7 +51,7 @@ func main() {
 	go func() {
 		<-sigCh
 		fmt.Println("\n\n👋 再见～")
-		os.Exit(0)
+		gracefulExit()
 	}()
 
 	// 启动 REPL
@@ -101,9 +107,21 @@ func printHelp() {
 用法:
   rescene              启动交互式 Shell
   rescene exec "..."   单条指令执行
+  rescene marathon     24H 自迭代马拉松（热点立项 → 需求→计划→自检闭环）
+  rescene report       查看马拉松战报（--dir 指定目录）
   rescene update       检查并更新到最新版
   rescene version      显示版本
   rescene help         显示帮助
+
+marathon 参数:
+  --task "..."     用户自编排项目（跳过热点选题）
+  --hours N        运行时长（默认 24）
+  --interval S     每轮间隔秒（默认 60）
+  --rounds N       固定轮数（优先于 --hours，测试用）
+  --model <id>     固定模型（默认自动轮换）
+  --hot hn|github  热点源（默认 hn）
+  --iters N        每项目迭代轮数（默认 6）
+  --quick          快速自测模式
 
 一行安装:
   PowerShell: irm https://git.io/rescene | iex

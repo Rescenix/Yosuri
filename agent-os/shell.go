@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -308,6 +309,7 @@ func (s *Shell) handleCommand(cmd string) {
   /refresh        重新加载模型列表
   /history        显示命令历史
   /env            显示模型相关环境变量
+  /report         查看马拉松战报（--dir 指定目录，默认 marathon/）
 
 用法:
   直接输入任何文字，Agent 会自动处理。
@@ -388,6 +390,16 @@ Agent OS v0.1.0
 		}
 		for i, h := range s.history {
 			fmt.Printf("%3d  %s\n", i+1, h)
+		}
+
+	case "report", "rep":
+		outDir := "marathon"
+		if len(parts) > 1 && parts[1] == "--dir" && len(parts) > 2 {
+			outDir = parts[2]
+		}
+		if !printReport(outDir) {
+			fmt.Printf("❌ 找不到战报: %s（先运行 /marathon 或 rescene marathon）\n",
+				filepath.Join(outDir, "report.md"))
 		}
 
 	case "env":

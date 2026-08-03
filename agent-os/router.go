@@ -157,6 +157,66 @@ type ChatResponse struct {
 	} `json:"choices"`
 }
 
+// callModel 单模型调用（不处理熔断，由调用方决定策略）
+func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(string)) (string, error) {
+	key := ""
+	if !m.Keyless {
+		key = os.Getenv(m.KeyEnv)
+	}
+
+	body := map[string]any{
+		"model":       m.Model,
+		"messages":    req.Messages,
+		"stream":      req.Stream,
+		"max_tokens":  req.MaxTokens,
+		"temperature": req.Temperature,
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	url := strings.TrimRight(m.Endpoint, "/")
+	if !strings.HasSuffix(url, "/chat/completions") {
+		url += "/chat/completions"
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+key)
+	}
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("[%s] %v", m.Name, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("[%s] HTTP %d: %s", m.Name, resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+
+	if req.Stream {
+		return readStream(resp.Body, onChunk)
+	}
+
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return "", fmt.Errorf("[%s] 解析响应失败: %v", m.Name, err)
+	}
+	if len(chatResp.Choices) > 0 {
+		return chatResp.Choices[0].Message.Content, nil
+	}
+	return "", fmt.Errorf("[%s] 空响应", m.Name)
+}
+
 // Complete 发送聊天请求到模型，自动 failover
 func Complete(ctx context.Context, req ChatRequest, onChunk func(string)) (string, error) {
 	if ctx == nil {
@@ -184,86 +244,57 @@ func Complete(ctx context.Context, req ChatRequest, onChunk func(string)) (strin
 		if circuitIsOpen(m) {
 			continue
 		}
-
-		key := ""
-		if !m.Keyless {
-			key = os.Getenv(m.KeyEnv)
-		}
-
-		// 复制请求，设置当前模型
-		body := map[string]any{
-			"model":       m.Model,
-			"messages":    req.Messages,
-			"stream":      req.Stream,
-			"max_tokens":  req.MaxTokens,
-			"temperature": req.Temperature,
-		}
-
-		jsonBody, err := json.Marshal(body)
+		content, err := callModel(ctx, m, req, onChunk)
 		if err != nil {
+			circuitFail(m)
 			lastErr = err
 			continue
 		}
-
-		url := strings.TrimRight(m.Endpoint, "/")
-		if !strings.HasSuffix(url, "/chat/completions") {
-			url += "/chat/completions"
-		}
-
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonBody))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		if key != "" {
-			httpReq.Header.Set("Authorization", "Bearer "+key)
-		}
-
-		client := &http.Client{Timeout: 60 * time.Second}
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			circuitFail(m)
-			lastErr = fmt.Errorf("[%s] %v", m.Name, err)
-			continue
-		}
-
-		if resp.StatusCode != 200 {
-			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-			resp.Body.Close()
-			circuitFail(m)
-			lastErr = fmt.Errorf("[%s] HTTP %d: %s", m.Name, resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
-			continue
-		}
-
-		// 成功
 		circuitSuccess(m)
-
-		if req.Stream {
-			// 流式读取
-			content, err := readStream(resp.Body, onChunk)
-			resp.Body.Close()
-			return content, err
-		}
-
-		// 非流式
-		var chatResp ChatResponse
-		if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-			resp.Body.Close()
-			circuitFail(m)
-			lastErr = fmt.Errorf("[%s] 解析响应失败: %v", m.Name, err)
-			continue
-		}
-		resp.Body.Close()
-
-		if len(chatResp.Choices) > 0 {
-			return chatResp.Choices[0].Message.Content, nil
-		}
-		lastErr = fmt.Errorf("[%s] 空响应", m.Name)
-		continue
+		return content, nil
 	}
 
 	return "", fmt.Errorf("所有模型均失败: %v", lastErr)
+}
+
+// CompleteWithModel 指定模型调用（不做 failover，供 marathon 轮询全网免费模型）
+func CompleteWithModel(ctx context.Context, modelID string, req ChatRequest, onChunk func(string)) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if req.Temperature == 0 {
+		req.Temperature = 0.2
+	}
+	if req.MaxTokens == 0 {
+		req.MaxTokens = 4096
+	}
+
+	wmMu.RLock()
+	models := make([]FreeModel, len(workingModels))
+	copy(models, workingModels)
+	wmMu.RUnlock()
+
+	var target *FreeModel
+	for i := range models {
+		if models[i].ID == modelID {
+			target = &models[i]
+			break
+		}
+	}
+	if target == nil {
+		return "", fmt.Errorf("模型不可用或未配置 key: %s", modelID)
+	}
+	if circuitIsOpen(*target) {
+		return "", fmt.Errorf("模型熔断中: %s", modelID)
+	}
+
+	content, err := callModel(ctx, *target, req, onChunk)
+	if err != nil {
+		circuitFail(*target)
+		return "", err
+	}
+	circuitSuccess(*target)
+	return content, nil
 }
 
 // readStream 读取 SSE 流

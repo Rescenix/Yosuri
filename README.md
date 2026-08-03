@@ -12,7 +12,7 @@ powershell -c "irm https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/
 curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os/install.sh | sh
 ```
 
-> 专攻**前端设计**、**浏览器自动化**、**Computer Use** 的二次元 Agent。
+> 24H 自迭代 Agent OS —— 聚合全网免费模型，需求→计划→自检闭环自主立项，热点驱动持续进化。
 > 免费模型智能路由：7 家免费提供方、30 分钟探活、熔断自愈——永不缺模型，永不浪费钱。
 
 付费 Agent 太贵，免费的总在限流？那就自己写一个——顺便把免费模型做成一套带智能路由的聚合 API。
@@ -39,7 +39,8 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 
 | 能力 | 说明 |
 | --- | --- |
-| **🎨 专攻前端设计** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），按任务类型自动匹配风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风。Agent 写完直接真实渲染给你看 |
+| **🏃 24H 自迭代马拉松** | `rescene marathon` 一条命令启动：自动抓取前沿热点（Hacker News / GitHub）→ 模型自主选题立项 → **需求→计划→自检**闭环迭代，执行一轮自检一轮，越做越完善；全程日志 + 战报 report.md，Ctrl+C 也优雅收尾 |
+| **🎨 前端设计** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），按任务类型自动匹配风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风。Agent 写完直接真实渲染给你看 |
 | **🌐 真实浏览器自动化** | 复用系统 Edge 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
 | **🖱️ Computer Use** | 不止会改代码——能操作桌面：截图、移动鼠标、点击、键入、拖拽、滚动，接管整台机器干活 |
 | **🔋 免费模型智能池** | 聚合 7 家免费提供方 18 个模型条目（SenseNova / ModelScope / NVIDIA / StepFun / Zen / Ollama Cloud…），30 分钟探活出信号、每日列表重探防下架、熔断自动跳过限流源、LRU 权重优先最近可用的——免费池永远是真能跑的，跑不了的自动退役 |
@@ -52,6 +53,55 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 | **💻 集成工作台** | 聊天界面内嵌 Monaco 编辑器、递归文件树、终端、流式 Diff、浏览器预览面板 |
 | **🔌 零依赖 MCP 扩展** | 纯 Go 实现的 MCP 客户端，跑远程 MCP 服务不需要在本地装 Node / Python / npx |
 | **🛡️ AgentFS 变更审计** | 快照 / Diff / 回滚管理 AI 文件修改，危险操作必须经用户批准 |
+
+---
+
+## 🏃 24H 自迭代马拉松 —— 让 Agent 自己跑出一个帝国
+
+Rescene Agent OS 不只是「你问它答」——它可以在无人值守时**自己决定做什么，并越做越好**。
+
+```bash
+# 一条命令：24 小时自主运行（默认抓 Hacker News 热点自动选题立项）
+rescene marathon
+
+# 用户自编排：指定项目方向，跳过热点选题
+rescene marathon --task "开发一个 markdown 博客引擎，支持主题定制"
+
+# 自定义时长 / 节奏 / 模型
+rescene marathon --hours 48 --interval 30 --model free_zen_deepseek_v4_flash
+
+# 热点源切换：GitHub 热门仓库 / 关闭热点用内置话题
+rescene marathon --hot github
+```
+
+### 核心循环：需求 → 计划 → 自检
+
+每个项目都经历完整的 Rescene 方法论闭环：
+
+| 阶段 | 干什么 |
+| --- | --- |
+| **🔥 热点立项** | 自动抓取 Hacker News / GitHub 前沿话题，模型选题并产出【需求 + 计划】（目标、用户、验收标准、实现步骤） |
+| **💻 执行** | 基于立项上下文写出真实可用的代码 / 脚本 / 文档，优先最小可用版本 |
+| **✅ 自检** | 质量官模式对照需求严格审查最近产出，列出问题 + 下轮改进项 |
+| **♻️ 迭代** | 自检结论喂回下一轮执行——每轮都比上一轮更完善 |
+
+### 产出归档
+
+```
+marathon/
+├── marathon.log          # 全程日志（每轮模型、耗时、成败）
+├── report.md             # 战报：总轮数 / 成功率 / 各模型表现 / 项目清单
+└── projects/
+    └── 001-项目名/
+        ├── 00-需求计划.md
+        ├── 01-执行-001.md
+        ├── 01-自检-001.md
+        └── ...
+```
+
+- **模型轮换**：全网免费模型自动轮询，429 限流自动熔断退避，一个挂了秒切下一个
+- **Ctrl+C 优雅收尾**：随时中断都会先生成战报再退出，进度不丢
+- **免费 = 无限算力**：24 小时跑完的每一轮都是真金白银的免费模型在工作
 
 ---
 
