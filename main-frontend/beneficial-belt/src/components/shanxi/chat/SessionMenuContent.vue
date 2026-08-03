@@ -50,7 +50,11 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
+                          <RunningRing
+                            v-if="s.id === runningSession"
+                            class="smc-running-ring"
+                          />
+                          <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
               <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
@@ -102,7 +106,11 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
+                          <RunningRing
+                            v-if="s.id === runningSession"
+                            class="smc-running-ring"
+                          />
+                          <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
               <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
@@ -142,7 +150,11 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-              <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
+                          <RunningRing
+                            v-if="s.id === runningSession"
+                            class="smc-running-ring"
+                          />
+                          <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
               <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
@@ -264,6 +276,7 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import RunningRing from './RunningRing.vue'
 import { useAuth } from '../../../composables/useAuth.js'
 
 const auth = useAuth()
@@ -773,16 +786,30 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   transition: background 0.15s ease;
 }
 .smc-session-row:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 95%); }
+/* 运行中/选中态会话行：统一白框。选中即白底细描边;运行中白底 + 主题色电流弧沿边框转。
+   用 box-shadow 内描边做框（不撑布局）;电流弧 conic + mask 镂空只留 2px 外环,
+   弧绕过时中央全透明,背景始终是白。 */
 .smc-session-row.active {
-  background: color-mix(in srgb, var(--app-text, #202124), transparent 92%);
+  background: #fff;
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-text), transparent 88%);
 }
+/* 运行中会话行：直角白框（去圆角，避免 SVG 电流在转角描边扭曲）。电流由 RunningRing(SVG 描边) 叠加。 */
 .smc-session-row.running {
-  background: color-mix(in srgb, var(--app-accent), transparent 94%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 50%);
+  background: #fff;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 70%);
+}
+/* RunningRing 覆盖层：定位整行，SVG 电流弧沿边框绕 */
+.smc-running-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
-/* 运行指示灯：灰色空闲 → running(accent脉冲) / completed(绿) / question(橙) */
+/* 运行指示灯：灰色空闲 → running(accent 电流行) / completed(绿) / question(橙) */
 .smc-session-dot {
   flex-shrink: 0;
   width: 7px;
@@ -791,9 +818,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: #c4c4c4;
   transition: background 0.2s ease;
 }
+/* 运行圆点：收敛的 accent 实心点 + 轻光晕。动态感交给整行电流环，这里不叠公转。 */
 .smc-session-dot.running {
   background: var(--app-accent);
-  animation: smc-dot-pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--app-accent), transparent 35%);
 }
 .smc-session-dot.completed {
   background: #22c55e;
@@ -802,10 +830,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-session-dot.question {
   background: #f59e0b;
   box-shadow: 0 0 0 0 #f59e0b;
-}
-@keyframes smc-dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent), transparent 45%); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent), transparent 100%); }
 }
 
 .smc-session-name {
