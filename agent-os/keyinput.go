@@ -1,6 +1,6 @@
 package main
 
-// keyinput.go — 交互式逐键输入：Tab 补全 + 方向键历史 + 中文输入
+// keyinput.go — 交互式逐键输入：实时补全 + ↑↓选择 + Tab 补全 + 历史 + 中文
 // raw mode 由 rawmode_windows.go / rawmode_unix.go 提供
 
 import (
@@ -37,7 +37,10 @@ var slashCommands = []string{
 	"marathon", "exec", "update", "version",
 }
 
-// readLine 读取一行输入（支持补全/历史/中文）；非终端时回退 bufio 整行读
+// 候选列表最多显示行数
+const maxCandidates = 9
+
+// readLine 读取一行输入（实时补全/选择/历史/中文）；非终端时回退 bufio 整行读
 func (s *Shell) readLine() (string, error) {
 	if !isTerminal() {
 		if !s.scanner.Scan() {
@@ -52,11 +55,44 @@ func (s *Shell) readLine() (string, error) {
 	var buf []rune
 	histIdx := len(s.history)
 	prompt := s.promptStr()
+	matches := []string(nil)
+	selIdx := -1
 
+	// 根据当前输入刷新候选列表（仅 / 命令前缀）
+	refreshCandidates := func() {
+		matches = s.matchCommands(string(buf))
+		if len(matches) > 0 {
+			selIdx = 0
+		} else {
+			selIdx = -1
+		}
+	}
+
+	// 全量重绘：输入行 + 候选列表（光标回到输入行行首）
 	redraw := func() {
-		fmt.Print("\r\x1b[K") // 回车 + 清行
-		fmt.Print(prompt)
-		fmt.Print(string(buf))
+		fmt.Print("\r\x1b[K")
+		fmt.Print(prompt + string(buf))
+		if len(matches) > 0 {
+			n := len(matches)
+			rows := n
+			if n > maxCandidates {
+				n = maxCandidates
+				rows = maxCandidates + 1
+			}
+			for i := 0; i < n; i++ {
+				fmt.Print("\n")
+				if i == selIdx {
+					fmt.Print(ColorCyan + "▸ " + matches[i] + ColorReset)
+				} else {
+					fmt.Print("  " + matches[i])
+				}
+			}
+			if len(matches) > maxCandidates {
+				fmt.Print("\n  …")
+			}
+			fmt.Printf("\x1b[%dA\r", rows) // 光标上移回输入行
+			fmt.Print("\x1b[J")            // 清掉输入行以下的残留
+		}
 	}
 
 	redraw()
@@ -68,49 +104,71 @@ func (s *Shell) readLine() (string, error) {
 
 		switch kind {
 		case keyEnter:
+			// 有选中候选且输入是未完成的 / 命令 → 用选中项确认执行
+			if selIdx >= 0 && strings.HasPrefix(string(buf), "/") {
+				buf = []rune("/" + matches[selIdx])
+			}
 			fmt.Println()
 			return string(buf), nil
 
 		case keyTab:
-			line := string(buf)
-			completed, matches := s.complete(line)
-			if completed != line {
-				buf = []rune(completed)
-				redraw()
-			} else if len(matches) > 0 {
-				fmt.Println()
-				fmt.Println(ColorYellow + "  " + strings.Join(matches, "   ") + ColorReset)
+			// Tab：补全当前选中（或唯一）候选
+			if selIdx >= 0 {
+				buf = []rune("/" + matches[selIdx])
+				refreshCandidates() // 完整命令不再有候选 → 关闭列表
 				redraw()
 			}
 
 		case keyBackspace:
 			if len(buf) > 0 {
 				buf = buf[:len(buf)-1]
+				refreshCandidates()
 				redraw()
 			}
 
 		case keyUp:
-			if histIdx > 0 {
+			if selIdx >= 0 {
+				if selIdx > 0 {
+					selIdx--
+					redraw()
+				}
+			} else if histIdx > 0 {
 				histIdx--
 				buf = []rune(s.history[histIdx])
+				refreshCandidates()
 				redraw()
 			}
 
 		case keyDown:
-			if histIdx < len(s.history) {
+			if selIdx >= 0 {
+				if selIdx < len(matches)-1 {
+					selIdx++
+					redraw()
+				}
+			} else if histIdx < len(s.history) {
 				histIdx++
 				if histIdx == len(s.history) {
 					buf = nil
 				} else {
 					buf = []rune(s.history[histIdx])
 				}
+				refreshCandidates()
 				redraw()
 			}
 
-		case keyLeft, keyRight, keyEsc:
-			// 暂不处理光标移动，忽略
+		case keyLeft, keyRight:
+			// 暂不处理光标移动
+
+		case keyEsc:
+			// 关闭候选列表
+			if selIdx >= 0 {
+				matches = nil
+				selIdx = -1
+				redraw()
+			}
 
 		case keyCtrlC:
+			restore() // 先恢复终端再退出，避免卡死
 			fmt.Println("^C")
 			gracefulExit()
 
@@ -120,29 +178,37 @@ func (s *Shell) readLine() (string, error) {
 
 		case keyRune:
 			buf = append(buf, r)
+			refreshCandidates()
 			redraw()
 		}
 	}
 }
 
-// complete 返回补全结果：唯一匹配直接补全；多匹配返回候选列表
-func (s *Shell) complete(line string) (string, []string) {
+// matchCommands 返回当前行匹配的 / 命令候选（按字母序，不含 / 前缀）
+// 输入 "/" 时返回全部命令；已完整输入的命令不再作为候选
+func (s *Shell) matchCommands(line string) []string {
 	if !strings.HasPrefix(line, "/") {
-		return line, nil
+		return nil
 	}
 	prefix := strings.TrimPrefix(line, "/")
-	var matches []string
+	var ms []string
 	for _, c := range slashCommands {
 		if strings.HasPrefix(c, prefix) && c != prefix {
-			matches = append(matches, c)
+			ms = append(ms, c)
 		}
 	}
-	if len(matches) == 1 {
-		return "/" + matches[0], nil
+	sort.Strings(ms)
+	return ms
+}
+
+// complete 返回补全结果：唯一匹配直接补全；多匹配返回候选列表
+func (s *Shell) complete(line string) (string, []string) {
+	ms := s.matchCommands(line)
+	if len(ms) == 1 {
+		return "/" + ms[0], nil
 	}
-	if len(matches) > 1 {
-		sort.Strings(matches)
-		return line, matches
+	if len(ms) > 1 {
+		return line, ms
 	}
 	return line, nil
 }

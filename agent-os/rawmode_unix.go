@@ -26,7 +26,7 @@ func enableRawMode() func() {
 		uintptr(unsafe.Pointer(&old)), 0, 0, 0)
 
 	raw := old
-	raw.Lflag &^= syscall.ICANON | syscall.ECHO
+	raw.Lflag &^= syscall.ICANON | syscall.ECHO | syscall.ISIG
 	raw.Iflag &^= syscall.ICRNL | syscall.IXON
 	raw.Cc[syscall.VMIN] = 1
 	raw.Cc[syscall.VTIME] = 0
