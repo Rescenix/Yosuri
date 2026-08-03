@@ -261,14 +261,22 @@ func readKey() (keyKind, rune, error) {
 	return keyRune, rune(b), nil
 }
 
-// readEscapeSeq 解析 ESC [...] 方向键序列
+// readEscapeSeq 解析 ESC 序列：方向键 ESC[A-D；独立 Esc 直接返回
 func readEscapeSeq() (keyKind, rune, error) {
-	// 立即读第二个字节判断是否为 '[' 序列
+	// 关键：先探测是否有后续字节。没有 → 这是独立的 Esc 键
+	if !inputAvailable() {
+		return keyEsc, 0, nil
+	}
+
 	b2, err := readByte()
 	if err != nil {
 		return keyEsc, 0, nil
 	}
 	if b2 != '[' {
+		return keyEsc, 0, nil
+	}
+	// 再探测是否有第三个字节（[A 的 A）
+	if !inputAvailable() {
 		return keyEsc, 0, nil
 	}
 	b3, err := readByte()
