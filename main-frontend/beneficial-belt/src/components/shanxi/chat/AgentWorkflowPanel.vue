@@ -1,5 +1,10 @@
 <template>
   <div class="agent-flow" :class="{ streaming: flow.status === 'running' }">
+    <!-- 首条回复前的「正在思考」扫描线：不可折叠、无 chevron；首字一到（blockGroups 非空）自动消失 -->
+    <div v-if="flow.status === 'running' && blockGroups.length === 0" class="flow-pending-scanline">
+      <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
+      <span class="flow-pending-label">正在思考</span>
+    </div>
     <!--
       ★ 按顺序渲染，但「回复(intent)」始终平铺可见；
       连续出现的「思考 + 工具调用」才收纳进同一个概要栏 + 可折叠时间线。
@@ -912,7 +917,33 @@ function toolBodyText(b) {
 }
 .flow-tool-detail { margin-top: 6px; }
 
-/* ---------- 思考 ---------- */
+/* ---------- 首条回复前的「正在思考」扫描线（不可折叠，首字到即隐藏） ---------- */
+.flow-pending-scanline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--app-text-soft);
+}
+.flow-pending-scanline .flow-pending-label {
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--app-text);
+  white-space: nowrap;
+  /* 复用 reasoning 的白色高光扫描 */
+  background: linear-gradient(100deg, var(--app-text) 40%, var(--app-accent) 50%, var(--app-text) 60%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: reasonShimmer 6s linear infinite;
+  }
+
+  /* ---------- 思考 ---------- */
 .flow-thinking {
   margin: 6px 0;
 }

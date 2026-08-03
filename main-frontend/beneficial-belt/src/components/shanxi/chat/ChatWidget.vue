@@ -2882,29 +2882,45 @@ function handleSend() {
   clearAttachments()
   userInput.value = ''
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-  // 公益免费模型：先查配额，通过后代理到 ResceneCloud（云端有 Key）
+  // 公益免费模型：发消息瞬间就把「用户气泡 + bot 正在思考框」都建出来，
+    // 鉴权/配额在后台并行——绝不让首屏等云往返（否则气泡、思考框都要卡到配额回来才显示）
     if (sharedPoolModelIds.value.has(selectedModel.value)) {
+      const userMsg = {
+        id: `sp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        sender: 'user',
+        content: displayText,
+        attachments: displayAttachments || [],
+        timestamp: new Date()
+      }
+      messages.value.push(userMsg)
+      // bot flow 先即时建出（running + 空 blocks）→「正在思考」扫描线立刻出现
+      const flow = reactive({
+        id: `sp_flow_${Date.now()}`,
+        kind: 'agentflow',
+        sender: 'bot',
+        status: 'running',
+        task: combined,
+        blocks: [],
+        startTime: Date.now(),
+        endTime: null,
+        modelInfo: null,
+        timestamp: new Date()
+      })
+      messages.value.push(flow)
+      onStreamUpdate?.()
+      // 配额/鉴权放后台：通过则拉流填充；不足则在这个已显示的框里补失败
       checkSharedPoolQuota().then(ok => {
         if (ok) {
-          sendSharedPoolChat(combined, displayText, displayAttachments)
+          sendSharedPoolStream(flow, combined, selectedModel.value)
         } else {
-          // 配额已用完，显示提示
-          const flow = {
-            id: `sp_quota_${Date.now()}`,
-            kind: 'agentflow',
-            sender: 'bot',
-            status: 'failed',
-            task: combined,
-            blocks: [{ type: 'intent', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' }],
-            startTime: Date.now(), endTime: Date.now(),
-            modelInfo: null, timestamp: new Date()
-          }
-          messages.value.push(flow)
+          flow.status = 'failed'
+          flow.blocks.push({ type: 'intent', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' })
+          flow.endTime = Date.now()
           onStreamUpdate?.()
         }
       }).catch(() => {
-        // 配额检查异常：不阻断，直接代理到云端
-        sendSharedPoolChat(combined, displayText, displayAttachments)
+        // 配额检查异常：不阻塞，直接代理到云端
+        sendSharedPoolStream(flow, combined, selectedModel.value)
       })
       return
     }
@@ -2912,55 +2928,39 @@ function handleSend() {
     startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
   }
 
-  // 公益免费配额检查
-  async function checkSharedPoolQuota() {
-    try {
-      const res = await fetch('/api/shared-pool/quota', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      })
-      if (!res.ok) return false
-      const data = await res.json()
-      return (data.quota?.remaining || 0) > 0
-    } catch {
-      return false
+  // 公益免费配额检查（带 25s 缓存：连续对话不再每次发送都打一次云端配额往返；
+    // 配额的权威值仍由云端 429 兜底，缓存过期后自动回源）
+    let quotaCacheOk = false
+    let quotaCacheUntil = 0
+    async function checkSharedPoolQuota() {
+      const now = Date.now()
+      if (quotaCacheUntil > now) return quotaCacheOk
+      try {
+        const res = await fetch('/api/shared-pool/quota', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        })
+        if (!res.ok) {
+          quotaCacheOk = false; quotaCacheUntil = now + 10000; return false
+        }
+        const data = await res.json()
+        quotaCacheOk = (data.quota?.remaining || 0) > 0
+        quotaCacheUntil = now + 25000
+        return quotaCacheOk
+      } catch {
+        quotaCacheOk = false; quotaCacheUntil = 0
+        return false
+      }
     }
-  }
 
-  // 公益免费聊天：代理到 ResceneCloud（云端有共享 Key）
-  function sendSharedPoolChat(combined, displayText, displayAttachments) {
-    const userMsg = {
-      id: `sp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      sender: 'user',
-      content: displayText,
-      attachments: displayAttachments || [],
-      timestamp: new Date()
-    }
-    messages.value.push(userMsg)
-    onStreamUpdate?.()
-
-    // reactive：push 进 messages 后继续改 flow.blocks/status 必须触发响应式渲染
-    // （普通对象 push 后被 Vue 代理，改原始对象不触发更新 → 回复延迟到发下一条才显示）
-    const flow = reactive({
-      id: `sp_flow_${Date.now()}`,
-      kind: 'agentflow',
-      sender: 'bot',
-      status: 'running',
-      task: combined,
-      blocks: [],
-      startTime: Date.now(),
-      endTime: null,
-      modelInfo: null,
-      timestamp: new Date()
-    })
-    messages.value.push(flow)
-    onStreamUpdate?.()
-
-    fetch('/api/chat/shared-pool', {
+  // 公益免费流式：把上游 SSE 流进「handleSend 已即时建好并显示『正在思考』」的 flow。
+    // 创建/回显已在 handleSend 完成，这里只装配请求 + 组装 blocks，避免重复创建。
+    function sendSharedPoolStream(flow, combined, model) {
+      fetch('/api/chat/shared-pool', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       body: JSON.stringify({
-        model: selectedModel.value,
-        messages: [{ role: 'user', content: combined }],
+        model: model,
+                messages: [{ role: 'user', content: combined }],
         stream: true
       })
     }).then(async res => {
