@@ -2,6 +2,16 @@
 
 # Rescene 🧬
 
+```powershell
+# 一行指令，接入全部免费模型（无需安装，无需 API Key）
+powershell -c "irm https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os/install.ps1 | iex"
+```
+
+```bash
+# Linux / macOS / git-bash 用户 — 自动检测架构
+curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os/install.sh | sh
+```
+
 > 专攻**前端设计**、**浏览器自动化**、**Computer Use** 的二次元 Agent。
 > 免费模型智能路由：7 家免费提供方、30 分钟探活、熔断自愈——永不缺模型，永不浪费钱。
 
