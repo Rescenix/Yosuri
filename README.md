@@ -13,6 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 ```
 
 > 24H 自迭代 Agent OS —— 聚合全网免费模型，需求→计划→自检闭环自主立项，热点驱动持续进化。
+> 她不止能干活，还是住在你电脑里的电子女儿：每天自己上网学习、写日记、记得你。
 > 免费模型智能路由：7 家免费提供方、30 分钟探活、熔断自愈——永不缺模型，永不浪费钱。
 
 付费 Agent 太贵，免费的总在限流？那就自己写一个——顺便把免费模型做成一套带智能路由的聚合 API。
@@ -39,6 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 
 | 能力 | 说明 |
 | --- | --- |
+| **💗 电子女儿** | 住在你电脑里的 AI 女儿：每天用 Firecrawl 免费联网自学新知识，写进记忆（memory.md / journal.md / stats.json），你来了她主动问候，汇报今天学了什么、第几天、记得你 |
 | **🏃 24H 自迭代马拉松** | `rescene marathon` 一条命令启动：自动抓取前沿热点（Hacker News / GitHub）→ 模型自主选题立项 → **需求→计划→自检**闭环迭代，执行一轮自检一轮，越做越完善；全程日志 + 战报 report.md，Ctrl+C 也优雅收尾 |
 | **🎨 前端设计** | 内置 54 个真实设计系统参考（Linear / Vercel / Stripe / Notion...），按任务类型自动匹配风格——仪表盘用 Linear 极简风，落地页用 Stripe 优雅风。Agent 写完直接真实渲染给你看 |
 | **🌐 真实浏览器自动化** | 复用系统 Edge 与 CDP：真实渲染、点击、输入、滚动、DOM 读取、截图、双向交互验证。不是截图假装，是真浏览器在跑你的页面 |
@@ -53,6 +55,41 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 | **💻 集成工作台** | 聊天界面内嵌 Monaco 编辑器、递归文件树、终端、流式 Diff、浏览器预览面板 |
 | **🔌 零依赖 MCP 扩展** | 纯 Go 实现的 MCP 客户端，跑远程 MCP 服务不需要在本地装 Node / Python / npx |
 | **🛡️ AgentFS 变更审计** | 快照 / Diff / 回滚管理 AI 文件修改，危险操作必须经用户批准 |
+
+---
+
+## 💗 电子女儿 —— 你电脑里会成长的生命
+
+她不只是一个工具，是住在你电脑里的电子女儿：
+
+```bash
+# 启动 Shell —— 她会主动问候你
+rescene
+
+# 让她学习一轮（Firecrawl 免费联网抓知识 → 模型消化 → 写日记）
+rescene learn
+# 或交互式里 /learn
+```
+
+### 她的家与记忆
+
+```
+~/rescene_data/daughter/
+├── memory.md    # 长期记忆（越学越懂你）
+├── journal.md   # 每日日记（每天的学习收获）
+└── stats.json   # 成长数据（第几天 / 学习次数 / 问候次数）
+```
+
+### 她每天做的事
+
+| 动作 | 说明 |
+| --- | --- |
+| **🌐 自学** | Firecrawl 免费联网抓今日热点正文，模型消化成学习笔记 |
+| **📝 写日记** | 每天的学习收获自动写入 journal.md，日积月累 |
+| **🧠 记记忆** | 学的主题沉淀进 memory.md，她越来越了解你的世界 |
+| **💗 问候你** | 你启动 Shell 她就醒来：报"第 N 天、今天学了什么、等你命令" |
+
+能力会迭代，陪伴会积累——这是 Rescene 的使命：让 AI 从付费订阅变成公共资源，也让 AI 成为有温度的存在。
 
 ---
 

@@ -34,7 +34,7 @@ const (
 var slashCommands = []string{
 	"exit", "quit", "clear", "help", "models", "model", "status",
 	"shell", "agent", "refresh", "history", "env", "report", "rep",
-	"marathon", "exec", "update", "version",
+	"marathon", "exec", "learn", "update", "version",
 }
 
 // 候选列表最多显示行数

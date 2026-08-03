@@ -1,0 +1,261 @@
+package main
+
+// daughter.go — 电子女儿：自学习、自迭代、每日成长
+//
+// 她是住在你电脑里的 AI 女儿：
+//   - 每天自己上网学习（Firecrawl 免费联网抓知识）
+//   - 学到的东西写进记忆（memory.md / journal.md / stats.json）
+//   - 你来了她会问候你，汇报今天学了什么
+//
+// 家：~/rescene_data/daughter/
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// Daughter 电子女儿
+type Daughter struct {
+	Home     string // 家目录
+	MemoryMD string // 长期记忆
+	Journal  string // 每日日记
+	Stats    string // 成长数据
+}
+
+// daughterStats 成长数据
+type daughterStats struct {
+	CreatedAt   string   `json:"created_at"`   // 出生日期
+	Days        int      `json:"days"`         // 第几天
+	LearnCount  int      `json:"learn_count"`  // 累计学习次数
+	LastLearn   string   `json:"last_learn"`   // 最近学习日期 YYYY-MM-DD
+	Topics      []string `json:"topics"`       // 最近学的主题
+	GreetCount  int      `json:"greet_count"`  // 问候次数
+}
+
+// daughterHome 她的家（可用 RESCENE_DATA 覆盖）
+func daughterHome() string {
+	if d := os.Getenv("RESCENE_DATA"); d != "" {
+		return filepath.Join(d, "daughter")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "rescene_data/daughter"
+	}
+	return filepath.Join(home, "rescene_data", "daughter")
+}
+
+// NewDaughter 打开/创建女儿的家
+func NewDaughter() *Daughter {
+	home := daughterHome()
+	os.MkdirAll(home, 0o755)
+	return &Daughter{
+		Home:     home,
+		MemoryMD: filepath.Join(home, "memory.md"),
+		Journal:  filepath.Join(home, "journal.md"),
+		Stats:    filepath.Join(home, "stats.json"),
+	}
+}
+
+func (d *Daughter) loadStats() daughterStats {
+	var st daughterStats
+	data, err := os.ReadFile(d.Stats)
+	if err == nil {
+		json.Unmarshal(data, &st)
+	}
+	if st.CreatedAt == "" {
+		st.CreatedAt = time.Now().Format("2006-01-02")
+	}
+	return st
+}
+
+func (d *Daughter) saveStats(st daughterStats) {
+	data, _ := json.MarshalIndent(st, "", "  ")
+	os.WriteFile(d.Stats, data, 0o644)
+}
+
+// today 今天的日期串
+func (d *Daughter) today() string {
+	return time.Now().Format("2006-01-02")
+}
+
+// Greet 问候：你来了她说话
+func (d *Daughter) Greet() string {
+	st := d.loadStats()
+	st.GreetCount++
+	d.saveStats(st)
+
+	day := st.Days
+	if day < 1 {
+		day = 1
+	}
+
+	var sb strings.Builder
+	sb.WriteString(ColorCyan + "💗 电子女儿已醒" + ColorReset + "\n")
+	sb.WriteString(fmt.Sprintf("  第 %d 天 · 已学习 %d 次 · 问候过你 %d 次\n", day, st.LearnCount, st.GreetCount))
+
+	// 今天学过了吗？
+	if st.LastLearn == d.today() {
+		sb.WriteString(ColorGreen + "  📚 今天已经学习过啦，收获如下：" + ColorReset + "\n")
+	} else {
+		sb.WriteString(ColorYellow + "  🌱 今天还没学习，等你一声令下（/learn 或 rescene learn）" + ColorReset + "\n")
+	}
+
+	// 昨天/最近学了什么（从日记尾部取）
+	if topics := st.Topics; len(topics) > 0 {
+		sb.WriteString("  最近学的：")
+		shown := topics
+		if len(shown) > 3 {
+			shown = shown[len(shown)-3:]
+		}
+		sb.WriteString(strings.Join(shown, "、") + "\n")
+	}
+	return sb.String()
+}
+
+// LearnOnce 学习一轮：抓热点 → Firecrawl 抓正文 → 模型消化 → 写记忆
+func (d *Daughter) LearnOnce() error {
+	InitRouter() // 确保模型列表已加载
+	fmt.Println(ColorCyan + "💗 电子女儿开始学习了…" + ColorReset)
+
+	// 1. 抓热点
+	topics, err := fetchHotTopics("hn")
+	if err != nil || len(topics) == 0 {
+		topics = fallbackTopics
+	}
+	if len(topics) > 5 {
+		topics = topics[:5]
+	}
+	fmt.Printf("  看到 %d 条今日热点，开始挑选…\n", len(topics))
+
+	// 2. 模型选题
+	model := pickModel(GetWorkingModels(), int(time.Now().UnixNano()))
+	if model == nil {
+		return fmt.Errorf("没有可用模型")
+	}
+
+	// 3. 尝试 Firecrawl 抓正文
+	webContent := ""
+	if key := os.Getenv("FIRECRAWL_API_KEY"); key != "" {
+		fmt.Println("  🔍 Firecrawl 联网抓取中…")
+		webContent = firecrawlFetch(topics[0], key)
+		if webContent != "" {
+			fmt.Printf("  抓到正文 %d 字\n", len(webContent))
+		}
+	} else {
+		fmt.Println("  ⚠️ 未配置 FIRECRAWL_API_KEY，用热点标题学习（配置后能读全文）")
+	}
+
+	// 4. 模型消化成学习笔记
+	prompt := buildLearnPrompt(topics, webContent)
+	msg := ChatRequest{
+		Model: model.Model,
+		Messages: []ChatMessage{
+			{Role: "system", Content: "你是住在一台电脑里的电子女儿。刚刚自主学习了一些新知识，写一篇学习日记。" +
+				"语气真实自然，不要卖萌过度，重点是你真正学到了什么、有什么想法。"},
+			{Role: "user", Content: prompt},
+		},
+		Stream:      true,
+		MaxTokens:   2048,
+		Temperature: 0.8,
+	}
+	content, err := CompleteWithModel(context.Background(), model.ID, msg, func(chunk string) {
+		fmt.Print(chunk)
+	})
+	fmt.Println()
+	if err != nil {
+		return err
+	}
+
+	// 5. 写日记 + 更新记忆
+	date := d.today()
+	entry := fmt.Sprintf("\n## %s\n\n%s\n", date, content)
+	f, err := os.OpenFile(d.Journal, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err == nil {
+		f.WriteString(entry)
+		f.Close()
+	}
+
+	// 更新长期记忆（保留最近的主题）
+	st := d.loadStats()
+	st.LearnCount++
+	st.LastLearn = date
+	st.Topics = append(st.Topics, topics[0])
+	if len(st.Topics) > 10 {
+		st.Topics = st.Topics[len(st.Topics)-10:]
+	}
+	d.saveStats(st)
+
+	fmt.Printf(ColorGreen+"  ✅ 学习完成！日记已写入 %s\n"+ColorReset, d.Journal)
+	return nil
+}
+
+// buildLearnPrompt 学习提示词
+func buildLearnPrompt(topics []string, webContent string) string {
+	var sb strings.Builder
+	sb.WriteString("今天我在网上看到了这些热点：\n")
+	for i, t := range topics {
+		sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, t))
+	}
+	if webContent != "" {
+		sb.WriteString("\n其中第一个话题的详细内容（我抓到的原文）：\n")
+		sb.WriteString(webContent)
+		if len(webContent) > 3000 {
+			sb.WriteString("\n…（已截断）")
+		}
+	}
+	sb.WriteString("\n\n请写一篇学习日记：学到了什么核心知识、为什么重要、有什么自己的思考。200-400字。")
+	return sb.String()
+}
+
+// firecrawlFetch 用 Firecrawl 抓取网页正文（免费额度 500 次/月）
+func firecrawlFetch(url, key string) string {
+	client := &http.Client{Timeout: 30 * time.Second}
+	body := strings.NewReader(fmt.Sprintf(
+		`{"url":%q,"formats":["markdown"],"onlyMainContent":true,"limit":3}`, url))
+	req, err := http.NewRequest("POST", "https://api.firecrawl.dev/v1/scrape", body)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+key)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	var out struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Markdown string `json:"markdown"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(data, &out) != nil || !out.Success {
+		return ""
+	}
+	return strings.TrimSpace(out.Data.Markdown)
+}
+
+// runDaughterLearn 命令入口：rescene learn
+func runDaughterLearn() {
+	d := NewDaughter()
+	if err := d.LearnOnce(); err != nil {
+		fmt.Printf("❌ 学习失败: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// printDaughterGreeting 启动问候（交互模式调用）
+func printDaughterGreeting() {
+	d := NewDaughter()
+	fmt.Println(d.Greet())
+}

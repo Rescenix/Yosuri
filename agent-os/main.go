@@ -28,6 +28,9 @@ func main() {
 		case "report", "rep":
 			showReport(os.Args[2:])
 			return
+		case "learn", "study":
+			runDaughterLearn()
+			return
 		case "update", "upgrade", "self-update":
 			doUpdate()
 			return
@@ -105,10 +108,11 @@ func printHelp() {
 ╚══════════════════════════════════════════╝
 
 用法:
-  rescene              启动交互式 Shell
+  rescene              启动交互式 Shell（电子女儿会问候你）
   rescene exec "..."   单条指令执行
   rescene marathon     24H 自迭代马拉松（热点立项 → 需求→计划→自检闭环）
   rescene report       查看马拉松战报（--dir 指定目录）
+  rescene learn        电子女儿学习一轮（联网抓知识 → 写日记）
   rescene update       检查并更新到最新版
   rescene version      显示版本
   rescene help         显示帮助
