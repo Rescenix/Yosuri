@@ -15,7 +15,7 @@ func NewAPIRouter() *gin.Engine {
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Guest-Uid"},
 		AllowCredentials: false,
 	}))
 	sessionStore := NewSessionStore(ChatSessionsDomain)

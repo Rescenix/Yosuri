@@ -54,12 +54,16 @@ func HandleGetSharedPoolModels(c *gin.Context) {
 	}
 	cloudURL = strings.TrimRight(cloudURL, "/")
 
-	// 透传 Authorization（用户 JWT）
+	// 透传 Authorization（用户 JWT）与游客 UID（未登录的公益免费用户）
 	auth := c.GetHeader("Authorization")
+	guest := c.GetHeader("X-Guest-Uid")
 
 	req, _ := http.NewRequest("GET", cloudURL+"/api/models/config", nil)
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
+	}
+	if guest != "" {
+		req.Header.Set("X-Guest-Uid", guest)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -114,9 +118,12 @@ func HandleSharedPoolChat(c *gin.Context) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// 透传用户 JWT（云端鉴权 + 限流用）
+	// 透传用户 JWT（云端鉴权 + 限流用）与游客 UID（未登录公益免费用户）
 	if auth := c.GetHeader("Authorization"); auth != "" {
 		req.Header.Set("Authorization", auth)
+	}
+	if guest := c.GetHeader("X-Guest-Uid"); guest != "" {
+		req.Header.Set("X-Guest-Uid", guest)
 	}
 
 	// 发起请求
@@ -174,6 +181,9 @@ func HandleSharedPoolQuotaProxy(c *gin.Context) {
 	req, _ := http.NewRequest("GET", cloudURL+"/api/shared-pool/quota", nil)
 	if auth := c.GetHeader("Authorization"); auth != "" {
 		req.Header.Set("Authorization", auth)
+	}
+	if guest := c.GetHeader("X-Guest-Uid"); guest != "" {
+		req.Header.Set("X-Guest-Uid", guest)
 	}
 
 	resp, err := http.DefaultClient.Do(req)

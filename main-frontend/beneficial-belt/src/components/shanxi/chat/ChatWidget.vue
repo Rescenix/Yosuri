@@ -2907,14 +2907,23 @@ function handleSend() {
         timestamp: new Date()
       })
       messages.value.push(flow)
-      onStreamUpdate?.()
-      // 配额/鉴权放后台：通过则拉流填充；不足则在这个已显示的框里补失败
-      checkSharedPoolQuota().then(ok => {
+            onStreamUpdate?.()
+            // 游客：先确保本机已拿到云端分发的游客 UID（首次发消息没有则现补，
+            //   保证「点开就用」的公益免费体验；登录用户已有账号身份，无需此步）
+            ensureGuestUid()
+            // 配额/鉴权放后台：通过则拉流填充；不足则在这个已显示的框里补失败
+            checkSharedPoolQuota().then(ok => {
         if (ok) {
           sendSharedPoolStream(flow, combined, selectedModel.value)
         } else {
           flow.status = 'failed'
-          flow.blocks.push({ type: 'intent', text: '😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～' })
+          const q = sharedPoolQuota.value
+          flow.blocks.push({
+            type: 'intent',
+            text: q?.limit != null
+              ? `😅 公益免费额度已用完（今日 ${q.used ?? q.limit}/${q.limit} 次）\n\n填自己的 Key 继续使用，无限制～`
+              : `😅 公益免费额度已用完（今日 50/50 次）\n\n填自己的 Key 继续使用，无限制～`
+          })
           flow.endTime = Date.now()
           onStreamUpdate?.()
         }
@@ -2928,8 +2937,56 @@ function handleSend() {
     startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
   }
 
-  // 公益免费配额检查（带 25s 缓存：连续对话不再每次发送都打一次云端配额往返；
-    // 配额的权威值仍由云端 429 兜底，缓存过期后自动回源）
+  // 确保本机已有云端游客 UID（未登录时公益免费的身份依据）。
+    // 同一设备首次调用用设备指纹向 /api/auth/uid 换 UID 并缓存（幂等，之后恒定）。
+    let ensureGuestUidPromise = null
+    async function ensureGuestUid() {
+      const cached = localStorage.getItem('aurora_uid')
+      if (cached) return cached
+      if (ensureGuestUidPromise) return ensureGuestUidPromise
+      ensureGuestUidPromise = (async () => {
+        try {
+          let deviceId = localStorage.getItem('aurora_device_id')
+          if (!deviceId) {
+            deviceId = (crypto.randomUUID && crypto.randomUUID())
+              || ('d-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10))
+            localStorage.setItem('aurora_device_id', deviceId)
+          }
+          const res = await fetch('/api/auth/uid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: deviceId })
+          })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.uid) {
+              localStorage.setItem('aurora_uid', String(data.uid))
+              return String(data.uid)
+            }
+          }
+        } catch {
+          // 云端不可达：本次放弃游客身份，云端 401 会给出明确引导
+        }
+        return null
+      })()
+      return ensureGuestUidPromise
+    }
+
+    // 公益免费请求的统一身份头：登录带 JWT，未登录带游客 UID（X-Guest-Uid），
+    // 游客凭本地 UID「点开就用」，免去先登录才能体验公益免费的障碍。
+    function sharedPoolAuthHeaders() {
+      const h = { 'Content-Type': 'application/json' }
+      const token = localStorage.getItem('token')
+      if (token) h['Authorization'] = 'Bearer ' + token
+      const guest = localStorage.getItem('aurora_uid') || (railAuth?.uid?.value)
+      if (guest != null && guest !== '' && guest !== 'undefined') h['X-Guest-Uid'] = String(guest)
+      return h
+    }
+
+    // 公益免费配额检查（带 25s 缓存：连续对话不再每次发送都打一次云端配额往返；
+    // 配额的权威值仍由云端 429 兜底，缓存过期后自动回源）。
+    // 重要：只有云端明确返回 remaining=0 才算「已用完」；401（无身份）/网络异常
+    // 一律当作「可尝试」放行——真正被限流时云端 429 会给准确提示，绝不误报已用完。
     let quotaCacheOk = false
     let quotaCacheUntil = 0
     async function checkSharedPoolQuota() {
@@ -2937,8 +2994,12 @@ function handleSend() {
       if (quotaCacheUntil > now) return quotaCacheOk
       try {
         const res = await fetch('/api/shared-pool/quota', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          headers: sharedPoolAuthHeaders()
         })
+        if (res.status === 401 || res.status === 403) {
+          // 身份没被识别：不阻塞，交给真正的请求（429 会兜底真实额度）
+          quotaCacheOk = true; quotaCacheUntil = now + 10000; return true
+        }
         if (!res.ok) {
           quotaCacheOk = false; quotaCacheUntil = now + 10000; return false
         }
@@ -2947,8 +3008,9 @@ function handleSend() {
         quotaCacheUntil = now + 25000
         return quotaCacheOk
       } catch {
-        quotaCacheOk = false; quotaCacheUntil = 0
-        return false
+        // 网络异常：不阻塞（云端 429 兜底），避免连不上配额服务就误报已用完
+        quotaCacheOk = true; quotaCacheUntil = 0
+        return true
       }
     }
 
@@ -2957,7 +3019,7 @@ function handleSend() {
     function sendSharedPoolStream(flow, combined, model) {
       fetch('/api/chat/shared-pool', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+          headers: sharedPoolAuthHeaders(),
       body: JSON.stringify({
         model: model,
                 messages: [{ role: 'user', content: combined }],
@@ -2974,6 +3036,14 @@ function handleSend() {
             ? `😅 公益免费额度已用完（今日 ${used}/${limit} 次）\n\n填自己的 Key 继续使用，无限制～`
             : `😅 上游免费模型暂时繁忙（429），稍等几分钟再试试～`
         })
+        flow.endTime = Date.now()
+        onStreamUpdate?.()
+        return
+      }
+      if (res.status === 401 || res.status === 403) {
+        // 身份未被识别（未登录且云端没识别游客）：明确引导，不再误报「已用完」
+        flow.status = 'failed'
+        flow.blocks.push({ type: 'intent', text: `🔑 公益免费需要登录或游客身份，打开「我的 → 登录」后即可使用～` })
         flow.endTime = Date.now()
         onStreamUpdate?.()
         return
