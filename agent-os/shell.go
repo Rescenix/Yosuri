@@ -119,10 +119,9 @@ func (s *Shell) printBanner() {
 	R := ColorReset
 
 	// 标题
-	fmt.Println()
 	fmt.Println(P + `              ╭──────────────────────────────────╮`)
 	fmt.Println(`              │     ✦  RESCENE AGENT OS  ✦     │`)
-	fmt.Println(`              │       v0.1.0 · 终端即桌面        │`)
+	fmt.Printf(`              │       v%s · 终端即桌面        │\n`, Version)
 	fmt.Println(`              ╰──────────────────────────────────╯` + R)
 
 	// 看板娘
