@@ -2992,6 +2992,8 @@ function handleSend() {
     async function checkSharedPoolQuota() {
       const now = Date.now()
       if (quotaCacheUntil > now) return quotaCacheOk
+      // 先确保游客 UID 已拿到并缓存（否则请求没带 X-Guest-Uid，云端会 401）
+      await ensureGuestUid()
       try {
         const res = await fetch('/api/shared-pool/quota', {
           headers: sharedPoolAuthHeaders()
@@ -3016,7 +3018,9 @@ function handleSend() {
 
   // 公益免费流式：把上游 SSE 流进「handleSend 已即时建好并显示『正在思考』」的 flow。
     // 创建/回显已在 handleSend 完成，这里只装配请求 + 组装 blocks，避免重复创建。
-    function sendSharedPoolStream(flow, combined, model) {
+    async function sendSharedPoolStream(flow, combined, model) {
+      // 先确保游客 UID 已拿到并缓存，请求才带得上 X-Guest-Uid（否则云端 401）
+      await ensureGuestUid()
       fetch('/api/chat/shared-pool', {
           method: 'POST',
           headers: sharedPoolAuthHeaders(),
@@ -3041,9 +3045,10 @@ function handleSend() {
         return
       }
       if (res.status === 401 || res.status === 403) {
-        // 身份未被识别（未登录且云端没识别游客）：明确引导，不再误报「已用完」
+        // 云端没识别游客身份（极端情况：游客 UID 服务不可达）。
+        // 公益免费不需要登录 —— 这是网络/云端问题，给平实提示并引导重试。
         flow.status = 'failed'
-        flow.blocks.push({ type: 'intent', text: `🔑 公益免费需要登录或游客身份，打开「我的 → 登录」后即可使用～` })
+        flow.blocks.push({ type: 'intent', text: `😅 暂时连不上公益免费服务，请检查网络后重试～` })
         flow.endTime = Date.now()
         onStreamUpdate?.()
         return
