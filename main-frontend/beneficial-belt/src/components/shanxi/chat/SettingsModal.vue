@@ -1,16 +1,28 @@
 <template>
   <Teleport to="body">
     <div class="settings-modal-backdrop" @click="$emit('close')" @keydown.esc="$emit('close')">
-      <div class="settings-modal-card" @click.stop>
+      <div class="settings-modal-card" role="dialog" aria-modal="true" aria-label="Rescene 设置" tabindex="-1" @click.stop>
         <div class="settings-modal-header">
-          <span class="settings-modal-title">设置</span>
-          <button class="settings-modal-close" @click="$emit('close')" title="关闭">
-            <Icon icon="mdi:close" width="18" />
-          </button>
+          <div class="settings-brand">
+            <span class="settings-brand-mark"><Icon icon="lucide:sparkles" width="17" /></span>
+            <span class="settings-brand-copy">
+              <strong>Rescene</strong>
+              <small>偏好设置</small>
+            </span>
+          </div>
+          <div class="settings-header-actions">
+            <span class="settings-privacy-badge">
+              <Icon icon="lucide:shield-check" width="14" />本地优先
+            </span>
+            <button class="settings-modal-close" @click="$emit('close')" title="关闭">
+              <Icon icon="mdi:close" width="18" />
+            </button>
+          </div>
         </div>
         <div class="settings-modal-body">
           <!-- 左侧边栏 -->
           <div class="settings-sidebar">
+            <div class="settings-nav-label">模型与连接</div>
             <button class="settings-tab" :class="{ on: activeTab === 'models' }" @click="activeTab = 'models'">
               <Icon icon="mdi:brain" width="16" />模型</button>
             <div class="settings-tab-group">
@@ -37,6 +49,7 @@
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'aggapi' }" @click="activeTab = 'aggapi'">
               <Icon icon="mdi:api" width="16" />聚合 API</button>
+            <div class="settings-nav-label">体验与能力</div>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
             <div class="settings-tab-group">
@@ -67,6 +80,7 @@
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'memory' }" @click="activeTab = 'memory'; loadMemoryInject()">
               <Icon icon="mdi:notebook-outline" width="16" />记忆</button>
+            <div class="settings-nav-label">账户与产品</div>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
             <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion()">
@@ -77,7 +91,7 @@
           <div class="settings-content">
             <!-- ========== 模型 ========== -->
             <div v-show="activeTab === 'models'" class="settings-panel">
-              <div class="settings-section-title">模型配置</div>
+              <div class="settings-section-title">基础配置</div>
               <div class="settings-section-desc">
                 统一模型：一个模型同时处理对话与识图。分开配置：文字对话、识图分析各用各的模型
                 （识图模型由你自己选，选错了换成能识图的即可）。候选来自「提供方」里选为可用的模型。
@@ -219,6 +233,9 @@
                 <template v-else>
                   <div v-for="grp in vendorGroups" :key="grp.vendor" class="vendor-group">
                     <div class="vendor-head">
+                      <span class="vendor-logo" :style="{ '--vendor-color': vendorColor(grp.vendor) }">
+                        <Icon :icon="vendorIcon(grp.vendor)" width="16" />
+                      </span>
                       <span class="vendor-name">{{ grp.vendor }}</span>
                       <span class="vendor-count">{{ grp.items.length }} 个模型</span>
                       <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? '免 Key' : (grp.hasKey ? '已配 Key' : '未配 Key') }}</span>
@@ -352,10 +369,10 @@
 
             <!-- ========== 外观 ========== -->
             <div v-show="activeTab === 'appearance'" class="settings-panel">
-              <div class="settings-section-title">界面配色</div>
-              <div class="settings-section-desc">选择强调色和亮度；完整页面氛围由你的动态壁纸决定。</div>
+              <div class="settings-section-title">主题</div>
+              <div class="settings-section-desc">选择你喜欢的主题色，设置会立即应用到整个界面。</div>
               <div class="param-row" style="align-items: flex-start;">
-                <span class="param-label">配色</span>
+                <span class="param-label">主题色</span>
                 <div class="theme-swatches">
                   <button
                     v-for="[key, p] in colorThemes"
@@ -372,8 +389,10 @@
                 </div>
               </div>
 
+              <div class="settings-section-title appearance-mode-title">显示模式</div>
+              <div class="settings-section-desc">选择亮色、暗色，或自动跟随系统设置。</div>
               <div class="param-row">
-                <span class="param-label">亮度</span>
+                <span class="param-label">界面亮度</span>
                 <div class="seg-control">
                   <button
                     v-for="opt in MODE_OPTIONS"
@@ -386,48 +405,29 @@
                 </div>
               </div>
 
-              <div class="settings-section-title" style="margin-top: 18px;">流式渐变</div>
-              <div class="settings-section-desc">AI 回复逐字级联淡入的"瀑布"效果（仿 ChatGPT/Gemini）。改动即时生效并自动保存。</div>
-
-              <div class="param-row">
-                <span class="param-label">流式渐变</span>
-                <label class="param-switch">
-                  <input type="checkbox" v-model="streamFadeConfig.enabled" />
-                  <span class="param-switch-track"></span>
-                </label>
-              </div>
-
-              <template v-if="streamFadeConfig.enabled">
-                <div class="param-row">
-                  <span class="param-label">淡入时长</span>
-                  <input class="param-range" type="range" min="150" max="1500" step="50" v-model.number="streamFadeConfig.fadeMs" />
-                  <span class="param-value">{{ streamFadeConfig.fadeMs }} ms</span>
+              <div class="settings-section-title appearance-preview-title">实时预览</div>
+              <div class="settings-section-desc">预览会随当前主题色和显示模式同步更新。</div>
+              <div
+                class="theme-live-preview"
+                :style="{ '--preview-accent': selectedTheme.accent, '--preview-accent-soft': selectedTheme.accentSoft }"
+              >
+                <div class="theme-live-topbar">
+                  <span class="theme-live-brand"><Icon icon="lucide:sparkles" width="13" />Rescene</span>
+                  <span class="theme-live-status"><i></i>{{ selectedTheme.label }} · {{ currentModeLabel }}</span>
                 </div>
-                <div class="param-row">
-                  <span class="param-label">级联间隔</span>
-                  <input class="param-range" type="range" min="0" max="40" step="2" v-model.number="streamFadeConfig.staggerMs" />
-                  <span class="param-value">{{ streamFadeConfig.staggerMs }} ms/字</span>
+                <div class="theme-live-body">
+                  <div class="theme-live-sidebar">
+                    <span class="on"><Icon icon="lucide:message-square" width="13" />对话</span>
+                    <span><Icon icon="lucide:folder" width="13" />项目</span>
+                    <span><Icon icon="lucide:settings-2" width="13" />设置</span>
+                  </div>
+                  <div class="theme-live-main">
+                    <div class="theme-live-heading">今天想创造什么？</div>
+                    <div class="theme-live-copy">主题色会用于选中状态、按钮和重要提示。</div>
+                    <div class="theme-live-message">界面预览已与当前设置同步。</div>
+                    <div class="theme-live-composer"><span>输入消息...</span><b><Icon icon="lucide:arrow-up" width="13" /></b></div>
+                  </div>
                 </div>
-                <div class="param-row">
-                  <span class="param-label">模糊强度</span>
-                  <input class="param-range" type="range" min="0" max="6" step="0.5" v-model.number="streamFadeConfig.blurPx" />
-                  <span class="param-value">{{ streamFadeConfig.blurPx }} px</span>
-                </div>
-                <div class="param-row">
-                  <span class="param-label">大块扫过上限</span>
-                  <input class="param-range" type="range" min="100" max="1000" step="50" v-model.number="streamFadeConfig.maxSweepMs" />
-                  <span class="param-value">{{ streamFadeConfig.maxSweepMs }} ms</span>
-                </div>
-              </template>
-              <div class="param-reset-row">
-                <button class="param-reset-btn" type="button" @click="resetStreamFadeConfig">恢复默认</button>
-              </div>
-
-
-              <div class="settings-section-title" style="margin-top: 18px;">实时预览</div>
-              <div class="settings-section-desc">按当前主题与渐变配置循环重播，专注排版 / 公式 / 表格。</div>
-              <div class="preview-stage">
-                <div class="preview-bubble markdown-body" ref="previewBubble"></div>
               </div>
             </div>
 
@@ -631,6 +631,10 @@
                 <div class="profile-intimacy">
                   <span class="intimacy-hearts">{{ heartsText }}</span>
                   <span class="intimacy-level">Lv.{{ intimacyLevel }}</span>
+                  <span class="intimacy-progress">
+                    <span class="intimacy-progress-bar"><span class="intimacy-progress-fill" :style="{ width: intimacyProgressPct + '%' }"></span></span>
+                    <span class="intimacy-progress-text">{{ intimacyProgressPct }}%</span>
+                  </span>
                 </div>
               </div>
 
@@ -716,31 +720,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
 import { useAuth } from '../../../composables/useAuth.js'
 import FreeOrderModal from './FreeOrderModal.vue'
-
-// 精简预览样本：专注 Markdown 排版 / 行内+块级公式 / 表格，去掉冗长解说。
-const PREVIEW_MD =
-`## 排版预览
-
-正文段落、**加粗**、行内代码 \`renderMarkdown\`、行内公式 $E = mc^2$。
-
-$$
-x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
-$$
-
-| 参数 | 含义 | 建议值 |
-| --- | --- | --- |
-| fadeMs | 单字淡入 | 500ms |
-| staggerMs | 字间级联 | 14ms |
-| blurPx | 起始模糊 | 2px |`
 
 const props = defineProps({
   openid: { type: String, default: '' }
@@ -753,82 +740,61 @@ const providerSubTab = ref('free')
 const mcpSubTab = ref('local')
 const skillsSubTab = ref('local')
 
+const VENDOR_ICONS = [
+  [/sensenova|商汤/i, 'lucide:sparkles'],
+  [/opencode/i, 'lucide:code-xml'],
+  [/ollama/i, 'simple-icons:ollama'],
+  [/stepfun|阶跃/i, 'lucide:footprints'],
+  [/modelscope|魔搭/i, 'lucide:gallery-vertical-end'],
+  [/deepseek/i, 'simple-icons:deepseek'],
+  [/openai/i, 'simple-icons:openai'],
+  [/anthropic|claude/i, 'simple-icons:anthropic'],
+  [/gemini|google/i, 'simple-icons:googlegemini'],
+  [/qwen|通义/i, 'simple-icons:alibabacloud'],
+  [/mistral/i, 'simple-icons:mistralai'],
+  [/groq/i, 'simple-icons:groq'],
+  [/openrouter/i, 'simple-icons:openrouter'],
+  [/hugging/i, 'simple-icons:huggingface'],
+  [/github/i, 'simple-icons:github'],
+  [/cloudflare/i, 'simple-icons:cloudflare'],
+  [/nvidia/i, 'simple-icons:nvidia']
+]
+
+function vendorIcon(name = '') {
+  return VENDOR_ICONS.find(([pattern]) => pattern.test(name))?.[1] || 'lucide:box'
+}
+
+function vendorColor(name = '') {
+  const palette = ['#5b6ee1', '#9b5de5', '#d35f5f', '#168f78', '#d17a22', '#4f7cac', '#b24c7c']
+  const hash = Array.from(name).reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return palette[hash % palette.length]
+}
+
 // ============ 亲密等级（我的 tab，爱心表示） ============
 const auth = useAuth()
 // 亲密等级：外显 Lv.N（无上限）。无缓存时显示 Lv.1。
 const intimacyLevel = computed(() => auth.intimacyLevel.value || 1)
 // 爱心表示：每个等级一颗爱心（Lv.3 = ♥♥♥）
 const heartsText = computed(() => '♥'.repeat(intimacyLevel.value))
+// 亲密等级到下一级的进度粉条（与后端同曲线 100*N*(N-1)/2）
+const intimacyTotalFor = (n) => 100 * n * (n - 1) / 2
+const intimacyProgressPct = computed(() => {
+  const v = auth.intimacy.value || 0
+  const L = intimacyLevel.value || 1  // 当前已显示等级
+  const cur = intimacyTotalFor(L)
+  const next = intimacyTotalFor(L + 1)
+  const span = next - cur
+  if (span <= 0) return 0
+  return Math.min(100, Math.floor(((v - cur) / span) * 100))
+})
 
 // ============ 界面配色切换 ============
 const colorThemes = computed(() => Object.entries(THEME_PRESETS))
+const selectedTheme = computed(() => THEME_PRESETS[theme.value] || THEME_PRESETS.orange)
+const currentModeLabel = computed(() => MODE_OPTIONS.find(option => option.value === mode.value)?.label || '亮色')
 
 function selectTheme(key) {
   theme.value = key
-}
-
-// ============ 流式渐变无限循环预览（纯前端，不花 token） ============
-const previewBubble = ref(null)
-const previewHtml = ref('')
-let previewTimer = null
-let previewOffset = 0
-
-// 用真实 renderMarkdown 把样本渲染成 HTML（含 katex/表格/代码），按当前配置
-// 逐字包 span.stream-fade-seg 触发全局 om-stream-fade 动画；到尾部后从头循环。
-function renderPreviewFrame() {
-  const el = previewBubble.value
-  if (!el) return
-  const { fadeMs, staggerMs, blurPx } = streamFadeConfig
-  const html = renderMarkdown(PREVIEW_MD, true)
-  const text = PREVIEW_MD
-  // 用一段“打字机”窗口：每帧多露几个字 + 给新露出的字加淡入动画
-  const spanAll = (fullHtml) => {
-    // 简单地整段插 span 会破坏标签，这里对纯文本快照逐字动画不合适；
-    // 改为：整段 v-html 渲染，再对当前可见文本节点逐字包 span 做一次性淡入。
-    el.innerHTML = fullHtml
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-      acceptNode(n) {
-        const p = n.parentElement
-        if (p && p.closest('pre, code, table, .katex, .code-btn-group')) return NodeFilter.FILTER_REJECT
-        return NodeFilter.FILTER_ACCEPT
-      }
-    })
-    const nodes = []
-    let n
-    while ((n = walker.nextNode())) nodes.push(n)
-    let i = 0
-    for (const node of nodes) {
-      const text = node.nodeValue
-      const frag = document.createDocumentFragment()
-      for (const ch of text) {
-        const span = document.createElement('span')
-        span.className = 'stream-fade-seg'
-        span.textContent = ch
-        span.style.animationDuration = fadeMs + 'ms'
-        span.style.animationDelay = (i * staggerMs) + 'ms'
-        span.style.setProperty('--sf-blur', blurPx + 'px')
-        frag.appendChild(span)
-        i++
-      }
-      node.parentNode.replaceChild(frag, node)
-    }
-  }
-  spanAll(html)
-}
-
-function startPreviewLoop() {
-  stopPreviewLoop()
-  renderPreviewFrame()
-  // 整段淡入播完（按字符数估算时长）后从头循环
-  const total = PREVIEW_MD.length
-  const { fadeMs, staggerMs } = streamFadeConfig
-  const oneRound = total * staggerMs + fadeMs + 800
-  previewTimer = setInterval(() => {
-    if (activeTab.value === 'appearance') renderPreviewFrame()
-  }, Math.max(2500, oneRound))
-}
-function stopPreviewLoop() {
-  if (previewTimer) { clearInterval(previewTimer); previewTimer = null }
 }
 
 const PRESETS = [
@@ -1555,14 +1521,12 @@ onMounted(() => {
   loadConfigs()
   loadProfile()
   document.addEventListener('keydown', handleEsc)
-  nextTick(startPreviewLoop)
   // 其他入口改了模型配置（如 FreeOrderModal 拖拽排序）→ 设置页也刷新顺序
   window.addEventListener('model-config-changed', loadConfigs)
 })
 onUnmounted(() => {
   document.removeEventListener('keydown', handleEsc)
   window.removeEventListener('model-config-changed', loadConfigs)
-  stopPreviewLoop()
 })
 </script>
 
@@ -1570,39 +1534,66 @@ onUnmounted(() => {
 .settings-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(20, 18, 15, 0.35);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background:
+    radial-gradient(circle at 50% 12%, color-mix(in srgb, var(--app-accent) 12%, transparent), transparent 42%),
+    rgba(14, 15, 18, 0.56);
+  backdrop-filter: blur(14px) saturate(0.9);
+  -webkit-backdrop-filter: blur(14px) saturate(0.9);
   z-index: 20000;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .settings-modal-card {
-  width: 1020px;
-  height: 600px;
+  width: min(1120px, calc(100vw - 48px));
+  height: min(700px, calc(100vh - 48px));
   background: var(--app-surface);
-  border-radius: 16px;
-  box-shadow: var(--app-shadow);
+  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
+  border-radius: 20px;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.28), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: settings-enter 180ms cubic-bezier(.2,.8,.2,1);
+}
+@keyframes settings-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .settings-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  min-height: 72px;
+  box-sizing: border-box;
+  padding: 14px 18px 14px 20px;
   border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
 }
-.settings-modal-title { font-size: 15px; font-weight: 700; color: var(--app-text); }
+.settings-brand, .settings-header-actions { display: flex; align-items: center; }
+.settings-brand { gap: 11px; }
+.settings-brand-mark {
+  width: 36px; height: 36px; display: grid; place-items: center; flex: none;
+  color: #fff; background: linear-gradient(145deg, var(--app-accent), var(--app-accent-hover));
+  border-radius: 11px; box-shadow: 0 7px 18px var(--app-accent-soft), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.settings-brand-copy { display: flex; flex-direction: column; gap: 1px; }
+.settings-brand-copy strong { color: var(--app-text); font-size: 14px; line-height: 1.25; letter-spacing: .01em; }
+.settings-brand-copy small { color: var(--app-text-faint); font-size: 11px; line-height: 1.25; }
+.settings-header-actions { gap: 9px; }
+.settings-privacy-badge {
+  height: 28px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 9px; color: #16805f; background: color-mix(in srgb, #2db786 11%, var(--app-surface));
+  border: 1px solid color-mix(in srgb, #2db786 23%, var(--app-border)); border-radius: 999px;
+  font-size: 11px; font-weight: 650;
+}
 .settings-modal-close {
   display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 6px; border: none;
+  width: 34px; height: 34px; border-radius: 9px; border: 1px solid transparent;
   background: transparent; cursor: pointer; color: var(--app-text-soft);
 }
-.settings-modal-close:hover { background: var(--app-surface-3); }
+.settings-modal-close:hover { color: var(--app-text); background: var(--app-surface-3); border-color: var(--app-border-soft); }
+.settings-modal-close:focus-visible, .settings-tab:focus-visible, .settings-subtab:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
 .settings-modal-body {
   display: flex;
   flex: 1;
@@ -1611,33 +1602,44 @@ onUnmounted(() => {
 }
 /* 左侧边栏 */
 .settings-sidebar {
-  width: 168px;
+  width: 210px;
   flex-shrink: 0;
   border-right: 1px solid var(--app-border-soft);
-  padding: 16px 12px;
+  padding: 18px 14px 22px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   background: var(--app-surface-2);
   overflow-y: auto;
 }
+.settings-nav-label {
+  margin: 14px 10px 6px; color: var(--app-text-faint); font-size: 10px; font-weight: 750;
+  line-height: 1; letter-spacing: .1em; text-transform: uppercase; user-select: none;
+}
+.settings-nav-label:first-child { margin-top: 2px; }
 .settings-tab {
   display: flex;
   align-items: center;
   gap: 8px;
   text-align: left;
-  padding: 9px 14px;
-  font-size: 13.5px;
-  font-weight: 600;
+  min-height: 40px;
+  padding: 9px 11px;
+  font-size: 13px;
+  font-weight: 580;
   color: var(--app-text-soft);
   background: transparent;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.settings-tab:hover { background: var(--app-surface-3); }
-.settings-tab.on { color: #fff; background: var(--app-accent); }
+.settings-tab :deep(svg) { flex: none; opacity: .78; }
+.settings-tab:hover { color: var(--app-text); background: var(--app-surface-3); }
+.settings-tab.on {
+  color: var(--app-accent); background: var(--app-accent-soft);
+  border-color: color-mix(in srgb, var(--app-accent) 18%, transparent); box-shadow: inset 3px 0 0 var(--app-accent);
+}
+.settings-tab.on :deep(svg) { opacity: 1; }
 .settings-tab-group {
   display: flex;
   flex-direction: column;
@@ -1648,7 +1650,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding-left: 20px;
+  margin: 2px 0 4px 17px;
+  padding-left: 13px;
+  border-left: 1px solid var(--app-border);
 }
 .settings-subtab {
   min-height: 34px;
@@ -1680,14 +1684,15 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 18px 22px 22px;
+  padding: 24px 30px 28px;
   background: var(--app-surface);
   color: var(--app-text);
 }
-.settings-panel { display: block; }
+.settings-panel { display: block; animation: settings-panel-in 160ms ease; }
+@keyframes settings-panel-in { from { opacity: 0; transform: translateY(3px); } }
 
-.settings-section-title { font-size: 13.5px; font-weight: 700; color: var(--app-text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-.settings-section-desc { font-size: 12px; color: var(--app-text-faint); margin-bottom: 14px; line-height: 1.5; }
+.settings-section-title { font-size: 14px; font-weight: 700; color: var(--app-text); margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+.settings-section-desc { max-width: 760px; font-size: 12px; color: var(--app-text-faint); margin-bottom: 18px; line-height: 1.65; }
 .settings-section-desc code { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; background: var(--app-code-bg); padding: 1px 5px; border-radius: 4px; }
 .settings-error { font-size: 12px; color: #d94834; padding: 8px 0; }
 .settings-loading { font-size: 12.5px; color: var(--app-text-faint); padding: 8px 0; }
@@ -1700,10 +1705,11 @@ onUnmounted(() => {
 .model-select {
   margin-left: auto; max-width: 320px; flex: 1;
   font-size: 12.5px; color: var(--app-text); background: var(--app-surface-2);
-  border: 1px solid var(--app-border); border-radius: 7px; padding: 6px 10px;
+  min-height: 38px; box-sizing: border-box;
+  border: 1px solid var(--app-border); border-radius: 9px; padding: 7px 10px;
   cursor: pointer;
 }
-.model-select:focus { outline: none; border-color: var(--app-accent); }
+.model-select:focus { outline: none; border-color: var(--app-accent); box-shadow: 0 0 0 3px var(--app-accent-soft); }
 
 .model-pick-btn {
   flex-shrink: 0; margin-left: auto; padding: 3px 12px; font-size: 12px; font-weight: 600;
@@ -1735,19 +1741,29 @@ onUnmounted(() => {
 .api-config-card.free { background: var(--app-surface); }
 .api-config-card.free:first-child { margin-top: 0; }
 
-.vendor-group { margin-bottom: 8px; }
+.vendor-group { margin-bottom: 10px; }
 .vendor-group:last-child { margin-bottom: 0; }
 .vendor-head {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  padding: 9px 12px; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 10px; user-select: none;
+  min-height: 54px; box-sizing: border-box; padding: 9px 11px; background: var(--app-surface-2);
+  border: 1px solid var(--app-border); border-radius: 12px; user-select: none;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease;
 }
-.vendor-head:hover { background: var(--app-surface-3); }
+.vendor-head:hover {
+  background: var(--app-surface); border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
+  transform: translateY(-1px); box-shadow: 0 7px 20px rgba(0,0,0,.045);
+}
+.vendor-logo {
+  width: 32px; height: 32px; display: grid; place-items: center; flex: none;
+  color: var(--vendor-color); background: color-mix(in srgb, var(--vendor-color) 11%, var(--app-surface));
+  border: 1px solid color-mix(in srgb, var(--vendor-color) 18%, var(--app-border)); border-radius: 9px;
+}
 .vendor-name { font-size: 13px; font-weight: 700; color: var(--app-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vendor-count { font-size: 10.5px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 1px 8px; flex-shrink: 0; }
 .vendor-keystate { font-size: 10.5px; font-weight: 600; color: var(--app-text-faint); flex-shrink: 0; }
 .vendor-keystate.on { color: #12b76a; }
 .vendor-keystate.free { color: var(--app-accent); }
-.vendor-key-btn { font-size: 11px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 3px 10px; cursor: pointer; flex-shrink: 0; }
+.vendor-key-btn { min-height: 28px; font-size: 11px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; padding: 4px 10px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-btn:hover { background: var(--app-surface-3); }
 .vendor-key-link { color: var(--app-accent); text-decoration: none; }
 .vendor-key-link:hover { text-decoration: underline; }
@@ -1830,10 +1846,12 @@ onUnmounted(() => {
 .api-form-btn.save { background: #1a1a1a; color: #fff; }
 .api-form-btn.save:hover { background: #333333; }
 
-/* 流式渐变参数控件 */
-.param-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; }
+/* 设置项基础控件 */
+.param-row {
+  display: flex; align-items: center; gap: 12px; min-height: 50px; box-sizing: border-box;
+  padding: 7px 2px; border-bottom: 1px solid var(--app-border-soft);
+}
 .param-label { flex-shrink: 0; width: 96px; font-size: 12.5px; color: var(--app-text); }
-.param-range { flex: 1; min-width: 0; height: 4px; accent-color: var(--app-accent); cursor: pointer; }
 .param-value { flex-shrink: 0; width: 72px; text-align: right; font-size: 12px; color: var(--app-text-soft); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
 .param-switch { position: relative; display: inline-block; margin-left: auto; cursor: pointer; }
 .param-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -1841,10 +1859,6 @@ onUnmounted(() => {
 .param-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--app-surface); box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.15s ease; }
 .param-switch input:checked + .param-switch-track { background: var(--app-accent); }
 .param-switch input:checked + .param-switch-track::after { transform: translateX(16px); }
-.param-reset-row { display: flex; justify-content: flex-end; margin-top: 6px; }
-.param-reset-btn { padding: 4px 14px; font-size: 12px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 999px; cursor: pointer; transition: background 0.15s ease; }
-.param-reset-btn:hover { background: var(--app-border); }
-
 /* 主题分段控件（仿图1 的 Small/Medium/Large 分段） */
 .seg-control { margin-left: auto; display: inline-flex; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 2px; }
 .seg-btn { border: none; background: transparent; color: var(--app-text-soft); font-size: 12.5px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: all 0.12s; }
@@ -1947,30 +1961,64 @@ onUnmounted(() => {
 .profile-intimacy { display: flex; align-items: center; gap: 8px; }
 .intimacy-hearts { font-size: 15px; line-height: 1; letter-spacing: 2px; color: #ff5d7e; }
 .intimacy-level { font-size: 13px; font-weight: 600; color: var(--app-accent); }
+/* 亲密度进度粉条 */
+.intimacy-progress { display: inline-flex; align-items: center; gap: 6px; margin-left: 2px; }
+.intimacy-progress-bar { width: 76px; height: 6px; border-radius: 3px; background: rgba(255, 93, 126, 0.18); overflow: hidden; }
+.intimacy-progress-fill { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #ff8fa8, #ff5d7e); transition: width .3s ease; }
+.intimacy-progress-text { font-size: 11px; font-weight: 600; color: #ff5d7e; min-width: 32px; text-align: right; }
 .profile-instructions { width: 100%; box-sizing: border-box; font-size: 13px; line-height: 1.6; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; resize: vertical; font-family: inherit; }
 .profile-instructions:focus { outline: none; border-color: var(--app-accent); }
 .profile-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 14px; }
 .profile-saved { font-size: 12px; color: #12b76a; }
 
-/* 实时预览（受主题影响，无内部滚动条：内容已精简到一屏内） */
-.preview-stage {
-  background: var(--app-bg);
-  border: 1px solid var(--app-border);
-  border-radius: 10px;
-  padding: 14px 16px;
+/* 外观实时预览：只展示当前主题结果，不承担第二套选择交互。 */
+.appearance-mode-title { margin-top: 24px; }
+.appearance-preview-title { margin-top: 24px; }
+.theme-live-preview {
+  --preview-bg: var(--app-bg);
+  --preview-surface: var(--app-surface);
+  --preview-surface-2: var(--app-surface-2);
+  --preview-border: var(--app-border);
+  --preview-text: var(--app-text);
+  --preview-muted: var(--app-text-faint);
   overflow: hidden;
-  font-size: 14px;
-  line-height: 1.75;
-  color: var(--app-text);
+  min-height: 245px;
+  color: var(--preview-text);
+  background: var(--preview-bg);
+  border: 1px solid var(--preview-border);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.06);
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
 }
-.preview-bubble { word-break: break-word; font-size: 16px; }
-.preview-bubble :deep(h2) { color: var(--app-text); font-size: 1.15rem; margin: 0 0 0.5em; }
-.preview-bubble :deep(p) { color: var(--app-text); margin: 0.4em 0; }
-.preview-bubble :deep(code) { background: var(--app-code-bg); color: var(--app-accent); padding: 1px 5px; border-radius: 4px; }
-.preview-bubble :deep(table) { border-collapse: collapse; margin: 0.6em 0; font-size: 0.9em; }
-.preview-bubble :deep(th), .preview-bubble :deep(td) { border: 1px solid var(--app-border); padding: 4px 10px; color: var(--app-text); }
-.preview-bubble :deep(th) { background: var(--app-surface-3); }
-.preview-bubble :deep(.katex) { color: var(--app-text); }
+.theme-live-topbar {
+  height: 42px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; background: var(--preview-surface); border-bottom: 1px solid var(--preview-border);
+}
+.theme-live-brand { display: inline-flex; align-items: center; gap: 6px; color: var(--preview-text); font-size: 11.5px; font-weight: 750; }
+.theme-live-brand :deep(svg) { color: var(--preview-accent); }
+.theme-live-status { display: inline-flex; align-items: center; gap: 6px; color: var(--preview-muted); font-size: 10px; }
+.theme-live-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--preview-accent); box-shadow: 0 0 0 3px var(--preview-accent-soft); }
+.theme-live-body { display: grid; grid-template-columns: 128px 1fr; min-height: 202px; }
+.theme-live-sidebar {
+  display: flex; flex-direction: column; gap: 5px; padding: 13px 9px;
+  background: var(--preview-surface-2); border-right: 1px solid var(--preview-border);
+}
+.theme-live-sidebar span { display: flex; align-items: center; gap: 7px; padding: 7px 9px; color: var(--preview-muted); border-radius: 7px; font-size: 10.5px; }
+.theme-live-sidebar span.on { color: var(--preview-accent); background: var(--preview-accent-soft); font-weight: 700; }
+.theme-live-main { display: flex; flex-direction: column; padding: 22px 24px 16px; background: var(--preview-surface); }
+.theme-live-heading { color: var(--preview-text); font-size: 14px; font-weight: 750; }
+.theme-live-copy { margin-top: 5px; color: var(--preview-muted); font-size: 10.5px; }
+.theme-live-message {
+  align-self: flex-start; margin-top: 20px; padding: 8px 11px; color: var(--preview-text);
+  background: var(--preview-surface-2); border: 1px solid var(--preview-border); border-radius: 5px 11px 11px 11px; font-size: 10.5px;
+}
+.theme-live-composer {
+  min-height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 10px;
+  margin-top: auto; padding: 5px 6px 5px 11px; color: var(--preview-muted);
+  background: var(--preview-surface); border: 1px solid var(--preview-border); border-radius: 10px; font-size: 10px;
+}
+.theme-live-composer span { flex: 1; }
+.theme-live-composer b { width: 25px; height: 25px; display: grid; place-items: center; color: #fff; background: var(--preview-accent); border-radius: 7px; }
 .api-form-btn.save:disabled { opacity: 0.6; cursor: default; }
 
 /* 记忆 tab：卡片化单块展示，移除不再使用的分段说明样式 */
@@ -2052,4 +2100,36 @@ onUnmounted(() => {
 .update-notes :deep(pre) { padding: 10px 12px; border-radius: 8px; background: var(--app-code-bg); overflow: auto; }
 .update-notes :deep(pre code) { padding: 0; background: none; }
 .update-notes :deep(a) { color: var(--app-accent); }
+
+@media (max-width: 900px) {
+  .settings-modal-card { width: calc(100vw - 28px); height: calc(100vh - 28px); border-radius: 16px; }
+  .settings-sidebar { width: 176px; padding-inline: 10px; }
+  .settings-content { padding-inline: 22px; }
+}
+
+@media (max-width: 640px) {
+  .settings-modal-card { width: calc(100vw - 16px); height: calc(100vh - 16px); border-radius: 14px; }
+  .settings-modal-header { min-height: 62px; padding: 11px 12px; }
+  .settings-privacy-badge { display: none; }
+  .settings-sidebar { width: 136px; padding: 12px 7px 18px; }
+  .settings-nav-label { margin-left: 9px; font-size: 9px; }
+  .settings-tab { min-height: 38px; padding-inline: 9px; font-size: 12px; }
+  .settings-subtabs { margin-left: 13px; padding-left: 8px; }
+  .settings-subtab { padding-inline: 7px; font-size: 11.5px; }
+  .settings-content { padding-inline: 16px; }
+  .param-row { align-items: flex-start; flex-direction: column; gap: 7px; padding: 10px 0; }
+  .param-label { width: auto; }
+  .model-select, .seg-control, .theme-swatches { width: 100%; max-width: none; margin-left: 0; }
+  .seg-btn { flex: 1; }
+  .theme-live-body { grid-template-columns: 84px 1fr; }
+  .theme-live-sidebar { padding-inline: 6px; }
+  .theme-live-sidebar span { padding-inline: 7px; }
+  .theme-live-main { padding: 18px 14px 14px; }
+  .theme-live-copy { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-modal-card, .settings-panel { animation: none; }
+  .settings-tab, .vendor-head { transition: none; }
+}
 </style>
