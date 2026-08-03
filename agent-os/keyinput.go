@@ -57,6 +57,7 @@ func (s *Shell) readLine() (string, error) {
 	prompt := s.promptStr()
 	matches := []string(nil)
 	selIdx := -1
+	hadCandidates := false // 上次是否有候选（决定是否先清旧候选区）
 
 	// 根据当前输入刷新候选列表（仅 / 命令前缀）
 	refreshCandidates := func() {
@@ -68,10 +69,15 @@ func (s *Shell) readLine() (string, error) {
 		}
 	}
 
-	// 全量重绘：输入行 + 候选列表（光标回到输入行行首）
+	// 重绘：清旧候选 → 画输入行 → 画新候选 → 光标回输入行
+	// 注意：画完候选后【不要】再清屏，否则候选被抹掉、光标位置错乱（输入行隐形 bug）
 	redraw := func() {
-		fmt.Print("\r\x1b[K")
+		fmt.Print("\r\x1b[K") // 清输入行
+		if hadCandidates {
+			fmt.Print("\x1b[J") // 清掉旧候选区（光标以下）
+		}
 		fmt.Print(prompt + string(buf))
+		hadCandidates = false
 		if len(matches) > 0 {
 			n := len(matches)
 			rows := n
@@ -90,8 +96,8 @@ func (s *Shell) readLine() (string, error) {
 			if len(matches) > maxCandidates {
 				fmt.Print("\n  …")
 			}
-			fmt.Printf("\x1b[%dA\r", rows) // 光标上移回输入行
-			fmt.Print("\x1b[J")            // 清掉输入行以下的残留
+			fmt.Printf("\x1b[%dA\r", rows) // 光标上移回输入行（候选保留）
+			hadCandidates = true
 		}
 	}
 
@@ -107,6 +113,11 @@ func (s *Shell) readLine() (string, error) {
 			// 有选中候选且输入是未完成的 / 命令 → 用选中项确认执行
 			if selIdx >= 0 && strings.HasPrefix(string(buf), "/") {
 				buf = []rune("/" + matches[selIdx])
+			}
+			// 清掉候选区，避免残留混入输出
+			if hadCandidates {
+				fmt.Print("\r\x1b[K\x1b[J")
+				hadCandidates = false
 			}
 			fmt.Println()
 			return string(buf), nil
@@ -166,7 +177,6 @@ func (s *Shell) readLine() (string, error) {
 				selIdx = -1
 				redraw()
 			}
-
 		case keyCtrlC:
 			restore() // 先恢复终端再退出，避免卡死
 			fmt.Println("^C")
