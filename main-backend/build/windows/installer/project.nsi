@@ -119,17 +119,21 @@ Section
     # upgrades do not leave an old name and icon next to the installed app.
     Delete "$SMPROGRAMS\ResceneAgent.lnk"
     Delete "$DESKTOP\ResceneAgent.lnk"
+    Delete "$SMSTARTUP\ResceneAgent.lnk"
     Delete "$SMPROGRAMS\Rescene.lnk"
     Delete "$DESKTOP\Rescene.lnk"
+    Delete "$SMSTARTUP\Rescene.lnk"
     Delete "$INSTDIR\ResceneAgent.exe"
     Delete "$INSTDIR\server.exe"
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
+    Delete "$SMSTARTUP\${INFO_PRODUCTNAME}.lnk"
 
     !insertmacro wails.files
 
     CreateShortcut "$SMPROGRAMS\${SHORTCUT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${SHORTCUT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    CreateShortcut "$SMSTARTUP\${SHORTCUT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "--background"
 
     # Notify Explorer that shortcut/icon data changed. Without this, Windows can
     # keep displaying the icon cached for a previous executable at the same path.
@@ -162,10 +166,13 @@ Section "uninstall"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
+    Delete "$SMSTARTUP\${INFO_PRODUCTNAME}.lnk"
     Delete "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
     Delete "$DESKTOP\${SHORTCUT_NAME}.lnk"
+    Delete "$SMSTARTUP\${SHORTCUT_NAME}.lnk"
     Delete "$SMPROGRAMS\ResceneAgent.lnk"
     Delete "$DESKTOP\ResceneAgent.lnk"
+    Delete "$SMSTARTUP\ResceneAgent.lnk"
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols

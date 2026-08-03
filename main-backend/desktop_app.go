@@ -17,6 +17,9 @@ type DesktopApp struct {
 	backendURL string
 	server     *http.Server
 	listener   net.Listener
+	ctx        context.Context
+	trayOnce   sync.Once
+	trayWindow uintptr
 }
 
 func NewDesktopApp() *DesktopApp {
@@ -57,7 +60,15 @@ func (a *DesktopApp) BackendURL() string {
 	return a.backendURL
 }
 
+// Startup captures Wails' runtime context for notification-area actions.
+func (a *DesktopApp) Startup(ctx context.Context) {
+	a.mu.Lock()
+	a.ctx = ctx
+	a.mu.Unlock()
+}
+
 func (a *DesktopApp) Shutdown(ctx context.Context) {
+	a.stopTray()
 	_ = handler.StopPreviewBrowser()
 	a.mu.RLock()
 	server := a.server
