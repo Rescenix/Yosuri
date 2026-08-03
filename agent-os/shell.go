@@ -63,12 +63,11 @@ func (s *Shell) Run() {
 	s.printAvailableModels()
 
 	for {
-		s.printPrompt()
-
-		if !s.scanner.Scan() {
+		line, err := s.readLine()
+		if err != nil {
 			break
 		}
-		line := strings.TrimSpace(s.scanner.Text())
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
@@ -271,12 +270,16 @@ func (s *Shell) printAvailableModels() {
 }
 
 func (s *Shell) printPrompt() {
+	fmt.Print(s.promptStr())
+}
+
+// promptStr 返回提示符字符串（readLine 重绘也用它）
+func (s *Shell) promptStr() string {
 	mode := ColorGreen + "AGENT" + ColorReset
 	if shellMode {
 		mode = ColorYellow + "SHELL" + ColorReset
 	}
-
-	fmt.Printf("%s[%s]%s %s%s%s $ ",
+	return fmt.Sprintf("%s[%s]%s %s%s%s $ ",
 		ColorCyan, time.Now().Format("15:04:05"), ColorReset,
 		mode, ColorBlue, " agent-os"+ColorReset,
 	)
