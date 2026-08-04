@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -521,45 +522,22 @@ func (s *Shell) handleAgentChat(input string) {
 	})
 	stopSpinner() // 安全兜底
 
-	// 回显用户消息到聊天记录
-	fmt.Println("  " + ColorCyan + "你" + ColorReset)
-	fmt.Println("  " + input)
-	fmt.Println()
-
-	// 名字和表情独立显示在方框左上方（绿色）
-	fmt.Print(ColorGreen + "rescene " + ColorReset)
-	fmt.Println(ColorGreen + s.daughter.moodEmoji() + ColorReset)
-
-	// 画蓝色方框包裹回复。所有边都使用同一个 outerW，最右保留一列，
-	// 防止 Windows 控制台写满整行后自动换行切断边框。
+	// 终端宽度
 	tw := terminalWidth()
 	if tw < 8 {
 		tw = 8
 	}
-	outerW := tw - 1
-	innerW := outerW - 4 // │ + 空格 + 内容 + 空格 + │
-	horizontal := strings.Repeat("─", outerW-2)
-	fmt.Println(ColorMood + "┌" + horizontal + "┐" + ColorReset)
+	boxW := tw - 2 // 框宽 = 终端宽 - 2 边距
 
-	// 正文：│ 绿色内容 │
+	// ─── Galgame 式对话框：用户消息 ───
+	drawGalgameBox("你", input, ColorCyan, boxW)
+
+	fmt.Println()
+
+	// ─── Galgame 式对话框：女儿回复 ───
+	header := "rescene " + s.daughter.moodEmoji()
 	content := strings.TrimRight(fullContent.String(), "\n\r")
-	if content == "" {
-		content = " "
-	}
-	for _, sourceLine := range strings.Split(content, "\n") {
-		for _, line := range wrapTerminalLine(strings.TrimSuffix(sourceLine, "\r"), innerW) {
-			pad := innerW - terminalTextWidth(line)
-			if pad < 0 {
-				pad = 0
-			}
-			// 内容用绿色，边框用蓝色；右边框前重设颜色防止 ANSI reset 导致边框掉色
-			fmt.Print(ColorMood + "│ " + ColorGreen + line + ColorReset)
-			fmt.Print(strings.Repeat(" ", pad))
-			fmt.Println(ColorMood + " │" + ColorReset)
-		}
-	}
-
-	fmt.Println(ColorMood + "└" + horizontal + "┘" + ColorReset)
+	drawGalgameBox(header, content, ColorMood, boxW)
 
 	if err != nil {
 		fmt.Println(ColorRed + "❌ " + err.Error() + ColorReset)
@@ -608,6 +586,42 @@ func wrapTerminalLine(line string, width int) []string {
 	}
 	lines = append(lines, current.String())
 	return lines
+}
+
+// drawGalgameBox 画一个 Galgame 式对话框
+//
+//	┌─ name ────────────────────────┐
+//	│ 内容...                        │
+//	└───────────────────────────────┘
+// boxW 为整个框的字符宽度（含边框），保证上下左右边框对齐
+func drawGalgameBox(name, content string, boxColor string, boxW int) {
+	if content == "" {
+		content = " "
+	}
+	content = strings.TrimRight(content, "\n\r")
+	contentW := boxW - 4 // │ + 空格 + 内容 + 空格 + │
+
+	// 上边框：┌─ name ──┐
+	nameTag := " " + name + " "
+	nameLen := utf8.RuneCountInString(nameTag)
+	top := "┌" + nameTag + strings.Repeat("─", boxW-2-nameLen) + "┐"
+	fmt.Println(boxColor + top + ColorReset)
+
+	// 正文行：│ 内容 │
+	for _, sourceLine := range strings.Split(content, "\n") {
+		for _, line := range wrapTerminalLine(strings.TrimSuffix(sourceLine, "\r"), contentW) {
+			pad := contentW - terminalTextWidth(line)
+			if pad < 0 {
+				pad = 0
+			}
+			fmt.Print(boxColor + "│ " + ColorGreen + line + ColorReset)
+			fmt.Print(strings.Repeat(" ", pad))
+			fmt.Println(boxColor + " │" + ColorReset)
+		}
+	}
+
+	// 下边框：└──┘（宽度 = boxW）
+	fmt.Println(boxColor + "└" + strings.Repeat("─", boxW-2) + "┘" + ColorReset)
 }
 
 func (s *Shell) execShellCommand(cmd string) {
