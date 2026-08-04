@@ -33,12 +33,44 @@ const (
 // slash 命令补全表
 var slashCommands = []string{
 	"exit", "quit", "clear", "help", "models", "model", "status",
-	"shell", "agent", "refresh", "history", "env", "report", "rep",
+	"shell", "refresh", "history", "env", "report", "rep",
 	"marathon", "exec", "learn", "update", "version",
 }
 
-// 候选列表最多显示行数
-const maxCandidates = 9
+// commandDesc 命令简短描述
+var commandDesc = map[string]string{
+	"exit":     "退出",
+	"quit":     "退出",
+	"clear":    "清屏",
+	"help":     "显示帮助",
+	"models":   "列出模型",
+	"model":    "切换模型",
+	"status":   "系统信息",
+	"shell":    "Shell 模式",
+	"refresh":  "刷新模型",
+	"history":  "命令历史",
+	"env":      "环境变量",
+	"report":   "查看战报",
+	"rep":      "查看战报",
+	"marathon": "24H 马拉松",
+	"exec":     "执行命令",
+	"learn":    "电子女儿学习",
+	"update":   "更新",
+	"version":  "版本",
+}
+
+// 候选列表 ANSI 样式
+const (
+	bgCand    = "\x1b[40m" // 纯黑背景遮罩（和终端同色，挡住后面文字）
+	fgCmd     = "\x1b[38;2;86;156;214m" // 亮蓝命令名
+	fgDesc    = "\x1b[38;2;140;140;155m" // 灰色描述
+	fgSel     = "\x1b[38;2;200;200;215m" // 选中项白色
+	markSel   = "▸ "
+	markNorm  = "  "
+)
+
+// 候选列表固定行数（不含 ... 行）
+const maxCandidates = 5
 
 // readLine 读取一行输入（实时补全/选择/历史/中文）；非终端时回退 bufio 整行读
 func (s *Shell) readLine() (string, error) {
@@ -58,6 +90,7 @@ func (s *Shell) readLine() (string, error) {
 	matches := []string(nil)
 	selIdx := -1
 	hadCandidates := false // 上次是否有候选（决定是否先清旧候选区）
+	oldCandRows := 0       // 上次候选占的行数（用于清旧候选区）
 
 	// 根据当前输入刷新候选列表（仅 / 命令前缀）
 	refreshCandidates := func() {
@@ -69,36 +102,71 @@ func (s *Shell) readLine() (string, error) {
 		}
 	}
 
-	// 重绘：清旧候选 → 画输入行 → 画新候选 → 光标回输入行
-	// 注意：画完候选后【不要】再清屏，否则候选被抹掉、光标位置错乱（输入行隐形 bug）
+	// 重绘：候选列表显示在输入行上方（向下打印，永不卡光标）
+	// 关键修复（2026-08-04 残留 bug）：
+	//   1. 所有上移前先 \r 归位列 0 —— 原实现上移时光标停在 prompt 末尾列（~36），
+	//      \x1b[J 清屏只清「该列之后 + 下方」，候选区顶部行行首残留旧内容
+	//   2. 候选行用显式 \r\n 结束 —— 不依赖终端对 \n 的解释（CRLF / LF-only）
+	//   3. 输入行是固定锚点：清屏后显式下移回输入行位置再重画，取消候选后输入行不漂移
 	redraw := func() {
-		fmt.Print("\r\x1b[K") // 清输入行
-		if hadCandidates {
-			fmt.Print("\x1b[J") // 清掉旧候选区（光标以下）
+		// 1. 清输入行 + 旧候选区（光标锚定在输入行位置 I）
+		if hadCandidates && oldCandRows > 0 {
+			fmt.Print("\r")                        // 归位列 0
+			fmt.Printf("\x1b[%dA", oldCandRows)    // I → 候选区顶部 T
+			fmt.Print("\x1b[J")                    // 清候选区 + 输入行 + 下方
+			fmt.Printf("\x1b[%dB", oldCandRows)    // T → 回输入行锚点 I
+			hadCandidates = false
+		} else {
+			fmt.Print("\r\x1b[K")                  // 只清输入行
 		}
-		fmt.Print(prompt + string(buf))
-		hadCandidates = false
+
+		// 2. 画新候选（输入行上方，向下打印）
 		if len(matches) > 0 {
-			n := len(matches)
-			rows := n
-			if n > maxCandidates {
-				n = maxCandidates
+			tw := terminalWidth()
+			rows := maxCandidates
+			if len(matches) > maxCandidates {
 				rows = maxCandidates + 1
 			}
-			for i := 0; i < n; i++ {
-				fmt.Print("\n")
-				if i == selIdx {
-					fmt.Print(ColorCyan + "▸ " + matches[i] + ColorReset)
-				} else {
-					fmt.Print("  " + matches[i])
+			fmt.Printf("\x1b[%dA", rows)           // I → 候选区顶部 T
+			// 画候选行（固定 maxCandidates 行，少于则空行补齐）
+			for i := 0; i < maxCandidates; i++ {
+				text := ""
+				clr := fgCmd
+				if i < len(matches) {
+					cmd := matches[i]
+					desc := commandDesc[cmd]
+					mark := markNorm
+					if i == selIdx {
+						mark = markSel
+						clr = fgSel
+					}
+					text = fmt.Sprintf("%s%-12s%s", mark, "/"+cmd, desc)
 				}
+				// 全宽补空格（背景遮罩铺满整行）
+				visLen := utf8.RuneCountInString(text)
+				if pad := tw - visLen; pad > 0 {
+					text += strings.Repeat(" ", pad)
+				}
+				// 显式 \r\n：跨终端安全（部分终端 LF-only，\n 不归位）
+				fmt.Print(bgCand + clr + text + ColorReset + "\r\n")
 			}
 			if len(matches) > maxCandidates {
-				fmt.Print("\n  …")
+				text := "  …"
+				if pad := tw - utf8.RuneCountInString(text); pad > 0 {
+					text += strings.Repeat(" ", pad)
+				}
+				fmt.Print(bgCand + text + ColorReset + "\r\n")
 			}
-			fmt.Printf("\x1b[%dA\r", rows) // 光标上移回输入行（候选保留）
+			// 画完 rows 行后光标自然落在 T+rows = I（输入行锚点）
+			oldCandRows = rows
 			hadCandidates = true
+		} else {
+			oldCandRows = 0
 		}
+
+		// 3. 画输入行（光标在输入行锚点，列 0）
+		fmt.Print(prompt + string(buf))
+		fmt.Print("\x1b[K") // 清输入行尾部（输入变短时）
 	}
 
 	redraw()
@@ -114,11 +182,15 @@ func (s *Shell) readLine() (string, error) {
 			if selIdx >= 0 && strings.HasPrefix(string(buf), "/") {
 				buf = []rune("/" + matches[selIdx])
 			}
-			// 清掉候选区，避免残留混入输出
-			if hadCandidates {
-				fmt.Print("\r\x1b[K\x1b[J")
-				hadCandidates = false
+			// 清掉候选区 + 输入行（候选在输入行上方；先 \r 归位再上移，避免列残留）
+			if hadCandidates && oldCandRows > 0 {
+				fmt.Print("\r")
+				fmt.Printf("\x1b[%dA", oldCandRows)
+				fmt.Print("\x1b[J")
+			} else {
+				fmt.Print("\r\x1b[K")
 			}
+			hadCandidates = false
 			fmt.Println()
 			return string(buf), nil
 
