@@ -808,7 +808,14 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 				// 限流 / 服务端故障：暂时性，计入熔断
 				circuitFail(b)
 			}
-			tried = append(tried, fmt.Sprintf("%s: HTTP %d", b.Name, resp.StatusCode))
+			reason := fmt.Sprintf("HTTP %d", resp.StatusCode)
+			low := strings.ToLower(string(raw))
+			if resp.StatusCode == 451 || strings.Contains(low, "censorship") || strings.Contains(low, "blocked") {
+				// StepFun 等国内模型服务对联网搜到的敏感新闻做内容审核，整请求 451 拒收
+				// （实测：censorship_blocked）。这是明确原因，别让用户误以为是网络/服务在折腾。
+				reason = "内容审核拦截(HTTP 451)：模型服务商封了这段内容——联网搜到的新闻敏感时常见。换不审的源（如 Zen 免 key）或换个话题再试"
+			}
+			tried = append(tried, fmt.Sprintf("%s: %s", b.Name, reason))
 			fmt.Printf("🔀 [路由] %s HTTP %d，秒切下一个: %s\n", b.Name, resp.StatusCode, truncateChars(string(raw), 120))
 			continue
 		}
