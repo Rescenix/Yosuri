@@ -929,9 +929,7 @@ function toolBodyText(b) {
 }
 .flow-pending-scanline .flow-pending-label {
   font-weight: 500;
-  font-size: 11px;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
+  font-size: 12.5px;
   color: var(--app-text);
   white-space: nowrap;
   /* 复用 reasoning 的白色高光扫描 */

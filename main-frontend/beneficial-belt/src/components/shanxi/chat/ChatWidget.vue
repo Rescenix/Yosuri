@@ -1349,25 +1349,29 @@ async function loadModelCapabilities() {
       const spModels = spData.free_models || []
       const spIds = new Set()
       for (const sp of spModels) {
-              spIds.add(sp.id)
-              // 如果本地已有同名模型，覆盖成共享池版本（标记 sharedPool）
-              const idx = freeModelsFull.value.findIndex(m => m.id === sp.id)
-              const modelWithFlag = { ...sp, sharedPool: true, api_key_set: true }
-              if (idx >= 0) {
-                freeModelsFull.value[idx] = modelWithFlag
-              } else {
-                freeModelsFull.value.push(modelWithFlag)
-              }
-        modelCapabilities.value[sp.id] = { vision: sp.vision, context_window: sp.context_window, reasoning: sp.reasoning }
-        modelLabels.value[sp.id] = sp.name
+          const idx = freeModelsFull.value.findIndex(m => m.id === sp.id)
+          const localModel = idx >= 0 ? freeModelsFull.value[idx] : null
+          // 本地优先：用户已配自己 key 或免 key（如 OpenCode Zen）→ 不覆盖，不入共享池
+          if (localModel && (localModel.api_key_set || localModel.keyless)) {
+            continue
+          }
+          spIds.add(sp.id)
+          const modelWithFlag = { ...sp, sharedPool: true, api_key_set: true }
+          if (idx >= 0) {
+            freeModelsFull.value[idx] = modelWithFlag
+          } else {
+            freeModelsFull.value.push(modelWithFlag)
+          }
+          modelCapabilities.value[sp.id] = { vision: sp.vision, context_window: sp.context_window, reasoning: sp.reasoning }
+          modelLabels.value[sp.id] = sp.name
+        }
+        sharedPoolModelIds.value = spIds
+        sharedPoolQuota.value = spData.quota || null
       }
-      sharedPoolModelIds.value = spIds
-      sharedPoolQuota.value = spData.quota || null
+    } catch (e) {
+      // 共享池不可用时不阻塞（用户可能没登录）
+      console.warn('共享池不可用', e)
     }
-  } catch (e) {
-    // 共享池不可用时不阻塞（用户可能没登录）
-    console.warn('共享池不可用', e)
-  }
 }
 onMounted(() => {
   loadModelCapabilities()

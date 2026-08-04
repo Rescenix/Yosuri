@@ -1,106 +1,91 @@
-# 编译产物
-*.o
-*.obj
-*.exe
-*.out
-*.a
-*.so
-*.dll
-*.dylib
-*.pyc
-*.lnk
-advisor
-main-backend/advisor
-main-backend/server
-main-backend/shanxi-server
 
-# 构建目录
-/build/
-/dist/
-main-backend/build/
-main-backend/frontend/dist/*
+
 !main-backend/frontend/dist/.gitkeep
-main-backend/frontend/package.json.md5
-main-backend/frontend/wailsjs/
-/target/
-/bin/
-
-# 打包时下载的浏览器运行时体积很大，只保留来源与校验信息。
-runtime/chromium/*
 !runtime/chromium/README.md
 !runtime/chromium/RELEASE.json
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# 系统文件
-.DS_Store
-Thumbs.db
-*.onnx
-
-# 依赖目录
-/node_modules/
-/vendor/
-/AAP/
-
-# 环境配置
-.env
-.env.local
-.npmrc
-.bfg-report/
-..bfg-report/
-bfg.jar
-
-# 日志
-*.log
-/logs/
-
-# Python 缓存
-__pycache__/
-scripts/.star-history-cache.json
-
 # agent / AI 工具配置（不进仓库）
-.claude/
-.mimocode/
-.agents/
-.hermes/
-.clinerules/
-
-# 技能 / MCP 运行时配置（用户本地自行获取，不随仓库分发）
-main-backend/skills/
-main-backend/skills-ext/
-main-backend/mcp.json
-harness/mcp.json
-
-# 工具输出
-.aurora/
-opencode/
-
 # Go 构建缓存
-.gocache/
-main-backend/.codex-go-cache/
-
-# 临时测试文件
-login-test.html
-test.c
-
+# IDE
+# Python 缓存
 # 本地模型文件
-main-backend/models/
-*.gguf
+# 编译产物
+# 打包时下载的浏览器运行时体积很大，只保留来源与校验信息。
+# 工具输出
+# 构建目录
+# 环境配置
+# 技能 / MCP 运行时配置（用户本地自行获取，不随仓库分发）
+# 临时测试文件
+# 日志
+# 系统文件
+# 依赖目录
+# 专栏文章与调试产物不入库
+*.a
 *.bin
-*.safetensors
+*.dll
+*.dylib
+*.exe
+*.gguf
+*.lnk
+*.log
+*.o
+*.obj
+*.onnx
+*.out
 *.pt
 *.pth
-*.onnx
-
-# 编译产物
-main-backend/aurora-server-bin
+*.pyc
+*.safetensors
+*.so
+*.swo
+*.swp
+*~
+..bfg-report/
+.agents/
+.aurora/
+.bfg-report/
 .cache/
-
-# 专栏文章与调试产物不入库
+.claude/
+.clinerules/
+.DS_Store
+.env
+.env.local
+.gocache/
+.hermes/
+.idea/
+.mimocode/
+.npmrc
+.vscode/
+/AAP/
+/bin/
+/build/
+/dist/
+/logs/
+/node_modules/
+/target/
+/vendor/
+__pycache__/
+advisor
+agent-os/rescene
+bfg.jar
 columns/
+harness/mcp.json
+login-test.html
+main-backend/.codex-go-cache/
+main-backend/advisor
+main-backend/aurora-server-bin
+main-backend/build/
 main-backend/ds3.txt
+main-backend/frontend/dist/*
+main-backend/frontend/package.json.md5
+main-backend/frontend/wailsjs/
+main-backend/mcp.json
+main-backend/models/
+main-backend/server
+main-backend/shanxi-server
+main-backend/skills/
+main-backend/skills-ext/
+opencode/
+runtime/chromium/*
+scripts/.star-history-cache.json
+test.c
+Thumbs.db
