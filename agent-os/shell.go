@@ -651,8 +651,15 @@ func galgameTopBorder(name, boxColor string, boxW int) string {
 }
 
 func (s *Shell) execShellCommand(cmd string) {
+	// Hermes 风格工具调用标记
+	start := time.Now()
+	cmdName := "shell"
+	if f := strings.Fields(cmd); len(f) > 0 {
+		cmdName = f[0]
+	}
 	fmt.Println()
-	fmt.Println(ColorCyan + "$ " + cmd + ColorReset)
+	fmt.Println(ColorYellow + "● " + cmdName + ColorReset)
+	fmt.Println(ColorCyan + "  $ " + cmd + ColorReset)
 	fmt.Println()
 
 	// 使用系统 shell 执行
@@ -671,16 +678,21 @@ func (s *Shell) execShellCommand(cmd string) {
 	execCmd.Stderr = os.Stderr
 	execCmd.Stdin = os.Stdin
 
-	if err := execCmd.Run(); err != nil {
+	err := execCmd.Run()
+	elapsed := time.Since(start).Round(time.Millisecond)
+	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			// 命令本身有错误输出，已经显示在 stderr 了
 			if exitErr.ExitCode() != 0 {
-				fmt.Println(ColorRed + "⚠️  命令退出码: " + fmt.Sprint(exitErr.ExitCode()) + ColorReset)
+				fmt.Println(ColorRed + "  ⚠️ 退出码 " + fmt.Sprint(exitErr.ExitCode()) + " (" + elapsed.String() + ")" + ColorReset)
 			}
 		} else {
-			fmt.Println(ColorRed + "❌ 执行失败: " + err.Error() + ColorReset)
+			fmt.Println(ColorRed + "  ❌ 执行失败: " + err.Error() + ColorReset)
 		}
+	} else {
+		fmt.Println(ColorGreen + "  ✓ 完成 (" + elapsed.String() + ")" + ColorReset)
 	}
+	fmt.Println()
 }
 
 func isSystemCommand(input string) bool {
