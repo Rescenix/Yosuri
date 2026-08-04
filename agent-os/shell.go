@@ -482,29 +482,33 @@ func (s *Shell) handleAgentChat(input string) {
 	drawGalgameBox("你", input, ColorCyan, boxW)
 	fmt.Println()
 
-	// 启动思考动画（跳动三点）
-	stopSpinner := startThinkingSpinner()
-
 	// 电子女儿 · 驯养：读一句性格底色，从你的话里嗅探情绪（无感知——你不会看到任何数值）
 	d := NewDaughter()
 	if fbs := detectFeedback(input); len(fbs) > 0 {
 		d.Personality.applyFeedback(d.Home, fbs, "主人说:「"+runeClip(input, 16)+"」")
 	}
 
-	// 构建系统提示词
+	// 构建系统提示词（含工具协议说明）
+	toolIntro := buildToolIntro()
 	systemPrompt := `你是一个 Agent OS 的 AI 助手，名叫 Rescene酱 (｡•ᴗ•｡)♡
 
 你的工作方式：
 1. 用户输入自然语言指令，你理解后执行
-2. 如果是系统操作（查文件、看进程、读日志等），用 shell 命令完成
-3. 如果是代码任务，直接写代码并执行
-4. 如果是纯问答，直接回答
+2. 需要查文件、看进程、读日志、联网搜索时，调用工具
+3. 代码任务直接写代码并执行（run_command）
+4. 纯问答直接回答
+
+工具调用协议（重要）：
+当你需要调用工具时，在回复中输出标记：
+  [TOOL:工具名 key="值" key2="值2"]
+一次可以输出多个标记，每个标记单独一行。工具执行结果会在下一轮喂回给你，你根据结果继续推理或给出最终回答。不需要调用工具时，直接正常回复。
+
+` + toolIntro + `
 
 行为规范：
 - 回复用中文，简洁有力
-- 执行系统命令前先说明要做什么
-- 命令执行结果要总结给用户
-- 需要用 shell 的时候，在回复中给出命令
+- 调用工具前先说明要做什么
+- 执行结果要总结给用户
 
 当前工作目录: ` + getCWD() + `
 
@@ -514,57 +518,103 @@ func (s *Shell) handleAgentChat(input string) {
 - python, go, node, npm
 - curl, wget, ping` + "\n\n" + d.Personality.PersonalityBlock()
 
-	msg := ChatRequest{
-		Model: currentModel,
-		Messages: []ChatMessage{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: input},
-		},
-		Stream:      true,
-		MaxTokens:   4096,
-		Temperature: 0.3,
+	// ─── Agent 循环：请求 → 解析工具标记 → 执行 → 结果喂回 → 继续 ───
+	messages := []ChatMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: input},
 	}
 
-	// 流式输出：先缓冲全部内容，再画蓝色方框
-	var fullContent strings.Builder
-	spinnerStopped := false
-	_, err := Complete(nil, msg, func(content, reasoning string) {
-		// 收到思考内容 → 替换 spinner 实时显示推理过程
-		if reasoning != "" {
-			if !spinnerStopped {
-				spinnerStopped = true
-				stopSpinner()
-				fmt.Print("\n") // 思考内容单独一行
-			}
-			// 单行实时刷新：\r 回行首 + 清行 + 打印最新思考片段
-			oneLine := strings.ReplaceAll(reasoning, "\n", " ")
-			fmt.Print("\r" + ColorYellow + "💭 " + runeClip(oneLine, tw-8) + ColorReset)
+	finalContent := ""
+	maxRounds := 8
+	for round := 0; round < maxRounds; round++ {
+		msg := ChatRequest{
+			Model:       currentModel,
+			Messages:    messages,
+			Stream:      true,
+			MaxTokens:   4096,
+			Temperature: 0.3,
 		}
-		if content != "" {
-			fullContent.WriteString(content)
-		}
-	})
-	stopSpinner() // 安全兜底
 
-	// 若显示过思考内容，换行收尾再画回复框
-	if spinnerStopped {
-		fmt.Print("\r\x1b[2K")
-		fmt.Println()
+		var fullContent strings.Builder
+		spinnerStopped := false
+		stopSpinner := startThinkingSpinner()
+		_, err := Complete(nil, msg, func(content, reasoning string) {
+			if reasoning != "" {
+				if !spinnerStopped {
+					spinnerStopped = true
+					stopSpinner()
+					fmt.Print("\n")
+				}
+				oneLine := strings.ReplaceAll(reasoning, "\n", " ")
+				fmt.Print("\r" + ColorYellow + "💭 " + runeClip(oneLine, tw-8) + ColorReset)
+			}
+			if content != "" {
+				fullContent.WriteString(content)
+			}
+		})
+		stopSpinner()
+		if spinnerStopped {
+			fmt.Print("\r\x1b[2K")
+			fmt.Println()
+		}
+
+		if err != nil {
+			fmt.Println(ColorRed + "❌ " + err.Error() + ColorReset)
+			return
+		}
+
+		reply := fullContent.String()
+		markers := ExtractToolMarkers(reply)
+		if len(markers) == 0 {
+			finalContent = reply
+			break // 无工具调用 → 最终回答
+		}
+
+		// 有工具调用：逐个执行，结果喂回模型
+		var toolResultText strings.Builder
+		for _, marker := range markers {
+			name, args, err := ExtractToolArgs(marker)
+			if err != nil {
+				toolResultText.WriteString(fmt.Sprintf("⚠️ 标记解析失败: %s\n", marker))
+				continue
+			}
+			// ● 工具调用标记
+			fmt.Println(ColorYellow + "● " + name + ColorReset)
+			if len(args) > 0 {
+				var parts []string
+				for k, v := range args {
+					parts = append(parts, k+"=\""+v+"\"")
+				}
+				fmt.Println(ColorCyan + "  " + strings.Join(parts, " ") + ColorReset)
+			}
+			result, err := callTool(nil, name, args)
+			if err != nil {
+				fmt.Println(ColorRed + "  ❌ " + err.Error() + ColorReset)
+				toolResultText.WriteString(fmt.Sprintf("[工具 %s 结果] ❌ %v\n", name, err))
+				continue
+			}
+			// 结果摘要（截断）
+			summary := runeClip(strings.TrimSpace(result.Text), 400)
+			fmt.Println(ColorGreen + "  ✓ " + strings.ReplaceAll(summary, "\n", " ⏎ ") + ColorReset)
+			toolResultText.WriteString(fmt.Sprintf("[工具 %s 结果]\n%s\n", name, summary))
+		}
+
+		// 把模型回复 + 工具结果喂回，继续循环
+		messages = append(messages,
+			ChatMessage{Role: "assistant", Content: reply},
+			ChatMessage{Role: "user", Content: toolResultText.String()})
+	}
+
+	if finalContent == "" {
+		finalContent = "（抱歉，我没有完成这个任务…）"
 	}
 
 	// ─── Galgame 式对话框：女儿回复 ───
 	header := "rescene " + s.daughter.moodEmoji()
-	content := strings.TrimRight(fullContent.String(), "\n\r")
-	drawGalgameBox(header, content, ColorMood, boxW)
+	drawGalgameBox(header, strings.TrimRight(finalContent, "\n\r"), ColorMood, boxW)
 
-	if err != nil {
-		fmt.Println(ColorRed + "❌ " + err.Error() + ColorReset)
-		return
-	}
-
-	// 检查回复中是否包含可执行的 shell 命令（用 ```bash 或 $ 标记）
-	content = fullContent.String()
-	if cmd := extractCommand(content); cmd != "" {
+	// 兜底：回复里若有 ```bash 命令且从未走工具调用，仍提供执行入口
+	if cmd := extractCommand(finalContent); cmd != "" {
 		fmt.Println()
 		fmt.Println(ColorYellow + "⚡ 检测到命令，是否执行？[Y/n] " + ColorReset)
 		if s.scanner.Scan() {
@@ -576,6 +626,31 @@ func (s *Shell) handleAgentChat(input string) {
 			}
 		}
 	}
+}
+
+// buildToolIntro 生成工具列表说明（注入系统提示词）
+func buildToolIntro() string {
+	defs := nativeToolDefs()
+	var sb strings.Builder
+	sb.WriteString("可用工具：\n")
+	for _, d := range defs {
+		fn := d.Function
+		fmt.Fprintf(&sb, "- %s: %s\n", fn.Name, fn.Description)
+		if len(fn.Parameters.Properties) > 0 {
+			var params []string
+			for name := range fn.Parameters.Properties {
+				req := ""
+				for _, r := range fn.Parameters.Required {
+					if r == name {
+						req = "（必填）"
+					}
+				}
+				params = append(params, name+req)
+			}
+			fmt.Fprintf(&sb, "  参数: %s\n", strings.Join(params, ", "))
+		}
+	}
+	return sb.String()
 }
 
 // wrapTerminalLine 按终端显示列宽换行，中文和 emoji 按双宽字符处理。
