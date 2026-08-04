@@ -17,7 +17,7 @@ import (
 
 // nativeToolDefs 返回本机工具定义列表
 func nativeToolDefs() []ToolDefinition {
-	return []ToolDefinition{
+	return append([]ToolDefinition{
 		nativeTool("read_file", "按行读取文本文件，返回带行号的内容；一次最多 400 行。offset 从 1 开始，limit 是行数。", map[string]ToolProperty{
 			"path":   {Type: "string", Description: "文件路径；相对路径按当前工作目录解析"},
 			"offset": {Type: "integer", Description: "起始行号，1-indexed，默认 1"},
@@ -69,7 +69,7 @@ func nativeToolDefs() []ToolDefinition {
 			"query": {Type: "string", Description: "搜索关键词"},
 			"limit": {Type: "integer", Description: "返回条数，默认 5，最大 10"},
 		}, []string{"query"}),
-	}
+	}, computerUseToolDefs()...)
 }
 
 // callNativeTool 分发执行本机工具
@@ -82,6 +82,10 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (ToolResult, err
 		return callNativeCommand(ctx, argsJSON)
 	case "web_search":
 		return callFirecrawlSearch(ctx, argsJSON)
+	case "computer_screenshot", "computer_mouse_move", "computer_mouse_click",
+		"computer_mouse_drag", "computer_type", "computer_key",
+		"computer_screen_size", "computer_scroll":
+		return callComputerUseTool(ctx, name, argsJSON)
 	default:
 		return ToolResult{}, fmt.Errorf("未知工具: %s", name)
 	}
@@ -304,4 +308,11 @@ func atoiDefault(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
