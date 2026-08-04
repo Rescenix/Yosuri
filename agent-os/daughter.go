@@ -271,22 +271,20 @@ func firecrawlSearch(query, key string) string {
 
 	var out struct {
 		Success bool `json:"success"`
-		Data    struct {
-			Results []struct {
-				Title       string `json:"title"`
-				URL         string `json:"url"`
-				Description string `json:"description"`
-				Content     string `json:"content"`
-			} `json:"results"`
+		Data    []struct { // Firecrawl 实测：data 本身就是结果数组（2026-08-04）
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+			Description string `json:"description"`
+			Content     string `json:"content"`
 		} `json:"data"`
 	}
-	if json.Unmarshal(data, &out) != nil || !out.Success || len(out.Data.Results) == 0 {
+	if json.Unmarshal(data, &out) != nil || !out.Success || len(out.Data) == 0 {
 		return ""
 	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "话题「%s」的联网搜索结果：\n", query)
-	for i, r := range out.Data.Results {
+	for i, r := range out.Data {
 		fmt.Fprintf(&sb, "%d. %s\n   %s\n", i+1, strings.TrimSpace(r.Title), strings.TrimSpace(r.URL))
 		if d := strings.TrimSpace(r.Description); d != "" {
 			sb.WriteString("   " + d + "\n")

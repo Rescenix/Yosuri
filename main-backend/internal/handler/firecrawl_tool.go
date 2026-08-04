@@ -92,10 +92,8 @@ func firecrawlSearch(ctx context.Context, query string, limit int) (string, []st
 		return "", nil, fmt.Errorf("Firecrawl 返回 %d：%s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	var out struct {
-		Success bool `json:"success"`
-		Data    struct {
-			Results []firecrawlSearchResult `json:"results"`
-		} `json:"data"`
+		Success bool                    `json:"success"`
+		Data    []firecrawlSearchResult `json:"data"` // Firecrawl 实测：data 本身就是结果数组（2026-08-04）
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
 		return "", nil, fmt.Errorf("Firecrawl 响应解析失败：%v", err)
@@ -103,14 +101,14 @@ func firecrawlSearch(ctx context.Context, query string, limit int) (string, []st
 	if !out.Success {
 		return "", nil, fmt.Errorf("Firecrawl 搜索失败（success=false）")
 	}
-	if len(out.Data.Results) == 0 {
+	if len(out.Data) == 0 {
 		return fmt.Sprintf("联网搜索「%s」没有找到结果。可以换个说法再试。", query), nil, nil
 	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "联网搜索「%s」结果（Firecrawl）：\n", query)
-	urls := make([]string, 0, len(out.Data.Results))
-	for i, r := range out.Data.Results {
+	urls := make([]string, 0, len(out.Data))
+	for i, r := range out.Data {
 		fmt.Fprintf(&sb, "%d. %s\n   %s\n", i+1, strings.TrimSpace(r.Title), strings.TrimSpace(r.URL))
 		if d := strings.TrimSpace(r.Description); d != "" {
 			sb.WriteString("   " + d + "\n")
