@@ -182,14 +182,13 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
         // 生图提供商：设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
         // 不走提示词——跟识图模型路由一个思路，模型不感知、不浪费 token
         const imageProvider = localStorage.getItem('imageProvider') || 'pollinations'
-        // 联网搜索模型：「模型」tab 独立配置的搜索模型 ID（'' = 不启用）。
-        // 后端收到后主链改用该 backend（Responses 协议 + 服务端 web_search）。
-        const searchModel = localStorage.getItem('searchModel') || ''
+        // 联网搜索已内置为 web_search 常驻工具（Firecrawl，模型自主触发），
+        // 无需 search_model 参数——后端不再有「搜索模型」概念。
         // 续跑：只带 resume=<workflow_id>，task/model/mode/effort 后端全从检查点取，
         // 免得前端此刻的模型选择跟中断前不一致（换模型会让已有 tool_calls 历史串味）
         const url = opts.resumeId
             ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}`
-            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}&search_model=${encodeURIComponent(searchModel)}`
+            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}`
         es = new EventSource(url)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
@@ -415,6 +414,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
                     ? 'running'
                     : (d.ok ? 'ok' : 'error')
                 t.output = d.output || ''
+                // 联网搜索（Firecrawl）：result 事件带引用来源 URL，回填进 args.urls，
+                // 来源卡片与「搜索到 N 个来源」都读它（后端 DS 时代在 action 里给，现在在 result 里给）
+                if (d.name === 'web_search' && Array.isArray(d.urls)) {
+                    t.args = { ...(t.args || {}), urls: d.urls }
+                }
                 t.elapsedMs = t.startTime ? (Date.now() - t.startTime) : 0
                 if (d.ok && /^(write_file|edit_file|apply_patch|mcp__fs__(write_file|edit_file|create_file))$/.test(d.name || t.name)) {
                     window.dispatchEvent(new CustomEvent('agent-working-diff-changed'))

@@ -339,29 +339,22 @@ func HandleGetModelConfig(c *gin.Context) {
 		freeModelOrder = append(freeModelOrder, fm.ID)
 	}
 
-	// 内置联网搜索模型（「模型」tab 独立配置，不走免费模型池）。
-	// key 状态 = user_configs 里同名 ID 条目有 key，或环境变量兜底。
-	searchModels := make([]map[string]any, 0, len(builtinSearchModels))
-	for _, s := range builtinSearchModels {
-		keySet := false
-		if e, ok := entryByID[s.ID]; ok && e.APIKey != "" {
-			keySet = true
-		}
-		if !keySet && os.Getenv(s.KeyEnv) != "" {
-			keySet = true
-		}
-		searchModels = append(searchModels, map[string]any{
-			"id": s.ID, "vendor": s.Vendor, "name": s.Name,
-			"model": s.Model, "api_key_set": keySet,
-		})
+	// Firecrawl 联网搜索 Key 状态（web_search 工具用，前端「Firecrawl API Key」设置）。
+	// key 来源 = user_configs id=firecrawl 条目，或环境变量 FIRECRAWL_API_KEY 兜底。
+	firecrawlKeySet := false
+	if e, ok := entryByID["firecrawl"]; ok && e.APIKey != "" {
+		firecrawlKeySet = true
+	}
+	if !firecrawlKeySet && os.Getenv("FIRECRAWL_API_KEY") != "" {
+		firecrawlKeySet = true
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"configs":         safe,
-		"free_models":     freeModels,
-		"custom_models":   customModels,
-		"search_models":   searchModels,
-		"free_model_order": freeModelOrder,
+		"configs":           safe,
+		"free_models":       freeModels,
+		"custom_models":     customModels,
+		"free_model_order":  freeModelOrder,
+		"firecrawl_key_set": firecrawlKeySet,
 	})
 }
 

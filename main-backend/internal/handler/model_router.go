@@ -159,62 +159,9 @@ func isFreeCatalogID(id string) bool {
 	return false
 }
 
-// builtinSearchModel 是「模型」tab 里独立配置的联网搜索模型（不走免费模型池，
-// 与识图模型/生图提供商平级）。目前内置 DeepSeek V4 Flash 官方 API——
-// 服务端搜索（web_search 工具）只在 /responses 端点可用，故走 Responses 协议。
-// Key 来源：设置面板填的 DEEPSEEK_API_KEY（经 loadModelConfigs 的
-// user_configs 保存）或环境变量兜底。
-type builtinSearchModel struct {
-	ID            string
-	Vendor        string
-	Name          string
-	Endpoint      string
-	Model         string
-	KeyEnv        string
-	ContextWindow int
-}
-
-var builtinSearchModels = []builtinSearchModel{
-	{
-		ID: "search_deepseek_v4_flash", Vendor: "DeepSeek",
-		Name: "DeepSeek V4 Flash（服务端搜索）", Endpoint: "https://api.deepseek.com",
-		Model: "deepseek-v4-flash", KeyEnv: "DEEPSEEK_API_KEY", ContextWindow: 1048576,
-	},
-}
-
-// searchBackend 解析内置联网搜索模型为 RouterBackend（Responses 协议）。
-// key 找不到返回 nil（调用方回退"不启用联网搜索"，不阻断主对话）。
-func searchBackend(userKey, searchModel string) *RouterBackend {
-	if searchModel == "" {
-		return nil
-	}
-	for _, s := range builtinSearchModels {
-		if s.ID != searchModel {
-			continue
-		}
-		key := ""
-		if entries, err := loadModelConfigs(userKey); err == nil {
-			for _, e := range entries {
-				if e.ID == s.ID {
-					key = e.APIKey
-					break
-				}
-			}
-		}
-		if key == "" {
-			key = os.Getenv(s.KeyEnv)
-		}
-		if key == "" {
-			return nil
-		}
-		return &RouterBackend{
-			Name: s.Name, BaseURL: s.Endpoint, Model: s.Model,
-			APIKey: key, Timeout: 5 * time.Minute, Source: "search",
-			ContextWindow: s.ContextWindow, Reasoning: true, WireResponses: true,
-		}
-	}
-	return nil
-}
+// searchBackend 已随 DeepSeek 服务端联网搜索一并退役（2026-08-04）：
+// 联网搜索改由常驻 web_search 工具（Firecrawl）提供，模型自主判断是否调用，
+// 不再需要独立的「搜索模型」配置与 Responses 服务端搜索分支。
 
 // resolveBackends 组装本次请求可用的路由链。
 // 若 model 命中免费池 ID 或用户自定义配置 ID，则只返回那一个 backend（精确路由，
@@ -540,10 +487,11 @@ func toResponsesInput(msgs []map[string]any) []any {
 
 // toResponsesTools 把 chat/completions 风格的 tools（{type:"function",
 // function:{name,description,parameters}}）转成 Responses API 格式
-// （{type:"function", name, description, parameters}），并在末尾自动附加
-// web_search 工具——DeepSeek 服务端联网搜索只认这个类型（2026-08-01 实测）。
+// （{type:"function", name, description, parameters}）。
+// 注：曾在这里自动附加 DeepSeek 服务端 web_search 工具，随 DS 服务端搜索
+// 一并移除（2026-08-04）——联网搜索已改为常驻 web_search 工具（Firecrawl）。
 func toResponsesTools(tools []map[string]any) []any {
-	out := make([]any, 0, len(tools)+1)
+	out := make([]any, 0, len(tools))
 	for _, t := range tools {
 		typ, _ := t["type"].(string)
 		if typ != "function" {
@@ -563,8 +511,6 @@ func toResponsesTools(tools []map[string]any) []any {
 		}
 		out = append(out, item)
 	}
-	// DeepSeek 服务端搜索：模型可自主决定是否搜索（tool_choice 默认 auto）
-	out = append(out, map[string]any{"type": "web_search"})
 	return out
 }
 
@@ -1342,28 +1288,28 @@ func drainResponsesStream(c *gin.Context, resp *http.Response, msgs []map[string
 					writeSearch(searchAgg, searchAgg.status)
 				}
 			case "function_call":
-					id, _ := item["id"].(string)
-					if st, ok := fnMap[id]; ok {
-						if name, ok := item["name"].(string); ok && name != "" {
-							st.name = name
-							if !st.emitted {
-								writeCodeSSE(c, "action_delta", map[string]any{
-									"id": id, "name": name, "args_delta": st.args,
-								})
-								st.emitted = true
-							}
+				id, _ := item["id"].(string)
+				if st, ok := fnMap[id]; ok {
+					if name, ok := item["name"].(string); ok && name != "" {
+						st.name = name
+						if !st.emitted {
+							writeCodeSSE(c, "action_delta", map[string]any{
+								"id": id, "name": name, "args_delta": st.args,
+							})
+							st.emitted = true
 						}
 					}
-				case "reasoning":
-					// DeepSeek 思考模式铁律：assistant 发起工具调用后，下一轮输入
-					// 必须把 reasoning item（含 id + content）原样回传，否则 400
-					// "reasoning_text in the thinking mode must be passed back"。
-					// 这里把完整的 reasoning item 存进 reasoningOut，由工作流
-					// 挂到下一轮 assistant 消息上，toResponsesInput 再转回 input items。
-					if reasoningOut != nil {
-						*reasoningOut = append(*reasoningOut, item)
-					}
 				}
+			case "reasoning":
+				// DeepSeek 思考模式铁律：assistant 发起工具调用后，下一轮输入
+				// 必须把 reasoning item（含 id + content）原样回传，否则 400
+				// "reasoning_text in the thinking mode must be passed back"。
+				// 这里把完整的 reasoning item 存进 reasoningOut，由工作流
+				// 挂到下一轮 assistant 消息上，toResponsesInput 再转回 input items。
+				if reasoningOut != nil {
+					*reasoningOut = append(*reasoningOut, item)
+				}
+			}
 		case "response.completed":
 			// 最后一个事件，携带含 usage 的完整 response 对象
 			if usage, ok := ev["usage"].(map[string]any); ok {

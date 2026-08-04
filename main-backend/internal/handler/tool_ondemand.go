@@ -68,6 +68,9 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		injectPreviewToolDef,
 		// remember：用户说「记住」时写入长期记忆文件。
 		rememberToolDef,
+		// web_search：联网搜索（Firecrawl）。默认开通——模型自主判断要不要搜，
+		// 不需要时零开销；需要时直接调，无需 load_tools。
+		webSearchToolDef,
 	}
 }
 

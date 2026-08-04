@@ -111,7 +111,7 @@
                   <select class="model-select" v-model="unifiedModelDraft" @change="setUnifiedModel(unifiedModelDraft)">
                     <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
                     <option v-for="m in chatList" :key="m.value" :value="m.value">
-                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}{{ webSearchByID[m.value] ? ' · 联网搜索' : '' }}
+                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}
                     </option>
                   </select>
                 </div>
@@ -125,35 +125,23 @@
                   </select>
                 </div>
                 <div class="param-row">
-                  <span class="param-label">联网搜索模型</span>
+                  <span class="param-label">Firecrawl API Key</span>
                   <div class="search-model-row">
-                    <select class="model-select" v-model="searchModelDraft" @change="setSearchModel(searchModelDraft)">
-                      <option value="">不启用</option>
-                      <option v-for="s in searchModels" :key="s.id" :value="s.id">
-                        {{ s.name }}{{ s.api_key_set ? '（已配 Key）' : '（需 Key）' }}
-                      </option>
-                    </select>
-                    <button
-                      v-if="searchModelDraft && searchKeyMissing"
-                      class="vendor-key-btn"
-                      type="button"
-                      @click.stop="searchKeyEditing = !searchKeyEditing"
-                    >{{ searchKeyEditing ? '收起' : '填 Key' }}</button>
-                  </div>
-                  <div v-if="searchKeyEditing" class="vendor-key-inline">
                     <input
-                      v-model="searchKeyDraft"
+                      v-model="firecrawlKeyDraft"
                       type="password"
                       class="vendor-key-input"
-                      placeholder="输入 DeepSeek API Key（sk- 开头）"
-                      @keyup.enter="saveSearchKey"
+                      placeholder="fc- 开头的 Firecrawl API Key（联网搜索用）"
+                      @keyup.enter="saveFirecrawlKey"
                     />
-                    <button class="vendor-key-save" type="button" @click="saveSearchKey">保存</button>
-                    <button class="vendor-key-cancel" type="button" @click="searchKeyEditing = false">取消</button>
+                    <button class="vendor-key-save" type="button" @click="saveFirecrawlKey">
+                      {{ firecrawlKeySet ? '已配置 · 更新' : '保存' }}
+                    </button>
                   </div>
+                  <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
-                  联网搜索模型负责服务端搜索（搜索+引用来源由上游完成），当前内置 DeepSeek V4 Flash。
+                  联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
                 </div>
               </template>
 
@@ -163,7 +151,7 @@
                   <select class="model-select" v-model="textModelDraft" @change="setTextModel(textModelDraft)">
                     <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
                     <option v-for="m in chatList" :key="m.value" :value="m.value">
-                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}{{ webSearchByID[m.value] ? ' · 联网搜索' : '' }}
+                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}
                     </option>
                   </select>
                 </div>
@@ -185,35 +173,23 @@
                   </select>
                 </div>
                 <div class="param-row">
-                  <span class="param-label">联网搜索模型</span>
+                  <span class="param-label">Firecrawl API Key</span>
                   <div class="search-model-row">
-                    <select class="model-select" v-model="searchModelDraft" @change="setSearchModel(searchModelDraft)">
-                      <option value="">不启用</option>
-                      <option v-for="s in searchModels" :key="s.id" :value="s.id">
-                        {{ s.name }}{{ s.api_key_set ? '（已配 Key）' : '（需 Key）' }}
-                      </option>
-                    </select>
-                    <button
-                      v-if="searchModelDraft && searchKeyMissing"
-                      class="vendor-key-btn"
-                      type="button"
-                      @click.stop="searchKeyEditing = !searchKeyEditing"
-                    >{{ searchKeyEditing ? '收起' : '填 Key' }}</button>
-                  </div>
-                  <div v-if="searchKeyEditing" class="vendor-key-inline">
                     <input
-                      v-model="searchKeyDraft"
+                      v-model="firecrawlKeyDraft"
                       type="password"
                       class="vendor-key-input"
-                      placeholder="输入 DeepSeek API Key（sk- 开头）"
-                      @keyup.enter="saveSearchKey"
+                      placeholder="fc- 开头的 Firecrawl API Key（联网搜索用）"
+                      @keyup.enter="saveFirecrawlKey"
                     />
-                    <button class="vendor-key-save" type="button" @click="saveSearchKey">保存</button>
-                    <button class="vendor-key-cancel" type="button" @click="searchKeyEditing = false">取消</button>
+                    <button class="vendor-key-save" type="button" @click="saveFirecrawlKey">
+                      {{ firecrawlKeySet ? '已配置 · 更新' : '保存' }}
+                    </button>
                   </div>
+                  <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
-                  联网搜索模型负责服务端搜索（搜索+引用来源由上游完成），当前内置 DeepSeek V4 Flash。
+                  联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
                 </div>
               </template>
             </div>
@@ -882,7 +858,7 @@ async function loadConfigs() {
     configs.value = data.configs || []
     freeModels.value = data.free_models || []
     customModels.value = data.custom_models || []
-    searchModels.value = data.search_models || []
+    firecrawlKeySet.value = !!data.firecrawl_key_set
   } catch (e) {
     errorMsg.value = '加载配置失败，请稍后再试'
   } finally {
@@ -1120,42 +1096,28 @@ function setImageProvider(provider) {
   localStorage.setItem(IMAGE_PROVIDER_KEY, provider || 'pollinations')
 }
 
-// ============ 联网搜索模型（「模型」tab 独立配置，走 Responses 协议） ============
-const SEARCH_MODEL_KEY = 'searchModel'
-// 内置联网搜索模型目录（后端 /api/models/config 的 search_models 字段返回）
-const searchModels = ref([])
-// 选中的联网搜索模型 ID（'' = 不启用）；默认从 localStorage 恢复
-const searchModelDraft = ref(localStorage.getItem(SEARCH_MODEL_KEY) || '')
-const searchKeyEditing = ref(false)
-const searchKeyDraft = ref('')
-function setSearchModel(id) {
-  searchModelDraft.value = id || ''
-  localStorage.setItem(SEARCH_MODEL_KEY, searchModelDraft.value)
-}
-// 选中的搜索模型缺 Key → 显示「填 Key」按钮
-const searchKeyMissing = computed(() => {
-  const s = searchModels.value.find(x => x.id === searchModelDraft.value)
-  return !!s && !s.api_key_set
-})
-async function saveSearchKey() {
-  const key = searchKeyDraft.value
+// ============ Firecrawl 联网搜索（web_search 常驻工具，模型自主触发） ============
+const FIRECRAWL_KEY_ID = 'firecrawl'
+// 后端 /api/models/config 的 firecrawl_key_set 字段返回是否已配 Key
+const firecrawlKeySet = ref(false)
+const firecrawlKeyDraft = ref('')
+async function saveFirecrawlKey() {
+  const key = firecrawlKeyDraft.value
   if (!key || !key.trim()) {
-    errorMsg.value = '请输入 API Key'
+    errorMsg.value = '请输入 Firecrawl API Key'
     return
   }
   errorMsg.value = ''
-  const s = searchModels.value.find(x => x.id === searchModelDraft.value)
-  if (!s) return
   const untouched = configs.value
-    .filter(c => c.id !== s.id)
+    .filter(c => c.id !== FIRECRAWL_KEY_ID)
     .map(c => ({ ...c, api_key: MASKED }))
   await persist([...untouched, {
-    id: s.id, name: s.vendor, endpoint: 'https://api.deepseek.com',
-    api_key: key, default_model: s.model, is_default: false
+    id: FIRECRAWL_KEY_ID, name: 'Firecrawl', endpoint: 'https://api.firecrawl.dev',
+    api_key: key, default_model: '', is_default: false
   }])
   await loadConfigs()
-  searchKeyEditing.value = false
-  searchKeyDraft.value = ''
+  firecrawlKeyDraft.value = ''
+  firecrawlKeySet.value = true
 }
 
 // id → 是否支持识图，合并免费池 + 自定义配置两个来源（/api/models/config 都带 vision 字段）。
@@ -1165,14 +1127,6 @@ const visionByID = computed(() => {
   const map = {}
   for (const fm of freeModels.value) map[fm.id] = !!fm.vision
   for (const model of customModels.value) map[model.id] = !!model.vision
-  return map
-})
-// id → 是否支持联网搜索（服务端搜索，如 DeepSeek Responses 协议）。同样只用于
-// UI 角标提示，不参与候选过滤——模型能不能搜由上游说了算。
-const webSearchByID = computed(() => {
-  const map = {}
-  for (const fm of freeModels.value) map[fm.id] = !!fm.responses
-  for (const model of customModels.value) map[model.id] = !!model.responses
   return map
 })
 // 识图模型候选 = 全部可用模型，用户自己挑（不按 vision 标签过滤，
@@ -1827,6 +1781,7 @@ onUnmounted(() => {
 .vendor-key-input:focus { outline: none; border-color: #c0c0c0; }
 .vendor-key-save { font-size: 12px; font-weight: 600; color: #fff; background: #1a1a1a; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-save:hover { background: #333; }
+.firecrawl-key-status { font-size: 12px; color: #2e7d32; margin-top: 6px; display: inline-block; }
 .vendor-key-cancel { font-size: 12px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-cancel:hover { background: var(--app-surface-3); }
 .api-preset-label { font-size: 11.5px; color: var(--app-text-faint); margin-right: 2px; }

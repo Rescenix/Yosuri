@@ -15,6 +15,8 @@ import (
 type nativeToolResult struct {
 	Text   string
 	Images []mcpImageArtifact
+	// URLs 是 web_search（Firecrawl 联网搜索）结果的引用来源，透出给前端来源卡片
+	URLs []string
 }
 
 func nativeOnDemandToolDefs() []core.ToolDefinition {
@@ -157,7 +159,7 @@ func isNativeOnDemandTool(name string) bool {
 }
 
 func isNativeExecutableTool(name string) bool {
-	return name == "apply_patch" || isNativeOnDemandTool(name)
+	return name == "apply_patch" || name == "web_search" || isNativeOnDemandTool(name)
 }
 
 func allOnDemandToolDefs() []core.ToolDefinition {
@@ -182,6 +184,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 			return nativeToolResult{}, err
 		}
 		return nativeToolResult{Text: text}, nil
+	case "web_search":
+		return callFirecrawlSearch(ctx, argsJSON)
 	case "view_image":
 		return callNativeViewImage(ctx, argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",

@@ -449,7 +449,7 @@ function actionText(b) {
   // load_tools 只是按需取 MCP 工具 schema 的内部动作，把一串 mcp__fs__read_file,
   // mcp__fs__edit_file 摊开念出来对用户没有信息量，只有噪音——统一成一句轻量提示
   if (b.name === 'load_tools') return b.status === 'running' ? '加载 MCP 工具中…' : '加载了 MCP 工具'
-  // 联网搜索（DeepSeek 服务端搜索）：显示「搜索到 N 个来源」而不是把一堆
+  // 联网搜索（Firecrawl 工具）：显示「搜索到 N 个来源」而不是把一堆
   // 搜索词原样摊开——图2 那种「搜索到 35 个网页」摘要形态。
   if (isWebSearch(b.name)) {
     const n = searchSources(b).length
@@ -506,11 +506,11 @@ function isRead(name) {
   return name === 'read_file' || name === 'mcp__fs__read_file' ||
     name === 'mcp__fs__read_text_file' || name === 'mcp__grep__read_range'
 }
-// DeepSeek 服务端搜索的 web_search 卡片（Responses API web_search_call 映射而来）
+// Firecrawl 联网搜索的 web_search 工具卡片（工具结果 URL 由后端 result 事件透出）
 function isWebSearch(name) {
   return name === 'web_search' || name === 'mcp__web_search__web_search'
 }
-// 引用来源列表：DeepSeek 服务端搜索返回的 URL（后端透出在 args.urls）
+// 引用来源列表：Firecrawl 搜索结果 URL（后端 result 事件透出，回填到 args.urls）
 function searchSources(b) {
   const a = b.args || {}
   const urls = Array.isArray(a.urls) ? a.urls : []
