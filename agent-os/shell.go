@@ -123,7 +123,7 @@ func (s *Shell) printBanner() {
 	// 标题
 	fmt.Println(P + `              ╭──────────────────────────────────╮`)
 	fmt.Println(`              │     ✦  RESCENE AGENT OS  ✦     │`)
-	fmt.Printf(`              │       v%s · 终端即桌面        │\n`, Version)
+	fmt.Printf("              │       v%s · 终端即桌面        │\n", Version)
 	fmt.Println(`              ╰──────────────────────────────────╯` + R)
 
 	// 看板娘
@@ -239,13 +239,23 @@ func renderMascot() (string, error) {
 		}
 	}
 
-	// 优先用 chafa（效果好）
+	// 优先用 chafa（效果好），但 Windows 上 chafa 输出 CRLF 行尾（\r\n）且带
+	// 隐藏光标 \x1b[?25l / 显示光标 \x1b[?25h 控制序列。若不经清洗，残留的 \r
+	// 会把终端光标拉回行首，导致看板娘像素行与上方 logo 重叠或错位。这里统一清洗：
+	//  - 去掉所有 \r（把 CRLF 归一为 LF）
+	//  - 去掉 ?25l / ?25h（隐藏/显示光标），避免干扰后续渲染
+	//  - 去掉尾部多余空白行
 	if out, err := exec.Command("chafa", "--symbols", "block", "-c", "16", "-s", "30x10", mascotPath).Output(); err == nil {
-		return string(out), nil
+		art := string(out)
+		art = strings.ReplaceAll(art, "\r", "")
+		art = strings.ReplaceAll(art, "\x1b[?25l", "")
+		art = strings.ReplaceAll(art, "\x1b[?25h", "")
+		return strings.TrimRight(art, "\n"), nil
 	}
 
 	// 回退到内置 ANSI 渲染
-	return RenderANSIArt(mascotPath, 28)
+	art, err := RenderANSIArt(mascotPath, 28)
+	return strings.TrimRight(art, "\n"), err
 }
 
 func (s *Shell) printAvailableModels() {
