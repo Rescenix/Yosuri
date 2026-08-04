@@ -23,10 +23,11 @@ import (
 
 // Daughter 电子女儿
 type Daughter struct {
-	Home     string // 家目录
-	MemoryMD string // 长期记忆
-	Journal  string // 每日日记
-	Stats    string // 成长数据
+	Home        string // 家目录
+	MemoryMD    string // 长期记忆
+	Journal     string // 每日日记
+	Stats       string // 成长数据
+	Personality *Personality // 性格（出生随机、随互动漂移，数值不见）
 }
 
 // daughterStats 成长数据
@@ -55,12 +56,14 @@ func daughterHome() string {
 func NewDaughter() *Daughter {
 	home := daughterHome()
 	os.MkdirAll(home, 0o755)
-	return &Daughter{
+	d := &Daughter{
 		Home:     home,
 		MemoryMD: filepath.Join(home, "memory.md"),
 		Journal:  filepath.Join(home, "journal.md"),
 		Stats:    filepath.Join(home, "stats.json"),
 	}
+	d.Personality = loadPersonality(home)
+	return d
 }
 
 func (d *Daughter) loadStats() daughterStats {
@@ -102,7 +105,7 @@ func (d *Daughter) Greet() string {
 
 	// 今天学过了吗？
 	if st.LastLearn == d.today() {
-		sb.WriteString(ColorGreen + "  📚 今天已经学习过啦，收获如下：" + ColorReset + "\n")
+		sb.WriteString(ColorGreen + "  📚 今天已经学习过啦，收获都写进日记里了：" + ColorReset + "\n")
 	} else {
 		sb.WriteString(ColorYellow + "  🌱 今天还没学习，等你一声令下（/learn 或 rescene learn）" + ColorReset + "\n")
 	}
@@ -158,7 +161,8 @@ func (d *Daughter) LearnOnce() error {
 		Model: model.Model,
 		Messages: []ChatMessage{
 			{Role: "system", Content: "你是住在一台电脑里的电子女儿。刚刚自主学习了一些新知识，写一篇学习日记。" +
-				"语气真实自然，不要卖萌过度，重点是你真正学到了什么、有什么想法。"},
+						"语气真实自然，不要卖萌过度，重点是你真正学到了什么、有什么想法。" +
+						d.Personality.PersonalityBlock()},
 			{Role: "user", Content: prompt},
 		},
 		Stream:      true,
@@ -180,6 +184,12 @@ func (d *Daughter) LearnOnce() error {
 	if err == nil {
 		f.WriteString(entry)
 		f.Close()
+	}
+
+	// 长期记忆：一天一行，沉淀"她学过的世界"（memory.md 之前从没被写过，这次补齐）
+	if mf, err := os.OpenFile(d.MemoryMD, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		mf.WriteString(fmt.Sprintf("- %s 学了「%s」\n", date, topics[0]))
+		mf.Close()
 	}
 
 	// 更新长期记忆（保留最近的主题）

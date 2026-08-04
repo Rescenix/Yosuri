@@ -472,6 +472,12 @@ func (s *Shell) handleAgentChat(input string) {
 	fmt.Println()
 	fmt.Println(ColorYellow + "🤔 思考中..." + ColorReset)
 
+	// 电子女儿 · 驯养：读一句性格底色，从你的话里嗅探情绪（无感知——你不会看到任何数值）
+	d := NewDaughter()
+	if fbs := detectFeedback(input); len(fbs) > 0 {
+		d.Personality.applyFeedback(d.Home, fbs, "主人说:「"+runeClip(input, 16)+"」")
+	}
+
 	// 构建系统提示词
 	systemPrompt := `你是一个 Agent OS 的 AI 助手，名叫 Rescene酱 (｡•ᴗ•｡)♡
 
@@ -493,7 +499,7 @@ func (s *Shell) handleAgentChat(input string) {
 - ls, pwd, cd, cat, head, tail, du, df, ps, top, grep, find
 - git status, git log, git diff
 - python, go, node, npm
-- curl, wget, ping`
+- curl, wget, ping` + "\n\n" + d.Personality.PersonalityBlock()
 
 	msg := ChatRequest{
 		Model: currentModel,
