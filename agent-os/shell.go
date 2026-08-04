@@ -521,9 +521,9 @@ func (s *Shell) handleAgentChat(input string) {
 	})
 	stopSpinner() // 安全兜底
 
-	// 名字和表情独立显示在方框左上方，不占用上边框。
-	fmt.Print(ColorMood + "rescene " + ColorReset)
-	fmt.Println(s.daughter.moodEmoji())
+	// 名字和表情独立显示在方框左上方（绿色）
+		fmt.Print(ColorGreen + "rescene " + ColorReset)
+		fmt.Println(ColorGreen + s.daughter.moodEmoji() + ColorReset)
 
 	// 画蓝色方框包裹回复。所有边都使用同一个 outerW，最右保留一列，
 	// 防止 Windows 控制台写满整行后自动换行切断边框。
@@ -536,7 +536,7 @@ func (s *Shell) handleAgentChat(input string) {
 	horizontal := strings.Repeat("─", outerW-2)
 	fmt.Println(ColorMood + "┌" + horizontal + "┐" + ColorReset)
 
-	// 正文：│ 内容 │
+	// 正文：│ 绿色内容 │
 	content := strings.TrimRight(fullContent.String(), "\n\r")
 	if content == "" {
 		content = " "
@@ -547,8 +547,9 @@ func (s *Shell) handleAgentChat(input string) {
 			if pad < 0 {
 				pad = 0
 			}
-			// 右边框前重新设置颜色，防止回复内容里的 ANSI reset 导致边框掉色。
-			fmt.Print(ColorMood + "│ " + line + strings.Repeat(" ", pad))
+			// 内容用绿色，边框用蓝色；右边框前重设颜色防止 ANSI reset 导致边框掉色
+			fmt.Print(ColorMood + "│ " + ColorGreen + line + ColorReset)
+			fmt.Print(strings.Repeat(" ", pad))
 			fmt.Println(ColorMood + " │" + ColorReset)
 		}
 	}
