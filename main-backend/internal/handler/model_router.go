@@ -102,6 +102,12 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
 	{ID: "free_step_3_7_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.7-flash（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰免费档·agent 可用（实测 2026-08-02）", KeyURL: "https://platform.stepfun.com/"},
 
+	// —— Step Plan 订阅（api.stepfun.com/step_plan/v1）——
+	// 订阅制专用端点：走月度 Credit 池，不扣账户余额（2026-08-04 实测）。
+	// 与普通 API(/v1) 是两套独立体系；非订阅用户用此端点会报错，未订阅请用上面 v1 条目。
+	// 自动发现会拉出订阅支持的 9 个旗舰模型（step-3.7/3.5-flash、stepaudio 系列、step-router 等）。
+	{ID: "plan_step_gateway", Vendor: "Step Plan 订阅", Name: "step-3.7-flash（订阅 Credit）", Endpoint: "https://api.stepfun.com/step_plan/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "Step Plan 订阅专用端点·走月池 Credit 不扣余额；未订阅请用免费档", KeyURL: "https://platform.stepfun.com/plan-subscribe"},
+
 	// —— OpenCode Zen 免 key 网关（opencode.ai/zen/v1，OpenAI 兼容）——
 	// 2026-07-28 用户实测接入：全程免 key，鉴权由域名承载；/v1/models 与
 	// /v1/chat/completions 均免 Bearer Token（curl 空 Authorization 实测 cost=0 返回 OK）。

@@ -229,10 +229,13 @@ func ensureFreePoolDiscovery(userKey string) {
 	discMu.Unlock()
 }
 
-// catalogHasModel 目录里是否已有同名上游模型（避免自动发现重复）
-func catalogHasModel(upstreamID string) bool {
+// catalogHasModel 目录里是否已有同名上游模型（避免自动发现重复）。
+// 按 (endpoint, model) 区分：普通 v1 与 Step Plan 订阅端点是两个体系，
+// 同名模型（如 step-3.7-flash）可以在两个分组各出现一次，用户可区分走
+// 余额还是走订阅 Credit（2026-08-04）。
+func catalogHasModel(upstreamID, endpoint string) bool {
 	for _, f := range freeModelCatalog {
-		if f.Model == upstreamID || f.ID == upstreamID {
+		if f.Endpoint == endpoint && (f.Model == upstreamID || f.ID == upstreamID) {
 			return true
 		}
 	}
@@ -248,7 +251,7 @@ func discoveredFreeModels(userKey string) []freeModelView {
 	var out []freeModelView
 	for _, p := range discCache {
 		for _, m := range p.Models {
-			if catalogHasModel(m.ID) {
+			if catalogHasModel(m.ID, p.Endpoint) {
 				continue
 			}
 			id := "auto_" + sanitizeID(p.Vendor) + "_" + hexEncode(m.ID)
