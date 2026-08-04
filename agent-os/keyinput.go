@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -61,16 +62,78 @@ var commandDesc = map[string]string{
 
 // 候选列表 ANSI 样式
 const (
-	bgCand    = "\x1b[40m" // 纯黑背景遮罩（和终端同色，挡住后面文字）
-	fgCmd     = "\x1b[38;2;86;156;214m" // 亮蓝命令名
-	fgDesc    = "\x1b[38;2;140;140;155m" // 灰色描述
-	fgSel     = "\x1b[38;2;200;200;215m" // 选中项白色
-	markSel   = "▸ "
-	markNorm  = "  "
+	bgCand   = "\x1b[40m"               // 纯黑背景遮罩（和终端同色，挡住后面文字）
+	fgCmd    = "\x1b[38;2;86;156;214m"  // 亮蓝命令名
+	fgDesc   = "\x1b[38;2;140;140;155m" // 灰色描述
+	fgSel    = "\x1b[38;2;200;200;215m" // 选中项白色
+	markSel  = "▸ "
+	markNorm = "  "
 )
 
 // 候选列表固定行数（不含 ... 行）
 const maxCandidates = 5
+
+// terminalCellWidth 返回 rune 在终端里实际占用的列数。候选描述含中文，不能用
+// RuneCount 计算；否则补空格后会越过右边界并产生一次额外的自动换行。
+func terminalCellWidth(r rune) int {
+	if r == 0 || r == '\n' || r == '\r' || unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) {
+		return 0
+	}
+	if r < 0x20 || (r >= 0x7f && r < 0xa0) {
+		return 0
+	}
+	if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
+		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
+		(r >= 0xac00 && r <= 0xd7a3) || (r >= 0xf900 && r <= 0xfaff) ||
+		(r >= 0xfe10 && r <= 0xfe19) || (r >= 0xfe30 && r <= 0xfe6f) ||
+		(r >= 0xff00 && r <= 0xff60) || (r >= 0xffe0 && r <= 0xffe6) ||
+		(r >= 0x1f300 && r <= 0x1faff) || (r >= 0x20000 && r <= 0x3fffd)) {
+		return 2
+	}
+	return 1
+}
+
+func terminalTextWidth(text string) int {
+	width := 0
+	for _, r := range text {
+		width += terminalCellWidth(r)
+	}
+	return width
+}
+
+// fitCandidateRow 把候选行限制在 width-1 列。保留最右一列可避免 Windows
+// Console/ConPTY 在恰好写满一行时触发延迟自动换行。
+func fitCandidateRow(text string, width int) string {
+	usable := width - 1
+	if usable < 1 {
+		usable = 1
+	}
+	var b strings.Builder
+	used := 0
+	for _, r := range text {
+		w := terminalCellWidth(r)
+		if used+w > usable {
+			break
+		}
+		b.WriteRune(r)
+		used += w
+	}
+	if used < usable {
+		b.WriteString(strings.Repeat(" ", usable-used))
+	}
+	return b.String()
+}
+
+func candidateWindowStart(selected, count int) int {
+	if selected < maxCandidates {
+		return 0
+	}
+	start := selected - maxCandidates + 1
+	if maxStart := count - maxCandidates; start > maxStart {
+		return maxStart
+	}
+	return start
+}
 
 // readLine 读取一行输入（实时补全/选择/历史/中文）；非终端时回退 bufio 整行读
 func (s *Shell) readLine() (string, error) {
@@ -111,51 +174,46 @@ func (s *Shell) readLine() (string, error) {
 	redraw := func() {
 		// 1. 清输入行 + 旧候选区（光标锚定在输入行位置 I）
 		if hadCandidates && oldCandRows > 0 {
-			fmt.Print("\r")                        // 归位列 0
-			fmt.Printf("\x1b[%dA", oldCandRows)    // I → 候选区顶部 T
-			fmt.Print("\x1b[J")                    // 清候选区 + 输入行 + 下方
-			fmt.Printf("\x1b[%dB", oldCandRows)    // T → 回输入行锚点 I
+			fmt.Print("\r")                     // 归位列 0
+			fmt.Printf("\x1b[%dA", oldCandRows) // I → 候选区顶部 T
+			fmt.Print("\x1b[J")                 // 清候选区 + 输入行 + 下方
+			fmt.Printf("\x1b[%dB", oldCandRows) // T → 回输入行锚点 I
 			hadCandidates = false
 		} else {
-			fmt.Print("\r\x1b[K")                  // 只清输入行
+			fmt.Print("\r\x1b[K") // 只清输入行
 		}
 
 		// 2. 画新候选（输入行上方，向下打印）
 		if len(matches) > 0 {
 			tw := terminalWidth()
+			windowStart := candidateWindowStart(selIdx, len(matches))
 			rows := maxCandidates
 			if len(matches) > maxCandidates {
 				rows = maxCandidates + 1
 			}
-			fmt.Printf("\x1b[%dA", rows)           // I → 候选区顶部 T
+			fmt.Printf("\x1b[%dA", rows) // I → 候选区顶部 T
 			// 画候选行（固定 maxCandidates 行，少于则空行补齐）
 			for i := 0; i < maxCandidates; i++ {
 				text := ""
 				clr := fgCmd
-				if i < len(matches) {
-					cmd := matches[i]
+				matchIdx := windowStart + i
+				if matchIdx < len(matches) {
+					cmd := matches[matchIdx]
 					desc := commandDesc[cmd]
 					mark := markNorm
-					if i == selIdx {
+					if matchIdx == selIdx {
 						mark = markSel
 						clr = fgSel
 					}
 					text = fmt.Sprintf("%s%-12s%s", mark, "/"+cmd, desc)
 				}
-				// 全宽补空格（背景遮罩铺满整行）
-				visLen := utf8.RuneCountInString(text)
-				if pad := tw - visLen; pad > 0 {
-					text += strings.Repeat(" ", pad)
-				}
-				// 显式 \r\n：跨终端安全（部分终端 LF-only，\n 不归位）
-				fmt.Print(bgCand + clr + text + ColorReset + "\r\n")
+				// 先用当前黑色背景擦整行，再写至 width-1 列，既形成遮罩也不触发换行。
+				text = fitCandidateRow(text, tw)
+				fmt.Print("\r" + bgCand + "\x1b[2K" + clr + text + ColorReset + "\r\n")
 			}
 			if len(matches) > maxCandidates {
-				text := "  …"
-				if pad := tw - utf8.RuneCountInString(text); pad > 0 {
-					text += strings.Repeat(" ", pad)
-				}
-				fmt.Print(bgCand + text + ColorReset + "\r\n")
+				text := fitCandidateRow("  …", tw)
+				fmt.Print("\r" + bgCand + "\x1b[2K" + text + ColorReset + "\r\n")
 			}
 			// 画完 rows 行后光标自然落在 T+rows = I（输入行锚点）
 			oldCandRows = rows

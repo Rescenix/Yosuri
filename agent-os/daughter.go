@@ -30,6 +30,71 @@ type Daughter struct {
 	Personality *Personality // 性格（出生随机、随互动漂移，数值不见）
 }
 
+// 蓝色 ANSI 颜色（女儿心情表情用）
+const ColorMood = "\x1b[38;2;100;180;255m"
+
+// 心情颜文字帧集合 — 每心情等级 4 帧粉色系，时间轮播实现动画效果
+var moodFrames = [][]string{
+	// 0 超开心
+	{"✨(◕‿◕✿)", "(◕‿◕)🌸", "💕(◕‿◕✿)", "(◕‿◕✿)✨"},
+	// 1 开心
+	{"(◕‿◕✿)", "(◕ᴗ◕✿)", "(◕‿◕✿)♡", "(◕‿◕)🌸"},
+	// 2 温暖
+	{"(◕‿◕)♡", "(◕‿◕)💗", "(◕‿◕)💕", "(◕‿◕)❤️"},
+	// 3 平静
+	{"(◕‿◕)", "(◕‿◕)", "(◕‿◕)", "(◕‿◕)"},
+	// 4 认真
+	{"(◕_◕)", "(◕_◕✿)"},
+	// 5 安静可爱
+	{"(◕‿◕✿)", "(◕‿◕)💗", "(◕‿◕✿)🌸", "(◕‿◕)💕"},
+}
+
+// moodLevel 根据性格和时段返回心情等级索引（0=超开心→5=安静可爱）
+func (d *Daughter) moodLevel() int {
+	if d.Personality == nil || len(d.Personality.Traits) == 0 {
+		return 3 // 平静
+	}
+	warmth := d.Personality.Traits[0]
+	lively := d.Personality.Traits[1]
+	hour := time.Now().Hour()
+	var periodMood float64
+	switch {
+	case hour >= 6 && hour < 12:
+		periodMood = 0.2 // 早上精力充沛
+	case hour >= 12 && hour < 18:
+		periodMood = 0.0 // 下午平稳
+	default:
+		periodMood = -0.2 // 晚上偏安静
+	}
+	score := warmth + lively + periodMood
+	switch {
+	case score > 1.2:
+		return 0 // 超开心
+	case score > 0.6:
+		return 1 // 开心
+	case score > 0.2:
+		return 2 // 温暖
+	case score > -0.2:
+		return 3 // 平静
+	case score > -0.6:
+		return 4 // 认真
+	default:
+		return 5 // 安静可爱
+	}
+}
+
+// moodEmoji 返回粉色颜文字（带帧动画：每 600ms 轮播一帧）
+func (d *Daughter) moodEmoji() string {
+	level := d.moodLevel()
+	if level < 0 || level >= len(moodFrames) {
+		return "💗"
+	}
+	frames := moodFrames[level]
+	// 用时间轮播帧：每 600ms 变一次，每次显示 prompt 时都可能不同
+	frame := time.Now().UnixMilli() / 600 % int64(len(frames))
+		return ColorMood + frames[frame] + ColorReset
+}
+
 // daughterStats 成长数据
 type daughterStats struct {
 	CreatedAt   string   `json:"created_at"`   // 出生日期
@@ -347,6 +412,8 @@ func runDaughterLearn() {
 
 // printDaughterGreeting 启动问候（交互模式调用）
 func printDaughterGreeting() {
+	// 女儿角色动画：播放表情帧（约 2 秒）
+	PlayDaughterAnimation()
 	d := NewDaughter()
 	fmt.Println(d.Greet())
 }

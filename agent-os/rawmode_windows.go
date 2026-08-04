@@ -11,11 +11,38 @@ import (
 )
 
 var (
-	kernel32           = syscall.NewLazyDLL("kernel32.dll")
-	procGetConsoleMode = kernel32.NewProc("GetConsoleMode")
-	procSetConsoleMode = kernel32.NewProc("SetConsoleMode")
-	procGetNumEvents   = kernel32.NewProc("GetNumberOfConsoleInputEvents")
+	kernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	procGetConsoleMode          = kernel32.NewProc("GetConsoleMode")
+	procSetConsoleMode          = kernel32.NewProc("SetConsoleMode")
+	procGetNumEvents            = kernel32.NewProc("GetNumberOfConsoleInputEvents")
+	procGetConsoleScreenBufferInfo = kernel32.NewProc("GetConsoleScreenBufferInfo")
 )
+
+type coord struct {
+	X, Y int16
+}
+
+type smallRect struct {
+	Left, Top, Right, Bottom int16
+}
+
+type consoleScreenBufferInfo struct {
+	dwSize              coord
+	dwCursorPosition    coord
+	wAttributes         uint16
+	srWindow            smallRect
+	dwMaximumWindowSize coord
+}
+
+// terminalWidth 获取控制台窗口宽度（字符列数）
+func terminalWidth() int {
+	var csbi consoleScreenBufferInfo
+	r, _, _ := procGetConsoleScreenBufferInfo.Call(os.Stdout.Fd(), uintptr(unsafe.Pointer(&csbi)))
+	if r == 0 {
+		return 80
+	}
+	return int(csbi.srWindow.Right - csbi.srWindow.Left + 1)
+}
 
 const (
 	enableLineInput    = 0x0002

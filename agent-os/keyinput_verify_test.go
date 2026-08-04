@@ -82,3 +82,45 @@ func TestCandidateSelectionPath(t *testing.T) {
 		t.Errorf("边界 ↓ 不应越界, got %d", sel)
 	}
 }
+
+func TestCandidateRowsDoNotWrapWithChineseText(t *testing.T) {
+	const width = 40
+	row := fitCandidateRow("▸ /clear      清屏", width)
+	if got := terminalTextWidth(row); got != width-1 {
+		t.Fatalf("候选行宽度 = %d, want %d; row=%q", got, width-1, row)
+	}
+	if terminalTextWidth("清屏") != 4 {
+		t.Fatal("中文字符应各占两个终端列")
+	}
+}
+
+func TestCandidateRowsTruncateWithoutSplittingTerminalWidth(t *testing.T) {
+	row := fitCandidateRow("▸ /clear      清屏", 10)
+	if got := terminalTextWidth(row); got != 9 {
+		t.Fatalf("窄终端候选行宽度 = %d, want 9; row=%q", got, row)
+	}
+}
+
+func TestCandidateWindowFollowsDownSelection(t *testing.T) {
+	if got := candidateWindowStart(0, 18); got != 0 {
+		t.Fatalf("首项窗口起点 = %d, want 0", got)
+	}
+	if got := candidateWindowStart(5, 18); got != 1 {
+		t.Fatalf("向下越过可见区后窗口起点 = %d, want 1", got)
+	}
+	if got := candidateWindowStart(17, 18); got != 13 {
+		t.Fatalf("末项窗口起点 = %d, want 13", got)
+	}
+}
+
+func TestWrapTerminalLineKeepsBoxWidth(t *testing.T) {
+	lines := wrapTerminalLine("你好呀，有什么事情需要我帮忙吗？😊", 16)
+	if len(lines) < 2 {
+		t.Fatalf("中文长文本应换行, got %v", lines)
+	}
+	for _, line := range lines {
+		if got := terminalTextWidth(line); got > 16 {
+			t.Fatalf("换行后宽度 = %d, 超过 16: %q", got, line)
+		}
+	}
+}

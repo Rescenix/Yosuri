@@ -114,11 +114,11 @@ func TestHistoryNavigation(t *testing.T) {
 	}
 }
 
-// 验证 promptStr 包含模式标识
+// 验证 promptStr 格式正确
 func TestPromptStr(t *testing.T) {
 	s := &Shell{}
 	p := s.promptStr()
-	if !strings.Contains(p, "AGENT") {
-		t.Errorf("prompt 应含 AGENT 标识, got %q", p)
+	if !strings.Contains(p, "$") {
+		t.Errorf("prompt 应含 $, got %q", p)
 	}
 }

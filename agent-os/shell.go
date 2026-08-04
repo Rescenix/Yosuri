@@ -28,14 +28,16 @@ var currentModel = "auto"
 var shellMode = false // false = agent mode, true = native shell mode
 
 type Shell struct {
-	scanner *bufio.Scanner
-	history []string
+	scanner  *bufio.Scanner
+	history  []string
+	daughter *Daughter
 }
 
 func NewShell() *Shell {
 	return &Shell{
-		scanner: bufio.NewScanner(os.Stdin),
-		history: make([]string, 0, 100),
+		scanner:  bufio.NewScanner(os.Stdin),
+		history:  make([]string, 0, 100),
+		daughter: NewDaughter(),
 	}
 }
 
@@ -87,7 +89,7 @@ func (s *Shell) Run() {
 			// 原生 shell 模式：先检查 Agent OS 内置命令
 			lower := strings.TrimSpace(strings.ToLower(line))
 			switch lower {
-			case "agent", "!agent", "exit", "quit", "help", "clear", "cls", "models", "status", "history":
+			case "exit", "quit", "help", "clear", "cls", "models", "status", "history":
 				s.handleCommand(line)
 				continue
 			}
@@ -136,7 +138,7 @@ func (s *Shell) printBanner() {
 			if strings.TrimSpace(line) == "" {
 				continue
 			}
-			fmt.Println("             " + line)
+			fmt.Println("                " + line)
 		}
 	}
 
@@ -286,14 +288,10 @@ func (s *Shell) printPrompt() {
 }
 
 // promptStr 返回提示符字符串（readLine 重绘也用它）
+// 格式: [时间] $
 func (s *Shell) promptStr() string {
-	mode := ColorGreen + "AGENT" + ColorReset
-	if shellMode {
-		mode = ColorYellow + "SHELL" + ColorReset
-	}
-	return fmt.Sprintf("%s[%s]%s %s%s%s $ ",
+	return fmt.Sprintf("%s[%s]%s $ ",
 		ColorCyan, time.Now().Format("15:04:05"), ColorReset,
-		mode, ColorBlue, " agent-os"+ColorReset,
 	)
 }
 
@@ -320,7 +318,6 @@ func (s *Shell) handleCommand(cmd string) {
   /model <id>     切换到指定模型
   /status         显示系统信息
   /shell          切换到原生 Shell 模式（直接执行系统命令）
-  /agent          切换回 Agent 模式（默认）
   /refresh        重新加载模型列表
   /history        显示命令历史
   /env            显示模型相关环境变量
@@ -389,10 +386,6 @@ Agent OS v0.1.0
 		shellMode = true
 		fmt.Println("🖥️  切换到 Shell 模式。输入的命令直接执行。输入 /agent 返回。")
 
-	case "agent":
-		shellMode = false
-		fmt.Println("🤖 切换到 Agent 模式。自然语言指令由 AI 处理。")
-
 	case "refresh":
 		refreshModels()
 		models := GetWorkingModels()
@@ -419,6 +412,7 @@ Agent OS v0.1.0
 		}
 
 	case "learn", "study":
+		PlayDaughterLearnAnimation()
 		d := NewDaughter()
 		if err := d.LearnOnce(); err != nil {
 			fmt.Printf("❌ 学习失败: %v\n", err)
@@ -462,9 +456,6 @@ func (s *Shell) handleAgentChat(input string) {
 	case "shell", "!shell":
 		s.handleCommand("shell")
 		return
-	case "agent", "!agent":
-		s.handleCommand("agent")
-		return
 	case "exit", "quit", "bye":
 		s.handleCommand("exit")
 		return
@@ -480,7 +471,8 @@ func (s *Shell) handleAgentChat(input string) {
 	}
 
 	fmt.Println()
-	fmt.Println(ColorYellow + "🤔 思考中..." + ColorReset)
+	// 启动思考动画（跳动三点）
+	stopSpinner := startThinkingSpinner()
 
 	// 电子女儿 · 驯养：读一句性格底色，从你的话里嗅探情绪（无感知——你不会看到任何数值）
 	d := NewDaughter()
@@ -522,23 +514,54 @@ func (s *Shell) handleAgentChat(input string) {
 		Temperature: 0.3,
 	}
 
-	// 流式输出
-	fmt.Print(ColorGreen)
+	// 流式输出：先缓冲全部内容，再画蓝色方框
 	var fullContent strings.Builder
 	_, err := Complete(nil, msg, func(chunk string) {
-		fmt.Print(chunk)
 		fullContent.WriteString(chunk)
 	})
-	fmt.Print(ColorReset)
-	fmt.Println()
+	stopSpinner() // 安全兜底
+
+	// 名字和表情独立显示在方框左上方，不占用上边框。
+	fmt.Print(ColorMood + "rescene " + ColorReset)
+	fmt.Println(s.daughter.moodEmoji())
+
+	// 画蓝色方框包裹回复。所有边都使用同一个 outerW，最右保留一列，
+	// 防止 Windows 控制台写满整行后自动换行切断边框。
+	tw := terminalWidth()
+	if tw < 8 {
+		tw = 8
+	}
+	outerW := tw - 1
+	innerW := outerW - 4 // │ + 空格 + 内容 + 空格 + │
+	horizontal := strings.Repeat("─", outerW-2)
+	fmt.Println(ColorMood + "┌" + horizontal + "┐" + ColorReset)
+
+	// 正文：│ 内容 │
+	content := strings.TrimRight(fullContent.String(), "\n\r")
+	if content == "" {
+		content = " "
+	}
+	for _, sourceLine := range strings.Split(content, "\n") {
+		for _, line := range wrapTerminalLine(strings.TrimSuffix(sourceLine, "\r"), innerW) {
+			pad := innerW - terminalTextWidth(line)
+			if pad < 0 {
+				pad = 0
+			}
+			// 右边框前重新设置颜色，防止回复内容里的 ANSI reset 导致边框掉色。
+			fmt.Print(ColorMood + "│ " + line + strings.Repeat(" ", pad))
+			fmt.Println(ColorMood + " │" + ColorReset)
+		}
+	}
+
+	fmt.Println(ColorMood + "└" + horizontal + "┘" + ColorReset)
 
 	if err != nil {
-		fmt.Println(ColorRed + "\n❌ " + err.Error() + ColorReset)
+		fmt.Println(ColorRed + "❌ " + err.Error() + ColorReset)
 		return
 	}
 
 	// 检查回复中是否包含可执行的 shell 命令（用 ```bash 或 $ 标记）
-	content := fullContent.String()
+	content = fullContent.String()
 	if cmd := extractCommand(content); cmd != "" {
 		fmt.Println()
 		fmt.Println(ColorYellow + "⚡ 检测到命令，是否执行？[Y/n] " + ColorReset)
@@ -551,6 +574,34 @@ func (s *Shell) handleAgentChat(input string) {
 			}
 		}
 	}
+}
+
+// wrapTerminalLine 按终端显示列宽换行，中文和 emoji 按双宽字符处理。
+func wrapTerminalLine(line string, width int) []string {
+	if width < 1 {
+		return []string{""}
+	}
+	if line == "" {
+		return []string{""}
+	}
+	var lines []string
+	var current strings.Builder
+	used := 0
+	for _, r := range line {
+		w := terminalCellWidth(r)
+		if used > 0 && used+w > width {
+			lines = append(lines, current.String())
+			current.Reset()
+			used = 0
+		}
+		if w > width {
+			continue
+		}
+		current.WriteRune(r)
+		used += w
+	}
+	lines = append(lines, current.String())
+	return lines
 }
 
 func (s *Shell) execShellCommand(cmd string) {
