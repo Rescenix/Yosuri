@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -122,5 +123,38 @@ func TestWrapTerminalLineKeepsBoxWidth(t *testing.T) {
 		if got := terminalTextWidth(line); got > 16 {
 			t.Fatalf("换行后宽度 = %d, 超过 16: %q", got, line)
 		}
+	}
+}
+
+func TestTerminalTextWidthIgnoresANSIAndCountsWideRunes(t *testing.T) {
+	coloredName := " rescene " + ColorMood + "(◕‿◕)🌸" + ColorReset + " "
+	plainName := " rescene (◕‿◕)🌸 "
+	if got, want := terminalTextWidth(coloredName), terminalTextWidth(plainName); got != want {
+		t.Fatalf("ANSI 标题宽度 = %d, want %d", got, want)
+	}
+	if got := terminalTextWidth(" 你 "); got != 4 {
+		t.Fatalf("中文标题宽度 = %d, want 4", got)
+	}
+}
+
+func TestGalgameBorderWidthMath(t *testing.T) {
+	const boxW = 80
+	for _, name := range []string{"你", "rescene " + ColorMood + "(◕‿◕)🌸" + ColorReset} {
+		nameTag := " " + name + " "
+		fill := boxW - 2 - terminalTextWidth(nameTag)
+		visible := 1 + terminalTextWidth(nameTag) + fill + 1
+		if visible != boxW {
+			t.Fatalf("标题 %q 的上边框宽度 = %d, want %d", name, visible, boxW)
+		}
+	}
+}
+
+func TestGalgameTopBorderRestoresColorAfterMood(t *testing.T) {
+	top := galgameTopBorder("rescene "+ColorMood+"(◕‿◕)🌸"+ColorReset, ColorMood, 80)
+	if got := terminalTextWidth(top); got != 80 {
+		t.Fatalf("上边框可见宽度 = %d, want 80", got)
+	}
+	if !strings.Contains(top, ColorReset+ColorMood) {
+		t.Fatal("表情重置颜色后没有恢复边框颜色")
 	}
 }

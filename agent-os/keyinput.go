@@ -95,8 +95,22 @@ func terminalCellWidth(r rune) int {
 
 func terminalTextWidth(text string) int {
 	width := 0
-	for _, r := range text {
+	for i := 0; i < len(text); {
+		// ANSI CSI（如 \x1b[38;2;100;180;255m）不占终端显示列。
+		if text[i] == '\x1b' && i+1 < len(text) && text[i+1] == '[' {
+			i += 2
+			for i < len(text) {
+				b := text[i]
+				i++
+				if b >= 0x40 && b <= 0x7e {
+					break
+				}
+			}
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(text[i:])
 		width += terminalCellWidth(r)
+		i += size
 	}
 	return width
 }

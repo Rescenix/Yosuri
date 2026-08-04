@@ -158,7 +158,8 @@ type ChatResponse struct {
 }
 
 // callModel 单模型调用（不处理熔断，由调用方决定策略）
-func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(string)) (string, error) {
+// onChunk 回调参数：content（回复内容）, reasoning（思考过程，可能为空）
+func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(content, reasoning string)) (string, error) {
 	key := ""
 	if !m.Keyless {
 		key = os.Getenv(m.KeyEnv)
@@ -218,7 +219,9 @@ func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(s
 }
 
 // Complete 发送聊天请求到模型，自动 failover
-func Complete(ctx context.Context, req ChatRequest, onChunk func(string)) (string, error) {
+// 策略：优先本地（有 key 的模型）→ 云端（免 key 网关）兜底
+// onChunk 回调参数：content（回复内容）, reasoning（思考过程，可能为空）
+func Complete(ctx context.Context, req ChatRequest, onChunk func(content, reasoning string)) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -238,9 +241,30 @@ func Complete(ctx context.Context, req ChatRequest, onChunk func(string)) (strin
 		return "", fmt.Errorf("没有可用的免费模型。请通过环境变量配置 API Key，或使用免 key 的 Zen 模型。\n\n可用环境变量:\n  SENSENOVA_API_KEY (商汤免费)\n  MODELSCOPE_API_KEY (魔搭免费)\n  STEP_API_KEY (阶跃星辰免费)\n  OLLAMA_API_KEY (Ollama Cloud 免费)\n  NVIDIA_NIM_API_KEY (NVIDIA 免费)\n\n免 key 模型（直接可用）:\n  OpenCode Zen 网关")
 	}
 
-	// 优先选免 key 模型（Zen 网关），作为默认
+	// 第一轮：有 key 的本地模型优先
 	var lastErr error
 	for _, m := range models {
+		if m.Keyless {
+			continue
+		}
+		if circuitIsOpen(m) {
+			continue
+		}
+		content, err := callModel(ctx, m, req, onChunk)
+		if err != nil {
+			circuitFail(m)
+			lastErr = err
+			continue
+		}
+		circuitSuccess(m)
+		return content, nil
+	}
+
+	// 第二轮：免 key 的云端网关兜底
+	for _, m := range models {
+		if !m.Keyless {
+			continue
+		}
 		if circuitIsOpen(m) {
 			continue
 		}
@@ -258,7 +282,8 @@ func Complete(ctx context.Context, req ChatRequest, onChunk func(string)) (strin
 }
 
 // CompleteWithModel 指定模型调用（不做 failover，供 marathon 轮询全网免费模型）
-func CompleteWithModel(ctx context.Context, modelID string, req ChatRequest, onChunk func(string)) (string, error) {
+// onChunk 回调参数：content（回复内容）, reasoning（思考过程，可能为空）
+func CompleteWithModel(ctx context.Context, modelID string, req ChatRequest, onChunk func(content, reasoning string)) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -298,7 +323,8 @@ func CompleteWithModel(ctx context.Context, modelID string, req ChatRequest, onC
 }
 
 // readStream 读取 SSE 流
-func readStream(body io.ReadCloser, onChunk func(string)) (string, error) {
+// onChunk 回调参数：content（回复内容）, reasoning（思考过程，可能为空）
+func readStream(body io.ReadCloser, onChunk func(content, reasoning string)) (string, error) {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var fullContent strings.Builder
@@ -315,7 +341,8 @@ func readStream(body io.ReadCloser, onChunk func(string)) (string, error) {
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content string `json:"content"`
+					Content          string `json:"content"`
+					ReasoningContent string `json:"reasoning_content"`
 				} `json:"delta"`
 			} `json:"choices"`
 		}
@@ -324,9 +351,12 @@ func readStream(body io.ReadCloser, onChunk func(string)) (string, error) {
 		}
 		if len(chunk.Choices) > 0 {
 			content := chunk.Choices[0].Delta.Content
-			fullContent.WriteString(content)
+			reasoning := chunk.Choices[0].Delta.ReasoningContent
+			if content != "" {
+				fullContent.WriteString(content)
+			}
 			if onChunk != nil {
-				onChunk(content)
+				onChunk(content, reasoning)
 			}
 		}
 	}

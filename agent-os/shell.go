@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 const (
@@ -517,8 +516,16 @@ func (s *Shell) handleAgentChat(input string) {
 
 	// 流式输出：先缓冲全部内容，再画蓝色方框
 	var fullContent strings.Builder
-	_, err := Complete(nil, msg, func(chunk string) {
-		fullContent.WriteString(chunk)
+	_, err := Complete(nil, msg, func(content, reasoning string) {
+		// 第一次收到 reasoning → 替换 spinner 显示思考内容
+		if reasoning != "" {
+			stopSpinner()
+			// 清空思考中行，显示推理过程
+			fmt.Print("\r" + ColorYellow + "💭 " + reasoning + ColorReset)
+		}
+		if content != "" {
+			fullContent.WriteString(content)
+		}
 	})
 	stopSpinner() // 安全兜底
 
@@ -593,6 +600,7 @@ func wrapTerminalLine(line string, width int) []string {
 //	┌─ name ────────────────────────┐
 //	│ 内容...                        │
 //	└───────────────────────────────┘
+//
 // boxW 为整个框的字符宽度（含边框），保证上下左右边框对齐
 func drawGalgameBox(name, content string, boxColor string, boxW int) {
 	if content == "" {
@@ -601,11 +609,7 @@ func drawGalgameBox(name, content string, boxColor string, boxW int) {
 	content = strings.TrimRight(content, "\n\r")
 	contentW := boxW - 4 // │ + 空格 + 内容 + 空格 + │
 
-	// 上边框：┌─ name ──┐
-	nameTag := " " + name + " "
-	nameLen := utf8.RuneCountInString(nameTag)
-	top := "┌" + nameTag + strings.Repeat("─", boxW-2-nameLen) + "┐"
-	fmt.Println(boxColor + top + ColorReset)
+	fmt.Println(galgameTopBorder(name, boxColor, boxW))
 
 	// 正文行：│ 内容 │
 	for _, sourceLine := range strings.Split(content, "\n") {
@@ -622,6 +626,17 @@ func drawGalgameBox(name, content string, boxColor string, boxW int) {
 
 	// 下边框：└──┘（宽度 = boxW）
 	fmt.Println(boxColor + "└" + strings.Repeat("─", boxW-2) + "┘" + ColorReset)
+}
+
+func galgameTopBorder(name, boxColor string, boxW int) string {
+	// 标题可能包含中文、emoji 和 ANSI 颜色码，必须按终端显示列计算。
+	nameWidth := terminalTextWidth(" " + name + " ")
+	fillWidth := boxW - 2 - nameWidth
+	if fillWidth < 0 {
+		fillWidth = 0
+	}
+	// name 内的 moodEmoji 会执行 ColorReset；标题后显式恢复边框颜色，避免横线掉色。
+	return boxColor + "┌ " + name + boxColor + " " + strings.Repeat("─", fillWidth) + "┐" + ColorReset
 }
 
 func (s *Shell) execShellCommand(cmd string) {

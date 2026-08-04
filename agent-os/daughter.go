@@ -236,7 +236,7 @@ func (d *Daughter) LearnOnce() error {
 		MaxTokens:   2048,
 		Temperature: 0.8,
 	}
-	content, err := CompleteWithModel(context.Background(), model.ID, msg, func(chunk string) {
+		content, err := CompleteWithModel(context.Background(), model.ID, msg, func(chunk, reasoning string) {
 		fmt.Print(chunk)
 	})
 	fmt.Println()
