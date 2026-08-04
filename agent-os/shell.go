@@ -521,9 +521,14 @@ func (s *Shell) handleAgentChat(input string) {
 	})
 	stopSpinner() // 安全兜底
 
+	// 回显用户消息到聊天记录
+	fmt.Println("  " + ColorCyan + "你" + ColorReset)
+	fmt.Println("  " + input)
+	fmt.Println()
+
 	// 名字和表情独立显示在方框左上方（绿色）
-		fmt.Print(ColorGreen + "rescene " + ColorReset)
-		fmt.Println(ColorGreen + s.daughter.moodEmoji() + ColorReset)
+	fmt.Print(ColorGreen + "rescene " + ColorReset)
+	fmt.Println(ColorGreen + s.daughter.moodEmoji() + ColorReset)
 
 	// 画蓝色方框包裹回复。所有边都使用同一个 outerW，最右保留一列，
 	// 防止 Windows 控制台写满整行后自动换行切断边框。
