@@ -143,16 +143,18 @@ func (d *Daughter) LearnOnce() error {
 		return fmt.Errorf("没有可用模型")
 	}
 
-	// 3. 尝试 Firecrawl 抓正文
+	// 3. Firecrawl 联网搜索（key 与前端设置打通：前端填一次，CLI 直接用）
 	webContent := ""
-	if key := os.Getenv("FIRECRAWL_API_KEY"); key != "" {
-		fmt.Println("  🔍 Firecrawl 联网抓取中…")
-		webContent = firecrawlFetch(topics[0], key)
+	if key := firecrawlKey(); key != "" {
+		fmt.Println("  🔍 Firecrawl 联网搜索中…")
+		webContent = firecrawlSearch(topics[0], key)
 		if webContent != "" {
-			fmt.Printf("  抓到正文 %d 字\n", len(webContent))
+			fmt.Printf("  搜到内容 %d 字\n", len(webContent))
+		} else {
+			fmt.Println("  ⚠️ 搜索无结果，用热点标题学习")
 		}
 	} else {
-		fmt.Println("  ⚠️ 未配置 FIRECRAWL_API_KEY，用热点标题学习（配置后能读全文）")
+		fmt.Println("  ⚠️ 未配置 Firecrawl Key（前端设置填一次即可，或设 FIRECRAWL_API_KEY），用热点标题学习")
 	}
 
 	// 4. 模型消化成学习笔记
@@ -224,8 +226,89 @@ func buildLearnPrompt(topics []string, webContent string) string {
 	return sb.String()
 }
 
-// firecrawlFetch 用 Firecrawl 抓取网页正文（免费额度 500 次/月）
-func firecrawlFetch(url, key string) string {
+// firecrawlKey 优先读前端设置的 key：~/rescene_data/user_configs/default.json 的
+// id=firecrawl 条目（前端「Firecrawl API Key」填一次），环境变量兜底——
+// 同一个 key，前端网页和 CLI 女儿通用。
+func firecrawlKey() string {
+	if home, err := os.UserHomeDir(); err == nil {
+		path := filepath.Join(home, "rescene_data", "user_configs", "default.json")
+		if data, err := os.ReadFile(path); err == nil {
+			var entries []struct {
+				ID     string `json:"id"`
+				APIKey string `json:"api_key"`
+			}
+			if json.Unmarshal(data, &entries) == nil {
+				for _, e := range entries {
+					if e.ID == "firecrawl" && strings.TrimSpace(e.APIKey) != "" {
+						return strings.TrimSpace(e.APIKey)
+					}
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(os.Getenv("FIRECRAWL_API_KEY"))
+}
+
+// firecrawlSearch 用 Firecrawl 搜索话题（/v1/search，免费额度 500 次/月），
+// 返回带标题/链接/摘要的结果文本。学习走搜索而非抓单 URL——HN 标题是话题
+// 文本不是 URL，旧的 firecrawlFetch(topics[0]) 其实一直在抓空（2026-08-04 修复）。
+func firecrawlSearch(query, key string) string {
+	client := &http.Client{Timeout: 30 * time.Second}
+	body := strings.NewReader(fmt.Sprintf(`{"query":%q,"limit":5}`, query))
+	req, err := http.NewRequest("POST", "https://api.firecrawl.dev/v1/search", body)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+key)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	var out struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Results []struct {
+				Title       string `json:"title"`
+				URL         string `json:"url"`
+				Description string `json:"description"`
+				Content     string `json:"content"`
+			} `json:"results"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(data, &out) != nil || !out.Success || len(out.Data.Results) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "话题「%s」的联网搜索结果：\n", query)
+	for i, r := range out.Data.Results {
+		fmt.Fprintf(&sb, "%d. %s\n   %s\n", i+1, strings.TrimSpace(r.Title), strings.TrimSpace(r.URL))
+		if d := strings.TrimSpace(r.Description); d != "" {
+			sb.WriteString("   " + d + "\n")
+		}
+		if c := strings.TrimSpace(r.Content); c != "" {
+			cc := strings.Join(strings.Fields(c), " ")
+			if len(cc) > 300 {
+				cc = cc[:300] + "…"
+			}
+			sb.WriteString("   " + cc + "\n")
+		}
+	}
+	return sb.String()
+}
+
+// firecrawlFetch 用 Firecrawl 抓取指定网页正文（/v1/scrape，免费额度 500 次/月）。
+// 保留给需要全文的场合；学习默认走 firecrawlSearch。
+func firecrawlFetch(url string) string {
+	key := firecrawlKey()
+	if key == "" {
+		return ""
+	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	body := strings.NewReader(fmt.Sprintf(
 		`{"url":%q,"formats":["markdown"],"onlyMainContent":true,"limit":3}`, url))
