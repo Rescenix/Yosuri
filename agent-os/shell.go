@@ -471,6 +471,17 @@ func (s *Shell) handleAgentChat(input string) {
 	}
 
 	fmt.Println()
+	// 终端宽度
+	tw := terminalWidth()
+	if tw < 8 {
+		tw = 8
+	}
+	boxW := tw - 2 // 框宽 = 终端宽 - 2 边距
+
+	// ─── 立即显示用户消息框（发出即显示，不等思考） ───
+	drawGalgameBox("你", input, ColorCyan, boxW)
+	fmt.Println()
+
 	// 启动思考动画（跳动三点）
 	stopSpinner := startThinkingSpinner()
 
@@ -516,12 +527,18 @@ func (s *Shell) handleAgentChat(input string) {
 
 	// 流式输出：先缓冲全部内容，再画蓝色方框
 	var fullContent strings.Builder
+	spinnerStopped := false
 	_, err := Complete(nil, msg, func(content, reasoning string) {
-		// 第一次收到 reasoning → 替换 spinner 显示思考内容
+		// 收到思考内容 → 替换 spinner 实时显示推理过程
 		if reasoning != "" {
-			stopSpinner()
-			// 清空思考中行，显示推理过程
-			fmt.Print("\r" + ColorYellow + "💭 " + reasoning + ColorReset)
+			if !spinnerStopped {
+				spinnerStopped = true
+				stopSpinner()
+				fmt.Print("\n") // 思考内容单独一行
+			}
+			// 单行实时刷新：\r 回行首 + 清行 + 打印最新思考片段
+			oneLine := strings.ReplaceAll(reasoning, "\n", " ")
+			fmt.Print("\r" + ColorYellow + "💭 " + runeClip(oneLine, tw-8) + ColorReset)
 		}
 		if content != "" {
 			fullContent.WriteString(content)
@@ -529,17 +546,11 @@ func (s *Shell) handleAgentChat(input string) {
 	})
 	stopSpinner() // 安全兜底
 
-	// 终端宽度
-	tw := terminalWidth()
-	if tw < 8 {
-		tw = 8
+	// 若显示过思考内容，换行收尾再画回复框
+	if spinnerStopped {
+		fmt.Print("\r\x1b[2K")
+		fmt.Println()
 	}
-	boxW := tw - 2 // 框宽 = 终端宽 - 2 边距
-
-	// ─── Galgame 式对话框：用户消息 ───
-	drawGalgameBox("你", input, ColorCyan, boxW)
-
-	fmt.Println()
 
 	// ─── Galgame 式对话框：女儿回复 ───
 	header := "rescene " + s.daughter.moodEmoji()
