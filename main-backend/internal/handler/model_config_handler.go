@@ -290,6 +290,7 @@ func HandleGetModelConfig(c *gin.Context) {
 	}
 
 	freeModels := make([]freeModelView, 0, len(freeModelCatalog))
+	envKeys := userKeysByEnv(userKey)
 	for _, f := range freeModelCatalog {
 		v := freeModelView{FreeModelDef: f}
 		v.Signal = probeSignalByDef(f)
@@ -297,11 +298,19 @@ func HandleGetModelConfig(c *gin.Context) {
 			v.APIKeySet = e.APIKey != ""
 			v.IsDefault = e.IsDefault
 		}
+		// 同厂商共享个人 key：同 KeyEnv（如 STEP_API_KEY）任一模型配过即视为
+		// 可用，step-3.7-flash 等兄弟模型不再要求逐个同名条目（2026-08-04）。
+		if !v.APIKeySet && envKeys[f.KeyEnv] != "" {
+			v.APIKeySet = true
+		}
 		if !v.APIKeySet && os.Getenv(f.KeyEnv) != "" {
 			v.APIKeySet = true
 		}
 		freeModels = append(freeModels, v)
 	}
+	// 免费池自动发现：有 key 的提供方自动 /v1/models，全部模型并入列表
+	// （提供方粒度，一个 key 拉全部模型，2026-08-04）。
+	freeModels = append(freeModels, discoveredFreeModels(userKey)...)
 	// 免费池显示顺序 = Auto 智能路由顺序（用户可在「编辑模型」弹窗调整）；
 	// 没保存过排序时保持目录声明顺序。信号格高的、最近成功用过的排前面。
 	orderRank := freeOrderRank()

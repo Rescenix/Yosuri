@@ -17,6 +17,10 @@ func main() {
 	// 避免子进程变孤儿继续占内存。（本地 llama-server 已移除，2026-08-01。）
 	handler.RegisterCleanupOnExit()
 
+	// 免费池自动发现预热：后台拉各提供方 /v1/models，一个 key 出全部模型
+	// （step 等厂商配过 key 就自动全量进下拉，2026-08-04）。
+	handler.WarmFreePoolDiscovery()
+
 	r := handler.NewAPIRouter()
 
 	log.Println("🚀 Rescene 引擎已启动，监听端口 :8080")

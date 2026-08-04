@@ -159,6 +159,32 @@ func isFreeCatalogID(id string) bool {
 	return false
 }
 
+// userKeysByEnv 从用户配置里按 KeyEnv 收集 key：同一厂商（同 KeyEnv，如
+// STEP_API_KEY）的多个免费模型共用一把 key——用户只要给任一 step 模型配过
+// 个人 key，其他 step 模型（step-3.7-flash 等）都算可用，不再要求逐个同名
+// 条目（2026-08-04：step-3.7-flash 之前因无独立条目被踢出下拉/路由链）。
+func userKeysByEnv(userKey string) map[string]string {
+	envOfID := map[string]string{}
+	for _, f := range freeModelCatalog {
+		if f.KeyEnv != "" {
+			envOfID[f.ID] = f.KeyEnv
+		}
+	}
+	out := map[string]string{}
+	if entries, err := loadModelConfigs(userKey); err == nil {
+		for _, e := range entries {
+			env, ok := envOfID[e.ID]
+			if !ok || env == "" || strings.TrimSpace(e.APIKey) == "" {
+				continue
+			}
+			if _, exists := out[env]; !exists {
+				out[env] = strings.TrimSpace(e.APIKey)
+			}
+		}
+	}
+	return out
+}
+
 // searchBackend 已随 DeepSeek 服务端联网搜索一并退役（2026-08-04）：
 // 联网搜索改由常驻 web_search 工具（Firecrawl）提供，模型自主判断是否调用，
 // 不再需要独立的「搜索模型」配置与 Responses 服务端搜索分支。
@@ -212,7 +238,9 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 		}
 	}
 
-	// 3. 免费池：Key 来源 = 用户保存的同 ID 条目 > 环境变量；没 Key 的源（Local/Ollama Cloud 走本地路由）直接不进链
+	// 3. 免费池：Key 来源 = 用户保存的同 ID 条目 > 同厂商共享 key > 环境变量；
+	// 没 Key 的源（Local/Ollama Cloud 走本地路由）直接不进链
+	envKeys := userKeysByEnv(userKey)
 	for _, f := range freeModelCatalog {
 		if f.Disabled {
 			continue
@@ -222,6 +250,9 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 		if e, ok := entryByID[f.ID]; ok {
 			key = e.APIKey
 			isDefault = e.IsDefault
+		}
+		if key == "" && !f.Local && !f.Keyless {
+			key = envKeys[f.KeyEnv] // 同厂商共享个人 key（同 KeyEnv 任一模型配过即可）
 		}
 		if key == "" && !f.Local && !f.Keyless {
 			key = os.Getenv(f.KeyEnv)
@@ -295,6 +326,13 @@ func resolveExact(userKey string, model string) *RouterBackend {
 	for _, e := range entries {
 		entryByID[e.ID] = e
 	}
+	envKeys := userKeysByEnv(userKey)
+	// 免费池自动发现模型（auto_ 前缀）：用户从下拉选中的动态模型，按提供方路由
+	if strings.HasPrefix(model, "auto_") {
+		if b := resolveAutoDiscovered(userKey, model, envKeys); b != nil {
+			return b
+		}
+	}
 	// 免费池
 	for _, f := range freeModelCatalog {
 		if f.Disabled {
@@ -307,6 +345,9 @@ func resolveExact(userKey string, model string) *RouterBackend {
 		if !f.Local && !f.Keyless {
 			if e, ok := entryByID[f.ID]; ok {
 				key = e.APIKey
+			}
+			if key == "" {
+				key = envKeys[f.KeyEnv] // 同厂商共享个人 key
 			}
 			if key == "" {
 				key = os.Getenv(f.KeyEnv)

@@ -2,11 +2,14 @@ package handler
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -126,4 +129,179 @@ func HandleDiscoverProviderModels(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"models": models})
+}
+
+// ==================== 免费池自动发现（提供方粒度） ====================
+// 一个提供方一把 key，自动拉它的 /v1/models，全部模型直接进池（2026-08-04）。
+// 自定义 API 能动态发现是因为前端手动点「发现模型」→ /api/models/discover；
+// 免费池之前是写死目录（freeModelCatalog），现在把同一个机制自动接到免费池：
+// 用户给某个提供方（如 StepFun）配过 key，它的全部模型自动出现，不用逐个人工录入。
+
+const freePoolDiscTTL = 6 * time.Hour
+
+type discoveredProvider struct {
+	Endpoint string
+	KeyEnv   string
+	Keyless  bool
+	Vendor   string
+	Models   []ModelConfigModel
+}
+
+var (
+	discMu      sync.Mutex
+	discCache   []discoveredProvider // 免费池各提供方的模型快照
+	discFetched time.Time            // 上次拉取时间
+	discUserKey string               // 拉取时用的 userKey（key 集合变了要重拉）
+)
+
+// WarmFreePoolDiscovery 启动时后台预热（main 调用），不阻塞启动。
+func WarmFreePoolDiscovery() {
+	go ensureFreePoolDiscovery("")
+}
+
+// ensureFreePoolDiscovery 保证免费池发现缓存新鲜：TTL 内直接用，过期/换用户则
+// 同步并行拉所有「有 key 的提供方」的 /v1/models；单源失败静默（保持现状），
+// 不阻塞整体。
+func ensureFreePoolDiscovery(userKey string) {
+	discMu.Lock()
+	if userKey == discUserKey && time.Since(discFetched) < freePoolDiscTTL {
+		discMu.Unlock()
+		return
+	}
+	discMu.Unlock()
+
+	envKeys := userKeysByEnv(userKey)
+	// 按 endpoint 去重：同提供方多个目录条目只拉一次
+	type prov struct {
+		ep, keyEnv, vendor string
+		keyless            bool
+	}
+	seen := map[string]prov{}
+	for _, f := range freeModelCatalog {
+		if f.Disabled || f.Local {
+			continue
+		}
+		if f.KeyEnv != "" {
+			if envKeys[f.KeyEnv] == "" && os.Getenv(f.KeyEnv) == "" && !f.Keyless {
+				continue // 没 key 的提供方不拉
+			}
+		} else if !f.Keyless {
+			continue
+		}
+		if _, ok := seen[f.Endpoint]; !ok {
+			seen[f.Endpoint] = prov{ep: f.Endpoint, keyEnv: f.KeyEnv, vendor: f.Vendor, keyless: f.Keyless}
+		}
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	results := make([]discoveredProvider, 0, len(seen))
+	for _, p := range seen {
+		wg.Add(1)
+		go func(p prov) {
+			defer wg.Done()
+			key := ""
+			if !p.keyless {
+				key = envKeys[p.keyEnv]
+				if key == "" {
+					key = os.Getenv(p.keyEnv)
+				}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer cancel()
+			models, err := fetchProviderModels(ctx, p.ep, key)
+			if err != nil || len(models) == 0 {
+				return // 拉不到保持现状，静默
+			}
+			mu.Lock()
+			results = append(results, discoveredProvider{
+				Endpoint: p.ep, KeyEnv: p.keyEnv, Keyless: p.keyless, Vendor: p.vendor, Models: models,
+			})
+			mu.Unlock()
+		}(p)
+	}
+	wg.Wait()
+
+	discMu.Lock()
+	discCache = results
+	discFetched = time.Now()
+	discUserKey = userKey
+	discMu.Unlock()
+}
+
+// catalogHasModel 目录里是否已有同名上游模型（避免自动发现重复）
+func catalogHasModel(upstreamID string) bool {
+	for _, f := range freeModelCatalog {
+		if f.Model == upstreamID || f.ID == upstreamID {
+			return true
+		}
+	}
+	return false
+}
+
+// discoveredFreeModels 把自动发现结果转成 free_models 视图条目（auto_ 前缀 ID，
+// 前端直接分组显示，api_key_set=true 保证进下拉）。
+func discoveredFreeModels(userKey string) []freeModelView {
+	ensureFreePoolDiscovery(userKey)
+	discMu.Lock()
+	defer discMu.Unlock()
+	var out []freeModelView
+	for _, p := range discCache {
+		for _, m := range p.Models {
+			if catalogHasModel(m.ID) {
+				continue
+			}
+			id := "auto_" + sanitizeID(p.Vendor) + "_" + hexEncode(m.ID)
+			out = append(out, freeModelView{
+				FreeModelDef: FreeModelDef{
+					ID: id, Vendor: p.Vendor, Name: m.Name + "（自动发现）",
+					Endpoint: p.Endpoint, Model: m.ID, KeyEnv: p.KeyEnv, Keyless: p.Keyless,
+				},
+				APIKeySet: true,
+			})
+		}
+	}
+	return out
+}
+
+// sanitizeID 去掉 vendor 名里的非字母数字（只做 ID 组件，不展示）
+func sanitizeID(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return strings.ToLower(b.String())
+}
+
+// hexEncode 用 hex 编码上游模型 ID（可能含 / : 等特殊字符，不能直接进 URL 参数）
+func hexEncode(s string) string {
+	return hex.EncodeToString([]byte(s))
+}
+
+// resolveAutoDiscovered 把 auto_ 前缀的自动发现模型解析成 RouterBackend
+// （endpoint + key 来自发现快照；上游模型 ID 是真实 ID，直接进 Model 字段）。
+func resolveAutoDiscovered(userKey, model string, envKeys map[string]string) *RouterBackend {
+	for _, fm := range discoveredFreeModels(userKey) {
+		if fm.ID != model {
+			continue
+		}
+		key := ""
+		if !fm.Keyless {
+			key = envKeys[fm.KeyEnv]
+			if key == "" {
+				key = os.Getenv(fm.KeyEnv)
+			}
+			if key == "" {
+				return nil
+			}
+		}
+		return &RouterBackend{
+			ID: fm.ID, Name: fm.Name, BaseURL: fm.Endpoint, Model: fm.Model,
+			APIKey: key, Timeout: 45 * time.Second, Source: "free",
+			Keyless: fm.Keyless,
+		}
+	}
+	return nil
 }
