@@ -122,10 +122,11 @@ func callArxivSearch(ctx context.Context, argsJSON string) (string, error) {
 	}
 
 	q := url.Values{}
+	searchQuery := "" // 提到块外：endpoint 构造时要用字面值替换回 %2B 编码
 	if idList != "" {
 		q.Set("id_list", idList)
 	} else {
-		searchQuery := normalizeArxivQuery(query)
+		searchQuery = normalizeArxivQuery(query)
 		// 分类过滤拼进 search_query：cat:A OR cat:B（与关键词 AND）
 		if cats := strings.TrimSpace(args.Categories); cats != "" {
 			var catParts []string
@@ -161,6 +162,11 @@ func callArxivSearch(ctx context.Context, argsJSON string) (string, error) {
 	q.Set("max_results", fmt.Sprintf("%d", maxResults))
 
 	endpoint := arxivAPIEndpoint + "?" + q.Encode()
+	// 坑：url.Values.Encode() 把 search_query 里的 + 编码成 %2B，arXiv 不认
+	// （AND/OR 语义失效 → 空 feed）。把 search_query 替换回字面值。
+	if idList == "" {
+		endpoint = strings.Replace(endpoint, "search_query="+url.QueryEscape(searchQuery), "search_query="+searchQuery, 1)
+	}
 	body, err := arxivHTTPGet(ctx, endpoint)
 	if err != nil {
 		return "", err
