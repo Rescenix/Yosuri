@@ -1,8 +1,9 @@
 [English](./README.md) · [中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
-# Rescene 🧬
-
-**less chat, more automatic.**
+<p align="center">
+  <img src="./assets/rescene-icon.png" alt="Rescene" width="96" style="vertical-align: middle; margin-right: 16px;">
+  <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
+</p>
 
 一个 24H 自迭代的 Agent OS，住在你的电脑里。她聚合全网免费模型，自己选题立项、写真实代码、跑验证——全自动。她每天还自己上网学习、写日记、记得你。
 
@@ -29,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 </p>
 
 <p align="center">
-  <img src="./assets/rescene-agent-workflow.png" alt="Rescene Agent 工作台与实时任务清单" width="100%">
+  <img src="./assets/preview.gif" alt="Rescene 实机演示" width="100%">
 </p>
 
 ---
