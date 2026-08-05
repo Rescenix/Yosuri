@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -82,6 +83,7 @@ func circuitFail(b FreeModel) {
 		openUntil: now.Add(30 * time.Second),
 		failCount: 1,
 	})
+	recordModelResult(b, false)
 }
 
 func circuitIsOpen(b FreeModel) bool {
@@ -101,6 +103,67 @@ func circuitIsOpen(b FreeModel) bool {
 func circuitSuccess(b FreeModel) {
 	k := b.Endpoint + "|" + b.Model
 	circuits.Delete(k)
+	recordModelResult(b, true)
+}
+
+// —— 模型信用（成功率）——
+// 决策时按信用排序：成功率最高的模型优先（首选），次高的后台预备。
+// 信用数据随每次调用自动积累（success/fail 计数），样本太少给中立 0.5。
+
+type modelStat struct {
+	Success int
+	Fail    int
+}
+
+var (
+	statsMu    sync.Mutex
+	modelStats = map[string]*modelStat{}
+)
+
+func recordModelResult(b FreeModel, ok bool) {
+	k := b.Endpoint + "|" + b.Model
+	statsMu.Lock()
+	st := modelStats[k]
+	if st == nil {
+		st = &modelStat{}
+		modelStats[k] = st
+	}
+	if ok {
+		st.Success++
+	} else {
+		st.Fail++
+	}
+	statsMu.Unlock()
+}
+
+// modelCredit 模型信用分：成功率为主；样本不足 3 次给中立 0.5（新模型不被歧视也不被高估）
+func modelCredit(b FreeModel) float64 {
+	statsMu.Lock()
+	st := modelStats[b.Endpoint+"|"+b.Model]
+	statsMu.Unlock()
+	if st == nil {
+		return 0.5
+	}
+	total := st.Success + st.Fail
+	if total < 3 {
+		return 0.5
+	}
+	return float64(st.Success) / float64(total)
+}
+
+// rankModels 按信用降序返回可用模型（过滤熔断的）——决策首选排最前
+func rankModels(models []FreeModel) []FreeModel {
+	out := make([]FreeModel, 0, len(models))
+	for _, m := range models {
+		if circuitIsOpen(m) {
+			continue
+		}
+		out = append(out, m)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return modelCredit(out[i]) > modelCredit(out[j])
+	})
+	return out
 }
 
 // InitRouter 初始化路由：过滤出可用模型
@@ -297,6 +360,10 @@ func Complete(ctx context.Context, req ChatRequest, onChunk func(content, reason
 		return content, nil
 	}
 
+	if lastErr == nil {
+		// 没有任何模型真正尝试过：全部被熔断跳过（冷却中），报 <nil> 是误导
+		return "", fmt.Errorf("所有模型均处于熔断冷却中（连续失败自动冷却，稍后恢复）")
+	}
 	return "", fmt.Errorf("所有模型均失败: %v", lastErr)
 }
 

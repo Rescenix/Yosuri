@@ -72,11 +72,21 @@ func llmDecideAction(d *Daughter) trumanAction {
 
 	prompt := fmt.Sprintf(trumanSystemPrompt, state)
 
-	// 免费模型 failover（熔断跳过，全失败规则兜底）
-	for _, m := range freeModelCandidates() {
-		if circuitIsOpen(m) {
-			continue
-		}
+	// 信用排序 failover：先用信用最好的模型（成功率最高），
+	// 次高的在后台预备——首选失败立刻用预备结果，不重等。
+	// 熔断用 sync.Map + statsMu 锁，并发安全。
+	ranked := rankModels(freeModelCandidates())
+	if len(ranked) == 0 {
+		// 全部熔断中：立即规则兜底，不空等
+		return ruleDecideAction(w)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	type result struct {
+		act trumanAction
+		ok  bool
+	}
+	call := func(m FreeModel, ch chan<- result) {
 		msg := ChatRequest{
 			Model:       m.Model,
 			Messages:    []ChatMessage{{Role: "user", Content: prompt}},
@@ -84,15 +94,46 @@ func llmDecideAction(d *Daughter) trumanAction {
 			MaxTokens:   128,
 			Temperature: 0.9,
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		content, err := CompleteWithModel(ctx, m.ID, msg, nil)
-		cancel()
 		if err != nil {
 			circuitFail(m)
-			continue
+			ch <- result{}
+			return
 		}
 		if act, ok := parseTrumanAction(content); ok {
-			return act
+			ch <- result{act: act, ok: true}
+			return
+		}
+		ch <- result{}
+	}
+
+	primary := ranked[0] // 首选：信用最好
+	primaryCh := make(chan result, 1)
+	go call(primary, primaryCh)
+	backups := ranked[1:] // 预备：次高信用
+	backupCh := make(chan result, len(backups))
+	for _, b := range backups {
+		go call(b, backupCh)
+	}
+
+	// 首选结果优先：成功直接用
+	select {
+	case r := <-primaryCh:
+		if r.ok {
+			return r.act
+		}
+	case <-ctx.Done():
+		return ruleDecideAction(w)
+	}
+	// 首选失败 → 用预备里最先成功的
+	for i := 0; i < len(backups); i++ {
+		select {
+		case r := <-backupCh:
+			if r.ok {
+				return r.act
+			}
+		case <-ctx.Done():
+			return ruleDecideAction(w)
 		}
 	}
 	// 规则兜底：按节奏轮换（模型不可用时保证生活继续）
