@@ -239,10 +239,11 @@ func maxI(a, b int) int {
 
 // drawSceneBlock 首次绘制 12 行直播画布，随后在第 13 行绘制输入提示符。
 func drawSceneBlock(prompt string, buf []rune, logPath string) {
-	for _, line := range renderLiveLines(currentLiveFrame(logPath, liveSceneRows-2)) {
-		fmt.Print("\r\x1b[2K" + line + "\r\n")
+	lines := renderLiveLines(currentLiveFrame(logPath, liveSceneRows-2))
+	for _, line := range lines {
+		fmt.Println(line)
 	}
-	fmt.Print("\r\x1b[2K" + prompt + string(buf) + "\x1b[K")
+	fmt.Print(prompt + string(buf) + "\x1b[K")
 }
 
 // overwriteScene 从输入行回到画布顶部，固定覆写 12 行，再准确回到输入行。
