@@ -31,6 +31,9 @@ func main() {
 		case "learn", "study":
 			runDaughterLearn()
 			return
+		case "live", "daemon", "truman":
+			runLive(os.Args[2:])
+			return
 		case "update", "upgrade", "self-update":
 			doUpdate()
 			return
@@ -113,6 +116,7 @@ func printHelp() {
   rescene marathon     24H 自迭代马拉松（热点立项 → 需求→计划→自检闭环）
   rescene report       查看马拉松战报（--dir 指定目录）
   rescene learn        电子女儿学习一轮（联网抓知识 → 写日记）
+  rescene live         楚门世界：常驻自主模式（她开始在自己的世界里生活）
   rescene update       检查并更新到最新版
   rescene version      显示版本
   rescene help         显示帮助
@@ -126,6 +130,11 @@ marathon 参数:
   --hot hn|github  热点源（默认 hn）
   --iters N        每项目迭代轮数（默认 6）
   --quick          快速自测模式
+
+live 参数:
+  --every N       轮间隔分钟（默认 30）
+  --task-every N  每几轮一次自主课题（默认 4）
+  --hot src       热点源 hn|github|off（默认 hn）
 
 一行安装:
   PowerShell: irm https://git.io/rescene | iex

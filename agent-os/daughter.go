@@ -184,6 +184,14 @@ func (d *Daughter) Greet() string {
 		}
 		sb.WriteString(strings.Join(shown, "、") + "\n")
 	}
+
+	// 楚门世界：你不在的时候她在干嘛（直播日志尾部）
+	if tail := liveLogTail(d.Home, 3); tail != "" {
+		sb.WriteString(ColorCyan + "  📺 你不在的时候：" + ColorReset + "\n")
+		for _, line := range strings.Split(strings.TrimRight(tail, "\n"), "\n") {
+			sb.WriteString("    " + line + "\n")
+		}
+	}
 	return sb.String()
 }
 
