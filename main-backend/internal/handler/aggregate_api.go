@@ -317,6 +317,16 @@ func HandleAggregateModels(c *gin.Context) {
 		})
 		seen[f.ID] = true
 	}
+	// 自动发现的免费池模型（用户配 key 后自动 /v1/models 拉取的）
+	for _, dm := range discoveredFreeModels("") {
+		if seen[dm.ID] {
+			continue
+		}
+		data = append(data, map[string]any{
+			"id": dm.ID, "object": "model", "owned_by": dm.Vendor, "created": 0,
+		})
+		seen[dm.ID] = true
+	}
 	// 自定义提供方模型
 	if entries, err := loadModelConfigs(""); err == nil {
 		for _, e := range entries {

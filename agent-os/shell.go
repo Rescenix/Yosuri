@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -42,6 +43,10 @@ func NewShell() *Shell {
 }
 
 func (s *Shell) Run() {
+	// 工作目录信任检查（仿 Claude Code）
+	if !checkTrustedDir() {
+		os.Exit(0)
+	}
 	// 初始化路由
 	InitRouter()
 	// 楚门世界：打开她就开始自动化（后台自主循环：学习 + arXiv 精读，静默只写 live.log）
@@ -112,7 +117,77 @@ func (s *Shell) Run() {
 	fmt.Println("\n👋 再见～")
 }
 
+// checkTrustedDir 工作目录信任检查（仿 Claude Code）
+// 首次在目录运行 rescene 时会询问是否信任，确认后加入信任列表
+func checkTrustedDir() bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return true // 无法获取目录时放行
+	}
+	trusted := loadTrustedDirs()
+	if trusted[cwd] {
+		return true
+	}
+	// 非终端模式（管道/重定向）直接放行
+	if !isTerminal() {
+		return true
+	}
+	fmt.Println(ColorYellow + "═══════════════════════════════════════════" + ColorReset)
+	fmt.Println("  工作目录：" + ColorCyan + cwd + ColorReset)
+	fmt.Println()
+	fmt.Println("  Rescene 将能够读取、修改和执行此目录下的文件。")
+	fmt.Println("  这是你自己的项目或你信任的项目吗？")
+	fmt.Println("  （如：自己的代码、知名的开源项目、或团队项目）")
+	fmt.Println()
+	fmt.Println("  " + ColorGreen + "1. 是，我信任此目录" + ColorReset)
+	fmt.Println("  " + ColorYellow + "2. 否，退出" + ColorReset)
+	fmt.Println(ColorYellow + "═══════════════════════════════════════════" + ColorReset)
+	fmt.Print("  选择 [1/2]：")
+
+	var choice string
+	fmt.Scanln(&choice)
+	if choice == "1" || choice == "" {
+		trusted[cwd] = true
+		saveTrustedDirs(trusted)
+		fmt.Println("  ✅ 已信任此目录，下次不再询问")
+		return true
+	}
+	fmt.Println("  👋 已退出")
+	return false
+}
+
+// loadTrustedDirs 加载信任目录列表
+func loadTrustedDirs() map[string]bool {
+	path := filepath.Join(daughterHome(), "..", "trusted_dirs.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return map[string]bool{}
+	}
+	var list []string
+	json.Unmarshal(data, &list)
+	m := map[string]bool{}
+	for _, d := range list {
+		m[d] = true
+	}
+	return m
+}
+
+// saveTrustedDirs 保存信任目录列表
+func saveTrustedDirs(m map[string]bool) {
+	path := filepath.Join(daughterHome(), "..", "trusted_dirs.json")
+	var list []string
+	for d := range m {
+		list = append(list, d)
+	}
+	data, _ := json.MarshalIndent(list, "", "  ")
+	os.WriteFile(path, data, 0644)
+}
+
 func (s *Shell) ExecOne(cmd string) {
+	// 工作目录信任检查（仿 Claude Code）
+	if !checkTrustedDir() {
+		os.Exit(0)
+	}
 	InitRouter()
 	available := GetWorkingModels()
 	defaultModel := "free_zen_deepseek_v4_flash"
