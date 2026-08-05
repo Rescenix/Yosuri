@@ -433,6 +433,7 @@ func (s *Shell) handleCommand(cmd string) {
   /env            显示模型相关环境变量
   /report         查看马拉松战报（--dir 指定目录，默认 marathon/）
   /learn          电子女儿学习一轮（联网抓知识 → 写日记）
+  /live           显示楚门世界直播画面（屏保）
 
 用法:
   直接输入任何文字，Agent 会自动处理。
@@ -527,6 +528,11 @@ Agent OS v0.1.0
 		if err := d.LearnOnce(); err != nil {
 			fmt.Printf("❌ 学习失败: %v\n", err)
 		}
+
+	case "live":
+		s.firstDraw = true
+		drawSceneBlock("", nil, s.daughter.Home)
+		fmt.Println()
 
 	case "env":
 		envVars := []string{"SENSENOVA_API_KEY", "MODELSCOPE_API_KEY", "STEP_API_KEY", "OLLAMA_API_KEY", "NVIDIA_NIM_API_KEY"}

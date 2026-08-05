@@ -326,22 +326,32 @@ func (s *Shell) readLine() (string, error) {
 	}
 	lastSceneVer := liveFrameVersion()
 	lastSceneWidth := terminalWidth()
+	idleStart := time.Now()
 
 	for {
-		// 仅场景数据实际变化时刷新，避免空闲状态反复重画顶部和产生闪烁。
+		// 空闲检测：无输入超过 30s → 屏保模式（显示直播画面）
 		if !inputAvailable() {
+			if time.Since(idleStart) > 30*time.Second && !s.firstDraw {
+				s.firstDraw = true
+			}
 			v := liveFrameVersion()
 			width := terminalWidth()
-			if v != lastSceneVer || width != lastSceneWidth {
+			if v != lastSceneVer || width != lastSceneWidth || s.firstDraw {
 				lastSceneVer = v
 				lastSceneWidth = width
 				if !hadCandidates {
-					overwriteScene(prompt, buf, s.daughter.Home)
+					if s.firstDraw {
+						drawSceneBlock(prompt, buf, s.daughter.Home)
+						s.firstDraw = false
+					} else {
+						overwriteScene(prompt, buf, s.daughter.Home)
+					}
 				}
 			}
 			time.Sleep(80 * time.Millisecond)
 			continue
 		}
+		idleStart = time.Now()
 
 		kind, r, err := readKey()
 		if err != nil {
