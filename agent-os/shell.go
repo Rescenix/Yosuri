@@ -612,10 +612,6 @@ func (s *Shell) handleAgentChat(input string) {
 	// 电子女儿 · 驯养 + 动画
 	d := NewDaughter()
 
-	// 动画：她拿出手机看你的消息（画面帧更新）
-	updateLiveFrame(frameOf(d.World, d, "📱 拿出手机，看看主人说了什么"))
-	overwriteScene("", nil, d.Home)
-
 	// 驯养：读一句性格底色，从你的话里嗅探情绪（无感知——你不会看到任何数值）
 	if fbs := detectFeedback(input); len(fbs) > 0 {
 		d.Personality.applyFeedback(d.Home, fbs, "主人说:「"+runeClip(input, 16)+"」")
