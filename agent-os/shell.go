@@ -113,6 +113,7 @@ func (s *Shell) Run() {
 		} else {
 			// Agent 模式
 			s.handleAgentChat(line)
+			fmt.Println() // 确保回复后光标在新行，下一轮 readLine 的 prompt 可见
 		}
 	}
 
