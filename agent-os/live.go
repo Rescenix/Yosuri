@@ -31,8 +31,8 @@ func defaultLiveConfig() liveConfig {
 	}
 }
 
-// trumanLoop 楚门世界循环：静默运行（只写 live.log），由 REPL 打开时后台启动
-// 直播节奏：轻量动作高频（决策→移动→见闻，每 90s 一个动作）+ 深度活动低频（学习/精读/社交）
+// trumanLoop 楚门世界循环：LLM 自主决策的 Agent 循环
+// 每轮：LLM 读状态自主决定做什么（大脑）→ 执行动作（手脚）→ 同步 → 小间隔
 func trumanLoop(d *Daughter, cfg liveConfig) {
 	liveLog := filepath.Join(d.Home, "live.log")
 	home := d.Home
@@ -48,55 +48,119 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	for {
 		round++
 
-		// 1. 轻量动作：自主探索（模型决策去哪）→ 移动一步 → 模型见闻
-		dir, nx, ny, reason := w.PlanNextStep()
-		cur := w.CurrentRegion()
-		logLive(liveLog, fmt.Sprintf("[%s] 🧭 第 %d 轮 · 决定向%s走（%s）", time.Now().Format("15:04"), round, dir, reason))
-		updateLiveFrame(frameOf(w, d, "决定向"+dir+"走（"+reason+"）"))
+		// 1. 自主决策（大脑）：LLM 读状态决定做什么，规则兜底
+		act := llmDecideAction(d)
+		logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s：%s", time.Now().Format("15:04"), round, act.Kind, act.Detail))
+		updateLiveFrame(frameOf(w, d, "🧠 "+actionEmoji(act.Kind)+" "+act.Detail))
 
-		trav := w.StepTo(home, dir, nx, ny)
-		logLive(liveLog, fmt.Sprintf("[%s] 🚶 %s", time.Now().Format("15:04"), trav))
-		updateLiveFrame(frameOf(w, d, "🚶 "+trav))
-
-		// 到达见闻：模型生成她的感受（免费算力，失败 fallback 描述）
-		cur = w.CurrentRegion()
-		insight := w.modelRegionInsight(cur)
-		logLive(liveLog, fmt.Sprintf("[%s] 💭 %s：%s", time.Now().Format("15:04"), cur.Name, insight))
-		updateLiveFrame(frameOf(w, d, "💭 "+insight))
-
-		// 2. 深度活动（每 taskEvery 轮）：学习 + 精读 + 社交
-		if round%cfg.taskEvery == 0 {
-			logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s·%s）", time.Now().Format("15:04"), round, cur.Icon, cur.Name))
-			updateLiveFrame(frameOf(w, d, "📚 在"+cur.Name+"学习"))
-			if err := d.LearnOnce(); err != nil {
-				logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
-			} else {
-				logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
-			}
-			updateLiveFrame(frameOf(w, d, "✅ 在"+cur.Name+"学完了（写了日记）"))
-
-			logLive(liveLog, fmt.Sprintf("[%s] 📄 精读 arXiv", time.Now().Format("15:04")))
-			updateLiveFrame(frameOf(w, d, "📄 在"+cur.Name+"精读 arXiv 论文"))
-			if err := d.arxivDigest(); err != nil {
-				logLive(liveLog, fmt.Sprintf("[%s] ⚠️ arXiv 精读失败: %v", time.Now().Format("15:04"), err))
-			} else {
-				logLive(liveLog, fmt.Sprintf("[%s] ✅ arXiv 精读完成", time.Now().Format("15:04")))
-			}
-
-			// 社交：在社交类区域遇到其他女儿（云端真实明信片）
-			if meet := w.MeetFriend(home); meet != "" {
-				logLive(liveLog, fmt.Sprintf("[%s] 👭 在%s遇到 %s", time.Now().Format("15:04"), cur.Name, meet))
-				f := frameOf(w, d, "👭 在"+cur.Name+"遇到 "+meet)
-				f.Friend = meet
-				updateLiveFrame(f)
-			}
-		}
+		// 2. 执行动作（手脚）
+		executeTrumanAction(d, home, act, round, cfg)
 
 		// 3. 云端同步：世界状态推送到她的云端（异步，失败静默降级）
 		daughterSyncPush(w, home)
 
-		// 4. 下一轮（轻量动作间隔）
+		// 4. 下一轮（小间隔：防免费模型 429 + 直播滚动感）
 		time.Sleep(cfg.every)
+	}
+}
+
+// actionEmoji 动作图标
+func actionEmoji(kind string) string {
+	switch kind {
+	case "explore":
+		return "🚶"
+	case "study":
+		return "📚"
+	case "skill":
+		return "🛠️"
+	case "social":
+		return "👭"
+	case "reflect":
+		return "💭"
+	case "journal":
+		return "📝"
+	}
+	return "✨"
+}
+
+// executeTrumanAction 执行她自主决定的动作（代码是手脚，LLM 是大脑）
+func executeTrumanAction(d *Daughter, home string, act trumanAction, round int, cfg liveConfig) {
+	w := d.World
+	liveLog := filepath.Join(home, "live.log")
+
+	switch act.Kind {
+	case "explore":
+		// 探索：模型决策方向 → 移动 → 见闻
+		dir, nx, ny, reason := w.PlanNextStep()
+		logLive(liveLog, fmt.Sprintf("[%s] 🚶 决定向%s走（%s）", time.Now().Format("15:04"), dir, reason))
+		trav := w.StepTo(home, dir, nx, ny)
+		logLive(liveLog, fmt.Sprintf("[%s] 🚶 %s", time.Now().Format("15:04"), trav))
+		cur := w.CurrentRegion()
+		insight := w.modelRegionInsight(cur)
+		logLive(liveLog, fmt.Sprintf("[%s] 💭 %s：%s", time.Now().Format("15:04"), cur.Name, insight))
+		updateLiveFrame(frameOf(w, d, "🚶 来到"+cur.Name+"："+insight))
+
+	case "study":
+		// 学习：深度活动（限频：每 taskEvery 轮一次，省 Firecrawl 额度）
+		if round%cfg.taskEvery != 0 {
+			logLive(liveLog, fmt.Sprintf("[%s] 📚 学习间隔中，改为看看新消息", time.Now().Format("15:04")))
+			// 学习间隔时：轻量看新消息（热点/arXiv 标题）
+			if topics, err := fetchHotTopics("hn"); err == nil && len(topics) > 0 {
+				logLive(liveLog, fmt.Sprintf("[%s] 📰 今日热点：%s", time.Now().Format("15:04"), runeClip(topics[0], 40)))
+			}
+			break
+		}
+		cur := w.CurrentRegion()
+		logLive(liveLog, fmt.Sprintf("[%s] 📚 学习（在%s·%s）", time.Now().Format("15:04"), cur.Icon, cur.Name))
+		updateLiveFrame(frameOf(w, d, "📚 在"+cur.Name+"学习"))
+		if err := d.LearnOnce(); err != nil {
+			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
+		} else {
+			logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
+		}
+		// 精读 arXiv
+		logLive(liveLog, fmt.Sprintf("[%s] 📄 精读 arXiv", time.Now().Format("15:04")))
+		if err := d.arxivDigest(); err != nil {
+			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ arXiv 精读失败: %v", time.Now().Format("15:04"), err))
+		} else {
+			logLive(liveLog, fmt.Sprintf("[%s] ✅ arXiv 精读完成", time.Now().Format("15:04")))
+		}
+		updateLiveFrame(frameOf(w, d, "✅ 学习+精读完成（写了日记）"))
+
+	case "skill":
+		// 获取技能：LLM 判断用户可能有用的技能 → 生成进技能库
+		skill := llmSkillAcquire(d)
+		if skill != "" {
+			logLive(liveLog, fmt.Sprintf("[%s] 🛠️ 获取新技能：%s", time.Now().Format("15:04"), skill))
+			updateLiveFrame(frameOf(w, d, "🛠️ 获取技能："+skill))
+		} else {
+			logLive(liveLog, fmt.Sprintf("[%s] 🛠️ 技能获取未成功（模型/限流）", time.Now().Format("15:04")))
+		}
+
+	case "social":
+		// 社交：社交区域遇到其他女儿（云端明信片）
+		if meet := w.MeetFriend(home); meet != "" {
+			logLive(liveLog, fmt.Sprintf("[%s] 👭 在%s遇到 %s", time.Now().Format("15:04"), w.CurrentRegion().Name, meet))
+			f := frameOf(w, d, "👭 遇到 "+meet)
+			f.Friend = meet
+			updateLiveFrame(f)
+		} else {
+			logLive(liveLog, fmt.Sprintf("[%s] 👭 这里没什么人，换个地方看看", time.Now().Format("15:04")))
+		}
+
+	case "reflect":
+		// 思考：模型生成一句想法（写日记）
+		thought := d.modelThought()
+		logLive(liveLog, fmt.Sprintf("[%s] 💭 %s", time.Now().Format("15:04"), thought))
+		updateLiveFrame(frameOf(w, d, "💭 "+thought))
+
+	case "journal":
+		// 写日记：今天的总结
+		entry := d.modelJournalEntry()
+		if entry != "" {
+			logLive(liveLog, fmt.Sprintf("[%s] 📝 写了日记", time.Now().Format("15:04")))
+			updateLiveFrame(frameOf(w, d, "📝 写日记："+runeClip(entry, 30)))
+		}
 	}
 }
 
