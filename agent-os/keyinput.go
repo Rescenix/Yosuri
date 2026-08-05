@@ -324,30 +324,18 @@ func (s *Shell) readLine() (string, error) {
 		drawSceneBlock(prompt, buf, s.daughter.Home)
 		s.firstDraw = false
 	}
-	lastSceneVer := liveFrameVersion()
-	lastSceneWidth := terminalWidth()
 	idleStart := time.Now()
 
 	for {
-		// 空闲检测：无输入超过 30s → 屏保模式（显示直播画面，只触发一次）
+		// 空闲检测：无输入超过 30s → 屏保模式（只触发一次，不重复覆盖聊天内容）
 		if !inputAvailable() {
 			if time.Since(idleStart) > 30*time.Second && !s.firstDraw {
 				s.firstDraw = true
-				idleStart = time.Now() // 重置计时，防无限重绘
+				idleStart = time.Now()
 			}
-			v := liveFrameVersion()
-			width := terminalWidth()
-			if v != lastSceneVer || width != lastSceneWidth || s.firstDraw {
-				lastSceneVer = v
-				lastSceneWidth = width
-				if !hadCandidates {
-					if s.firstDraw {
-						drawSceneBlock(prompt, buf, s.daughter.Home)
-						s.firstDraw = false
-					} else {
-						overwriteScene(prompt, buf, s.daughter.Home)
-					}
-				}
+			if s.firstDraw && !hadCandidates {
+				drawSceneBlock(prompt, buf, s.daughter.Home)
+				s.firstDraw = false
 			}
 			time.Sleep(80 * time.Millisecond)
 			continue
