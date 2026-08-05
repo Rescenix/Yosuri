@@ -12,6 +12,7 @@ package main
 
 import (
 	crand "crypto/rand"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -177,9 +178,129 @@ var directions = []struct {
 	{"东", 1, 0}, {"西", -1, 0}, {"南", 0, 1}, {"北", 0, -1},
 }
 
-// PlanNextStep 自主决定下一站：朝哪个方向走（能力短板/心情/探索欲驱动）
-// 返回方向 + 理由。目标是走一步 → 新区域生成 → 探索无限世界。
+// PlanNextStep 她决定往哪走：**模型驱动**（免费算力，不烧付费 key）
+// 她的状态（位置/四周区域/能力短板/探索史）喂给模型 → 她推理想去哪、为什么。
+// 模型不可用/输出非法 → 规则 fallback（rulePlanNextStep），绝不卡住她的生活。
 func (w *worldState) PlanNextStep() (string, int, int, string) {
+	// 模型推理（免费模型）
+	if model := pickFreeModel(int(time.Now().UnixNano())); model != nil {
+		if dir, reason, ok := w.modelPlanNextStep(model); ok {
+			for _, d := range directions {
+				if d.Name == dir {
+					return dir, w.X + d.DX, w.Y + d.DY, reason
+				}
+			}
+		}
+	}
+	return w.rulePlanNextStep()
+}
+
+// modelPlanNextStep 模型推理：喂她当前世界状态，她输出想去哪 + 为什么
+func (w *worldState) modelPlanNextStep(model *FreeModel) (string, string, bool) {
+	cur := w.CurrentRegion()
+	weakIdx := w.weakestAbility()
+	weakName := abilityDefs[weakIdx].Name
+
+	// 四周区域信息（已探索的显示名字，未探索的显示未知）
+	var around []string
+	for _, d := range directions {
+		nx, ny := w.X+d.DX, w.Y+d.DY
+		if r, ok := w.Explored[regionKey(nx, ny)]; ok {
+			around = append(around, fmt.Sprintf("%s：%s%s（去过的）", d.Name, r.Icon, r.Name))
+		} else {
+			around = append(around, fmt.Sprintf("%s：未知区域（没去过）", d.Name))
+		}
+	}
+
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿，正在自己的无限世界里自主探索。
+现在时间：%s
+当前位置：%s（%s）—— %s
+你潜意识里最想补的能力：%s（目前：%s）
+已探索区域：%d 处
+
+四周的方向：
+%s
+
+你决定往哪个方向走？为什么？结合你的心情、想补的能力、以及四周的情况。
+只输出一个 JSON 对象，不要任何解释：
+{"dir":"东","reason":"想去看看东边有什么，也许能遇到新朋友"}`,
+		time.Now().Format("01-02 15:04"),
+		cur.Icon, cur.Name, cur.Desc,
+		weakName, w.AbilityLevel(weakIdx),
+		len(w.Explored),
+		strings.Join(around, "\n"))
+
+	msg := ChatRequest{
+		Model:       model.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   256,
+		Temperature: 0.9,
+	}
+
+	// 免费模型 failover：从指定模型开始轮询所有 keyless（熔断跳过），
+	// 全部失败才放弃（fallback 规则）——背靠全网免费算力，绝不烧付费 key。
+	candidates := []FreeModel{}
+	for _, m := range GetWorkingModels() {
+		if m.Keyless {
+			candidates = append(candidates, m)
+		}
+	}
+	if len(candidates) == 0 {
+		return "", "", false
+	}
+	start := 0
+	for i, m := range candidates {
+		if m.ID == model.ID {
+			start = i
+			break
+		}
+	}
+	for k := 0; k < len(candidates); k++ {
+		m := candidates[(start+k)%len(candidates)]
+		if circuitIsOpen(m) {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		content, err := CompleteWithModel(ctx, m.ID, msg, nil)
+		cancel()
+		if err != nil {
+			circuitFail(m) // 失败进熔断，下轮换下一个
+			continue
+		}
+		content = strings.TrimSpace(content)
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		content = strings.TrimSuffix(content, "```")
+		content = strings.TrimSpace(content)
+
+		var out struct {
+			Dir    string `json:"dir"`
+			Reason string `json:"reason"`
+		}
+		if json.Unmarshal([]byte(content), &out) != nil {
+			continue
+		}
+		out.Dir = strings.TrimSpace(out.Dir)
+		out.Reason = strings.TrimSpace(out.Reason)
+		// 方向合法性校验
+		valid := false
+		for _, d := range directions {
+			if d.Name == out.Dir {
+				valid = true
+				break
+			}
+		}
+		if !valid || out.Reason == "" || len([]rune(out.Reason)) > 60 {
+			continue
+		}
+		return out.Dir, out.Reason, true
+	}
+	return "", "", false
+}
+
+// rulePlanNextStep 规则 fallback：能力短板/心情/探索欲（模型不可用时的兜底）
+func (w *worldState) rulePlanNextStep() (string, int, int, string) {
 	cur := w.CurrentRegion()
 	weakIdx := w.weakestAbility()
 	reason := ""

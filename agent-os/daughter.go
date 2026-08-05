@@ -217,10 +217,10 @@ func (d *Daughter) LearnOnce() error {
 		fmt.Printf("  看到 %d 条今日热点，开始挑选…\n", len(topics))
 	}
 
-	// 2. 模型选题
-	model := pickModel(GetWorkingModels(), int(time.Now().UnixNano()))
+	// 2. 模型选题（免费算力：免 key 模型优先，不烧付费 key）
+	model := pickFreeModel(int(time.Now().UnixNano()))
 	if model == nil {
-		return fmt.Errorf("没有可用模型")
+		return fmt.Errorf("没有可用的免费模型")
 	}
 
 	// 3. Firecrawl 联网搜索（key 与前端设置打通：前端填一次，CLI 直接用）

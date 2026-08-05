@@ -168,9 +168,9 @@ func (d *Daughter) arxivDigest() error {
 		return fmt.Errorf("arXiv 无结果")
 	}
 
-	model := pickModel(GetWorkingModels(), int(time.Now().UnixNano()))
+	model := pickFreeModel(int(time.Now().UnixNano()))
 	if model == nil {
-		return fmt.Errorf("没有可用模型")
+		return fmt.Errorf("没有可用的免费模型")
 	}
 
 	// 组装论文摘要供模型挑选

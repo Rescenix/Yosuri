@@ -134,6 +134,25 @@ func GetWorkingModels() []FreeModel {
 	return out
 }
 
+// pickFreeModel 选一个免 key 免费模型（背靠全网免费算力，不烧用户付费 key）。
+// 无免费模型时返回 nil（调用方应 fallback 规则或用 key 兜底）。
+func pickFreeModel(seed int) *FreeModel {
+	models := GetWorkingModels()
+	var free []FreeModel
+	for _, m := range models {
+		if m.Keyless {
+			free = append(free, m)
+		}
+	}
+	if len(free) == 0 {
+		return nil
+	}
+	if seed < 0 {
+		seed = int(time.Now().UnixNano())
+	}
+	return &free[seed%len(free)]
+}
+
 // ChatRequest 聊天请求
 type ChatRequest struct {
 	Model       string           `json:"model"`
