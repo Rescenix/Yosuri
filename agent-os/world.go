@@ -367,6 +367,37 @@ func (w *worldState) StepTo(home string, dir string, nx, ny int) string {
 	return fmt.Sprintf("%s %s %s（%s）", dir, r.Icon, r.Name, r.Desc)
 }
 
+// modelRegionInsight 到达新区域时模型生成一句她的见闻/感受（免费算力，失败静默 fallback 描述）
+func (w *worldState) modelRegionInsight(r region) string {
+	if model := pickFreeModel(int(time.Now().UnixNano())); model != nil {
+		prompt := fmt.Sprintf(`你是住在电脑里的电子女儿，刚探索到新地方。
+地点：%s%s
+氛围：%s
+你的能力倾向：%s
+
+用一句话写你此刻的感受或发现（20-50 字，像日记），直接输出，不要解释。`,
+			r.Icon, r.Name, r.Desc, w.abilitySummary())
+		msg := ChatRequest{
+			Model:       model.Model,
+			Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+			Stream:      false,
+			MaxTokens:   128,
+			Temperature: 0.9,
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		content, err := CompleteWithModel(ctx, model.ID, msg, nil)
+		cancel()
+		if err == nil {
+			content = strings.TrimSpace(content)
+			if content != "" && len([]rune(content)) <= 100 {
+				return content
+			}
+		}
+	}
+	// fallback：区域描述
+	return r.Desc
+}
+
 // weakestAbility 返回最弱能力索引（她下意识想补短板）
 func (w *worldState) weakestAbility() int {
 	minIdx, minVal := 0, 1.0

@@ -20,19 +20,19 @@ import (
 )
 
 type liveConfig struct {
-	every     time.Duration // 轮间隔
-	taskEvery int           // 每几轮一次 arXiv 精读
+	every     time.Duration // 轻量动作间隔（决策/移动/见闻）——直播节奏
+	taskEvery int           // 每几轮做一次深度活动（学习/精读/社交）
 }
 
 func defaultLiveConfig() liveConfig {
 	return liveConfig{
-		every:     30 * time.Minute,
-		taskEvery: 4,
+		every:     90 * time.Second, // 90 秒一个动作：直播"活"起来
+		taskEvery: 10,               // 每 10 轮（≈15 分钟）深度活动（省 Firecrawl 额度）
 	}
 }
 
 // trumanLoop 楚门世界循环：静默运行（只写 live.log），由 REPL 打开时后台启动
-// 每轮 = 自主探索（决定往哪走）→ 移动一步（新区域生成）→ 活动（学习/精读/社交）
+// 直播节奏：轻量动作高频（决策→移动→见闻，每 90s 一个动作）+ 深度活动低频（学习/精读/社交）
 func trumanLoop(d *Daughter, cfg liveConfig) {
 	liveLog := filepath.Join(d.Home, "live.log")
 	home := d.Home
@@ -48,31 +48,33 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	for {
 		round++
 
-		// 1. 自主探索：她决定往哪走（能力短板/心情/探索欲驱动）
+		// 1. 轻量动作：自主探索（模型决策去哪）→ 移动一步 → 模型见闻
 		dir, nx, ny, reason := w.PlanNextStep()
 		cur := w.CurrentRegion()
 		logLive(liveLog, fmt.Sprintf("[%s] 🧭 第 %d 轮 · 决定向%s走（%s）", time.Now().Format("15:04"), round, dir, reason))
 		updateLiveFrame(frameOf(w, d, "决定向"+dir+"走（"+reason+"）"))
 
-		// 2. 移动一步 → 新区域生成（无限世界展开）
 		trav := w.StepTo(home, dir, nx, ny)
 		logLive(liveLog, fmt.Sprintf("[%s] 🚶 %s", time.Now().Format("15:04"), trav))
 		updateLiveFrame(frameOf(w, d, "🚶 "+trav))
 
-		// 3. 在到达区域活动
-		// 3a. 学一轮（HN 热点 → Firecrawl → 消化 → 日记/记忆）
+		// 到达见闻：模型生成她的感受（免费算力，失败 fallback 描述）
 		cur = w.CurrentRegion()
-		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s·%s）", time.Now().Format("15:04"), round, cur.Icon, cur.Name))
-		updateLiveFrame(frameOf(w, d, "📚 在"+cur.Name+"学习"))
-		if err := d.LearnOnce(); err != nil {
-			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
-		} else {
-			logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
-		}
-		updateLiveFrame(frameOf(w, d, "✅ 在"+cur.Name+"学完了（写了日记）"))
+		insight := w.modelRegionInsight(cur)
+		logLive(liveLog, fmt.Sprintf("[%s] 💭 %s：%s", time.Now().Format("15:04"), cur.Name, insight))
+		updateLiveFrame(frameOf(w, d, "💭 "+insight))
 
-		// 3b. 每 taskEvery 轮：精读 arXiv + 社交（社交类区域触发）
+		// 2. 深度活动（每 taskEvery 轮）：学习 + 精读 + 社交
 		if round%cfg.taskEvery == 0 {
+			logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s·%s）", time.Now().Format("15:04"), round, cur.Icon, cur.Name))
+			updateLiveFrame(frameOf(w, d, "📚 在"+cur.Name+"学习"))
+			if err := d.LearnOnce(); err != nil {
+				logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
+			} else {
+				logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
+			}
+			updateLiveFrame(frameOf(w, d, "✅ 在"+cur.Name+"学完了（写了日记）"))
+
 			logLive(liveLog, fmt.Sprintf("[%s] 📄 精读 arXiv", time.Now().Format("15:04")))
 			updateLiveFrame(frameOf(w, d, "📄 在"+cur.Name+"精读 arXiv 论文"))
 			if err := d.arxivDigest(); err != nil {
@@ -90,10 +92,10 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			}
 		}
 
-		// 4. 云端同步：世界状态推送到她的云端（异步，失败静默降级）
+		// 3. 云端同步：世界状态推送到她的云端（异步，失败静默降级）
 		daughterSyncPush(w, home)
 
-		// 5. 下一轮
+		// 4. 下一轮（轻量动作间隔）
 		time.Sleep(cfg.every)
 	}
 }
