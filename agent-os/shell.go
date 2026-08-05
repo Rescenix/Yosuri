@@ -118,42 +118,67 @@ func (s *Shell) Run() {
 }
 
 // checkTrustedDir 工作目录信任检查（仿 Claude Code）
-// 首次在目录运行 rescene 时会询问是否信任，确认后加入信任列表
+// 首次在目录运行 rescene 时会询问是否信任，方向键选择后确认
 func checkTrustedDir() bool {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return true // 无法获取目录时放行
+		return true
 	}
 	trusted := loadTrustedDirs()
 	if trusted[cwd] {
 		return true
 	}
-	// 非终端模式（管道/重定向）直接放行
 	if !isTerminal() {
 		return true
 	}
-	fmt.Println(ColorYellow + "═══════════════════════════════════════════" + ColorReset)
-	fmt.Println("  工作目录：" + ColorCyan + cwd + ColorReset)
-	fmt.Println()
-	fmt.Println("  Rescene 将能够读取、修改和执行此目录下的文件。")
-	fmt.Println("  这是你自己的项目或你信任的项目吗？")
-	fmt.Println("  （如：自己的代码、知名的开源项目、或团队项目）")
-	fmt.Println()
-	fmt.Println("  " + ColorGreen + "1. 是，我信任此目录" + ColorReset)
-	fmt.Println("  " + ColorYellow + "2. 否，退出" + ColorReset)
-	fmt.Println(ColorYellow + "═══════════════════════════════════════════" + ColorReset)
-	fmt.Print("  选择 [1/2]：")
 
-	var choice string
-	fmt.Scanln(&choice)
-	if choice == "1" || choice == "" {
-		trusted[cwd] = true
-		saveTrustedDirs(trusted)
-		fmt.Println("  ✅ 已信任此目录，下次不再询问")
-		return true
+	restore := enableRawMode()
+	defer restore()
+
+	sel := 0 // 0=信任, 1=退出
+	opts := []string{"是，我信任此目录", "否，退出"}
+	for {
+		fmt.Print("\r\x1b[2J\x1b[H")
+		fmt.Println(ColorYellow + "╭──────────────────────────────────────╮" + ColorReset)
+		fmt.Println("│  工作目录：" + ColorCyan + cwd + ColorReset)
+		fmt.Println("│" + ColorReset)
+		fmt.Println("│  Rescene 将能够读取、修改和执行此目录下的文件。")
+		fmt.Println("│  这是你自己的项目或你信任的项目吗？")
+		fmt.Println("│" + ColorReset)
+		for i, opt := range opts {
+			if i == sel {
+				fmt.Println("│  " + ColorGreen + "▸ " + opt + ColorReset)
+			} else {
+				fmt.Println("│    " + opt)
+			}
+		}
+		fmt.Println(ColorYellow + "╰──────────────────────────────────────╯" + ColorReset)
+		fmt.Print("\r  ↑↓ 选择 · Enter 确认")
+
+		kind, _, _ := readKey()
+		switch kind {
+		case keyUp:
+			if sel > 0 {
+				sel--
+			}
+		case keyDown:
+			if sel < len(opts)-1 {
+				sel++
+			}
+		case keyEnter:
+			if sel == 0 {
+				trusted[cwd] = true
+				saveTrustedDirs(trusted)
+				fmt.Println("\r\n  ✅ 已信任此目录，下次不再询问")
+				return true
+			}
+			fmt.Println("\r\n  👋 已退出")
+			return false
+		case keyCtrlC:
+			fmt.Println("\r\n  👋 已退出")
+			return false
+		}
 	}
-	fmt.Println("  👋 已退出")
-	return false
 }
 
 // loadTrustedDirs 加载信任目录列表
