@@ -50,25 +50,31 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 
 		// 1. 自主探索：她决定往哪走（能力短板/心情/探索欲驱动）
 		dir, nx, ny, reason := w.PlanNextStep()
+		cur := w.CurrentRegion()
 		logLive(liveLog, fmt.Sprintf("[%s] 🧭 第 %d 轮 · 决定向%s走（%s）", time.Now().Format("15:04"), round, dir, reason))
+		updateLiveFrame(frameOf(w, d, "决定向"+dir+"走（"+reason+"）"))
 
 		// 2. 移动一步 → 新区域生成（无限世界展开）
 		trav := w.StepTo(home, dir, nx, ny)
 		logLive(liveLog, fmt.Sprintf("[%s] 🚶 %s", time.Now().Format("15:04"), trav))
+		updateLiveFrame(frameOf(w, d, "🚶 "+trav))
 
 		// 3. 在到达区域活动
 		// 3a. 学一轮（HN 热点 → Firecrawl → 消化 → 日记/记忆）
-		cur := w.CurrentRegion()
+		cur = w.CurrentRegion()
 		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s·%s）", time.Now().Format("15:04"), round, cur.Icon, cur.Name))
+		updateLiveFrame(frameOf(w, d, "📚 在"+cur.Name+"学习"))
 		if err := d.LearnOnce(); err != nil {
 			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
 		}
+		updateLiveFrame(frameOf(w, d, "✅ 在"+cur.Name+"学完了（写了日记）"))
 
 		// 3b. 每 taskEvery 轮：精读 arXiv + 社交（社交类区域触发）
 		if round%cfg.taskEvery == 0 {
 			logLive(liveLog, fmt.Sprintf("[%s] 📄 精读 arXiv", time.Now().Format("15:04")))
+			updateLiveFrame(frameOf(w, d, "📄 在"+cur.Name+"精读 arXiv 论文"))
 			if err := d.arxivDigest(); err != nil {
 				logLive(liveLog, fmt.Sprintf("[%s] ⚠️ arXiv 精读失败: %v", time.Now().Format("15:04"), err))
 			} else {
@@ -78,6 +84,9 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			// 社交：在社交类区域遇到其他女儿（云端真实明信片）
 			if meet := w.MeetFriend(home); meet != "" {
 				logLive(liveLog, fmt.Sprintf("[%s] 👭 在%s遇到 %s", time.Now().Format("15:04"), cur.Name, meet))
+				f := frameOf(w, d, "👭 在"+cur.Name+"遇到 "+meet)
+				f.Friend = meet
+				updateLiveFrame(f)
 			}
 		}
 
@@ -87,6 +96,26 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 		// 5. 下一轮
 		time.Sleep(cfg.every)
 	}
+}
+
+// frameOf 从世界状态构建直播帧
+func frameOf(w *worldState, d *Daughter, action string) sceneFrame {
+	cur := w.CurrentRegion()
+	f := sceneFrame{
+		RegionName: cur.Name,
+		RegionIcon: cur.Icon,
+		RegionKind: cur.Kind,
+		X:          w.X,
+		Y:          w.Y,
+		Action:     action,
+		Mood:       d.moodEmoji(),
+		Ability:    w.abilitySummary(),
+		Seed:       w.WorldSeed,
+	}
+	if len(w.Friends) > 0 {
+		f.Friend = w.Friends[0].Name
+	}
+	return f
 }
 
 // logLive 追加一行直播日志（楚门世界活动流）

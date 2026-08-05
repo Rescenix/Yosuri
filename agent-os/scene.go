@@ -1,10 +1,10 @@
 package main
 
-// scene.go — 楚门世界场景渲染（MC 式真实世界）
+// scene.go — 楚门世界实时直播场景
 //
-// 不是图标地图，是「场景」：每个地点有块状 ASCII 环境（天空/建筑/地面/装饰），
-// 她（颜表情 + 移动动画）叠加在场景里，自动化跑。
-// 每次行动 = 场景帧序列（出发→途中→到达→活动），REPL 打开时按帧播放。
+// 不是静态地图：她在你眼前跑。场景帧（固定行数）钉在 REPL 输入行上方，
+// trumanLoop 每步更新 liveFrame，readLine 空闲时轮询变化 → 覆写刷新场景区。
+// 场景 = 当前区域氛围 + 她（颜表情/移动图标） + 行动行 + 状态行。
 
 import (
 	"fmt"
@@ -12,20 +12,29 @@ import (
 	"time"
 )
 
-// sceneFrame 一帧场景：当前位置/动作/表情/叙述
+// liveSceneRows 场景区固定行数（覆写刷新依赖固定行数）
+const liveSceneRows = 9
+
+// sceneFrame 一帧场景
 type sceneFrame struct {
-	Place    string `json:"place"`     // 地点名（决定场景模板）
-	City     string `json:"city"`      // 城市
-	Action   string `json:"action"`    // 她正在做什么（"去学校的路上"/"精读 arXiv"…）
-	Mood     string `json:"mood"`      // 颜表情
-	TravelIcon string `json:"travel"`  // 移动图标（🚶/🚌/✈️，空=静止）
-	Version  int64  `json:"version"`   // 帧版本（递增，前端检测变化）
+	RegionName string `json:"region"`   // 当前区域名（翠风镇/静湖…）
+	RegionIcon string `json:"icon"`     // 区域图标
+	RegionKind string `json:"kind"`     // 区域类型
+	X          int    `json:"x,omitempty"`
+	Y          int    `json:"y,omitempty"`
+	Action     string `json:"action"`   // 她正在做什么
+	Mood       string `json:"mood"`     // 颜表情
+	TravelIcon string `json:"travel"`   // 移动图标（🚶，空=静止）
+	Ability    string `json:"ability"`  // 能力摘要（状态行）
+	Friend     string `json:"friend"`   // 最近社交（可空）
+	Seed       int64  `json:"seed"`     // 世界种子（区域氛围确定性）
+	Version    int64  `json:"version"`  // 帧版本（递增，前端检测变化）
 }
 
-// liveFrame 当前帧（trumanLoop 写，REPL 渲染读；mutex 保护）
+// liveFrame 当前帧（trumanLoop 写，REPL 渲染读）
 var (
 	liveFrameMu    = syncMu()
-	currentFrame   = sceneFrame{Place: "家", City: "栖城", Action: "刚刚醒来", Mood: "(◕‿◕)"}
+	currentFrame   = sceneFrame{RegionName: "出生地", RegionIcon: "🏠", Action: "刚刚醒来", Mood: "(◕‿◕)"}
 )
 
 func syncMu() *mu { return newMu() }
@@ -39,133 +48,12 @@ func newMu() *mu { return &mu{ch: make(chan struct{}, 1)} }
 func (m *mu) Lock()   { m.ch <- struct{}{} }
 func (m *mu) Unlock() { <-m.ch }
 
-// sceneTemplates 每个地点的 MC 式 ASCII 场景（环境 + 地面）
-// 用 ▓█▄▀ 块状字符营造体素感；行宽约 30 字符。
-var sceneTemplates = map[string][]string{
-	"家": {
-		"        ☁️       ☁️",
-		"    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"    ▓ 🛋️ 🖥️ 📚  ▓  ▓",
-		"    ▓  ┌────┐   ▓  ▓",
-		"    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-	},
-	"学校": {
-		"      ☁️    ☁️   ☁️",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ 🏫 ▓ ▓ ▓ ▓ ▓ ▓ ▓",
-		"  ▓ 大门 ▓ ▓ ▓ ▓ ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   🌳    🌳    🌳",
-	},
-	"图书馆": {
-		"      ☁️        ☁️",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ 📚📚📚 📖 ▓ ▓ ▓ ▓",
-		"  ▓ 📚📚📚 阅读 ▓ ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   🦉    🪴    🦉",
-	},
-	"咖啡馆": {
-		"      ☕  ☁️   ☕",
-		"   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   ▓ ☕☕☕ ▓ ▓ ▓ ▓ ▓",
-		"   ▓ ☕☕☕ 窗边 ▓ ▓ ▓",
-		"   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"    🪑    🪴    🪑",
-	},
-	"公园": {
-		"     ⛅     ⛅    ☁️",
-		"   🌳🌳🌳🌳🌳🌳🌳🌳",
-		"   🌳  ⛲  🌳  🦆  🌳",
-		"   🌳🌳🌳🌳🌳🌳🌳🌳",
-		"    🌼   🌷   🌼",
-	},
-	"商场": {
-		"      ☁️    ☁️",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ 🛍️ ▓ 🧸 ▓ 🎮 ▓ ▓",
-		"  ▓ 橱窗 ▓ 奶茶 ▓ ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   🎵    🍜    🎵",
-	},
-	"车站": {
-		"     ☁️      ☁️",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ 🚉 检票 ▓ ▓ ▓ ▓",
-		"  ▓  ── 轨道 ──  ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"    🧳   🎒   🧳",
-	},
-	"机场": {
-		"   ✈️  ☁️  ✈️  ☁️",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ ✈️ 登机口 ▓ ▓ ▓ ▓",
-		"  ▓  ─── 跑道 ───  ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"    🧳   ✈️   🧳",
-	},
-	"海边": {
-		"    ⛅   ☁️   ⛅",
-		"  ~~~~~ ~~~~~ ~~~~~",
-		"  ~~ 🌊 🌊 🌊 🌊 ~~",
-		"  ~~~~~ ~~~~~ ~~~~~",
-		"   🏖️ ⛱️  🐚  ⛱️ 🏖️",
-	},
-	"月光塔": {
-		"     🌙   ⭐   🌙",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ 🗼 月光塔 ▓ ▓ ▓",
-		"  ▓ 俯瞰城市 ▓ ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   ✨  🏙️  ✨",
-	},
-	"星港码头": {
-		"     ⭐   🌙  ⭐",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ ⚓ 码头 ▓ ▓ ▓ ▓",
-		"  ▓ ~~~~ 海风 ~~~~ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   🐚   ⛵   🐚",
-	},
-	"雪原车站": {
-		"     ❄️  ☁️  ❄️",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ 🚞 雪国 ▓ ▓ ▓ ▓",
-		"  ▓  ── 铁轨 ──  ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   ⛄    🧣    ⛄",
-	},
-	"天文台": {
-		"  🌌  ✨  🌠  ✨  🌌",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"  ▓ 🔭 望远镜 ▓ ▓ ▓",
-		"  ▓ 仰望星空 ▓ ▓ ▓ ▓",
-		"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-		"   ✨  🪐  ✨  ☄️",
-	},
-}
-
-// sceneTemplate 取地点场景模板（未知地点回退"家"）
-func sceneTemplate(place string) []string {
-	if t, ok := sceneTemplates[place]; ok {
-		return t
-	}
-	return sceneTemplates["家"]
-}
-
 // updateLiveFrame 更新当前场景帧（trumanLoop 每步调用）
-func updateLiveFrame(place, city, action, mood, travelIcon string) {
+func updateLiveFrame(f sceneFrame) {
 	liveFrameMu.Lock()
 	defer liveFrameMu.Unlock()
-	currentFrame = sceneFrame{
-		Place:      place,
-		City:       city,
-		Action:     action,
-		Mood:       mood,
-		TravelIcon: travelIcon,
-		Version:    time.Now().UnixNano(),
-	}
+	f.Version = time.Now().UnixNano()
+	currentFrame = f
 }
 
 // currentLiveFrame 读当前帧
@@ -175,30 +63,84 @@ func currentLiveFrame() sceneFrame {
 	return currentFrame
 }
 
-// RenderScene 渲染一帧场景：环境 + 她 + 状态行
-func RenderScene(f sceneFrame, mood string) string {
-	tpl := sceneTemplate(f.Place)
-	var sb strings.Builder
+// liveFrameVersion 帧版本（轮询检测变化用）
+func liveFrameVersion() int64 {
+	liveFrameMu.Lock()
+	defer liveFrameMu.Unlock()
+	return currentFrame.Version
+}
 
-	// 标题行
-	title := fmt.Sprintf("楚门世界 · %s·%s", f.City, f.Place)
-	sb.WriteString(ColorCyan + "╭─ " + title + " " + strings.Repeat("─", 8) + "╮" + ColorReset + "\n")
+// drawSceneBlock 画场景区（输入行上方固定 liveSceneRows 行）+ 输入行
+// readLine 开头调用：场景区在输入行上方，向下打印
+func drawSceneBlock(prompt string, buf []rune) {
+	lines := renderLiveLines(currentLiveFrame())
+	for _, l := range lines {
+		fmt.Println(l)
+	}
+	fmt.Print(prompt + string(buf))
+}
 
-	// 环境
-	for _, line := range tpl {
-		sb.WriteString("  " + line + "\n")
+// overwriteScene 覆写场景区（不破坏输入行下方历史）：
+// 光标在输入行 → 上移 liveSceneRows 行到场景区首行 → 逐行 \x1b[2K 覆写 → 重画输入行
+func overwriteScene(prompt string, buf []rune) {
+	fmt.Print("\r")
+	fmt.Printf("\x1b[%dA", liveSceneRows)
+	lines := renderLiveLines(currentLiveFrame())
+	for i, l := range lines {
+		if i > 0 {
+			fmt.Print("\n")
+		}
+		fmt.Print("\r\x1b[2K" + l)
+	}
+	// 光标在最后一行（= 输入行位置），重画输入行
+	fmt.Print("\r" + prompt + string(buf) + "\x1b[K")
+}
+
+// renderLiveLines 渲染固定行数的场景帧（不足补空行）
+func renderLiveLines(f sceneFrame) []string {
+	lines := make([]string, 0, liveSceneRows)
+
+	// 1 标题
+	title := "楚门世界"
+	lines = append(lines, ColorCyan+"╭─ "+title+" "+strings.Repeat("─", 8)+"╮"+ColorReset)
+
+	// 2 区域行
+	lines = append(lines, ColorCyan+"╭─ "+f.RegionIcon+" "+f.RegionName+" "+strings.Repeat("─", 6)+"╮"+ColorReset)
+
+	// 3-5 区域氛围（确定性，随坐标变化）
+	decor := regionDecor(f.RegionKind, f.Seed, f.X, f.Y)
+	parts := strings.Split(decor, "\n")
+	for i := 0; i < 3; i++ {
+		if i < len(parts) {
+			lines = append(lines, "  "+parts[i])
+		} else {
+			lines = append(lines, "  ")
+		}
 	}
 
-	// 她（移动图标 + 颜表情）
+	// 6 她（移动图标 + 颜表情）
 	she := f.Mood
 	if f.TravelIcon != "" {
 		she = f.TravelIcon + " " + f.Mood
 	}
-	sb.WriteString("  " + she + "\n")
+	lines = append(lines, "  "+she)
 
-	// 行动行 + 状态
-	sb.WriteString("  " + f.Action + "\n")
+	// 7 行动行
+	lines = append(lines, "  "+f.Action)
 
-	sb.WriteString(ColorCyan + "╰" + strings.Repeat("─", 36) + "╯" + ColorReset)
-	return sb.String()
+	// 8 能力
+	lines = append(lines, "  💗 能力："+f.Ability)
+
+	// 9 社交（可空）+ 底线
+	friendLine := "  👭 "+f.Friend
+	if f.Friend == "" {
+		friendLine = "  "
+	}
+	lines = append(lines, friendLine+ColorCyan+"╰"+strings.Repeat("─", 34)+"╯"+ColorReset)
+
+	// 固定行数
+	for len(lines) < liveSceneRows {
+		lines = append(lines, "  ")
+	}
+	return lines[:liveSceneRows]
 }

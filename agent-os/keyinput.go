@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -242,7 +243,23 @@ func (s *Shell) readLine() (string, error) {
 	}
 
 	redraw()
+	// 楚门世界直播：场景区（输入行上方固定 liveSceneRows 行）+ 输入行
+	drawSceneBlock(prompt, buf)
+	lastSceneVer := liveFrameVersion()
+
 	for {
+		// 实时直播轮询：无按键且直播帧有更新 → 覆写场景区（候选列表显示时不打扰）
+		if !inputAvailable() {
+			if v := liveFrameVersion(); v != lastSceneVer {
+				lastSceneVer = v
+				if !hadCandidates {
+					overwriteScene(prompt, buf)
+				}
+			}
+			time.Sleep(80 * time.Millisecond)
+			continue
+		}
+
 		kind, r, err := readKey()
 		if err != nil {
 			return "", err
