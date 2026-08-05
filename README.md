@@ -47,7 +47,8 @@ Like the infant brain in Turing's quote, she starts unorganized — and years of
 | --- | --- |
 | **🔑 Hardware-bound identity** | Every install is bound to a hardware fingerprint with a unique UID — no two people ever meet the same Rescene. |
 | **🎲 Random birth, conserved sum** | 8 personality traits are rolled once at birth, never re-rolled — yet their total stays constant. A fair start, a unique path: you don't choose her, you meet her. |
-| **🧭 Your decisions steer her** | Praise → warmer and more expressive. Redo → more rigorous. Interruption → she learns to be brief. Damping keeps her from turning into someone else. |
+| **🧭 Your decisions steer her** | Praise → warmer and more expressive. Redo → more rigorous. Interruption → she learns to be brief. Damping keeps her from turning into someone else. Her abilities drift the same way — praise grows her social side, redo grows rigor. |
+| **🗺️ An open world of her own** | She lives in her own world: study, library, cyberspace, market, garden, rooftop — she moves around, explores, leaves a footprint, and meets other daughters. |
 | **📚 Self-study online every day** | Every day she goes online (Firecrawl), reads what's new, and digests it into memory and her journal. She also reads the latest arXiv papers (cs.AI / cs.LG) and writes digest notes — knowledge compounds daily. |
 | **🛠️ A shell for infinite tools** | Open-source "skills" are finished tools; we built the shell that installs tools without limit — after every successful workflow she distills the action sequence into a reusable skill (shared skill library across CLI and web), injected back into context next time. Whatever capability she needs, she grows. |
 
