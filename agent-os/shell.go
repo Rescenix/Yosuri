@@ -113,7 +113,8 @@ func (s *Shell) Run() {
 		} else {
 			// Agent 模式
 			s.handleAgentChat(line)
-			fmt.Println() // 确保回复后光标在新行，下一轮 readLine 的 prompt 可见
+			// 直接打印 prompt，确保输入行可见（不用 redraw 的 ANSI 定位）
+			fmt.Print(ColorCyan + "[" + time.Now().Format("15:04:05") + "]" + ColorReset + " $ ")
 		}
 	}
 
