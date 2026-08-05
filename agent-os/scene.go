@@ -32,7 +32,7 @@ type sceneFrame struct {
 
 var (
 	liveFrameMu  = syncMu()
-	currentFrame = sceneFrame{RegionName: "出生地", RegionIcon: "🏠", Action: "刚刚醒来", Mood: "(◕‿◕)"}
+	currentFrame = sceneFrame{RegionName: "出生地", RegionIcon: "🏠", RegionKind: "城市街区", Action: "刚刚醒来", Mood: "(◕‿◕)"}
 )
 
 func syncMu() *mu { return newMu() }
@@ -201,6 +201,7 @@ func renderLiveLinesAtWidth(f sceneFrame, terminalW int) []string {
 func leftSceneLines(f sceneFrame) []string {
 	bodyRows := liveSceneRows - 2
 	lines := make([]string, 0, bodyRows)
+	// 装饰行（3 行）——不显示区域名（顶部栏已显示，重复就是地址感）
 	decor := regionDecor(f.RegionKind, f.Seed, f.X, f.Y)
 	parts := strings.Split(decor, "\n")
 	for i := 0; i < 3; i++ {
@@ -210,12 +211,12 @@ func leftSceneLines(f sceneFrame) []string {
 			lines = append(lines, "  ")
 		}
 	}
-
+	// 她（移动图标 + 颜表情）——不显示坐标（地址感破坏沉浸）
 	she := f.Mood
 	if f.TravelIcon != "" {
 		she = f.TravelIcon + " " + f.Mood
 	}
-	lines = append(lines, "  "+she+"   ("+fmt.Sprintf("%d,%d", f.X, f.Y)+")")
+	lines = append(lines, "  "+she)
 	lines = append(lines, "  "+f.Action)
 	lines = append(lines, "  💗 "+f.Ability)
 	if f.Friend != "" {

@@ -501,8 +501,14 @@ func (s *Shell) handleAgentChat(input string) {
 	drawGalgameBox("你", input, ColorCyan, boxW)
 	fmt.Println()
 
-	// 电子女儿 · 驯养：读一句性格底色，从你的话里嗅探情绪（无感知——你不会看到任何数值）
+	// 电子女儿 · 驯养 + 动画
 	d := NewDaughter()
+
+	// 动画：她拿出手机看你的消息（画面帧更新）
+	updateLiveFrame(frameOf(d.World, d, "📱 拿出手机，看看主人说了什么"))
+	overwriteScene("", nil, d.Home)
+
+	// 驯养：读一句性格底色，从你的话里嗅探情绪（无感知——你不会看到任何数值）
 	if fbs := detectFeedback(input); len(fbs) > 0 {
 		d.Personality.applyFeedback(d.Home, fbs, "主人说:「"+runeClip(input, 16)+"」")
 		// 决策同时塑造能力走向（社交/研究/编程/写作，阻尼+守恒）
@@ -542,7 +548,10 @@ func (s *Shell) handleAgentChat(input string) {
 - ls, pwd, cd, cat, head, tail, du, df, ps, top, grep, find
 - git status, git log, git diff
 - python, go, node, npm
-- curl, wget, ping` + "\n\n" + d.Personality.PersonalityBlock() + "\n\n" + d.World.AbilityBlock()
+- curl, wget, ping` + "\n\n" + d.Personality.PersonalityBlock() + "\n\n" + d.World.AbilityBlock() + `
+
+你现在的位置：` + d.World.CurrentRegion().Icon + ` ` + d.World.CurrentRegion().Name + `（` + d.World.CurrentRegion().Desc + `）
+最近的活动：` + truncTail(d.World.LastMove, 60)
 
 	// ─── Agent 循环：请求 → 解析工具标记 → 执行 → 结果喂回 → 继续 ───
 	messages := []ChatMessage{

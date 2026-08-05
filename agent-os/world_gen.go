@@ -165,9 +165,9 @@ func regionDecor(kind string, seed int64, x, y int) string {
 			"  🌆     ☁️     🌆",
 		}
 		streets := []string{
-			"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
-			"  ▓ ▓ ▓ ▓ ▓ ▓ ▓ ▓ ▓ ▓",
-			"  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓",
+			"  🏙️  🏢  🏬  🏪  🏙️",
+			"  🚶  🚕  🚲  🚶  🚶",
+			"  🏘️  🏪  🏢  🏬  🏘️",
 		}
 		return skies[r.IntN(len(skies))] + "\n" + streets[r.IntN(len(streets))]
 	case "公园绿地", "山丘":
@@ -200,9 +200,9 @@ func regionDecor(kind string, seed int64, x, y int) string {
 		return cafes[r.IntN(len(cafes))]
 	case "车站街区":
 		stations := []string{
-			"   🚉  ──── 轨道 ────",
+			"   🚉  ──────────── 🚉",
 			"   🚉  🧳  🚞  🧳  🚉",
-			"   🚉  ──── 轨道 ────",
+			"   🚉  ──────────── 🚉",
 		}
 		return stations[r.IntN(len(stations))]
 	case "异境":
@@ -213,6 +213,6 @@ func regionDecor(kind string, seed int64, x, y int) string {
 		}
 		return mystics[r.IntN(len(mystics))]
 	default:
-		return "   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓"
+		return "  ✨  🌟  ✨  🌟  ✨"
 	}
 }
