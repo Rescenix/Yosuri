@@ -256,11 +256,17 @@ func newCSDNAdapter() *csdnAdapter {
 
 func (a *csdnAdapter) Name() string { return "csdn" }
 
+// csdnCookieValid 校验 Cookie 是否像 CSDN 登录态（防假/失效 Cookie 静默返回空列表）
+func csdnCookieValid(cookie string) bool {
+	lower := strings.ToLower(cookie)
+	return strings.Contains(lower, "sessid") || strings.Contains(lower, "username") || strings.Contains(lower, "userinfo")
+}
+
 // fetchNewComments 拉我的文章的新评论（未处理）
 func (a *csdnAdapter) fetchNewComments() ([]replyEvent, error) {
 	cookie := a.cfg.CSDN.Cookie
-	if cookie == "" {
-		return nil, fmt.Errorf("未配置 CSDN Cookie（浏览器登录 blog.csdn.net 后复制到 reply_config.json）")
+	if cookie == "" || !csdnCookieValid(cookie) {
+		return nil, fmt.Errorf("未配置有效的 CSDN Cookie（浏览器登录 blog.csdn.net 后复制到 reply_config.json，需含 SESSID/userName）")
 	}
 	// 文章列表：配置的 ID 优先，否则自动拉我的文章
 	var articles []csdnArticle
