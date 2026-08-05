@@ -73,8 +73,6 @@ func (s *Shell) Run() {
 	s.printBanner()
 	s.printAvailableModels()
 	printDaughterGreeting()
-	// 楚门世界：打开即见她的世界（GTA 式城市地图 + 女儿颜表情）
-	fmt.Println(s.daughter.World.RenderWorldView(s.daughter.moodEmoji(), ""))
 	fmt.Println()
 
 	for {

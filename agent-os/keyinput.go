@@ -243,17 +243,21 @@ func (s *Shell) readLine() (string, error) {
 	}
 
 	redraw()
-	// 楚门世界直播：场景区（输入行上方固定 liveSceneRows 行）+ 输入行
-	drawSceneBlock(prompt, buf)
+	// 楚门世界直播：双栏直播屏（场景 3/4 + 日志 1/4，输入行上方固定 liveSceneRows 行）
+	drawSceneBlock(prompt, buf, s.daughter.Home)
 	lastSceneVer := liveFrameVersion()
+	lastAnimTick := time.Now()
 
 	for {
-		// 实时直播轮询：无按键且直播帧有更新 → 覆写场景区（候选列表显示时不打扰）
+		// 实时直播轮询：无按键且（直播帧更新 或 每 400ms 动画节拍）→ 覆写直播屏
+		// 400ms 节拍 = 颜表情帧轮播（moodEmoji 600ms）+ 日志滚动 → 任何时候都有动画
 		if !inputAvailable() {
-			if v := liveFrameVersion(); v != lastSceneVer {
+			now := time.Now()
+			if v := liveFrameVersion(); v != lastSceneVer || now.Sub(lastAnimTick) > 400*time.Millisecond {
 				lastSceneVer = v
+				lastAnimTick = now
 				if !hadCandidates {
-					overwriteScene(prompt, buf)
+					overwriteScene(prompt, buf, s.daughter.Home)
 				}
 			}
 			time.Sleep(80 * time.Millisecond)

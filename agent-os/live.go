@@ -128,15 +128,20 @@ func logLive(path, line string) {
 	f.Close()
 }
 
-// liveLogTail 读直播日志尾部 N 行（Greet 播报「你不在的时候」用）
-func liveLogTail(home string, n int) string {
+// liveLogTailLines 读直播日志尾部 N 行（返回行切片）
+func liveLogTailLines(home string, n int) []string {
 	data, err := os.ReadFile(filepath.Join(home, "live.log"))
 	if err != nil {
-		return ""
+		return nil
 	}
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
-	return strings.Join(lines, "\n") + "\n"
+	return lines
+}
+
+// liveLogTail 读直播日志尾部 N 行（Greet 播报「你不在的时候」用）
+func liveLogTail(home string, n int) string {
+	return strings.Join(liveLogTailLines(home, n), "\n") + "\n"
 }
