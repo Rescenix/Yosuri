@@ -161,7 +161,7 @@ func daughterSyncPull(w *worldState, home string) {
 	w.CloudOK = true
 	if raw, ok := out.Data["world"]; ok && len(raw) > 2 {
 		var cloudWorld worldState
-		if json.Unmarshal(raw, &cloudWorld) == nil && cloudWorld.Place != "" {
+		if json.Unmarshal(raw, &cloudWorld) == nil && cloudWorld.WorldSeed != 0 {
 			// 云端权威覆盖（保留本地身份字段）
 			localDevice, localToken, localName := w.DeviceID, w.Token, w.Name
 			*w = cloudWorld

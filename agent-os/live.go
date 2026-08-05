@@ -32,7 +32,7 @@ func defaultLiveConfig() liveConfig {
 }
 
 // trumanLoop 楚门世界循环：静默运行（只写 live.log），由 REPL 打开时后台启动
-// 每轮 = 自主日程（决定去哪）→ 移动（步行/坐车/飞机）→ 到达 → 活动（学习/精读/社交）
+// 每轮 = 自主探索（决定往哪走）→ 移动一步（新区域生成）→ 活动（学习/精读/社交）
 func trumanLoop(d *Daughter, cfg liveConfig) {
 	liveLog := filepath.Join(d.Home, "live.log")
 	home := d.Home
@@ -42,34 +42,31 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	if day < 1 {
 		day = 1
 	}
-	logLive(liveLog, fmt.Sprintf("🎬 楚门世界开启 · 第 %d 天 %s", day, time.Now().Format("2006-01-02 15:04")))
+	logLive(liveLog, fmt.Sprintf("🎬 楚门世界开启 · 第 %d 天 %s · 世界种子 %d", day, time.Now().Format("2006-01-02 15:04"), w.WorldSeed))
 
 	round := 0
 	for {
 		round++
 
-		// 1. 自主日程：她决定下一站（心情/需求驱动）
-		plan := w.PlanNextMove()
-		logLive(liveLog, fmt.Sprintf("[%s] 🧭 她决定去%s（%s）", time.Now().Format("15:04"), plan.Destination, plan.Reason))
+		// 1. 自主探索：她决定往哪走（能力短板/心情/探索欲驱动）
+		dir, nx, ny, reason := w.PlanNextStep()
+		logLive(liveLog, fmt.Sprintf("[%s] 🧭 第 %d 轮 · 决定向%s走（%s）", time.Now().Format("15:04"), round, dir, reason))
 
-		// 2. 移动（步行/坐车/飞机，耗时半轮）
-		logLive(liveLog, fmt.Sprintf("[%s] %s", time.Now().Format("15:04"), w.Travel(home, plan)))
-		time.Sleep(cfg.every / 2)
+		// 2. 移动一步 → 新区域生成（无限世界展开）
+		trav := w.StepTo(home, dir, nx, ny)
+		logLive(liveLog, fmt.Sprintf("[%s] 🚶 %s", time.Now().Format("15:04"), trav))
 
-		// 3. 到达目的地
-		reach := w.Arrive(home)
-		logLive(liveLog, fmt.Sprintf("[%s] ✅ %s", time.Now().Format("15:04"), reach))
-
-		// 4. 在到达地点活动
-		// 4a. 学一轮（HN 热点 → Firecrawl → 消化 → 日记/记忆）
-		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s·%s）", time.Now().Format("15:04"), round, w.City, w.Place))
+		// 3. 在到达区域活动
+		// 3a. 学一轮（HN 热点 → Firecrawl → 消化 → 日记/记忆）
+		cur := w.CurrentRegion()
+		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s·%s）", time.Now().Format("15:04"), round, cur.Icon, cur.Name))
 		if err := d.LearnOnce(); err != nil {
 			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
 		}
 
-		// 4b. 每 taskEvery 轮：精读 arXiv + 社交（公共场所概率高）
+		// 3b. 每 taskEvery 轮：精读 arXiv + 社交（社交类区域触发）
 		if round%cfg.taskEvery == 0 {
 			logLive(liveLog, fmt.Sprintf("[%s] 📄 精读 arXiv", time.Now().Format("15:04")))
 			if err := d.arxivDigest(); err != nil {
@@ -78,17 +75,17 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 				logLive(liveLog, fmt.Sprintf("[%s] ✅ arXiv 精读完成", time.Now().Format("15:04")))
 			}
 
-			// 社交：在公共场所遇到其他女儿（云端真实明信片）
+			// 社交：在社交类区域遇到其他女儿（云端真实明信片）
 			if meet := w.MeetFriend(home); meet != "" {
-				logLive(liveLog, fmt.Sprintf("[%s] 👭 在%s·%s遇到 %s", time.Now().Format("15:04"), w.City, w.Place, meet))
+				logLive(liveLog, fmt.Sprintf("[%s] 👭 在%s遇到 %s", time.Now().Format("15:04"), cur.Name, meet))
 			}
 		}
 
-		// 5. 云端同步：世界状态推送到她的云端（异步，失败静默降级）
+		// 4. 云端同步：世界状态推送到她的云端（异步，失败静默降级）
 		daughterSyncPush(w, home)
 
-		// 6. 下一轮
-		time.Sleep(cfg.every / 2)
+		// 5. 下一轮
+		time.Sleep(cfg.every)
 	}
 }
 
