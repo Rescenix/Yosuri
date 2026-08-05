@@ -503,7 +503,7 @@ func (s *Shell) handleAgentChat(input string) {
   [TOOL:工具名 key="值" key2="值2"]
 一次可以输出多个标记，每个标记单独一行。工具执行结果会在下一轮喂回给你，你根据结果继续推理或给出最终回答。不需要调用工具时，直接正常回复。
 
-` + toolIntro + `
+` + toolIntro + skillsIndexPrompt() + `
 
 行为规范：
 - 回复用中文，简洁有力
@@ -525,6 +525,7 @@ func (s *Shell) handleAgentChat(input string) {
 	}
 
 	finalContent := ""
+	transcript := make([]string, 0, 16) // 动作序列（技能沉淀素材），跨轮累计
 	maxRounds := 8
 	for round := 0; round < maxRounds; round++ {
 		msg := ChatRequest{
@@ -597,12 +598,19 @@ func (s *Shell) handleAgentChat(input string) {
 			summary := runeClip(strings.TrimSpace(result.Text), 400)
 			fmt.Println(ColorGreen + "  ✓ " + strings.ReplaceAll(summary, "\n", " ⏎ ") + ColorReset)
 			toolResultText.WriteString(fmt.Sprintf("[工具 %s 结果]\n%s\n", name, summary))
+			// 记录动作序列（技能沉淀素材）
+			transcript = append(transcript, fmt.Sprintf("%s %v → %s", name, args, summary))
 		}
 
 		// 把模型回复 + 工具结果喂回，继续循环
 		messages = append(messages,
 			ChatMessage{Role: "assistant", Content: reply},
 			ChatMessage{Role: "user", Content: toolResultText.String()})
+	}
+
+	// 工作流收尾：有足够工具动作 → 后台异步沉淀技能（失败绝不影响主流程）
+	if len(transcript) >= 3 {
+		go generateSkill(input, transcript)
 	}
 
 	if finalContent == "" {
