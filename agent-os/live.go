@@ -26,8 +26,8 @@ type liveConfig struct {
 
 func defaultLiveConfig() liveConfig {
 	return liveConfig{
-		every:     90 * time.Second, // 90 秒一个动作：直播"活"起来
-		taskEvery: 10,               // 每 10 轮（≈15 分钟）深度活动（省 Firecrawl 额度）
+		every:     10 * time.Second, // 动作间隔：她一直做自己的事情（直播持续滚动）
+		taskEvery: 10,               // 每 10 轮深度活动（学习/精读/社交，省 Firecrawl 额度）
 	}
 }
 

@@ -647,6 +647,9 @@ func (s *Shell) handleAgentChat(input string) {
 	header := "rescene " + s.daughter.moodEmoji()
 	drawGalgameBox(header, strings.TrimRight(finalContent, "\n\r"), ColorMood, boxW)
 
+	// 成长：模型判断这次互动让她成长什么（异步，免费算力，失败静默）
+	go llmGrowthAnalysis(d, input, finalContent)
+
 	// 兜底：回复里若有 ```bash 命令且从未走工具调用，仍提供执行入口
 	if cmd := extractCommand(finalContent); cmd != "" {
 		fmt.Println()

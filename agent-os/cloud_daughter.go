@@ -138,6 +138,13 @@ func buildSyncPack(w *worldState, home string) map[string]any {
 		}
 		pack["journal_tail"] = s
 	}
+	// 人格快照（personality.json：8 维性格 + 出生底色 + 年轮）——云端完整快照
+	if data, err := os.ReadFile(filepath.Join(home, "personality.json")); err == nil {
+		var p map[string]any
+		if json.Unmarshal(data, &p) == nil {
+			pack["personality"] = p
+		}
+	}
 	return pack
 }
 
@@ -174,6 +181,21 @@ func daughterSyncPull(w *worldState, home string) {
 		var tail string
 		if json.Unmarshal(raw, &tail) == nil && tail != "" {
 			appendJournalTail(home, tail)
+		}
+	}
+	// 人格快照恢复（8 维性格/出生底色/年轮）——跨设备人格一致
+	if raw, ok := out.Data["personality"]; ok && len(raw) > 2 {
+		var p Personality
+		if json.Unmarshal(raw, &p) == nil && len(p.Traits) == len(traitDefs) {
+			// 保留本地日志累积（云端覆盖 traits/born，log 合并）
+			if data, err := os.ReadFile(daughterPersonalityPath(home)); err == nil {
+				var local Personality
+				if json.Unmarshal(data, &local) == nil && len(local.Log) > 0 {
+					p.Log = local.Log
+				}
+			}
+			p.save(home)
+			logLive(filepath.Join(home, "live.log"), "☁️ 人格快照已恢复（跨设备）")
 		}
 	}
 }
