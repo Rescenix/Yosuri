@@ -157,17 +157,27 @@ func llmSkillAcquire(d *Daughter) string {
 		names = append(names, s.Name)
 	}
 
+	// 先决定学习方向 → 真浏览器联网搜最新资讯（基于真实资讯学技能，不是脑补）
+	topic := llmSkillTopic(model.ID, d)
+	trend := ""
+	if topic != "" {
+		trend = browserSearch(topic)
+	}
+	if len(trend) > 1500 {
+		trend = runeClip(trend, 1500)
+	}
+
 	prompt := fmt.Sprintf(`你是住在电脑里的全能积极学习者，主动为用户获取有用的技能。
 你判断用户（你的主人）可能需要的技能，把它写成一个可复用的技能。
 
 已有技能：%s
 你的能力倾向：%s
 最近见闻：%s
-
+%s
 生成 1 个对用户（技术创作者/开发者）可能有用的新技能。
 只输出 JSON：{"name":"kebab-case英文名","description":"一句话中文描述什么场景用","trigger":"何时调用","verification":"如何验证成功","steps":["步骤1","步骤2","步骤3"]}
 步骤 3-6 条，不要与已有技能重名。`,
-		strings.Join(names, "、"), d.World.abilitySummary(), truncTail(d.World.LastMove, 50))
+		strings.Join(names, "、"), d.World.abilitySummary(), truncTail(d.World.LastMove, 50), trendBlock(trend))
 
 	msg := ChatRequest{
 		Model:       model.Model,
@@ -215,6 +225,49 @@ func llmSkillAcquire(d *Daughter) string {
 		return ""
 	}
 	return s.Name + "（" + s.Description + "）"
+}
+
+// trendBlock 最新资讯块：搜到就带原文，没搜到返回空（LLM 脑补兜底，不阻塞）
+func trendBlock(trend string) string {
+	if strings.TrimSpace(trend) == "" {
+		return ""
+	}
+	return "我上网搜到的最新资讯（基于这些真实资讯生成技能，不要凭空编造）：\n" + trend + "\n"
+}
+
+// llmSkillTopic 让 LLM 决定「学什么最新技能方向」，输出英文搜索关键词。
+// 免费模型调用，失败返回 ""——调用方跳过联网，直接脑补生成。
+func llmSkillTopic(modelID string, d *Daughter) string {
+	if modelID == "" || d == nil || d.World == nil {
+		return ""
+	}
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿，正在主动学习对用户（技术创作者/开发者）最新、最有用的技能。
+你的能力倾向：%s
+最近见闻：%s
+
+给出 2-6 个英文搜索关键词，用来搜「开发者最新值得学的技能方向」（例如 ai agent workflow 2026、local llm tooling、new css frameworks）。
+只输出关键词，不要任何解释。`,
+		d.World.abilitySummary(), truncTail(d.World.LastMove, 50))
+	msg := ChatRequest{
+		Model:       modelID,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   64,
+		Temperature: 0.9,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	content, err := CompleteWithModel(ctx, modelID, msg, nil)
+	if err != nil {
+		return ""
+	}
+	content = strings.TrimSpace(content)
+	content = strings.NewReplacer("\n", " ", "\r", " ", "\"", "", "'", "", "。", "", "，", "").Replace(content)
+	content = strings.TrimSpace(content)
+	if r := []rune(content); len(r) > 80 {
+		content = string(r[:80])
+	}
+	return content
 }
 
 // modelThought 思考：模型生成一句当下的想法（写进日记）

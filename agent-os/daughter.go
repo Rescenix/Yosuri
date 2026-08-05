@@ -223,22 +223,25 @@ func (d *Daughter) LearnOnce() error {
 		return fmt.Errorf("没有可用的免费模型")
 	}
 
-	// 3. Firecrawl 联网搜索（key 与前端设置打通：前端填一次，CLI 直接用）
+	// 3. 联网获取内容：真浏览器优先（免 key、真渲染）→ Firecrawl 兜底（需 key）
+	//    女儿真的打开系统 Edge 上网搜，不是等 API 配额
 	webContent := ""
-	if key := firecrawlKey(); key != "" {
+	if !d.Silent {
+		fmt.Println("  🌐 打开浏览器上网搜索…")
+	}
+	webContent = browserSearch(topics[0])
+	if webContent == "" && firecrawlKey() != "" {
 		if !d.Silent {
-			fmt.Println("  🔍 Firecrawl 联网搜索中…")
+			fmt.Println("  🔍 浏览器搜索失败，回退 Firecrawl…")
 		}
-		webContent = firecrawlSearch(topics[0], key)
-		if webContent != "" {
-			if !d.Silent {
-				fmt.Printf("  搜到内容 %d 字\n", len(webContent))
-			}
-		} else if !d.Silent {
-			fmt.Println("  ⚠️ 搜索无结果，用热点标题学习")
+		webContent = firecrawlSearch(topics[0], firecrawlKey())
+	}
+	if webContent != "" {
+		if !d.Silent {
+			fmt.Printf("  搜到内容 %d 字\n", len(webContent))
 		}
 	} else if !d.Silent {
-		fmt.Println("  ⚠️ 未配置 Firecrawl Key（前端设置填一次即可，或设 FIRECRAWL_API_KEY），用热点标题学习")
+		fmt.Println("  ⚠️ 搜索无结果，用热点标题学习")
 	}
 
 	// 4. 模型消化成学习笔记
