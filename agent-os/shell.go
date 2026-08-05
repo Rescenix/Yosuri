@@ -29,9 +29,10 @@ var currentModel = "auto"
 var shellMode = false // false = agent mode, true = native shell mode
 
 type Shell struct {
-	scanner  *bufio.Scanner
-	history  []string
-	daughter *Daughter
+	scanner    *bufio.Scanner
+	history    []string
+	daughter   *Daughter
+	firstDraw  bool // 首次进入画直播屏，聊天后不重画
 }
 
 func NewShell() *Shell {

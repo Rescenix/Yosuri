@@ -319,8 +319,11 @@ func (s *Shell) readLine() (string, error) {
 		fmt.Print("\x1b[K") // 清输入行尾部（输入变短时）
 	}
 
-	// 楚门世界直播：双栏直播屏（场景 3/4 + 日志 1/4，输入行上方固定 liveSceneRows 行）
-	drawSceneBlock(prompt, buf, s.daughter.Home)
+	// 楚门世界直播：首次进入显示（屏保模式），聊天回复后不重画
+	if s.firstDraw {
+		drawSceneBlock(prompt, buf, s.daughter.Home)
+		s.firstDraw = false
+	}
 	lastSceneVer := liveFrameVersion()
 	lastSceneWidth := terminalWidth()
 
