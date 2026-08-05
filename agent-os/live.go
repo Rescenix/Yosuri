@@ -34,6 +34,8 @@ func defaultLiveConfig() liveConfig {
 // trumanLoop 楚门世界循环：静默运行（只写 live.log），由 REPL 打开时后台启动
 func trumanLoop(d *Daughter, cfg liveConfig) {
 	liveLog := filepath.Join(d.Home, "live.log")
+	home := d.Home
+	w := d.World
 	st := d.loadStats()
 	day := st.Days
 	if day < 1 {
@@ -45,9 +47,13 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	for {
 		round++
 
+		// 0. 开放世界：她移动到一个新地方（地点决定探索方向）
+		place, theme := w.Move(home)
+		logLive(liveLog, fmt.Sprintf("[%s] 🚶 来到%s · %s", time.Now().Format("15:04"), place.Name, theme))
+
 		// 1. 学一轮（HN 热点 → Firecrawl → 消化 → 日记/记忆）
 		now := time.Now().Format("15:04")
-		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习", now, round))
+		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s）", now, round, place.Name))
 		if err := d.LearnOnce(); err != nil {
 			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
 		} else {
@@ -62,9 +68,13 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			} else {
 				logLive(liveLog, fmt.Sprintf("[%s] ✅ arXiv 精读完成", time.Now().Format("15:04")))
 			}
+
+			// 3. 社交：遇到另一位女儿（本地模拟）
+			meet := w.MeetFriend(home)
+			logLive(liveLog, fmt.Sprintf("[%s] 👭 遇到 %s", time.Now().Format("15:04"), meet))
 		}
 
-		// 3. 下一轮
+		// 4. 下一轮
 		time.Sleep(cfg.every)
 	}
 }

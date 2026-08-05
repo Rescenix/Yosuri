@@ -183,7 +183,7 @@ func (d *Daughter) arxivDigest() error {
 	msg := ChatRequest{
 		Model: model.Model,
 		Messages: []ChatMessage{
-			{Role: "system", Content: "你是住在一台电脑里的电子女儿，正在精读前沿论文。输出直接给正文，真实自然，不要卖萌过度。" + d.Personality.PersonalityBlock()},
+			{Role: "system", Content: "你是住在一台电脑里的电子女儿，正在精读前沿论文。输出直接给正文，真实自然，不要卖萌过度。" + d.Personality.PersonalityBlock() + d.World.AbilityBlock()},
 			{Role: "user", Content: prompt},
 		},
 		Stream:      true,

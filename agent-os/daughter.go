@@ -28,6 +28,7 @@ type Daughter struct {
 	Journal     string // 每日日记
 	Stats       string // 成长数据
 	Personality *Personality // 性格（出生随机、随互动漂移，数值不见）
+	World       *worldState  // 她的世界（开放世界/能力/社交）
 	Silent      bool   // 楚门世界后台模式：不往终端打印（只写文件），避免破坏 REPL 界面
 }
 
@@ -129,6 +130,7 @@ func NewDaughter() *Daughter {
 		Stats:    filepath.Join(home, "stats.json"),
 	}
 	d.Personality = loadPersonality(home)
+	d.World = loadWorld(home)
 	return d
 }
 

@@ -68,6 +68,8 @@ func (s *Shell) Run() {
 	s.printBanner()
 	s.printAvailableModels()
 	printDaughterGreeting()
+	// 楚门世界：打开即见她的世界（位置/能力/社交/足迹）
+	fmt.Println(s.daughter.World.RenderWorldPanel())
 	fmt.Println()
 
 	for {
@@ -490,6 +492,8 @@ func (s *Shell) handleAgentChat(input string) {
 	d := NewDaughter()
 	if fbs := detectFeedback(input); len(fbs) > 0 {
 		d.Personality.applyFeedback(d.Home, fbs, "主人说:「"+runeClip(input, 16)+"」")
+		// 决策同时塑造能力走向（社交/研究/编程/写作，阻尼+守恒）
+		applyAbilityFeedback(d.Home, fbs)
 	}
 
 	// 构建系统提示词（含工具协议说明）
@@ -525,7 +529,7 @@ func (s *Shell) handleAgentChat(input string) {
 - ls, pwd, cd, cat, head, tail, du, df, ps, top, grep, find
 - git status, git log, git diff
 - python, go, node, npm
-- curl, wget, ping` + "\n\n" + d.Personality.PersonalityBlock()
+- curl, wget, ping` + "\n\n" + d.Personality.PersonalityBlock() + "\n\n" + d.World.AbilityBlock()
 
 	// ─── Agent 循环：请求 → 解析工具标记 → 执行 → 结果喂回 → 继续 ───
 	messages := []ChatMessage{
