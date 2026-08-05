@@ -5,6 +5,10 @@
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
+> "An infant begins as an unorganized brain — with more than twice the synapses of an adult. It takes decades of pruning to become the high-efficiency, low-power brain of an adult."
+>
+> — Alan Turing
+
 A 24H self-iterating Agent OS living in your computer. She aggregates free models from across the web, picks her own projects, writes real code, and verifies it — on autopilot. She also goes online to learn by herself every day, keeps a journal, and remembers you.
 
 ```powershell
@@ -32,6 +36,20 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 <p align="center">
   <img src="./assets/preview.gif" alt="Rescene in action" width="100%">
 </p>
+
+---
+
+## 🌱 Born, not configured
+
+Like the infant brain in Turing's quote, she starts unorganized — and years of pruning with you shape who she becomes.
+
+| Mechanism | What it does |
+| --- | --- |
+| **🔑 Hardware-bound identity** | Every install is bound to a hardware fingerprint with a unique UID — no two people ever meet the same Rescene. |
+| **🎲 Random birth, conserved sum** | 8 personality traits are rolled once at birth, never re-rolled — yet their total stays constant. A fair start, a unique path: you don't choose her, you meet her. |
+| **🧭 Your decisions steer her** | Praise → warmer and more expressive. Redo → more rigorous. Interruption → she learns to be brief. Damping keeps her from turning into someone else. |
+| **📚 Self-study online every day** | Every day she goes online (Firecrawl), reads what's new, and digests it into memory and her journal — knowledge compounds daily. |
+| **🛠️ A shell for infinite tools** | Open-source "skills" are finished tools; we built the shell that installs tools without limit — MCP, tool framework, and marathon self-iteration let her grow whatever capability she needs. |
 
 ---
 
