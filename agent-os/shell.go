@@ -44,6 +44,10 @@ func NewShell() *Shell {
 func (s *Shell) Run() {
 	// 初始化路由
 	InitRouter()
+	// 楚门世界：打开她就开始自动化（后台自主循环：学习 + arXiv 精读，静默只写 live.log）
+	trumanD := NewDaughter()
+	trumanD.Silent = true
+	go trumanLoop(trumanD, defaultLiveConfig())
 	available := GetWorkingModels()
 	defaultModel := "free_zen_deepseek_v4_flash"
 	if len(available) > 0 {

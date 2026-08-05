@@ -28,6 +28,7 @@ type Daughter struct {
 	Journal     string // 每日日记
 	Stats       string // 成长数据
 	Personality *Personality // 性格（出生随机、随互动漂移，数值不见）
+	Silent      bool   // 楚门世界后台模式：不往终端打印（只写文件），避免破坏 REPL 界面
 }
 
 // 蓝色 ANSI 颜色（女儿心情表情用）
@@ -198,7 +199,9 @@ func (d *Daughter) Greet() string {
 // LearnOnce 学习一轮：抓热点 → Firecrawl 抓正文 → 模型消化 → 写记忆
 func (d *Daughter) LearnOnce() error {
 	InitRouter() // 确保模型列表已加载
-	fmt.Println(ColorCyan + "💗 电子女儿开始学习了…" + ColorReset)
+	if !d.Silent {
+		fmt.Println(ColorCyan + "💗 电子女儿开始学习了…" + ColorReset)
+	}
 
 	// 1. 抓热点
 	topics, err := fetchHotTopics("hn")
@@ -208,7 +211,9 @@ func (d *Daughter) LearnOnce() error {
 	if len(topics) > 5 {
 		topics = topics[:5]
 	}
-	fmt.Printf("  看到 %d 条今日热点，开始挑选…\n", len(topics))
+	if !d.Silent {
+		fmt.Printf("  看到 %d 条今日热点，开始挑选…\n", len(topics))
+	}
 
 	// 2. 模型选题
 	model := pickModel(GetWorkingModels(), int(time.Now().UnixNano()))
@@ -219,14 +224,18 @@ func (d *Daughter) LearnOnce() error {
 	// 3. Firecrawl 联网搜索（key 与前端设置打通：前端填一次，CLI 直接用）
 	webContent := ""
 	if key := firecrawlKey(); key != "" {
-		fmt.Println("  🔍 Firecrawl 联网搜索中…")
+		if !d.Silent {
+			fmt.Println("  🔍 Firecrawl 联网搜索中…")
+		}
 		webContent = firecrawlSearch(topics[0], key)
 		if webContent != "" {
-			fmt.Printf("  搜到内容 %d 字\n", len(webContent))
-		} else {
+			if !d.Silent {
+				fmt.Printf("  搜到内容 %d 字\n", len(webContent))
+			}
+		} else if !d.Silent {
 			fmt.Println("  ⚠️ 搜索无结果，用热点标题学习")
 		}
-	} else {
+	} else if !d.Silent {
 		fmt.Println("  ⚠️ 未配置 Firecrawl Key（前端设置填一次即可，或设 FIRECRAWL_API_KEY），用热点标题学习")
 	}
 
@@ -245,9 +254,13 @@ func (d *Daughter) LearnOnce() error {
 		Temperature: 0.8,
 	}
 		content, err := CompleteWithModel(context.Background(), model.ID, msg, func(chunk, reasoning string) {
-		fmt.Print(chunk)
+		if !d.Silent {
+			fmt.Print(chunk)
+		}
 	})
-	fmt.Println()
+	if !d.Silent {
+		fmt.Println()
+	}
 	if err != nil {
 		return err
 	}
@@ -277,7 +290,9 @@ func (d *Daughter) LearnOnce() error {
 	}
 	d.saveStats(st)
 
-	fmt.Printf(ColorGreen+"  ✅ 学习完成！日记已写入 %s\n"+ColorReset, d.Journal)
+	if !d.Silent {
+		fmt.Printf(ColorGreen+"  ✅ 学习完成！日记已写入 %s\n"+ColorReset, d.Journal)
+	}
 	return nil
 }
 
