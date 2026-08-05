@@ -329,10 +329,11 @@ func (s *Shell) readLine() (string, error) {
 	idleStart := time.Now()
 
 	for {
-		// 空闲检测：无输入超过 30s → 屏保模式（显示直播画面）
+		// 空闲检测：无输入超过 30s → 屏保模式（显示直播画面，只触发一次）
 		if !inputAvailable() {
 			if time.Since(idleStart) > 30*time.Second && !s.firstDraw {
 				s.firstDraw = true
+				idleStart = time.Now() // 重置计时，防无限重绘
 			}
 			v := liveFrameVersion()
 			width := terminalWidth()

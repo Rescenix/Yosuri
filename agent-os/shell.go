@@ -37,9 +37,10 @@ type Shell struct {
 
 func NewShell() *Shell {
 	return &Shell{
-		scanner:  bufio.NewScanner(os.Stdin),
-		history:  make([]string, 0, 100),
-		daughter: NewDaughter(),
+		scanner:   bufio.NewScanner(os.Stdin),
+		history:   make([]string, 0, 100),
+		daughter:  NewDaughter(),
+		firstDraw: true,
 	}
 }
 
