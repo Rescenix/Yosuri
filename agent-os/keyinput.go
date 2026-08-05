@@ -80,8 +80,15 @@ func terminalCellWidth(r rune) int {
 	if r == 0 || r == '\n' || r == '\r' || unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) {
 		return 0
 	}
+	if r == 0x200d || (r >= 0xfe00 && r <= 0xfe0f) ||
+		(r >= 0x1f3fb && r <= 0x1f3ff) || (r >= 0xe0020 && r <= 0xe007f) {
+		return 0
+	}
 	if r < 0x20 || (r >= 0x7f && r < 0xa0) {
 		return 0
+	}
+	if isDefaultEmojiPresentation(r) {
+		return 2
 	}
 	if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
 		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
@@ -92,6 +99,75 @@ func terminalCellWidth(r rune) int {
 		return 2
 	}
 	return 1
+}
+
+func isDefaultEmojiPresentation(r rune) bool {
+	if r >= 0x1f000 && r <= 0x1faff {
+		return true
+	}
+	switch {
+	case r == 0x231a || r == 0x231b ||
+		(r >= 0x23e9 && r <= 0x23ec) || r == 0x23f0 || r == 0x23f3 ||
+		(r >= 0x25fd && r <= 0x25fe) || r == 0x2614 || r == 0x2615 ||
+		(r >= 0x2648 && r <= 0x2653) || r == 0x267f || r == 0x2693 ||
+		r == 0x26a1 || r == 0x26aa || r == 0x26ab || r == 0x26bd || r == 0x26be ||
+		r == 0x26c4 || r == 0x26c5 || r == 0x26ce || r == 0x26d4 || r == 0x26ea ||
+		r == 0x26f2 || r == 0x26f3 || r == 0x26f5 || r == 0x26fa || r == 0x26fd ||
+		r == 0x2705 || r == 0x270a || r == 0x270b || r == 0x2728 ||
+		r == 0x274c || r == 0x274e || (r >= 0x2753 && r <= 0x2755) || r == 0x2757 ||
+		(r >= 0x2795 && r <= 0x2797) || r == 0x27b0 || r == 0x27bf ||
+		r == 0x2b1b || r == 0x2b1c || r == 0x2b50 || r == 0x2b55:
+		return true
+	}
+	return false
+}
+
+func isRegionalIndicator(r rune) bool { return r >= 0x1f1e6 && r <= 0x1f1ff }
+
+// terminalClusterAt 返回一个终端字素簇的结束字节和显示列宽。
+// 它把 VS16、ZWJ emoji、肤色、旗帜和 keycap 作为一个整体，避免边框逐行漂移。
+func terminalClusterAt(text string, start int) (end, width int) {
+	if start >= len(text) {
+		return start, 0
+	}
+	r, size := utf8.DecodeRuneInString(text[start:])
+	end = start + size
+	width = terminalCellWidth(r)
+
+	if isRegionalIndicator(r) && end < len(text) {
+		next, nextSize := utf8.DecodeRuneInString(text[end:])
+		if isRegionalIndicator(next) {
+			return end + nextSize, 2
+		}
+	}
+
+	for end < len(text) {
+		next, nextSize := utf8.DecodeRuneInString(text[end:])
+		switch {
+		case next == 0xfe0f: // emoji presentation selector
+			end += nextSize
+			if width > 0 {
+				width = 2
+			}
+		case next == 0xfe0e || unicode.Is(unicode.Mn, next) || unicode.Is(unicode.Me, next) ||
+			(next >= 0x1f3fb && next <= 0x1f3ff) || (next >= 0xe0020 && next <= 0xe007f):
+			end += nextSize
+			if next == 0x20e3 {
+				width = 2
+			}
+		case next == 0x200d:
+			end += nextSize
+			if end >= len(text) {
+				return end, width
+			}
+			_, joinedSize := utf8.DecodeRuneInString(text[end:])
+			end += joinedSize
+			width = 2
+		default:
+			return end, width
+		}
+	}
+	return end, width
 }
 
 func terminalTextWidth(text string) int {
@@ -109,9 +185,9 @@ func terminalTextWidth(text string) int {
 			}
 			continue
 		}
-		r, size := utf8.DecodeRuneInString(text[i:])
-		width += terminalCellWidth(r)
-		i += size
+		end, clusterWidth := terminalClusterAt(text, i)
+		width += clusterWidth
+		i = end
 	}
 	return width
 }
@@ -125,13 +201,14 @@ func fitCandidateRow(text string, width int) string {
 	}
 	var b strings.Builder
 	used := 0
-	for _, r := range text {
-		w := terminalCellWidth(r)
+	for i := 0; i < len(text); {
+		end, w := terminalClusterAt(text, i)
 		if used+w > usable {
 			break
 		}
-		b.WriteRune(r)
+		b.WriteString(text[i:end])
 		used += w
+		i = end
 	}
 	if used < usable {
 		b.WriteString(strings.Repeat(" ", usable-used))
@@ -242,20 +319,19 @@ func (s *Shell) readLine() (string, error) {
 		fmt.Print("\x1b[K") // 清输入行尾部（输入变短时）
 	}
 
-	redraw()
 	// 楚门世界直播：双栏直播屏（场景 3/4 + 日志 1/4，输入行上方固定 liveSceneRows 行）
 	drawSceneBlock(prompt, buf, s.daughter.Home)
 	lastSceneVer := liveFrameVersion()
-	lastAnimTick := time.Now()
+	lastSceneWidth := terminalWidth()
 
 	for {
-		// 实时直播轮询：无按键且（直播帧更新 或 每 400ms 动画节拍）→ 覆写直播屏
-		// 400ms 节拍 = 颜表情帧轮播（moodEmoji 600ms）+ 日志滚动 → 任何时候都有动画
+		// 仅场景数据实际变化时刷新，避免空闲状态反复重画顶部和产生闪烁。
 		if !inputAvailable() {
-			now := time.Now()
-			if v := liveFrameVersion(); v != lastSceneVer || now.Sub(lastAnimTick) > 400*time.Millisecond {
+			v := liveFrameVersion()
+			width := terminalWidth()
+			if v != lastSceneVer || width != lastSceneWidth {
 				lastSceneVer = v
-				lastAnimTick = now
+				lastSceneWidth = width
 				if !hadCandidates {
 					overwriteScene(prompt, buf, s.daughter.Home)
 				}

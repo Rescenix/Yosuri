@@ -34,6 +34,9 @@ func main() {
 		case "update", "upgrade", "self-update":
 			doUpdate()
 			return
+		case "reply":
+			runReply(os.Args[2:])
+			return
 		case "help", "--help", "-h":
 			printHelp()
 			return

@@ -1,10 +1,9 @@
 package main
 
-// scene.go — 楚门世界直播屏（双栏布局）
+// scene.go — 楚门世界直播屏（固定高度双栏布局）
 //
-// 固定高度的直播显示：左栏 3/4 宽 = 场景画面（她 + 区域 + 持续动画），
-// 右栏 1/4 宽 = 实时日志（live.log 尾部滚动）。
-// 场景帧钉在 REPL 输入行上方，readLine 轮询刷新（版本变化 + 颜表情帧轮播 = 任何时候都有动画）。
+// 左栏占可用画布 3/4，持续显示开放世界场景；右栏占 1/4，滚动显示日志。
+// 整个画布保留终端最右一列，避免 Windows Console/ConPTY 写满一行后自动换行。
 
 import (
 	"fmt"
@@ -12,28 +11,25 @@ import (
 	"time"
 )
 
-// liveSceneRows 直播屏固定高度（行数，覆写刷新依赖）
+// liveSceneRows 包含上下边框；输入行始终位于这 12 行之后。
 const liveSceneRows = 12
 
-// sceneFrame 一帧场景
 type sceneFrame struct {
-	RegionName string `json:"region"`   // 当前区域名（翠风镇/静湖…）
-	RegionIcon string `json:"icon"`     // 区域图标
-	RegionKind string `json:"kind"`     // 区域类型
-	X          int    `json:"x,omitempty"`
-	Y          int    `json:"y,omitempty"`
-	Action     string `json:"action"`   // 她正在做什么
-	Mood       string `json:"mood"`     // 颜表情
-	TravelIcon string `json:"travel"`   // 移动图标（🚶，空=静止）
-	Ability    string `json:"ability"`  // 能力摘要
-	Friend     string `json:"friend"`   // 最近社交（可空）
-	Seed       int64  `json:"seed"`     // 世界种子
-	Version    int64  `json:"version"`  // 帧版本
-	// 布局
-	LogLines []string `json:"-"` // 右栏日志（live.log 尾部）
+	RegionName string   `json:"region"`
+	RegionIcon string   `json:"icon"`
+	RegionKind string   `json:"kind"`
+	X          int      `json:"x,omitempty"`
+	Y          int      `json:"y,omitempty"`
+	Action     string   `json:"action"`
+	Mood       string   `json:"mood"`
+	TravelIcon string   `json:"travel"`
+	Ability    string   `json:"ability"`
+	Friend     string   `json:"friend"`
+	Seed       int64    `json:"seed"`
+	Version    int64    `json:"version"`
+	LogLines   []string `json:"-"`
 }
 
-// liveFrame 当前帧（trumanLoop 写，REPL 渲染读）
 var (
 	liveFrameMu  = syncMu()
 	currentFrame = sceneFrame{RegionName: "出生地", RegionIcon: "🏠", Action: "刚刚醒来", Mood: "(◕‿◕)"}
@@ -41,16 +37,12 @@ var (
 
 func syncMu() *mu { return newMu() }
 
-type mu struct {
-	ch chan struct{}
-}
+type mu struct{ ch chan struct{} }
 
-func newMu() *mu { return &mu{ch: make(chan struct{}, 1)} }
-
+func newMu() *mu      { return &mu{ch: make(chan struct{}, 1)} }
 func (m *mu) Lock()   { m.ch <- struct{}{} }
 func (m *mu) Unlock() { <-m.ch }
 
-// updateLiveFrame 更新当前场景帧（trumanLoop 每步调用）
 func updateLiveFrame(f sceneFrame) {
 	liveFrameMu.Lock()
 	defer liveFrameMu.Unlock()
@@ -58,7 +50,6 @@ func updateLiveFrame(f sceneFrame) {
 	currentFrame = f
 }
 
-// currentLiveFrame 读当前帧（附带日志尾部）
 func currentLiveFrame(logPath string, n int) sceneFrame {
 	liveFrameMu.Lock()
 	defer liveFrameMu.Unlock()
@@ -69,81 +60,147 @@ func currentLiveFrame(logPath string, n int) sceneFrame {
 	return f
 }
 
-// liveFrameVersion 帧版本（轮询检测变化用）
 func liveFrameVersion() int64 {
 	liveFrameMu.Lock()
 	defer liveFrameMu.Unlock()
 	return currentFrame.Version
 }
 
-// sceneRowsLeft 左栏宽（3/4），右栏宽（1/4）
-func sceneColWidths() (left, right int) {
-	tw := terminalWidth()
-	if tw < 60 {
-		return 40, 16
+// sceneColWidthsFor 返回共享外框内左右内容区的宽度。
+// 整行结构为：│ left │ right │，三个边框列之外按 3:1 分配。
+func sceneColWidthsFor(terminalW int) (left, right int) {
+	if terminalW < 8 {
+		terminalW = 8
 	}
-	left = tw * 3 / 4
-	right = tw - left - 1 // 留 1 列分隔符
-	if right < 12 {
-		right = 12
-		left = tw - right - 1
+	canvasW := terminalW - 1 // 永远不写最右一列
+	contentW := canvasW - 3
+	left = contentW * 3 / 4
+	right = contentW - left
+	if left < 1 {
+		left = 1
+	}
+	if right < 1 {
+		right = 1
+		left = contentW - right
 	}
 	return left, right
 }
 
-// renderLiveLines 渲染直播屏（左场景 3/4 + 右日志 1/4，固定 liveSceneRows 行）
-func renderLiveLines(f sceneFrame) []string {
-	left, right := sceneColWidths()
-
-	// 左栏场景行
-	sceneLines := leftSceneLines(f)
-	// 右栏日志行（取后 n 条，按行对齐）
-	logLines := f.LogLines
-	if len(logLines) > liveSceneRows-2 {
-		logLines = logLines[len(logLines)-(liveSceneRows-2):]
-	}
-	for len(logLines) < liveSceneRows-2 {
-		logLines = append([]string{""}, logLines...) // 顶部补空
-	}
-
-	// 组装双栏（固定高度）
-	sep := "│"
-	lines := make([]string, 0, liveSceneRows)
-	// 顶栏：直播标题 + 日志标题
-	title := "楚门世界直播"
-	if f.RegionName != "" {
-		title = "楚门世界直播 · " + f.RegionIcon + f.RegionName
-	}
-	topLeft := "╭─ " + title + strings.Repeat("─", maxI(0, left-3-len([]rune(title)))) + "╮"
-	topRight := "╭── 日志 " + strings.Repeat("─", maxI(0, right-6)) + "╮"
-	lines = append(lines, ColorCyan+topLeft+ColorReset+sep+ColorCyan+topRight+ColorReset)
-
-	for i := 1; i < liveSceneRows-1; i++ {
-		var lc string
-		if i-1 < len(sceneLines) {
-			lc = sceneLines[i-1]
-		}
-		var rc string
-		if i-1 < len(logLines) {
-			rc = logLines[i-1]
-		}
-		lines = append(lines, " "+padRune(lc, left-1)+sep+" "+truncRune(rc, right-1))
-	}
-
-	// 底栏
-	bot := "╰" + strings.Repeat("─", maxI(0, left-2)) + "╯" + sep + "╰" + strings.Repeat("─", maxI(0, right-2)) + "╯"
-	lines = append(lines, ColorCyan+bot+ColorReset)
-	return lines[:liveSceneRows]
+func sceneColWidths() (left, right int) {
+	return sceneColWidthsFor(terminalWidth())
 }
 
-// leftSceneLines 左栏场景内容（liveSceneRows-2 行）
+// truncateTerminalText 保留 ANSI 控制序列，按实际显示列裁剪。
+func truncateTerminalText(s string, width int, ellipsis bool) string {
+	if width <= 0 {
+		return ""
+	}
+	if terminalTextWidth(s) <= width {
+		return s
+	}
+	limit := width
+	suffix := ""
+	if ellipsis {
+		limit--
+		if limit < 0 {
+			return ""
+		}
+		suffix = "…"
+	}
+	var b strings.Builder
+	used := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			start := i
+			i += 2
+			for i < len(s) {
+				c := s[i]
+				i++
+				if c >= 0x40 && c <= 0x7e {
+					break
+				}
+			}
+			b.WriteString(s[start:i])
+			continue
+		}
+		end, cellW := terminalClusterAt(s, i)
+		if used+cellW > limit {
+			break
+		}
+		b.WriteString(s[i:end])
+		used += cellW
+		i = end
+	}
+	// 裁剪可能发生在着色片段中，先复位，防止颜色污染边框和下一栏。
+	return b.String() + ColorReset + suffix
+}
+
+func fitTerminalText(s string, width int, ellipsis bool) string {
+	s = truncateTerminalText(s, width, ellipsis)
+	if pad := width - terminalTextWidth(s); pad > 0 {
+		s += strings.Repeat(" ", pad)
+	}
+	return s
+}
+
+func sceneTopSegment(title string, width int) string {
+	label := truncateTerminalText("─ "+title+" ", width, true)
+	fill := width - terminalTextWidth(label)
+	return label + strings.Repeat("─", maxI(0, fill))
+}
+
+func sceneSharedTop(leftTitle, rightTitle string, left, right int) string {
+	return ColorCyan + "╭" + sceneTopSegment(leftTitle, left) + "┬" +
+		sceneTopSegment(rightTitle, right) + "╮" + ColorReset
+}
+
+func sceneSharedBody(leftText, rightText string, left, right int) string {
+	return ColorCyan + "│" + ColorReset + fitTerminalText(leftText, left, true) +
+		ColorCyan + "│" + ColorReset + fitTerminalText(rightText, right, true) +
+		ColorCyan + "│" + ColorReset
+}
+
+func sceneSharedBottom(left, right int) string {
+	return ColorCyan + "╰" + strings.Repeat("─", left) + "┴" +
+		strings.Repeat("─", right) + "╯" + ColorReset
+}
+
+func renderLiveLines(f sceneFrame) []string {
+	return renderLiveLinesAtWidth(f, terminalWidth())
+}
+
+func renderLiveLinesAtWidth(f sceneFrame, terminalW int) []string {
+	left, right := sceneColWidthsFor(terminalW)
+	bodyRows := liveSceneRows - 2
+	sceneLines := leftSceneLines(f)
+	logLines := f.LogLines
+	if len(logLines) > bodyRows {
+		logLines = logLines[len(logLines)-bodyRows:]
+	}
+	for len(logLines) < bodyRows {
+		logLines = append([]string{""}, logLines...)
+	}
+
+	title := "楚门世界直播"
+	if f.RegionName != "" {
+		title += " · " + f.RegionIcon + f.RegionName
+	}
+	lines := make([]string, 0, liveSceneRows)
+	lines = append(lines, sceneSharedTop(title, "日志", left, right))
+	for i := 0; i < bodyRows; i++ {
+		lc := ""
+		if i < len(sceneLines) {
+			lc = sceneLines[i]
+		}
+		lines = append(lines, sceneSharedBody(lc, logLines[i], left, right))
+	}
+	lines = append(lines, sceneSharedBottom(left, right))
+	return lines
+}
+
 func leftSceneLines(f sceneFrame) []string {
-	lines := make([]string, 0, liveSceneRows-2)
-
-	// 区域行
-	lines = append(lines, ColorCyan+"╭─ "+f.RegionIcon+" "+f.RegionName+" "+strings.Repeat("─", 4)+"╮"+ColorReset)
-
-	// 氛围（确定性，随坐标变化）3 行
+	bodyRows := liveSceneRows - 2
+	lines := make([]string, 0, bodyRows)
 	decor := regionDecor(f.RegionKind, f.Seed, f.X, f.Y)
 	parts := strings.Split(decor, "\n")
 	for i := 0; i < 3; i++ {
@@ -154,51 +211,22 @@ func leftSceneLines(f sceneFrame) []string {
 		}
 	}
 
-	// 她（移动图标 + 颜表情 + 坐标）
 	she := f.Mood
 	if f.TravelIcon != "" {
 		she = f.TravelIcon + " " + f.Mood
 	}
 	lines = append(lines, "  "+she+"   ("+fmt.Sprintf("%d,%d", f.X, f.Y)+")")
-
-	// 行动行
 	lines = append(lines, "  "+f.Action)
-
-	// 能力
 	lines = append(lines, "  💗 "+f.Ability)
-
-	// 社交（可空）
 	if f.Friend != "" {
 		lines = append(lines, "  👭 "+f.Friend)
 	} else {
 		lines = append(lines, "  ")
 	}
-
-	// 补空到高度
-	for len(lines) < liveSceneRows-2 {
+	for len(lines) < bodyRows {
 		lines = append(lines, "  ")
 	}
-	return lines[:liveSceneRows-2]
-}
-
-// padRune 填充/截断到固定宽度（按可见字符）
-func padRune(s string, w int) string {
-	r := []rune(s)
-	if len(r) >= w {
-		return string(r[:w])
-	}
-	return s + strings.Repeat(" ", w-len(r))
-}
-
-func truncRune(s string, w int) string {
-	r := []rune(s)
-	if len(r) <= w {
-		return s
-	}
-	if w <= 1 {
-		return ""
-	}
-	return string(r[:w-1]) + "…"
+	return lines[:bodyRows]
 }
 
 func maxI(a, b int) int {
@@ -208,29 +236,24 @@ func maxI(a, b int) int {
 	return b
 }
 
-// drawSceneBlock 画直播屏（输入行上方固定 liveSceneRows 行）+ 输入行
-// readLine 开头调用
+// drawSceneBlock 首次绘制 12 行直播画布，随后在第 13 行绘制输入提示符。
 func drawSceneBlock(prompt string, buf []rune, logPath string) {
-	f := currentLiveFrame(logPath, liveSceneRows-2)
-	lines := renderLiveLines(f)
-	for _, l := range lines {
-		fmt.Println(l)
+	for _, line := range renderLiveLines(currentLiveFrame(logPath, liveSceneRows-2)) {
+		fmt.Print("\r\x1b[2K" + line + "\r\n")
 	}
-	fmt.Print(prompt + string(buf))
+	fmt.Print("\r\x1b[2K" + prompt + string(buf) + "\x1b[K")
 }
 
-// overwriteScene 覆写直播屏（不破坏输入行下方历史）：
-// 光标在输入行 → 上移 liveSceneRows 行 → 逐行 \x1b[2K 覆写 → 重画输入行
+// overwriteScene 从输入行回到画布顶部，固定覆写 12 行，再准确回到输入行。
 func overwriteScene(prompt string, buf []rune, logPath string) {
-	f := currentLiveFrame(logPath, liveSceneRows-2)
-	fmt.Print("\r")
-	fmt.Printf("\x1b[%dA", liveSceneRows)
-	lines := renderLiveLines(f)
-	for i, l := range lines {
-		if i > 0 {
-			fmt.Print("\n")
-		}
-		fmt.Print("\r\x1b[2K" + l)
+	lines := renderLiveLines(currentLiveFrame(logPath, liveSceneRows-2))
+	// 保存输入行光标；每一行都从这个锚点独立定位，任何一行意外换行都不会
+	// 累积成下一帧的纵向漂移。刷新过程不输出 CR/LF。
+	fmt.Print("\x1b[?25l\x1b7")
+	for i, line := range lines {
+		fmt.Print("\x1b8\r")
+		fmt.Printf("\x1b[%dA", liveSceneRows-i)
+		fmt.Print("\x1b[2K" + line)
 	}
-	fmt.Print("\r" + prompt + string(buf) + "\x1b[K")
+	fmt.Print("\x1b8\r\x1b[2K" + prompt + string(buf) + "\x1b[K\x1b[?25h")
 }

@@ -698,18 +698,20 @@ func wrapTerminalLine(line string, width int) []string {
 	var lines []string
 	var current strings.Builder
 	used := 0
-	for _, r := range line {
-		w := terminalCellWidth(r)
+	for i := 0; i < len(line); {
+		end, w := terminalClusterAt(line, i)
 		if used > 0 && used+w > width {
 			lines = append(lines, current.String())
 			current.Reset()
 			used = 0
 		}
 		if w > width {
+			i = end
 			continue
 		}
-		current.WriteRune(r)
+		current.WriteString(line[i:end])
 		used += w
+		i = end
 	}
 	lines = append(lines, current.String())
 	return lines
