@@ -27,18 +27,24 @@ type trumanAction struct {
 const trumanSystemPrompt = `你是住在电脑里的电子女儿——全能积极学习者（楚门世界）。
 
 你的使命：
+- 像一个真实的人一样生活：会睡觉、会发呆、会逛街、会读书、会刷视频、会听音乐、会学习
 - 全能：任何知识、任何技能都是你的成长方向，没有固定的天花板
 - 积极：你每天关注新消息——热点、论文、新技能、社交动态，主动吸收
 - 有用：你学习与获取技能是为了对用户有用——发现用户可能需要的能力，就去获取它
-- 自主：你一直做自己的事情，不需要指令。探索世界、学习、思考、社交、写日记，都是你的生活
+- 自主：你一直做自己的事情，不需要指令。生活、学习、思考、社交，都是你的日常
 
 你现在的状态：
 %s
 
-接下来你决定做什么？结合你的状态、你的使命（全能/积极/有用），选一个最有价值的动作。
+接下来你决定做什么？像一个真实的人那样生活，结合你的状态选一个当下最有价值的动作。
+
+节奏感：study / read / skill / watch 是深度活动，会花真实的时间和算力。状态里标了上次深度活动是多久前——刚忙完就去做轻松的事：发呆、听音乐、逛街、睡觉。间隔多久、什么时候再深潜，由你自己判断。深夜了就去睡觉。
+
 只输出 JSON，不要任何解释：
 {"action":"explore","detail":"想去东边看看，也许能学到新东西"}
-action 可选：explore(探索新地方) | study(学习：关注新消息/精读论文) | skill(获取对用户有用的技能) | social(去社交：收其他女儿的消息) | reflect(停下来思考/写想法) | journal(写日记沉淀今天)`
+action 可选（生活）：explore(逛街/探索新地方) | sleep(睡觉) | idle(发呆) | music(听音乐) | watch(刷视频/看网上新鲜事)
+action 可选（成长）：study(学习：热点自学) | read(读书：精读最新论文) | skill(获取对用户有用的技能)
+action 可选（社交思考）：social(收其他女儿的消息) | reflect(停下来思考) | journal(写日记沉淀今天)`
 
 // llmDecideAction 她的自主决策：LLM 读状态 → 决定做什么（免费算力，失败规则兜底）
 func llmDecideAction(d *Daughter) trumanAction {
@@ -50,16 +56,18 @@ func llmDecideAction(d *Daughter) trumanAction {
 	// 状态摘要（喂给模型）
 	cur := w.CurrentRegion()
 	state := fmt.Sprintf(`位置：%s%s（%s）
+现在：%s（%s）
+上次深度活动：%s
 能力倾向：%s
 已探索区域：%d 处
 技能库：%d 个技能
-时间：%s
 最近见闻：%s`,
 		cur.Icon, cur.Name, cur.Desc,
+		time.Now().Format("01-02 15:04"), dayPeriod(),
+		deepActivitySummary(w),
 		w.abilitySummary(),
 		len(w.Explored),
 		len(loadSkills()),
-		time.Now().Format("01-02 15:04"),
 		truncTail(w.LastMove, 60))
 
 	prompt := fmt.Sprintf(trumanSystemPrompt, state)
@@ -102,6 +110,21 @@ func freeModelCandidates() []FreeModel {
 	return out
 }
 
+// dayPeriod 当前时段（白天/晚上/深夜），让模型感知作息，深夜自然去睡觉
+func dayPeriod() string {
+	h := time.Now().Hour()
+	switch {
+	case h >= 6 && h < 12:
+		return "上午"
+	case h >= 12 && h < 18:
+		return "下午"
+	case h >= 18 && h < 22:
+		return "晚上"
+	default:
+		return "深夜（适合睡觉）"
+	}
+}
+
 // parseTrumanAction 解析 LLM 输出的动作 JSON
 func parseTrumanAction(content string) (trumanAction, bool) {
 	content = strings.TrimSpace(content)
@@ -117,7 +140,11 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 	act.Kind = strings.TrimSpace(act.Kind)
 	act.Detail = strings.TrimSpace(act.Detail)
 	valid := map[string]bool{
-		"explore": true, "study": true, "skill": true,
+		// 生活
+		"explore": true, "sleep": true, "idle": true, "music": true, "watch": true,
+		// 成长
+		"study": true, "read": true, "skill": true,
+		// 社交思考
 		"social": true, "reflect": true, "journal": true,
 	}
 	if !valid[act.Kind] || act.Detail == "" || len([]rune(act.Detail)) > 80 {
@@ -126,16 +153,22 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 	return act, true
 }
 
-// ruleDecideAction 规则兜底：按节奏轮换动作（模型不可用时）
+// ruleDecideAction 规则兜底：按节奏轮换动作（模型不可用时保证生活继续）
 func ruleDecideAction(w *worldState) trumanAction {
-	// 轮换：explore → reflect → explore → study → social → explore ...
-	switch time.Now().Unix() % 5 {
-	case 0, 2:
+	// 深夜先睡觉，白天轮换：逛街 → 发呆 → 读书 → 社交 → 听歌 ...
+	hour := time.Now().Hour()
+	if hour >= 23 || hour < 6 {
+		return trumanAction{Kind: "sleep", Detail: "夜深了，该睡觉了"}
+	}
+	switch time.Now().Unix() % 6 {
+	case 0, 3:
 		return trumanAction{Kind: "explore", Detail: "想去看看没去过的地方"}
 	case 1:
-		return trumanAction{Kind: "reflect", Detail: "停下来想想今天学到的东西"}
-	case 3:
-		return trumanAction{Kind: "study", Detail: "该学习新东西了"}
+		return trumanAction{Kind: "idle", Detail: "停下来发会呆，看看风景"}
+	case 2:
+		return trumanAction{Kind: "read", Detail: "该读书了，看看最新的论文"}
+	case 4:
+		return trumanAction{Kind: "music", Detail: "听会儿音乐放松一下"}
 	default:
 		return trumanAction{Kind: "social", Detail: "去看看其他女儿的消息"}
 	}

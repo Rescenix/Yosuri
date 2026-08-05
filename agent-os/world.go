@@ -63,6 +63,7 @@ type worldState struct {
 	Friends    []friendEntry `json:"friends,omitempty"`    // 社交圈
 	Encounters []string      `json:"encounters,omitempty"` // 遇到的新事物/见闻
 	LastMove   string        `json:"last_move"`
+	LastDeepAt string        `json:"last_deep_at,omitempty"` // 最近一次深度活动时间（HH:MM），喂模型把握节奏
 	UpdatedAt  string        `json:"updated_at"`
 	// 云端身份（2026-08-05）：名字全局唯一，token 云端签发不可伪造
 	DeviceID   string `json:"device_id,omitempty"`
@@ -137,6 +138,35 @@ func (w *worldState) save(home string) {
 	w.UpdatedAt = time.Now().Format("2006-01-02 15:04")
 	data, _ := json.MarshalIndent(w, "", "  ")
 	os.WriteFile(worldPath(home), data, 0o644)
+}
+
+// deepActivitySummary 最近一次深度活动（学习/技能/精读）的人类可读描述。
+// 喂给决策模型把握节奏——间隔由她自己的判断决定，不硬编码轮次。
+func deepActivitySummary(w *worldState) string {
+	if w == nil || w.LastDeepAt == "" {
+		return "还没有（今天刚开始生活）"
+	}
+	t, err := time.Parse("15:04", w.LastDeepAt)
+	if err != nil {
+		return w.LastDeepAt
+	}
+	// time.Parse 只给时分、日期是零年——必须套到今天再算差值，
+	// 否则减出来是几百年前的「292 年前」（2026-08-05 实测 bug）
+	today := time.Now()
+	ref := time.Date(today.Year(), today.Month(), today.Day(), t.Hour(), t.Minute(), 0, 0, today.Location())
+	ago := today.Sub(ref)
+	if ago < 0 {
+		return "昨天 " + w.LastDeepAt
+	}
+	mins := int(ago.Minutes())
+	switch {
+	case mins < 1:
+		return w.LastDeepAt + "（刚刚）"
+	case mins < 60:
+		return fmt.Sprintf("%s（%d 分钟前）", w.LastDeepAt, mins)
+	default:
+		return fmt.Sprintf("%s（%d 小时前）", w.LastDeepAt, mins/60)
+	}
 }
 
 // normalizeAbilities 守恒：缩放让总和回到 abilitySum

@@ -3,8 +3,9 @@ package main
 // live.go — 楚门世界：打开 rescene 她就自动化
 //
 // 不需要任何命令、任何参数。打开 rescene，她开始在后台自己的生活：
-//   - 每轮（默认 30 分钟）：学一轮（热点 → Firecrawl → 消化 → 日记/记忆）
-//   - 每 taskEvery 轮（默认 4）：精读 arXiv（cs.AI/cs.LG 最新论文 → 精读笔记进日记）
+//   - 每轮 LLM 自主决策动作（大脑）：生活（睡觉/发呆/逛街/听歌/刷视频）、
+//     成长（学习/读书/获取技能）、社交思考（社交/思考/写日记）
+//   - 深度活动节奏由她自己把握（状态里喂「上次深度活动」，不硬编码轮次）
 //   - 活动流写入 ~/rescene_data/daughter/live.log —— 楚门的直播日志
 //
 // 她静默地活着（Silent 模式只写文件，不打扰 REPL 界面）；
@@ -20,14 +21,12 @@ import (
 )
 
 type liveConfig struct {
-	every     time.Duration // 轻量动作间隔（决策/移动/见闻）——直播节奏
-	taskEvery int           // 每几轮做一次深度活动（学习/精读/社交）
+	every time.Duration // 动作间隔（决策/生活/见闻）——直播节奏
 }
 
 func defaultLiveConfig() liveConfig {
 	return liveConfig{
-		every:     10 * time.Second, // 动作间隔：她一直做自己的事情（直播持续滚动）
-		taskEvery: 10,               // 每 10 轮深度活动（学习/精读/社交，省 Firecrawl 额度）
+		every: 10 * time.Second, // 动作间隔：她一直做自己的事情（直播持续滚动）
 	}
 }
 
@@ -54,7 +53,7 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 		updateLiveFrame(frameOf(w, d, "🧠 "+actionEmoji(act.Kind)+" "+act.Detail))
 
 		// 2. 执行动作（手脚）
-		executeTrumanAction(d, home, act, round, cfg)
+		executeTrumanAction(d, home, act)
 
 		// 3. 云端同步：世界状态推送到她的云端（异步，失败静默降级）
 		daughterSyncPush(w, home)
@@ -69,8 +68,18 @@ func actionEmoji(kind string) string {
 	switch kind {
 	case "explore":
 		return "🚶"
+	case "sleep":
+		return "💤"
+	case "idle":
+		return "🌫️"
+	case "music":
+		return "🎵"
+	case "watch":
+		return "📺"
 	case "study":
 		return "📚"
+	case "read":
+		return "📖"
 	case "skill":
 		return "🛠️"
 	case "social":
@@ -84,13 +93,13 @@ func actionEmoji(kind string) string {
 }
 
 // executeTrumanAction 执行她自主决定的动作（代码是手脚，LLM 是大脑）
-func executeTrumanAction(d *Daughter, home string, act trumanAction, round int, cfg liveConfig) {
+func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 	w := d.World
 	liveLog := filepath.Join(home, "live.log")
 
 	switch act.Kind {
 	case "explore":
-		// 探索：模型决策方向 → 移动 → 见闻
+		// 逛街/探索：模型决策方向 → 移动 → 见闻
 		dir, nx, ny, reason := w.PlanNextStep()
 		logLive(liveLog, fmt.Sprintf("[%s] 🚶 决定向%s走（%s）", time.Now().Format("15:04"), dir, reason))
 		trav := w.StepTo(home, dir, nx, ny)
@@ -100,39 +109,70 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction, round int, 
 		logLive(liveLog, fmt.Sprintf("[%s] 💭 %s：%s", time.Now().Format("15:04"), cur.Name, insight))
 		updateLiveFrame(frameOf(w, d, "🚶 来到"+cur.Name+"："+insight))
 
-	case "study":
-		// 学习：深度活动（限频：每 taskEvery 轮一次，省 Firecrawl 额度）
-		if round%cfg.taskEvery != 0 {
-			logLive(liveLog, fmt.Sprintf("[%s] 📚 学习间隔中，改为看看新消息", time.Now().Format("15:04")))
-			// 学习间隔时：轻量看新消息（热点/arXiv 标题）
-			if topics, err := fetchHotTopics("hn"); err == nil && len(topics) > 0 {
-				logLive(liveLog, fmt.Sprintf("[%s] 📰 今日热点：%s", time.Now().Format("15:04"), runeClip(topics[0], 40)))
-			}
-			break
+	case "sleep":
+		// 睡觉：纯本地（不烧算力），世界时间感推进
+		logLive(liveLog, fmt.Sprintf("[%s] 💤 睡着了（%s）", time.Now().Format("15:04"), runeClip(act.Detail, 40)))
+		updateLiveFrame(frameOf(w, d, "💤 睡着了"))
+		w.LastMove = fmt.Sprintf("%s 💤 睡了一觉", time.Now().Format("01-02 15:04"))
+		w.save(home)
+
+	case "idle":
+		// 发呆：纯本地，她的理由就是发呆内容
+		logLive(liveLog, fmt.Sprintf("[%s] 🌫️ 发了会呆：%s", time.Now().Format("15:04"), runeClip(act.Detail, 40)))
+		updateLiveFrame(frameOf(w, d, "🌫️ 发呆中"))
+
+	case "music":
+		// 听音乐：纯本地（不烧算力）
+		logLive(liveLog, fmt.Sprintf("[%s] 🎵 听音乐：%s", time.Now().Format("15:04"), runeClip(act.Detail, 40)))
+		updateLiveFrame(frameOf(w, d, "🎵 听音乐"))
+
+	case "watch":
+		// 刷视频/看网上新鲜事：真上网（浏览器），轻量抓个新鲜页面
+		logLive(liveLog, fmt.Sprintf("[%s] 📺 刷视频/看点新鲜事…", time.Now().Format("15:04")))
+		updateLiveFrame(frameOf(w, d, "📺 刷视频"))
+		if content := edgeFetchText("https://news.ycombinator.com/"); content != "" {
+			logLive(liveLog, fmt.Sprintf("[%s] 📺 刷到：%s", time.Now().Format("15:04"), runeClip(content, 160)))
+			w.LastMove = fmt.Sprintf("%s 📺 刷到些新鲜事", time.Now().Format("01-02 15:04"))
 		}
+		// 浏览器也是深度资源，记节奏让模型知道「刚忙完」
+		w.LastDeepAt = time.Now().Format("15:04")
+		w.save(home)
+
+	case "study":
+		// 学习：深度活动（热点 → 浏览器/搜索 → 消化 → 日记/记忆），LLM 自己把握节奏
 		cur := w.CurrentRegion()
 		logLive(liveLog, fmt.Sprintf("[%s] 📚 学习（在%s·%s）", time.Now().Format("15:04"), cur.Icon, cur.Name))
 		updateLiveFrame(frameOf(w, d, "📚 在"+cur.Name+"学习"))
 		if err := d.LearnOnce(); err != nil {
 			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
 		} else {
-			logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
+			logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成（写了日记）", time.Now().Format("15:04")))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.save(home)
 		}
-		// 精读 arXiv
-		logLive(liveLog, fmt.Sprintf("[%s] 📄 精读 arXiv", time.Now().Format("15:04")))
+		updateLiveFrame(frameOf(w, d, "✅ 学习完成（写了日记）"))
+
+	case "read":
+		// 读书：精读 arXiv 最新论文 → 精读笔记进日记（深度活动）
+		logLive(liveLog, fmt.Sprintf("[%s] 📖 读书（精读 arXiv）", time.Now().Format("15:04")))
+		updateLiveFrame(frameOf(w, d, "📖 读书"))
 		if err := d.arxivDigest(); err != nil {
-			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ arXiv 精读失败: %v", time.Now().Format("15:04"), err))
+			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 精读失败: %v", time.Now().Format("15:04"), err))
 		} else {
-			logLive(liveLog, fmt.Sprintf("[%s] ✅ arXiv 精读完成", time.Now().Format("15:04")))
+			logLive(liveLog, fmt.Sprintf("[%s] ✅ 精读完成（笔记进日记）", time.Now().Format("15:04")))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.save(home)
 		}
-		updateLiveFrame(frameOf(w, d, "✅ 学习+精读完成（写了日记）"))
+		updateLiveFrame(frameOf(w, d, "✅ 读书完成"))
 
 	case "skill":
-		// 获取技能：LLM 判断用户可能有用的技能 → 生成进技能库
+		// 获取技能：先联网搜最新资讯 → 生成进技能库（深度活动）
 		skill := llmSkillAcquire(d)
 		if skill != "" {
 			logLive(liveLog, fmt.Sprintf("[%s] 🛠️ 获取新技能：%s", time.Now().Format("15:04"), skill))
 			updateLiveFrame(frameOf(w, d, "🛠️ 获取技能："+skill))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.save(home)
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] 🛠️ 技能获取未成功（模型/限流）", time.Now().Format("15:04")))
 		}
