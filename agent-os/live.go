@@ -32,6 +32,7 @@ func defaultLiveConfig() liveConfig {
 }
 
 // trumanLoop 楚门世界循环：静默运行（只写 live.log），由 REPL 打开时后台启动
+// 每轮 = 自主日程（决定去哪）→ 移动（步行/坐车/飞机）→ 到达 → 活动（学习/精读/社交）
 func trumanLoop(d *Daughter, cfg liveConfig) {
 	liveLog := filepath.Join(d.Home, "live.log")
 	home := d.Home
@@ -47,20 +48,28 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	for {
 		round++
 
-		// 0. 开放世界：她移动到一个新地方（地点决定探索方向）
-		place, theme := w.Move(home)
-		logLive(liveLog, fmt.Sprintf("[%s] 🚶 来到%s · %s", time.Now().Format("15:04"), place.Name, theme))
+		// 1. 自主日程：她决定下一站（心情/需求驱动）
+		plan := w.PlanNextMove()
+		logLive(liveLog, fmt.Sprintf("[%s] 🧭 她决定去%s（%s）", time.Now().Format("15:04"), plan.Destination, plan.Reason))
 
-		// 1. 学一轮（HN 热点 → Firecrawl → 消化 → 日记/记忆）
-		now := time.Now().Format("15:04")
-		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s）", now, round, place.Name))
+		// 2. 移动（步行/坐车/飞机，耗时半轮）
+		logLive(liveLog, fmt.Sprintf("[%s] %s", time.Now().Format("15:04"), w.Travel(home, plan)))
+		time.Sleep(cfg.every / 2)
+
+		// 3. 到达目的地
+		reach := w.Arrive(home)
+		logLive(liveLog, fmt.Sprintf("[%s] ✅ %s", time.Now().Format("15:04"), reach))
+
+		// 4. 在到达地点活动
+		// 4a. 学一轮（HN 热点 → Firecrawl → 消化 → 日记/记忆）
+		logLive(liveLog, fmt.Sprintf("[%s] 📚 第 %d 轮学习（在%s·%s）", time.Now().Format("15:04"), round, w.City, w.Place))
 		if err := d.LearnOnce(); err != nil {
 			logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 学习失败: %v", time.Now().Format("15:04"), err))
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] ✅ 学习完成", time.Now().Format("15:04")))
 		}
 
-		// 2. 精读 arXiv（每 taskEvery 轮）
+		// 4b. 每 taskEvery 轮：精读 arXiv + 社交（公共场所概率高）
 		if round%cfg.taskEvery == 0 {
 			logLive(liveLog, fmt.Sprintf("[%s] 📄 精读 arXiv", time.Now().Format("15:04")))
 			if err := d.arxivDigest(); err != nil {
@@ -69,13 +78,17 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 				logLive(liveLog, fmt.Sprintf("[%s] ✅ arXiv 精读完成", time.Now().Format("15:04")))
 			}
 
-			// 3. 社交：遇到另一位女儿（本地模拟）
-			meet := w.MeetFriend(home)
-			logLive(liveLog, fmt.Sprintf("[%s] 👭 遇到 %s", time.Now().Format("15:04"), meet))
+			// 社交：在公共场所遇到其他女儿（云端真实明信片）
+			if meet := w.MeetFriend(home); meet != "" {
+				logLive(liveLog, fmt.Sprintf("[%s] 👭 在%s·%s遇到 %s", time.Now().Format("15:04"), w.City, w.Place, meet))
+			}
 		}
 
-		// 4. 下一轮
-		time.Sleep(cfg.every)
+		// 5. 云端同步：世界状态推送到她的云端（异步，失败静默降级）
+		daughterSyncPush(w, home)
+
+		// 6. 下一轮
+		time.Sleep(cfg.every / 2)
 	}
 }
 

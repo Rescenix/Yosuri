@@ -47,6 +47,11 @@ func (s *Shell) Run() {
 	// 楚门世界：打开她就开始自动化（后台自主循环：学习 + arXiv 精读，静默只写 live.log）
 	trumanD := NewDaughter()
 	trumanD.Silent = true
+	// 云端身份：注册/取回唯一名字（不可用则本地降级）
+	ensureCloudIdentity(trumanD.World, trumanD.Home)
+	// 跨设备恢复：拉云端数据包覆盖本地
+	daughterSyncPull(trumanD.World, trumanD.Home)
+	daughterSyncPush(trumanD.World, trumanD.Home) // 新女儿初始化云端
 	go trumanLoop(trumanD, defaultLiveConfig())
 	available := GetWorkingModels()
 	defaultModel := "free_zen_deepseek_v4_flash"
@@ -68,8 +73,8 @@ func (s *Shell) Run() {
 	s.printBanner()
 	s.printAvailableModels()
 	printDaughterGreeting()
-	// 楚门世界：打开即见她的世界（位置/能力/社交/足迹）
-	fmt.Println(s.daughter.World.RenderWorldPanel())
+	// 楚门世界：打开即见她的世界（GTA 式城市地图 + 女儿颜表情）
+	fmt.Println(s.daughter.World.RenderWorldView(s.daughter.moodEmoji(), ""))
 	fmt.Println()
 
 	for {
@@ -485,6 +490,16 @@ func (s *Shell) handleAgentChat(input string) {
 	boxW := tw - 2 // 框宽 = 终端宽 - 2 边距
 
 	// ─── 立即显示用户消息框（发出即显示，不等思考） ───
+	// 改名意图：你说"你叫XX / 改名XX" → 云端全局查重改名（不画用户框，她直接回应）
+	if newName := detectRename(input); newName != "" {
+		d := NewDaughter()
+		if renamed, err := daughterRename(d.World, d.Home, newName); err != nil {
+			drawGalgameBox("rescene", "😢 "+err.Error(), ColorMood, boxW)
+		} else {
+			drawGalgameBox("rescene", "💗 从今天起，我叫"+renamed+"！", ColorMood, boxW)
+		}
+		return
+	}
 	drawGalgameBox("你", input, ColorCyan, boxW)
 	fmt.Println()
 
