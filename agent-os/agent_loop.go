@@ -59,19 +59,32 @@ func llmDecideAction(d *Daughter) trumanAction {
 	if !deepActivityDue(w, 30*time.Minute) {
 		deep = "⏳ 冷却中（刚忙完，先做轻量工作）"
 	}
+	// 技能列表（决策记忆：她知道自己的武器库）
+	skills := loadSkills()
+	var skillNames []string
+	for i, s := range skills {
+		if i >= 8 {
+			break
+		}
+		skillNames = append(skillNames, s.Name)
+	}
+	skillLine := "（空）"
+	if len(skillNames) > 0 {
+		skillLine = strings.Join(skillNames, "、")
+	}
 	state := fmt.Sprintf(`现在：%s（%s）
 深度活动：%s
 上次深度活动：%s
 今日产出：%s
 能力倾向：%s
-技能库：%d 个技能
+技能库：%d 个（%s）
 最近见闻：%s`,
 		time.Now().Format("01-02 15:04"), dayPeriod(),
 		deep,
 		deepActivitySummary(w),
 		todayOutputsSummary(d.Home),
 		w.abilitySummary(),
-		len(loadSkills()),
+		len(skills), skillLine,
 		truncTail(w.LastMove, 60))
 
 	prompt := fmt.Sprintf(trumanSystemPrompt, state)
