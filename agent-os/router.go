@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -41,10 +42,12 @@ var freeModels = []FreeModel{
 	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", Keyless: true, Reasoning: true},
 	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", Keyless: true, Reasoning: true},
 	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code（免费·最快）", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", Keyless: true, Reasoning: true},
+	{ID: "free_zen_nemotron_3_ultra", Vendor: "OpenCode Zen", Name: "Nemotron 3 Ultra（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "nemotron-3-ultra-free", Keyless: true, Reasoning: true},
 
 	// —— 阶跃星辰 StepFun ——
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰", Name: "step-1o-turbo-vision（识图）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
 	{ID: "free_step_3_7_flash", Vendor: "阶跃星辰", Name: "step-3.7-flash（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", KeyURL: "https://platform.stepfun.com/"},
+	{ID: "plan_step_gateway", Vendor: "Step Plan 订阅", Name: "step-3.7-flash（订阅 Credit）", Endpoint: "https://api.stepfun.com/step_plan/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", KeyURL: "https://platform.stepfun.com/plan-subscribe"},
 
 	// —— SenseNova 商汤 ——
 	{ID: "free_sensenova_6_7_flash_lite", Vendor: "SenseNova", Name: "SenseNova 6.7 Flash-Lite（免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "sensenova-6.7-flash-lite", KeyEnv: "SENSENOVA_API_KEY", Vision: true, CtxWindow: 262144, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
@@ -53,6 +56,8 @@ var freeModels = []FreeModel{
 
 	// —— ModelScope 魔搭 ——
 	{ID: "free_modelscope_qwen3_5_397b", Vendor: "ModelScope", Name: "Qwen3.5-397B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3.5-397B-A17B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 397, Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_235b", Vendor: "ModelScope", Name: "Qwen3-235B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-235B-A22B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 235, Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_glm_5_2", Vendor: "ModelScope", Name: "GLM-5.2（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "ZhipuAI/GLM-5.2", KeyEnv: "MODELSCOPE_API_KEY", Reasoning: true, KeyURL: "https://modelscope.cn"},
 	{ID: "free_modelscope_deepseek_v4_flash", Vendor: "ModelScope", Name: "DeepSeek V4 Flash（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "deepseek-ai/DeepSeek-V4-Flash", KeyEnv: "MODELSCOPE_API_KEY", Reasoning: true, KeyURL: "https://modelscope.cn"},
 	{ID: "free_modelscope_qwen2_5_vl", Vendor: "ModelScope", Name: "Qwen3-VL-235B（免费·识图）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-VL-235B-A22B-Instruct", KeyEnv: "MODELSCOPE_API_KEY", Vision: true, CtxWindow: 131072, KeyURL: "https://modelscope.cn"},
 
@@ -172,6 +177,7 @@ func InitRouter() {
 }
 
 func refreshModels() {
+	byID, byEnv := userConfigKeys()
 	var available []FreeModel
 	for _, m := range freeModels {
 		if m.Keyless {
@@ -179,6 +185,12 @@ func refreshModels() {
 			continue
 		}
 		key := os.Getenv(m.KeyEnv)
+		if key == "" {
+			key = byID[m.ID] // default.json 兜底（按模型 ID）
+		}
+		if key == "" {
+			key = byEnv[m.KeyEnv] // 同服务商 key 共用（魔搭一个 token 全模型可用）
+		}
 		if key != "" {
 			available = append(available, m)
 		}
@@ -186,6 +198,48 @@ func refreshModels() {
 	wmMu.Lock()
 	workingModels = available
 	wmMu.Unlock()
+}
+
+// userConfigKeys 从 ~/rescene_data/user_configs/default.json 读取用户配置的 API key。
+// 返回两张表：byID（模型 ID → key）、byEnv（KeyEnv 服务商 → key，同服务商 key 共用）。
+// agent-os 环境变量优先；default.json 兜底——用户主项目（re0 网页端）配过的 key 直接共用，
+// 24H 自转才有足够大的免费模型池（ModelScope 每日 2000 次等）。
+// 安全：脱敏条目（含 "..."）跳过；key 绝不打印。
+func userConfigKeys() (byID, byEnv map[string]string) {
+	byID = map[string]string{}
+	byEnv = map[string]string{}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return byID, byEnv
+	}
+	path := filepath.Join(home, "rescene_data", "user_configs", "default.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return byID, byEnv
+	}
+	var list []struct {
+		ID     string `json:"id"`
+		APIKey string `json:"api_key"`
+	}
+	if json.Unmarshal(data, &list) != nil {
+		return byID, byEnv
+	}
+	for _, it := range list {
+		if it.ID == "" || it.APIKey == "" {
+			continue
+		}
+		if strings.Contains(it.APIKey, "...") {
+			continue // 脱敏条目不可用
+		}
+		byID[it.ID] = it.APIKey
+		// 顺带登记服务商级 key（同 KeyEnv 的模型共用）
+		for _, m := range freeModels {
+			if m.ID == it.ID && m.KeyEnv != "" {
+				byEnv[m.KeyEnv] = it.APIKey
+			}
+		}
+	}
+	return byID, byEnv
 }
 
 // GetWorkingModels 返回当前可用模型列表
@@ -245,6 +299,13 @@ func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(c
 	key := ""
 	if !m.Keyless {
 		key = os.Getenv(m.KeyEnv)
+		if key == "" {
+			byID, byEnv := userConfigKeys()
+			key = byID[m.ID]    // default.json 兜底（按模型 ID）
+			if key == "" {
+				key = byEnv[m.KeyEnv] // 同服务商 key 共用
+			}
+		}
 	}
 
 	body := map[string]any{

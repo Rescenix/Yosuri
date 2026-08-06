@@ -104,7 +104,10 @@ func llmDecideAction(d *Daughter) trumanAction {
 	primary := ranked[0] // 首选：信用最好
 	primaryCh := make(chan result, 1)
 	go call(primary, primaryCh)
-	backups := ranked[1:] // 预备：次高信用
+	backups := ranked[1:] // 预备：信用次高（最多 1 个，省免费额度——24H 要跑得久）
+	if len(backups) > 1 {
+		backups = backups[:1]
+	}
 	backupCh := make(chan result, len(backups))
 	for _, b := range backups {
 		go call(b, backupCh)
@@ -134,15 +137,11 @@ func llmDecideAction(d *Daughter) trumanAction {
 	return ruleDecideAction(w)
 }
 
-// freeModelCandidates 免费模型候选（keyless）
+// freeModelCandidates 免费模型候选：全网免费模型（keyless + 免费档 keyed）。
+// 用户是 Rescene 聚合 API 提供方，目录里全是免费档（商汤/魔搭/阶跃/NVIDIA/Ollama/Zen）——
+// 决策统一走整个免费池，信用排序自动挑最可靠的，不是只有 Zen。
 func freeModelCandidates() []FreeModel {
-	var out []FreeModel
-	for _, m := range GetWorkingModels() {
-		if m.Keyless {
-			out = append(out, m)
-		}
-	}
-	return out
+	return GetWorkingModels()
 }
 
 // dayPeriod 当前时段（白天/晚上/深夜），让模型感知作息，深夜自然去睡觉

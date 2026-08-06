@@ -25,7 +25,44 @@ type liveConfig struct {
 
 func defaultLiveConfig() liveConfig {
 	return liveConfig{
-		every: 10 * time.Second, // 动作间隔：她一直做自己的事情（直播持续滚动）
+		every: 120 * time.Second, // 24H 自转节奏：2 分钟一轮（免费额度友好，720 轮/天）
+	}
+}
+
+// deepActivityKinds 深度动作（烧算力/免费额度）
+var deepActivityKinds = map[string]bool{
+	"study": true, "read": true, "skill": true, "project": true, "watch": true,
+}
+
+// deepActivityDue 距上次深度活动是否已过冷却期（免费额度管理）
+func deepActivityDue(w *worldState, cool time.Duration) bool {
+	if w == nil || w.LastDeepAt == "" {
+		return true
+	}
+	now := time.Now()
+	t, err := time.ParseInLocation("15:04", w.LastDeepAt, time.Local)
+	if err != nil {
+		return true
+	}
+	// 坑：ParseInLocation("15:04") 只给时:分，日期是 zero year 0000-01-01，
+	// time.Since 会得到 25 万小时 → 冷却永远生效。必须补成今天的日期。
+	t = time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
+	sub := now.Sub(t)
+	if sub < 0 {
+		return true // 跨天了（LastDeepAt 是更早日期）→ 冷却早已过
+	}
+	return sub >= cool
+}
+
+// lightFallback 深度冷却未过时的轻量替代（不烧算力/额度）
+func lightFallback() trumanAction {
+	switch time.Now().Unix() % 3 {
+	case 0:
+		return trumanAction{Kind: "reflect", Detail: "整理一下刚学到的东西"}
+	case 1:
+		return trumanAction{Kind: "journal", Detail: "把今天的进展写进日记"}
+	default:
+		return trumanAction{Kind: "social", Detail: "看看其他女儿的消息"}
 	}
 }
 
@@ -51,6 +88,10 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 		setThinking("💭 她在想接下来做什么…")
 		act := llmDecideAction(d)
 		setThinking("")
+		// 深度活动限频：冷却期未过 → 降级轻量动作（免费额度管理，24H 撑得住）
+		if deepActivityKinds[act.Kind] && !deepActivityDue(w, 30*time.Minute) {
+			act = lightFallback()
+		}
 		logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s：%s", time.Now().Format("15:04"), round, act.Kind, act.Detail))
 		// 决策事件：💭 思考行（Hermes 风格）
 		pushToolCall("agent.decide", fmt.Sprintf("action=%q", act.Kind), "think", runeClip(act.Detail, 40))
