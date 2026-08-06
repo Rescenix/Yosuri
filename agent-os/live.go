@@ -189,6 +189,11 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	}
 	logLive(liveLog, fmt.Sprintf("🎬 24H 自转开启 · 第 %d 天 %s", day, time.Now().Format("2006-01-02 15:04")))
 
+	// 启动补目标：当天还没有今日目标就定一个（目标驱动的自转，不等跨天）
+	if dailyGoal(home) == "（未定）" {
+		safeGo("daily-goal", func() { d.setDailyGoal() })
+	}
+
 	round := 0
 	lightStreak := 0 // 连续轻量轮数（可深潜时强制深度节奏）
 	lastDay := time.Now().Format("2006-01-02") // 跨天检测：日报生成
