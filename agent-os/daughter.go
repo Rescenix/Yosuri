@@ -295,6 +295,12 @@ func (d *Daughter) LearnOnce() error {
 	}
 	d.saveStats(st)
 
+	// 学习笔记落盘 outputs/（自主产出物：打开就能看她的学习成果——吊打 Hermes 的实体证据）
+	outDir := filepath.Join(d.Home, "outputs")
+	os.MkdirAll(outDir, 0o755)
+	noteFile := filepath.Join(outDir, fmt.Sprintf("学习-%s-%02d.md", date, st.LearnCount))
+	os.WriteFile(noteFile, []byte(fmt.Sprintf("# 学习笔记 · %s\n\n主题：%s\n\n%s\n", date, topics[0], content)), 0o644)
+
 	if !d.Silent {
 		fmt.Printf(ColorGreen+"  ✅ 学习完成！日记已写入 %s\n"+ColorReset, d.Journal)
 	}

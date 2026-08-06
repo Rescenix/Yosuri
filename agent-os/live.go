@@ -91,6 +91,47 @@ func maybeProbe() {
 	}
 }
 
+// generateDailyReport 汇总某日活动生成日报（规则汇总，免费不烧模型）——自主产出物
+func generateDailyReport(home, date string) {
+	all, err := os.ReadFile(filepath.Join(home, "live.log"))
+	if err != nil {
+		return
+	}
+	counts := map[string]int{}
+	var dayLines []string
+	for _, l := range strings.Split(string(all), "\n") {
+		if strings.Contains(l, date) && strings.Contains(l, "🧠") {
+			dayLines = append(dayLines, l)
+			for _, k := range []string{"study", "read", "skill", "project", "social", "reflect", "journal", "watch"} {
+				if strings.Contains(l, "· "+k) {
+					counts[k]++
+				}
+			}
+		}
+	}
+	if len(dayLines) == 0 {
+		return
+	}
+	names := map[string]string{"study": "学习", "read": "读书", "skill": "技能", "project": "项目",
+		"social": "社交", "reflect": "思考", "journal": "日记", "watch": "上网"}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Rescene 日报 · %s\n\n共 %d 轮自主工作\n\n## 活动统计\n\n", date, len(dayLines)))
+	for _, k := range []string{"study", "read", "skill", "project", "social", "reflect", "journal", "watch"} {
+		if counts[k] > 0 {
+			sb.WriteString(fmt.Sprintf("- %s × %d\n", names[k], counts[k]))
+		}
+	}
+	sb.WriteString("\n## 活动记录\n\n")
+	for _, l := range dayLines {
+		sb.WriteString("- " + strings.TrimSpace(l) + "\n")
+	}
+	outDir := filepath.Join(home, "outputs")
+	os.MkdirAll(outDir, 0o755)
+	os.WriteFile(filepath.Join(outDir, "日报-"+date+".md"), []byte(sb.String()), 0o644)
+	logLive(filepath.Join(home, "live.log"),
+		fmt.Sprintf("[%s] 📊 日报已生成 outputs/日报-%s.md", time.Now().Format("15:04"), date))
+}
+
 // trumanLoop 24H 自转循环：LLM 自主决策的 Agent 循环
 // 每轮：LLM 读状态自主决定做什么（大脑）→ 执行工具（手脚）→ 同步 → 小间隔
 // 界面 = Hermes 风格工作流：💭 思考 → ● 工具 → ✓ 结果，24H 不停
@@ -107,6 +148,7 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 
 	round := 0
 	lightStreak := 0 // 连续轻量轮数（可深潜时强制深度节奏）
+	lastDay := time.Now().Format("2006-01-02") // 跨天检测：日报生成
 	for {
 		round++
 		// 轮次安全执行：panic 恢复写日志继续转（24H 守护不能因为一个轮次崩溃）
@@ -119,6 +161,12 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 
 			// 每日探活：24h 一次（被 LRU/信用淘汰的模型恢复可用后重新入池）
 			maybeProbe()
+
+			// 跨天检测：生成前一日日报（自主产出物——24H 成果可见）
+			if today := time.Now().Format("2006-01-02"); today != lastDay {
+				generateDailyReport(home, lastDay)
+				lastDay = today
+			}
 
 			// 思考可视化：决策前显示她在想什么（顶部 💭 状态）
 			setThinking("💭 她在想接下来做什么…")
@@ -147,8 +195,8 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 				modelTag = " · " + act.Model
 			}
 			pushToolCall("agent.decide", decideArgs, "think", runeClip(act.Detail, 40))
-			// 轮次日志带模型（tail live.log 可见智能路由）
-			logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s%s：%s", time.Now().Format("15:04"), round, act.Kind, modelTag, act.Detail))
+			// 轮次日志带模型（tail live.log 可见智能路由）——带日期前缀（日报按日期统计用）
+			logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s%s：%s", time.Now().Format("2006-01-02 15:04"), round, act.Kind, modelTag, act.Detail))
 			updateLiveFrame(frameOf(w, d, actionEmoji(act.Kind)+" "+act.Detail))
 
 			// 执行动作（工具调用可视化：● 工具名 → ✓ 结果）
@@ -201,6 +249,13 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 			logLive(liveLog, fmt.Sprintf("[%s] 📺 刷到：%s", time.Now().Format("15:04"), runeClip(content, 160)))
 			toolEventByName("browser.fetch", "done", "刷到些新鲜事")
 			w.LastMove = fmt.Sprintf("%s 📺 刷到些新鲜事", time.Now().Format("01-02 15:04"))
+			// 资讯沉淀：append 到 outputs/每日资讯.md（自主产出物）
+			outDir := filepath.Join(home, "outputs")
+			os.MkdirAll(outDir, 0o755)
+			if f, err := os.OpenFile(filepath.Join(outDir, "每日资讯.md"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+				f.WriteString(fmt.Sprintf("\n## %s 刷到的\n%s\n", time.Now().Format("01-02 15:04"), runeClip(content, 300)))
+				f.Close()
+			}
 		} else {
 			toolEventByName("browser.fetch", "done", "没抓到新内容")
 		}
