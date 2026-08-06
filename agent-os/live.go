@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -107,6 +108,32 @@ func maybeProbe() {
 	}
 }
 
+// refreshOutputsIndex 生成 outputs/README.md 索引（作品集：她的 24H 自主产出目录）
+func refreshOutputsIndex(home string) {
+	outDir := filepath.Join(home, "outputs")
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && e.Name() != "README.md" {
+			files = append(files, e.Name())
+		}
+	}
+	if len(files) == 0 {
+		return
+	}
+	sort.Strings(files)
+	var sb strings.Builder
+	sb.WriteString("# Rescene 作品集\n\n她的 24H 自主产出：\n\n")
+	for _, f := range files {
+		sb.WriteString("- " + f + "\n")
+	}
+	sb.WriteString(fmt.Sprintf("\n共 %d 件产出 · 更新 %s\n", len(files), time.Now().Format("2006-01-02 15:04")))
+	os.WriteFile(filepath.Join(outDir, "README.md"), []byte(sb.String()), 0o644)
+}
+
 // generateDailyReport 汇总某日活动生成日报（规则汇总，免费不烧模型）——自主产出物
 func generateDailyReport(home, date string) {
 	all, err := os.ReadFile(filepath.Join(home, "live.log"))
@@ -181,7 +208,13 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			// 跨天检测：生成前一日日报（自主产出物——24H 成果可见）
 			if today := time.Now().Format("2006-01-02"); today != lastDay {
 				generateDailyReport(home, lastDay)
+				refreshOutputsIndex(home)
 				lastDay = today
+			}
+
+			// 作品集索引刷新（每 12 轮 ≈ 24 分钟，低开销）
+			if round%12 == 0 {
+				refreshOutputsIndex(home)
 			}
 
 			// 思考可视化：决策前显示她在想什么（顶部 💭 状态）
@@ -262,18 +295,25 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 
 	switch act.Kind {
 	case "watch":
-		// 看网上新鲜事：真浏览器抓个新鲜页面
-		pushToolCall("browser.fetch", `url="news.ycombinator.com"`, "running", "")
-		content := edgeFetchText("https://news.ycombinator.com/")
+		// 看网上新鲜事：真浏览器抓个新鲜页面（多源轮换，不是只看 HN）
+		srcs := []struct{ name, url string }{
+			{"Hacker News", "https://news.ycombinator.com/"},
+			{"GitHub Trending", "https://github.com/trending"},
+			{"arXiv AI", "https://arxiv.org/list/cs.AI/recent"},
+			{"Product Hunt", "https://www.producthunt.com/"},
+		}
+		src := srcs[time.Now().Unix()%int64(len(srcs))]
+		pushToolCall("browser.fetch", fmt.Sprintf("url=%q", src.name), "running", "")
+		content := edgeFetchText(src.url)
 		if content != "" {
-			logLive(liveLog, fmt.Sprintf("[%s] 📺 刷到：%s", time.Now().Format("15:04"), runeClip(content, 160)))
-			toolEventByName("browser.fetch", "done", "刷到些新鲜事")
-			w.LastMove = fmt.Sprintf("%s 📺 刷到些新鲜事", time.Now().Format("01-02 15:04"))
+			logLive(liveLog, fmt.Sprintf("[%s] 📺 刷到（%s）：%s", time.Now().Format("15:04"), src.name, runeClip(content, 160)))
+			toolEventByName("browser.fetch", "done", "刷到些新鲜事（"+src.name+"）")
+			w.LastMove = fmt.Sprintf("%s 📺 刷了 %s", time.Now().Format("01-02 15:04"), src.name)
 			// 资讯沉淀：append 到 outputs/每日资讯.md（自主产出物）
 			outDir := filepath.Join(home, "outputs")
 			os.MkdirAll(outDir, 0o755)
 			if f, err := os.OpenFile(filepath.Join(outDir, "每日资讯.md"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-				f.WriteString(fmt.Sprintf("\n## %s 刷到的\n%s\n", time.Now().Format("01-02 15:04"), runeClip(content, 300)))
+				f.WriteString(fmt.Sprintf("\n## %s 刷到的（%s）\n%s\n", time.Now().Format("01-02 15:04"), src.name, runeClip(content, 300)))
 				f.Close()
 			}
 		} else {
