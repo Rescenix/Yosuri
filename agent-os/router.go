@@ -156,7 +156,27 @@ func modelCredit(b FreeModel) float64 {
 	return float64(st.Success) / float64(total)
 }
 
-// rankModels 按信用降序返回可用模型（过滤熔断的）——决策首选排最前
+// activePoolLimit 活跃池上限：超出按 LRU+信用淘汰（付费/垃圾模型自动沉底）
+const activePoolLimit = 12
+
+// modelUsed 模型最近使用时间（LRU 淘汰维度）
+var modelUsed sync.Map // id -> time.Time
+
+// markModelUsed 记录模型最近一次使用（callModel 成功后调）
+func markModelUsed(id string) {
+	modelUsed.Store(id, time.Now())
+}
+
+// lastUsedAt 模型最近使用时间（未用过的给 zero 时间，排最后）
+func lastUsedAt(m FreeModel) time.Time {
+	if v, ok := modelUsed.Load(m.ID); ok {
+		return v.(time.Time)
+	}
+	return time.Time{}
+}
+
+// rankModels 按信用降序返回可用模型（过滤熔断的）——决策首选排最前。
+// LRU+信用淘汰：信用优先，同信用按最近使用；超活跃池上限直接裁掉尾部。
 func rankModels(models []FreeModel) []FreeModel {
 	out := make([]FreeModel, 0, len(models))
 	for _, m := range models {
@@ -166,8 +186,16 @@ func rankModels(models []FreeModel) []FreeModel {
 		out = append(out, m)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		return modelCredit(out[i]) > modelCredit(out[j])
+		ci := modelCredit(out[i])
+		cj := modelCredit(out[j])
+		if ci != cj {
+			return ci > cj
+		}
+		return lastUsedAt(out[i]).After(lastUsedAt(out[j])) // 同信用：最近使用优先（LRU）
 	})
+	if len(out) > activePoolLimit {
+		out = out[:activePoolLimit] // 活跃池上限，尾部淘汰（休眠等探活找回）
+	}
 	return out
 }
 
@@ -176,10 +204,30 @@ func InitRouter() {
 	refreshModels()
 }
 
+// isFreeModel 是否免费模型（付费模型屏蔽）。
+// 规则：keyless 免 key 网关；或 ID 含 "free"（Zen 免费档后面都写了 free）；
+// 显式白名单兜底免费档但 ID 不含 free 的（如 Ollama Cloud 免费档）。
+func isFreeModel(m FreeModel) bool {
+	if m.Keyless {
+		return true
+	}
+	if strings.Contains(m.ID, "free") {
+		return true
+	}
+	switch m.ID {
+	case "cloud_ollama_gpt_oss_120b": // Ollama Cloud 免费档（Name 标免费·云端）
+		return true
+	}
+	return false // plan_step_gateway 等订阅/付费模型不进免费池
+}
+
 func refreshModels() {
 	byID, byEnv := userConfigKeys()
 	var available []FreeModel
 	for _, m := range freeModels {
+		if !isFreeModel(m) {
+			continue // 付费模型屏蔽（订阅 Credit 等）
+		}
 		if m.Keyless {
 			available = append(available, m)
 			continue
@@ -347,6 +395,8 @@ func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(c
 		return "", fmt.Errorf("[%s] HTTP %d: %s", m.Name, resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 
+	markModelUsed(m.ID) // HTTP 200 = 模型可达，记 LRU（最近可用维度）
+
 	if req.Stream {
 		return readStream(resp.Body, onChunk)
 	}
@@ -509,4 +559,46 @@ func readStream(body io.ReadCloser, onChunk func(content, reasoning string)) (st
 	}
 
 	return fullContent.String(), nil
+}
+
+// —— 每日探活：模型池自循环（被淘汰的模型恢复可用后重新入池） ——
+
+// probeModels 遍历全部免费候选，最小请求验证可用性；可用 → 清熔断 + 刷新池。
+// 由 trumanLoop/daemon 每 24h 调一次（异步，不阻塞生活循环）。
+func probeModels() {
+	cands := make([]FreeModel, 0, len(freeModels))
+	for _, m := range freeModels {
+		if isFreeModel(m) {
+			cands = append(cands, m)
+		}
+	}
+	okN := 0
+	for _, m := range cands {
+		if probeOne(m) {
+			okN++
+			circuits.Delete(m.ID) // 探活成功：清熔断，重新可用
+			markModelUsed(m.ID)
+		}
+	}
+	refreshModels()
+	// 结果记入 live.log（不打扰终端）
+	if home, err := os.UserHomeDir(); err == nil {
+		logLive(filepath.Join(home, "rescene_data", "daughter", "live.log"),
+			fmt.Sprintf("[%s] 🛰️ 每日探活：%d/%d 免费模型可用", time.Now().Format("15:04"), okN, len(cands)))
+	}
+}
+
+// probeOne 单模型探活：最小请求（MaxTokens=1），8s 超时
+func probeOne(m FreeModel) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	msg := ChatRequest{
+		Model:      m.Model,
+		Messages:   []ChatMessage{{Role: "user", Content: "ping"}},
+		Stream:     false,
+		MaxTokens:  1,
+		Temperature: 0,
+	}
+	_, err := callModel(ctx, m, msg, nil)
+	return err == nil
 }

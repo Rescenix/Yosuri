@@ -66,6 +66,17 @@ func lightFallback() trumanAction {
 	}
 }
 
+// lastProbeAt 上次每日探活时间（模型池自循环：24h 一次）
+var lastProbeAt = time.Now()
+
+// maybeProbe 每日探活节流：距上次 >24h 则异步探活（不阻塞生活循环）
+func maybeProbe() {
+	if time.Since(lastProbeAt) > 24*time.Hour {
+		lastProbeAt = time.Now()
+		go probeModels()
+	}
+}
+
 // trumanLoop 24H 自转循环：LLM 自主决策的 Agent 循环
 // 每轮：LLM 读状态自主决定做什么（大脑）→ 执行工具（手脚）→ 同步 → 小间隔
 // 界面 = Hermes 风格工作流：💭 思考 → ● 工具 → ✓ 结果，24H 不停
@@ -83,6 +94,9 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	round := 0
 	for {
 		round++
+
+		// 每日探活：24h 一次（被 LRU/信用淘汰的模型恢复可用后重新入池）
+		maybeProbe()
 
 		// 思考可视化：决策前显示她在想什么（顶部 💭 状态）
 		setThinking("💭 她在想接下来做什么…")
