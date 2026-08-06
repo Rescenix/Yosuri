@@ -106,9 +106,16 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 		if deepActivityKinds[act.Kind] && !deepActivityDue(w, 30*time.Minute) {
 			act = lightFallback()
 		}
-		logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s：%s", time.Now().Format("15:04"), round, act.Kind, act.Detail))
-		// 决策事件：💭 思考行（Hermes 风格）
-		pushToolCall("agent.decide", fmt.Sprintf("action=%q", act.Kind), "think", runeClip(act.Detail, 40))
+		// 决策事件：💭 思考行（Hermes 风格）+ 模型透明度（免费池智能路由）
+		decideArgs := fmt.Sprintf("action=%q", act.Kind)
+		modelTag := ""
+		if act.Model != "" {
+			decideArgs += " · model=" + act.Model
+			modelTag = " · " + act.Model
+		}
+		pushToolCall("agent.decide", decideArgs, "think", runeClip(act.Detail, 40))
+		// 轮次日志带模型（tail live.log 可见智能路由）
+		logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s%s：%s", time.Now().Format("15:04"), round, act.Kind, modelTag, act.Detail))
 		updateLiveFrame(frameOf(w, d, actionEmoji(act.Kind)+" "+act.Detail))
 
 		// 执行动作（工具调用可视化：● 工具名 → ✓ 结果）
@@ -194,17 +201,14 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 		}
 
 	case "skill":
-		// 获取技能：先联网搜最新资讯 → 生成进技能库（深度活动）
-		pushToolCall("agent.skill_acquire", "联网搜最新技能方向", "running", "")
+		// 获取技能：内部子工具流（skill_topic → browser.fetch → skill_acquire）
 		skill := llmSkillAcquire(d)
 		if skill != "" {
 			logLive(liveLog, fmt.Sprintf("[%s] 🛠️ 获取新技能：%s", time.Now().Format("15:04"), skill))
-			toolEventByName("agent.skill_acquire", "done", skill)
 			w.LastDeepAt = time.Now().Format("15:04")
 			w.save(home)
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] 🛠️ 技能获取未成功（模型/限流）", time.Now().Format("15:04")))
-			toolEventByName("agent.skill_acquire", "fail", "模型/限流未成功")
 		}
 
 	case "project":

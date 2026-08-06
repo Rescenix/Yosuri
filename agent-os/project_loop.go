@@ -34,10 +34,13 @@ func runDaughterProject(d *Daughter, home string) string {
 	}
 
 	// 1. 选题立项（LLM 结合热点 + 能力 + 技能库）
+	pushToolCall("agent.project.kickoff", "热点选题+需求计划", "running", "")
 	name, brief := daughterKickoff(d, models)
 	if name == "" {
+		toolEventByName("agent.project.kickoff", "fail", "立项失败")
 		return ""
 	}
+	toolEventByName("agent.project.kickoff", "done", name)
 	idx := nextProjectIndex(daughterProjectDir(home))
 	projDir := filepath.Join(daughterProjectDir(home), fmt.Sprintf("%03d-%s", idx, sanitizeFilename(name)))
 	os.MkdirAll(projDir, 0o755)
@@ -48,20 +51,28 @@ func runDaughterProject(d *Daughter, home string) string {
 	phase := 1
 	for i := 0; i < 2; i++ {
 		// 执行轮
+		pushToolCall("agent.project.exec", fmt.Sprintf("迭代%d/2", i+1), "running", "")
 		execPrompt := fmt.Sprintf("你是 Rescene Agent OS 的开发核心。项目「%s」当前上下文：\n\n%s\n\n请执行本轮开发：写出真实可用的代码/脚本/文档（纯文本，直接输出，代码用三个反引号围栏包裹）。优先实现最小可用版本，下一轮会自检并改进。", name, briefOr(brief, "（暂无上下文）"))
 		content := daughterCallModel(models, execPrompt)
 		if content != "" {
 			os.WriteFile(filepath.Join(projDir, fmt.Sprintf("%02d-执行-%03d.md", phase, round)), []byte(content), 0o644)
 			brief = extractProjectBrief(brief, content)
+			toolEventByName("agent.project.exec", "done", fmt.Sprintf("执行产出落盘（%d 字节）", len(content)))
 			phase++
+		} else {
+			toolEventByName("agent.project.exec", "fail", "模型不可用")
 		}
 		// 自检轮
+		pushToolCall("agent.project.check", fmt.Sprintf("自检%d/2", i+1), "running", "")
 		checkPrompt := fmt.Sprintf("你是 Rescene Agent OS 的质量官。对项目「%s」最近一轮产出做严格自检：\n\n%s\n\n自检清单（输出格式）:\n---问题---\n1. ...\n---改进---\n下一轮执行时优先修复的问题（最多3条，具体可执行）", name, briefOr(brief, "（无产出）"))
 		content = daughterCallModel(models, checkPrompt)
 		if content != "" {
 			os.WriteFile(filepath.Join(projDir, fmt.Sprintf("%02d-自检-%03d.md", phase, round)), []byte(content), 0o644)
 			brief = extractProjectBrief(brief, content)
+			toolEventByName("agent.project.check", "done", "自检问题已记录")
 			phase++
+		} else {
+			toolEventByName("agent.project.check", "fail", "模型不可用")
 		}
 	}
 

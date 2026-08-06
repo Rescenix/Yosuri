@@ -573,18 +573,25 @@ func probeModels() {
 		}
 	}
 	okN := 0
+	var failed []string
 	for _, m := range cands {
 		if probeOne(m) {
 			okN++
 			circuits.Delete(m.ID) // 探活成功：清熔断，重新可用
 			markModelUsed(m.ID)
+		} else {
+			failed = append(failed, m.ID)
 		}
 	}
 	refreshModels()
 	// 结果记入 live.log（不打扰终端）
 	if home, err := os.UserHomeDir(); err == nil {
+		detail := ""
+		if len(failed) > 0 {
+			detail = "，失败: " + strings.Join(failed, ", ")
+		}
 		logLive(filepath.Join(home, "rescene_data", "daughter", "live.log"),
-			fmt.Sprintf("[%s] 🛰️ 每日探活：%d/%d 免费模型可用", time.Now().Format("15:04"), okN, len(cands)))
+			fmt.Sprintf("[%s] 🛰️ 每日探活：%d/%d 免费模型可用%s", time.Now().Format("15:04"), okN, len(cands), detail))
 	}
 }
 

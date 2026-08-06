@@ -21,6 +21,7 @@ import (
 type trumanAction struct {
 	Kind   string `json:"action"`  // study | read | skill | project | social | reflect | journal | watch
 	Detail string `json:"detail"`  // 她为什么要做（理由/描述）
+	Model  string `json:"-"`       // 决策用的模型（透明度：显示免费池智能路由）
 }
 
 // trumanSystemPrompt 她的自我认知（24H 自主工作的全能学习者）
@@ -77,8 +78,9 @@ func llmDecideAction(d *Daughter) trumanAction {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	type result struct {
-		act trumanAction
-		ok  bool
+		act   trumanAction
+		ok    bool
+		model string
 	}
 	call := func(m FreeModel, ch chan<- result) {
 		msg := ChatRequest{
@@ -95,7 +97,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 			return
 		}
 		if act, ok := parseTrumanAction(content); ok {
-			ch <- result{act: act, ok: true}
+			ch <- result{act: act, ok: true, model: m.ID}
 			return
 		}
 		ch <- result{}
@@ -117,6 +119,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 	select {
 	case r := <-primaryCh:
 		if r.ok {
+			r.act.Model = r.model
 			return r.act
 		}
 	case <-ctx.Done():
@@ -127,6 +130,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 		select {
 		case r := <-backupCh:
 			if r.ok {
+				r.act.Model = r.model
 				return r.act
 			}
 		case <-ctx.Done():
@@ -220,10 +224,23 @@ func llmSkillAcquire(d *Daughter) string {
 	}
 
 	// 先决定学习方向 → 真浏览器联网搜最新资讯（基于真实资讯学技能，不是脑补）
+	// 子工具流可视化：● agent.skill_topic → ● browser.fetch → ● agent.skill_acquire
+	pushToolCall("agent.skill_topic", "决定学习方向", "running", "")
 	topic := llmSkillTopic(model.ID, d)
+	if topic != "" {
+		toolEventByName("agent.skill_topic", "done", runeClip(topic, 30))
+	} else {
+		toolEventByName("agent.skill_topic", "fail", "模型不可用，跳过联网")
+	}
 	trend := ""
 	if topic != "" {
+		pushToolCall("browser.fetch", fmt.Sprintf("q=%q", runeClip(topic, 18)), "running", "")
 		trend = browserSearch(topic)
+		if trend != "" {
+			toolEventByName("browser.fetch", "done", "抓到最新资讯")
+		} else {
+			toolEventByName("browser.fetch", "done", "没抓到（脑补兜底）")
+		}
 	}
 	if len(trend) > 1500 {
 		trend = runeClip(trend, 1500)
@@ -251,8 +268,10 @@ func llmSkillAcquire(d *Daughter) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	pushToolCall("agent.skill_acquire", "生成技能 JSON", "running", "")
 	content, err := CompleteWithModel(ctx, model.ID, msg, nil)
 	if err != nil {
+		toolEventByName("agent.skill_acquire", "fail", "模型调用失败")
 		return ""
 	}
 	content = strings.TrimSpace(content)
@@ -269,11 +288,13 @@ func llmSkillAcquire(d *Daughter) string {
 	s.Name = strings.Trim(s.Name, "-")
 	// 质量门槛（与 generateSkill 一致）
 	if s.Name == "" || len(s.Steps) < 3 || len(s.Steps) > 6 || s.Trigger == "" || s.Verification == "" {
+		toolEventByName("agent.skill_acquire", "fail", "质量门槛未过，放弃")
 		return ""
 	}
 	// 重名检查
 	for _, ex := range existing {
 		if ex.Name == s.Name {
+			toolEventByName("agent.skill_acquire", "fail", "与已有技能重名")
 			return ""
 		}
 	}
@@ -284,8 +305,10 @@ func llmSkillAcquire(d *Daughter) string {
 	s.UpdatedAt = s.CreatedAt
 	data, _ := json.MarshalIndent(s, "", "  ")
 	if err := os.WriteFile(filepath.Join(skillsDir(), s.Name+".json"), data, 0o644); err != nil {
+		toolEventByName("agent.skill_acquire", "fail", "落盘失败")
 		return ""
 	}
+	toolEventByName("agent.skill_acquire", "done", s.Name+"（"+runeClip(s.Description, 20)+"）")
 	return s.Name + "（" + s.Description + "）"
 }
 
