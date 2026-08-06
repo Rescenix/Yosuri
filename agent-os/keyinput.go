@@ -319,16 +319,22 @@ func (s *Shell) readLine() (string, error) {
 		fmt.Print("\x1b[K") // 清输入行尾部（输入变短时）
 	}
 
-	// 楚门世界直播：首次进入显示（屏保模式），聊天回复后不重画
+	// 楚门世界工作面板：首次进入显示，聊天回复后不重画
 	if s.firstDraw {
 		drawSceneBlock(prompt, buf, s.daughter.Home)
 		s.firstDraw = false
 	}
 	idleStart := time.Now()
+	lastFrameVersion := liveFrameVersion() // 事件驱动刷新：工作流变了才覆写
 
 	for {
 		// 空闲检测：无输入超过 30s → 屏保模式（只触发一次，不重复覆盖聊天内容）
 		if !inputAvailable() {
+			// 实时刷新（Hermes 工作流滚动）：她的事件变了 → 原地覆写面板
+			if !hadCandidates && liveFrameVersion() != lastFrameVersion {
+				overwriteScene(prompt, buf, s.daughter.Home)
+				lastFrameVersion = liveFrameVersion()
+			}
 			if time.Since(idleStart) > 30*time.Second && !s.firstDraw {
 				s.firstDraw = true
 				idleStart = time.Now()
@@ -336,6 +342,7 @@ func (s *Shell) readLine() (string, error) {
 			if s.firstDraw && !hadCandidates {
 				drawSceneBlock(prompt, buf, s.daughter.Home)
 				s.firstDraw = false
+				lastFrameVersion = liveFrameVersion()
 			}
 			time.Sleep(80 * time.Millisecond)
 			continue

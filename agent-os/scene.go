@@ -1,9 +1,10 @@
 package main
 
-// scene.go — 楚门世界直播屏（固定高度双栏布局）
+// scene.go — 楚门世界工作面板（固定高度双栏布局）
 //
-// 左栏占可用画布 3/4，持续显示开放世界场景；右栏占 1/4，滚动显示日志。
-// 整个画布保留终端最右一列，避免 Windows Console/ConPTY 写满一行后自动换行。
+// 她不是 emoji 场景秀：左栏是她的工具调用流（● 工具名 + 参数 + 结果），
+// 右栏滚动日志。顶部显示她此刻的思考。整个面板保留终端最右一列，
+// 避免 Windows Console/ConPTY 写满一行后自动换行。
 
 import (
 	"fmt"
@@ -13,6 +14,15 @@ import (
 
 // liveSceneRows 包含上下边框；输入行始终位于这 12 行之后。
 const liveSceneRows = 12
+
+// toolEvent 她的一次工具调用（工具调用可视化）
+type toolEvent struct {
+	Name   string `json:"name"`             // 工具名（explore/study/skill/...）
+	Args   string `json:"args,omitempty"`   // 参数摘要（dir="东" 之类）
+	Status string `json:"status"`           // running | done | fail
+	Result string `json:"result,omitempty"` // 结果摘要
+	At     string `json:"at,omitempty"`     // HH:MM:SS
+}
 
 type sceneFrame struct {
 	RegionName string   `json:"region"`
@@ -26,6 +36,8 @@ type sceneFrame struct {
 	Ability    string   `json:"ability"`
 	Friend     string   `json:"friend"`
 	Seed       int64    `json:"seed"`
+	Thinking   string   `json:"thinking,omitempty"` // 她此刻的思考（思考可视化）
+	Tools      []toolEvent `json:"-"`               // 最近工具调用流
 	Version    int64    `json:"version"`
 	LogLines   []string `json:"-"`
 }
@@ -48,6 +60,47 @@ func updateLiveFrame(f sceneFrame) {
 	defer liveFrameMu.Unlock()
 	f.Version = time.Now().UnixNano()
 	currentFrame = f
+}
+
+// pushToolCall 记录一次工具调用（工具调用可视化：● 名 参数 + 结果）
+// 慢操作（模型调用）前 push running，完成后 push done/fail。
+func pushToolCall(name, args, status, result string) {
+	liveFrameMu.Lock()
+	defer liveFrameMu.Unlock()
+	ev := toolEvent{
+		Name:   name,
+		Args:   runeClip(args, 40),
+		Status: status,
+		Result: runeClip(result, 46),
+		At:     time.Now().Format("15:04:05"),
+	}
+	currentFrame.Tools = append(currentFrame.Tools, ev)
+	if len(currentFrame.Tools) > 10 {
+		currentFrame.Tools = currentFrame.Tools[len(currentFrame.Tools)-10:]
+	}
+	currentFrame.Version = time.Now().UnixNano()
+}
+
+// setThinking 显示/清除她此刻的思考（思考可视化：顶部 💭 状态）
+func setThinking(s string) {
+	liveFrameMu.Lock()
+	defer liveFrameMu.Unlock()
+	currentFrame.Thinking = s
+	currentFrame.Version = time.Now().UnixNano()
+}
+
+// toolEventByName 把同一次调用的 running 记录升级为 done/fail（保留参数行）
+func toolEventByName(name, status, result string) {
+	liveFrameMu.Lock()
+	defer liveFrameMu.Unlock()
+	for i := len(currentFrame.Tools) - 1; i >= 0; i-- {
+		if currentFrame.Tools[i].Name == name && currentFrame.Tools[i].Status == "running" {
+			currentFrame.Tools[i].Status = status
+			currentFrame.Tools[i].Result = runeClip(result, 46)
+			break
+		}
+	}
+	currentFrame.Version = time.Now().UnixNano()
 }
 
 func currentLiveFrame(logPath string, n int) sceneFrame {
@@ -170,58 +223,81 @@ func renderLiveLines(f sceneFrame) []string {
 }
 
 func renderLiveLinesAtWidth(f sceneFrame, terminalW int) []string {
-	left, right := sceneColWidthsFor(terminalW)
+	width := terminalW - 2 // 全宽单栏：左右边框各 1 列
+	if width < 1 {
+		width = 1
+	}
 	bodyRows := liveSceneRows - 2
-	sceneLines := leftSceneLines(f)
-	logLines := f.LogLines
-	if len(logLines) > bodyRows {
-		logLines = logLines[len(logLines)-bodyRows:]
-	}
-	for len(logLines) < bodyRows {
-		logLines = append([]string{""}, logLines...)
-	}
+	content := leftSceneLines(f)
 
-	title := "楚门世界直播"
-	if f.RegionName != "" {
-		title += " · " + f.RegionIcon + f.RegionName
+	title := "Rescene · 24H 自转"
+	if f.Thinking != "" {
+		title += " · " + f.Thinking
+	} else {
+		title += " · " + time.Now().Format("15:04:05")
 	}
 	lines := make([]string, 0, liveSceneRows)
-	lines = append(lines, sceneSharedTop(title, "日志", left, right))
+	lines = append(lines, sceneTop(title, width))
 	for i := 0; i < bodyRows; i++ {
 		lc := ""
-		if i < len(sceneLines) {
-			lc = sceneLines[i]
+		if i < len(content) {
+			lc = content[i]
 		}
-		lines = append(lines, sceneSharedBody(lc, logLines[i], left, right))
+		lines = append(lines, sceneBodyLine(lc, width))
 	}
-	lines = append(lines, sceneSharedBottom(left, right))
+	lines = append(lines, sceneBottom(width))
 	return lines
 }
 
+// sceneTop / sceneBodyLine / sceneBottom 全宽单栏边框（Hermes 工作流面板）
+func sceneTop(title string, width int) string {
+	label := truncateTerminalText("─ "+title+" ", width, true)
+	fill := width - terminalTextWidth(label)
+	return ColorCyan + "╭" + label + strings.Repeat("─", maxI(0, fill)) + "╮" + ColorReset
+}
+
+func sceneBodyLine(text string, width int) string {
+	return ColorCyan + "│" + ColorReset + fitTerminalText(text, width, true) + ColorCyan + "│" + ColorReset
+}
+
+func sceneBottom(width int) string {
+	return ColorCyan + "╰" + strings.Repeat("─", width) + "╯" + ColorReset
+}
+
+// leftSceneLines 全宽内容：她的 Hermes 风格工作流（最近 5 条事件）
+// 💭 思考（黄）→ ● 工具名 参数（黄●+青参）→ ✓/❌ 结果（绿/红）
 func leftSceneLines(f sceneFrame) []string {
 	bodyRows := liveSceneRows - 2
 	lines := make([]string, 0, bodyRows)
-	// 装饰行（3 行）——不显示区域名（顶部栏已显示，重复就是地址感）
-	decor := regionDecor(f.RegionKind, f.Seed, f.X, f.Y)
-	parts := strings.Split(decor, "\n")
-	for i := 0; i < 3; i++ {
-		if i < len(parts) {
-			lines = append(lines, "  "+parts[i])
-		} else {
-			lines = append(lines, "  ")
+
+	tools := f.Tools
+	if len(tools) > 5 {
+		tools = tools[len(tools)-5:]
+	}
+	for _, t := range tools {
+		argsPart := ""
+		if t.Args != "" {
+			argsPart = "  " + ColorCyan + t.Args + ColorReset
+		}
+		switch t.Status {
+		case "think":
+			// 💭 思考行（思考可视化）
+			lines = append(lines, ColorYellow+"💭 "+t.Result+ColorReset)
+		case "running":
+			lines = append(lines, ColorYellow+"● "+t.Name+ColorReset+argsPart)
+			lines = append(lines, ColorYellow+"  ⏳ 进行中…"+ColorReset)
+		case "fail":
+			lines = append(lines, ColorYellow+"● "+t.Name+ColorReset+argsPart)
+			lines = append(lines, ColorRed+"  ❌ "+t.Result+ColorReset)
+		default:
+			lines = append(lines, ColorYellow+"● "+t.Name+ColorReset+argsPart)
+			lines = append(lines, ColorGreen+"  ✓ "+t.Result+ColorReset)
 		}
 	}
-	// 她（移动图标 + 颜表情）——不显示坐标（地址感破坏沉浸）
-	she := f.Mood
-	if f.TravelIcon != "" {
-		she = f.TravelIcon + " " + f.Mood
-	}
-	lines = append(lines, "  "+she)
-	lines = append(lines, "  "+f.Action)
-	lines = append(lines, "  💗 "+f.Ability)
-	if f.Friend != "" {
-		lines = append(lines, "  👭 "+f.Friend)
-	} else {
+
+	// 没有事件时给一句她的状态
+	if len(lines) == 0 && f.Action != "" {
+		lines = append(lines, "  "+f.Action)
 		lines = append(lines, "  ")
 	}
 	for len(lines) < bodyRows {
@@ -237,9 +313,9 @@ func maxI(a, b int) int {
 	return b
 }
 
-// drawSceneBlock 首次绘制 12 行直播画布，随后在第 13 行绘制输入提示符。
+// drawSceneBlock 首次绘制 12 行工作面板，随后在第 13 行绘制输入提示符。
 func drawSceneBlock(prompt string, buf []rune, logPath string) {
-	lines := renderLiveLines(currentLiveFrame(logPath, liveSceneRows-2))
+	lines := renderLiveLines(currentLiveFrame("", 0))
 	for _, line := range lines {
 		fmt.Println(line)
 	}
@@ -248,7 +324,7 @@ func drawSceneBlock(prompt string, buf []rune, logPath string) {
 
 // overwriteScene 从输入行回到画布顶部，固定覆写 12 行，再准确回到输入行。
 func overwriteScene(prompt string, buf []rune, logPath string) {
-	lines := renderLiveLines(currentLiveFrame(logPath, liveSceneRows-2))
+	lines := renderLiveLines(currentLiveFrame("", 0))
 	// 保存输入行光标；每一行都从这个锚点独立定位，任何一行意外换行都不会
 	// 累积成下一帧的纵向漂移。刷新过程不输出 CR/LF。
 	fmt.Print("\x1b[?25l\x1b7")
