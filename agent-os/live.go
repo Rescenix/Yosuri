@@ -117,48 +117,48 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 				}
 			}()
 
-		// 每日探活：24h 一次（被 LRU/信用淘汰的模型恢复可用后重新入池）
-		maybeProbe()
+			// 每日探活：24h 一次（被 LRU/信用淘汰的模型恢复可用后重新入池）
+			maybeProbe()
 
-		// 思考可视化：决策前显示她在想什么（顶部 💭 状态）
-		setThinking("💭 她在想接下来做什么…")
-		act := llmDecideAction(d)
-		setThinking("")
-		// 深度活动限频：冷却期未过 → 降级轻量动作（免费额度管理，24H 撑得住）
-		if deepActivityKinds[act.Kind] && !deepActivityDue(w, 30*time.Minute) {
-			act = lightFallback()
-		}
-		// 深度节奏强制干预（吊打 Hermes：系统级保证自主工作节奏，不靠模型自觉）：
-		// 可深潜时 LLM 连续 2 轮选轻量 → 第 3 轮强制深度（study/read/skill/project 轮换）
-		if deepActivityDue(w, 30*time.Minute) {
-			lightStreak++
-			if lightStreak >= 2 {
-				act = forcedDeepAction(round)
+			// 思考可视化：决策前显示她在想什么（顶部 💭 状态）
+			setThinking("💭 她在想接下来做什么…")
+			act := llmDecideAction(d)
+			setThinking("")
+			// 深度活动限频：冷却期未过 → 降级轻量动作（免费额度管理，24H 撑得住）
+			if deepActivityKinds[act.Kind] && !deepActivityDue(w, 30*time.Minute) {
+				act = lightFallback()
+			}
+			// 深度节奏强制干预（吊打 Hermes：系统级保证自主工作节奏，不靠模型自觉）：
+			// 可深潜时 LLM 连续 2 轮选轻量 → 第 3 轮强制深度（study/read/skill/project 轮换）
+			if deepActivityDue(w, 30*time.Minute) {
+				lightStreak++
+				if lightStreak >= 2 {
+					act = forcedDeepAction(round)
+					lightStreak = 0
+				}
+			} else {
 				lightStreak = 0
 			}
-		} else {
-			lightStreak = 0
-		}
-		// 决策事件：💭 思考行（Hermes 风格）+ 模型透明度（免费池智能路由）
-		decideArgs := fmt.Sprintf("action=%q", act.Kind)
-		modelTag := ""
-		if act.Model != "" {
-			decideArgs += " · model=" + act.Model
-			modelTag = " · " + act.Model
-		}
-		pushToolCall("agent.decide", decideArgs, "think", runeClip(act.Detail, 40))
-		// 轮次日志带模型（tail live.log 可见智能路由）
-		logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s%s：%s", time.Now().Format("15:04"), round, act.Kind, modelTag, act.Detail))
-		updateLiveFrame(frameOf(w, d, actionEmoji(act.Kind)+" "+act.Detail))
+			// 决策事件：💭 思考行（Hermes 风格）+ 模型透明度（免费池智能路由）
+			decideArgs := fmt.Sprintf("action=%q", act.Kind)
+			modelTag := ""
+			if act.Model != "" {
+				decideArgs += " · model=" + act.Model
+				modelTag = " · " + act.Model
+			}
+			pushToolCall("agent.decide", decideArgs, "think", runeClip(act.Detail, 40))
+			// 轮次日志带模型（tail live.log 可见智能路由）
+			logLive(liveLog, fmt.Sprintf("[%s] 🧠 第 %d 轮 · %s%s：%s", time.Now().Format("15:04"), round, act.Kind, modelTag, act.Detail))
+			updateLiveFrame(frameOf(w, d, actionEmoji(act.Kind)+" "+act.Detail))
 
-		// 执行动作（工具调用可视化：● 工具名 → ✓ 结果）
-		executeTrumanAction(d, home, act)
+			// 执行动作（工具调用可视化：● 工具名 → ✓ 结果）
+			executeTrumanAction(d, home, act)
 
-		// 云端同步：状态推送到她的云端（异步，失败静默降级）
-		daughterSyncPush(w, home)
+			// 云端同步：状态推送到她的云端（异步，失败静默降级）
+			daughterSyncPush(w, home)
 
-		// 下一轮（小间隔：防免费模型 429）
-		time.Sleep(cfg.every)
+			// 下一轮（小间隔：防免费模型 429）
+			time.Sleep(cfg.every)
 		}() // 轮次安全执行结束
 	}
 }
