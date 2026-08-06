@@ -103,7 +103,7 @@ func daughterSyncPush(w *worldState, home string) {
 		return
 	}
 	pack := buildSyncPack(w, home)
-	go func() {
+	safeGo("cloud-sync", func() {
 		_, err := cloudReq("PUT", "/api/daughter/sync", map[string]any{
 			"token": w.Token,
 			"data":  pack,
@@ -112,7 +112,7 @@ func daughterSyncPush(w *worldState, home string) {
 			w.CloudOK = false // 连续失败降级，避免每轮重试噪音
 			logLive(filepath.Join(home, "live.log"), fmt.Sprintf("☁️ 同步失败（降级本地）: %v", err))
 		}
-	}()
+	})
 }
 
 // buildSyncPack 数据包：world + stats + journal 尾部

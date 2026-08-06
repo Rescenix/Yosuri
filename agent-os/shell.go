@@ -751,7 +751,7 @@ func (s *Shell) handleAgentChat(input string) {
 
 	// 工作流收尾：有足够工具动作 → 后台异步沉淀技能（失败绝不影响主流程）
 	if len(transcript) >= 3 {
-		go generateSkill(input, transcript)
+		safeGo("generateSkill", func() { generateSkill(input, transcript) })
 	}
 
 	if finalContent == "" {
@@ -763,7 +763,7 @@ func (s *Shell) handleAgentChat(input string) {
 	drawGalgameBox(header, strings.TrimRight(finalContent, "\n\r"), ColorMood, boxW)
 
 	// 成长：模型判断这次互动让她成长什么（异步，免费算力，失败静默）
-	go llmGrowthAnalysis(d, input, finalContent)
+	safeGo("growth", func() { llmGrowthAnalysis(d, input, finalContent) })
 
 	// 兜底：回复里若有 ```bash 命令且从未走工具调用，仍提供执行入口
 	if cmd := extractCommand(finalContent); cmd != "" {

@@ -111,14 +111,16 @@ func llmDecideAction(d *Daughter) trumanAction {
 
 	primary := ranked[0] // 首选：信用最好
 	primaryCh := make(chan result, 1)
-	go call(primary, primaryCh)
+	safeGo("decide-primary", func() { call(primary, primaryCh) })
 	backups := ranked[1:] // 预备：信用次高（最多 1 个，省免费额度——24H 要跑得久）
 	if len(backups) > 1 {
 		backups = backups[:1]
 	}
 	backupCh := make(chan result, len(backups))
 	for _, b := range backups {
-		go call(b, backupCh)
+		safeGo("decide-backup", func(b FreeModel) func() {
+			return func() { call(b, backupCh) }
+		}(b))
 	}
 
 	// 首选结果优先：成功直接用

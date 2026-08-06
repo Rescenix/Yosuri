@@ -103,7 +103,7 @@ func runDaemon() {
 	models := GetWorkingModels()
 	fmt.Printf("🚀 Rescene 24H 自转守护已启动：第 %d 天 · %d 个免费模型可用 · 每 2 分钟一轮\n", trumanD.loadStats().Days, len(models))
 	fmt.Printf("   她正在后台工作（学习/读书/技能/项目/社交/思考/日记）——Ctrl+C 停止\n")
-	go probeModels() // 启动即探活校准池子（异步）
+	safeGo("daemon-probe", probeModels) // 启动即探活校准池子（异步）
 	trumanLoop(trumanD, defaultLiveConfig())
 }
 

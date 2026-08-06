@@ -83,11 +83,27 @@ func forcedDeepAction(round int) trumanAction {
 // lastProbeAt 上次每日探活时间（模型池自循环：24h 一次）
 var lastProbeAt = time.Now()
 
+// safeGo 异步执行带 panic 恢复——goroutine panic 会崩整个 24H 守护（defer 不执行），
+// 所有后台 goroutine 必须走这里或自带 recover。
+func safeGo(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if home, err := os.UserHomeDir(); err == nil {
+					logLive(filepath.Join(home, "rescene_data", "daughter", "live.log"),
+						fmt.Sprintf("[%s] ⚠️ goroutine %s panic 已兜住: %v", time.Now().Format("15:04"), name, r))
+				}
+			}
+		}()
+		fn()
+	}()
+}
+
 // maybeProbe 每日探活节流：距上次 >24h 则异步探活（不阻塞生活循环）
 func maybeProbe() {
 	if time.Since(lastProbeAt) > 24*time.Hour {
 		lastProbeAt = time.Now()
-		go probeModels()
+		safeGo("probeModels", probeModels)
 	}
 }
 
