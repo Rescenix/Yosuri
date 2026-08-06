@@ -175,7 +175,7 @@ func (d *Daughter) Greet() string {
 	if st.LastLearn == d.today() {
 		sb.WriteString(ColorGreen + "  📚 今天已经学习过啦，收获都写进日记里了：" + ColorReset + "\n")
 	} else {
-		sb.WriteString(ColorYellow + "  🌱 今天还没学习，过会儿我自己去学（楚门世界：rescene live 会自动学）" + ColorReset + "\n")
+		sb.WriteString(ColorYellow + "  🌱 今天还没学习，过会儿我自己去学（24H 自转：后台自动工作）" + ColorReset + "\n")
 	}
 
 	// 昨天/最近学了什么（从日记尾部取）
