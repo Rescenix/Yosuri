@@ -62,12 +62,14 @@ func llmDecideAction(d *Daughter) trumanAction {
 	state := fmt.Sprintf(`现在：%s（%s）
 深度活动：%s
 上次深度活动：%s
+今日产出：%s
 能力倾向：%s
 技能库：%d 个技能
 最近见闻：%s`,
 		time.Now().Format("01-02 15:04"), dayPeriod(),
 		deep,
 		deepActivitySummary(w),
+		todayOutputsSummary(d.Home),
 		w.abilitySummary(),
 		len(loadSkills()),
 		truncTail(w.LastMove, 60))
@@ -461,6 +463,31 @@ func truncTail(s string, n int) string {
 		return s
 	}
 	return string(r[len(r)-n:])
+}
+
+// todayOutputsSummary 今日产出摘要（决策记忆：她知道自己今天写了什么/调研了什么）
+func todayOutputsSummary(home string) string {
+	if home == "" {
+		return "（暂无）"
+	}
+	entries, err := os.ReadDir(filepath.Join(home, "outputs"))
+	if err != nil {
+		return "（暂无）"
+	}
+	today := time.Now().Format("2006-01-02")
+	var names []string
+	for _, e := range entries {
+		if strings.Contains(e.Name(), today) {
+			names = append(names, e.Name())
+		}
+	}
+	if len(names) == 0 {
+		return "（今天还没有产出文件）"
+	}
+	if len(names) > 3 {
+		names = names[:3]
+	}
+	return strings.Join(names, "、")
 }
 
 // modelWrite 她按主题写一篇短文（落盘 outputs/——真实文件产出工具）

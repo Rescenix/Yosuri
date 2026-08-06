@@ -10,6 +10,8 @@ package main
 // 免费算力铁律：只用 keyless 模型（不烧用户付费 key），熔断/失败静默降级。
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -79,7 +81,69 @@ func runDaughterProject(d *Daughter, home string) string {
 		}
 	}
 
+	// 项目成果技能化：方法沉淀进技能库（做过的事变成可复用能力——自循环自迭代）
+	safeGo("project-skill", func() { daughterProjectSkill(projDir, name, brief) })
+
 	return fmt.Sprintf("%s：立项+执行+自检完成", name)
+}
+
+// daughterProjectSkill 项目方法沉淀技能（LLM 生成 skill json 进技能库，质量门槛同 generateSkill）
+func daughterProjectSkill(projDir, name, brief string) {
+	model := pickFreeModel(int(time.Now().UnixNano()))
+	if model == nil {
+		return
+	}
+	ctxText := brief
+	if len(ctxText) > 2500 {
+		ctxText = runeClip(ctxText, 2500)
+	}
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。你刚完成了项目「%s」。把做这个项目的方法沉淀成一个可复用技能（以后遇到类似任务直接照做）。
+
+项目过程：
+%s
+
+只输出 JSON：{"name":"kebab-case英文名","description":"一句话中文描述什么场景用","trigger":"何时调用","verification":"如何验证成功","steps":["步骤1","步骤2","步骤3"]}
+步骤 3-6 条。`, name, ctxText)
+	msg := ChatRequest{
+		Model:       model.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   512,
+		Temperature: 0.7,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	content, err := CompleteWithModel(ctx, model.ID, msg, nil)
+	if err != nil {
+		return
+	}
+	content = strings.TrimSpace(content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	var s Skill
+	if json.Unmarshal([]byte(strings.TrimSpace(content)), &s) != nil {
+		return
+	}
+	s.Name = skillNameSanitizer.ReplaceAllString(strings.ToLower(strings.TrimSpace(s.Name)), "-")
+	s.Name = strings.Trim(s.Name, "-")
+	if s.Name == "" || len(s.Steps) < 3 || len(s.Steps) > 6 || s.Trigger == "" || s.Verification == "" {
+		return // 质量门槛，静默放弃
+	}
+	for _, ex := range loadSkills() {
+		if ex.Name == s.Name {
+			return // 重名跳过
+		}
+	}
+	os.MkdirAll(skillsDir(), 0o755)
+	s.CreatedAt = time.Now()
+	s.UpdatedAt = s.CreatedAt
+	data, _ := json.MarshalIndent(s, "", "  ")
+	if err := os.WriteFile(filepath.Join(skillsDir(), s.Name+".json"), data, 0o644); err != nil {
+		return
+	}
+	logLive(filepath.Join(daughterHome(), "live.log"),
+		fmt.Sprintf("[%s] 🛠️ 项目沉淀技能: %s（%s）", time.Now().Format("15:04"), s.Name, s.Description))
 }
 
 // daughterKickoff 选题立项（免费模型）：热点 + 能力 + 技能库 → 项目名 + 需求计划
