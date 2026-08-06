@@ -205,11 +205,13 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			// 每日探活：24h 一次（被 LRU/信用淘汰的模型恢复可用后重新入池）
 			maybeProbe()
 
-			// 跨天检测：生成前一日日报（自主产出物——24H 成果可见）
+			// 跨天检测：生成前一日日报 + 定新一天的目标（自主产出物——24H 成果可见）
 			if today := time.Now().Format("2006-01-02"); today != lastDay {
 				generateDailyReport(home, lastDay)
 				refreshOutputsIndex(home)
 				lastDay = today
+				// 新的一天：她自定今日目标（目标驱动的自转）
+				safeGo("daily-goal", func() { d.setDailyGoal() })
 			}
 
 			// 作品集索引刷新（每 12 轮 ≈ 24 分钟，低开销）

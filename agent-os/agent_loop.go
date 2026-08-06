@@ -72,10 +72,13 @@ func llmDecideAction(d *Daughter) trumanAction {
 	if len(skillNames) > 0 {
 		skillLine = strings.Join(skillNames, "、")
 	}
+	// 今日目标（决策注入：目标驱动的自转，不是随机生活）
+	goal := dailyGoal(d.Home)
 	state := fmt.Sprintf(`现在：%s（%s）
 深度活动：%s
 上次深度活动：%s
 今日产出：%s
+今日目标：%s
 能力倾向：%s
 技能库：%d 个（%s）
 最近见闻：%s`,
@@ -83,6 +86,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 		deep,
 		deepActivitySummary(w),
 		todayOutputsSummary(d.Home),
+		goal,
 		w.abilitySummary(),
 		len(skills), skillLine,
 		truncTail(w.LastMove, 60))
@@ -501,6 +505,55 @@ func todayOutputsSummary(home string) string {
 		names = names[:3]
 	}
 	return strings.Join(names, "、")
+}
+
+// dailyGoal 读取今日目标（outputs/今日目标.md，只认今天的）
+func dailyGoal(home string) string {
+	if home == "" {
+		return "（未定）"
+	}
+	data, err := os.ReadFile(filepath.Join(home, "outputs", "今日目标.md"))
+	if err != nil {
+		return "（未定）"
+	}
+	if !strings.Contains(string(data), time.Now().Format("2006-01-02")) {
+		return "（未定）"
+	}
+	return runeClip(string(data), 160)
+}
+
+// setDailyGoal 生成今日目标（LLM：结合能力/技能/产出定 1-3 个目标，落盘 outputs/今日目标.md）
+func (d *Daughter) setDailyGoal() string {
+	model := pickFreeModel(int(time.Now().UnixNano()))
+	if model == nil {
+		return ""
+	}
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。为新的一天（%s）定 1-3 个今日目标：可以是学习主题、项目方向、技能获取、写作主题、调研方向。要具体、可执行、能落成产出文件。
+你的能力倾向：%s
+最近学的主题：%s
+
+输出格式（严格）：直接列出目标，每行一个「- 目标：...」`, d.today(), d.World.abilitySummary(), strings.Join(d.loadStats().Topics, "、"))
+	msg := ChatRequest{
+		Model:       model.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   256,
+		Temperature: 0.8,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	content, err := CompleteWithModel(ctx, model.ID, msg, nil)
+	if err != nil || strings.TrimSpace(content) == "" {
+		return ""
+	}
+	content = strings.TrimSpace(content)
+	outDir := filepath.Join(d.Home, "outputs")
+	os.MkdirAll(outDir, 0o755)
+	goalFile := fmt.Sprintf("# 今日目标 · %s\n\n%s\n", d.today(), content)
+	os.WriteFile(filepath.Join(outDir, "今日目标.md"), []byte(goalFile), 0o644)
+	logLive(filepath.Join(d.Home, "live.log"),
+		fmt.Sprintf("[%s] 🎯 今日目标已定", time.Now().Format("15:04")))
+	return content
 }
 
 // modelWrite 她按主题写一篇短文（落盘 outputs/——真实文件产出工具）
