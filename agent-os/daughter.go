@@ -188,6 +188,11 @@ func (d *Daughter) Greet() string {
 		sb.WriteString(strings.Join(shown, "、") + "\n")
 	}
 
+	// 今日产出播报（作品集动态：打开就能看到她的成果）
+	if outs := todayOutputsSummary(d.Home); outs != "" && !strings.Contains(outs, "（今天还没有") {
+		sb.WriteString(ColorCyan + "  📂 今日产出：" + outs + ColorReset + "\n")
+	}
+
 	// 楚门世界：你不在的时候她在干嘛（直播日志尾部）
 	if tail := liveLogTail(d.Home, 3); tail != "" {
 		sb.WriteString(ColorCyan + "  📺 你不在的时候：" + ColorReset + "\n")
