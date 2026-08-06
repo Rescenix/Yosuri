@@ -281,8 +281,8 @@ func leftSceneLines(f sceneFrame) []string {
 		}
 		switch t.Status {
 		case "think":
-			// 💭 思考行（思考可视化）
-			lines = append(lines, ColorYellow+"💭 "+t.Result+ColorReset)
+			// 💭 思考行（思考可视化）+ Args（action/model 路由）
+			lines = append(lines, ColorYellow+"💭 "+t.Result+ColorReset+argsPart)
 		case "running":
 			lines = append(lines, ColorYellow+"● "+t.Name+ColorReset+argsPart)
 			lines = append(lines, ColorYellow+"  ⏳ 进行中…"+ColorReset)
