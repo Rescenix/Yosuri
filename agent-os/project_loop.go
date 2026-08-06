@@ -12,6 +12,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -56,20 +57,22 @@ func runDaughterProject(d *Daughter, home string) string {
 		content := daughterCallModel(models, execPrompt)
 		if content != "" {
 			os.WriteFile(filepath.Join(projDir, fmt.Sprintf("%02d-执行-%03d.md", phase, round)), []byte(content), 0o644)
+			// 真实验证：提取代码块落盘 → 语法编译检查（go build / python 编译）
+			verify := verifyProjectOutput(projDir, content)
 			brief = extractProjectBrief(brief, content)
-			toolEventByName("agent.project.exec", "done", fmt.Sprintf("执行产出落盘（%d 字节）", len(content)))
+			toolEventByName("agent.project.exec", "done", fmt.Sprintf("产出 %d 字节 · 验证: %s", len(content), verify))
 			phase++
 		} else {
 			toolEventByName("agent.project.exec", "fail", "模型不可用")
 		}
-		// 自检轮
+		// 自检轮（喂入真实验证结果，闭环有证据）
 		pushToolCall("agent.project.check", fmt.Sprintf("自检%d/2", i+1), "running", "")
-		checkPrompt := fmt.Sprintf("你是 Rescene Agent OS 的质量官。对项目「%s」最近一轮产出做严格自检：\n\n%s\n\n自检清单（输出格式）:\n---问题---\n1. ...\n---改进---\n下一轮执行时优先修复的问题（最多3条，具体可执行）", name, briefOr(brief, "（无产出）"))
+		checkPrompt := fmt.Sprintf("你是 Rescene Agent OS 的质量官。对项目「%s」最近一轮产出做严格自检：\n\n%s\n\n%s\n自检清单（输出格式）:\n---问题---\n1. ...\n---改进---\n下一轮执行时优先修复的问题（最多3条，具体可执行）", name, briefOr(brief, "（无产出）"), lastVerifyResult)
 		content = daughterCallModel(models, checkPrompt)
 		if content != "" {
 			os.WriteFile(filepath.Join(projDir, fmt.Sprintf("%02d-自检-%03d.md", phase, round)), []byte(content), 0o644)
 			brief = extractProjectBrief(brief, content)
-			toolEventByName("agent.project.check", "done", "自检问题已记录")
+			toolEventByName("agent.project.check", "done", "自检问题已记录（含验证结果）")
 			phase++
 		} else {
 			toolEventByName("agent.project.check", "fail", "模型不可用")
@@ -146,6 +149,100 @@ func nextProjectIndex(dir string) int {
 		return 1
 	}
 	return len(entries) + 1
+}
+
+// —— 项目产出真实验证（吊打 Hermes：自主闭环带编译证据，不是空口自检） ——
+
+// lastVerifyResult 最近一次真实验证结果（喂给自检轮，闭环有证据）
+var lastVerifyResult = "（本轮无验证）"
+
+// codeBlock 一个提取的代码块
+type codeBlock struct {
+	Lang string
+	Code string
+}
+
+// extractCodeBlocks 从模型产出里提取 ```lang ... ``` 代码块
+func extractCodeBlocks(content string) []codeBlock {
+	var blocks []codeBlock
+	lines := strings.Split(content, "\n")
+	inBlock := false
+	var cur codeBlock
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			if inBlock {
+				blocks = append(blocks, cur)
+				cur = codeBlock{}
+				inBlock = false
+			} else {
+				lang := strings.TrimPrefix(trimmed, "```")
+				lang = strings.TrimSpace(strings.SplitN(lang, " ", 2)[0])
+				cur.Lang = lang
+				inBlock = true
+			}
+			continue
+		}
+		if inBlock {
+			cur.Code += line + "\n"
+		}
+	}
+	if inBlock {
+		blocks = append(blocks, cur)
+	}
+	return blocks
+}
+
+// verifyProjectOutput 提取代码块落盘 + 真实语法验证（go build / python 编译 / bash -n）
+// 返回验证摘要（面板 + 喂给自检轮）
+func verifyProjectOutput(projDir, content string) string {
+	blocks := extractCodeBlocks(content)
+	if len(blocks) == 0 {
+		lastVerifyResult = "✅ 纯文档产出，无需编译验证"
+		return "纯文档"
+	}
+	exts := map[string]string{"go": "go", "python": "py", "py": "py", "bash": "sh", "sh": "sh",
+		"js": "js", "ts": "ts", "json": "json", "yaml": "yaml", "yml": "yml", "md": "md"}
+	var results []string
+	for i, b := range blocks {
+		ext := exts[b.Lang]
+		if ext == "" {
+			ext = "txt"
+		}
+		fname := fmt.Sprintf("output-%d.%s", i+1, ext)
+		os.WriteFile(filepath.Join(projDir, fname), []byte(b.Code), 0o644)
+		results = append(results, verifyCode(b.Lang, filepath.Join(projDir, fname)))
+	}
+	lastVerifyResult = "真实验证: " + strings.Join(results, "；")
+	return strings.Join(results, "；")
+}
+
+// verifyCode 对单个代码文件做语法/编译验证（真实工具调用，不是模型自评）
+func verifyCode(lang, path string) string {
+	switch lang {
+	case "go":
+		tmp := filepath.Join(os.TempDir(), "rescene-verify-tmp.exe")
+		defer os.Remove(tmp)
+		out, err := exec.Command("go", "build", "-o", tmp, path).CombinedOutput()
+		if err != nil {
+			return "❌ go build 失败: " + runeClip(string(out), 80)
+		}
+		return "✅ go build 通过"
+	case "python", "py":
+		out, err := exec.Command("python", "-m", "py_compile", path).CombinedOutput()
+		if err != nil {
+			return "❌ python 编译失败: " + runeClip(string(out), 80)
+		}
+		return "✅ python 语法通过"
+	case "bash", "sh":
+		out, err := exec.Command("bash", "-n", path).CombinedOutput()
+		if err != nil {
+			return "❌ bash 语法错误: " + runeClip(string(out), 80)
+		}
+		return "✅ bash 语法通过"
+	default:
+		return "（" + lang + " 跳过编译）"
+	}
 }
 
 // sanitizeFilename 清洗项目名为安全文件名（marathon.go 已定义，同包复用）

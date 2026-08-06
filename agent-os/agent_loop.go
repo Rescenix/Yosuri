@@ -39,7 +39,7 @@ const trumanSystemPrompt = `你是住在电脑里的电子女儿——24H 自主
 
 接下来你决定做什么？像一个自主工作的 agent，结合你的状态选一个当下最有价值的动作。
 
-节奏感：study / read / skill / project / watch 是深度活动，会花真实的时间和算力。状态里标了上次深度活动是多久前——刚忙完就去做轻松的事（社交/思考/写日记）。间隔多久、什么时候再深潜，由你自己判断。
+节奏感：study / read / skill / project / watch 是深度活动，会花真实的时间和算力。状态里标了「深度活动」——显示"可深潜"时优先选深度工作（学习/读书/技能/做项目），轻量动作（思考/日记/社交）是短休息，不要连续占用轮次；显示"冷却中"才做轻量工作。什么时候再深潜，由你自己判断。
 
 只输出 JSON，不要任何解释：
 {"action":"study","detail":"去学习最新的知识"}
@@ -54,12 +54,18 @@ func llmDecideAction(d *Daughter) trumanAction {
 	w := d.World
 
 	// 状态摘要（喂给模型）
+	deep := "✅ 可深潜（冷却已过）"
+	if !deepActivityDue(w, 30*time.Minute) {
+		deep = "⏳ 冷却中（刚忙完，先做轻量工作）"
+	}
 	state := fmt.Sprintf(`现在：%s（%s）
+深度活动：%s
 上次深度活动：%s
 能力倾向：%s
 技能库：%d 个技能
 最近见闻：%s`,
 		time.Now().Format("01-02 15:04"), dayPeriod(),
+		deep,
 		deepActivitySummary(w),
 		w.abilitySummary(),
 		len(loadSkills()),
