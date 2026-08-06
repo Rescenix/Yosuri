@@ -25,6 +25,9 @@ func main() {
 		case "marathon", "m", "run24":
 			runMarathon(os.Args[2:])
 			return
+		case "daemon", "d", "auto":
+			runDaemon()
+			return
 		case "report", "rep":
 			showReport(os.Args[2:])
 			return
@@ -74,6 +77,21 @@ func oneShot(cmd string) {
 	shell.ExecOne(cmd)
 }
 
+// runDaemon 24H 无头自转：不启动 REPL，纯后台跑 trumanLoop（Silent 只写 live.log）。
+// Windows 计划任务/开机自启/后台挂起都走这里——关掉终端她也在转。
+func runDaemon() {
+	InitRouter()
+	trumanD := NewDaughter()
+	trumanD.Silent = true
+	ensureCloudIdentity(trumanD.World, trumanD.Home)
+	daughterSyncPull(trumanD.World, trumanD.Home)
+	daughterSyncPush(trumanD.World, trumanD.Home)
+	models := GetWorkingModels()
+	fmt.Printf("🚀 Rescene 24H 自转守护已启动：第 %d 天 · %d 个免费模型可用 · 每 2 分钟一轮\n", trumanD.loadStats().Days, len(models))
+	fmt.Printf("   她正在后台工作（学习/读书/技能/项目/社交/思考/日记）——Ctrl+C 停止\n")
+	trumanLoop(trumanD, defaultLiveConfig())
+}
+
 func doUpdate() {
 	fmt.Println("🔄 检查更新...")
 	// 先通过 install.ps1 或 install.sh 重装
@@ -112,6 +130,7 @@ func printHelp() {
 
 用法:
   rescene              启动交互式 Shell（电子女儿会问候你）
+  rescene daemon       24H 无头自转守护（后台自动工作，关终端也在转）
   rescene exec "..."   单条指令执行
   rescene marathon     24H 自迭代马拉松（热点立项 → 需求→计划→自检闭环）
   rescene report       查看马拉松战报（--dir 指定目录）
