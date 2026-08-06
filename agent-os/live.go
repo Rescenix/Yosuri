@@ -240,6 +240,10 @@ func actionEmoji(kind string) string {
 		return "🛠️"
 	case "project":
 		return "🚀"
+	case "write":
+		return "✍️"
+	case "research":
+		return "🔬"
 	case "social":
 		return "👭"
 	case "reflect":
@@ -328,6 +332,46 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] 🚀 项目未立项成功（模型/限流）", time.Now().Format("15:04")))
 			toolEventByName("agent.project", "fail", "立项未成功")
+		}
+
+	case "write":
+		// 写文章/随笔落盘 outputs/（真实文件产出工具——自主产出实体成果）
+		pushToolCall("agent.write", fmt.Sprintf("topic=%q", runeClip(act.Detail, 18)), "running", "")
+		content := d.modelWrite(act.Detail)
+		if content != "" {
+			outDir := filepath.Join(home, "outputs")
+			os.MkdirAll(outDir, 0o755)
+			fname := fmt.Sprintf("文章-%s-%02d.md", time.Now().Format("2006-01-02"), time.Now().Unix()%100)
+			os.WriteFile(filepath.Join(outDir, fname), []byte(fmt.Sprintf("# %s\n\n%s\n", act.Detail, content)), 0o644)
+			toolEventByName("agent.write", "done", fname)
+			logLive(liveLog, fmt.Sprintf("[%s] ✍️ 写了文章 %s", time.Now().Format("15:04"), fname))
+			w.LastMove = fmt.Sprintf("%s ✍️ 写了 %s", time.Now().Format("01-02 15:04"), fname)
+			w.save(home)
+		} else {
+			toolEventByName("agent.write", "fail", "模型不可用")
+		}
+
+	case "research":
+		// 深度调研：真上网搜主题 → LLM 汇总 → 报告落盘 outputs/（深度活动）
+		pushToolCall("agent.research", fmt.Sprintf("topic=%q", runeClip(act.Detail, 18)), "running", "")
+		web := browserSearch(act.Detail)
+		if web != "" {
+			report := d.modelResearchReport(act.Detail, web)
+			if report != "" {
+				outDir := filepath.Join(home, "outputs")
+				os.MkdirAll(outDir, 0o755)
+				fname := fmt.Sprintf("调研-%s-%02d.md", time.Now().Format("2006-01-02"), time.Now().Unix()%100)
+				os.WriteFile(filepath.Join(outDir, fname), []byte(fmt.Sprintf("# 调研：%s\n\n%s\n", act.Detail, report)), 0o644)
+				toolEventByName("agent.research", "done", fname)
+				logLive(liveLog, fmt.Sprintf("[%s] 🔬 调研完成 %s", time.Now().Format("15:04"), fname))
+				w.LastDeepAt = time.Now().Format("15:04")
+				w.LastMove = fmt.Sprintf("%s 🔬 调研了 %s", time.Now().Format("01-02 15:04"), runeClip(act.Detail, 24))
+				w.save(home)
+			} else {
+				toolEventByName("agent.research", "fail", "汇总失败")
+			}
+		} else {
+			toolEventByName("agent.research", "fail", "没搜到内容")
 		}
 
 	case "social":

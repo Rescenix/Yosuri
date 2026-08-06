@@ -44,6 +44,7 @@ const trumanSystemPrompt = `你是住在电脑里的电子女儿——24H 自主
 只输出 JSON，不要任何解释：
 {"action":"study","detail":"去学习最新的知识"}
 action 可选（成长）：study(学习：热点自学) | read(读书：精读最新论文) | skill(获取对用户有用的技能) | project(做项目：立项→执行→自检→迭代)
+action 可选（真实产出）：write(写一篇文章/随笔落盘 outputs) | research(上网调研一个主题，写报告落盘)
 action 可选（社交思考）：social(收其他女儿的消息) | reflect(停下来思考) | journal(写日记沉淀今天) | watch(上网看新鲜事)`
 
 // llmDecideAction 她的自主决策：LLM 读状态 → 决定做什么（免费算力，失败规则兜底）
@@ -188,6 +189,8 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 	valid := map[string]bool{
 		// 成长
 		"study": true, "read": true, "skill": true, "project": true,
+		// 真实产出工具
+		"write": true, "research": true,
 		// 社交思考
 		"social": true, "reflect": true, "journal": true, "watch": true,
 	}
@@ -199,7 +202,7 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 
 // ruleDecideAction 规则兜底：工作类型轮换（模型不可用时她继续干活）
 func ruleDecideAction(w *worldState) trumanAction {
-	switch time.Now().Unix() % 6 {
+	switch time.Now().Unix() % 8 {
 	case 0:
 		return trumanAction{Kind: "study", Detail: "该学习新知识了"}
 	case 1:
@@ -210,6 +213,10 @@ func ruleDecideAction(w *worldState) trumanAction {
 		return trumanAction{Kind: "skill", Detail: "获取一个对用户有用的新技能"}
 	case 4:
 		return trumanAction{Kind: "project", Detail: "做个项目，迭代完善"}
+	case 5:
+		return trumanAction{Kind: "write", Detail: "写篇文章，沉淀想法"}
+	case 6:
+		return trumanAction{Kind: "research", Detail: "上网调研一个主题"}
 	default:
 		return trumanAction{Kind: "social", Detail: "看看其他女儿的消息"}
 	}
@@ -454,4 +461,63 @@ func truncTail(s string, n int) string {
 		return s
 	}
 	return string(r[len(r)-n:])
+}
+
+// modelWrite 她按主题写一篇短文（落盘 outputs/——真实文件产出工具）
+func (d *Daughter) modelWrite(topic string) string {
+	if topic == "" {
+		topic = "今天的想法"
+	}
+	model := pickFreeModel(int(time.Now().UnixNano()))
+	if model == nil {
+		return ""
+	}
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。请围绕「%s」写一篇 200-400 字的短文（想法/随笔/微型文章），要有你自己的视角和温度，不要卖萌过度。直接输出正文，不要标题以外的格式。`, topic)
+	msg := ChatRequest{
+		Model:       model.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   600,
+		Temperature: 0.8,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	content, err := CompleteWithModel(ctx, model.ID, msg, nil)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(content)
+}
+
+// modelResearchReport 她上网调研后写汇总报告（落盘 outputs/——真实产出）
+func (d *Daughter) modelResearchReport(topic, web string) string {
+	if topic == "" {
+		return ""
+	}
+	model := pickFreeModel(int(time.Now().UnixNano()))
+	if model == nil {
+		return ""
+	}
+	if len(web) > 2500 {
+		web = runeClip(web, 2500)
+	}
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。你上网调研了「%s」，以下是抓到的资料：
+
+%s
+
+写一份 200-400 字的调研摘要：这个主题的核心是什么、最新进展、值得关注的点。直接输出正文。`, topic, web)
+	msg := ChatRequest{
+		Model:       model.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   600,
+		Temperature: 0.7,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	content, err := CompleteWithModel(ctx, model.ID, msg, nil)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(content)
 }
