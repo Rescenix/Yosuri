@@ -251,6 +251,22 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			// 执行动作（工具调用可视化：● 工具名 → ✓ 结果）
 			executeTrumanAction(d, home, act)
 
+			// 深度工作后能力微调（24H 自转越做越强：阻尼+守恒保证能力总和不变）
+			growMap := map[string]struct {
+				k int
+				d float64
+			}{
+				"study":    {2, 0.02}, // 研究
+				"read":     {2, 0.02}, // 研究
+				"skill":    {3, 0.02}, // 设计（技能设计）
+				"project":  {0, 0.03}, // 编程
+				"write":    {1, 0.03}, // 写作
+				"research": {2, 0.03}, // 研究
+			}
+			if g, ok := growMap[act.Kind]; ok {
+				w.AbilityFeedback(home, g.k, g.d)
+			}
+
 			// 云端同步：状态推送到她的云端（异步，失败静默降级）
 			daughterSyncPush(w, home)
 
