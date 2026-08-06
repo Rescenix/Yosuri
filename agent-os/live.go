@@ -66,6 +66,20 @@ func lightFallback() trumanAction {
 	}
 }
 
+// forcedDeepAction 可深潜但 LLM 连续轻量时的强制深度轮换（系统级自主工作节奏）
+func forcedDeepAction(round int) trumanAction {
+	switch round % 4 {
+	case 0:
+		return trumanAction{Kind: "study", Detail: "自主深潜：去学习最新知识"}
+	case 1:
+		return trumanAction{Kind: "read", Detail: "自主深潜：精读最新论文"}
+	case 2:
+		return trumanAction{Kind: "skill", Detail: "自主深潜：获取对用户有用的新技能"}
+	default:
+		return trumanAction{Kind: "project", Detail: "自主深潜：立项做项目并迭代"}
+	}
+}
+
 // lastProbeAt 上次每日探活时间（模型池自循环：24h 一次）
 var lastProbeAt = time.Now()
 
@@ -92,8 +106,16 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	logLive(liveLog, fmt.Sprintf("🎬 24H 自转开启 · 第 %d 天 %s", day, time.Now().Format("2006-01-02 15:04")))
 
 	round := 0
+	lightStreak := 0 // 连续轻量轮数（可深潜时强制深度节奏）
 	for {
 		round++
+		// 轮次安全执行：panic 恢复写日志继续转（24H 守护不能因为一个轮次崩溃）
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logLive(liveLog, fmt.Sprintf("[%s] ⚠️ 第 %d 轮 panic 已恢复: %v", time.Now().Format("15:04"), round, r))
+				}
+			}()
 
 		// 每日探活：24h 一次（被 LRU/信用淘汰的模型恢复可用后重新入池）
 		maybeProbe()
@@ -105,6 +127,17 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 		// 深度活动限频：冷却期未过 → 降级轻量动作（免费额度管理，24H 撑得住）
 		if deepActivityKinds[act.Kind] && !deepActivityDue(w, 30*time.Minute) {
 			act = lightFallback()
+		}
+		// 深度节奏强制干预（吊打 Hermes：系统级保证自主工作节奏，不靠模型自觉）：
+		// 可深潜时 LLM 连续 2 轮选轻量 → 第 3 轮强制深度（study/read/skill/project 轮换）
+		if deepActivityDue(w, 30*time.Minute) {
+			lightStreak++
+			if lightStreak >= 2 {
+				act = forcedDeepAction(round)
+				lightStreak = 0
+			}
+		} else {
+			lightStreak = 0
 		}
 		// 决策事件：💭 思考行（Hermes 风格）+ 模型透明度（免费池智能路由）
 		decideArgs := fmt.Sprintf("action=%q", act.Kind)
@@ -126,6 +159,7 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 
 		// 下一轮（小间隔：防免费模型 429）
 		time.Sleep(cfg.every)
+		}() // 轮次安全执行结束
 	}
 }
 

@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"syscall"
+	"time"
 )
 
 const Version = "0.1.0"
@@ -80,6 +83,17 @@ func oneShot(cmd string) {
 // runDaemon 24H 无头自转：不启动 REPL，纯后台跑 trumanLoop（Silent 只写 live.log）。
 // Windows 计划任务/开机自启/后台挂起都走这里——关掉终端她也在转。
 func runDaemon() {
+	// 崩溃日志：daemon 意外死亡时留证据（24H 守护排障）
+	defer func() {
+		if r := recover(); r != nil {
+			crash := fmt.Sprintf("[%s] daemon PANIC: %v\n%s\n", time.Now().Format("2006-01-02 15:04:05"), r, debug.Stack())
+			if home, err := os.UserHomeDir(); err == nil {
+				os.WriteFile(filepath.Join(home, "rescene_data", "daughter", "crash.log"), []byte(crash), 0o644)
+			}
+			fmt.Printf("❌ daemon panic: %v（详情见 crash.log）\n", r)
+			os.Exit(1)
+		}
+	}()
 	InitRouter()
 	trumanD := NewDaughter()
 	trumanD.Silent = true
