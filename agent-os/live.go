@@ -109,6 +109,32 @@ func maybeProbe() {
 	}
 }
 
+// archiveOutputs 把某日的产出文件归档到 outputs/archive/日期/（作品集整洁，不混日子）
+func archiveOutputs(home, date string) {
+	outDir := filepath.Join(home, "outputs")
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return
+	}
+	archiveDir := filepath.Join(outDir, "archive", date)
+	os.MkdirAll(archiveDir, 0o755)
+	moved := 0
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == "README.md" {
+			continue
+		}
+		// 当日产出文件（文章/调研/学习/任务/日报）归档；每日资讯/今日目标留根目录
+		if strings.Contains(e.Name(), date) && !strings.Contains(e.Name(), "今日目标") {
+			os.Rename(filepath.Join(outDir, e.Name()), filepath.Join(archiveDir, e.Name()))
+			moved++
+		}
+	}
+	if moved > 0 {
+		logLive(filepath.Join(home, "live.log"),
+			fmt.Sprintf("[%s] 📦 归档 %d 件产出 → outputs/archive/%s", time.Now().Format("15:04"), moved, date))
+	}
+}
+
 // refreshOutputsIndex 生成 outputs/README.md 索引（作品集：她的 24H 自主产出目录）
 func refreshOutputsIndex(home string) {
 	outDir := filepath.Join(home, "outputs")
@@ -303,6 +329,7 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			if today := time.Now().Format("2006-01-02"); today != lastDay {
 				generateDailyReport(home, lastDay)
 				refreshOutputsIndex(home)
+				archiveOutputs(home, lastDay) // 前一日产出归档（作品集不混日子）
 				lastDay = today
 				// 新的一天：她自定今日目标（目标驱动的自转）
 				safeGo("daily-goal", func() { d.setDailyGoal() })
