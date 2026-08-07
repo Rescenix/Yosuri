@@ -108,15 +108,22 @@ func llmDecideAction(d *Daughter) trumanAction {
 		ok    bool
 		model string
 	}
-	call := func(m FreeModel, ch chan<- result) {
+	call := func(m FreeModel, ch chan<- result, isPrimary bool) {
 		msg := ChatRequest{
 			Model:       m.Model,
 			Messages:    []ChatMessage{{Role: "user", Content: prompt}},
-			Stream:      false,
+			Stream:      true, // 流式：拿 reasoning（决策实时推理可视化）
 			MaxTokens:   128,
 			Temperature: 0.9,
 		}
-		content, err := CompleteWithModel(ctx, m.ID, msg, nil)
+		content, err := CompleteWithModel(ctx, m.ID, msg, func(c, reasoning string) {
+			// 决策实时推理可视化（碾压 Hermes 的最后一环）：
+			// 首选模型的思考过程实时推送到面板顶部 💭（像 Hermes 的 thinking）
+			if isPrimary && reasoning != "" {
+				oneLine := strings.ReplaceAll(reasoning, "\n", " ")
+				setThinking("💭 " + runeClip(oneLine, 24))
+			}
+		})
 		if err != nil {
 			circuitFail(m)
 			ch <- result{}
@@ -131,7 +138,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 
 	primary := ranked[0] // 首选：信用最好
 	primaryCh := make(chan result, 1)
-	safeGo("decide-primary", func() { call(primary, primaryCh) })
+	safeGo("decide-primary", func() { call(primary, primaryCh, true) })
 	backups := ranked[1:] // 预备：信用次高（最多 1 个，省免费额度——24H 要跑得久）
 	if len(backups) > 1 {
 		backups = backups[:1]
@@ -139,7 +146,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 	backupCh := make(chan result, len(backups))
 	for _, b := range backups {
 		safeGo("decide-backup", func(b FreeModel) func() {
-			return func() { call(b, backupCh) }
+			return func() { call(b, backupCh, false) }
 		}(b))
 	}
 
