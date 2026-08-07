@@ -149,24 +149,23 @@ func runPublish(args []string) {
 	fmt.Printf("\n完成：%d/%d 平台发布成功\n", ok, len(targets))
 }
 
-// publishOne 发布到单平台
+// publishOne 发布到单平台：无头 Chrome 自动填表（登录态在发布专用 profile）
 func publishOne(p pubPlatform, art publishArticle, acc pubAccount) error {
-	// 1. cookie：配置优先，否则 Edge 自动获取（关 Edge 后可用）
+	// 无端点配置：无头 Chrome 自动发布（打开创作页 → 填表 → 提交）
+	if acc.PublishURL == "" {
+		return headlessChromePublish(p, art.Title, art.Content)
+	}
+	// 有端点：cookie 自动获取（Edge 调试端口或配置）+ HTTP POST
 	cookie := acc.Cookie
 	if cookie == "" {
 		var err error
 		cookie, err = edgeCookieDomain(p.Domain)
 		if err != nil {
-			return fmt.Errorf("自动获取 cookie 失败: %v（请先关闭 Edge 重试，或在 publish_config.json 配置 cookie）", err)
+			return fmt.Errorf("自动获取 cookie 失败: %v（请先在 Edge 登录该平台）", err)
 		}
 	}
 	if cookie == "" {
 		return fmt.Errorf("未找到 %s 登录态（请先在 Edge 登录该平台）", p.Name)
 	}
-
-	// 2. 发布：有端点走 HTTP，无端点打开创作页
-	if acc.PublishURL != "" {
-		return postArticleHTTP(p, acc, cookie, art)
-	}
-	return openCreatePage(p, art)
+	return postArticleHTTP(p, acc, cookie, art)
 }

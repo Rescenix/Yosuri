@@ -49,6 +49,9 @@ func main() {
 		case "edge-debug", "edge":
 			edgeDebugHint()
 			return
+		case "chrome-login", "login":
+			runChromeLogin()
+			return
 		case "help", "--help", "-h":
 			printHelp()
 			return
