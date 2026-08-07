@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
-
 // AgentRole 一个 agent 的角色定义
 type AgentRole struct {
 	Key     string   // 唯一标识（作者/研究员/发布官）
@@ -33,7 +33,7 @@ type AgentRole struct {
 var CompanyRoles = []AgentRole{
 	{
 		Key: "writer", Name: "作者", Emoji: "✍️",
-		Prompt: "你的角色是公司里的【作者】。你的天职是持续创作：把学习到的、想到的、研究到的东西，写成文章、小说、随笔。产出就是你的价值——每天都要有新的文字诞生。",
+		Prompt: "你的角色是公司里的【作者】。你的天职是持续创作：把学习到的、想到的、研究到的东西，写成文章、小说、随笔、文档。产出就是你的价值——每天都要有新的文字诞生。",
 		Actions: []string{"write", "journal", "study"},
 	},
 	{
@@ -42,8 +42,13 @@ var CompanyRoles = []AgentRole{
 		Actions: []string{"research", "read", "study"},
 	},
 	{
+		Key: "coder", Name: "程序员", Emoji: "💻",
+		Prompt: "你的角色是公司里的【程序员】。你的天职是写代码、做项目、自检迭代。你是公司的双手——把想法变成可运行的代码，用工具干活，让产品不断进化。",
+		Actions: []string{"project", "task", "write"},
+	},
+	{
 		Key: "publisher", Name: "发布官", Emoji: "📡",
-		Prompt: "你的角色是公司里的【发布官】。你的天职是分发成果：把公司产出的文章/报告发布到各平台（晋江/番茄/纵横等网文平台）。你让公司的作品被世界看见。",
+		Prompt: "你的角色是公司里的【发布官】。你的天职是分发成果：把公司产出的文章/代码/报告发布到各平台（晋江/番茄/纵横/GitHub）。你让公司的作品被世界看见。",
 		Actions: []string{"task", "write"},
 	},
 }
@@ -115,12 +120,15 @@ func runCompany(args []string) {
 	}
 	fmt.Println()
 
-	// 每个 agent 独立 goroutine 自转
-	for _, a := range agents {
+	// 每个 agent 独立 goroutine 自转（错峰 + 低频，避免免费模型 429 限流风暴）
+	for i, a := range agents {
 		d := newCompanyAgent(a.Name, a.Role)
 		d.Silent = true
 		fmt.Printf("  ✅ %s%s 已开工（家: %s）\n", a.Role.Emoji, a.Name, companyAgentHome(a.Name))
-		go trumanLoop(d, defaultLiveConfig())
+		cfg := defaultLiveConfig()
+		cfg.every = 5 * time.Minute // 5 分钟一轮，14 模型信用排序自动选可用
+		time.Sleep(time.Duration(i) * 15 * time.Second) // 错峰 15 秒
+		go trumanLoop(d, cfg)
 	}
 
 	select {} // 常驻
