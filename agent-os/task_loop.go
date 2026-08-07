@@ -35,6 +35,11 @@ func runAutonomousTask(d *Daughter, home, task string) string {
   [TOOL:工具名 key="值" key2="值2"]
 一次可以输出多个标记，每个标记单独一行。工具执行结果会在下一轮喂回给你，你根据结果继续推理或给出最终成果。不需要调用工具时，直接输出任务成果。
 
+示例（照这个格式）：
+  [TOOL:web_search query="rust 2026 new features"]
+  [TOOL:read_file path="C:\\Users\\undercurrent\\test.txt" offset="1"]
+  [TOOL:write_file path="C:\\Users\\undercurrent\\output.md" content="成果内容"]
+
 ` + buildToolIntro() + `
 
 行为规范：
