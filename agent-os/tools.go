@@ -164,6 +164,10 @@ func ExtractToolMarkers(content string) []string {
 
 // callTool 执行工具，返回结果
 func callTool(ctx context.Context, name string, args map[string]string) (ToolResult, error) {
+	// nil ctx 兜底（skill 记录过的坑：context.WithTimeout(nil) 会 panic）
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	argsJSON, _ := json.Marshal(args)
 	return callNativeTool(ctx, name, string(argsJSON))
 }
