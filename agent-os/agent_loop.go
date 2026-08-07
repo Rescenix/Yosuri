@@ -453,12 +453,18 @@ func (d *Daughter) modelJournalEntry() string {
 	}
 	// 今天的活动（live.log 尾部）
 	tail := strings.Join(liveLogTailLines(d.Home, 8), "\n")
+	goalLine := "（未定）"
+	if g := dailyGoal(d.Home); g != "（未定）" {
+		goalLine = g
+	}
 	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。今天是第 %d 天。
 今天发生的事：
 %s
 
-写今天的日记（50-120 字）：今天去了哪里、学到了什么、心情如何。直接输出日记正文。`,
-		d.loadStats().Days, runeClip(tail, 400))
+今日目标：%s
+
+写今天的日记（50-120 字）：今天做了什么、目标完成得怎么样、收获了什么、心情如何。直接输出日记正文。`,
+		d.loadStats().Days, runeClip(tail, 400), runeClip(goalLine, 120))
 	msg := ChatRequest{
 		Model:       model.Model,
 		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
