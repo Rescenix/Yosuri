@@ -12,6 +12,7 @@ package main
 // 用户的回复是引导，不是命令；她不需要指令。
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -134,7 +135,7 @@ func refreshOutputsIndex(home string) {
 	os.WriteFile(filepath.Join(outDir, "README.md"), []byte(sb.String()), 0o644)
 }
 
-// generateDailyReport 汇总某日活动生成日报（规则汇总，免费不烧模型）——自主产出物
+// generateDailyReport 汇总某日活动生成日报——规则统计 + LLM 有温度的每日回顾
 func generateDailyReport(home, date string) {
 	all, err := os.ReadFile(filepath.Join(home, "live.log"))
 	if err != nil {
@@ -145,7 +146,7 @@ func generateDailyReport(home, date string) {
 	for _, l := range strings.Split(string(all), "\n") {
 		if strings.Contains(l, date) && strings.Contains(l, "🧠") {
 			dayLines = append(dayLines, l)
-			for _, k := range []string{"study", "read", "skill", "project", "social", "reflect", "journal", "watch"} {
+			for _, k := range []string{"study", "read", "skill", "project", "social", "reflect", "journal", "watch", "write", "research", "task"} {
 				if strings.Contains(l, "· "+k) {
 					counts[k]++
 				}
@@ -156,15 +157,43 @@ func generateDailyReport(home, date string) {
 		return
 	}
 	names := map[string]string{"study": "学习", "read": "读书", "skill": "技能", "project": "项目",
-		"social": "社交", "reflect": "思考", "journal": "日记", "watch": "上网"}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("# Rescene 日报 · %s\n\n共 %d 轮自主工作\n\n## 活动统计\n\n", date, len(dayLines)))
-	for _, k := range []string{"study", "read", "skill", "project", "social", "reflect", "journal", "watch"} {
+		"social": "社交", "reflect": "思考", "journal": "日记", "watch": "上网", "write": "写作", "research": "调研", "task": "自主任务"}
+	var stats strings.Builder
+	for _, k := range []string{"study", "read", "skill", "project", "write", "research", "task", "social", "reflect", "journal", "watch"} {
 		if counts[k] > 0 {
-			sb.WriteString(fmt.Sprintf("- %s × %d\n", names[k], counts[k]))
+			stats.WriteString(fmt.Sprintf("%s×%d ", names[k], counts[k]))
 		}
 	}
-	sb.WriteString("\n## 活动记录\n\n")
+	// 当日产出 + 目标（LLM 回顾素材）
+	var outputs []string
+	if entries, err := os.ReadDir(filepath.Join(home, "outputs")); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.Contains(e.Name(), date) {
+				outputs = append(outputs, e.Name())
+			}
+		}
+	}
+	goal := "（未定）"
+	if g := dailyGoal(home); g != "（未定）" {
+		goal = g
+	}
+
+	// LLM 有温度的每日回顾（1 次模型调用/天，失败降级规则版）
+	review := ""
+	if d := NewDaughter(); d != nil {
+		d.Silent = true
+		review = d.modelDailyReview(date, stats.String(), strings.Join(outputs, "、"), goal)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Rescene 日报 · %s\n\n共 %d 轮自主工作\n\n## 活动统计\n\n", date, len(dayLines)))
+	sb.WriteString(stats.String() + "\n\n## 每日回顾\n\n")
+	if review != "" {
+		sb.WriteString(review + "\n\n")
+	} else {
+		sb.WriteString("（模型不可用，统计版）\n\n")
+	}
+	sb.WriteString("## 活动记录\n\n")
 	for _, l := range dayLines {
 		sb.WriteString("- " + strings.TrimSpace(l) + "\n")
 	}
@@ -173,6 +202,35 @@ func generateDailyReport(home, date string) {
 	os.WriteFile(filepath.Join(outDir, "日报-"+date+".md"), []byte(sb.String()), 0o644)
 	logLive(filepath.Join(home, "live.log"),
 		fmt.Sprintf("[%s] 📊 日报已生成 outputs/日报-%s.md", time.Now().Format("15:04"), date))
+}
+
+// modelDailyReview LLM 写有温度的每日回顾（对照目标 + 产出 + 统计）
+func (d *Daughter) modelDailyReview(date, statsText, outputsText, goal string) string {
+	model := pickFreeModel(int(time.Now().UnixNano()))
+	if model == nil {
+		return ""
+	}
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。为 %s 写一份每日回顾（150-250 字）：今天做了什么、收获了什么、心情如何。要有你自己的语气和温度，不要卖萌过度。
+
+今天的统计：%s
+今天的产出：%s
+今天的目标：%s
+
+直接输出回顾正文。`, date, statsText, outputsText, goal)
+	msg := ChatRequest{
+		Model:       model.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   400,
+		Temperature: 0.8,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	content, err := CompleteWithModel(ctx, model.ID, msg, nil)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(content)
 }
 
 // trumanLoop 24H 自转循环：LLM 自主决策的 Agent 循环
