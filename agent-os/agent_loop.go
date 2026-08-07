@@ -573,6 +573,11 @@ func (d *Daughter) setDailyGoal() string {
 	return content
 }
 
+// outputMeta 统一产出文件元数据头（作品集专业感：作者/日期/类型）
+func outputMeta(kind string) string {
+	return fmt.Sprintf("---\n作者: Rescene（24H 自转）\n日期: %s\n类型: %s\n---\n\n", time.Now().Format("2006-01-02 15:04"), kind)
+}
+
 // modelWrite 她按主题写一篇短文（落盘 outputs/——真实文件产出工具）
 func (d *Daughter) modelWrite(topic string) string {
 	if topic == "" {
