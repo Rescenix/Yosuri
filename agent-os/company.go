@@ -126,8 +126,15 @@ func runCompany(args []string) {
 		d.Silent = true
 		fmt.Printf("  ✅ %s%s 已开工（家: %s）\n", a.Role.Emoji, a.Name, companyAgentHome(a.Name))
 		cfg := defaultLiveConfig()
-		cfg.every = 5 * time.Minute // 5 分钟一轮，14 模型信用排序自动选可用
+		cfg.every = 2 * time.Minute // 2 分钟一轮（keyed 模型稳定，产出节奏快）
 		time.Sleep(time.Duration(i) * 15 * time.Second) // 错峰 15 秒
+		// coder 启动即做项目（立即产出代码，不等 LLM 慢慢决策）
+		if a.Role.Key == "coder" {
+			go func() {
+				time.Sleep(10 * time.Second)
+				executeTrumanAction(d, d.Home, trumanAction{Kind: "project", Detail: "开发一个 CLI 工具：自动代码审查器（code-reviewer），用 go 实现"})
+			}()
+		}
 		go trumanLoop(d, cfg)
 	}
 

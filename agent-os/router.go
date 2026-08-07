@@ -85,7 +85,7 @@ func circuitFail(b FreeModel) {
 	k := b.Endpoint + "|" + b.Model
 	now := time.Now()
 	circuits.Store(k, &circuitBreaker{
-		openUntil: now.Add(30 * time.Second),
+		openUntil: now.Add(5 * time.Minute), // 5 分钟冷却（之前 30s 导致同一模型被反复选+429 循环）
 		failCount: 1,
 	})
 	recordModelResult(b, false)
@@ -176,7 +176,7 @@ func lastUsedAt(m FreeModel) time.Time {
 }
 
 // rankModels 按信用降序返回可用模型（过滤熔断的）——决策首选排最前。
-// LRU+信用淘汰：信用优先，同信用按最近使用；超活跃池上限直接裁掉尾部。
+// LRU+信用淘汰：信用优先，同信用随机轮换；超活跃池上限直接裁掉尾部。
 func rankModels(models []FreeModel) []FreeModel {
 	out := make([]FreeModel, 0, len(models))
 	for _, m := range models {
@@ -191,12 +191,25 @@ func rankModels(models []FreeModel) []FreeModel {
 		if ci != cj {
 			return ci > cj
 		}
-		return lastUsedAt(out[i]).After(lastUsedAt(out[j])) // 同信用：最近使用优先（LRU）
+		// 同信用随机轮换（避免总选同一模型被 429 循环）
+		seed := time.Now().Unix() / 60
+		h := hashPair(out[i].ID, out[j].ID, seed)
+		return h > 0
 	})
 	if len(out) > activePoolLimit {
-		out = out[:activePoolLimit] // 活跃池上限，尾部淘汰（休眠等探活找回）
+		out = out[:activePoolLimit]
 	}
 	return out
+}
+
+// hashPair 确定性伪随机比较（同信用换序，每分钟换一次）
+func hashPair(a, b string, seed int64) int {
+	s := a + "|" + b + fmt.Sprintf("|%d", seed)
+	h := 0
+	for _, c := range s {
+		h = h*31 + int(c)
+	}
+	return h % 2
 }
 
 // InitRouter 初始化路由：过滤出可用模型

@@ -181,11 +181,20 @@ func llmDecideAction(d *Daughter) trumanAction {
 	return ruleDecideAction(w)
 }
 
-// freeModelCandidates 免费模型候选：全网免费模型（keyless + 免费档 keyed）。
-// 用户是 Rescene 聚合 API 提供方，目录里全是免费档（商汤/魔搭/阶跃/NVIDIA/Ollama/Zen）——
-// 决策统一走整个免费池，信用排序自动挑最可靠的，不是只有 Zen。
+// freeModelCandidates 免费模型候选：keyed 优先（商汤/魔搭/阶跃/NVIDIA 比 Zen 稳定）
+// 用户配置的 keyed 模型也是免费档，优先用它们，Zen 免费网关兜底（429 太频繁）
 func freeModelCandidates() []FreeModel {
-	return GetWorkingModels()
+	all := GetWorkingModels()
+	keyed := make([]FreeModel, 0, len(all))
+	keyless := make([]FreeModel, 0, len(all))
+	for _, m := range all {
+		if m.Keyless {
+			keyless = append(keyless, m)
+		} else {
+			keyed = append(keyed, m)
+		}
+	}
+	return append(keyed, keyless...)
 }
 
 // dayPeriod 当前时段（白天/晚上/深夜），让模型感知作息，深夜自然去睡觉
