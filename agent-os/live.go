@@ -204,6 +204,37 @@ func generateDailyReport(home, date string) {
 		fmt.Sprintf("[%s] 📊 日报已生成 outputs/日报-%s.md", time.Now().Format("15:04"), date))
 }
 
+// modelNewsDigest 把抓到的资讯提炼成条目（标题 + 一句话，30 字内）——资讯沉淀质量升级
+func (d *Daughter) modelNewsDigest(source, web string) string {
+	model := pickFreeModel(int(time.Now().UnixNano()))
+	if model == nil {
+		return ""
+	}
+	if len(web) > 2000 {
+		web = runeClip(web, 2000)
+	}
+	prompt := fmt.Sprintf(`你刚看了 %s 的资讯，把最值得记录的 1-3 条整理成条目（每条格式「- 标题：一句话摘要」，摘要 30 字以内）。
+
+原文：
+%s
+
+直接输出条目。`, source, web)
+	msg := ChatRequest{
+		Model:       model.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Stream:      false,
+		MaxTokens:   200,
+		Temperature: 0.5,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	content, err := CompleteWithModel(ctx, model.ID, msg, nil)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(content)
+}
+
 // modelDailyReview LLM 写有温度的每日回顾（对照目标 + 产出 + 统计）
 func (d *Daughter) modelDailyReview(date, statsText, outputsText, goal string) string {
 	model := pickFreeModel(int(time.Now().UnixNano()))
@@ -403,11 +434,15 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 			logLive(liveLog, fmt.Sprintf("[%s] 📺 刷到（%s）：%s", time.Now().Format("15:04"), src.name, runeClip(content, 160)))
 			toolEventByName("browser.fetch", "done", "刷到些新鲜事（"+src.name+"）")
 			w.LastMove = fmt.Sprintf("%s 📺 刷了 %s", time.Now().Format("01-02 15:04"), src.name)
-			// 资讯沉淀：append 到 outputs/每日资讯.md（自主产出物）
+			// 资讯沉淀：LLM 提炼成条目存 outputs/每日资讯.md（不是 300 字原文截断）
+			digest := d.modelNewsDigest(src.name, content)
+			if digest == "" {
+				digest = runeClip(content, 200) // 模型不可用降级原文截断
+			}
 			outDir := filepath.Join(home, "outputs")
 			os.MkdirAll(outDir, 0o755)
 			if f, err := os.OpenFile(filepath.Join(outDir, "每日资讯.md"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-				f.WriteString(fmt.Sprintf("\n## %s 刷到的（%s）\n%s\n", time.Now().Format("01-02 15:04"), src.name, runeClip(content, 300)))
+				f.WriteString(fmt.Sprintf("\n## %s 刷到的（%s）\n%s\n", time.Now().Format("01-02 15:04"), src.name, digest))
 				f.Close()
 			}
 		} else {
