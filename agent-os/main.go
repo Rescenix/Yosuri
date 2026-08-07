@@ -43,6 +43,12 @@ func main() {
 		case "reply":
 			runReply(os.Args[2:])
 			return
+		case "publish", "pub":
+			runPublish(os.Args[2:])
+			return
+		case "edge-debug", "edge":
+			edgeDebugHint()
+			return
 		case "help", "--help", "-h":
 			printHelp()
 			return
@@ -150,6 +156,9 @@ func printHelp() {
   rescene marathon     24H 自迭代马拉松（热点立项 → 需求→计划→自检闭环）
   rescene report       查看马拉松战报（--dir 指定目录）
   rescene learn        电子女儿学习一轮（联网抓知识 → 写日记）
+  rescene reply        替你回复平台评论/私信（CSDN 等）
+  rescene publish      一键发布文章到网文平台（晋江/番茄/纵横/17K/七猫/飞卢/咪咕/黑岩/掌阅/豆瓣）
+  rescene edge-debug   让 Edge 常驻调试端口（cookie 自动读取，浏览器不关）
   rescene update       检查并更新到最新版
   rescene version      显示版本
   rescene help         显示帮助
