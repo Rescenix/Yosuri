@@ -38,6 +38,7 @@ type sceneFrame struct {
 	Seed       int64    `json:"seed"`
 	Thinking   string   `json:"thinking,omitempty"` // 她此刻的思考（思考可视化）
 	Tools      []toolEvent `json:"-"`               // 最近工具调用流
+	Growth     string   `json:"growth,omitempty"`   // 成长状态（能力/技能/产出数——越做越强的可视化）
 	Version    int64    `json:"version"`
 	LogLines   []string `json:"-"`
 }
@@ -295,6 +296,10 @@ func leftSceneLines(f sceneFrame) []string {
 		}
 	}
 
+	// 成长状态行（越做越强的可视化：能力/技能/产出数）
+	if f.Growth != "" {
+		lines = append(lines, "  💗 "+f.Growth)
+	}
 	// 没有事件时给一句她的状态
 	if len(lines) == 0 && f.Action != "" {
 		lines = append(lines, "  "+f.Action)

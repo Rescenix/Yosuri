@@ -556,6 +556,17 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 // frameOf 从世界状态构建直播帧
 func frameOf(w *worldState, d *Daughter, action string) sceneFrame {
 	cur := w.CurrentRegion()
+	// 成长状态：能力/技能/产出数（越做越强的可视化）
+	var outputN int
+	if entries, err := os.ReadDir(filepath.Join(d.Home, "outputs")); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				outputN++
+			}
+		}
+	}
+	growth := fmt.Sprintf("第%d天 · 技能%d · 产出%d · %s",
+		d.loadStats().Days, len(loadSkills()), outputN, w.abilitySummary())
 	f := sceneFrame{
 		RegionName: cur.Name,
 		RegionIcon: cur.Icon,
@@ -566,6 +577,7 @@ func frameOf(w *worldState, d *Daughter, action string) sceneFrame {
 		Mood:       d.moodEmoji(),
 		Ability:    w.abilitySummary(),
 		Seed:       w.WorldSeed,
+		Growth:     growth,
 	}
 	if len(w.Friends) > 0 {
 		f.Friend = w.Friends[0].Name
