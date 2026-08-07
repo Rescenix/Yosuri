@@ -69,9 +69,9 @@ func headlessChromePublish(p pubPlatform, title, content string) error {
 	cmd := exec.Command(exe,
 		"--headless=new",
 		fmt.Sprintf("--remote-debugging-port=%d", port),
-		fmt.Sprintf("--remote-debugging-address=127.0.0.1"),
+		"--remote-debugging-address=127.0.0.1",
 		"--user-data-dir="+profile,
-		"--no-first-run", "--disable-gpu",
+		"--no-first-run", "--disable-gpu", "--disable-extensions",
 		"about:blank")
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("无头 Chrome 启动失败: %v", err)

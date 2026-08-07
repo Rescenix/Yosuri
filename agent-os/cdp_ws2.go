@@ -13,19 +13,27 @@ import (
 )
 
 // wsCall 连接 WS → 发一条命令 → 读一条响应 → 关闭
-func wsCall(addr string, payload []byte) ([]byte, error) {
-	conn, err := net.Dial("tcp", addr)
+// wsURL 形如 ws://127.0.0.1:9222/devtools/page/XXXX —— host 和 path 必须拆分
+func wsCall(wsURL string, payload []byte) ([]byte, error) {
+	u := strings.TrimPrefix(wsURL, "ws://")
+	host := u
+	path := "/"
+	if i := strings.Index(u, "/"); i >= 0 {
+		host = u[:i]
+		path = u[i:]
+	}
+	conn, err := net.Dial("tcp", host)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 
-	// 握手
+	// 握手（GET 用 WS 路径，Host 用 host）
 	key := make([]byte, 16)
 	rand.Read(key)
 	secKey := base64.StdEncoding.EncodeToString(key)
-	req := "GET / HTTP/1.1\r\n" +
-		"Host: " + addr + "\r\n" +
+	req := "GET " + path + " HTTP/1.1\r\n" +
+		"Host: " + host + "\r\n" +
 		"Upgrade: websocket\r\n" +
 		"Connection: Upgrade\r\n" +
 		"Sec-WebSocket-Key: " + secKey + "\r\n" +

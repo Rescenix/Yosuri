@@ -160,7 +160,8 @@ func freePort() int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
-// cdpPageWS 从 CDP HTTP 端点拿第一个页面的 WebSocket URL
+// cdpPageWS 从 CDP HTTP 端点拿第一个 type=page 的 WebSocket URL
+// （过滤扩展/后台页面，避免导航发错 target）
 func cdpPageWS(port int) string {
 	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/json", port))
 	if err != nil {
@@ -168,12 +169,18 @@ func cdpPageWS(port int) string {
 	}
 	defer resp.Body.Close()
 	var pages []struct {
+		Type                 string `json:"type"`
 		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&pages) != nil || len(pages) == 0 {
+	if json.NewDecoder(resp.Body).Decode(&pages) != nil {
 		return ""
 	}
-	return pages[0].WebSocketDebuggerURL
+	for _, p := range pages {
+		if p.Type == "page" && p.WebSocketDebuggerURL != "" {
+			return p.WebSocketDebuggerURL
+		}
+	}
+	return ""
 }
 
 // cookieRec CDP cookie 结构

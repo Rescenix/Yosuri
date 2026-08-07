@@ -6,7 +6,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // cdpConn 一次 CDP WebSocket 会话
@@ -30,8 +29,7 @@ func (c *cdpConn) call(method string, params map[string]any) ([]byte, error) {
 	payload, _ := json.Marshal(req)
 
 	// 每次调用新建连接（简单可靠；发布流程低频调用可接受）
-	addr := strings.TrimPrefix(c.wsURL, "ws://")
-	resp, err := wsCall(addr, payload)
+	resp, err := wsCall(c.wsURL, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -54,17 +52,22 @@ func cdpEval(wsURL, js string) (string, error) {
 	}
 	var r struct {
 		Result struct {
-			Value json.RawMessage `json:"value"`
+			Result struct {
+				Type  string          `json:"type"`
+				Value json.RawMessage `json:"value"`
+			} `json:"result"`
 		} `json:"result"`
 	}
 	if json.Unmarshal(resp, &r) != nil {
 		return "", fmt.Errorf("CDP eval 解析失败")
 	}
-	if len(r.Result.Value) > 0 {
+	if len(r.Result.Result.Value) > 0 {
 		var v string
-		if json.Unmarshal(r.Result.Value, &v) == nil {
+		if json.Unmarshal(r.Result.Result.Value, &v) == nil {
 			return v, nil
 		}
+		// bool/number 等非字符串值：返回原始 JSON 文本
+		return string(r.Result.Result.Value), nil
 	}
 	return "", nil
 }
