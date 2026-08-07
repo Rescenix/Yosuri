@@ -82,24 +82,24 @@ func runDaughterProject(d *Daughter, home string) string {
 	}
 
 	// 项目成果技能化：方法沉淀进技能库（做过的事变成可复用能力——自循环自迭代）
-	safeGo("project-skill", func() { daughterProjectSkill(projDir, name, brief) })
+	safeGo("project-skill", func() { skillFromContext(name, brief) })
 
 	return fmt.Sprintf("%s：立项+执行+自检完成", name)
 }
 
-// daughterProjectSkill 项目方法沉淀技能（LLM 生成 skill json 进技能库，质量门槛同 generateSkill）
-func daughterProjectSkill(projDir, name, brief string) {
+// skillFromContext 把「做过的实体工作」沉淀成可复用技能（项目/任务通用）。
+// LLM 生成 skill json 进技能库，质量门槛 + 重名检查，失败静默（不阻塞主流程）。
+func skillFromContext(name, ctxText string) {
 	model := pickFreeModel(int(time.Now().UnixNano()))
 	if model == nil {
 		return
 	}
-	ctxText := brief
 	if len(ctxText) > 2500 {
 		ctxText = runeClip(ctxText, 2500)
 	}
-	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。你刚完成了项目「%s」。把做这个项目的方法沉淀成一个可复用技能（以后遇到类似任务直接照做）。
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。你刚完成了「%s」。把做这件事的方法沉淀成一个可复用技能（以后遇到类似任务直接照做）。
 
-项目过程：
+过程：
 %s
 
 只输出 JSON：{"name":"kebab-case英文名","description":"一句话中文描述什么场景用","trigger":"何时调用","verification":"如何验证成功","steps":["步骤1","步骤2","步骤3"]}
@@ -143,7 +143,7 @@ func daughterProjectSkill(projDir, name, brief string) {
 		return
 	}
 	logLive(filepath.Join(daughterHome(), "live.log"),
-		fmt.Sprintf("[%s] 🛠️ 项目沉淀技能: %s（%s）", time.Now().Format("15:04"), s.Name, s.Description))
+		fmt.Sprintf("[%s] 🛠️ 沉淀技能: %s（%s）", time.Now().Format("15:04"), s.Name, s.Description))
 }
 
 // daughterKickoff 选题立项（免费模型）：热点 + 能力 + 技能库 → 项目名 + 需求计划

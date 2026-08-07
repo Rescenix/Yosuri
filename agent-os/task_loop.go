@@ -82,6 +82,8 @@ func runAutonomousTask(d *Daughter, home, task string) string {
 			os.WriteFile(filepath.Join(outDir, fname), []byte(fmt.Sprintf("# 任务：%s\n\n%s\n", task, content)), 0o644)
 			logLive(filepath.Join(home, "live.log"),
 				fmt.Sprintf("[%s] ⚙️ 任务完成 %s", time.Now().Format("15:04"), fname))
+			// 任务方法沉淀技能（做过的事变成可复用能力——自循环自迭代）
+			safeGo("task-skill", func() { skillFromContext(task, content) })
 			return fname
 		}
 
