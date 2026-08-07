@@ -14,7 +14,7 @@ type pubPlatform struct {
 }
 
 var pubPlatforms = []pubPlatform{
-	{"jjwxc", "晋江文学城", "jjwxc.net", "https://www.jjwxc.net/myauthor.php", "女频·言情", 0, "IP 改编能力强，榜单公平，读者粘性高"},
+	{"jjwxc", "晋江文学城", "jjwxc.net", "https://my.jjwxc.net/backend/managenovel.php", "女频·言情", 0, "IP 改编能力强，榜单公平，读者粘性高"},
 	{"fanqie", "番茄小说", "fanqienovel.com", "https://fanqienovel.com/writer", "爽文·快节奏", 4000, "字节流量巨大，算法推荐精准，日更 4000+ 是基本要求"},
 	{"zongheng", "纵横中文网", "zongheng.com", "https://www.zongheng.com/writer", "男频·玄幻都市", 0, "百度旗下老牌男频，买断/分成签约"},
 	{"17k", "17K小说网", "17k.com", "https://www.17k.com/writer", "综合", 0, "老牌综合门户，作者扶持计划"},

@@ -117,10 +117,10 @@ func cdpFillForm(wsURL, title, content string) (string, error) {
 func cdpClickPublish(wsURL string) (string, error) {
 	js := `(function() {
   var btns = Array.from(document.querySelectorAll('button, input[type=submit], a.btn'));
-  var kw = ['发布', '提交', '保存', '发表', '上传', '确定', 'publish', 'submit'];
+  var kw = ['发布', '提交', '保存', '发表', '上传', '确定', '存稿', '章节', '草稿', 'publish', 'submit', 'save', 'saveDraft'];
   for (var i = 0; i < btns.length; i++) {
     var t = (btns[i].innerText || btns[i].value || '').trim();
-    if (t.length < 12 && kw.some(function(k) { return t.indexOf(k) >= 0; })) {
+    if (t.length < 16 && kw.some(function(k) { return t.indexOf(k) >= 0; })) {
       btns[i].click();
       return t;
     }
