@@ -5,12 +5,16 @@ package main
 // task 动作的工具从 13 → 17，更接近 Hermes 的工具广度。
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // daughterToolDefs 女儿专属工具定义（追加到 nativeToolDefs）
@@ -24,6 +28,7 @@ func daughterToolDefs() []ToolDefinition {
 			"kind": {Type: "string", Description: "memory（长期记忆）或 journal（日记），默认 memory"},
 		}, nil),
 		nativeTool("outputs_list", "列出她的作品集（outputs/ 全部产出文件名）。", nil, nil),
+		nativeTool("computer_see", "截取当前屏幕截图，用视觉模型描述屏幕上的内容——她看得见世界（多模态）。", nil, nil),
 	}
 }
 
@@ -77,6 +82,47 @@ func callDaughterTool(ctx context.Context, name string, args map[string]string) 
 			return ToolResult{Text: "（暂无产出）"}, nil
 		}
 		return ToolResult{Text: strings.Join(names, "\n")}, nil
+
+	case "computer_see":
+		// 多模态：截屏 + vision 模型描述——她看得见世界
+		img, err := captureFullScreen()
+		if err != nil {
+			return ToolResult{}, fmt.Errorf("截图失败: %v", err)
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			return ToolResult{}, fmt.Errorf("PNG 编码失败: %v", err)
+		}
+		b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+		var vm *FreeModel
+		for i := range workingModels {
+			if workingModels[i].Vision {
+				m := workingModels[i]
+				vm = &m
+				break
+			}
+		}
+		if vm == nil {
+			return ToolResult{}, fmt.Errorf("无 vision 模型可用（需商汤/魔搭/阶跃 key）")
+		}
+		msg := ChatRequest{
+			Model: vm.Model,
+			Messages: []ChatMessage{{
+				Role:    "user",
+				Content: "描述这张屏幕截图的内容：这是什么界面、在做什么、有什么值得注意的。中文 60 字内。",
+				Images:  []string{"data:image/png;base64," + b64},
+			}},
+			Stream:      false,
+			MaxTokens:   150,
+			Temperature: 0.5,
+		}
+		ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		content, err := CompleteWithModel(ctx2, vm.ID, msg, nil)
+		if err != nil {
+			return ToolResult{}, fmt.Errorf("视觉分析失败: %v", err)
+		}
+		return ToolResult{Text: "👁 屏幕：" + strings.TrimSpace(content)}, nil
 	}
 	return ToolResult{}, fmt.Errorf("未知女儿工具: %s", name)
 }

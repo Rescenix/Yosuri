@@ -330,6 +330,8 @@ type ChatRequest struct {
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Images 多模态图片（data URL 或 http URL），OpenAI 兼容 vision 格式
+	Images []string `json:"-"`
 }
 
 // ChatResponse 聊天响应
@@ -339,6 +341,30 @@ type ChatResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
+}
+
+// buildWireMessages 构造发送给 API 的 messages：带图片的用 OpenAI 兼容
+// content 数组格式 [{"type":"text",...},{"type":"image_url","image_url":{"url":...}}]
+func buildWireMessages(msgs []ChatMessage) []any {
+	out := make([]any, 0, len(msgs))
+	for _, m := range msgs {
+		if len(m.Images) == 0 {
+			out = append(out, map[string]any{"role": m.Role, "content": m.Content})
+			continue
+		}
+		content := make([]any, 0, 1+len(m.Images))
+		if m.Content != "" {
+			content = append(content, map[string]any{"type": "text", "text": m.Content})
+		}
+		for _, img := range m.Images {
+			content = append(content, map[string]any{
+				"type": "image_url",
+				"image_url": map[string]any{"url": img},
+			})
+		}
+		out = append(out, map[string]any{"role": m.Role, "content": content})
+	}
+	return out
 }
 
 // callModel 单模型调用（不处理熔断，由调用方决定策略）
@@ -358,7 +384,7 @@ func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(c
 
 	body := map[string]any{
 		"model":       m.Model,
-		"messages":    req.Messages,
+		"messages":    buildWireMessages(req.Messages),
 		"stream":      req.Stream,
 		"max_tokens":  req.MaxTokens,
 		"temperature": req.Temperature,
