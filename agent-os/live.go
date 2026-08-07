@@ -243,6 +243,11 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			} else {
 				lightStreak = 0
 			}
+			// task 保底节奏：每 15 轮（≈30 分钟）强制一次自主任务——
+			// 免费模型偏好轻量产出（write/research），task（工具干活）必须系统级保底
+			if round%15 == 0 {
+				act = trumanAction{Kind: "task", Detail: "自主任务：用工具实际完成一件有价值的事（查资料/写代码/写文件）"}
+			}
 			// 决策事件：💭 思考行（Hermes 风格）+ 模型透明度（免费池智能路由）
 			decideArgs := fmt.Sprintf("action=%q", act.Kind)
 			modelTag := ""
