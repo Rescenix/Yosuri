@@ -64,33 +64,33 @@ func headlessChromePublish(p pubPlatform, title, content string) error {
 		return fmt.Errorf("发布 profile 未初始化（先运行 rescene chrome-login 登录一次）")
 	}
 
-	// 启动无头 Chrome（发布 profile + CDP）
+	// 启动 Chrome（有头模式：真实 profile 下 headless 不监听 CDP——
+	// 用户可看到自动发布过程，透明且稳定）
 	port := freePort()
 	cmd := exec.Command(exe,
-		"--headless=new",
 		fmt.Sprintf("--remote-debugging-port=%d", port),
 		"--remote-debugging-address=127.0.0.1",
 		"--user-data-dir="+profile,
 		"--no-first-run", "--disable-gpu", "--disable-extensions",
 		"about:blank")
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("无头 Chrome 启动失败: %v", err)
+		return fmt.Errorf("Chrome 启动失败: %v", err)
 	}
 	defer func() {
 		cmd.Process.Kill()
 		cmd.Wait()
 	}()
 
-	// 等 CDP 就绪
+	// 等 CDP 就绪（真实 profile 启动慢，最多 30s）
 	var wsURL string
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 60; i++ {
 		if wsURL = cdpPageWS(port); wsURL != "" {
 			break
 		}
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 	if wsURL == "" {
-		return fmt.Errorf("无头 Chrome CDP 未就绪")
+		return fmt.Errorf("Chrome CDP 未就绪（30 秒超时）")
 	}
 
 	// 打开创作页

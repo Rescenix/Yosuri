@@ -6,61 +6,16 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
-	"strings"
 )
 
-// cdpGetAllCookies 通过 CDP WebSocket 取全部 cookie
+// cdpGetAllCookies 通过 CDP WebSocket 取全部 cookie（复用 wsCall，host/path 已修复）
 func cdpGetAllCookies(wsURL string) ([]cookieRec, error) {
-	// 1. TCP 连接 + WS 握手
-	addr := strings.TrimPrefix(wsURL, "ws://")
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	key := make([]byte, 16)
-	rand.Read(key)
-	secKey := base64.StdEncoding.EncodeToString(key)
-	req := "GET / HTTP/1.1\r\n" +
-		"Host: " + addr + "\r\n" +
-		"Upgrade: websocket\r\n" +
-		"Connection: Upgrade\r\n" +
-		"Sec-WebSocket-Key: " + secKey + "\r\n" +
-		"Sec-WebSocket-Version: 13\r\n\r\n"
-	if _, err := conn.Write([]byte(req)); err != nil {
-		return nil, err
-	}
-
-	br := bufio.NewReader(conn)
-	status, err := br.ReadString('\n')
-	if err != nil || !strings.Contains(status, "101") {
-		return nil, fmt.Errorf("WS 握手失败: %s", strings.TrimSpace(status))
-	}
-	for {
-		line, err := br.ReadString('\n')
-		if err != nil {
-			return nil, err
-		}
-		if line == "\r\n" {
-			break
-		}
-	}
-
-	// 2. 发 Network.getAllCookies
-	msg := []byte(`{"id":1,"method":"Network.getAllCookies"}`)
-	if err := wsSendFrame(conn, msg); err != nil {
-		return nil, err
-	}
-
-	// 3. 收响应
-	resp, err := wsReadFrame(br)
+	resp, err := wsCall(wsURL, []byte(`{"id":1,"method":"Network.getAllCookies"}`))
 	if err != nil {
 		return nil, err
 	}
