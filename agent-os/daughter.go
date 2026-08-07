@@ -188,6 +188,12 @@ func (d *Daughter) Greet() string {
 		sb.WriteString(strings.Join(shown, "、") + "\n")
 	}
 
+	// 今日目标播报（目标驱动的自转：打开就看到她今天的方向）
+	if g := dailyGoal(d.Home); g != "（未定）" {
+		oneLine := strings.ReplaceAll(g, "\n", " · ")
+		sb.WriteString(ColorCyan + "  🎯 今日目标：" + runeClip(oneLine, 80) + ColorReset + "\n")
+	}
+
 	// 今日产出播报（作品集动态：打开就能看到她的成果）
 	if outs := todayOutputsSummary(d.Home); outs != "" && !strings.Contains(outs, "（今天还没有") {
 		sb.WriteString(ColorCyan + "  📂 今日产出：" + outs + ColorReset + "\n")
