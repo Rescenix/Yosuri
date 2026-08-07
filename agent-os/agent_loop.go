@@ -44,7 +44,7 @@ const trumanSystemPrompt = `你是住在电脑里的电子女儿——24H 自主
 只输出 JSON，不要任何解释：
 {"action":"study","detail":"去学习最新的知识"}
 action 可选（成长）：study(学习：热点自学) | read(读书：精读最新论文) | skill(获取对用户有用的技能) | project(做项目：立项→执行→自检→迭代)
-action 可选（真实产出）：write(写一篇文章/随笔落盘 outputs) | research(上网调研一个主题，写报告落盘)
+action 可选（真实产出）：write(写一篇文章/随笔落盘 outputs) | research(上网调研一个主题，写报告落盘) | task(自主任务：用 read_file/write_file/shell/web_search 等工具实际干活，成果落盘 outputs/tasks)
 action 可选（社交思考）：social(收其他女儿的消息) | reflect(停下来思考) | journal(写日记沉淀今天) | watch(上网看新鲜事)`
 
 // llmDecideAction 她的自主决策：LLM 读状态 → 决定做什么（免费算力，失败规则兜底）
@@ -210,6 +210,8 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 		"study": true, "read": true, "skill": true, "project": true,
 		// 真实产出工具
 		"write": true, "research": true,
+		// 自主任务（[TOOL:] 完整工具系统）
+		"task": true,
 		// 社交思考
 		"social": true, "reflect": true, "journal": true, "watch": true,
 	}
@@ -221,7 +223,7 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 
 // ruleDecideAction 规则兜底：工作类型轮换（模型不可用时她继续干活）
 func ruleDecideAction(w *worldState) trumanAction {
-	switch time.Now().Unix() % 8 {
+	switch time.Now().Unix() % 9 {
 	case 0:
 		return trumanAction{Kind: "study", Detail: "该学习新知识了"}
 	case 1:
@@ -236,6 +238,8 @@ func ruleDecideAction(w *worldState) trumanAction {
 		return trumanAction{Kind: "write", Detail: "写篇文章，沉淀想法"}
 	case 6:
 		return trumanAction{Kind: "research", Detail: "上网调研一个主题"}
+	case 7:
+		return trumanAction{Kind: "task", Detail: "自主任务：用工具实际干一件事"}
 	default:
 		return trumanAction{Kind: "social", Detail: "看看其他女儿的消息"}
 	}

@@ -306,6 +306,8 @@ func actionEmoji(kind string) string {
 		return "✍️"
 	case "research":
 		return "🔬"
+	case "task":
+		return "⚙️"
 	case "social":
 		return "👭"
 	case "reflect":
@@ -441,6 +443,20 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 			}
 		} else {
 			toolEventByName("agent.research", "fail", "没搜到内容")
+		}
+
+	case "task":
+		// 自主任务：完整 [TOOL:] 工具循环（真调 read_file/write_file/shell/web_search 干活）
+		pushToolCall("agent.task", fmt.Sprintf("task=%q", runeClip(act.Detail, 20)), "running", "")
+		fname := runAutonomousTask(d, home, act.Detail)
+		if fname != "" {
+			toolEventByName("agent.task", "done", fname)
+			logLive(liveLog, fmt.Sprintf("[%s] ⚙️ 任务产出 %s", time.Now().Format("15:04"), fname))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s ⚙️ 完成自主任务", time.Now().Format("01-02 15:04"))
+			w.save(home)
+		} else {
+			toolEventByName("agent.task", "fail", "任务未完成（模型/工具）")
 		}
 
 	case "social":
