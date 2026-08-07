@@ -30,6 +30,8 @@ type Daughter struct {
 	Personality *Personality // 性格（出生随机、随互动漂移，数值不见）
 	World       *worldState  // 她的世界（开放世界/能力/社交）
 	Silent      bool   // 楚门世界后台模式：不往终端打印（只写文件），避免破坏 REPL 界面
+	Role        string // 角色 key（多 agent 编排：公司角色名，空=普通女儿）
+	RolePrompt  string // 角色人设文本（注入决策 prompt，驱动行为倾向）
 }
 
 // 蓝色 ANSI 颜色（女儿心情表情用）

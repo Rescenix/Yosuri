@@ -74,6 +74,11 @@ func llmDecideAction(d *Daughter) trumanAction {
 	}
 	// 今日目标（决策注入：目标驱动的自转，不是随机生活）
 	goal := dailyGoal(d.Home)
+	// 角色人设（多 agent 编排：注入决策，驱动行为倾向）
+	roleBlock := ""
+	if d != nil && d.RolePrompt != "" {
+		roleBlock = "\n\n【你的角色】\n" + d.RolePrompt + "\n做决定时优先选择符合你角色天职的动作。"
+	}
 	state := fmt.Sprintf(`现在：%s（%s）
 深度活动：%s
 上次深度活动：%s
@@ -81,7 +86,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 今日目标：%s
 能力倾向：%s
 技能库：%d 个（%s）
-最近见闻：%s`,
+最近见闻：%s%s`,
 		time.Now().Format("01-02 15:04"), dayPeriod(),
 		deep,
 		deepActivitySummary(w),
@@ -89,7 +94,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 		goal,
 		w.abilitySummary(),
 		len(skills), skillLine,
-		truncTail(w.LastMove, 60))
+		truncTail(w.LastMove, 60), roleBlock)
 
 	prompt := fmt.Sprintf(trumanSystemPrompt, state)
 

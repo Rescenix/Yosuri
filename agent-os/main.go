@@ -52,6 +52,9 @@ func main() {
 		case "chrome-login", "login":
 			runChromeLogin()
 			return
+		case "company", "org":
+			runCompany(os.Args[2:])
+			return
 		case "help", "--help", "-h":
 			printHelp()
 			return
@@ -162,7 +165,8 @@ func printHelp() {
   rescene reply        替你回复平台评论/私信（CSDN 等）
   rescene publish      一键发布文章到网文平台（晋江/番茄/纵横/17K/七猫/飞卢/咪咕/黑岩/掌阅/豆瓣）
   rescene edge-debug   让 Edge 常驻调试端口（cookie 自动读取，浏览器不关）
-  rescene update       检查并更新到最新版
+    rescene company       多 Agent 公司（百人并行自转协作）
+    rescene chrome-login  打开发布专用 Chrome
   rescene version      显示版本
   rescene help         显示帮助
 
