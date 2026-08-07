@@ -277,8 +277,14 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 			// 云端同步：状态推送到她的云端（异步，失败静默降级）
 			daughterSyncPush(w, home)
 
+			// 429 自适应退避：模型全熔断（rule 兜底 = act.Model 空）→ 拉长间隔等限流恢复
+			// 正常 2 分钟一轮；限流风暴时 5 分钟一轮（不烧额度，恢复后自动回到 2 分钟）
+			sleepDur := cfg.every
+			if act.Model == "" {
+				sleepDur = 5 * time.Minute
+			}
 			// 下一轮（小间隔：防免费模型 429）
-			time.Sleep(cfg.every)
+			time.Sleep(sleepDur)
 		}() // 轮次安全执行结束
 	}
 }
