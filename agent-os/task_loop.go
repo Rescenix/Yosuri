@@ -47,7 +47,8 @@ func runAutonomousTask(d *Daughter, home, task string) string {
 - 任务自主完成，做完给最终成果，不要问用户
 - 写文件用 [TOOL:write_file path="..." content="..."]；上网查资料用 [TOOL:web_search query="..."]
 - 不要执行破坏性 shell 命令（rm/format/恶意操作禁止）
-- 成果要具体完整，是最终交付物`
+- 成果要具体完整，是最终交付物
+- 信息足够就收尾：当你已经能写出成果时，直接输出最终成果（不要继续调工具、不要输出标记）——任务最多 5 轮工具循环，第 5 轮必须给出成果`
 
 	messages := []ChatMessage{
 		{Role: "system", Content: systemPrompt},
