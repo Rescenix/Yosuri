@@ -581,7 +581,8 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 			w.LastMove = fmt.Sprintf("%s ⚙️ 完成自主任务", time.Now().Format("01-02 15:04"))
 			w.save(home)
 		} else {
-			toolEventByName("agent.task", "fail", "任务未完成（模型/工具）")
+			toolEventByName("agent.task", "fail", "任务未完成")
+			logLive(liveLog, fmt.Sprintf("[%s] ⚙️ 任务未完成（模型限流/工具遵循弱，%s）", time.Now().Format("15:04"), runeClip(act.Detail, 30)))
 		}
 
 	case "social":

@@ -74,7 +74,6 @@ func runAutonomousTask(d *Daughter, home, task string) string {
 				fmt.Sprintf("[%s] ⚙️ 任务中断: %v", time.Now().Format("15:04"), err))
 			return ""
 		}
-
 		markers := ExtractToolMarkers(content)
 		if len(markers) == 0 {
 			// 最终成果：落盘
