@@ -74,6 +74,11 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// Python Harness (:8001) 集成示例：转发 /run_task
 	r.GET("/api/harness/demo", HandleHarnessDemo)
 
+	// 创作工作台：文案成片（曼波视频一键生成 + 产物静态服务）
+	r.POST("/api/studio/mambo", HandleStudioMambo)
+		r.GET("/api/studio/files/:file", HandleStudioFiles)
+		r.POST("/api/translate", HandleTranslate)
+
 	// 设置面板：技能库 / MCP 生态 / 用户档案（含自定义指令）
 	r.GET("/api/skills", HandleListSkills)
 	r.POST("/api/skills/:name/status", HandleUpdateSkillStatus)
@@ -240,4 +245,17 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 			r.GET("/api/shared-pool/quota", HandleSharedPoolQuotaProxy)
 
 	r.Static("/images", "./public/images")
-}
+
+	// 多平台发布（GUI 发布面板：网文平台一键发布 + Edge CDP cookie 自动化）
+		r.GET("/api/publish/platforms", HandlePublishPlatforms)
+		r.POST("/api/publish", HandlePublish)
+		r.POST("/api/publish/login-chrome", HandlePublishLoginChrome)
+		// 作品集列表（发布面板选文件用）
+		r.GET("/api/outputs/list", HandleOutputsList)
+			r.GET("/api/outputs/file", HandleOutputsFile)
+			// 公司管理面板（多 Agent 编排 GUI）
+			r.GET("/api/company/agents", HandleCompanyAgents)
+				r.GET("/api/company/agent", HandleCompanyAgent)
+				// AI 写作工坊（输入主题 → AI 生成完整文章）
+				r.POST("/api/ai/write", HandleAIWrite)
+			}
