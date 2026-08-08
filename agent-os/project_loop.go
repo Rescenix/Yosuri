@@ -84,6 +84,18 @@ func runDaughterProject(d *Daughter, home string) string {
 	// 项目成果技能化：方法沉淀进技能库（做过的事变成可复用能力——自循环自迭代）
 	safeGo("project-skill", func() { skillFromContext(name, brief) })
 
+	// 公司 agent：项目产出自动进公司仓库（GitHub 分 feature 分支，可开 PR）
+	if strings.Contains(home, "company") {
+		var files []string
+		entries, _ := os.ReadDir(projDir)
+		for _, e := range entries {
+			if !e.IsDir() {
+				files = append(files, filepath.Join(projDir, e.Name()))
+			}
+		}
+		safeGo("company-commit", func() { companyCommit(filepath.Base(home), name, files) })
+	}
+
 	return fmt.Sprintf("%s：立项+执行+自检完成", name)
 }
 

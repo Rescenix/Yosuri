@@ -55,6 +55,9 @@ func main() {
 		case "company", "org":
 			runCompany(os.Args[2:])
 			return
+		case "company-repo", "repo":
+			runCompanyRepo(os.Args[2:])
+			return
 		case "help", "--help", "-h":
 			printHelp()
 			return
