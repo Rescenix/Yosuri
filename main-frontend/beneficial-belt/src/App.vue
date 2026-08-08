@@ -1,23 +1,32 @@
 <template>
-  <router-link to="/studio" class="studio-float-btn" title="创作工作台 · 文案成片">
-      <span>🎬</span>
+  <!-- 右侧统一工具条（聊天工具组件风格：方形圆角图标 + 文字标签） -->
+  <nav class="app-tool-rail">
+    <router-link to="/chat" class="app-tool-btn" title="对话" active-class="active">
+      <span class="tool-ico">💬</span>
+      <span class="tool-lbl">对话</span>
     </router-link>
-    <router-link to="/sync" class="sync-float-btn" title="多女儿同步工作台">
-      <span>👯</span>
+    <router-link to="/sync" class="app-tool-btn" title="部门协同工作台" active-class="active">
+      <span class="tool-ico">👥</span>
+      <span class="tool-lbl">协同</span>
     </router-link>
-    <router-link to="/company" class="company-float-btn" title="公司 · 多 Agent 协作">
-          <span>🏢</span>
-        </router-link>
-        <router-link to="/ai-write" class="aiwrite-float-btn" title="AI 写作工坊">
-          <span>✨</span>
-        </router-link>
-        <router-link to="/publish" class="publish-float-btn" title="多平台一键发布">
-      <span>📚</span>
+    <router-link to="/company" class="app-tool-btn" title="公司管理" active-class="active">
+      <span class="tool-ico">🏢</span>
+      <span class="tool-lbl">公司</span>
     </router-link>
-    <router-link to="/chat" class="chat-float-btn" title="回到对话">
-      <span>💬</span>
+    <router-link to="/ai-write" class="app-tool-btn" title="AI 女儿们写小说" active-class="active">
+      <span class="tool-ico">✨</span>
+      <span class="tool-lbl">写作</span>
     </router-link>
-    <router-view />
+    <router-link to="/publish" class="app-tool-btn" title="多平台一键发布" active-class="active">
+      <span class="tool-ico">📚</span>
+      <span class="tool-lbl">发布</span>
+    </router-link>
+    <router-link to="/studio" class="app-tool-btn" title="创作工作台" active-class="active">
+      <span class="tool-ico">🎬</span>
+      <span class="tool-lbl">工作台</span>
+    </router-link>
+  </nav>
+  <router-view />
   <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
 </template>
 
@@ -58,136 +67,39 @@ onMounted(async () => {
 </script>
 
 <style>
-.studio-float-btn {
+/* 右侧统一工具条（聊天工具组件风格） */
+.app-tool-rail {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 9999;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--app-accent, #2dd4bf);
-  color: #fff;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25);
-  transition: transform .15s, box-shadow .15s;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--app-surface-2, rgba(20,20,40,.85));
+  border: 1px solid var(--app-border, rgba(255,255,255,.1));
+  border-radius: 12px;
+  padding: 6px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 30px rgba(0,0,0,.3);
 }
-.studio-float-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
-}
-.publish-float-btn {
-  position: fixed;
-  right: 20px;
-  bottom: 84px;
-  z-index: 9999;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--app-accent, #4a9eff);
-  color: #fff;
+.app-tool-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25);
-  transition: transform .15s, box-shadow .15s;
-}
-.publish-float-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
-}
-.chat-float-btn {
-  position: fixed;
-  right: 20px;
-  top: 20px;
-  z-index: 9999;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  color: var(--app-text-faint, #94a3b8);
+  border-radius: 8px;
+  padding: 6px 8px;
   width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--app-accent, #2dd4bf);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
   text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25);
-  transition: transform .15s, box-shadow .15s;
+  transition: all .15s;
 }
-.chat-float-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
-}
-.company-float-btn {
-  position: fixed;
-  right: 20px;
-  bottom: 148px;
-  z-index: 9999;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--app-accent, #f59e0b);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25);
-  transition: transform .15s, box-shadow .15s;
-}
-.company-float-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
-}
-.aiwrite-float-btn {
-  position: fixed;
-  right: 20px;
-  bottom: 212px;
-  z-index: 9999;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--app-accent, #8b5cf6);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25);
-  transition: transform .15s, box-shadow .15s;
-}
-.aiwrite-float-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
-}
-.sync-float-btn {
-  position: fixed;
-  right: 20px;
-  bottom: 276px;
-  z-index: 9999;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--app-accent, #22c55e);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25);
-  transition: transform .15s, box-shadow .15s;
-}
-.sync-float-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
-}
+.app-tool-btn:hover { background: var(--app-surface-3, rgba(255,255,255,.1)); color: var(--app-text, #fff); }
+.app-tool-btn.active { background: var(--app-accent-soft, rgba(139,92,246,.25)); color: var(--app-accent, #a78bfa); }
+.tool-ico { font-size: 18px; }
+.tool-lbl { font-size: 10px; }
 </style>
