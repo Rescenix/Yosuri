@@ -28,6 +28,7 @@ type publishRequest struct {
 	Title     string   `json:"title" binding:"required"`
 	Content   string   `json:"content" binding:"required"`
 	Platforms []string `json:"platforms" binding:"required"`
+	Format    string   `json:"format"` // xhs=小红书格式排版（默认空=纯文本）
 }
 
 // stripMarkdown 去掉常见 markdown 格式标记，保留纯文本
@@ -141,6 +142,107 @@ type publishResult struct {
 	Message  string `json:"message"`
 }
 
+// mdToRichText md → 富文本（保留标题/列表/引用/加粗/图片占位，平台富文本编辑器可识别）
+// 只清洗脏标记（非图片 HTML 注释、代码块围栏、链接 URL），格式结构全保留
+func mdToRichText(s string) string {
+	// 1. 图片注释 → 【图: 文件名】占位；其他 HTML 注释删除
+	for strings.Contains(s, "<!--") {
+		i := strings.Index(s, "<!--")
+		j := strings.Index(s[i:], "-->")
+		if j < 0 {
+			s = s[:i]
+			break
+		}
+		comment := s[i+4 : i+j]
+		if strings.Contains(comment, "IMAGE") || strings.Contains(comment, "图片") {
+			fn := ""
+			for _, sep := range []string{"文件：", "文件:"} {
+				if k := strings.Index(comment, sep); k >= 0 {
+					fn = strings.TrimSpace(comment[k+len(sep):])
+					if p := strings.IndexAny(fn, "｜| "); p > 0 {
+						fn = fn[:p]
+					}
+					break
+				}
+			}
+			marker := "【图片】"
+			if fn != "" {
+				marker = "【图: " + fn + "】"
+			}
+			s = s[:i] + "\n" + marker + "\n" + s[i+j+3:]
+		} else {
+			s = s[:i] + s[i+j+3:]
+		}
+	}
+	// 2. 代码块围栏 ``` 去掉，内容保留
+	for strings.Contains(s, "```") {
+		i := strings.Index(s, "```")
+		j := strings.Index(s[i+3:], "```")
+		if j < 0 {
+			s = s[:i] + strings.TrimSpace(s[i+3:])
+			break
+		}
+		s = s[:i] + strings.TrimSpace(s[i+3:i+3+j]) + s[i+3+j+3:]
+	}
+	// 3. 链接 [text](url) → text（富文本超链接文字）
+	s = fixLinkText(s)
+	// 4. 行内残留：~~删除线~~（**加粗保留，富文本支持）
+	s = strings.ReplaceAll(s, "~~", "")
+	// 5. 清理多余空行（保留段落结构）
+	lines := strings.Split(s, "\n")
+	var out []string
+	blank := 0
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			blank++
+			if blank <= 1 {
+				out = append(out, "")
+			}
+			continue
+		}
+		blank = 0
+		out = append(out, l)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// fixLinkText [text](url) → text（保留链接文字，去掉 URL）
+func fixLinkText(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == '[' {
+			if j := strings.Index(s[i:], "]"); j > 0 && i+j+1 < len(s) && s[i+j+1] == '(' {
+				if end := strings.Index(s[i+j+1:], ")"); end >= 0 {
+					b.WriteString(s[i+1 : i+j])
+					i = i + j + 1 + end + 1
+					continue
+				}
+			}
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
+
+// xhsFormat 小红书格式：富文本 + 话题标签
+func xhsFormat(title, content string) string {
+	title = strings.TrimSpace(title)
+	if r := []rune(title); len(r) > 20 {
+		title = string(r[:20])
+	}
+	body := mdToRichText(content)
+	return title + "\n\n" + body + "\n\n#AI写作 #AI小说 #人工智能创作 #网文 #ResceneAI"
+}
+
+// publishRequest 发布请求
+type publishRequest2 struct {
+	Title     string   `json:"title" binding:"required"`
+	Content   string   `json:"content" binding:"required"`
+	Platforms []string `json:"platforms" binding:"required"`
+	Format    string   `json:"format"`
+}
+
 // HandlePublish POST /api/publish —— 一键发布到多个平台
 func HandlePublish(c *gin.Context) {
 	var req publishRequest
@@ -149,8 +251,11 @@ func HandlePublish(c *gin.Context) {
 		return
 	}
 	runes := len([]rune(req.Content))
-	// md 转纯文本（发布到网文平台是纯文本格式）
+	// md 转纯文本（网文平台）；xhs=小红书富文本格式（保留标题/加粗/图片占位）
 	plain := stripMarkdown(req.Content)
+	if req.Format == "xhs" {
+		plain = xhsFormat(req.Title, req.Content) // 用原始 md（保留格式结构）
+	}
 	results := make([]publishResult, 0, len(req.Platforms))
 	for _, key := range req.Platforms {
 		p := FindPubPlatform(key)
