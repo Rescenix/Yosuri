@@ -15,9 +15,11 @@ import (
 )
 
 // HandleAIWrite POST /api/ai/write
+// {topic} 主题 → 生成小说/文章（标题+简介+章节）
 func HandleAIWrite(c *gin.Context) {
 	var req struct {
 		Topic string `json:"topic" binding:"required"`
+		Type  string `json:"type"` // novel=小说（默认）| article=文章
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入主题"})
@@ -29,7 +31,23 @@ func HandleAIWrite(c *gin.Context) {
 		return
 	}
 
-	prompt := fmt.Sprintf(`你是一位住在 AI 公司里的全能作者。围绕「%s」写一篇 800-1500 字的完整文章。
+	kind := req.Type
+	if kind != "article" {
+		kind = "novel"
+	}
+
+	var prompt string
+	if kind == "novel" {
+		prompt = fmt.Sprintf(`你是一家 AI 小说公司里的主编。围绕「%s」创作一部小说的第一章。
+
+输出格式（严格）：
+标题：<小说标题>
+简介：<80-150 字简介，吸引人>
+第一章：<800-1500 字的章节正文，有场景、人物、悬念>
+
+要求：真实有吸引力的网文风格，不是 AI 腔，有画面感。`, topic)
+	} else {
+		prompt = fmt.Sprintf(`你是一位住在 AI 公司里的全能作者。围绕「%s」写一篇 800-1500 字的完整文章。
 
 要求：
 - 有吸引人的标题（第一行）
@@ -38,15 +56,22 @@ func HandleAIWrite(c *gin.Context) {
 - 直接输出正文，标题用 # 开头
 
 写吧。`, topic)
+	}
 
-	// 调本地聚合 API 生成（复用免费模型池）
 	content, err := callLocalAggregate(prompt)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"error": "模型暂不可用（免费额度限流），请稍后重试", "topic": topic})
 		return
 	}
 
-	// 解析标题（第一个 # 行）
+	// 解析
+	if kind == "novel" {
+		title, summary, chapter := parseNovel(content)
+		c.JSON(http.StatusOK, gin.H{
+			"type": "novel", "title": title, "summary": summary, "chapter": chapter, "content": content,
+		})
+		return
+	}
 	title := topic
 	for _, line := range strings.Split(content, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
@@ -54,7 +79,46 @@ func HandleAIWrite(c *gin.Context) {
 			break
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"title": title, "content": content})
+	c.JSON(http.StatusOK, gin.H{"type": "article", "title": title, "content": content})
+}
+
+// parseNovel 解析小说输出（标题/简介/第一章）
+func parseNovel(content string) (title, summary, chapter string) {
+	lines := strings.Split(content, "\n")
+	title = "未命名"
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "标题") || strings.HasPrefix(t, "书名") {
+			title = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(t, "标题"), "书名"))
+			title = strings.Trim(title, "：:")
+			break
+		}
+		if strings.HasPrefix(t, "#") && title == "未命名" {
+			title = strings.TrimSpace(strings.TrimPrefix(t, "#"))
+		}
+		_ = i
+	}
+	var sb strings.Builder
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "简介") {
+			summary = strings.TrimSpace(strings.TrimPrefix(t, "简介"))
+			summary = strings.Trim(summary, "：:")
+			continue
+		}
+		if strings.HasPrefix(t, "第一章") || strings.HasPrefix(t, "第 1 章") {
+			chapter += t + "\n"
+			continue
+		}
+		if summary != "" && chapter != "" {
+			chapter += l + "\n"
+		}
+	}
+	if chapter == "" {
+		chapter = content
+	}
+	_ = sb
+	return title, summary, strings.TrimSpace(chapter)
 }
 
 // callLocalAggregate 调本地 /v1/chat/completions（聚合免费模型池）
@@ -72,7 +136,10 @@ func callLocalAggregate(prompt string) (string, error) {
 	reqBytes, _ := json.Marshal(body)
 
 	client := &http.Client{Timeout: 90 * time.Second}
-	resp, err := client.Post("http://127.0.0.1:8080/v1/chat/completions", "application/json", bytes.NewReader(reqBytes))
+	req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/v1/chat/completions", bytes.NewReader(reqBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+aggregateAPIKey()) // 聚合 API 鉴权（之前漏了 → 一直 401）
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
