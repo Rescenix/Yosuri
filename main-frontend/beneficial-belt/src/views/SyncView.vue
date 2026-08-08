@@ -144,10 +144,10 @@ function doingText(a) {
   return clean || '待命中'
 }
 
-// 点击产出文件 → 实时预览（读 /api/outputs/file）
+// 点击产出文件 → 实时预览（读 /api/company/file）
 async function previewFile(a, f) {
   try {
-    const r = await fetch('/api/outputs/file?name=' + encodeURIComponent(f))
+    const r = await fetch('/api/company/file?agent=' + encodeURIComponent(a.name) + '&name=' + encodeURIComponent(f))
     const d = await r.json()
     preview.value = { agent: a.name, file: f, content: d.content || d.error || '' }
   } catch (e) {

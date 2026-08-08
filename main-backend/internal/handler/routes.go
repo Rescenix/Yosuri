@@ -255,7 +255,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 			r.GET("/api/outputs/file", HandleOutputsFile)
 			// 公司管理面板（多 Agent 编排 GUI）
 			r.GET("/api/company/agents", HandleCompanyAgents)
-				r.GET("/api/company/agent", HandleCompanyAgent)
+			r.GET("/api/company/agent", HandleCompanyAgent)
+			r.GET("/api/company/file", HandleCompanyFile)
 				// AI 写作工坊（输入主题 → AI 生成完整文章）
 				r.POST("/api/ai/write", HandleAIWrite)
 			}

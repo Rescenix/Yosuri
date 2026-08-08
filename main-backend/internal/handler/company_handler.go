@@ -32,6 +32,23 @@ func companyDir() string {
 	return filepath.Join(home, "rescene_data", "company")
 }
 
+// HandleCompanyFile GET /api/company/file?agent=researcher-02&name=xxx.md
+func HandleCompanyFile(c *gin.Context) {
+	agent := c.Query("agent")
+	name := c.Query("name")
+	if agent == "" || name == "" || strings.Contains(name, "..") || strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	path := filepath.Join(companyDir(), agent, "outputs", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在: " + name})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"name": name, "content": string(data)})
+}
+
 // HandleCompanyAgents GET /api/company/agents
 func HandleCompanyAgents(c *gin.Context) {
 	dir := companyDir()
