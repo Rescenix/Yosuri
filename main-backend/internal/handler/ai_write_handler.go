@@ -15,11 +15,13 @@ import (
 )
 
 // HandleAIWrite POST /api/ai/write
-// {topic} 主题 → 生成小说/文章（标题+简介+章节）
+// {topic} 主题 → 生成小说/文章（标题+简介+章节）；{chapter} 续写章节号
 func HandleAIWrite(c *gin.Context) {
 	var req struct {
-		Topic string `json:"topic" binding:"required"`
-		Type  string `json:"type"` // novel=小说（默认）| article=文章
+		Topic   string `json:"topic" binding:"required"`
+		Type    string `json:"type"` // novel=小说（默认）| article=文章
+		Chapter int    `json:"chapter"` // 续写：0=第一章，N=第N+1章
+		Title   string `json:"title"`   // 续写时的小说标题
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入主题"})
@@ -38,7 +40,15 @@ func HandleAIWrite(c *gin.Context) {
 
 	var prompt string
 	if kind == "novel" {
-		prompt = fmt.Sprintf(`你是一家 AI 小说公司里的主编。围绕「%s」创作一部小说的第一章。
+		if req.Chapter > 0 {
+			cn := req.Chapter + 1
+			prompt = fmt.Sprintf(`你是一家 AI 小说公司里的作者。继续写《%s》的第%d章。
+
+已知设定：%s
+
+要求：承接前文，800-1500 字，有场景、人物、悬念推进，结尾留钩子。直接输出第%d章正文。`, req.Title, cn, topic, cn)
+		} else {
+			prompt = fmt.Sprintf(`你是一家 AI 小说公司里的主编。围绕「%s」创作一部小说的第一章。
 
 输出格式（严格）：
 标题：<小说标题>
@@ -46,6 +56,7 @@ func HandleAIWrite(c *gin.Context) {
 第一章：<800-1500 字的章节正文，有场景、人物、悬念>
 
 要求：真实有吸引力的网文风格，不是 AI 腔，有画面感。`, topic)
+		}
 	} else {
 		prompt = fmt.Sprintf(`你是一位住在 AI 公司里的全能作者。围绕「%s」写一篇 800-1500 字的完整文章。
 
@@ -64,11 +75,21 @@ func HandleAIWrite(c *gin.Context) {
 		return
 	}
 
-	// 解析
 	if kind == "novel" {
+		if req.Chapter > 0 {
+			cn := req.Chapter + 1
+			title := req.Title
+			if title == "" {
+				title = topic
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"type": "novel", "title": title, "chapterNo": cn, "chapter": content, "content": content,
+			})
+			return
+		}
 		title, summary, chapter := parseNovel(content)
 		c.JSON(http.StatusOK, gin.H{
-			"type": "novel", "title": title, "summary": summary, "chapter": chapter, "content": content,
+			"type": "novel", "title": title, "summary": summary, "chapter": chapter, "chapterNo": 1, "content": content,
 		})
 		return
 	}
