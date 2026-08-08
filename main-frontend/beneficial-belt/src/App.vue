@@ -1,28 +1,28 @@
 <template>
-  <!-- 右侧统一工具条（聊天工具组件风格：方形圆角图标 + 文字标签） -->
+  <!-- 右侧统一工具条（iconify 图标 + 亮色） -->
   <nav class="app-tool-rail">
     <router-link to="/chat" class="app-tool-btn" title="对话" active-class="active">
-      <span class="tool-ico">💬</span>
+      <Icon icon="mdi:chat" width="20" />
       <span class="tool-lbl">对话</span>
     </router-link>
     <router-link to="/sync" class="app-tool-btn" title="部门协同工作台" active-class="active">
-      <span class="tool-ico">👥</span>
+      <Icon icon="mdi:account-multiple" width="20" />
       <span class="tool-lbl">协同</span>
     </router-link>
     <router-link to="/company" class="app-tool-btn" title="公司管理" active-class="active">
-      <span class="tool-ico">🏢</span>
+      <Icon icon="mdi:office-building" width="20" />
       <span class="tool-lbl">公司</span>
     </router-link>
     <router-link to="/ai-write" class="app-tool-btn" title="AI 女儿们写小说" active-class="active">
-      <span class="tool-ico">✨</span>
+      <Icon icon="mdi:pen" width="20" />
       <span class="tool-lbl">写作</span>
     </router-link>
     <router-link to="/publish" class="app-tool-btn" title="多平台一键发布" active-class="active">
-      <span class="tool-ico">📚</span>
+      <Icon icon="mdi:rocket-launch" width="20" />
       <span class="tool-lbl">发布</span>
     </router-link>
     <router-link to="/studio" class="app-tool-btn" title="创作工作台" active-class="active">
-      <span class="tool-ico">🎬</span>
+      <Icon icon="mdi:movie-open" width="20" />
       <span class="tool-lbl">工作台</span>
     </router-link>
   </nav>
@@ -32,6 +32,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
@@ -67,7 +68,7 @@ onMounted(async () => {
 </script>
 
 <style>
-/* 右侧统一工具条（聊天工具组件风格） */
+/* 右侧统一工具条（亮色 + iconify） */
 .app-tool-rail {
   position: fixed;
   right: 12px;
@@ -76,13 +77,12 @@ onMounted(async () => {
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  background: var(--app-surface-2, rgba(20,20,40,.85));
-  border: 1px solid var(--app-border, rgba(255,255,255,.1));
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 6px;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 8px 30px rgba(0,0,0,.3);
+  box-shadow: 0 4px 20px rgba(0,0,0,.08);
 }
 .app-tool-btn {
   display: flex;
@@ -91,15 +91,14 @@ onMounted(async () => {
   gap: 2px;
   border: none;
   background: transparent;
-  color: var(--app-text-faint, #94a3b8);
+  color: #9ca3af;
   border-radius: 8px;
   padding: 6px 8px;
   width: 52px;
   text-decoration: none;
   transition: all .15s;
 }
-.app-tool-btn:hover { background: var(--app-surface-3, rgba(255,255,255,.1)); color: var(--app-text, #fff); }
-.app-tool-btn.active { background: var(--app-accent-soft, rgba(139,92,246,.25)); color: var(--app-accent, #a78bfa); }
-.tool-ico { font-size: 18px; }
+.app-tool-btn:hover { background: #f3f4f6; color: #1a1a2e; }
+.app-tool-btn.active { background: #eff6ff; color: #2563eb; }
 .tool-lbl { font-size: 10px; }
 </style>
