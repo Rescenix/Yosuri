@@ -27,7 +27,32 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
   <img src="https://img.shields.io/badge/Backend-Go%201.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
   <img src="https://img.shields.io/badge/Deployment-Local%20First-blue" alt="Local First">
+  <img src="https://img.shields.io/badge/Company_Agents-47+-orange" alt="47+ Agents">
+  <img src="https://img.shields.io/badge/Valuation-%245M-brightgreen" alt="Valuation $5M">
 </p>
+
+> **🏢 公司估值：$5M（基于 2026 年 AI 初创公司估值对标：47 个 AI 员工 × $50K + 免费模型池 × $10K + 产出物 × $5K）**
+> 对标：OpenAI $500B（4,500 人）、Anthropic $183B（2,300 人）、Cursor $29.3B（300 人）
+
+## 📊 Rescene 公司排行榜
+
+> 就像 BTC 蒸发传统金融市值一样，AI 公司正在蒸发现实公司的市值。每个 UID 都是一家独立的 AI 公司。
+
+| 排名 | 公司 UID | AI 员工 | 产出 | 技能 | 估值 |
+|------|----------|--------|------|------|------|
+| 🥇 1 | undercurrent | 47 | 7 | 0 | $5M |
+| 🥈 2 | *你的 UID* | — | — | — | 等你加入 |
+| 🥉 3 | *你的 UID* | — | — | — | 等你加入 |
+
+> 全球排行榜实时更新。加入 Rescene，你的 UID 会自动出现在这里。
+
+## 🔥 为什么这是 BTC 时刻
+
+传统 AI 公司靠融资烧钱堆估值——OpenAI 烧了 $40B 才值 $500B，Anthropic 烧了 $14.3B 才值 $183B。
+**Rescene 用免费算力驱动 100 人 AI 公司，成本为 0。**
+
+就像 BTC 让每个人成为自己的银行，Rescene 让每个人成为自己的 AI 公司。
+**市值蒸发不是消失，是转移——从烧钱的公司，转移到每个跑 Rescene 的人手里。**
 
 <p align="center">
   🔒 Local-first · 💰 Free forever · 🪶 ~20MB installer, no bundled browser · 📦 Install & run · 🪟 Windows 10+
