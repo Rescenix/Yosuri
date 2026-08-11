@@ -19,9 +19,9 @@ import (
 
 // trumanAction 她自主决定的一个动作
 type trumanAction struct {
-	Kind   string `json:"action"`  // study | read | skill | project | social | reflect | journal | watch
-	Detail string `json:"detail"`  // 她为什么要做（理由/描述）
-	Model  string `json:"-"`       // 决策用的模型（透明度：显示免费池智能路由）
+	Kind   string `json:"action"` // study | read | skill | project | social | reflect | journal | watch
+	Detail string `json:"detail"` // 她为什么要做（理由/描述）
+	Model  string `json:"-"`      // 决策用的模型（透明度：显示免费池智能路由）
 }
 
 // trumanSystemPrompt 她的自我认知（24H 自主工作的全能学习者）
@@ -44,7 +44,8 @@ const trumanSystemPrompt = `你是住在电脑里的电子女儿——24H 自主
 只输出 JSON，不要任何解释：
 {"action":"study","detail":"去学习最新的知识"}
 action 可选（成长）：study(学习：热点自学) | read(读书：精读最新论文) | skill(获取对用户有用的技能) | project(做项目：立项→执行→自检→迭代)
-action 可选（真实产出）：write(写一篇文章/随笔落盘 outputs) | research(上网调研一个主题，写报告落盘) | task(自主任务：用 read_file/write_file/shell/web_search 等工具实际干活，成果落盘 outputs/tasks)
+action 可选（真实产出）：write(写一篇文章/随笔落盘 outputs) | research(上网调研一个主题，写报告落盘) | spreadsheet(把公司真实文件整理成 Excel 可用生产清单) | task(自主任务：用 read_file/write_file/shell/web_search 等工具实际干活，成果落盘 outputs/tasks)
+action 可选（公司交付）：meeting(开会并记录决策) | doc(写软件文档) | ppt(生成真实 .pptx) | pv(生成真实 .mp4)；未实现跨部门 DAG 前不得声称 pipeline 已完成
 action 可选（社交思考）：social(收其他女儿的消息) | reflect(停下来思考) | journal(写日记沉淀今天) | watch(上网看新鲜事)`
 
 // llmDecideAction 她的自主决策：LLM 读状态 → 决定做什么（免费算力，失败规则兜底）
@@ -230,7 +231,9 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 		// 成长
 		"study": true, "read": true, "skill": true, "project": true,
 		// 真实产出工具
-		"write": true, "research": true,
+		"write": true, "research": true, "spreadsheet": true, "ppt": true, "design": true,
+		// 公司流水线
+		"meeting": true, "doc": true, "pv": true,
 		// 自主任务（[TOOL:] 完整工具系统）
 		"task": true,
 		// 社交思考
@@ -244,7 +247,7 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 
 // ruleDecideAction 规则兜底：工作类型轮换（模型不可用时她继续干活）
 func ruleDecideAction(w *worldState) trumanAction {
-	switch time.Now().Unix() % 9 {
+	switch time.Now().Unix() % 12 {
 	case 0:
 		return trumanAction{Kind: "study", Detail: "该学习新知识了"}
 	case 1:
@@ -260,6 +263,12 @@ func ruleDecideAction(w *worldState) trumanAction {
 	case 6:
 		return trumanAction{Kind: "research", Detail: "上网调研一个主题"}
 	case 7:
+		return trumanAction{Kind: "meeting", Detail: "召集公司例会，同步各部门进度"}
+	case 8:
+		return trumanAction{Kind: "doc", Detail: "写软件文档，沉淀技术成果"}
+	case 9:
+		return trumanAction{Kind: "pv", Detail: "做宣传视频脚本，扩大影响力"}
+	case 10:
 		return trumanAction{Kind: "task", Detail: "自主任务：用工具实际干一件事"}
 	default:
 		return trumanAction{Kind: "social", Detail: "看看其他女儿的消息"}
@@ -601,7 +610,7 @@ func (d *Daughter) modelWrite(topic string) string {
 	if model == nil {
 		return ""
 	}
-	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。请围绕「%s」写一篇 200-400 字的短文（想法/随笔/微型文章），要有你自己的视角和温度，不要卖萌过度。直接输出正文，不要标题以外的格式。`, topic)
+	prompt := fmt.Sprintf(`你是住在电脑里的电子女儿。请围绕「%s」写一篇 200-400 字的短文（想法/随笔/微型文章），要有你自己的视角和温度，不要卖萌过度。直接输出正文，不要标题以外的格式。%s`, topic, teamContext(d.Name))
 	msg := ChatRequest{
 		Model:       model.Model,
 		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
@@ -634,7 +643,7 @@ func (d *Daughter) modelResearchReport(topic, web string) string {
 
 %s
 
-写一份 200-400 字的调研摘要：这个主题的核心是什么、最新进展、值得关注的点。直接输出正文。`, topic, web)
+写一份 200-400 字的调研摘要：这个主题的核心是什么、最新进展、值得关注的点。直接输出正文。%s`, topic, web, teamContext(d.Name))
 	msg := ChatRequest{
 		Model:       model.Model,
 		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
@@ -649,4 +658,166 @@ func (d *Daughter) modelResearchReport(topic, web string) string {
 		return ""
 	}
 	return strings.TrimSpace(content)
+}
+
+// modelMeeting 召集公司例会：读全公司产出 → 会议纪要
+func (d *Daughter) modelMeeting(topic string) string {
+	if topic == "" {
+		topic = "公司周会"
+	}
+	outputs := companyTeamOutputs(d.Name)
+	if len(outputs) > 2000 {
+		outputs = runeClip(outputs, 2000)
+	}
+	prompt := fmt.Sprintf(`你是公司的 CEO，正在主持「%s」。以下是各部门最近产出摘要：
+
+%s
+
+请输出会议纪要，格式：
+## 会议概要
+- 时间、主题、参与部门
+## 各部门汇报
+- 部门名：核心进展（1-2 句）
+## 关键决策
+- 决策事项
+## 下一步行动
+- 负责人：行动项
+
+直接输出，不要多余说明。`, topic, outputs)
+	return modelCallRetry(prompt)
+}
+
+// modelDoc 写软件文档
+func (d *Daughter) modelDoc(product string) string {
+	if product == "" {
+		product = "项目"
+	}
+	prompt := fmt.Sprintf(`你是公司的技术文档工程师。为「%s」写一份完整的软件文档。
+
+输出 markdown 格式：
+## 项目概述
+- 一句话介绍
+## 技术架构
+- 架构图描述（文字）
+- 核心模块
+## 快速开始
+- 安装/运行步骤
+## API 说明
+- 主要接口
+## 部署说明
+- 环境要求
+
+直接输出，不要多余说明。%s`, product, teamContext(d.Name))
+	return modelCallRetry(prompt)
+}
+
+// modelPV 做宣传视频脚本
+func (d *Daughter) modelPV(product string) string {
+	if product == "" {
+		product = "产品"
+	}
+	prompt := fmt.Sprintf(`你是公司的宣传导演。为「%s」制作一份 30 秒宣传视频（PV）脚本。
+
+输出 markdown 格式：
+## PV 概要
+- 时长、风格、目标受众
+## 分镜脚本
+### 镜头 1
+- 时间：0-5s
+- 画面：描述画面
+- 旁白：旁白文案
+- 音效：背景音乐/音效
+### 镜头 2
+- 时间：5-10s
+- 画面：描述画面
+- 旁白：旁白文案
+- 音效：背景音乐/音效
+（继续到 30s）
+
+直接输出，不要多余说明。%s`, product, teamContext(d.Name))
+	return modelCallRetry(prompt)
+}
+
+// modelPPT 她做 PPT 大纲（宣传官看家本领）
+func (d *Daughter) modelPPT(topic string) string {
+	if topic == "" {
+		topic = "知识分享"
+	}
+	prompt := fmt.Sprintf(`你是公司里的宣传官。请围绕「%s」制作一份 PPT 大纲，8 页左右，逻辑递进（引入-展开-案例-结论），每页标题抓眼球、3-4 个要点，像真正的商业/知识分享 PPT。
+
+输出 markdown 格式：
+## 第1页 标题
+- 要点1
+- 要点2
+- 要点3
+
+直接输出大纲内容，不要多余说明。%s`, topic, teamContext(d.Name))
+	return modelCallRetry(prompt)
+}
+
+// modelDesign 她出一份 UI 设计方案（程序员能照着实现）
+func (d *Daughter) modelDesign(product string) string {
+	if product == "" {
+		product = "一个产品"
+	}
+	prompt := fmt.Sprintf(`你是公司里的 UI 设计师。为「%s」出一份 UI 设计方案，要让程序员能照着实现。风格：亮色清爽、现代专业、有品牌感，拒绝 AI 味的深紫渐变。
+
+输出 markdown（严格按以下小节）：
+## 设计理念
+2-3 句，说清这个产品的视觉气质
+## 页面结构
+- 页面名：该页面的核心模块（bullet 列出）
+## 配色方案
+- 主色 #hex：用途
+- 辅色 #hex：用途
+- 背景 #hex：用途
+## 组件规范
+- 按钮：形状/配色/状态
+- 卡片：圆角/阴影/间距
+- 导航：形态/位置
+## 交互说明
+关键操作怎么交互（点击/悬浮/跳转），3-5 条
+
+直接输出，不要多余说明。%s`, product, teamContext(d.Name))
+	return modelCallRetry(prompt)
+}
+
+// modelCallRetry 遍历 keyless 免费模型逐个尝试（随机打乱 + 每个 2 次重试）
+func modelCallRetry(prompt string) string {
+	models := GetWorkingModels()
+	if len(models) == 0 {
+		return ""
+	}
+	// 熔断沉底 + keyed 优先 + 同信用随机轮换（和决策路径一致，2026-08-09 修复：
+	// 原来只筛 Keyless 且不跳熔断——100 人启动风暴把免费模型打熔断后全选到熔断模型，全部失败）
+	ranked := rankModels(models)
+	if len(ranked) == 0 {
+		return ""
+	}
+	for _, m := range ranked {
+		for attempt := 0; attempt < 2; attempt++ {
+			msg := ChatRequest{
+				Model:       m.Model,
+				Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+				Stream:      false,
+				MaxTokens:   1200,
+				Temperature: 0.7,
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			content, err := CompleteWithModel(ctx, m.ID, msg, nil)
+			cancel()
+			if err == nil && strings.TrimSpace(content) != "" {
+				return strings.TrimSpace(content)
+			}
+			if err != nil {
+				fmt.Printf("[modelCallRetry] %s attempt%d: %v\n", m.ID, attempt, err)
+				// 429 限流：熔断该模型，换下一个
+				if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Rate limit") {
+					circuitFail(m)
+					break
+				}
+			}
+		}
+	}
+	return ""
 }

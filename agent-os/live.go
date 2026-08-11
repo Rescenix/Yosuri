@@ -33,7 +33,7 @@ func defaultLiveConfig() liveConfig {
 
 // deepActivityKinds 深度动作（烧算力/免费额度）
 var deepActivityKinds = map[string]bool{
-	"study": true, "read": true, "skill": true, "project": true, "watch": true,
+	"study": true, "read": true, "skill": true, "project": true, "watch": true, "spreadsheet": true, "ppt": true, "design": true, "meeting": true, "doc": true, "pv": true,
 }
 
 // deepActivityDue 距上次深度活动是否已过冷却期（免费额度管理）
@@ -70,15 +70,23 @@ func lightFallback() trumanAction {
 
 // forcedDeepAction 可深潜但 LLM 连续轻量时的强制深度轮换（系统级自主工作节奏）
 func forcedDeepAction(round int) trumanAction {
-	switch round % 4 {
+	switch round % 8 {
 	case 0:
 		return trumanAction{Kind: "study", Detail: "自主深潜：去学习最新知识"}
 	case 1:
 		return trumanAction{Kind: "read", Detail: "自主深潜：精读最新论文"}
 	case 2:
 		return trumanAction{Kind: "skill", Detail: "自主深潜：获取对用户有用的新技能"}
-	default:
+	case 3:
 		return trumanAction{Kind: "project", Detail: "自主深潜：立项做项目并迭代"}
+	case 4:
+		return trumanAction{Kind: "meeting", Detail: "召集公司例会：同步各部门进度"}
+	case 5:
+		return trumanAction{Kind: "doc", Detail: "写软件文档：沉淀技术成果"}
+	case 6:
+		return trumanAction{Kind: "pv", Detail: "做宣传视频脚本：让更多人看见"}
+	default:
+		return trumanAction{Kind: "research", Detail: "调研前沿市场动态"}
 	}
 }
 
@@ -310,7 +318,7 @@ func trumanLoop(d *Daughter, cfg liveConfig) {
 	}
 
 	round := 0
-	lightStreak := 0 // 连续轻量轮数（可深潜时强制深度节奏）
+	lightStreak := 0                           // 连续轻量轮数（可深潜时强制深度节奏）
 	lastDay := time.Now().Format("2006-01-02") // 跨天检测：日报生成
 	for {
 		round++
@@ -423,12 +431,24 @@ func actionEmoji(kind string) string {
 		return "🛠️"
 	case "project":
 		return "🚀"
+	case "ppt":
+		return "📽️"
+	case "design":
+		return "🎨"
 	case "write":
 		return "✍️"
 	case "research":
 		return "🔬"
+	case "spreadsheet":
+		return "📊"
 	case "task":
 		return "⚙️"
+	case "meeting":
+		return "🤝"
+	case "doc":
+		return "📘"
+	case "pv":
+		return "🎬"
 	case "social":
 		return "👭"
 	case "reflect":
@@ -479,6 +499,21 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 		w.LastDeepAt = time.Now().Format("15:04")
 		w.save(home)
 
+	case "spreadsheet":
+		// 电子表格必须来自真实磁盘数据，不能让模型编造表格数字。
+		pushToolCall("agent.spreadsheet", "扫描公司真实交付物", "running", "")
+		fname, sheetErr := writeCompanyInventoryCSV(home)
+		if sheetErr != nil {
+			toolEventByName("agent.spreadsheet", "fail", sheetErr.Error())
+			logLive(liveLog, fmt.Sprintf("[%s] 📊 生产清单生成失败：%v", time.Now().Format("15:04"), sheetErr))
+		} else {
+			toolEventByName("agent.spreadsheet", "done", fname)
+			logLive(liveLog, fmt.Sprintf("[%s] 📊 Excel 可用生产清单已落盘 %s", time.Now().Format("15:04"), fname))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s 📊 生成了真实生产清单", time.Now().Format("01-02 15:04"))
+			w.save(home)
+		}
+
 	case "study":
 		// 学习：深度活动（热点 → 浏览器/搜索 → 消化 → 日记/记忆），LLM 自己把握节奏
 		pushToolCall("daughter.learn", "热点自学一轮", "running", "")
@@ -528,6 +563,109 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] 🚀 项目未立项成功（模型/限流）", time.Now().Format("15:04")))
 			toolEventByName("agent.project", "fail", "立项未成功")
+		}
+
+	case "ppt":
+		// 这里只生成结构化前稿；未渲染成 .pptx 前不能冒充 PPT 成品。
+		pushToolCall("agent.ppt", fmt.Sprintf("topic=%q", runeClip(act.Detail, 18)), "running", "")
+		content := d.modelPPT(act.Detail)
+		if content != "" {
+			outDir := filepath.Join(home, "outputs")
+			os.MkdirAll(outDir, 0o755)
+			fname := fmt.Sprintf("PPT大纲-%s-%02d.md", time.Now().Format("2006-01-02"), time.Now().Unix()%100)
+			os.WriteFile(filepath.Join(outDir, fname), []byte(outputMeta("PPT大纲")+fmt.Sprintf("# 《%s》 PPT 大纲（未渲染）\n\n%s\n", act.Detail, content)), 0o644)
+			rendered, renderErr := renderPPTX(outDir, act.Detail, content)
+			if renderErr != nil {
+				toolEventByName("agent.ppt", "fail", renderErr.Error())
+				logLive(liveLog, fmt.Sprintf("[%s] ⚠️ PPTX 渲染失败，仅保留前稿 %s：%v", time.Now().Format("15:04"), fname, renderErr))
+			} else {
+				toolEventByName("agent.ppt", "done", rendered)
+				logLive(liveLog, fmt.Sprintf("[%s] 📽️ PPTX 成品已落盘 %s", time.Now().Format("15:04"), rendered))
+			}
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s 📽️ 做了 PPT《%s》", time.Now().Format("01-02 15:04"), runeClip(act.Detail, 16))
+			w.save(home)
+		} else {
+			toolEventByName("agent.ppt", "fail", "模型不可用")
+			logLive(liveLog, fmt.Sprintf("[%s] 📽️ PPT 未产出（模型不可用/限流）", time.Now().Format("15:04")))
+		}
+
+	case "design":
+		// 出 UI 设计方案：产品概念+页面结构+配色+组件规范+交互（设计师的天职，程序员立项会参考）
+		pushToolCall("agent.design", fmt.Sprintf("product=%q", runeClip(act.Detail, 18)), "running", "")
+		content := d.modelDesign(act.Detail)
+		if content != "" {
+			outDir := filepath.Join(home, "outputs")
+			os.MkdirAll(outDir, 0o755)
+			fname := fmt.Sprintf("设计-%s-%02d.md", time.Now().Format("2006-01-02"), time.Now().Unix()%100)
+			os.WriteFile(filepath.Join(outDir, fname), []byte(outputMeta("设计")+fmt.Sprintf("# 《%s》 UI 设计方案\n\n%s\n", act.Detail, content)), 0o644)
+			toolEventByName("agent.design", "done", fname)
+			logLive(liveLog, fmt.Sprintf("[%s] 🎨 出设计方案 %s", time.Now().Format("15:04"), fname))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s 🎨 设计了《%s》", time.Now().Format("01-02 15:04"), runeClip(act.Detail, 16))
+			w.save(home)
+		} else {
+			toolEventByName("agent.design", "fail", "模型不可用")
+			logLive(liveLog, fmt.Sprintf("[%s] 🎨 设计稿未产出（模型不可用/限流）", time.Now().Format("15:04")))
+		}
+
+	case "meeting":
+		// 召集公司例会：逐部门读取真实产物，生成纪要、PPT、VTT 与 AI 重建回放。
+		pushToolCall("agent.meeting", fmt.Sprintf("topic=%q", runeClip(act.Detail, 18)), "running", "")
+		bundle, meetingErr := runMeetingBundle(d, home, act.Detail)
+		if meetingErr == nil {
+			toolEventByName("agent.meeting", "done", bundle.MinutesFile)
+			logLive(liveLog, fmt.Sprintf("[%s] 🤝 会议包已落盘：%d 位部门发言 · PPT=%t · 回放=%t", time.Now().Format("15:04"), len(bundle.Speeches), bundle.PPTFile != "", bundle.ReplayFile != ""))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s 🤝 开了会《%s》", time.Now().Format("01-02 15:04"), runeClip(act.Detail, 16))
+			w.save(home)
+		} else {
+			toolEventByName("agent.meeting", "fail", meetingErr.Error())
+			logLive(liveLog, fmt.Sprintf("[%s] 🤝 会议未产出：%v", time.Now().Format("15:04"), meetingErr))
+		}
+
+	case "doc":
+		// 写软件文档：项目完成后产出技术文档
+		pushToolCall("agent.doc", fmt.Sprintf("product=%q", runeClip(act.Detail, 18)), "running", "")
+		content := d.modelDoc(act.Detail)
+		if content != "" {
+			outDir := filepath.Join(home, "outputs")
+			os.MkdirAll(outDir, 0o755)
+			fname := fmt.Sprintf("文档-%s-%02d.md", time.Now().Format("2006-01-02"), time.Now().Unix()%100)
+			os.WriteFile(filepath.Join(outDir, fname), []byte(outputMeta("文档")+fmt.Sprintf("# 软件文档：%s\n\n%s\n", act.Detail, content)), 0o644)
+			toolEventByName("agent.doc", "done", fname)
+			logLive(liveLog, fmt.Sprintf("[%s] 📘 软件文档 %s", time.Now().Format("15:04"), fname))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s 📘 写了文档《%s》", time.Now().Format("01-02 15:04"), runeClip(act.Detail, 16))
+			w.save(home)
+		} else {
+			toolEventByName("agent.doc", "fail", "模型不可用")
+			logLive(liveLog, fmt.Sprintf("[%s] 📘 文档未产出（模型不可用/限流）", time.Now().Format("15:04")))
+		}
+
+	case "pv":
+		// 这里只生成分镜前稿；未渲染成 .mp4 前不能冒充 PV 成品。
+		pushToolCall("agent.pv", fmt.Sprintf("product=%q", runeClip(act.Detail, 18)), "running", "")
+		content := d.modelPV(act.Detail)
+		if content != "" {
+			outDir := filepath.Join(home, "outputs")
+			os.MkdirAll(outDir, 0o755)
+			fname := fmt.Sprintf("PV脚本-%s-%02d.md", time.Now().Format("2006-01-02"), time.Now().Unix()%100)
+			os.WriteFile(filepath.Join(outDir, fname), []byte(outputMeta("PV脚本")+fmt.Sprintf("# 宣传 PV 脚本（未渲染）：%s\n\n%s\n", act.Detail, content)), 0o644)
+			rendered, renderErr := renderPV(outDir, act.Detail, content)
+			if renderErr != nil {
+				toolEventByName("agent.pv", "fail", renderErr.Error())
+				logLive(liveLog, fmt.Sprintf("[%s] ⚠️ PV 渲染失败，仅保留脚本 %s：%v", time.Now().Format("15:04"), fname, renderErr))
+			} else {
+				toolEventByName("agent.pv", "done", rendered)
+				logLive(liveLog, fmt.Sprintf("[%s] 🎬 PV 成品已落盘 %s", time.Now().Format("15:04"), rendered))
+			}
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s 🎬 做了PV《%s》", time.Now().Format("01-02 15:04"), runeClip(act.Detail, 16))
+			w.save(home)
+		} else {
+			toolEventByName("agent.pv", "fail", "模型不可用")
+			logLive(liveLog, fmt.Sprintf("[%s] 🎬 PV未产出（模型不可用/限流）", time.Now().Format("15:04")))
 		}
 
 	case "write":

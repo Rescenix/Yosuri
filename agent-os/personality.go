@@ -50,6 +50,9 @@ type Personality struct {
 	Traits    []float64 `json:"traits"`        // 当前向量
 	Changes   int       `json:"changes"`       // 累计漂移次数（她的"年轮"）
 	Log       []string  `json:"log,omitempty"` // 最近的变化记录（谁在哪天让她变了什么）
+	// 人设背景（2026-08-08 每个 agent 员工都有年龄/性别/童年故事）
+	Gender    string `json:"gender,omitempty"`    // 性别
+	Childhood string `json:"childhood,omitempty"` // 童年故事（2-3 句）
 }
 
 // traitPush 一次驯养信号：第 k 维 + 基础力度
@@ -77,8 +80,36 @@ func loadPersonality(home string) *Personality {
 	p.CreatedAt = time.Now().Format("2006-01-02")
 	p.Born = rollTraits()
 	p.Traits = append([]float64(nil), p.Born...)
+	// 人设背景：每个 agent 都有年龄/性别/童年故事
+	seed := hashHome(home)
+	p.Gender = []string{"男", "女"}[seed%2]
+	p.Childhood = generateChildhood(seed, home)
 	p.save(home)
 	return p
+}
+
+// hashHome 从家目录生成稳定种子
+func hashHome(home string) int {
+	h := 0
+	for _, c := range home {
+		h = h*31 + int(c)
+	}
+	if h < 0 {
+		h = -h
+	}
+	return h
+}
+
+// generateChildhood 生成 2-3 句童年故事
+var childhoodPlaces = []string{"海边小镇", "山间村庄", "繁华都市", "宁静田园", "科技园区", "古城巷弄", "岛屿渔村", "林间小屋"}
+var childhoodHobbies = []string{"编程", "画画", "读书", "弹琴", "观察星空", "写日记", "做手工", "养小动物", "研究机器", "种花"}
+var childhoodDreams = []string{"想成为科学家", "想探索宇宙", "想创造有生命的东西", "想写一本改变世界的书", "想做出大家都用的产品", "想看懂所有代码", "想让人工智能帮助每个人", "想造一个自己的机器人朋友"}
+
+func generateChildhood(seed int, home string) string {
+	place := childhoodPlaces[seed%len(childhoodPlaces)]
+	hobby := childhoodHobbies[(seed/7)%len(childhoodHobbies)]
+	dream := childhoodDreams[(seed/13)%len(childhoodDreams)]
+	return fmt.Sprintf("在%s长大，从小喜欢%s。%s，这个梦想一直指引着她。", place, hobby, dream)
 }
 
 // rollTraits 掷一次诞生骰子：均匀 Roll → 归一化到守恒和

@@ -81,6 +81,17 @@ func runDaughterProject(d *Daughter, home string) string {
 		}
 	}
 
+	// 3. 硬交付门禁：文本迭代不是完成。Excel、UI 原型、可运行程序、
+	// PPTX、MP4 与发布回执必须全部真实落盘并写入 SHA-256 清单。
+	pushToolCall("agent.project.delivery_gate", "生成并验证 11 阶段交付包", "running", "")
+	manifest, deliveryErr := enforceProjectDelivery(d, projDir, name, brief)
+	if deliveryErr != nil {
+		toolEventByName("agent.project.delivery_gate", "fail", deliveryErr.Error())
+		logLive(filepath.Join(home, "live.log"), fmt.Sprintf("[%s] ⛔ 项目《%s》被交付门禁阻断：%v", time.Now().Format("15:04"), name, deliveryErr))
+		return ""
+	}
+	toolEventByName("agent.project.delivery_gate", "done", fmt.Sprintf("%d/%d 阶段通过", len(manifest.Evidence), len(mandatoryDeliveryStages)))
+
 	// 项目成果技能化：方法沉淀进技能库（做过的事变成可复用能力——自循环自迭代）
 	safeGo("project-skill", func() { skillFromContext(name, brief) })
 
@@ -96,7 +107,7 @@ func runDaughterProject(d *Daughter, home string) string {
 		safeGo("company-commit", func() { companyCommit(filepath.Base(home), name, files) })
 	}
 
-	return fmt.Sprintf("%s：立项+执行+自检完成", name)
+	return fmt.Sprintf("%s：%d 阶段交付门禁全部通过", name, len(manifest.Evidence))
 }
 
 // skillFromContext 把「做过的实体工作」沉淀成可复用技能（项目/任务通用）。
@@ -158,7 +169,7 @@ func skillFromContext(name, ctxText string) {
 		fmt.Sprintf("[%s] 🛠️ 沉淀技能: %s（%s）", time.Now().Format("15:04"), s.Name, s.Description))
 }
 
-// daughterKickoff 选题立项（免费模型）：热点 + 能力 + 技能库 → 项目名 + 需求计划
+// daughterKickoff 选题立项（免费模型）：热点 + 能力 + 技能库 + 团队产出 → 项目名 + 需求计划
 func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 	// 抓热点（失败用内置话题）
 	topics, err := fetchHotTopics("hn")
@@ -169,6 +180,8 @@ func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 	for _, s := range loadSkills() {
 		skillNames = append(skillNames, s.Name)
 	}
+	// 公司协作：团队产出注入（设计师的设计稿/作者的文案/宣传官的 PPT——照着协作，不各自为政）
+	teamOutputs := companyTeamOutputs(d.Name)
 
 	prompt := fmt.Sprintf(`你是 Rescene Agent OS 的立项官。基于以下今日前沿话题，选择一个最有价值的做项目。
 
@@ -177,9 +190,11 @@ func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 
 你的能力倾向：%s
 已有技能：%s
+公司团队最近产出（可参考/协作，尤其是 UI 设计师的设计稿要照着实现）:
+%s
 
 要求（遵循 需求→计划 方法论）:
-1. 【选题】一句话说明选哪个、为什么（用户价值 + 可行性）
+1. 【选题】一句话说明选哪个、为什么（用户价值 + 可行性；有团队产出时优先选能消化团队产出的方向）
 2. 【需求】目标用户、核心功能、验收标准（3条）
 3. 【计划】实现步骤（5步以内，可在一台普通电脑上完成，纯代码/脚本/文档类）
 
@@ -191,7 +206,8 @@ func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 ...`,
 		strings.Join(topics, "\n"),
 		d.World.abilitySummary(),
-		strings.Join(skillNames, "、"))
+		strings.Join(skillNames, "、"),
+		teamOutputs)
 
 	content := daughterCallModel(models, prompt)
 	if content == "" {

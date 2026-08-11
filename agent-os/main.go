@@ -58,6 +58,9 @@ func main() {
 		case "company-repo", "repo":
 			runCompanyRepo(os.Args[2:])
 			return
+		case "demo-delivery":
+			runDemoDelivery()
+			return
 		case "help", "--help", "-h":
 			printHelp()
 			return
@@ -168,7 +171,8 @@ func printHelp() {
   rescene reply        替你回复平台评论/私信（CSDN 等）
   rescene publish      一键发布文章到网文平台（晋江/番茄/纵横/17K/七猫/飞卢/咪咕/黑岩/掌阅/豆瓣）
   rescene edge-debug   让 Edge 常驻调试端口（cookie 自动读取，浏览器不关）
-    rescene company       多 Agent 公司（百人并行自转协作）
+  rescene company       多 Agent 公司（百人并行自转协作）
+  rescene demo-delivery 生成一套通过硬门槛的全链路演示项目
     rescene chrome-login  打开发布专用 Chrome
   rescene version      显示版本
   rescene help         显示帮助

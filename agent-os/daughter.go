@@ -32,6 +32,7 @@ type Daughter struct {
 	Silent      bool   // 楚门世界后台模式：不往终端打印（只写文件），避免破坏 REPL 界面
 	Role        string // 角色 key（多 agent 编排：公司角色名，空=普通女儿）
 	RolePrompt  string // 角色人设文本（注入决策 prompt，驱动行为倾向）
+	Name        string // 公司 agent 名字（writer-01 等，团队协作区分自己用）
 }
 
 // 蓝色 ANSI 颜色（女儿心情表情用）
