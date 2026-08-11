@@ -27,9 +27,13 @@ func NewDesktopApp() *DesktopApp {
 }
 
 func (a *DesktopApp) StartBackend() error {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	// 优先用固定端口 8080（聚合 API 文档写死的地址），被占时回退随机端口
+	listener, err := net.Listen("tcp", "127.0.0.1:8080")
 	if err != nil {
-		return fmt.Errorf("监听本机 API 端口失败: %w", err)
+		listener, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return fmt.Errorf("监听本机 API 端口失败: %w", err)
+		}
 	}
 	server := &http.Server{
 		Handler:           handler.NewAPIRouter(),
