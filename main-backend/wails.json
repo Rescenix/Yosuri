@@ -1,20 +1,20 @@
 {
-    "$schema":  "https://wails.io/schemas/config.v2.json",
-    "name":  "rescene",
-    "outputfilename":  "rescene",
-    "frontend:install":  "npm run install:app",
-    "frontend:build":  "npm run build",
-    "frontend:dev:watcher":  "npm run dev",
-    "frontend:dev:serverUrl":  "auto",
-    "author":  {
-                   "name":  "Rescenix",
-                   "email":  "3478556810@qq.com"
-               },
-    "info":  {
-                 "companyName":  "Rescenix",
-                 "productName":  "Rescene Agent",
-                 "productVersion":  "0.1.2",
-                 "copyright":  "Copyright 2026 Rescenix",
-                 "comments":  "Zero-friction local AI agent client"
-             }
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "rescene",
+  "outputfilename": "rescene",
+  "frontend:install": "npm run install:app",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Rescenix",
+    "email": "3478556810@qq.com"
+  },
+  "info": {
+    "companyName": "Rescenix",
+    "productName": "Rescene Agent",
+    "productVersion": "0.1.2",
+    "copyright": "Copyright 2026 Rescenix",
+    "comments": "Zero-friction local AI agent client"
+  }
 }
