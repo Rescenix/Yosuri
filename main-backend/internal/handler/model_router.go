@@ -120,6 +120,45 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·最快）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_nemotron_3_ultra", Vendor: "OpenCode Zen", Name: "Nemotron 3 Ultra（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "nemotron-3-ultra-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档）", Keyless: true, Reasoning: true},
+	// 2026-08-08 重新爬取 Zen /v1/models（61 模型，8 个 free 档）实测新增：
+	// longcat-2.0-free（全新可用）、laguna-s-2.1-free（恢复可用）；ling-3.0-tiny/flash-free 上游挂未收录
+	{ID: "free_zen_longcat_2_0", Vendor: "OpenCode Zen", Name: "Longcat 2.0（免费·新增）", Endpoint: "https://opencode.ai/zen/v1", Model: "longcat-2.0-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·2026-08-08 新增实测可用）", Keyless: true, Reasoning: true},
+	{ID: "free_zen_laguna_s_2_1", Vendor: "OpenCode Zen", Name: "Laguna S 2.1（免费·恢复）", Endpoint: "https://opencode.ai/zen/v1", Model: "laguna-s-2.1-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·2026-08-08 恢复可用）", Keyless: true, Reasoning: true},
+
+	// —— Kilo Gateway（api.kilo.ai/api/gateway，OpenAI 兼容）——
+	// 2026-08-08 发现：完全免 key 的聚合网关，349 个模型，免费档 200 RPH。
+	// 实测 6 个 :free 模型稳定可用（Nemotron 3 Ultra/Super/Nano、腾讯混元 Hy3、阶跃 step-3.7、Laguna）；
+	// 需浏览器 UA 过 Cloudflare（agent-os callModel 已带；main-backend 走 http 时也要带）。
+	{ID: "free_kilo_nemotron_3_ultra", Vendor: "Kilo Gateway", Name: "Nemotron 3 Ultra 550B（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "nvidia/nemotron-3-ultra-550b-a55b:free", KeyEnv: "", ParamsB: 550, Note: "Kilo 免 key 网关（免费档·550B 旗舰）", Keyless: true, Reasoning: true},
+	{ID: "free_kilo_nemotron_3_super", Vendor: "Kilo Gateway", Name: "Nemotron 3 Super 120B（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "nvidia/nemotron-3-super-120b-a12b:free", KeyEnv: "", ParamsB: 120, Note: "Kilo 免 key 网关（免费档）", Keyless: true, Reasoning: true},
+	{ID: "free_kilo_nemotron_nano_omni", Vendor: "Kilo Gateway", Name: "Nemotron Nano Omni 30B（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", KeyEnv: "", ParamsB: 30, Note: "Kilo 免 key 网关（免费档·30B 推理）", Keyless: true, Reasoning: true},
+	{ID: "free_kilo_tencent_hy3", Vendor: "Kilo Gateway", Name: "腾讯混元 Hy3（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "tencent/hy3:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key 网关（免费档·腾讯混元）", Keyless: true, Reasoning: true},
+	{ID: "free_kilo_step_3_7_flash", Vendor: "Kilo Gateway", Name: "阶跃 step-3.7-flash（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "stepfun/step-3.7-flash:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key 网关（免费档·阶跃）", Keyless: true, Reasoning: true},
+	{ID: "free_kilo_laguna_s_2_1", Vendor: "Kilo Gateway", Name: "Laguna S 2.1（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "poolside/laguna-s-2.1:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key 网关（免费档）", Keyless: true, Reasoning: true},
+
+	// —— Cerebras（api.cerebras.ai/v1，OpenAI 兼容）——
+	// 2026-08-08 接入：免费档 1M tokens/天（gpt-oss-120b 5 RPM / 30K TPM）。
+	// ⚠️ Cloudflare 地域风控：大陆 IP 直连被拒（error code 1009 实测），需海外出口。
+	{ID: "free_cerebras_gpt_oss_120b", Vendor: "Cerebras", Name: "GPT-OSS 120B（Cerebras·免费）", Endpoint: "https://api.cerebras.ai/v1", Model: "gpt-oss-120b", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 120, Note: "Cerebras 免费·1M tokens/天（大陆 IP 被 Cloudflare 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.cerebras.ai/"},
+	{ID: "free_cerebras_qwen3_235b", Vendor: "Cerebras", Name: "Qwen3-235B（Cerebras·免费）", Endpoint: "https://api.cerebras.ai/v1", Model: "qwen-3-235b-a22b-instruct-2507", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 235, Note: "Cerebras 免费·1M tokens/天（大陆 IP 被 Cloudflare 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.cerebras.ai/"},
+	{ID: "free_cerebras_glm_4_7", Vendor: "Cerebras", Name: "GLM-4.7（Cerebras·免费）", Endpoint: "https://api.cerebras.ai/v1", Model: "zai-glm-4.7", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 0, Note: "Cerebras 免费·1M tokens/天（大陆 IP 被 Cloudflare 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.cerebras.ai/"},
+
+	// —— 智谱 BigModel（open.bigmodel.cn/api/paas/v4，OpenAI 兼容）——
+	// 2026-08-08 接入：GLM Flash 系列永久免费（30 并发）。实测可用：
+	// glm-4.5-flash / glm-4.1v-thinking-flash / glm-4-flash-250414 ✅；
+	// glm-4.7-flash / glm-4.6v-flash 免费档访问量大（1305 稍后再试，也收录轮换）。
+	{ID: "free_zhipu_glm_4_7_flash", Vendor: "智谱 BigModel", Name: "GLM-4.7-Flash（永久免费）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.7-flash", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱永久免费·30 并发", ContextWindow: 200000, Reasoning: true, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
+	{ID: "free_zhipu_glm_4_5_flash", Vendor: "智谱 BigModel", Name: "GLM-4.5-Flash（永久免费）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.5-flash", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱永久免费·30 并发", ContextWindow: 128000, Reasoning: true, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
+	{ID: "free_zhipu_glm_4_1v_thinking", Vendor: "智谱 BigModel", Name: "GLM-4.1V-Thinking-Flash（免费）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.1v-thinking-flash", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱免费·识图", Vision: true, ContextWindow: 128000, Reasoning: true, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
+	{ID: "free_zhipu_glm_4_flash", Vendor: "智谱 BigModel", Name: "GLM-4-Flash（永久免费）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4-flash-250414", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱永久免费", ContextWindow: 128000, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
+	{ID: "free_zhipu_glm_4_6v_flash", Vendor: "智谱 BigModel", Name: "GLM-4.6V-Flash（免费·视觉）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.6v-flash", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱免费·识图", Vision: true, ContextWindow: 128000, Reasoning: true, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
+
+	// —— Groq（api.groq.com/openai/v1，OpenAI 兼容）——
+	// 2026-08-08 接入：免费档 30 RPM / 1000 RPD（gpt-oss-120b 等）。
+	// ⚠️ 地域风控：大陆 IP 直连 403 Forbidden（无 key/假 key/真 key 同码实测），需海外出口。
+	{ID: "free_groq_gpt_oss_120b", Vendor: "Groq", Name: "GPT-OSS 120B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "gpt-oss-120b", KeyEnv: "GROQ_API_KEY", ParamsB: 120, Note: "Groq 免费·30 RPM/1000 RPD（大陆 IP 403 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_gpt_oss_20b", Vendor: "Groq", Name: "GPT-OSS 20B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "gpt-oss-20b", KeyEnv: "GROQ_API_KEY", ParamsB: 20, Note: "Groq 免费·30 RPM/1000 RPD（大陆 IP 403 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_qwen3_32b", Vendor: "Groq", Name: "Qwen3-32B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "qwen3-32b", KeyEnv: "GROQ_API_KEY", ParamsB: 32, Note: "Groq 免费·30 RPM/1000 RPD（大陆 IP 403 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
 
 	// —— 本地 llama.cpp 已移除：维护 Vision 标签成本高于收益，识图模型由用户自行选择 ——
 
@@ -583,6 +622,9 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 		return "", nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	// 浏览器 UA 必带：OpenCode Zen / Kilo 等免 key 网关有 Cloudflare 防护，
+	// Go 默认 UA 会吃 403 error code 1010（2026-08-08 实测根因，agent-os 同修）。
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 	if b.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
@@ -661,6 +703,8 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 		return "", nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	// 浏览器 UA 必带：OpenCode Zen / Kilo 等免 key 网关有 Cloudflare 防护（2026-08-08 实测根因）。
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 	if b.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}

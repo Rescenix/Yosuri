@@ -131,6 +131,8 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, capturePreviewToolDef)
 	// arxiv_search：arXiv 论文检索/预览（alphaXiv 风格），Go 直连 API 免外部依赖
 	defs = append(defs, arxivToolDef)
+	// mambo_video：曼波视频一键生成（配音+字幕+素材匹配+ffmpeg 合成）
+	defs = append(defs, mamboToolDef)
 	return defs
 }
 
@@ -184,6 +186,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 			return nativeToolResult{}, err
 		}
 		return nativeToolResult{Text: text}, nil
+	case "mambo_video":
+		return callMamboVideo(ctx, argsJSON)
 	case "web_search":
 		return callFirecrawlSearch(ctx, argsJSON)
 	case "view_image":

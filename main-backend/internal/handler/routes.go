@@ -76,8 +76,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	// 创作工作台：文案成片（曼波视频一键生成 + 产物静态服务）
 	r.POST("/api/studio/mambo", HandleStudioMambo)
-		r.GET("/api/studio/files/:file", HandleStudioFiles)
-		r.POST("/api/translate", HandleTranslate)
+	r.GET("/api/studio/files/:file", HandleStudioFiles)
+	r.POST("/api/translate", HandleTranslate)
 
 	// 设置面板：技能库 / MCP 生态 / 用户档案（含自定义指令）
 	r.GET("/api/skills", HandleListSkills)
@@ -235,28 +235,44 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.PUT("/api/models/free-order", HandlePutFreeModelOrder)
 
 	// Rescene 聚合 API：OpenAI 兼容端点，聚合免费模型池 + 自定义提供方
-		r.POST("/v1/chat/completions", HandleAggregateChat)
-		r.GET("/v1/models", HandleAggregateModels)
+	r.POST("/v1/chat/completions", HandleAggregateChat)
+	r.GET("/v1/models", HandleAggregateModels)
 
-		// 共享池（公益免费）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
-			r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)
-			r.POST("/api/chat/shared-pool", HandleSharedPoolChat)
-			// 配额查询：本地网关路由前检查公益免费模型配额
-			r.GET("/api/shared-pool/quota", HandleSharedPoolQuotaProxy)
+	// 共享池（公益免费）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
+	r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)
+	r.POST("/api/chat/shared-pool", HandleSharedPoolChat)
+	// 配额查询：本地网关路由前检查公益免费模型配额
+	r.GET("/api/shared-pool/quota", HandleSharedPoolQuotaProxy)
 
 	r.Static("/images", "./public/images")
 
 	// 多平台发布（GUI 发布面板：网文平台一键发布 + Edge CDP cookie 自动化）
-		r.GET("/api/publish/platforms", HandlePublishPlatforms)
-		r.POST("/api/publish", HandlePublish)
-		r.POST("/api/publish/login-chrome", HandlePublishLoginChrome)
-		// 作品集列表（发布面板选文件用）
-		r.GET("/api/outputs/list", HandleOutputsList)
-			r.GET("/api/outputs/file", HandleOutputsFile)
-			// 公司管理面板（多 Agent 编排 GUI）
-			r.GET("/api/company/agents", HandleCompanyAgents)
-			r.GET("/api/company/agent", HandleCompanyAgent)
-			r.GET("/api/company/file", HandleCompanyFile)
-				// AI 写作工坊（输入主题 → AI 生成完整文章）
-				r.POST("/api/ai/write", HandleAIWrite)
-			}
+	r.GET("/api/publish/platforms", HandlePublishPlatforms)
+	r.POST("/api/publish", HandlePublish)
+	r.POST("/api/publish/login-chrome", HandlePublishLoginChrome)
+	// 作品集列表（发布面板选文件用）
+	r.GET("/api/outputs/list", HandleOutputsList)
+	r.GET("/api/outputs/file", HandleOutputsFile)
+	// 公司管理面板（多 Agent 编排 GUI）
+	r.GET("/api/company/agents", HandleCompanyAgents)
+	r.GET("/api/company/agent", HandleCompanyAgent)
+	r.GET("/api/company/file", HandleCompanyFile)
+	r.GET("/api/company/integrations", HandleCompanyIntegrations)
+	r.GET("/api/company/production-audit", HandleCompanyProductionAudit)
+	r.GET("/api/company/goals", HandleCompanyGoals)
+	r.POST("/api/company/goals", HandleCreateCompanyGoal)
+	r.GET("/api/company/goals/:id", HandleCompanyGoal)
+	r.POST("/api/company/goals/:id/run", HandleRunCompanyGoal)
+	r.POST("/api/company/goals/:id/decision", HandleCompanyGoalDecision)
+	r.GET("/api/company/goals/:id/artifacts/:artifactId", HandleCompanyArtifact)
+	r.GET("/api/company/os-stats", HandleCompanyOSStats)
+	// 审批工作台（用户只审批，不聊天）
+	r.GET("/api/company/approvals", HandleCompanyApprovals)
+	r.POST("/api/company/approve", HandleCompanyApprove)
+	r.GET("/api/company/approval-history", HandleCompanyApprovalHistory)
+	r.GET("/api/company/meetings", HandleCompanyMeetings)
+	// AI PPT 生成（看得见的幻灯片）
+	r.POST("/api/ai/ppt", HandleAIPPT)
+	// AI 项目工坊（写出真实可运行项目）
+	r.POST("/api/ai/project", HandleAIProject)
+}
