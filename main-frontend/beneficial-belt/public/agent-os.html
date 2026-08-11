@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Rescene Agent OS · 王者归来</title>
+<script src="https://unpkg.com/@iconify/vue@4/dist/iconify.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system,'PingFang SC','Microsoft YaHei',sans-serif; background: #0f0f1a; color: #fff; overflow-x: hidden; }
+.bg-grid { position: fixed; inset: 0; background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+.hero { position: relative; z-index: 1; text-align: center; padding: 60px 20px 30px; }
+.hero-badge { display: inline-flex; align-items: center; gap: 10px; padding: 10px 24px; border: 1px solid rgba(59,130,246,.3); border-radius: 999px; background: rgba(59,130,246,.08); font-size: 14px; color: #93c5fd; margin-bottom: 20px; }
+.hero-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 12px rgba(34,197,94,.4); animation: pulse 1.4s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.hero h1 { font-size: clamp(36px,6vw,72px); font-weight: 900; background: linear-gradient(135deg,#60a5fa,#a78bfa,#f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -.03em; }
+.hero p { color: #64748b; font-size: 16px; margin-top: 12px; }
+.stats-row { display: flex; justify-content: center; gap: 40px; margin-top: 30px; }
+.stat-item { text-align: center; }
+.stat-num { font-size: 36px; font-weight: 900; color: #fff; }
+.stat-lbl { font-size: 13px; color: #64748b; margin-top: 2px; }
+.dashboard { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 20px; }
+.dept-section { margin-bottom: 30px; }
+.dept-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 0 4px; }
+.dept-name { font-size: 18px; font-weight: 700; color: #e2e8f0; }
+.dept-count { font-size: 12px; color: #64748b; background: rgba(255,255,255,.06); padding: 3px 12px; border-radius: 999px; }
+.dept-badge { font-size: 11px; color: #22c55e; background: rgba(34,197,94,.12); padding: 3px 10px; border-radius: 999px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 14px; backdrop-filter: blur(8px); transition: all .2s; }
+.card.busy { border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.04); }
+.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.card-info { flex: 1; min-width: 0; }
+.card-info strong { display: block; font-size: 13px; color: #e2e8f0; }
+.card-role { font-size: 11px; color: #64748b; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #334155; flex-shrink: 0; }
+.status-dot.on { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.3); animation: pulse 1.2s infinite; }
+.card-doing { font-size: 11px; color: #94a3b8; padding: 5px 8px; background: rgba(0,0,0,.15); border-radius: 8px; margin-bottom: 8px; min-height: 24px; }
+.card-metrics { display: flex; gap: 4px; }
+.metric { flex: 1; text-align: center; background: rgba(0,0,0,.15); border-radius: 8px; padding: 5px 2px; }
+.metric-num { display: block; font-size: 18px; font-weight: 800; color: #e2e8f0; }
+.card.busy .metric-num { color: #22c55e; }
+.metric-lbl { display: block; font-size: 9px; color: #64748b; }
+.footer { position: relative; z-index: 1; text-align: center; padding: 30px; color: #334155; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    <span id="heroBadgeText">AGENT OS · 王者归来</span>
+  </div>
+  <h1>100 人 AI 公司</h1>
+  <p>24 小时自转 · 免费算力驱动 · 6 个部门协作</p>
+  <div class="stats-row">
+    <div class="stat-item"><div class="stat-num" id="totalAgents">0</div><div class="stat-lbl">AI 员工</div></div>
+    <div class="stat-item"><div class="stat-num" id="workingCount">0</div><div class="stat-lbl">工作中</div></div>
+    <div class="stat-item"><div class="stat-num" id="totalOutputs">0</div><div class="stat-lbl">完成任务</div></div>
+    <div class="stat-item"><div class="stat-num" id="totalSkills">0</div><div class="stat-lbl">掌握技能</div></div>
+  </div>
+</div>
+<div class="dashboard" id="dashboard"></div>
+<div class="footer">Rescene Agent OS · 2026</div>
+
+<script>
+const deptMeta = {
+  writer: { name:'作者部', icon:'ph:pen-nib-bold' },
+  researcher: { name:'研究部', icon:'mdi:microscope' },
+  coder: { name:'程序部', icon:'mdi:code-tags' },
+  designer: { name:'设计部', icon:'mdi:palette' },
+  publisher: { name:'发布部', icon:'mdi:bullhorn' },
+  promoter: { name:'宣传部', icon:'mdi:megaphone' },
+}
+
+function roleIcon(role) {
+  return deptMeta[role]?.icon || 'mdi:robot'
+}
+
+function isBusy(a) {
+  const log = a.recentLog || ''
+  return /🧠|⚙️|🔬|💻|🎨|📡|📣|调研|学习|写|精读|项目|任务/.test(log) && !/失败|未完成|熔断|429/.test(log)
+}
+
+function doingText(a) {
+  const log = a.recentLog || ''
+  const lines = log.split('\n').filter(Boolean)
+  const last = lines[lines.length-1] || ''
+  if (/失败|熔断|429|未完成|限流/.test(last)) return '⏳ 冷却中'
+  return last.replace(/^\[[^\]]*\]\s*/,'').replace(/·[^·]*$/,'').trim() || '待命中'
+}
+
+function calcTools(a) {
+  return Math.min((a.recentLog||'').match(/🧠|⚙️|🔬|💻|📡|🎨/g)?.length||0, 99)
+}
+
+function roleLabel(r) {
+  return deptMeta[r]?.name || r
+}
+
+async function load() {
+  try {
+    const [osR, agR] = await Promise.all([
+      fetch('/api/company/os-stats').then(r=>r.json()).catch(()=>({})),
+      fetch('/api/company/agents').then(r=>r.json()).catch(()=>({agents:[]}))
+    ])
+    document.getElementById('totalAgents').textContent = osR.totalAgents || 0
+    document.getElementById('workingCount').textContent = osR.workingCount || 0
+    document.getElementById('totalOutputs').textContent = osR.totalOutputs || 0
+    document.getElementById('totalSkills').textContent = osR.totalSkills || 0
+    document.getElementById('heroBadgeText').textContent = `AGENT OS · 王者归来 · ${osR.totalAgents||0} 人 · ${osR.workingCount||0} 工作中`
+
+    const agents = agR.agents || []
+    const map = {}
+    for (const k in deptMeta) map[k] = { ...deptMeta[k], agents:[] }
+    for (const a of agents) {
+      if (map[a.role]) map[a.role].agents.push(a)
+    }
+
+    const dash = document.getElementById('dashboard')
+    dash.innerHTML = ''
+    for (const [key, dept] of Object.entries(map)) {
+      if (!dept.agents.length && !['coder','designer','promoter'].includes(key)) continue
+      const sec = document.createElement('div')
+      sec.className = 'dept-section'
+      const working = dept.agents.some(isBusy)
+      sec.innerHTML = `<div class="dept-head"><span style="display:flex;align-items:center;gap:6px"><span class="dept-name">${dept.name}</span><span class="dept-count">${dept.agents.length} 人</span>${working?'<span class="dept-badge">工作中</span>':''}</span></div><div class="card-grid" id="grid-${key}"></div>`
+      dash.appendChild(sec)
+      const grid = sec.querySelector('.card-grid')
+      for (const a of dept.agents) {
+        const busy = isBusy(a)
+        const card = document.createElement('div')
+        card.className = 'card' + (busy ? ' busy' : '')
+        card.innerHTML = `<div class="card-head"><div class="card-info"><strong>${a.name}</strong><span class="card-role">${roleLabel(a.role)}</span></div><span class="status-dot${busy?' on':''}"></span></div><div class="card-doing">${doingText(a)}</div><div class="card-metrics"><div class="metric"><span class="metric-num">${a.outputs||0}</span><span class="metric-lbl">任务</span></div><div class="metric"><span class="metric-num">${a.skills||0}</span><span class="metric-lbl">技能</span></div><div class="metric"><span class="metric-num">${calcTools(a)}</span><span class="metric-lbl">工具</span></div></div>`
+        grid.appendChild(card)
+      }
+    }
+  } catch(e) {}
+}
+
+load()
+setInterval(load, 5000)
+</script>
+</body>
+</html>

@@ -3,6 +3,7 @@
     <div class="nav-content">
       <div class="nav-brand">
         <router-link to="/">星尘核心</router-link>
+        <router-link to="/studio" class="nav-studio">🎬 创作工作台</router-link>
       </div>
 
       <!-- 桌面端登录 -->
@@ -47,6 +48,22 @@ import AdminLogin from './shanxi/AdminLogin.vue'
   text-decoration: none;
   letter-spacing: -0.3px;
 }
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.nav-studio {
+  font-size: 0.95rem !important;
+  font-weight: 600;
+  color: var(--app-text-soft) !important;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border-soft);
+  background: color-mix(in srgb, var(--app-accent) 6%, transparent);
+  transition: color .15s, border-color .15s;
+}
+.nav-studio:hover { color: var(--app-accent) !important; border-color: var(--app-accent); }
 
 .nav-actions {
   display: flex;

@@ -5,17 +5,9 @@
       <Icon icon="mdi:chat" width="20" />
       <span class="tool-lbl">对话</span>
     </router-link>
-    <router-link to="/sync" class="app-tool-btn" title="部门协同工作台" active-class="active">
-      <Icon icon="mdi:account-multiple" width="20" />
-      <span class="tool-lbl">协同</span>
-    </router-link>
-    <router-link to="/company" class="app-tool-btn" title="公司管理" active-class="active">
-      <Icon icon="mdi:office-building" width="20" />
-      <span class="tool-lbl">公司</span>
-    </router-link>
-    <router-link to="/ai-write" class="app-tool-btn" title="AI 女儿们写小说" active-class="active">
-      <Icon icon="mdi:pen" width="20" />
-      <span class="tool-lbl">写作</span>
+    <router-link to="/company" class="app-tool-btn" title="公司目标与协作" active-class="active">
+      <Icon icon="mdi:target-arrow" width="20" />
+      <span class="tool-lbl">目标</span>
     </router-link>
     <router-link to="/publish" class="app-tool-btn" title="多平台一键发布" active-class="active">
       <Icon icon="mdi:rocket-launch" width="20" />

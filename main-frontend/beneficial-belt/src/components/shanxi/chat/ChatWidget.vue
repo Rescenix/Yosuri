@@ -1035,6 +1035,7 @@ import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
 import 'katex/dist/katex.min.css'
 import { renderMarkdown } from './markdownRenderer.js'
+import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
 import UserMessageRail from './UserMessageRail.vue'
@@ -2959,7 +2960,7 @@ function handleSend() {
           const res = await fetch('/api/auth/uid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ device_id: deviceId })
+            body: JSON.stringify({ device_id: deviceId, fingerprint: computeHardwareFingerprint() })
           })
           if (res.ok) {
             const data = await res.json()

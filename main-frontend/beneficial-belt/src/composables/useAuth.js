@@ -7,6 +7,7 @@
 //   - 登录：refresh 成功后调 /api/auth/uid/bind，把游客 UID 升级为正式账号，
 //     此后换设备/清缓存重新登录即恢复同一 UID —— 用户才会珍惜账号。
 import { ref, computed, readonly } from 'vue'
+import { computeHardwareFingerprint } from '../utils/hardwareFingerprint.js'
 
 const isLoggedIn = ref(false)
 const login = ref('')   // GitHub 登录名
@@ -33,12 +34,16 @@ function getDeviceId() {
 }
 
 // 向 cloud 请求/取回本设备 UID：同一 device_id 恒定返回同一 UID（幂等）。
+// 附带硬件指纹（清缓存不变，云端可识别同一台机器）。
 async function fetchUid() {
   try {
     const res = await fetch('/api/auth/uid', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_id: getDeviceId() })
+      body: JSON.stringify({
+        device_id: getDeviceId(),
+        fingerprint: computeHardwareFingerprint()
+      })
     })
     if (res.ok) {
       const data = await res.json()

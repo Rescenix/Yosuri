@@ -5,7 +5,9 @@ import { dirname, resolve } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const apiTarget = process.env.AURORA_API_TARGET || 'http://localhost:8080';
+// 8080 may still be occupied by an older elevated desktop build. Keep the
+// development/demo UI on the current audited backend without changing URLs.
+const apiTarget = process.env.AURORA_API_TARGET || 'http://localhost:8081';
 
 export default defineConfig({
   plugins: [vue()],

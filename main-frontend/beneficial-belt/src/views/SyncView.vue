@@ -1,13 +1,25 @@
 <template>
   <main class="sync-view">
+    <!-- 王者归来 Banner -->
+    <div class="sv-battle-banner">
+      <div class="sv-banner-inner">
+        <span class="sv-banner-crown">⚡</span>
+        <div class="sv-banner-text">
+          <span class="sv-banner-title">AGENT OS · 王者归来</span>
+          <span class="sv-banner-sub">100 个 AI 员工 · 24H 不眠不休 · 免费算力驱动</span>
+        </div>
+        <span class="sv-banner-live" :class="{ on: anyWorking }">LIVE {{ workingCount }} 工作中</span>
+      </div>
+    </div>
+
     <header class="sv-header">
       <div class="sv-title-row">
-        <h1>AI 公司 · 部门协同工作台</h1>
+        <h1>Rescene Agent OS · 100 人公司</h1>
         <div class="sv-live" :class="{ on: anyWorking }">
           <span class="live-dot"></span> LIVE · {{ workingCount }}/{{ agents.length }} 工作中
         </div>
       </div>
-      <p class="sub">分部门协作 · 实时同步 · 点击产出实时预览</p>
+      <p class="sub">６个部门协同 · 24H 自转 · 免费算力池 · 每 3 秒实时刷新</p>
     </header>
 
     <!-- 全局统计 -->
@@ -50,7 +62,8 @@
           </div>
           <div v-if="a.files && a.files.length" class="sv-files">
             <button v-for="f in a.files" :key="f" class="sv-file" :title="f" @click="previewFile(a, f)">
-              <Icon icon="mdi:file-document-outline" width="12" /> {{ f }}
+              <span class="sv-file-type">{{ fileType(f) }}</span>
+              <span class="sv-file-name">{{ f }}</span>
             </button>
           </div>
           <div class="sv-agent-stats">
@@ -89,7 +102,7 @@
           <span class="pv-title">{{ preview.agent }} · {{ preview.file }}</span>
           <button class="pv-close" @click="preview = null"><Icon icon="mdi:close" width="16" /></button>
         </div>
-        <pre class="pv-content">{{ preview.content }}</pre>
+        <pre class="pv-content">{{ renderPreview(preview.content) }}</pre>
       </div>
     </div>
   </main>
@@ -108,7 +121,9 @@ const deptMeta = {
   writer: { key: 'writer', name: '作者部', icon: 'ph:pen-nib-bold', color: '#f59e0b' },
   researcher: { key: 'researcher', name: '研究部', icon: 'mdi:microscope', color: '#3b82f6' },
   coder: { key: 'coder', name: '程序部', icon: 'mdi:code-tags', color: '#8b5cf6' },
+  designer: { key: 'designer', name: '设计部', icon: 'mdi:palette', color: '#ec4899' },
   publisher: { key: 'publisher', name: '发布部', icon: 'mdi:bullhorn', color: '#ef4444' },
+  promoter: { key: 'promoter', name: '宣传部', icon: 'mdi:megaphone', color: '#14b8a6' },
 }
 
 const departments = computed(() => {
@@ -133,15 +148,46 @@ const totalSkills = computed(() => agents.value.reduce((s, a) => s + (a.skills |
 
 function isWorking(a) {
   const log = a.recentLog || ''
-  return /🧠|✍️|🔬|💻|📡|⚙️|调研|学习|写|精读|项目|任务/.test(log) && !/失败|未完成|未成功|熔断|429/.test(log)
+  return /🧠|✍️|🔬|💻|🎨|📡|📣|⚙️|调研|学习|写|精读|项目|任务|宣传|推广/.test(log) && !/失败|未完成|未成功|熔断|429/.test(log)
 }
 
 function doingText(a) {
   const log = a.recentLog || ''
   const lines = log.split('\n').filter(Boolean)
   const last = lines[lines.length - 1] || ''
+  // 错误状态 → 友好化（不显示 429/熔断原文，败兴）
+  if (/失败|熔断|429|未成功|未完成|限流/.test(last)) return '⚡ 充电中…'
   const clean = last.replace(/^\[[^\]]*\]\s*/, '').replace(/·[^·]*$/, '').trim()
   return clean || '待命中'
+}
+
+// 产出类型标签（按文件名前缀）
+function fileType(f) {
+  if (f.startsWith('学习')) return '📖 学习'
+  if (f.startsWith('调研')) return '🔍 调研'
+  if (f.startsWith('文章')) return '✍️ 文章'
+  if (f.startsWith('任务')) return '⚙️ 任务'
+  if (f.startsWith('今日目标')) return '🎯 目标'
+  if (f.startsWith('计划')) return '📋 计划'
+  if (f.startsWith('需求')) return '📐 需求'
+  if (f.startsWith('日报')) return '📊 日报'
+  if (f.endsWith('.pptx') || f.endsWith('.ppt')) return '📽️ PPT'
+  return '📄 文档'
+}
+
+// 预览：渲染 md 为可读内容（标题/段落/列表），不是 raw 源码
+function renderPreview(text) {
+  return text
+    .split('\n')
+    .map(l => {
+      const t = l.trim()
+      if (t.startsWith('## ')) return '\n【' + t.replace(/^##\s*/, '') + '】'
+      if (t.startsWith('# ')) return '\n【' + t.replace(/^#\s*/, '') + '】'
+      if (t.startsWith('**')) return t.replace(/\*\*/g, '')
+      return l
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
 }
 
 // 点击产出文件 → 实时预览（读 /api/company/file）
@@ -163,11 +209,19 @@ async function loadAgents() {
     for (const a of agents.value) {
       const lines = (a.recentLog || '').split('\n').filter(Boolean)
       for (const line of lines.slice(-2)) {
+        // 错误事件友好化（不显示 429/熔断原文）
+        const friendly = line.replace(/^\[[^\]]*\]\s*/, '')
+        if (/失败|熔断|429|未成功|未完成|限流/.test(friendly)) {
+          if (seen.has(a.name + '|⚡充电')) continue
+          seen.add(a.name + '|⚡充电')
+          events.value.unshift({ role: a.role, name: a.name, time: '', text: '⚡ 充电中…' })
+          continue
+        }
         const key = a.name + '|' + line
         if (!seen.has(key)) {
           seen.add(key)
           const t = (line.match(/\[([^\]]*)\]/) || [])[1] || ''
-          const text = line.replace(/^\[[^\]]*\]\s*/, '').slice(0, 46)
+          const text = friendly.slice(0, 46)
           events.value.unshift({ role: a.role, name: a.name, time: t, text })
         }
       }
@@ -178,7 +232,7 @@ async function loadAgents() {
 
 let timer
 onMounted(() => {
-  document.title = '杉汐 | 部门协同工作台'
+  document.title = 'Rescene Agent OS · 王者归来'
   loadAgents()
   timer = setInterval(loadAgents, 3000)
 })
@@ -193,6 +247,31 @@ onUnmounted(() => { clearInterval(timer) })
   background: #f5f7fa;
   color: #333;
 }
+
+/* 王者归来 Banner */
+.sv-battle-banner {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border-radius: 16px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+}
+.sv-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+}
+.sv-banner-crown {
+  font-size: 32px;
+  animation: crownPulse 2s infinite;
+}
+@keyframes crownPulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.15) } }
+.sv-banner-text { flex: 1; }
+.sv-banner-title { display: block; font-size: 20px; font-weight: 800; color: #fff; letter-spacing: 2px; }
+.sv-banner-sub { display: block; font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.sv-banner-live { font-size: 12px; font-weight: 700; color: #22c55e; background: rgba(34,197,94,.15); border: 1px solid rgba(34,197,94,.3); padding: 6px 16px; border-radius: 999px; white-space: nowrap; }
+.sv-banner-live.on { box-shadow: 0 0 12px rgba(34,197,94,.2); }
 .sv-header h1 { margin: 0; font-size: 24px; color: #1a1a2e; }
 .sv-title-row { display: flex; align-items: center; justify-content: space-between; }
 .sv-live { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; background: #fff; border: 1px solid #e5e7eb; padding: 4px 12px; border-radius: 999px; }
@@ -230,8 +309,10 @@ onUnmounted(() => { clearInterval(timer) })
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg) } }
 .sv-files { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-.sv-file { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 999px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-file { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 8px; cursor: pointer; max-width: 100%; }
 .sv-file:hover { background: #dbeafe; }
+.sv-file-type { font-size: 10px; color: #1d4ed8; font-weight: 600; }
+.sv-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
 .sv-agent-stats { display: flex; gap: 12px; font-size: 12px; color: #6b7280; }
 
 .sv-timeline h3 { font-size: 16px; margin: 0 0 14px; color: #1a1a2e; }
