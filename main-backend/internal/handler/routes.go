@@ -200,6 +200,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 亲密度（无上限互动值）：云端权威存储，re0 透传 + 本地缓存
 	r.POST("/api/auth/intimacy/inc", CloudIntimacyIncProxy)
 	r.GET("/api/auth/intimacy", CloudIntimacyGetProxy)
+	r.GET("/api/evolve/me", HandleEvolveMe)
+	r.GET("/api/evolve/events", HandleEvolveEvents)
 	// 主页统计云端账本（热力图 + 模型数据，按 uid 累计）：re0 透传
 	r.POST("/api/stats/inc", CloudStatsIncProxy)
 	r.GET("/api/stats", CloudStatsGetProxy)
@@ -218,6 +220,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 自动更新：启动时检查 GitHub 最新 release，有新版则前端弹窗提示更新内容
 	r.GET("/api/update/check", HandleCheckUpdate)
 	r.POST("/api/update/open", HandleOpenUpdateDownload)
+	// 后台自动下载安装包 + 进度 + 拉起安装程序
+	r.POST("/api/update/download", HandleAutoDownload)
+	r.GET("/api/update/download/status", HandleUpdateDownloadStatus)
+	r.POST("/api/update/install", HandleInstallUpdate)
 
 	// 定时任务：前端 ScheduledTaskModal 创建 → 调度器到点弹 Windows 原生通知（右下角）
 	r.POST("/api/cron/create", HandleCronCreate)
@@ -259,6 +265,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/company/file", HandleCompanyFile)
 	r.GET("/api/company/integrations", HandleCompanyIntegrations)
 	r.GET("/api/company/production-audit", HandleCompanyProductionAudit)
+	r.GET("/api/company/evolve", HandleCompanyEvolve)
 	r.GET("/api/company/goals", HandleCompanyGoals)
 	r.POST("/api/company/goals", HandleCreateCompanyGoal)
 	r.GET("/api/company/goals/:id", HandleCompanyGoal)
@@ -271,6 +278,15 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/company/approve", HandleCompanyApprove)
 	r.GET("/api/company/approval-history", HandleCompanyApprovalHistory)
 	r.GET("/api/company/meetings", HandleCompanyMeetings)
+	// 公司标签系统（调研方向 + 热门标签云端维护）
+	r.GET("/api/company/tags", HandleCompanyTags)
+	r.POST("/api/company/tags", HandleCompanyAddTag)
+	r.DELETE("/api/company/tags/:id", HandleCompanyDeleteTag)
+	// 迭代计划（预设：从已审批项目选，每天调研前沿技术迭代产品）
+	r.GET("/api/company/iterate", HandleCompanyIterate)
+	r.POST("/api/company/iterate", HandleCompanyIterateStart)
+	r.POST("/api/company/iterate/stop", HandleCompanyIterateStop)
+	r.GET("/api/company/tags/hot", HandleCompanyHotTags)
 	// AI PPT 生成（看得见的幻灯片）
 	r.POST("/api/ai/ppt", HandleAIPPT)
 	// AI 项目工坊（写出真实可运行项目）

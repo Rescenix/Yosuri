@@ -3,8 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -183,6 +187,167 @@ func HandleOpenUpdateDownload(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// ============ 自动下载安装包（后台） ============
+
+// updateDownloadState 记录后台下载进度，供前端轮询。
+type updateDownloadState struct {
+	mu        sync.Mutex
+	State     string  `json:"state"` // idle | downloading | done | error
+	DoneBytes int64   `json:"done_bytes"`
+	TotalBytes int64  `json:"total_bytes"`
+	Percent   float64 `json:"percent"`
+	Path      string  `json:"path"`
+	ErrMsg    string  `json:"error"`
+}
+
+var updateDL = &updateDownloadState{State: "idle"}
+
+// updateSetupFileName 安装包文件名（与官网下载页一致）。
+const updateSetupFileName = "Rescene-windows-amd64-setup.exe"
+
+// HandleAutoDownload 触发后台下载最新安装包。
+// 下载目录：%LOCALAPPDATA%\Rescene\updates\（用户可写，不必管理员权限）。
+// 重复调用不重复下载：已 done 直接返回；正在下返回进行中。
+func HandleAutoDownload(c *gin.Context) {
+	updateDL.mu.Lock()
+	if updateDL.State == "done" {
+		updateDL.mu.Unlock()
+		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "done", "path": updateDL.Path})
+		return
+	}
+	if updateDL.State == "downloading" {
+		updateDL.mu.Unlock()
+		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "downloading"})
+		return
+	}
+	updateDL.State = "downloading"
+	updateDL.DoneBytes = 0
+	updateDL.TotalBytes = 0
+	updateDL.Percent = 0
+	updateDL.ErrMsg = ""
+	updateDL.mu.Unlock()
+
+	go func() {
+		err := downloadInstaller()
+		updateDL.mu.Lock()
+		defer updateDL.mu.Unlock()
+		if err != nil {
+			updateDL.State = "error"
+			updateDL.ErrMsg = err.Error()
+			return
+		}
+		updateDL.State = "done"
+	}()
+	c.JSON(http.StatusOK, gin.H{"ok": true, "state": "downloading"})
+}
+
+// HandleUpdateDownloadStatus 返回下载进度。
+func HandleUpdateDownloadStatus(c *gin.Context) {
+	updateDL.mu.Lock()
+	defer updateDL.mu.Unlock()
+	c.JSON(http.StatusOK, gin.H{
+		"ok":          updateDL.State != "error",
+		"state":       updateDL.State,
+		"done_bytes":  updateDL.DoneBytes,
+		"total_bytes": updateDL.TotalBytes,
+		"percent":     math.Round(updateDL.Percent*10) / 10,
+		"path":        updateDL.Path,
+		"error":       updateDL.ErrMsg,
+	})
+}
+
+// downloadInstaller 流式下载安装包到本地并更新进度。
+func downloadInstaller() error {
+	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		return err
+	}
+	dest := filepath.Join(localDir, updateSetupFileName)
+
+	// 若已存在同版本安装包且非 0 字节，直接复用（跳过重复下载）
+	if fi, err := os.Stat(dest); err == nil && fi.Size() > 1024*1024 {
+		updateDL.mu.Lock()
+		updateDL.Path = dest
+		updateDL.mu.Unlock()
+		return nil
+	}
+
+	client := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := client.Get(updateDownloadURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("下载安装包失败：HTTP %d", resp.StatusCode)
+	}
+
+	out, err := os.Create(dest + ".part")
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	total := resp.ContentLength
+	buf := make([]byte, 64*1024)
+	var done int64
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := out.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			done += int64(n)
+			updateDL.mu.Lock()
+			updateDL.DoneBytes = done
+			updateDL.TotalBytes = total
+			if total > 0 {
+				updateDL.Percent = float64(done) / float64(total) * 100
+			}
+			updateDL.mu.Unlock()
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return rerr
+		}
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(dest+".part", dest); err != nil {
+		return err
+	}
+
+	updateDL.mu.Lock()
+	updateDL.Path = dest
+	updateDL.mu.Unlock()
+	return nil
+}
+
+// HandleInstallUpdate 启动已下载的安装程序（用户确认后调用）。
+// 安装程序会自行处理覆盖/重启，这里只负责拉起，不做静默。
+func HandleInstallUpdate(c *gin.Context) {
+	updateDL.mu.Lock()
+	state, path := updateDL.State, updateDL.Path
+	updateDL.mu.Unlock()
+	if state != "done" || path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "安装包尚未就绪"})
+		return
+	}
+	if _, err := os.Stat(path); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "安装包文件不存在"})
+		return
+	}
+	cmd := exec.Command(path)
+	if err := cmd.Start(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "启动安装程序失败：" + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "path": path})
 }
 
 // versionRe 匹配完整 SemVer（含预发布与构建元数据）。tag 可能带代号前缀，

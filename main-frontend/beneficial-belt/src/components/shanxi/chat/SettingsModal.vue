@@ -647,13 +647,38 @@
                 <div v-else class="memory-empty">{{ versionInfo.has_update ? '本次更新没有附带更新说明。' : '—' }}</div>
               </div>
 
-              <div class="profile-actions" style="margin-top: 14px;">
+              <div class="profile-actions" style="margin-top: 14px; align-items: center;">
                 <button
                   class="api-form-btn save"
                   type="button"
-                  @click="openUpdate"
-                  :disabled="!versionInfo.has_update || versionOpening"
-                >{{ versionOpening ? '正在打开…' : '去官网更新' }}</button>
+                  v-if="dlState === 'idle'"
+                  @click="startAutoDownload"
+                  :disabled="!versionInfo.has_update || dlWorking"
+                >{{ dlWorking ? '开始下载…' : '一键更新' }}</button>
+                <button
+                  class="api-form-btn save"
+                  type="button"
+                  v-else-if="dlState === 'downloading'"
+                  @click="startAutoDownload"
+                  disabled
+                >下载中 {{ dlPercent }}%</button>
+                <button
+                  class="api-form-btn save"
+                  type="button"
+                  v-else-if="dlState === 'done'"
+                  @click="installUpdate"
+                  :disabled="dlWorking"
+                >{{ dlWorking ? '正在启动…' : '一键安装' }}</button>
+                <button
+                  class="api-form-btn save"
+                  type="button"
+                  v-else-if="dlState === 'error'"
+                  @click="startAutoDownload"
+                >重试下载</button>
+                <div v-if="dlState === 'downloading'" class="update-progress" style="flex:1; margin-left:12px;">
+                  <div class="update-progress-bar" :style="{ width: dlPercent + '%' }"></div>
+                </div>
+                <span v-else-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
                 <label class="param-switch" style="margin-left: auto;" title="关闭后启动不再检查/弹窗提示更新">
                   <input type="checkbox" v-model="notifyDisabled" @change="onNotifyDisabledChange" />
                   <span class="param-switch-track"></span>
@@ -1425,9 +1450,14 @@ async function saveProfile() {
 
 // ============ 版本与更新 ============
 const versionLoading = ref(false)
-const versionOpening = ref(false)
 const versionInfo = ref({})
 const notifyDisabled = ref(isUpdateNotifyDisabled())
+// 自动下载状态：idle | downloading | done | error
+const dlState = ref('idle')
+const dlPercent = ref(0)
+const dlError = ref('')
+const dlWorking = ref(false)
+let dlTimer = null
 
 async function loadVersion() {
   versionLoading.value = true
@@ -1441,29 +1471,85 @@ async function loadVersion() {
     versionInfo.value = {}
   } finally {
     versionLoading.value = false
+    // 检测到新版本且未关闭提示 → 自动开始后台下载
+    if (versionInfo.value.has_update && !notifyDisabled.value && dlState.value === 'idle') {
+      startAutoDownload()
+    }
+  }
+}
+
+async function startAutoDownload() {
+  dlWorking.value = true
+  dlError.value = ''
+  try {
+    const res = await fetch('/api/update/download', { method: 'POST' })
+    if (res.ok) {
+      const d = await res.json()
+      if (d.state === 'done') {
+        dlState.value = 'done'
+        dlPercent.value = 100
+      } else {
+        dlState.value = 'downloading'
+        pollDownloadStatus()
+      }
+    } else {
+      dlState.value = 'error'
+      dlError.value = '触发下载失败'
+    }
+  } catch (e) {
+    dlState.value = 'error'
+    dlError.value = '网络异常'
+  } finally {
+    dlWorking.value = false
+  }
+}
+
+async function pollDownloadStatus() {
+  if (dlTimer) clearInterval(dlTimer)
+  dlTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/update/download/status')
+      if (!res.ok) return
+      const d = await res.json()
+      if (d.state === 'downloading') {
+        dlState.value = 'downloading'
+        dlPercent.value = Math.round(d.percent || 0)
+      } else if (d.state === 'done') {
+        dlState.value = 'done'
+        dlPercent.value = 100
+        clearInterval(dlTimer)
+        dlTimer = null
+      } else if (d.state === 'error') {
+        dlState.value = 'error'
+        dlError.value = d.error || '下载失败'
+        clearInterval(dlTimer)
+        dlTimer = null
+      }
+    } catch (e) { /* 轮询失败忽略，下次再试 */ }
+  }, 800)
+}
+
+async function installUpdate() {
+  dlWorking.value = true
+  try {
+    const res = await fetch('/api/update/install', { method: 'POST' })
+    if (res.ok) {
+      dlState.value = 'done'
+    } else {
+      const d = await res.json().catch(() => ({}))
+      dlError.value = d.error || '启动安装失败'
+      dlState.value = 'error'
+    }
+  } catch (e) {
+    dlError.value = '启动安装失败'
+    dlState.value = 'error'
+  } finally {
+    dlWorking.value = false
   }
 }
 
 function onNotifyDisabledChange() {
   setUpdateNotifyDisabled(notifyDisabled.value)
-}
-
-async function openUpdate() {
-  const url = versionInfo.value.download_url || versionInfo.value.release_url
-  if (!url) return
-  versionOpening.value = true
-  try {
-    const res = await fetch('/api/update/open', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url })
-    })
-    if (!res.ok) window.open(url, '_blank')
-  } catch (e) {
-    window.open(url, '_blank')
-  } finally {
-    versionOpening.value = false
-  }
 }
 
 function handleEsc(e) {
@@ -1481,6 +1567,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('keydown', handleEsc)
   window.removeEventListener('model-config-changed', loadConfigs)
+  if (dlTimer) clearInterval(dlTimer)
 })
 </script>
 
@@ -2022,6 +2109,20 @@ onUnmounted(() => {
 }
 .version-value { color: var(--app-text); font-size: 12.5px; font-weight: 600; }
 .version-new { color: var(--app-accent); }
+.update-progress {
+  height: 8px;
+  background: var(--app-bg-soft, rgba(128,128,128,.15));
+  border-radius: 999px;
+  overflow: hidden;
+  min-width: 120px;
+}
+.update-progress-bar {
+  height: 100%;
+  background: var(--app-accent);
+  border-radius: 999px;
+  transition: width .3s ease;
+}
+.update-err { color: #e5484d; font-size: 12.5px; word-break: break-all; }
 .update-notes {
   flex: 1;
   min-height: 0;

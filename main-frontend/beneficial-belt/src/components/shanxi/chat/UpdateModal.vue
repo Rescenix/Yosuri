@@ -21,17 +21,37 @@
 
       <div class="update-modal-footer">
         <button class="update-modal-btn ghost" type="button" @click="$emit('close')">稍后再说</button>
-        <button class="update-modal-btn ghost" type="button" @click="onSkip">跳过此版本</button>
-        <button class="update-modal-btn primary" type="button" :disabled="opening" @click="onDownload">
-          {{ opening ? '正在打开…' : '去下载新版' }}
-        </button>
+        <button class="update-modal-btn ghost" type="button" @click="onSkip" :disabled="downloading">跳过此版本</button>
+        <button
+          v-if="dlState === 'done'"
+          class="update-modal-btn primary"
+          type="button"
+          :disabled="opening"
+          @click="onInstall"
+        >{{ opening ? '正在启动…' : '一键安装' }}</button>
+        <button
+          v-else-if="dlState === 'downloading'"
+          class="update-modal-btn primary"
+          type="button"
+          disabled
+        >后台下载中 {{ dlPercent }}%…</button>
+        <button
+          v-else
+          class="update-modal-btn primary"
+          type="button"
+          @click="onInstall"
+        >{{ dlState === 'error' ? '重试下载' : '开始下载' }}</button>
       </div>
+      <div v-if="dlState === 'downloading'" class="update-modal-progress">
+        <div class="update-modal-progress-bar" :style="{ width: dlPercent + '%' }"></div>
+      </div>
+      <div v-else-if="dlState === 'error'" class="update-modal-dlerr">{{ dlError }}</div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { renderMarkdown } from './markdownRenderer.js'
 import { setSkippedVersion } from '../../../composables/updatePrefs.js'
 
@@ -41,6 +61,10 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const opening = ref(false)
+const dlState = ref('downloading') // downloading | done | error
+const dlPercent = ref(0)
+const dlError = ref('')
+let dlTimer = null
 
 const renderedNotes = computed(() => renderMarkdown(props.update.release_notes || ''))
 
@@ -56,23 +80,79 @@ function onSkip() {
   emit('close')
 }
 
-async function onDownload() {
+// 挂载即后台自动下载（安装包 20MB 级别，几秒到几十秒完成）
+onMounted(() => {
+  startDownload()
+})
+
+async function startDownload() {
+  dlState.value = 'downloading'
+  dlError.value = ''
+  try {
+    const res = await fetch('/api/update/download', { method: 'POST' })
+    if (!res.ok) throw new Error('触发失败')
+    const d = await res.json()
+    if (d.state === 'done') {
+      dlState.value = 'done'
+      dlPercent.value = 100
+      return
+    }
+  } catch {
+    dlState.value = 'error'
+    dlError.value = '下载失败，请检查网络'
+    return
+  }
+  pollStatus()
+}
+
+function pollStatus() {
+  if (dlTimer) clearInterval(dlTimer)
+  dlTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/update/download/status')
+      if (!res.ok) return
+      const d = await res.json()
+      if (d.state === 'downloading') {
+        dlState.value = 'downloading'
+        dlPercent.value = Math.round(d.percent || 0)
+      } else if (d.state === 'done') {
+        dlState.value = 'done'
+        dlPercent.value = 100
+        clearInterval(dlTimer)
+        dlTimer = null
+      } else if (d.state === 'error') {
+        dlState.value = 'error'
+        dlError.value = d.error || '下载失败'
+        clearInterval(dlTimer)
+        dlTimer = null
+      }
+    } catch { /* 轮询失败忽略 */ }
+  }, 800)
+}
+
+// 一键安装：直接拉起本地已下载的安装程序
+async function onInstall() {
   opening.value = true
   try {
-    // 安装器直链优先，无直链时回退 release 页面；由后端打开系统浏览器
-    const url = props.update.download_url || props.update.release_url
-    const res = await fetch('/api/update/open', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url })
-    })
-    if (!res.ok) window.open(url, '_blank')
+    const res = await fetch('/api/update/install', { method: 'POST' })
+    if (res.ok) {
+      emit('close')
+    } else {
+      const d = await res.json().catch(() => ({}))
+      dlError.value = d.error || '启动安装失败'
+      dlState.value = 'error'
+    }
   } catch {
-    window.open(props.update.release_url, '_blank')
+    dlError.value = '启动安装失败'
+    dlState.value = 'error'
   } finally {
     opening.value = false
   }
 }
+
+onUnmounted(() => {
+  if (dlTimer) clearInterval(dlTimer)
+})
 </script>
 
 <style scoped>
@@ -222,4 +302,23 @@ async function onDownload() {
 }
 .update-modal-btn.primary:hover { background: var(--app-accent-hover); }
 .update-modal-btn.primary:disabled { cursor: default; opacity: 0.6; }
+.update-modal-progress {
+  height: 6px;
+  margin: 0 20px 14px;
+  background: var(--app-surface-3, rgba(128,128,128,.18));
+  border-radius: 999px;
+  overflow: hidden;
+}
+.update-modal-progress-bar {
+  height: 100%;
+  background: var(--app-accent);
+  border-radius: 999px;
+  transition: width .3s ease;
+}
+.update-modal-dlerr {
+  margin: 0 20px 14px;
+  color: #e5484d;
+  font-size: 12px;
+  text-align: right;
+}
 </style>
