@@ -38,7 +38,8 @@ type providerModelList struct {
 var freeCatalogMu sync.Mutex
 
 func disableFreeModel(model string) {
-	if model == "" {
+	if model == "" || isProtectedModel(model) {
+		// DeepSeek 系受保护模型永不淘汰（核心卖点，见 free_probe.go isProtectedModel）
 		return
 	}
 	freeCatalogMu.Lock()
@@ -151,7 +152,9 @@ func providerListRefreshOnce() {
 					fmt.Printf("✅ [提供方重探] 恢复可用: %s (%s)\n", f.ID, f.Model)
 				}
 			} else {
-				if !f.Disabled {
+				if !f.Disabled && !isProtectedModel(f.Model) {
+					// DeepSeek 系受保护模型不因重探短暂缺位而下架（核心卖点，
+					// 上游可能临时改 ID 或限流；见 free_probe.go isProtectedModel）
 					f.Disabled = true
 					disabled++
 					fmt.Printf("🚫 [提供方重探] 标记退役(下架): %s (%s)\n", f.ID, f.Model)

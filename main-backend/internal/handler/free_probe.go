@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -38,7 +39,45 @@ var (
 	// lastUsedAt 记录每个免费条目最近一次真实请求成功的时刻（LRU 新鲜度）。
 	lastUsedMu     sync.Mutex
 	lastUsedAt     = map[string]time.Time{}
+	// autoDisabled 记录自动发现模型（auto_ 前缀）的确定性不可用标记：
+	// key = endpoint|model（与 probeStates 同键）。401/403/404 等确定性错误
+	// 时标记；探活成功（200）自动移除（拉起）。聚合 API /v1/models 输出时
+	// 跳过被标记的模型，避免外部工具选到付费墙/已下架的模型。
+	autoDisabledMu sync.Mutex
+	autoDisabled   = map[string]bool{}
 )
+
+// isProtectedModel 判断模型是否受保护（DeepSeek 系永不淘汰）。
+// 用户明确要求：DeepSeek 是核心卖点模型，即使上游临时 401/403/404 或探活
+// 失败，也不从聚合池移除（真实请求失败由熔断/failover 兜底，冷却后自愈）。
+func isProtectedModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "deepseek")
+}
+
+// disableAutoModel 标记一个自动发现模型确定性不可用（401/403/404）。
+// DeepSeek 系受保护模型永不标记——核心卖点不能从池子消失。
+func disableAutoModel(endpoint, model string) {
+	if endpoint == "" || model == "" || isProtectedModel(model) {
+		return
+	}
+	autoDisabledMu.Lock()
+	autoDisabled[endpoint+"|"+model] = true
+	autoDisabledMu.Unlock()
+}
+
+// enableAutoModel 探活恢复时移除不可用标记（拉起）。
+func enableAutoModel(endpoint, model string) {
+	autoDisabledMu.Lock()
+	delete(autoDisabled, endpoint+"|"+model)
+	autoDisabledMu.Unlock()
+}
+
+// isAutoModelDisabled 查询自动发现模型是否被标记不可用。
+func isAutoModelDisabled(endpoint, model string) bool {
+	autoDisabledMu.Lock()
+	defer autoDisabledMu.Unlock()
+	return autoDisabled[endpoint+"|"+model]
+}
 
 const (
 	// probeInterval 探活周期：30 分钟一轮（免费档 429 常见，太频繁等于自打限流）。
@@ -219,8 +258,123 @@ func probeOnce() {
 			probeCatalogEntry(ff)
 		}(f)
 	}
+	// 自动发现模型（auto_ 前缀）同样探活：不可用的信号打 0 且标记确定性
+	// 淘汰（401/403/404），恢复的移除标记重新进池。聚合 API /v1/models 输出
+	// 时按信号 0 + autoDisabled 过滤，外部工具就看不到不可用模型了。
+	probeAutoDiscovered(&wg)
 	wg.Wait()
-	fmt.Printf("🛰️ [免费池探活] 完成一轮：%d 个条目（并发探测）\n", len(snapshot))
+	fmt.Printf("🛰️ [免费池探活] 完成一轮：%d 个目录条目 + 自动发现模型（并发探测）\n", len(snapshot))
+}
+
+// probeAutoDiscovered 对自动发现快照里的每个模型做一次最小探活。
+// 成功 → 移除不可用标记（拉起）；确定性错误(401/403/404) → 标记淘汰。
+// 探活信号由 recordProbeResultDef 统一管理（key=endpoint|model）。
+func probeAutoDiscovered(wg *sync.WaitGroup) {
+	// 直接读 discCache（discoveredFreeModels 内部会再取锁并可能触发重拉，
+	// 探活场景只需当前快照，避免重入锁/重复网络开销）
+	discMu.Lock()
+	snap := make([]freeModelView, 0)
+	for _, p := range discCache {
+		for _, m := range p.Models {
+			if catalogHasModel(m.ID, p.Endpoint) {
+				continue
+			}
+			snap = append(snap, freeModelView{
+				FreeModelDef: FreeModelDef{
+					ID:       "auto_" + sanitizeID(p.Vendor) + "_" + hexEncode(m.ID),
+					Vendor:   p.Vendor,
+					Name:     m.Name,
+					Endpoint: p.Endpoint,
+					Model:    m.ID,
+					KeyEnv:   p.KeyEnv,
+					Keyless:  p.Keyless,
+				},
+				APIKeySet: true,
+			})
+		}
+	}
+	discMu.Unlock()
+
+	for i := range snap {
+		fm := snap[i]
+		wg.Add(1)
+		go func(fm freeModelView) {
+			defer wg.Done()
+			key := ""
+			if !fm.Keyless {
+				key = os.Getenv(fm.KeyEnv)
+				if key == "" {
+					if entries, err := loadModelConfigs(""); err == nil {
+						for _, e := range entries {
+							if e.ID == fm.ID {
+								key = e.APIKey
+								break
+							}
+						}
+					}
+				}
+				if key == "" {
+					// 没 key 的源无法探活：保持现状，不淘汰
+					return
+				}
+			}
+			b := RouterBackend{
+				BaseURL: fm.Endpoint, Model: fm.Model,
+				APIKey: key, Keyless: fm.Keyless,
+			}
+			start := time.Now()
+			ok, status := probeChatOnce(b)
+			lat := time.Since(start)
+			recordProbeResultDef(fm.Endpoint, fm.Model, lat, status, ok)
+			if ok {
+				enableAutoModel(fm.Endpoint, fm.Model)
+				return
+			}
+			// 确定性错误：永久淘汰（聚合池不再出现；探活恢复后自动拉起）
+			if status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusNotFound {
+				disableAutoModel(fm.Endpoint, fm.Model)
+			}
+		}(fm)
+	}
+}
+
+// recordProbeResultDef 与 recordProbeResult 同逻辑，但接收 endpoint/model 而不是
+// *FreeModelDef（自动发现模型不在 freeModelCatalog 里，没有 FreeModelDef）。
+func recordProbeResultDef(endpoint, model string, lat time.Duration, status int, ok bool) {
+	probeMu.Lock()
+	defer probeMu.Unlock()
+	k := endpoint + "|" + model
+	st := probeStates[k]
+	if st == nil {
+		st = &probeState{signal: -1}
+		probeStates[k] = st
+	}
+	st.lastProbe = time.Now()
+	st.latency = lat
+	if ok {
+		st.lastOK = true
+		switch {
+		case lat <= probeLatencyFast:
+			st.signal = 4
+		case lat <= probeLatencyMid:
+			st.signal = 3
+		default:
+			st.signal = 2
+		}
+		return
+	}
+	st.lastOK = false
+	switch {
+	case status == http.StatusTooManyRequests: // 429：可用但受限
+		st.signal = 2
+	case st.signal <= 0:
+		st.signal = 0
+	default:
+		st.signal--
+		if st.signal < 1 {
+			st.signal = 0
+		}
+	}
 }
 
 // startFreeProbeLoop 定期探活；首次立即跑（启动即校准信号），之后每 probeInterval 一轮。

@@ -639,9 +639,15 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
-		// 仅 401(鉴权)/403(额度) 确定性不可用才标记禁用；400 属请求格式/上游解析 bug，不禁用
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			disableFreeModel(b.Model)
+		// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
+		// 400 属请求格式/上游解析 bug，不禁用。自动发现模型（auto_ 前缀，
+		// 不在 freeModelCatalog 里）单独走 autoDisabled 淘汰。
+		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+			if strings.HasPrefix(b.ID, "auto_") {
+				disableAutoModel(b.BaseURL, b.Model)
+			} else {
+				disableFreeModel(b.Model)
+			}
 		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 			// 限流 / 服务端故障：暂时性，计入熔断
 			circuitFail(b)
@@ -719,9 +725,14 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
-		// 仅 401(鉴权)/403(额度) 确定性不可用才标记禁用；400 属请求格式/上游解析 bug，不禁用
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			disableFreeModel(b.Model)
+		// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
+		// 400 属请求格式/上游解析 bug，不禁用。自动发现模型走 autoDisabled。
+		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+			if strings.HasPrefix(b.ID, "auto_") {
+				disableAutoModel(b.BaseURL, b.Model)
+			} else {
+				disableFreeModel(b.Model)
+			}
 		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 			// 限流 / 服务端故障：暂时性，计入熔断
 			circuitFail(b)
@@ -890,11 +901,15 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		if resp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			// 仅 401(鉴权)/403(额度) 是确定性不可用，当场标记禁用；
+			// 401(鉴权)/403(额度)/404(模型不存在) 是确定性不可用，当场标记禁用；
 			// 400 是请求格式/上游解析问题，属客户端侧，不该永久禁用模型，
-			// 否则一棍子打死整个免费档。
-			if resp.StatusCode == 401 || resp.StatusCode == 403 {
-				disableFreeModel(b.Model)
+			// 否则一棍子打死整个免费档。自动发现模型走 autoDisabled。
+			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+				if strings.HasPrefix(b.ID, "auto_") {
+					disableAutoModel(b.BaseURL, b.Model)
+				} else {
+					disableFreeModel(b.Model)
+				}
 			} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 				// 限流 / 服务端故障：暂时性，计入熔断
 				circuitFail(b)
@@ -1114,10 +1129,15 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		// 仅 401(鉴权)/403(额度) 是确定性不可用，当场标记禁用；
+		// 401(鉴权)/403(额度)/404(模型不存在) 是确定性不可用，当场标记禁用；
 		// 400 是请求格式/上游解析问题，属客户端侧，不该永久禁用模型。
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			disableFreeModel(b.Model)
+		// 自动发现模型走 autoDisabled。
+		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+			if strings.HasPrefix(b.ID, "auto_") {
+				disableAutoModel(b.BaseURL, b.Model)
+			} else {
+				disableFreeModel(b.Model)
+			}
 		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 			// 限流 / 服务端故障：暂时性，计入熔断
 			circuitFail(b)

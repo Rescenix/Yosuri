@@ -302,8 +302,49 @@ func resolveAutoDiscovered(userKey, model string, envKeys map[string]string) *Ro
 		}
 		return &RouterBackend{
 			ID: fm.ID, Name: fm.Name, BaseURL: fm.Endpoint, Model: fm.Model,
-			APIKey: key, Timeout: 45 * time.Second, Source: "free",
+			APIKey:  key,
+			Timeout: 45 * time.Second, Source: "free",
 			Keyless: fm.Keyless,
+		}
+	}
+	return nil
+}
+
+// autoReadableID 把自动发现模型的内部 ID（auto_<vendor>_<hex>）解码成可读形式：
+// auto_<vendor>_<真实模型名>。hex 是上游模型 ID 的 hex 编码（可能含 / : 等字符，
+// 不能直接进 URL 参数，所以内部用 hex；对外展示时解码回真实名）。
+// 解码失败/非 auto_ 前缀时原样返回。
+func autoReadableID(id string) string {
+	if !strings.HasPrefix(id, "auto_") {
+		return id
+	}
+	idx := strings.LastIndex(id, "_")
+	if idx < 0 {
+		return id
+	}
+	hexPart := id[idx+1:]
+	raw, err := hex.DecodeString(hexPart)
+	if err != nil || len(raw) == 0 {
+		return id
+	}
+	return id[:idx+1] + string(raw)
+}
+
+// resolveAutoReadable 把 /v1/models 暴露的可读 auto_ ID（auto_<vendor>_<真实模型名>）
+// 反解回发现快照的原始条目并精确路由。这是聚合 API 的入口：外部工具从
+// /v1/models 拿到可读 ID 后原样填回 model 字段，这里负责匹配。找不到返回 nil。
+// 已淘汰（autoDisabled）的模型不路由——列表里没有的模型不该还能用。
+func resolveAutoReadable(userKey, model string) *RouterBackend {
+	if !strings.HasPrefix(model, "auto_") {
+		return nil
+	}
+	envKeys := userKeysByEnv(userKey)
+	for _, fm := range discoveredFreeModels(userKey) {
+		if autoReadableID(fm.ID) == model {
+			if isAutoModelDisabled(fm.Endpoint, fm.Model) {
+				return nil
+			}
+			return resolveAutoDiscovered(userKey, fm.ID, envKeys)
 		}
 	}
 	return nil

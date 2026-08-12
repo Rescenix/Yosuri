@@ -103,12 +103,18 @@ func modelToAggregateBackends(model string) []RouterBackend {
 			}
 			b := RouterBackend{
 				ID: f.ID, Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
-				APIKey: key, ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: "free",
+				APIKey:           key,
+				ParamsB:          f.ParamsB, Timeout: 45 * time.Second, Source: "free",
 				Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
 				IsLocal: f.Local, Keyless: f.Keyless, WireResponses: f.Responses,
 			}
 			return []RouterBackend{b}
 		}
+	}
+	// 按自动发现模型（auto_ 前缀）解析：/v1/models 暴露的是解码后的可读 ID（hex → 真实模型名），
+	// 这里把可读 ID 反解回发现快照里的原始 auto_ 条目再精确路由。
+	if b := resolveAutoReadable("", model); b != nil {
+		return []RouterBackend{*b}
 	}
 	// 找不到：回退 Auto 全链（容忍未知模型名，让路由自己挑）
 	return resolveBackends("", "auto")
@@ -221,9 +227,13 @@ func aggregateStreamOnce(ctx context.Context, b RouterBackend, reqBody map[strin
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		// 与主链同口径：401/403 永久禁用，429/5xx 计入熔断
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			disableFreeModel(b.Model)
+		// 与主链同口径：401/403/404 永久禁用（auto_ 发现模型走 autoDisabled），429/5xx 计入熔断
+		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+			if strings.HasPrefix(b.ID, "auto_") {
+				disableAutoModel(b.BaseURL, b.Model)
+			} else {
+				disableFreeModel(b.Model)
+			}
 		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 			circuitFail(b)
 		}
@@ -317,15 +327,33 @@ func HandleAggregateModels(c *gin.Context) {
 		})
 		seen[f.ID] = true
 	}
-	// 自动发现的免费池模型（用户配 key 后自动 /v1/models 拉取的）
+	// 自动发现的免费池模型（用户配 key 后自动 /v1/models 拉取的）：
+	// 内部 ID 是 auto_<vendor>_<hex>（hex 编码真实模型名，防 / : 特殊字符进 URL），
+	// 对外解码成 auto_<vendor>_<真实模型名>，外部工具（Hermes 等）看到可读名字，
+	// 选它后原样填回 model 字段，路由侧 resolveAutoReadable 反解回原始条目精确路由。
+	// 不可用的（探活信号 0 连续失败 / 确定性 401/403/404 淘汰）不输出，避免
+	// 外部工具选到付费墙或已下架的模型（动态淘汰 + 探活拉起，见 free_probe.go）。
+	// DeepSeek 系受保护模型永不淘汰（isProtectedModel）：即使探活信号 0 也保留，
+	// 由真实请求路径的熔断/failover 兜底。
 	for _, dm := range discoveredFreeModels("") {
 		if seen[dm.ID] {
 			continue
 		}
+		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
+			continue
+		}
+		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 && !isProtectedModel(dm.Model) {
+			continue // 探活确认不可用：沉底不输出（DeepSeek 除外）
+		}
+		id := autoReadableID(dm.ID)
+		if seen[id] {
+			continue
+		}
 		data = append(data, map[string]any{
-			"id": dm.ID, "object": "model", "owned_by": dm.Vendor, "created": 0,
+			"id": id, "object": "model", "owned_by": dm.Vendor, "created": 0,
 		})
 		seen[dm.ID] = true
+		seen[id] = true
 	}
 	// 自定义提供方模型
 	if entries, err := loadModelConfigs(""); err == nil {
