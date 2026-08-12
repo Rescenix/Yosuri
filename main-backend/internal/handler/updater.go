@@ -345,7 +345,9 @@ func downloadInstaller() error {
 }
 
 // HandleInstallUpdate 启动已下载的安装程序（用户确认后调用）。
-// 安装程序会自行处理覆盖/重启，这里只负责拉起，不做静默。
+// 关键：安装程序要覆盖正在运行的 rescene.exe，所以必须：
+//  1) cmd /c start 分离启动安装程序（独立进程，不随本进程退出）
+//  2) 返回响应后延时退出本进程，释放 exe 文件锁，安装程序才能覆盖
 func HandleInstallUpdate(c *gin.Context) {
 	updateDL.mu.Lock()
 	state, path := updateDL.State, updateDL.Path
@@ -358,12 +360,19 @@ func HandleInstallUpdate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "安装包文件不存在"})
 		return
 	}
-	cmd := exec.Command(path)
+	// cmd /c start "" "path"：分离启动，安装程序不继承本进程句柄
+	cmd := exec.Command("cmd", "/c", "start", "", path)
 	if err := cmd.Start(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "启动安装程序失败：" + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "path": path})
+	// 延时退出本进程：给 HTTP 响应刷完 + 安装程序完全拉起的时间，
+	// 然后让出 rescene.exe 文件锁，NSIS 才能覆盖安装。
+	go func() {
+		time.Sleep(3 * time.Second)
+		os.Exit(0)
+	}()
 }
 
 // versionRe 匹配完整 SemVer（含预发布与构建元数据）。tag 可能带代号前缀，
