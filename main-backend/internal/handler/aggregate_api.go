@@ -314,18 +314,21 @@ func aggregateForwardSSE(c *gin.Context, b RouterBackend, resp *http.Response) {
 }
 
 // HandleAggregateModels GET /v1/models —— 列出可用模型（OpenAI 格式）。
+// 只提供 DeepSeek 系模型（核心卖点）+ auto 智能路由入口，其他模型一律不暴露，
+// 外部工具（Hermes 等）看到的列表干净聚焦。
 func HandleAggregateModels(c *gin.Context) {
 	if !aggregateAuth(c) {
 		return
 	}
-	data := make([]map[string]any, 0, len(freeModelCatalog)+1)
+	data := make([]map[string]any, 0, 16)
 	// 伪装一个 auto 条目：Hermes 等工具自动探测模型列表后，选它即走 Auto 智能路由
 	data = append(data, map[string]any{
 		"id": "auto", "object": "model", "owned_by": "Rescene", "created": 0,
 	})
 	seen := map[string]bool{"auto": true}
+	// 目录条目：只保留 DeepSeek 系
 	for _, f := range freeModelCatalog {
-		if f.Disabled {
+		if f.Disabled || !isDeepSeekModel(f.Model) {
 			continue
 		}
 		data = append(data, map[string]any{
@@ -333,16 +336,13 @@ func HandleAggregateModels(c *gin.Context) {
 		})
 		seen[f.ID] = true
 	}
-	// 自动发现的免费池模型（用户配 key 后自动 /v1/models 拉取的）：
+	// 自动发现的免费池模型：只保留 DeepSeek 系。
 	// 内部 ID 是 auto_<vendor>_<hex>（hex 编码真实模型名，防 / : 特殊字符进 URL），
-	// 对外解码成 auto_<vendor>_<真实模型名>，外部工具（Hermes 等）看到可读名字，
-	// 选它后原样填回 model 字段，路由侧 resolveAutoReadable 反解回原始条目精确路由。
-	// 不可用的（探活信号 0 连续失败 / 确定性 401/403/404 淘汰）不输出，避免
-	// 外部工具选到付费墙或已下架的模型（动态淘汰 + 探活拉起，见 free_probe.go）。
-	// DeepSeek 保活只作用于目录精选条目（disableFreeModel 路径）；自动发现的
-	// 付费墙 DeepSeek（Kilo/Ollama/Zen 401/403）照样淘汰，不占列表。
+	// 对外解码成 auto_<vendor>_<真实模型名>，外部工具看到可读名字，选它后原样
+	// 填回 model 字段，路由侧 resolveAutoReadable 反解回原始条目精确路由。
+	// 不可用的（探活信号 0 / 确定性 401/403/404 淘汰）不输出；恢复自动拉起。
 	for _, dm := range discoveredFreeModels("") {
-		if seen[dm.ID] {
+		if seen[dm.ID] || !isDeepSeekModel(dm.Model) {
 			continue
 		}
 		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
@@ -361,13 +361,16 @@ func HandleAggregateModels(c *gin.Context) {
 		seen[dm.ID] = true
 		seen[id] = true
 	}
-	// 自定义提供方模型
+	// 自定义提供方模型：只保留 DeepSeek 系
 	if entries, err := loadModelConfigs(""); err == nil {
 		for _, e := range entries {
 			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
 				continue
 			}
 			for _, m := range configuredProviderModels(e) {
+				if !isDeepSeekModel(m.ID) {
+					continue
+				}
 				id := customModelSelectionID(e.ID, m.ID)
 				if seen[id] {
 					continue
@@ -380,4 +383,9 @@ func HandleAggregateModels(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"object": "list", "data": data})
+}
+
+// isDeepSeekModel 判断模型名是否 DeepSeek 系（聚合端口只暴露它）。
+func isDeepSeekModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "deepseek")
 }
