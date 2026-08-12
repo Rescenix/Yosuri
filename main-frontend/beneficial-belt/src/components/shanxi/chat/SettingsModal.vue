@@ -661,7 +661,7 @@
                   v-else-if="dlState === 'downloading'"
                   @click="startAutoDownload"
                   disabled
-                >下载中 {{ dlPercent }}%</button>
+                >正在准备安装包…</button>
                 <button
                   class="api-form-btn save"
                   type="button"
@@ -675,10 +675,7 @@
                   v-else-if="dlState === 'error'"
                   @click="startAutoDownload"
                 >重试下载</button>
-                <div v-if="dlState === 'downloading'" class="update-progress" style="flex:1; margin-left:12px;">
-                  <div class="update-progress-bar" :style="{ width: dlPercent + '%' }"></div>
-                </div>
-                <span v-else-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
+                <span v-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
                 <label class="param-switch" style="margin-left: auto;" title="关闭后启动不再检查/弹窗提示更新">
                   <input type="checkbox" v-model="notifyDisabled" @change="onNotifyDisabledChange" />
                   <span class="param-switch-track"></span>
@@ -1454,7 +1451,6 @@ const versionInfo = ref({})
 const notifyDisabled = ref(isUpdateNotifyDisabled())
 // 自动下载状态：idle | downloading | done | error
 const dlState = ref('idle')
-const dlPercent = ref(0)
 const dlError = ref('')
 const dlWorking = ref(false)
 let dlTimer = null
@@ -1487,7 +1483,6 @@ async function startAutoDownload() {
       const d = await res.json()
       if (d.state === 'done') {
         dlState.value = 'done'
-        dlPercent.value = 100
       } else {
         dlState.value = 'downloading'
         pollDownloadStatus()
@@ -1513,10 +1508,8 @@ async function pollDownloadStatus() {
       const d = await res.json()
       if (d.state === 'downloading') {
         dlState.value = 'downloading'
-        dlPercent.value = Math.round(d.percent || 0)
       } else if (d.state === 'done') {
         dlState.value = 'done'
-        dlPercent.value = 100
         clearInterval(dlTimer)
         dlTimer = null
       } else if (d.state === 'error') {

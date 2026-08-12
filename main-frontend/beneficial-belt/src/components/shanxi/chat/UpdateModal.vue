@@ -34,7 +34,7 @@
           class="update-modal-btn primary"
           type="button"
           disabled
-        >后台下载中 {{ dlPercent }}%…</button>
+        >正在准备安装包…</button>
         <button
           v-else
           class="update-modal-btn primary"
@@ -42,10 +42,7 @@
           @click="onInstall"
         >{{ dlState === 'error' ? '重试下载' : '开始下载' }}</button>
       </div>
-      <div v-if="dlState === 'downloading'" class="update-modal-progress">
-        <div class="update-modal-progress-bar" :style="{ width: dlPercent + '%' }"></div>
-      </div>
-      <div v-else-if="dlState === 'error'" class="update-modal-dlerr">{{ dlError }}</div>
+      <div v-if="dlState === 'error'" class="update-modal-dlerr">{{ dlError }}</div>
     </div>
   </div>
 </template>
@@ -62,7 +59,6 @@ const emit = defineEmits(['close'])
 
 const opening = ref(false)
 const dlState = ref('downloading') // downloading | done | error
-const dlPercent = ref(0)
 const dlError = ref('')
 let dlTimer = null
 
@@ -80,13 +76,12 @@ function onSkip() {
   emit('close')
 }
 
-// 挂载即后台自动下载（安装包 20MB 级别，几秒到几十秒完成）
+// 挂载时若安装包未就绪则补齐下载（App.vue 启动时已静默预下载，此处兜底）
 onMounted(() => {
   startDownload()
 })
 
 async function startDownload() {
-  dlState.value = 'downloading'
   dlError.value = ''
   try {
     const res = await fetch('/api/update/download', { method: 'POST' })
@@ -94,7 +89,6 @@ async function startDownload() {
     const d = await res.json()
     if (d.state === 'done') {
       dlState.value = 'done'
-      dlPercent.value = 100
       return
     }
   } catch {
@@ -114,10 +108,8 @@ function pollStatus() {
       const d = await res.json()
       if (d.state === 'downloading') {
         dlState.value = 'downloading'
-        dlPercent.value = Math.round(d.percent || 0)
       } else if (d.state === 'done') {
         dlState.value = 'done'
-        dlPercent.value = 100
         clearInterval(dlTimer)
         dlTimer = null
       } else if (d.state === 'error') {
@@ -127,7 +119,7 @@ function pollStatus() {
         dlTimer = null
       }
     } catch { /* 轮询失败忽略 */ }
-  }, 800)
+  }, 1500)
 }
 
 // 一键安装：直接拉起本地已下载的安装程序
@@ -302,19 +294,6 @@ onUnmounted(() => {
 }
 .update-modal-btn.primary:hover { background: var(--app-accent-hover); }
 .update-modal-btn.primary:disabled { cursor: default; opacity: 0.6; }
-.update-modal-progress {
-  height: 6px;
-  margin: 0 20px 14px;
-  background: var(--app-surface-3, rgba(128,128,128,.18));
-  border-radius: 999px;
-  overflow: hidden;
-}
-.update-modal-progress-bar {
-  height: 100%;
-  background: var(--app-accent);
-  border-radius: 999px;
-  transition: width .3s ease;
-}
 .update-modal-dlerr {
   margin: 0 20px 14px;
   color: #e5484d;

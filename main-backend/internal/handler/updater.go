@@ -222,6 +222,22 @@ func HandleAutoDownload(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "downloading"})
 		return
 	}
+	updateDL.mu.Unlock()
+
+	// 先同步检查本地是否已有安装包（上次启动已下载完 → 本次直接弹一键安装）。
+	// updateDL 是内存状态，重启后丢失，必须落到磁盘判断。
+	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
+	dest := filepath.Join(localDir, updateSetupFileName)
+	if fi, err := os.Stat(dest); err == nil && fi.Size() > 1024*1024 {
+		updateDL.mu.Lock()
+		updateDL.State = "done"
+		updateDL.Path = dest
+		updateDL.mu.Unlock()
+		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "done", "path": dest})
+		return
+	}
+
+	updateDL.mu.Lock()
 	updateDL.State = "downloading"
 	updateDL.DoneBytes = 0
 	updateDL.TotalBytes = 0

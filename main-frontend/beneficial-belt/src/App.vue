@@ -53,7 +53,30 @@ onMounted(async () => {
     if (data.ok && data.update?.has_update) {
       if (getSkippedVersion() === data.update.latest_version) return
       updateInfo.value = data.update
-      showUpdate.value = true
+      // 第一次进应用：静默后台下载安装包（用户无感知、不弹窗）。
+      // 下完本次不打扰；下次启动本地已有安装包 → 直接弹「一键安装」。
+      try {
+        const dl = await fetch('/api/update/download', { method: 'POST' })
+        const dlData = await dl.json()
+        if (dlData.state === 'done') {
+          // 安装包已就绪（上次启动已下载完）→ 本次弹一键安装
+          showUpdate.value = true
+          return
+        }
+        // 本次开始下载：轮询等待完成，完成后静默，不弹窗
+        const timer = setInterval(async () => {
+          try {
+            const r = await fetch('/api/update/download/status')
+            const d = await r.json()
+            if (d.state === 'done' || d.state === 'error') {
+              clearInterval(timer)
+              // 故意不弹窗：安装包留到下次启动再提示一键安装
+            }
+          } catch { /* 忽略轮询错误 */ }
+        }, 2000)
+      } catch {
+        // 下载接口不可达：本次不弹窗，下次启动再试
+      }
     }
   } catch {}
 })
