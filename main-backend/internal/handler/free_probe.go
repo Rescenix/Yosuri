@@ -55,9 +55,11 @@ func isProtectedModel(model string) bool {
 }
 
 // disableAutoModel 标记一个自动发现模型确定性不可用（401/403/404）。
-// DeepSeek 系受保护模型永不标记——核心卖点不能从池子消失。
+// 注意：自动发现（auto_）模型按实际可用性淘汰——Kilo/Ollama/Zen 等
+// 付费墙 DeepSeek（401/403）照样淘汰，不能因为名字带 deepseek 就保活成
+// "付费墙占位"；目录里精选的免费 DeepSeek 由 disableFreeModel 保活。
 func disableAutoModel(endpoint, model string) {
-	if endpoint == "" || model == "" || isProtectedModel(model) {
+	if endpoint == "" || model == "" {
 		return
 	}
 	autoDisabledMu.Lock()

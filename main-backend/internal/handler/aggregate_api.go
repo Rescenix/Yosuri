@@ -140,6 +140,12 @@ func HandleAggregateChat(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "没有可用的免费模型（未配置任何 key）"})
 		return
 	}
+	// 精确指定模型（非 auto）时，追加 Auto 全链做兜底：免费档 429 限流很常见，
+	// 单一源失败不该让外部工具（Hermes 等）直接 502 掉线——先试精确源，
+	// 挂了秒切 Auto 链里其他可用源（熔断/探活信号自动排序）。
+	if req.Model != "" && req.Model != "auto" && req.Model != "rescene-auto" {
+		chain = append(chain, resolveBackends("", "auto")...)
+	}
 
 	// 构造上游请求体（透传 messages/tools，统一 temperature/max_tokens）
 	upstream := map[string]any{
@@ -333,8 +339,8 @@ func HandleAggregateModels(c *gin.Context) {
 	// 选它后原样填回 model 字段，路由侧 resolveAutoReadable 反解回原始条目精确路由。
 	// 不可用的（探活信号 0 连续失败 / 确定性 401/403/404 淘汰）不输出，避免
 	// 外部工具选到付费墙或已下架的模型（动态淘汰 + 探活拉起，见 free_probe.go）。
-	// DeepSeek 系受保护模型永不淘汰（isProtectedModel）：即使探活信号 0 也保留，
-	// 由真实请求路径的熔断/failover 兜底。
+	// DeepSeek 保活只作用于目录精选条目（disableFreeModel 路径）；自动发现的
+	// 付费墙 DeepSeek（Kilo/Ollama/Zen 401/403）照样淘汰，不占列表。
 	for _, dm := range discoveredFreeModels("") {
 		if seen[dm.ID] {
 			continue
@@ -342,8 +348,8 @@ func HandleAggregateModels(c *gin.Context) {
 		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
 			continue
 		}
-		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 && !isProtectedModel(dm.Model) {
-			continue // 探活确认不可用：沉底不输出（DeepSeek 除外）
+		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 {
+			continue // 探活确认不可用：沉底不输出
 		}
 		id := autoReadableID(dm.ID)
 		if seen[id] {
