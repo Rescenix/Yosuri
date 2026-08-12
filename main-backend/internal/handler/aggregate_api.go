@@ -326,9 +326,9 @@ func HandleAggregateModels(c *gin.Context) {
 		"id": "auto", "object": "model", "owned_by": "Rescene", "created": 0,
 	})
 	seen := map[string]bool{"auto": true}
-	// 目录条目：只保留 DeepSeek 系
+	// 目录条目：只保留可用的 DeepSeek（V4 系 + 非付费墙）
 	for _, f := range freeModelCatalog {
-		if f.Disabled || !isDeepSeekModel(f.Model) {
+		if f.Disabled || !isUsableDeepSeek(f.Model, f.Vendor) {
 			continue
 		}
 		data = append(data, map[string]any{
@@ -336,13 +336,13 @@ func HandleAggregateModels(c *gin.Context) {
 		})
 		seen[f.ID] = true
 	}
-	// 自动发现的免费池模型：只保留 DeepSeek 系。
+	// 自动发现的免费池模型：只保留可用的 DeepSeek（V4 系 + 非付费墙）。
 	// 内部 ID 是 auto_<vendor>_<hex>（hex 编码真实模型名，防 / : 特殊字符进 URL），
 	// 对外解码成 auto_<vendor>_<真实模型名>，外部工具看到可读名字，选它后原样
 	// 填回 model 字段，路由侧 resolveAutoReadable 反解回原始条目精确路由。
 	// 不可用的（探活信号 0 / 确定性 401/403/404 淘汰）不输出；恢复自动拉起。
 	for _, dm := range discoveredFreeModels("") {
-		if seen[dm.ID] || !isDeepSeekModel(dm.Model) {
+		if seen[dm.ID] || !isUsableDeepSeek(dm.Model, dm.Vendor) {
 			continue
 		}
 		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
@@ -361,14 +361,14 @@ func HandleAggregateModels(c *gin.Context) {
 		seen[dm.ID] = true
 		seen[id] = true
 	}
-	// 自定义提供方模型：只保留 DeepSeek 系
+	// 自定义提供方模型：只保留可用的 DeepSeek（V4 系 + 非付费墙）
 	if entries, err := loadModelConfigs(""); err == nil {
 		for _, e := range entries {
 			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
 				continue
 			}
 			for _, m := range configuredProviderModels(e) {
-				if !isDeepSeekModel(m.ID) {
+				if !isUsableDeepSeek(m.ID, e.Name) {
 					continue
 				}
 				id := customModelSelectionID(e.ID, m.ID)
@@ -388,4 +388,37 @@ func HandleAggregateModels(c *gin.Context) {
 // isDeepSeekModel 判断模型名是否 DeepSeek 系（聚合端口只暴露它）。
 func isDeepSeekModel(model string) bool {
 	return strings.Contains(strings.ToLower(model), "deepseek")
+}
+
+// isUsableDeepSeek 判断是否聚合端口真正可用的 DeepSeek：
+// 1. 只认 V4 系列（V4-Flash / V4-Pro 实测可用）；v3.x / r1 / chat 等低版本实测用不了
+// 2. 排除付费墙提供方（Kilo 401、Ollama Cloud 403，挂着占列表、选了必挂）
+func isUsableDeepSeek(model, vendor string) bool {
+	if !isDeepSeekModel(model) {
+		return false
+	}
+	if isPaidWallVendor(vendor) {
+		return false
+	}
+	lower := strings.ToLower(model)
+	// 只保留 V4 系；排除低版本（v3.x/r1/chat/coder 等）
+	if !strings.Contains(lower, "v4") {
+		return false
+	}
+	return true
+}
+
+// paidWallVendors 聚合端口直接排除的提供方：实测 DeepSeek 全是付费墙
+// （Kilo 401 PAID_MODEL_AUTH_REQUIRED、Ollama Cloud 403 requires subscription）。
+var paidWallVendors = []string{"kilo gateway", "ollama cloud"}
+
+// isPaidWallVendor 判断 vendor 是否付费墙提供方（其 DeepSeek 不可用）。
+func isPaidWallVendor(vendor string) bool {
+	v := strings.ToLower(vendor)
+	for _, p := range paidWallVendors {
+		if strings.Contains(v, p) {
+			return true
+		}
+	}
+	return false
 }
