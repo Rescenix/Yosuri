@@ -21,18 +21,22 @@ var AppVersion = "0.0.0-dev"
 const (
 	updateRepoOwner = "Rescenix"
 	updateRepoName  = "ResceneAgent"
-	updateCacheTTL  = time.Hour // GitHub 未认证 API 限 60 次/小时/IP，内存缓存避免每次启动都打
+	// 官网 update.json 优先（国内可达的 Cloudflare CDN），GitHub API 兜底
+	siteUpdateURL   = "https://rescene.shanca.me/update.json"
+	updateCacheTTL  = 30 * time.Minute // 官网接口无认证限流，可缩短缓存；GitHub 未认证 API 限 60 次/小时/IP
 	// 下载走官网安装器直链（GitHub 仅作版本/更新内容基准，用户流量不引到 GitHub）
 	updateDownloadURL = "https://download.shanca.me/Rescene-windows-amd64-setup.exe"
 )
 
 // githubRelease 是 GitHub /releases/latest 响应里用到的字段子集。
+// 也兼容官网 update.json 的相同字段，所以客户端可以优先从国内可达的 update.json 获取。
 type githubRelease struct {
 	TagName     string `json:"tag_name"`
 	Name        string `json:"name"`
 	Body        string `json:"body"`
 	HTMLURL     string `json:"html_url"`
 	PublishedAt string `json:"published_at"`
+	DownloadURL string `json:"download_url"` // 官网 JSON 提供，GitHub 无此字段
 }
 
 // updateInfo 是 /api/update/check 的响应体。
@@ -53,8 +57,8 @@ var (
 	updateCachedAt time.Time
 )
 
-// HandleCheckUpdate 检查 GitHub 最新 release 是否比当前版本新。
-// 失败（离线/GitHub 限流/无 release）时返回 ok=false，前端静默不打扰。
+// HandleCheckUpdate 检查最新版本（官网 update.json 优先 → GitHub 兜底）。
+// 失败（离线/接口不可达/无 release）时返回 ok=false，前端静默不打扰。
 func HandleCheckUpdate(c *gin.Context) {
 	info, err := checkUpdate()
 	if err != nil {
@@ -64,6 +68,9 @@ func HandleCheckUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "update": info})
 }
 
+// checkUpdate 检查最新版本是否比当前版本新。
+// 数据源顺序：官网 update.json（rescene.shanca.me，Cloudflare CDN，国内可达）
+// → GitHub API 兜底（Release 基准）。两者都失败返回错误，前端静默不打扰。
 func checkUpdate() (*updateInfo, error) {
 	updateMu.Lock()
 	defer updateMu.Unlock()
@@ -71,34 +78,21 @@ func checkUpdate() (*updateInfo, error) {
 		return updateCache, nil
 	}
 
-	req, err := http.NewRequest(http.MethodGet,
-		fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", updateRepoOwner, updateRepoName), nil)
+	// 1) 官网 update.json（优先，国内可达）
+	rel, err := fetchRelease(siteUpdateURL)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "ResceneAgent/"+AppVersion)
-	req.Header.Set("Accept", "application/vnd.github+json")
-
-	client := &http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		// 仓库还没有任何 release，视为无更新
-		info := &updateInfo{HasUpdate: false, CurrentVersion: AppVersion}
-		updateCache, updateCachedAt = info, time.Now()
-		return info, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API 返回 %d", resp.StatusCode)
-	}
-
-	var rel githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return nil, err
+		// 2) GitHub API 兜底
+		rel, err = fetchRelease(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest",
+			updateRepoOwner, updateRepoName))
+		if err != nil {
+			// 两处都 404（还没有 release / 文件未部署）→ 视为无更新，而不是报错
+			if err == errNoRelease {
+				info := &updateInfo{HasUpdate: false, CurrentVersion: AppVersion}
+				updateCache, updateCachedAt = info, time.Now()
+				return info, nil
+			}
+			return nil, err
+		}
 	}
 
 	// 以 release 名称为准（用户发布时名称才是真正的版本线，如 v0.1.2-alpha.2；
@@ -113,6 +107,13 @@ func checkUpdate() (*updateInfo, error) {
 			latestNum, latest = t, rel.TagName
 		}
 	}
+
+	var downloadURL string
+	if rel.DownloadURL != "" {
+		downloadURL = rel.DownloadURL
+	} else {
+		downloadURL = updateDownloadURL
+	}
 	info := &updateInfo{
 		HasUpdate:      compareVersions(AppVersion, latestNum),
 		CurrentVersion: AppVersion,
@@ -120,13 +121,47 @@ func checkUpdate() (*updateInfo, error) {
 		ReleaseName:    rel.Name,
 		ReleaseNotes:   rel.Body,
 		ReleaseURL:     rel.HTMLURL,
-		DownloadURL:    updateDownloadURL, // 官网安装器直链，不经 GitHub
+		DownloadURL:    downloadURL, // 官网安装器直链，不经 GitHub
 		PublishedAt:    rel.PublishedAt,
 	}
 
 	updateCache, updateCachedAt = info, time.Now()
 	return info, nil
 }
+
+// fetchRelease 拉取并解析版本信息 JSON（兼容 GitHub API 与官网 update.json 两种来源）。
+// 404（仓库无 release / 官网无该文件）视为无更新。
+func fetchRelease(url string) (*githubRelease, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "ResceneAgent/"+AppVersion)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errNoRelease
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("更新接口 %s 返回 %d", url, resp.StatusCode)
+	}
+
+	var rel githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		return nil, err
+	}
+	return &rel, nil
+}
+
+// errNoRelease 表示接口正常但还没有正式 release，调用方应视为无更新而不是报错。
+var errNoRelease = fmt.Errorf("no release yet")
 
 // HandleOpenUpdateDownload 让系统浏览器打开安装器下载地址（失败时前端回退 release 页面）。
 // 走后端 exec 而非前端 window.open：Wails WebView2 里 window.open 不可靠。
