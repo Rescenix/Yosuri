@@ -17,7 +17,8 @@ package handler
 // 模型映射（model 字段）：
 //   - 空 / "auto" / "rescene-auto" → Auto 全链（信号 + LRU 排序）
 //   - 免费池 ID（free_xxx）/ 自定义配置 ID → 精确路由
-//   - 其他字符串 → 按 Model 名 / 名称模糊匹配目录，找不到回退 Auto 全链
+//   - 其他字符串 → 按 Model 名 / 名称模糊匹配目录，找不到明确报错
+//     （2026-08-13 铁律：非 auto 精确模型禁止偷偷 failover 回退 Auto 链）
 //
 // 二期预留：Anthropic（/v1/messages）与 Gemini 原生协议适配层，共用同一路由内核。
 
@@ -116,8 +117,11 @@ func modelToAggregateBackends(model string) []RouterBackend {
 	if b := resolveAutoReadable("", model); b != nil {
 		return []RouterBackend{*b}
 	}
-	// 找不到：回退 Auto 全链（容忍未知模型名，让路由自己挑）
-	return resolveBackends("", "auto")
+	// 找不到：明确返回空链，绝不回退 Auto 全链（2026-08-13 用户铁律：
+	// 非 auto 精确模型禁止偷偷 failover，挂了就明确报错，让调用方如实返回）。
+	// 此前这里 `return resolveBackends("", "auto")` 会把未匹配的精确模型名
+	// 静默替换成 Auto 多源轮换链，产生「选了 A 却在跑 B/C/D」的隐形 failover。
+	return nil
 }
 
 // HandleAggregateChat POST /v1/chat/completions
@@ -137,15 +141,18 @@ func HandleAggregateChat(c *gin.Context) {
 
 	chain := modelToAggregateBackends(req.Model)
 	if len(chain) == 0 {
+		// 空链两种成因，报错要分清（2026-08-13 铁律配套）：
+		// 1. 精确模型名未匹配 → 明确告诉调用方，绝不静默换成别的模型
+		// 2. auto 但一个可用源都没有 → 提示配置 key
+		if req.Model != "" && req.Model != "auto" && req.Model != "rescene-auto" {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("模型 %q 未找到（精确模型禁止自动回退，请检查模型名或改用 auto）", req.Model)})
+			return
+		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "没有可用的免费模型（未配置任何 key）"})
 		return
 	}
-	// 精确指定模型（非 auto）时，追加 Auto 全链做兜底：免费档 429 限流很常见，
-	// 单一源失败不该让外部工具（Hermes 等）直接 502 掉线——先试精确源，
-	// 挂了秒切 Auto 链里其他可用源（熔断/探活信号自动排序）。
-	if req.Model != "" && req.Model != "auto" && req.Model != "rescene-auto" {
-		chain = append(chain, resolveBackends("", "auto")...)
-	}
+	// 精确指定模型（非 auto）绝不追加 Auto 链：用户选定哪个模型就路由到哪个，
+	// 挂了就明确报错，禁止偷偷 failover 到别的模型（2026-08-13 用户铁律）。
 
 	// 构造上游请求体（透传 messages/tools，统一 temperature/max_tokens）
 	upstream := map[string]any{
@@ -165,8 +172,10 @@ func HandleAggregateChat(c *gin.Context) {
 	}
 
 	var lastErr error
+	tried := []string{} // 实际尝试过的上游模型（精确模型=1个；auto=多个），报错时如实列出
 	for i := range chain {
 		b := chain[i]
+		tried = append(tried, b.Model)
 		upstream["model"] = b.Model
 		if req.Stream {
 			resp, err := aggregateStreamOnce(c.Request.Context(), b, upstream)
@@ -208,7 +217,12 @@ func HandleAggregateChat(c *gin.Context) {
 		})
 		return
 	}
-	c.JSON(http.StatusBadGateway, gin.H{"error": "所有免费模型均失败: " + fmt.Sprint(lastErr)})
+	// 报错如实区分：精确模型（只试了 1 个）直接点名；auto（多源轮换）才说「所有」
+	if len(tried) <= 1 {
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("模型 %s 请求失败: %s", tried[0], lastErr)})
+		return
+	}
+	c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("所有免费模型均失败（已尝试: %s）: %s", strings.Join(tried, " → "), lastErr)})
 }
 
 // aggregateStreamOnce 请求上游流式端点，返回裸响应（SSE 由调用方转发）。
