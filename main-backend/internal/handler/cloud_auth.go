@@ -81,6 +81,7 @@ func proxyToCloudOpt(c *gin.Context, targetPath string, forwardAuth bool) {
 }
 
 // CloudLoginProxy 把密码登录转发到 ResceneCloud（sha256 比对在那里完成）。
+// 双模式：{username,password}=账号登录，{password}=管理员密码登录。
 func CloudLoginProxy(c *gin.Context) {
 	proxyToCloud(c, "/api/login")
 }

@@ -285,7 +285,7 @@
             <input v-model="rcPwd" type="password" class="smc-rc-input" placeholder="密码" @keyup.enter="loginResceneCloud" />
             <button class="smc-rc-btn" :disabled="rcLoading" @click="loginResceneCloud">{{ rcLoading ? '登录中…' : '登录' }}</button>
             <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
-            <div class="smc-rc-hint">没有账号？国内直接注册 Rescene Cloud 账号即可（无需 GitHub）</div>
+            <div class="smc-rc-hint">没有账号？官网用 3 个邀请码合成（80% 概率）</div>
           </div>
           </div>
       </div>
@@ -624,10 +624,12 @@ function shareCard() {
 }
 
 // ===== Rescene Cloud 账号登录（国内无需 GitHub/代理）=====
+// 注册已关闭（2026-08-14 用户定稿）：账号只能通过官网 3 个邀请码合成获得。
 const rcUser = ref('')
 const rcPwd = ref('')
 const rcLoading = ref(false)
 const rcError = ref('')
+
 async function loginResceneCloud() {
   rcError.value = ''
   if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = '请输入账号和密码'; return }
