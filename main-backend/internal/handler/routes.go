@@ -224,7 +224,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/update/download", HandleAutoDownload)
 	r.GET("/api/update/download/status", HandleUpdateDownloadStatus)
 	r.POST("/api/update/install", HandleInstallUpdate)
-	r.DELETE("/api/update/pending", HandleClearPendingHotPatch)
+	r.DELETE("/api/update/pending", HandleClearPendingHotPatch) // 跳过此版本：删待应用热补丁 exe
 
 	// 定时任务：前端 ScheduledTaskModal 创建 → 调度器到点弹 Windows 原生通知（右下角）
 	r.POST("/api/cron/create", HandleCronCreate)
@@ -244,6 +244,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// Rescene 聚合 API：OpenAI 兼容端点，聚合免费模型池 + 自定义提供方
 	r.POST("/v1/chat/completions", HandleAggregateChat)
 	r.GET("/v1/models", HandleAggregateModels)
+	// 聚合 API 健康度可视化（设置面板「聚合 API」tab）
+	r.GET("/api/aggregate/health", HandleAggregateHealth)
 
 	// 共享池（公益免费）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
 	r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)
@@ -255,8 +257,15 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	// 多平台发布（GUI 发布面板：网文平台一键发布 + Edge CDP cookie 自动化）
 	r.GET("/api/publish/platforms", HandlePublishPlatforms)
+	r.GET("/api/publish/books", HandleNovelBooks)
+	r.POST("/api/publish/books", HandleCreateNovelBook)
+	r.PUT("/api/publish/books/:id", HandleUpdateNovelBook)
+	r.DELETE("/api/publish/books/:id", HandleDeleteNovelBook)
+	r.POST("/api/publish/books/:id/open", HandleOpenNovelBook)
+	r.POST("/api/publish/books/:id/chapters", HandleSaveNovelChapter)
+	r.POST("/api/publish/compose", HandlePublishCompose)
 	r.POST("/api/publish", HandlePublish)
-	r.POST("/api/publish/login-chrome", HandlePublishLoginChrome)
+	r.POST("/api/publish/login-edge", HandlePublishLoginEdge)
 	// 作品集列表（发布面板选文件用）
 	r.GET("/api/outputs/list", HandleOutputsList)
 	r.GET("/api/outputs/file", HandleOutputsFile)
@@ -288,12 +297,26 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/company/iterate", HandleCompanyIterateStart)
 	r.POST("/api/company/iterate/stop", HandleCompanyIterateStop)
 	r.GET("/api/company/tags/hot", HandleCompanyHotTags)
-	// User directive and selected model.
+	// 用户自定义指令（考题/项目目标，立项最高优先级）
 	r.GET("/api/company/directive", HandleCompanyDirective)
 	r.PUT("/api/company/directive", HandleCompanySaveDirective)
+	// 发行评测：用户 Agent 打分评论
 	r.GET("/api/company/reviews", HandleCompanyReviews)
 	// AI PPT 生成（看得见的幻灯片）
 	r.POST("/api/ai/ppt", HandleAIPPT)
 	// AI 项目工坊（写出真实可运行项目）
 	r.POST("/api/ai/project", HandleAIProject)
+	// 漫画创作 Agent（宇宙第一画面Agent）
+	r.GET("/api/comic/status", HandleComicStatus)
+	r.POST("/api/comic/start-sd", HandleComicStartSD)
+	r.POST("/api/comic/breakdown", HandleComicBreakdown)
+	r.POST("/api/comic/generate", HandleComicGenerate)
+	r.POST("/api/comic/render-panel", HandleComicRenderPanel)
+	r.POST("/api/comic/assemble", HandleComicAssemble)
+	r.GET("/api/comic/characters", HandleComicCharacters)
+	r.POST("/api/comic/characters", HandleComicCreateCharacter)
+	r.GET("/api/comic/pages", HandleComicList)
+	r.GET("/api/comic/page/:id", HandleComicPage)
+	// 漫画图片静态服务
+	r.Static("/api/comic/image", comicOutputDir())
 }
