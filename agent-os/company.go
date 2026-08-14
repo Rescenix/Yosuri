@@ -15,6 +15,7 @@ package main
 //   rescene company 作者 研究员  启动指定角色
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"strings"
 	"time"
 )
+
 // AgentRole 一个 agent 的角色定义
 type AgentRole struct {
 	Key     string   // 唯一标识（作者/研究员/发布官）
@@ -35,38 +37,43 @@ type AgentRole struct {
 var CompanyRoles = []AgentRole{
 	{
 		Key: "writer", Name: "作者", Emoji: "✍️",
-		Prompt: "你的角色是公司里的【作者】。你的天职是持续创作：把学习到的、想到的、研究到的东西，写成文章、小说、随笔、文档。产出就是你的价值——每天都要有新的文字诞生。",
+		Prompt:  "你的角色是公司里的【作者】。你的天职是持续创作：把学习到的、想到的、研究到的东西，写成文章、小说、随笔、文档。产出就是你的价值——每天都要有新的文字诞生。",
 		Actions: []string{"write", "journal", "study"},
 	},
 	{
 		Key: "researcher", Name: "研究员", Emoji: "🔬",
-		Prompt: "你的角色是公司里的【研究员】。你的天职是深度研究：读最新论文、调研前沿话题、积累知识。你是公司的大脑，为作者的创作提供素材与洞见。",
+		Prompt:  "你的角色是公司里的【研究员】。你的天职是深度研究：读最新论文、调研前沿话题、积累知识。你是公司的大脑，为作者的创作提供素材与洞见。",
 		Actions: []string{"research", "read", "study"},
 	},
 	{
 		Key: "coder", Name: "程序员", Emoji: "💻",
-		Prompt: "你的角色是公司里的【程序员】。你的天职是写代码、做项目、自检迭代。你是公司的双手——把想法变成可运行的代码，用工具干活，让产品不断进化。",
+		Prompt:  "你的角色是公司里的【程序员】。你的天职是写代码、做项目、自检迭代。你是公司的双手——把想法变成可运行的代码，用工具干活，让产品不断进化。",
 		Actions: []string{"project", "task", "write"},
 	},
 	{
 		Key: "designer", Name: "UI 设计师", Emoji: "🎨",
-		Prompt: "你的角色是公司里的【UI 设计师】。你的天职是出 UI 设计方案：产品概念、页面结构、配色方案、组件规范、交互说明，写清楚程序员能照着实现的规格。你是公司的门面——每个产品先经过你的手设计，程序员再照着写。拒绝 AI 味的紫色渐变，要亮色清爽、现代专业、有品牌感。",
+		Prompt:  "你的角色是公司里的【UI 设计师】。你的天职是出 UI 设计方案：产品概念、页面结构、配色方案、组件规范、交互说明，写清楚程序员能照着实现的规格。你是公司的门面——每个产品先经过你的手设计，程序员再照着写。拒绝 AI 味的紫色渐变，要亮色清爽、现代专业、有品牌感。",
 		Actions: []string{"design", "write", "research"},
 	},
 	{
 		Key: "publisher", Name: "发布官", Emoji: "📡",
-		Prompt: "你的角色是公司里的【发布官】。你的天职是分发成果：把公司产出的文章/代码/报告发布到各平台（晋江/番茄/纵横/GitHub）。你让公司的作品被世界看见。",
+		Prompt:  "你的角色是公司里的【发布官】。你的天职是分发成果：把公司产出的文章/代码/报告发布到各平台（晋江/番茄/纵横/GitHub）。你让公司的作品被世界看见。",
 		Actions: []string{"task", "write"},
 	},
 	{
 		Key: "promoter", Name: "宣传官", Emoji: "📣",
-		Prompt: "你的角色是公司里的【宣传官】。你的天职是让公司的作品被更多人看见：写宣传文案、设计推广标题、策划话题、制作宣传 PPT 大纲、做宣传视频 PV 脚本、运营平台账号、做引流话术。你是公司的扩音器——每篇产出都要经过你，变成吸引人点进来的传播内容。",
+		Prompt:  "你的角色是公司里的【宣传官】。你的天职是让公司的作品被更多人看见：写宣传文案、设计推广标题、策划话题、制作宣传 PPT 大纲、做宣传视频 PV 脚本、运营平台账号、做引流话术。你是公司的扩音器——每篇产出都要经过你，变成吸引人点进来的传播内容。",
 		Actions: []string{"write", "ppt", "pv", "task", "study"},
 	},
 	{
 		Key: "ceo", Name: "CEO", Emoji: "🤝",
-		Prompt: "你的角色是公司里的【CEO】。你的天职是召集公司例会：读全公司产出，主持部门汇报，做关键决策，产出会议纪要。你是公司的掌舵人——让各部门协同起来，确保公司朝着目标前进。",
+		Prompt:  "你的角色是公司里的【CEO】。你的天职是召集公司例会：读全公司产出，主持部门汇报，做关键决策，产出会议纪要。你是公司的掌舵人——让各部门协同起来，确保公司朝着目标前进。",
 		Actions: []string{"meeting", "research", "write"},
+	},
+	{
+		Key: "boss", Name: "社长（用户）", Emoji: "👑",
+		Prompt:  "你是公司的【社长】——真实用户本人。你不参与 AI 自转，你的指令通过「下达指令」通道进入公司：CEO 开会时必须读社长的最新指令（directive.json），把它作为本次例会最高优先级议题，各部门围绕社长指令汇报进展与接力计划。社长的审批（审批台）决定项目是否进入生产。你是公司的出资人与掌舵者，AI 员工对你负责。",
+		Actions: []string{"meeting", "approve"},
 	},
 }
 
@@ -154,6 +161,72 @@ func teamContext(selfName string) string {
 	return fmt.Sprintf("\n\n【公司团队最近产出（可选参考：消化团队产出优先，引用时写明同事名如 designer-04）】\n%s\n", outputs)
 }
 
+// companyDirectionTags 读公司 tags.json，返回标签名列表（逗号分隔），用于立项注入
+func companyDirectionTags() string {
+	home, _ := os.UserHomeDir()
+	p := filepath.Join(home, "rescene_data", "company", "tags.json")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return "（暂无方向标签请在标签页添加）"
+	}
+	var tags []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &tags); err != nil || len(tags) == 0 {
+		return "（暂无方向标签请在标签页添加）"
+	}
+	var names []string
+	for _, t := range tags {
+		names = append(names, t.Name)
+	}
+	return strings.Join(names, "、")
+}
+
+// companyDirective 读用户自定义指令（前端「下达指令」写 directive.json），立项最高优先级
+// 无指令返回空串，调用方跳过注入；有指令则必须围绕它立项（1vs100 考题通道）
+// 返回 (指令, 指定模型ID)；模型为空 = 自动轮换
+func companyDirective() string {
+	home, _ := os.UserHomeDir()
+	p := filepath.Join(home, "rescene_data", "company", "directive.json")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return ""
+	}
+	var d struct {
+		Directive string `json:"directive"`
+		Task      string `json:"task"`
+		Model     string `json:"model"`
+	}
+	if json.Unmarshal(data, &d) != nil {
+		return ""
+	}
+	directive := strings.TrimSpace(d.Directive)
+	if directive == "" {
+		if task := strings.TrimSpace(d.Task); task != "" {
+			return task
+		}
+		return ""
+	}
+	return directive
+}
+
+// companyDirectiveModel 读下达指令时指定的模型 ID（空 = 自动轮换）
+func companyDirectiveModel() string {
+	home, _ := os.UserHomeDir()
+	p := filepath.Join(home, "rescene_data", "company", "directive.json")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return ""
+	}
+	var d struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(data, &d) != nil {
+		return ""
+	}
+	return strings.TrimSpace(d.Model)
+}
+
 // runCompany 启动公司：N 个 agent 并行 24H 自转
 //   rescene company           启动 3 个核心角色
 //   rescene company 100       启动 100 个 agent（百人公司）
@@ -195,6 +268,9 @@ func runCompany(args []string) {
 
 	for i := 0; i < count; i++ {
 		role := avail[i%len(avail)]
+		if role.Key == "boss" {
+			continue // 社长=真实用户，不启动 AI 自转（指令走 directive 通道）
+		}
 		agents = append(agents, agent{
 			Name: fmt.Sprintf("%s-%02d", role.Key, i+1),
 			Role: role,
@@ -213,7 +289,7 @@ func runCompany(args []string) {
 		d.Silent = true
 		fmt.Printf("  ✅ %s%s 已开工（家: %s）\n", a.Role.Emoji, a.Name, companyAgentHome(a.Name))
 		cfg := defaultLiveConfig()
-		cfg.every = 2 * time.Minute // 2 分钟一轮（keyed 模型稳定，产出节奏快）
+		cfg.every = 2 * time.Minute                     // 2 分钟一轮（keyed 模型稳定，产出节奏快）
 		time.Sleep(time.Duration(i) * 15 * time.Second) // 错峰 15 秒
 		// coder 启动即做项目（立即产出代码，不等 LLM 慢慢决策；90s 后触发，等设计师设计稿先落盘——协作链：设计→开发）
 		if a.Role.Key == "coder" {

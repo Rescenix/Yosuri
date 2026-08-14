@@ -102,11 +102,7 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
 	{ID: "free_step_3_7_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.7-flash（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰免费档·agent 可用（实测 2026-08-02）", KeyURL: "https://platform.stepfun.com/"},
 
-	// —— Step Plan 订阅（api.stepfun.com/step_plan/v1）——
-	// 订阅制专用端点：走月度 Credit 池，不扣账户余额（2026-08-04 实测）。
-	// 与普通 API(/v1) 是两套独立体系；非订阅用户用此端点会报错，未订阅请用上面 v1 条目。
-	// 自动发现会拉出订阅支持的 9 个旗舰模型（step-3.7/3.5-flash、stepaudio 系列、step-router 等）。
-	{ID: "plan_step_gateway", Vendor: "Step Plan 订阅", Name: "step-3.7-flash（订阅 Credit）", Endpoint: "https://api.stepfun.com/step_plan/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "Step Plan 订阅专用端点·走月池 Credit 不扣余额；未订阅请用免费档", KeyURL: "https://platform.stepfun.com/plan-subscribe"},
+	// —— Step Plan 订阅已移除（2026-08-13 用户清理）：无订阅用不了，纯占位 ——
 
 	// —— OpenCode Zen 免 key 网关（opencode.ai/zen/v1，OpenAI 兼容）——
 	// 2026-07-28 用户实测接入：全程免 key，鉴权由域名承载；/v1/models 与
@@ -119,29 +115,16 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·最快）", Keyless: true, Reasoning: true},
-	{ID: "free_zen_nemotron_3_ultra", Vendor: "OpenCode Zen", Name: "Nemotron 3 Ultra（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "nemotron-3-ultra-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档）", Keyless: true, Reasoning: true},
 	// 2026-08-08 重新爬取 Zen /v1/models（61 模型，8 个 free 档）实测新增：
+	// Nemotron 3 Ultra 已移除：免费档思考 4 分钟级超时（2026-08-13 用户清理）
 	// longcat-2.0-free（全新可用）、laguna-s-2.1-free（恢复可用）；ling-3.0-tiny/flash-free 上游挂未收录
 	{ID: "free_zen_longcat_2_0", Vendor: "OpenCode Zen", Name: "Longcat 2.0（免费·新增）", Endpoint: "https://opencode.ai/zen/v1", Model: "longcat-2.0-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·2026-08-08 新增实测可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_laguna_s_2_1", Vendor: "OpenCode Zen", Name: "Laguna S 2.1（免费·恢复）", Endpoint: "https://opencode.ai/zen/v1", Model: "laguna-s-2.1-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·2026-08-08 恢复可用）", Keyless: true, Reasoning: true},
 
-	// —— Kilo Gateway（api.kilo.ai/api/gateway，OpenAI 兼容）——
-	// 2026-08-08 发现：完全免 key 的聚合网关，349 个模型，免费档 200 RPH。
-	// 实测 6 个 :free 模型稳定可用（Nemotron 3 Ultra/Super/Nano、腾讯混元 Hy3、阶跃 step-3.7、Laguna）；
-	// 需浏览器 UA 过 Cloudflare（agent-os callModel 已带；main-backend 走 http 时也要带）。
-	{ID: "free_kilo_nemotron_3_ultra", Vendor: "Kilo Gateway", Name: "Nemotron 3 Ultra 550B（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "nvidia/nemotron-3-ultra-550b-a55b:free", KeyEnv: "", ParamsB: 550, Note: "Kilo 免 key 网关（免费档·550B 旗舰）", Keyless: true, Reasoning: true},
-	{ID: "free_kilo_nemotron_3_super", Vendor: "Kilo Gateway", Name: "Nemotron 3 Super 120B（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "nvidia/nemotron-3-super-120b-a12b:free", KeyEnv: "", ParamsB: 120, Note: "Kilo 免 key 网关（免费档）", Keyless: true, Reasoning: true},
-	{ID: "free_kilo_nemotron_nano_omni", Vendor: "Kilo Gateway", Name: "Nemotron Nano Omni 30B（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", KeyEnv: "", ParamsB: 30, Note: "Kilo 免 key 网关（免费档·30B 推理）", Keyless: true, Reasoning: true},
-	{ID: "free_kilo_tencent_hy3", Vendor: "Kilo Gateway", Name: "腾讯混元 Hy3（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "tencent/hy3:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key 网关（免费档·腾讯混元）", Keyless: true, Reasoning: true},
-	{ID: "free_kilo_step_3_7_flash", Vendor: "Kilo Gateway", Name: "阶跃 step-3.7-flash（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "stepfun/step-3.7-flash:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key 网关（免费档·阶跃）", Keyless: true, Reasoning: true},
-	{ID: "free_kilo_laguna_s_2_1", Vendor: "Kilo Gateway", Name: "Laguna S 2.1（免费）", Endpoint: "https://api.kilo.ai/api/gateway", Model: "poolside/laguna-s-2.1:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key 网关（免费档）", Keyless: true, Reasoning: true},
+	// —— Kilo Gateway 已整体移除（2026-08-13 用户清理）：免费档排队+推理超时（Nemotron 思考 4 分钟元凶），
+	// 与 Zen 的模型重复度高，且实测 6 个 :free 模型质量一般 ——
 
-	// —— Cerebras（api.cerebras.ai/v1，OpenAI 兼容）——
-	// 2026-08-08 接入：免费档 1M tokens/天（gpt-oss-120b 5 RPM / 30K TPM）。
-	// ⚠️ Cloudflare 地域风控：大陆 IP 直连被拒（error code 1009 实测），需海外出口。
-	{ID: "free_cerebras_gpt_oss_120b", Vendor: "Cerebras", Name: "GPT-OSS 120B（Cerebras·免费）", Endpoint: "https://api.cerebras.ai/v1", Model: "gpt-oss-120b", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 120, Note: "Cerebras 免费·1M tokens/天（大陆 IP 被 Cloudflare 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.cerebras.ai/"},
-	{ID: "free_cerebras_qwen3_235b", Vendor: "Cerebras", Name: "Qwen3-235B（Cerebras·免费）", Endpoint: "https://api.cerebras.ai/v1", Model: "qwen-3-235b-a22b-instruct-2507", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 235, Note: "Cerebras 免费·1M tokens/天（大陆 IP 被 Cloudflare 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.cerebras.ai/"},
-	{ID: "free_cerebras_glm_4_7", Vendor: "Cerebras", Name: "GLM-4.7（Cerebras·免费）", Endpoint: "https://api.cerebras.ai/v1", Model: "zai-glm-4.7", KeyEnv: "CEREBRAS_API_KEY", ParamsB: 0, Note: "Cerebras 免费·1M tokens/天（大陆 IP 被 Cloudflare 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.cerebras.ai/"},
+	// —— Cerebras 已整体移除（2026-08-13 用户清理）：大陆 IP 被 Cloudflare 地域风控（error 1009 实测必挂）——
 
 	// —— 智谱 BigModel（open.bigmodel.cn/api/paas/v4，OpenAI 兼容）——
 	// 2026-08-08 接入：GLM Flash 系列永久免费（30 并发）。实测可用：
@@ -153,21 +136,11 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_zhipu_glm_4_flash", Vendor: "智谱 BigModel", Name: "GLM-4-Flash（永久免费）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4-flash-250414", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱永久免费", ContextWindow: 128000, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
 	{ID: "free_zhipu_glm_4_6v_flash", Vendor: "智谱 BigModel", Name: "GLM-4.6V-Flash（免费·视觉）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.6v-flash", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱免费·识图", Vision: true, ContextWindow: 128000, Reasoning: true, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
 
-	// —— Groq（api.groq.com/openai/v1，OpenAI 兼容）——
-	// 2026-08-08 接入：免费档 30 RPM / 1000 RPD（gpt-oss-120b 等）。
-	// ⚠️ 地域风控：大陆 IP 直连 403 Forbidden（无 key/假 key/真 key 同码实测），需海外出口。
-	{ID: "free_groq_gpt_oss_120b", Vendor: "Groq", Name: "GPT-OSS 120B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "gpt-oss-120b", KeyEnv: "GROQ_API_KEY", ParamsB: 120, Note: "Groq 免费·30 RPM/1000 RPD（大陆 IP 403 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
-	{ID: "free_groq_gpt_oss_20b", Vendor: "Groq", Name: "GPT-OSS 20B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "gpt-oss-20b", KeyEnv: "GROQ_API_KEY", ParamsB: 20, Note: "Groq 免费·30 RPM/1000 RPD（大陆 IP 403 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
-	{ID: "free_groq_qwen3_32b", Vendor: "Groq", Name: "Qwen3-32B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "qwen3-32b", KeyEnv: "GROQ_API_KEY", ParamsB: 32, Note: "Groq 免费·30 RPM/1000 RPD（大陆 IP 403 地域风控）", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
+	// —— Groq 已整体移除（2026-08-13 用户清理）：大陆 IP 地域风控 403（无 key/真 key 全挂）——
 
 	// —— 本地 llama.cpp 已移除：维护 Vision 标签成本高于收益，识图模型由用户自行选择 ——
 
-	// —— Ollama Cloud 云端（OpenAI 兼容端点 ollama.com/v1）——
-	// 2026-07-31 接入：云端免费档（无需本地跑 ollama）。实测 /v1/models 与
-	// /v1/chat/completions 均可用；需要 OLLAMA_API_KEY（ollama.com 注册获取）。
-	// 仅收录用户实测可用的 gpt-oss:120b；20b 档连对话质量都不够，不收录。
-	// ContextWindow 未知者留 0，绝不伪造（目录规矩）。
-	{ID: "cloud_ollama_gpt_oss_120b", Vendor: "Ollama Cloud", Name: "GPT-OSS 120B（免费·云端）", Endpoint: "https://ollama.com/v1", Model: "gpt-oss:120b", KeyEnv: "OLLAMA_API_KEY", ParamsB: 120, Note: "Ollama Cloud 免费档大模型", Reasoning: true, KeyURL: "https://ollama.com/settings/keys"},
+	// —— Ollama Cloud 已整体移除（2026-08-13 用户清理）：403 requires subscription（付费墙）——
 
 	// —— SenseNova 商汤（token.sensenova.cn/v1，OpenAI 兼容）——
 	// 2026-08-02 用户要求接入。官方文档确认免费额度：sensenova-6.7-flash-lite 每 5 小时
@@ -185,14 +158,10 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_modelscope_qwen3_5_397b", Vendor: "ModelScope 魔搭", Name: "Qwen3.5-397B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3.5-397B-A17B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 397, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
 	{ID: "free_modelscope_qwen3_235b", Vendor: "ModelScope 魔搭", Name: "Qwen3-235B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-235B-A22B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 235, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
 	{ID: "free_modelscope_glm_5_2", Vendor: "ModelScope 魔搭", Name: "GLM-5.2（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "ZhipuAI/GLM-5.2", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
-	{ID: "free_modelscope_deepseek_v4_flash", Vendor: "ModelScope 魔搭", Name: "DeepSeek V4 Flash（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "deepseek-ai/DeepSeek-V4-Flash", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_deepseek_v4_flash", Vendor: "ModelScope 魔搭", Name: "DeepSeek V4 Flash（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "deepseek-ai/DeepSeek-V4-Flash-0731", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天·2026-08-13 ID 改 -0731（旧 ID 上游已下架 400）", Reasoning: true, KeyURL: "https://modelscope.cn"},
 
-	// —— NVIDIA NIM（integrate.api.nvidia.com/v1，OpenAI 兼容）——
-	// 2026-08-02 用户要求接入。build.nvidia.com 免费注册即得 API Key，80+ 免费 serverless 模型
-	// （gpt-oss-120b 等）。⚠️ 此前 2026-07-23 曾因免费档限流 429 严重整体移除，本次按用户
-	// 明确要求重新收录；如再次出现高频 429 可整体下架（nim_refresh.go 探测骨架仍保留）。
-	{ID: "free_nvidia_gpt_oss_120b", Vendor: "NVIDIA NIM", Name: "GPT-OSS 120B（英伟达·免费）", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "openai/gpt-oss-120b", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 120, Note: "NVIDIA 免费 serverless（注意限流）", ContextWindow: 131072, KeyURL: "https://build.nvidia.com/settings/api-keys"},
-	{ID: "free_nvidia_glm_5_2", Vendor: "NVIDIA NIM", Name: "GLM-5.2（英伟达·免费）", Endpoint: "https://integrate.api.nvidia.com/v1", Model: "z-ai/glm-5.2", KeyEnv: "NVIDIA_NIM_API_KEY", ParamsB: 0, Note: "NVIDIA 免费 serverless·响应偏慢（实测 2026-08-02）", Reasoning: true, KeyURL: "https://build.nvidia.com/settings/api-keys"},
+	// —— NVIDIA NIM 已整体移除（2026-08-13 用户清理：「纯纯垃圾，不要了」，实测慢/超时）——
+	// —— Step Plan 订阅已移除：无订阅用不了（2026-08-13 用户清理）——
 }
 
 func isFreeCatalogID(id string) bool {

@@ -261,6 +261,11 @@ func HandleGetModelConfig(c *gin.Context) {
 		if isFreeCatalogID(e.ID) {
 			continue // 免费池条目走下面的 free_models 视图，不在自定义列表里重复出现
 		}
+		if strings.TrimSpace(e.Endpoint) == "" {
+			// 目录外残留（厂商已整体移除/字段损坏）：不进前端列表，否则会以
+			// 「未命名」展示且任何保存都被 Endpoint 校验拦死（2026-08-14 修复）。
+			continue
+		}
 		e.APIKeySet = e.APIKey != ""
 		e.APIKey = ""
 		safe = append(safe, e)
@@ -391,6 +396,18 @@ func HandlePutModelConfig(c *gin.Context) {
 	for _, e := range existing {
 		existingByID[e.ID] = e
 	}
+
+	// 先剔除目录外残留（厂商已整体移除的旧 free_ 条目/字段损坏的僵尸记录）：
+	// 这类条目 Endpoint 为空会让下面的校验直接拒绝整次保存，用户连删都删不掉
+	// （2026-08-14 修复：free_cerebras/free_groq 目录移除后残留 user_configs）。
+	clean := make([]ModelConfigEntry, 0, len(req.Configs))
+	for _, e := range req.Configs {
+		if strings.TrimSpace(e.Endpoint) == "" && !isFreeCatalogID(e.ID) {
+			continue // 目录外残留，丢弃
+		}
+		clean = append(clean, e)
+	}
+	req.Configs = clean
 
 	// 只校验格式（非空、长度合理），不校验 Key 是否真的有效——那是用户自己的事
 	for i, e := range req.Configs {

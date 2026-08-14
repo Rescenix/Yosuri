@@ -80,6 +80,7 @@
                       v-if="sidebarOpen"
                       fill
                       :sessions="sessionList"
+                      :projects="projects"
                       :active-session="activeSession"
                       :running-session="runningSession"
                       :completed-sessions="completedSessions"
@@ -93,6 +94,7 @@
             @open-search="openSearchPanel"
                         @open-plugins="openPluginsMarket"
                         @open-scheduled-tasks="showScheduledTaskManager = true"
+                        @create-project="createProject"
                       />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
@@ -1025,6 +1027,9 @@
     <!-- 插件市场浮层（占位入口）：独立组件 + Teleport，与 SettingsModal 保持一致 -->
     <PluginsMarketModal v-if="showPluginsPanel" @close="closePluginsPanel" />
 
+    <!-- 技能习得气泡（左下角空白区，agent 提炼新技能时弹出） -->
+    <SkillToasts />
+
   </div>
 </template>
 
@@ -1043,6 +1048,7 @@ import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
+import SkillToasts from './SkillToasts.vue'
 import ScheduledTaskModal from './ScheduledTaskModal.vue'
 import ScheduledTaskManager from './ScheduledTaskManager.vue'
 import SettingsModal from './SettingsModal.vue'
@@ -1143,6 +1149,39 @@ function selectSession(id) {
 }
 // ==================== 工作目录 → 会话分组 ====================
 const WD_MAP_KEY = 'shanxi_session_workdir'
+const PROJECTS_KEY = 'shanxi_projects_v1'
+const LEGACY_AUTO_PROJECTS = new Set(['re0', 'main-frontend'])
+
+function normalizeProjectPath(path) {
+  return String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+function readProjects() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]')
+    return Array.isArray(value)
+      ? value.filter(p => p?.name?.trim() && p?.path).map(p => ({ name: p.name.trim(), path: p.path }))
+      : []
+  } catch { return [] }
+}
+const projects = ref(readProjects())
+function saveProjects() {
+  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects.value)) } catch {}
+}
+function rememberProject(project) {
+  const name = project?.name?.trim()
+  const path = project?.path
+  if (!name || !path) return
+  const normalized = normalizeProjectPath(path)
+  projects.value = [
+    { name, path },
+    ...projects.value.filter(p => p.name !== name && normalizeProjectPath(p.path) !== normalized)
+  ].slice(0, 30)
+  saveProjects()
+}
+function findProjectByPath(path) {
+  const normalized = normalizeProjectPath(path)
+  return projects.value.find(p => normalizeProjectPath(p.path) === normalized) || null
+}
 
 function loadWorkdirMapping() {
   try { return JSON.parse(localStorage.getItem(WD_MAP_KEY) || '{}') } catch { return {} }
@@ -1151,27 +1190,38 @@ function saveWorkdirMapping(m) {
   try { localStorage.setItem(WD_MAP_KEY, JSON.stringify(m)) } catch {}
 }
 function getSessionWorkdir(sid) {
-  const mapped = loadWorkdirMapping()[sid]
-  if (mapped) return mapped
-  const fallback = currentWorkDir.value?.name?.trim() || ''
-  if (fallback) {
-    const m = loadWorkdirMapping()
-    m[sid] = fallback
-    saveWorkdirMapping(m)
-  }
-  return fallback
+  return loadWorkdirMapping()[sid] || ''
 }
 function recordSessionWorkdir(sid) {
-  const wd = currentWorkDir.value?.name?.trim()
+  if (!sid) return
+  const wd = findProjectByPath(currentWorkDir.value?.path)?.name || ''
   if (!wd) return
   const m = loadWorkdirMapping()
   m[sid] = wd
   saveWorkdirMapping(m)
+  sessionList.value = sessionList.value.map(s => s.id === sid ? { ...s, workdir: wd } : s)
 }
+
+// 旧版把开发机默认值 main-frontend 和仓库根名 re0 自动写进每个会话。
+// 只清理由旧自动逻辑产生、且用户没有显式创建过的同名项目。
+function migrateLegacyWorkdirMapping() {
+  const explicitNames = new Set(projects.value.map(p => p.name))
+  const m = loadWorkdirMapping()
+  let changed = false
+  for (const [sid, name] of Object.entries(m)) {
+    if (LEGACY_AUTO_PROJECTS.has(name) && !explicitNames.has(name)) {
+      delete m[sid]
+      changed = true
+    }
+  }
+  if (changed) saveWorkdirMapping(m)
+}
+migrateLegacyWorkdirMapping()
 
 function newSession() {
   const id = 'sess_' + Date.now().toString(36)
-  sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0 }, ...sessionList.value]
+  const workdir = findProjectByPath(currentWorkDir.value?.path)?.name || ''
+  sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0, workdir }, ...sessionList.value]
   recordSessionWorkdir(id)
   switchSession(id)
 }
@@ -1539,8 +1589,8 @@ watch(() => previewRequest.seq, () => {
 // 不调这个接口的话，选目录就只是好看，agent 该读哪还是读哪，等于没切
 const WORKDIR_STORAGE_KEY = 'aether_workdir_state_v1'
 const WORKDIR_IGNORED = new Set(['node_modules', 'build', '__pycache__', 'dist', '.git'])
-const currentWorkDir = ref({ name: 'main-frontend', path: 'main-frontend' })
-const workDirRecents = ref([{ name: 'main-frontend', path: 'main-frontend' }])
+const currentWorkDir = ref({ name: '', path: '' })
+const workDirRecents = ref([])
 const showWorkDirMenu = ref(false)
 const workDirMenuView = ref('recent') // 'recent' | 'browse'
 const workDirBrowseOptions = ref([])
@@ -1794,9 +1844,14 @@ async function syncWorkDirFromBackend() {
     if (!res.ok) return
     const data = await res.json()
     if (!data.path) return
-    const dir = { name: data.name || data.path, path: data.path }
+    const project = findProjectByPath(data.path)
+    const dir = { name: project?.name || data.name || data.path, path: data.path }
     currentWorkDir.value = dir
-    workDirRecents.value = [dir, ...workDirRecents.value.filter(d => d.path !== dir.path)].slice(0, 6)
+    // 后端启动目录只是运行上下文，不等于用户创建的项目。只有显式项目才进入
+    // Recent，避免再次把开发仓库名 re0 暴露到真实用户界面。
+    if (project) {
+      workDirRecents.value = [dir, ...workDirRecents.value.filter(d => normalizeProjectPath(d.path) !== normalizeProjectPath(dir.path))].slice(0, 6)
+    }
     saveWorkDirState()
   } catch (e) {}
 }
@@ -1851,10 +1906,13 @@ async function selectWorkDir(dir) {
       throw new Error(data.error || `切换失败 (${res.status})`)
     }
     const data = await res.json()
-    const resolved = { name: data.name || dir.name, path: data.path || dir.path }
+    const resolved = { name: dir.name || data.name || dir.path, path: data.path || dir.path }
+    rememberProject(resolved)
     currentWorkDir.value = resolved
     // 去重后塞到最前面，最多保留 6 条最近记录
-    workDirRecents.value = [resolved, ...workDirRecents.value.filter(d => d.path !== resolved.path)].slice(0, 6)
+    workDirRecents.value = [resolved, ...workDirRecents.value.filter(d => normalizeProjectPath(d.path) !== normalizeProjectPath(resolved.path))].slice(0, 6)
+    // 切换目录就是把当前会话归入该项目；旧实现只切了 agent cwd，侧栏不会更新。
+    recordSessionWorkdir(activeSession.value)
     saveWorkDirState()
     showWorkDirMenu.value = false
     showGitToast(`已切换工作目录: ${resolved.name}`)
@@ -1864,6 +1922,15 @@ async function selectWorkDir(dir) {
   } finally {
     workDirSwitching.value = false
   }
+}
+
+async function createProject({ name, sourceFolder }) {
+  const projectName = name?.trim()
+  if (!projectName || !sourceFolder?.path) {
+    showGitToast('项目名称或源文件夹无效')
+    return
+  }
+  await selectWorkDir({ name: projectName, path: sourceFolder.path })
 }
 async function openFolderBrowser() {
   workDirMenuView.value = 'browse'

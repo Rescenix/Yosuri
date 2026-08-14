@@ -224,6 +224,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/update/download", HandleAutoDownload)
 	r.GET("/api/update/download/status", HandleUpdateDownloadStatus)
 	r.POST("/api/update/install", HandleInstallUpdate)
+	r.DELETE("/api/update/pending", HandleClearPendingHotPatch)
 
 	// 定时任务：前端 ScheduledTaskModal 创建 → 调度器到点弹 Windows 原生通知（右下角）
 	r.POST("/api/cron/create", HandleCronCreate)
@@ -287,6 +288,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/company/iterate", HandleCompanyIterateStart)
 	r.POST("/api/company/iterate/stop", HandleCompanyIterateStop)
 	r.GET("/api/company/tags/hot", HandleCompanyHotTags)
+	// User directive and selected model.
+	r.GET("/api/company/directive", HandleCompanyDirective)
+	r.PUT("/api/company/directive", HandleCompanySaveDirective)
+	r.GET("/api/company/reviews", HandleCompanyReviews)
 	// AI PPT 生成（看得见的幻灯片）
 	r.POST("/api/ai/ppt", HandleAIPPT)
 	// AI 项目工坊（写出真实可运行项目）

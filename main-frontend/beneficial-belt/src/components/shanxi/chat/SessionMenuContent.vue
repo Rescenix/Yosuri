@@ -207,30 +207,89 @@
 
     <!-- 用户卡片菜单 -->
     <Teleport to="body">
-      <div v-if="showUserMenu" ref="userCardRef" class="smc-user-card" :style="userMenuStyle" @click.stop>
-        <template v-if="isLoggedIn">
-          <div class="smc-user-card-head">
-            <img v-if="auth.avatar.value" :src="auth.avatar.value" class="smc-user-avatar" alt="avatar" />
-            <Icon v-else icon="mdi:account-circle" width="26" color="var(--app-accent)" />
+      <template v-if="showUserMenu">
+        <div class="smc-card-backdrop" @click="showUserMenu = false"></div>
+        <div ref="userCardRef" class="smc-user-card is-profile" :style="userMenuStyle" @click.stop>
+          <header class="smc-profile-hero">
+            <div class="smc-profile-aura" aria-hidden="true"></div>
+            <div class="smc-avatar-shell">
+              <img v-if="auth.avatar.value" :src="auth.avatar.value" class="smc-user-avatar" alt="avatar" />
+              <Icon v-else icon="mdi:account-circle" width="48" color="#fff" />
+              <i class="smc-online-dot" title="在线"></i>
+            </div>
             <div class="smc-user-card-name">
-              <div>{{ auth.name.value || auth.login.value || 'GitHub 用户' }}</div>
-              <div v-if="auth.uid.value" class="smc-user-uid">UID {{ auth.uid.value }}</div>
+              <span class="smc-profile-kicker">RESCENE IDENTITY</span>
+              <strong>{{ auth.name.value || auth.login.value || '本地访客' }}</strong>
+              <div class="smc-profile-meta">
+                <span v-if="auth.uid.value">UID {{ auth.uid.value }}</span>
+                <span>本地 AI 档案</span>
+              </div>
+            </div>
+            <button class="smc-profile-share" type="button" aria-label="分享角色卡" @click="shareCard"><Icon icon="mdi:share-variant-outline" width="18" /></button>
+            <button class="smc-profile-close" type="button" aria-label="关闭角色卡" @click="showUserMenu = false"><Icon icon="mdi:close" width="18" /></button>
+          </header>
+          <div v-if="evolve" class="smc-evolve">
+            <div class="smc-evolve-summary">
+              <div>
+                <span class="smc-evolve-stage">{{ evolve.stage }}</span>
+                <span class="smc-evolve-lv" :class="{ bump: lvBump }">LV {{ evolve.level || 1 }}</span>
+              </div>
+              <strong>{{ evolveNum().xp }} <small>XP</small></strong>
+            </div>
+            <div class="smc-xp-track" role="progressbar" :aria-valuenow="xpProgress" aria-valuemin="0" aria-valuemax="100">
+              <i :style="{ width: xpProgress + '%' }"></i>
+            </div>
+            <div class="smc-xp-copy"><span>本级进度 {{ xpProgress }}%</span><span>距 LV {{ (evolve.level || 1) + 1 }} 还需 {{ xpRemaining }} XP</span></div>
+
+            <div class="smc-profile-dashboard">
+              <div class="smc-radar-wrap">
+                <span class="smc-panel-label">能力轮廓</span>
+                <svg viewBox="0 0 200 200" class="smc-radar">
+                  <polygon :points="evoPoints(1)" class="smc-radar-grid smc-radar-grid-1" />
+                  <polygon :points="evoPoints(0.66)" class="smc-radar-grid smc-radar-grid-2" />
+                  <polygon :points="evoPoints(0.33)" class="smc-radar-grid smc-radar-grid-3" />
+                  <polygon :points="evoHexPoints()" class="smc-radar-fill" />
+                  <g v-for="(a, i) in EVO_AXES" :key="a.label">
+                    <line :x1="100" :y1="100" :x2="100 + Math.cos(labelAng(i)) * 82" :y2="100 - Math.sin(labelAng(i)) * 82" :stroke="a.color" stroke-opacity="0.4" stroke-width="1.4" class="smc-radar-line" />
+                    <circle :cx="evoPoint(i, evolveNum()[a.key]).x" :cy="evoPoint(i, evolveNum()[a.key]).y" r="3.2" :fill="a.color" stroke="#fff" stroke-width="1.4" class="smc-radar-point" />
+                    <text :x="100 + Math.cos(labelAng(i)) * 93" :y="100 - Math.sin(labelAng(i)) * 93" class="smc-radar-label" text-anchor="middle" dominant-baseline="middle">{{ a.label }}</text>
+                  </g>
+                </svg>
+              </div>
+              <div class="smc-ability-list">
+                <span class="smc-panel-label">实时能力值</span>
+                <div v-for="a in EVO_AXES" :key="a.key" class="smc-ability-row">
+                  <div><i :style="{ background: a.color }"></i><span>{{ a.label }}</span><b>{{ evolveNum()[a.key] || 0 }}<small v-if="a.key === 'success'">%</small></b></div>
+                  <span class="smc-ability-track"><i :style="{ width: Math.max(2, evolveNum()[a.key] || 0) + '%', background: a.color }"></i></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="smc-career-stats">
+              <div><Icon icon="mdi:file-check-outline" width="17" /><span><b>{{ evolve.outputs || 0 }}</b><small>真实产出</small></span></div>
+              <div><Icon icon="mdi:puzzle-outline" width="17" /><span><b>{{ evolve.skills || 0 }}</b><small>已学技能</small></span></div>
+              <div><Icon icon="mdi:brain" width="17" /><span><b>{{ evolve.memories || 0 }}</b><small>记忆沉淀</small></span></div>
+              <div><Icon icon="mdi:chart-timeline-variant-shimmer" width="17" /><span><b>{{ evolve.refines || 0 }}</b><small>自我迭代</small></span></div>
             </div>
           </div>
-          <button class="smc-user-card-item danger" @click="logout">退出登录</button>
-        </template>
-        <template v-else>
-          <div class="smc-user-card-head">
-            <Icon icon="mdi:account-circle" width="26" color="var(--app-accent)" />
-            <div class="smc-user-card-name">
-              <div>{{ auth.displayName.value }}</div>
-              <div v-if="auth.uid.value" class="smc-user-uid">登录后永久保留 UID {{ auth.uid.value }}</div>
-              <div v-else class="smc-user-uid">登录后永久保留 UID</div>
-            </div>
-          </div>
+          <div v-else class="smc-profile-loading"><i></i><span>正在读取成长档案…</span></div>
+          <footer class="smc-profile-actions">
+            <span><Icon icon="mdi:shield-check-outline" width="15" /> 数据来自真实使用记录</span>
+            <button v-if="isLoggedIn" class="smc-user-card-item danger" @click="logout"><Icon icon="mdi:logout-variant" width="16" />退出登录</button>
+          </footer>
+          <div v-if="!isLoggedIn" class="smc-login-panel">
           <a class="smc-user-card-item" :href="githubAuthUrl">使用 GitHub 登录</a>
-        </template>
+          <div class="smc-rc-sep">或 · Rescene Cloud 账号</div>
+          <div class="smc-rc-login">
+            <input v-model="rcUser" class="smc-rc-input" placeholder="Rescene Cloud 账号" @keyup.enter="loginResceneCloud" />
+            <input v-model="rcPwd" type="password" class="smc-rc-input" placeholder="密码" @keyup.enter="loginResceneCloud" />
+            <button class="smc-rc-btn" :disabled="rcLoading" @click="loginResceneCloud">{{ rcLoading ? '登录中…' : '登录' }}</button>
+            <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
+            <div class="smc-rc-hint">没有账号？国内直接注册 Rescene Cloud 账号即可（无需 GitHub）</div>
+          </div>
+          </div>
       </div>
+      </template>
     </Teleport>
 
     <!-- 会话三点菜单 -->
@@ -293,6 +352,7 @@ const PIN_KEY = 'shanxi_pinned_projects'
 
 const props = defineProps({
   sessions: { type: Array, default: () => [] },
+  projects: { type: Array, default: () => [] },
   activeSession: { type: String, default: '' },
   runningSession: { type: String, default: '' },
   completedSessions: { type: Set, default: () => new Set() },
@@ -367,6 +427,12 @@ function toggleOrphan() { showOrphan.value = !showOrphan.value }
 // ========== 按 workdir 分组 ==========
 const workdirMap = computed(() => {
   const map = new Map()
+  // 项目是独立实体，不能只靠“恰好有会话”来反推；新建项目即使暂时没有
+  // 会话也必须立刻出现在侧栏。
+  for (const project of props.projects) {
+    const name = project?.name?.trim()
+    if (name && !map.has(name)) map.set(name, [])
+  }
   for (const s of props.sessions) {
     const wd = s.workdir || ''
     if (!wd) continue
@@ -411,29 +477,183 @@ const showUserMenu = ref(false)
 const userMenuStyle = ref({})
 const isLoggedIn = auth.isLoggedIn
 function refreshLoginState() { auth.refresh() }
+
+// ===== 进化雷达（聊天界面看 AI 成长，真实数据 /api/evolve/me）=====
+const evolve = ref(null)
+// 经验增长动画：evolveAnim 从 0 滚动逼近真实值（XP 数字滚动 + 雷达从中心展开）
+const evolveAnim = ref(null)
+let evolveRaf = 0
+const lvBump = ref(false)  // XP 到达后 Lv 跳动
+function startEvolveAnim(target) {
+  cancelAnimationFrame(evolveRaf)
+  const keys = ['output', 'skill', 'collab', 'memory', 'success', 'intimacy', 'xp']
+  const t0 = performance.now()
+  const DUR = 1600 // 1.6s 成长动画
+  function tick(t) {
+    const p = Math.min(1, (t - t0) / DUR)
+    const e = 1 - Math.pow(1 - p, 3) // easeOutCubic：先快后慢，像升级冲刺
+    const cur = {}
+    for (const k of keys) cur[k] = Math.round((target[k] || 0) * e)
+    if (p < 1) {
+      evolveAnim.value = cur
+      evolveRaf = requestAnimationFrame(tick)
+    } else {
+          evolveAnim.value = { ...target }
+          // 经验到位，Lv 徽章跳一下
+          lvBump.value = true
+          setTimeout(() => { lvBump.value = false }, 900)
+        }
+  }
+  evolveRaf = requestAnimationFrame(tick)
+}
+const EVO_AXES = [
+  { label: '产出', key: 'output', color: '#f59e0b' },
+  { label: '技能', key: 'skill', color: '#6366f1' },
+  { label: '协作', key: 'collab', color: '#0ea5e9' },
+  { label: '记忆', key: 'memory', color: '#8b5cf6' },
+  { label: '成功率', key: 'success', color: '#10b981' },
+  { label: '亲密度', key: 'intimacy', color: '#ec4899' },
+]
+const xpLevelStart = computed(() => Math.max(0, ((evolve.value?.level || 1) * ((evolve.value?.level || 1) - 1) / 2) * 100))
+const xpLevelEnd = computed(() => (((evolve.value?.level || 1) * ((evolve.value?.level || 1) + 1) / 2) * 100))
+const xpProgress = computed(() => Math.max(0, Math.min(100, Math.round(((evolve.value?.xp || 0) - xpLevelStart.value) / Math.max(1, xpLevelEnd.value - xpLevelStart.value) * 100))))
+const xpRemaining = computed(() => Math.max(0, xpLevelEnd.value - (evolve.value?.xp || 0)))
+function labelAng(i) { return Math.PI / 2 - i * 2 * Math.PI / EVO_AXES.length }
+function evoPoint(i, val) {
+  const ang = labelAng(i)
+  const v = Math.max(0, Math.min(100, val || 0)) / 100 * 78
+  return { x: 100 + Math.cos(ang) * v, y: 100 - Math.sin(ang) * v }
+}
+function evoPoints(pct) {
+  return EVO_AXES.map((_, i) => { const p = evoPoint(i, pct * 100); return p.x.toFixed(1) + ',' + p.y.toFixed(1) }).join(' ')
+}
+function evoHexPoints() {
+  // 动画期间用滚动值，动画结束用真实值
+  const src = evolveAnim.value || evolve.value
+  return EVO_AXES.map((a, i) => { const p = evoPoint(i, src ? src[a.key] : 0); return p.x.toFixed(1) + ',' + p.y.toFixed(1) }).join(' ')
+}
+function evolveNum() { return evolveAnim.value || evolve.value || {} }
+async function loadEvolve() {
+  try {
+    const r = await fetch('/api/evolve/me')
+    if (r.ok) {
+      const data = await r.json()
+      evolve.value = data
+      startEvolveAnim(data)
+    }
+  } catch (e) { /* 后端没起就静默，不打扰聊天 */ }
+}
+
+// ===== 分享角色卡：canvas 生成成长档案图并下载 =====
+function shareCard() {
+  if (!evolve.value) return
+  const ev = evolve.value
+  const lv = ev.level || 1
+  const stage = ev.stage || '微光'
+  const name = auth.name.value || auth.login.value || '本地访客'
+  const W = 720, H = 640
+  const c = document.createElement('canvas')
+  c.width = W; c.height = H
+  const g = c.getContext('2d')
+  // 顶栏
+  const grd = g.createLinearGradient(0, 0, W, 0)
+  grd.addColorStop(0, '#111827'); grd.addColorStop(0.55, '#1e293b'); grd.addColorStop(1, '#172554')
+  g.fillStyle = grd; g.fillRect(0, 0, W, 150)
+  g.fillStyle = '#93c5fd'; g.font = '700 13px sans-serif'; g.fillText('RESCENE IDENTITY', 36, 44)
+  g.fillStyle = '#ffffff'; g.font = '800 30px sans-serif'; g.fillText(name, 36, 84)
+  g.fillStyle = '#cbd5e1'; g.font = '600 14px sans-serif'
+  g.fillText(auth.uid.value ? 'UID ' + auth.uid.value : '本地 AI 档案', 36, 112)
+  g.textAlign = 'right'
+  g.fillStyle = '#a5b4fc'; g.font = '800 22px sans-serif'; g.fillText(stage, W - 36, 66)
+  g.fillStyle = '#eef2ff'; g.font = '800 42px sans-serif'; g.fillText('LV ' + lv, W - 36, 114)
+  g.textAlign = 'left'
+  // 雷达
+  const cx = W / 2, cy = 340, R = 140
+  const pts = (i, r) => { const ang = Math.PI / 2 - i * 2 * Math.PI / 6; return [cx + Math.cos(ang) * r, cy - Math.sin(ang) * r] }
+  for (const pct of [1, 0.66, 0.33]) {
+    g.strokeStyle = '#dbe3ef'; g.lineWidth = 1; g.beginPath()
+    for (let i = 0; i <= 6; i++) { const [x, y] = pts(i % 6, R * pct); i === 0 ? g.moveTo(x, y) : g.lineTo(x, y) }
+    g.stroke()
+  }
+  EVO_AXES.forEach((a, i) => {
+    const val = Math.max(0, Math.min(100, ev[a.key] || 0))
+    const [ex, ey] = pts(i, R)
+    const [px, py] = pts(i, R * val / 100)
+    g.strokeStyle = a.color; g.globalAlpha = 0.35; g.lineWidth = 1.6
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(ex, ey); g.stroke()
+    g.globalAlpha = 1
+    g.fillStyle = a.color
+    g.beginPath(); g.arc(px, py, 5, 0, Math.PI * 2); g.fill()
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke()
+    g.fillStyle = '#64748b'; g.font = '700 15px sans-serif'; g.textAlign = 'center'
+    g.fillText(a.label, cx + Math.cos(Math.PI / 2 - i * 2 * Math.PI / 6) * (R + 26), cy - Math.sin(Math.PI / 2 - i * 2 * Math.PI / 6) * (R + 26) + 5)
+    g.textAlign = 'left'
+  })
+  g.beginPath()
+  EVO_AXES.forEach((a, i) => {
+    const val = Math.max(0, Math.min(100, ev[a.key] || 0))
+    const [x, y] = pts(i, R * val / 100)
+    i === 0 ? g.moveTo(x, y) : g.lineTo(x, y)
+  })
+  g.closePath()
+  g.fillStyle = 'rgba(99,102,241,0.14)'; g.fill()
+  g.strokeStyle = '#6366f1'; g.lineWidth = 2; g.stroke()
+  // 底部数值卡 3x2
+  const cardW = 200, cardH = 46, gap = 14, x0 = (W - cardW * 3 - gap * 2) / 2, y0 = 512
+  EVO_AXES.forEach((a, i) => {
+    const col = i % 3, row = Math.floor(i / 3)
+    const x = x0 + col * (cardW + gap), y = y0 + row * (cardH + 10)
+    g.fillStyle = '#f8fafc'; g.strokeStyle = '#e2e8f0'; g.lineWidth = 1
+    g.beginPath(); g.roundRect ? g.roundRect(x, y, cardW, cardH, 10) : g.rect(x, y, cardW, cardH); g.fill(); g.stroke()
+    g.fillStyle = a.color
+    g.fillRect(x + 14, y + cardH / 2 - 3.5, 7, 7)
+    g.fillStyle = '#64748b'; g.font = '600 13px sans-serif'; g.fillText(a.label, x + 28, y + 19)
+    g.fillStyle = '#1e293b'; g.font = '800 20px sans-serif'; g.textAlign = 'right'
+    g.fillText(String(ev[a.key] || 0) + (a.key === 'success' ? '%' : ''), x + cardW - 14, y + 29)
+    g.textAlign = 'left'
+  })
+  // 页脚
+  g.fillStyle = '#94a3b8'; g.font = '600 12px sans-serif'; g.textAlign = 'center'
+  g.fillText('数据来自真实使用记录 · Rescene', W / 2, H - 18)
+  g.textAlign = 'left'
+  // 下载
+  const a = document.createElement('a')
+  a.download = '成长档案-LV' + lv + '-' + stage + '.png'
+  a.href = c.toDataURL('image/png')
+  a.click()
+}
+
+// ===== Rescene Cloud 账号登录（国内无需 GitHub/代理）=====
+const rcUser = ref('')
+const rcPwd = ref('')
+const rcLoading = ref(false)
+const rcError = ref('')
+async function loginResceneCloud() {
+  rcError.value = ''
+  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = '请输入账号和密码'; return }
+  rcLoading.value = true
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: rcUser.value.trim(), password: rcPwd.value })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.token) { rcError.value = data.error || '登录失败，请检查账号密码'; return }
+    localStorage.setItem('token', data.token)
+    window.dispatchEvent(new Event('auth-change'))
+    rcUser.value = ''; rcPwd.value = ''
+    showUserMenu.value = false
+  } catch (e) { rcError.value = '网络错误，请稍后再试' } finally { rcLoading.value = false }
+}
+
 function toggleUserMenu() {
   if (showUserMenu.value) { showUserMenu.value = false; return }
   showUserMenu.value = true
+  loadEvolve()
   refreshLoginState()
-  nextTick(() => {
-    const el = userRef.value || footerRef.value
-    const card = userCardRef.value
-    if (!el || !card) return
-    const rect = el.getBoundingClientRect()
-    const cardRect = card.getBoundingClientRect()
-    const cardW = 200
-    const cardH = cardRect.height || 100
-    const gap = 8
-    let left = rect.right - cardW
-    let top = rect.top - cardH - gap
-    if (left < 8) left = 8
-    if (top < 8) top = rect.bottom + gap
-    if (top + cardH > window.innerHeight - 8) {
-      top = window.innerHeight - cardH - 8
-      if (top < 8) top = 8
-    }
-    userMenuStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: cardW + 'px' }
-  })
+  // 居中弹窗：位置交给 CSS（.smc-user-card fixed 居中），无需按触发点计算
+  userMenuStyle.value = {}
 }
 function logout() {
   auth.logout()
@@ -964,25 +1184,53 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 }
 
 /* ===== User card ===== */
+.smc-card-backdrop {
+  position: fixed; inset: 0; z-index: 9990;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(3px);
+  animation: smcBackdropIn 0.18s ease-out;
+}
 .smc-user-card {
-  background: #ffffff;
+  position: fixed; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 40px));
+  max-height: min(760px, calc(100vh - 32px));
+  overflow: auto;
+  box-sizing: border-box;
+  background: #fff;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-  padding: 8px;
+  border-radius: 16px;
+  box-shadow: 0 32px 90px rgba(15, 23, 42, 0.28), 0 2px 8px rgba(15, 23, 42, .08);
+  padding: 14px;
   z-index: 10000;
+  animation: smcCardIn 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.smc-user-card-head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 8px 8px;
+.smc-user-card.is-profile { width: min(720px, calc(100vw - 32px)); padding: 0; border-color: rgba(148,163,184,.24); border-radius: 24px; background: #f8fafc; scrollbar-width: none; }
+.smc-user-card.is-profile::-webkit-scrollbar { display: none; }
+@keyframes smcBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes smcCardIn {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
+.smc-profile-hero { position: relative; display: flex; align-items: center; gap: 16px; min-height: 116px; overflow: hidden; padding: 22px 24px; color: #fff; background: linear-gradient(125deg,#111827 0%,#1e293b 54%,#172554 100%); }
+.smc-profile-aura { position: absolute; right: -70px; top: -100px; width: 310px; height: 310px; border: 1px solid rgba(129,140,248,.2); border-radius: 50%; box-shadow: 0 0 0 42px rgba(56,189,248,.045),0 0 0 82px rgba(99,102,241,.035); }
+.smc-avatar-shell { position: relative; z-index: 1; display: grid; width: 62px; height: 62px; flex: 0 0 auto; place-items: center; border: 1px solid rgba(255,255,255,.42); border-radius: 18px; background: linear-gradient(145deg,#fb7185,#c2415d); box-shadow: 0 12px 25px rgba(190,24,93,.24); }
 .smc-user-avatar {
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 100%; height: 100%; border-radius: 18px;
   object-fit: cover; flex-shrink: 0;
-  border: 1px solid var(--app-accent);
+  border: 0;
 }
-.smc-user-card-name { font-size: 13px; font-weight: 600; color: var(--app-text); }
-.smc-user-card-name .smc-user-uid { font-size: 11px; font-weight: 400; color: var(--app-text-secondary, #8a8a8a); margin-top: 2px; }
+.smc-online-dot { position: absolute; right: -4px; bottom: -4px; width: 11px; height: 11px; border: 3px solid #172033; border-radius: 50%; background: #34d399; box-shadow: 0 0 12px #34d399; }
+.smc-user-card-name { position: relative; z-index: 1; min-width: 0; color: #fff; }
+.smc-profile-kicker { display: block; margin-bottom: 5px; color: #93c5fd; font-size: 9px; font-weight: 800; letter-spacing: .18em; }
+.smc-user-card-name strong { display: block; overflow: hidden; font-size: 21px; line-height: 1.25; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
+.smc-profile-meta { display: flex; gap: 8px; margin-top: 8px; }
+.smc-profile-meta span { padding: 4px 7px; border: 1px solid rgba(255,255,255,.14); border-radius: 6px; color: #cbd5e1; background: rgba(255,255,255,.06); font-size: 9px; font-weight: 700; }
+.smc-profile-close { position: absolute; z-index: 2; right: 16px; top: 16px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 9px; color: #94a3b8; background: rgba(255,255,255,.06); cursor: pointer; }
+.smc-profile-close:hover { color: #fff; background: rgba(255,255,255,.13); }
+.smc-profile-share { position: absolute; z-index: 2; right: 58px; top: 16px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 9px; color: #94a3b8; background: rgba(255,255,255,.06); cursor: pointer; }
+.smc-profile-share:hover { color: #fff; background: rgba(255,255,255,.13); }
+.smc-radar-val { font-size: 10px; font-weight: 800; fill: #94a3b8; }
 .smc-user-card-item {
   display: block; width: 100%; box-sizing: border-box;
   padding: 9px 12px; border: none; border-radius: 8px;
@@ -994,6 +1242,76 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-user-card-item:hover { background: var(--app-surface-3); }
 .smc-user-card-item.danger { color: #d94834; }
 .smc-user-card-item.danger:hover { background: rgba(217, 72, 52, 0.08); }
+
+/* 角色成长档案 */
+.smc-evolve { padding: 22px 24px 18px; background: #f8fafc; }
+.smc-evolve-summary { display: flex; align-items: center; justify-content: space-between; }
+.smc-evolve-summary > div { display: flex; align-items: center; gap: 9px; }
+.smc-evolve-summary > strong { color: #172033; font-size: 26px; letter-spacing: -.04em; }
+.smc-evolve-summary > strong small { color: #94a3b8; font-size: 10px; letter-spacing: .12em; }
+.smc-evolve-stage { color: #334155; font-size: 14px; font-weight: 800; }
+.smc-evolve-lv { padding: 4px 8px; border: 1px solid #c7d2fe; border-radius: 7px; background: #eef2ff; color: #4338ca; font-size: 9px; font-weight: 900; letter-spacing: .08em; animation: smcLvPulse 1.6s ease-in-out 0.5s 2; }
+.smc-evolve-lv.bump { animation: smcLvBump 0.6s cubic-bezier(0.34,1.56,0.64,1) 1; }
+.smc-xp-track { height: 7px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.smc-xp-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#6366f1,#38bdf8); box-shadow: 0 0 14px rgba(56,189,248,.5); transition: width .5s ease; }
+.smc-xp-copy { display: flex; justify-content: space-between; margin-top: 6px; color: #94a3b8; font-size: 9px; font-weight: 650; }
+.smc-profile-dashboard { display: grid; grid-template-columns: minmax(0,.88fr) minmax(220px,1.12fr); gap: 14px; margin-top: 18px; }
+.smc-radar-wrap,.smc-ability-list { min-height: 242px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 15px; background: #fff; }
+.smc-panel-label { display: block; color: #94a3b8; font-size: 8px; font-weight: 900; letter-spacing: .15em; }
+.smc-radar { width: 100%; max-width: 225px; height: auto; display: block; margin: 2px auto -4px; }
+.smc-radar-grid { fill: none; stroke: #dbe3ef; stroke-width: 1; }
+.smc-radar-grid-1 { animation: smcRadarDraw 0.7s ease-out 0.05s both; }
+.smc-radar-grid-2 { animation: smcRadarDraw 0.7s ease-out 0.15s both; }
+.smc-radar-grid-3 { animation: smcRadarDraw 0.7s ease-out 0.25s both; }
+.smc-radar-fill {
+  fill: rgba(99, 102, 241, 0.16); stroke: #6366f1; stroke-width: 1.8;
+  stroke-linejoin: round;
+  transform-box: fill-box; transform-origin: center;
+  animation: smcRadarGrow 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s both;
+}
+.smc-radar-line { opacity: 0; animation: smcFadeIn 0.3s ease-out 0.5s both; }
+.smc-radar-label { font-size: 10.5px; font-weight: 750; fill: #64748b; opacity: 0; animation: smcFadeIn 0.3s ease-out 0.55s both; }
+.smc-radar-point { opacity: 0; animation: smcFadeIn 0.3s ease-out 0.55s both; }
+.smc-ability-list { display: flex; flex-direction: column; gap: 11px; }
+.smc-ability-list > .smc-panel-label { margin-bottom: 1px; }
+.smc-ability-row > div { display: grid; grid-template-columns: 7px 1fr auto; align-items: center; gap: 7px; color: #64748b; font-size: 10px; }
+.smc-ability-row > div > i { width: 7px; height: 7px; border-radius: 2px; }
+.smc-ability-row b { margin-left: auto; justify-self: end; color: #1e293b; font-size: 14px; font-weight: 800; letter-spacing: -.02em; }
+.smc-ability-row b small { font-size: 9px; }
+.smc-ability-track { display: block; height: 4px; margin-top: 5px; overflow: hidden; border-radius: 99px; background: #eef2f7; }
+.smc-ability-track i { display: block; height: 100%; border-radius: inherit; transition: width .45s ease; }
+.smc-career-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-top: 12px; }
+.smc-career-stats > div { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 11px; border: 1px solid #e2e8f0; border-radius: 12px; color: #6366f1; background: #fff; }
+.smc-career-stats span { min-width: 0; }
+.smc-career-stats b,.smc-career-stats small { display: block; }
+.smc-career-stats b { color: #1e293b; font-size: 14px; }
+.smc-career-stats small { margin-top: 1px; overflow: hidden; color: #94a3b8; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.smc-profile-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 24px; border-top: 1px solid #e2e8f0; background: #fff; }
+.smc-profile-actions > span { display: flex; align-items: center; gap: 5px; color: #94a3b8; font-size: 9px; }
+.smc-profile-actions .smc-user-card-item { display: flex; align-items: center; gap: 6px; width: auto; min-height: 36px; padding: 7px 10px; }
+.smc-login-panel { padding: 14px 24px 20px; border-top: 1px solid #e2e8f0; background: #fff; }
+.smc-login-panel .smc-user-card-item { width: 100%; box-sizing: border-box; text-align: center; color: #1e293b; font-weight: 650; text-decoration: none; }
+.smc-login-panel .smc-rc-sep { margin: 12px 0; }
+.smc-profile-loading { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 270px; color: #64748b; font-size: 12px; }
+.smc-profile-loading i { width: 16px; height: 16px; border: 2px solid #cbd5e1; border-top-color: #6366f1; border-radius: 50%; animation: smcSpin .7s linear infinite; }
+@keyframes smcSpin { to { transform: rotate(360deg); } }
+@keyframes smcRadarDraw { from { stroke-dasharray: 640; stroke-dashoffset: 640; } to { stroke-dasharray: 640; stroke-dashoffset: 0; } }
+@keyframes smcRadarGrow { from { transform: scale(0); opacity: 0.2; } to { transform: scale(1); opacity: 1; } }
+@keyframes smcFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes smcLvPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes smcLvBump { 0% { transform: scale(1); } 50% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+@media (max-width: 620px) {
+  .smc-user-card.is-profile { width: calc(100vw - 20px); max-height: calc(100vh - 20px); border-radius: 18px; }
+  .smc-profile-hero { min-height: 92px; padding: 18px; }
+  .smc-profile-dashboard { grid-template-columns: 1fr; }
+  .smc-career-stats { grid-template-columns: repeat(2,1fr); }
+  .smc-profile-actions { padding: 12px 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smc-user-card,.smc-radar-grid,.smc-radar-fill,.smc-radar-line,.smc-radar-label,.smc-evolve-lv { animation: none; }
+}
 
 /* ===== Create project modal ===== */
 .smc-modal-backdrop {
@@ -1046,4 +1364,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-modal-enter-active .smc-create-project, .smc-modal-leave-active .smc-create-project { transition: transform 0.18s ease, opacity 0.18s ease; }
 .smc-modal-enter-from, .smc-modal-leave-to { opacity: 0; }
 .smc-modal-enter-from .smc-create-project, .smc-modal-leave-to .smc-create-project { transform: translateY(10px) scale(0.98); opacity: 0; }
+
+
+/* ===== Rescene Cloud 账号登录 ===== */
+.smc-rc-sep { margin: 8px 12px 4px; font-size: 11px; color: #9aa3b2; text-align: center; }
+.smc-rc-login { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.smc-rc-input { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid #e3e9f2; border-radius: 8px; font-size: 12.5px; outline: none; background: #fff; }
+.smc-rc-input:focus { border-color: #4f7cff; }
+.smc-rc-btn { padding: 7px 0; border: 0; border-radius: 8px; background: #4f7cff; color: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.smc-rc-btn:disabled { opacity: 0.6; }
+.smc-rc-err { font-size: 11px; color: #e5484d; }
+.smc-rc-hint { font-size: 10.5px; color: #9aa3b2; text-align: center; }
 </style>

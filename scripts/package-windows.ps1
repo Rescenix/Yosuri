@@ -7,6 +7,8 @@ $installerPath = Join-Path $outputRoot $installerName
 $checksumPath = Join-Path $outputRoot 'SHA256SUMS.txt'
 $wailsConfigPath = Join-Path $backendDir 'wails.json'
 $installerSourceDir = Join-Path $backendDir 'build\windows\installer'
+$wailsBinaryName = 'rescene-package.exe'
+$wailsBinaryPath = Join-Path $backendDir "build\bin\$wailsBinaryName"
 $wailsCommand = Get-Command wails -ErrorAction SilentlyContinue
 $wailsPath = if ($wailsCommand) { $wailsCommand.Source } else { $null }
 if (-not $wailsPath) {
@@ -49,7 +51,8 @@ try {
     # NSIS 的 Windows 文件版本只接受纯数字；AppVersion 仍保留完整的预发布版本。
     $wailsConfigRaw = [System.IO.File]::ReadAllText($wailsConfigPath)
     $wailsConfig = $wailsConfigRaw | ConvertFrom-Json
-    $appVersion = $wailsConfig.info.productVersion
+    # 强制复制为独立字符串，避免后续修改 PSCustomObject 时预发布后缀丢失。
+    [string]$appVersion = "$($wailsConfig.info.productVersion)"
     $numericVersionMatch = [regex]::Match($appVersion, '^\d+\.\d+\.\d+')
     if (-not $numericVersionMatch.Success) {
         throw "wails.json 的 info.productVersion 不是有效版本号：$appVersion"
@@ -63,7 +66,9 @@ try {
         $utf8NoBom
     )
 
-    & $wailsPath build -clean -nsis -installscope user -webview2 embed -ldflags "-X backend/internal/handler.AppVersion=$appVersion"
+    # 使用独立输出名，不清空 build/bin。开发者可能正运行上一版 rescene.exe；
+    # 旧脚本的 -clean 会因 Windows 文件锁直接打包失败。
+    & $wailsPath build -nopackage -o $wailsBinaryName -installscope user -webview2 embed -ldflags "-X backend/internal/handler.AppVersion=$appVersion"
     if ($LASTEXITCODE -ne 0) { throw "wails build 失败，退出码 $LASTEXITCODE" }
 
     # Wails/Windows resources require a numeric file version. Recompile only the
@@ -71,7 +76,7 @@ try {
     Push-Location $installerSourceDir
     try {
         & $makensisCommand.Source `
-            '-DARG_WAILS_AMD64_BINARY=..\..\bin\rescene.exe' `
+            "-DARG_WAILS_AMD64_BINARY=..\..\bin\$wailsBinaryName" `
             '-DWAILS_INSTALL_SCOPE=user' `
             '-DREQUEST_EXECUTION_LEVEL=user' `
             "-DINFO_DISPLAYVERSION=$appVersion" `
@@ -81,10 +86,16 @@ try {
         Pop-Location
     }
 } finally {
+    $restoreError = $null
     if ($null -ne $wailsConfigRaw) {
         [System.IO.File]::WriteAllText($wailsConfigPath, $wailsConfigRaw, $utf8NoBom)
+        $restoredVersion = ([System.IO.File]::ReadAllText($wailsConfigPath) | ConvertFrom-Json).info.productVersion
+        if ($restoredVersion -ne $appVersion) {
+            $restoreError = "wails.json 版本恢复失败：$restoredVersion（预期 $appVersion）"
+        }
     }
     Pop-Location
+    if ($restoreError) { throw $restoreError }
 }
 
 $wailsInstallerPath = Join-Path $backendDir 'build\bin\rescene-amd64-installer.exe'
@@ -95,18 +106,30 @@ if (-not (Test-Path -LiteralPath $wailsInstallerPath)) {
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 Copy-Item -LiteralPath $wailsInstallerPath -Destination $installerPath -Force
 
-# 成功生成安装器后清理旧便携产物，避免误上传到 Release。
-$obsoletePortableDir = Join-Path $outputRoot 'ResceneAgent-windows-amd64'
-$obsoleteZipPath = Join-Path $outputRoot 'ResceneAgent-windows-amd64.zip'
-$obsoleteInstallerPath = Join-Path $outputRoot 'ResceneAgent-windows-amd64-setup.exe'
-if (Test-Path -LiteralPath $obsoletePortableDir) {
-    Remove-Item -LiteralPath $obsoletePortableDir -Recurse -Force
+# 官网与热更新共用同一个 zip：
+# - 官网用户解压后运行 setup.exe，获得正常安装/快捷方式体验；
+# - 应用内热更新只提取 rescene.exe，覆盖后自动重启。
+# 两个文件必须同时存在，避免官网包与热更新包分叉成两套发布物。
+$portableZipPath = Join-Path $outputRoot 'Rescene-windows-amd64-portable.zip'
+if (Test-Path -LiteralPath $portableZipPath) {
+    Remove-Item -LiteralPath $portableZipPath -Force
 }
-if (Test-Path -LiteralPath $obsoleteZipPath) {
-    Remove-Item -LiteralPath $obsoleteZipPath -Force
-}
-if (Test-Path -LiteralPath $obsoleteInstallerPath) {
-    Remove-Item -LiteralPath $obsoleteInstallerPath -Force
+$packageStage = Join-Path $outputRoot '.package-stage'
+if (Test-Path -LiteralPath $wailsBinaryPath) {
+    if (Test-Path -LiteralPath $packageStage) {
+        Remove-Item -LiteralPath $packageStage -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $packageStage | Out-Null
+    try {
+        Copy-Item -LiteralPath $wailsBinaryPath -Destination (Join-Path $packageStage 'rescene.exe') -Force
+        Copy-Item -LiteralPath $installerPath -Destination (Join-Path $packageStage $installerName) -Force
+        Compress-Archive -Path (Join-Path $packageStage '*') -DestinationPath $portableZipPath -CompressionLevel Optimal
+    } finally {
+        Remove-Item -LiteralPath $packageStage -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "官网/热更新共用 zip 打包完成（rescene.exe + setup.exe）：$portableZipPath"
+} else {
+    Write-Host "警告：未找到 $wailsBinaryPath，跳过便携 zip 生成"
 }
 
 $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()

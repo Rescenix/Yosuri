@@ -21,14 +21,14 @@
 
       <div class="update-modal-footer">
         <button class="update-modal-btn ghost" type="button" @click="$emit('close')">稍后再说</button>
-        <button class="update-modal-btn ghost" type="button" @click="onSkip" :disabled="downloading">跳过此版本</button>
+        <button class="update-modal-btn ghost" type="button" @click="onSkip" :disabled="dlState === 'downloading'">跳过此版本</button>
         <button
           v-if="dlState === 'done'"
           class="update-modal-btn primary"
           type="button"
           :disabled="opening"
           @click="onInstall"
-        >{{ opening ? '正在启动…' : '一键安装' }}</button>
+        >{{ opening ? '正在启动…' : (update.hot_patch ? '立即更新' : '一键安装') }}</button>
         <button
           v-else-if="dlState === 'downloading'"
           class="update-modal-btn primary"
@@ -39,7 +39,7 @@
           v-else
           class="update-modal-btn primary"
           type="button"
-          @click="onInstall"
+          @click="startDownload"
         >{{ dlState === 'error' ? '重试下载' : '开始下载' }}</button>
       </div>
       <div v-if="dlState === 'error'" class="update-modal-dlerr">{{ dlError }}</div>
@@ -70,9 +70,11 @@ function formatDate(iso) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// 记住跳过该版本，以后启动不再提示（新版本发布后重新提示）
+// 记住跳过该版本，以后启动不再提示（新版本发布后重新提示）。
+// 同时删除已下载的待应用热补丁 exe——否则下次启动会被自动应用（2026-08-13）。
 function onSkip() {
   setSkippedVersion(props.update.latest_version)
+  fetch('/api/update/pending', { method: 'DELETE' }).catch(() => {})
   emit('close')
 }
 
@@ -83,17 +85,18 @@ onMounted(() => {
 
 async function startDownload() {
   dlError.value = ''
+  dlState.value = 'downloading'
   try {
     const res = await fetch('/api/update/download', { method: 'POST' })
-    if (!res.ok) throw new Error('触发失败')
-    const d = await res.json()
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(d.error || `触发失败 (${res.status})`)
     if (d.state === 'done') {
       dlState.value = 'done'
       return
     }
-  } catch {
+  } catch (err) {
     dlState.value = 'error'
-    dlError.value = '下载失败，请检查网络'
+    dlError.value = err.message || '下载失败，请检查网络'
     return
   }
   pollStatus()

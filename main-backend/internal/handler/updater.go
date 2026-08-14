@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,10 +27,12 @@ const (
 	updateRepoOwner = "Rescenix"
 	updateRepoName  = "ResceneAgent"
 	// 官网 update.json 优先（国内可达的 Cloudflare CDN），GitHub API 兜底
-	siteUpdateURL   = "https://rescene.shanca.me/update.json"
-	updateCacheTTL  = 30 * time.Minute // 官网接口无认证限流，可缩短缓存；GitHub 未认证 API 限 60 次/小时/IP
-	// 下载走官网安装器直链（GitHub 仅作版本/更新内容基准，用户流量不引到 GitHub）
+	siteUpdateURL  = "https://rescene.shanca.me/update.json"
+	updateCacheTTL = 30 * time.Minute // 官网接口无认证限流，可缩短缓存；GitHub 未认证 API 限 60 次/小时/IP
+	// 官网目前只发布 portable zip。旧安装器地址已经下线，不能再把缺失的
+	// download_url_exe 静默回退到 setup.exe，否则真实用户会稳定得到 HTTP 404。
 	updateDownloadURL = "https://download.shanca.me/Rescene-windows-amd64-setup.exe"
+	updateHotPatchURL = "https://download.shanca.me/Rescene-windows-amd64-portable.zip"
 )
 
 // githubRelease 是 GitHub /releases/latest 响应里用到的字段子集。
@@ -40,7 +43,9 @@ type githubRelease struct {
 	Body        string `json:"body"`
 	HTMLURL     string `json:"html_url"`
 	PublishedAt string `json:"published_at"`
-	DownloadURL string `json:"download_url"` // 官网 JSON 提供，GitHub 无此字段
+	DownloadURL string `json:"download_url"`     // 官网 JSON 提供，GitHub 无此字段
+	DownloadExe string `json:"download_url_exe"` // 热补丁通道：新版 rescene.exe 直链（官网 JSON 提供）
+	DownloadZip string `json:"download_url_zip"` // 热补丁通道的新字段名；兼容旧 download_url_exe
 }
 
 // updateInfo 是 /api/update/check 的响应体。
@@ -51,7 +56,9 @@ type updateInfo struct {
 	ReleaseName    string `json:"release_name"`
 	ReleaseNotes   string `json:"release_notes"`
 	ReleaseURL     string `json:"release_url"`
-	DownloadURL    string `json:"download_url"` // 官网安装器直链
+	DownloadURL    string `json:"download_url"`               // 官网安装器直链
+	DownloadExe    string `json:"download_url_exe,omitempty"` // 热补丁通道：新 exe 直链
+	HotPatch       bool   `json:"hot_patch"`                  // true = 本次走热补丁（直接换 exe），false = 全量安装器
 	PublishedAt    string `json:"published_at"`
 }
 
@@ -84,6 +91,7 @@ func checkUpdate() (*updateInfo, error) {
 
 	// 1) 官网 update.json（优先，国内可达）
 	rel, err := fetchRelease(siteUpdateURL)
+	fromSite := err == nil
 	if err != nil {
 		// 2) GitHub API 兜底
 		rel, err = fetchRelease(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest",
@@ -118,19 +126,48 @@ func checkUpdate() (*updateInfo, error) {
 	} else {
 		downloadURL = updateDownloadURL
 	}
+	// 防空版本弹窗（2026-08-13 重大 bug）：裸构建未注入版本时 AppVersion=0.0.0-dev，
+	// 会永远低于线上 release 导致每次启动都弹更新。无法判断当前版本时就不打扰用户。
+	cur := AppVersion
+	hasUpdate := true
+	if cur == "" || cur == "0.0.0-dev" {
+		cur = "未知（开发版）"
+		hasUpdate = false
+	} else {
+		hasUpdate = compareVersions(AppVersion, latestNum)
+	}
+	hotPatchURL := resolveHotPatchURL(rel, fromSite)
+	hotPatch := hotPatchURL != ""
 	info := &updateInfo{
-		HasUpdate:      compareVersions(AppVersion, latestNum),
-		CurrentVersion: AppVersion,
+		HasUpdate:      hasUpdate,
+		CurrentVersion: cur,
 		LatestVersion:  latest,
 		ReleaseName:    rel.Name,
 		ReleaseNotes:   rel.Body,
 		ReleaseURL:     rel.HTMLURL,
 		DownloadURL:    downloadURL, // 官网安装器直链，不经 GitHub
+		DownloadExe:    hotPatchURL,
+		HotPatch:       hotPatch,
 		PublishedAt:    rel.PublishedAt,
 	}
 
 	updateCache, updateCachedAt = info, time.Now()
 	return info, nil
+}
+
+func resolveHotPatchURL(rel *githubRelease, fromSite bool) string {
+	if rel.DownloadZip != "" {
+		return rel.DownloadZip
+	}
+	if rel.DownloadExe != "" {
+		return rel.DownloadExe
+	}
+	// 兼容已经部署但缺少下载字段的 update.json。官网 portable.zip 是稳定的
+	// “当前版本”地址；GitHub 兜底不能这样猜，否则 CDN 尚未同步时可能装错版本。
+	if fromSite {
+		return updateHotPatchURL
+	}
+	return ""
 }
 
 // fetchRelease 拉取并解析版本信息 JSON（兼容 GitHub API 与官网 update.json 两种来源）。
@@ -167,6 +204,18 @@ func fetchRelease(url string) (*githubRelease, error) {
 // errNoRelease 表示接口正常但还没有正式 release，调用方应视为无更新而不是报错。
 var errNoRelease = fmt.Errorf("no release yet")
 
+// HandleClearPendingHotPatch 删除待应用的热补丁 exe（用户「跳过此版本」时调用，
+// 防止下次启动被自动应用；「稍后再说」不删——那是下次启动更新的入口）。
+func HandleClearPendingHotPatch(c *gin.Context) {
+	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
+	newExe := filepath.Join(localDir, updateHotPatchFileName)
+	if err := os.Remove(newExe); err != nil && !os.IsNotExist(err) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // HandleOpenUpdateDownload 让系统浏览器打开安装器下载地址（失败时前端回退 release 页面）。
 // 走后端 exec 而非前端 window.open：Wails WebView2 里 window.open 不可靠。
 func HandleOpenUpdateDownload(c *gin.Context) {
@@ -193,19 +242,22 @@ func HandleOpenUpdateDownload(c *gin.Context) {
 
 // updateDownloadState 记录后台下载进度，供前端轮询。
 type updateDownloadState struct {
-	mu        sync.Mutex
-	State     string  `json:"state"` // idle | downloading | done | error
-	DoneBytes int64   `json:"done_bytes"`
-	TotalBytes int64  `json:"total_bytes"`
-	Percent   float64 `json:"percent"`
-	Path      string  `json:"path"`
-	ErrMsg    string  `json:"error"`
+	mu         sync.Mutex
+	State      string  `json:"state"` // idle | downloading | done | error
+	DoneBytes  int64   `json:"done_bytes"`
+	TotalBytes int64   `json:"total_bytes"`
+	Percent    float64 `json:"percent"`
+	Path       string  `json:"path"`
+	ErrMsg     string  `json:"error"`
 }
 
 var updateDL = &updateDownloadState{State: "idle"}
 
 // updateSetupFileName 安装包文件名（与官网下载页一致）。
 const updateSetupFileName = "Rescene-windows-amd64-setup.exe"
+
+// updateHotPatchFileName 热补丁通道下载的新版 exe 文件名（直接替换运行中 exe）。
+const updateHotPatchFileName = "rescene-new.exe"
 
 // HandleAutoDownload 触发后台下载最新安装包。
 // 下载目录：%LOCALAPPDATA%\Rescene\updates\（用户可写，不必管理员权限）。
@@ -224,11 +276,25 @@ func HandleAutoDownload(c *gin.Context) {
 	}
 	updateDL.mu.Unlock()
 
+	// 更新通道已经统一为 portable zip 热更新。清单不可用或没有 ZIP 时明确报错，
+	// 绝不能再静默走已经下线的 setup.exe 地址。
+	info, err := checkUpdate()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "error": "无法读取更新清单：" + err.Error()})
+		return
+	}
+	exeURL := info.DownloadExe
+	if exeURL == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "error": "更新清单缺少 ZIP 下载地址"})
+		return
+	}
+
 	// 先同步检查本地是否已有安装包（上次启动已下载完 → 本次直接弹一键安装）。
 	// updateDL 是内存状态，重启后丢失，必须落到磁盘判断。
 	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
-	dest := filepath.Join(localDir, updateSetupFileName)
-	if fi, err := os.Stat(dest); err == nil && fi.Size() > 1024*1024 {
+	dest := filepath.Join(localDir, updateHotPatchFileName)
+	ready := isLikelyWindowsExecutable(dest)
+	if ready {
 		updateDL.mu.Lock()
 		updateDL.State = "done"
 		updateDL.Path = dest
@@ -243,10 +309,12 @@ func HandleAutoDownload(c *gin.Context) {
 	updateDL.TotalBytes = 0
 	updateDL.Percent = 0
 	updateDL.ErrMsg = ""
+	updateDL.Path = ""
 	updateDL.mu.Unlock()
 
 	go func() {
-		err := downloadInstaller()
+		// 热补丁：下载官网 zip → 解压提取 exe 存为待应用补丁。
+		err := downloadHotPatchZip(exeURL, dest)
 		updateDL.mu.Lock()
 		defer updateDL.mu.Unlock()
 		if err != nil {
@@ -257,6 +325,148 @@ func HandleAutoDownload(c *gin.Context) {
 		updateDL.State = "done"
 	}()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "state": "downloading"})
+}
+
+// downloadHotPatchZip 下载官网 zip（内含 rescene.exe + setup.exe）→ 解压提取 rescene.exe
+// → 存为待应用热补丁（rescene-new.exe）→ 删除 zip。更新包只传 zip 一个文件（2026-08-13）。
+func downloadHotPatchZip(zipURL, dest string) error {
+	localDir := filepath.Dir(dest)
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		return err
+	}
+	// 已下载完成 → 复用
+	if isLikelyWindowsExecutable(dest) {
+		updateDL.mu.Lock()
+		updateDL.Path = dest
+		updateDL.mu.Unlock()
+		return nil
+	}
+	zipPath := filepath.Join(localDir, "rescene-update.zip")
+	fi, err := os.Stat(zipPath)
+	if err != nil || fi.Size() < 1024*1024 {
+		// 下载 zip（带进度）
+		client := &http.Client{Timeout: 10 * time.Minute}
+		resp, err := client.Get(zipURL)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("下载更新包失败：HTTP %d", resp.StatusCode)
+		}
+		out, err := os.Create(zipPath + ".part")
+		if err != nil {
+			return err
+		}
+		total := resp.ContentLength
+		buf := make([]byte, 64*1024)
+		var done int64
+		for {
+			n, rerr := resp.Body.Read(buf)
+			if n > 0 {
+				if _, werr := out.Write(buf[:n]); werr != nil {
+					out.Close()
+					return werr
+				}
+				done += int64(n)
+				updateDL.mu.Lock()
+				updateDL.DoneBytes = done
+				updateDL.TotalBytes = total
+				if total > 0 {
+					updateDL.Percent = float64(done) / float64(total) * 100
+				}
+				updateDL.mu.Unlock()
+			}
+			if rerr == io.EOF {
+				break
+			}
+			if rerr != nil {
+				out.Close()
+				return rerr
+			}
+		}
+		if err := out.Close(); err != nil {
+			return err
+		}
+		// Windows 的 Rename 不会覆盖已有文件；先清掉可能残留的小包。
+		if err := os.Remove(zipPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Rename(zipPath+".part", zipPath); err != nil {
+			return err
+		}
+	}
+	// 解压提取 rescene.exe
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		_ = os.Remove(zipPath) // 损坏包不能在下一次重试时继续复用
+		return err
+	}
+	defer zr.Close()
+	found := false
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() || !strings.EqualFold(filepath.Base(f.Name), "rescene.exe") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		extractPath := dest + ".part"
+		out, err := os.Create(extractPath)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		_, cerr := io.Copy(out, rc)
+		rc.Close()
+		closeErr := out.Close()
+		if cerr != nil {
+			_ = os.Remove(extractPath)
+			return cerr
+		}
+		if closeErr != nil {
+			_ = os.Remove(extractPath)
+			return closeErr
+		}
+		if !isLikelyWindowsExecutable(extractPath) {
+			_ = os.Remove(extractPath)
+			return fmt.Errorf("更新包中的 rescene.exe 无效")
+		}
+		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+			_ = os.Remove(extractPath)
+			return err
+		}
+		if err := os.Rename(extractPath, dest); err != nil {
+			_ = os.Remove(extractPath)
+			return err
+		}
+		found = true
+		break
+	}
+	os.Remove(zipPath)
+	if !found {
+		return fmt.Errorf("更新包 zip 里没有 rescene.exe")
+	}
+	updateDL.mu.Lock()
+	updateDL.Path = dest
+	updateDL.mu.Unlock()
+	return nil
+}
+
+func isLikelyWindowsExecutable(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil || fi.Size() < 1024*1024 {
+		return false
+	}
+	var magic [2]byte
+	_, err = io.ReadFull(f, magic[:])
+	return err == nil && magic == [2]byte{'M', 'Z'}
 }
 
 // HandleUpdateDownloadStatus 返回下载进度。
@@ -274,13 +484,13 @@ func HandleUpdateDownloadStatus(c *gin.Context) {
 	})
 }
 
-// downloadInstaller 流式下载安装包到本地并更新进度。
-func downloadInstaller() error {
-	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
+// downloadInstaller 流式下载更新包到本地并更新进度。
+// url 为空时用默认安装器直链；dest 决定保存位置（热补丁 exe 或 setup.exe）。
+func downloadInstaller(url, dest string) error {
+	localDir := filepath.Dir(dest)
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		return err
 	}
-	dest := filepath.Join(localDir, updateSetupFileName)
 
 	// 若已存在同版本安装包且非 0 字节，直接复用（跳过重复下载）
 	if fi, err := os.Stat(dest); err == nil && fi.Size() > 1024*1024 {
@@ -290,14 +500,19 @@ func downloadInstaller() error {
 		return nil
 	}
 
+	dlURL := url
+	if dlURL == "" {
+		dlURL = updateDownloadURL
+	}
+
 	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Get(updateDownloadURL)
+	resp, err := client.Get(dlURL)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("下载安装包失败：HTTP %d", resp.StatusCode)
+		return fmt.Errorf("下载更新包失败：HTTP %d", resp.StatusCode)
 	}
 
 	out, err := os.Create(dest + ".part")
@@ -346,8 +561,8 @@ func downloadInstaller() error {
 
 // HandleInstallUpdate 启动已下载的安装程序（用户确认后调用）。
 // 关键：安装程序要覆盖正在运行的 rescene.exe，所以必须：
-//  1) cmd /c start 分离启动安装程序（独立进程，不随本进程退出）
-//  2) 返回响应后延时退出本进程，释放 exe 文件锁，安装程序才能覆盖
+//  1. cmd /c start 分离启动安装程序（独立进程，不随本进程退出）
+//  2. 返回响应后延时退出本进程，释放 exe 文件锁，安装程序才能覆盖
 func HandleInstallUpdate(c *gin.Context) {
 	updateDL.mu.Lock()
 	state, path := updateDL.State, updateDL.Path
@@ -360,6 +575,37 @@ func HandleInstallUpdate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "安装包文件不存在"})
 		return
 	}
+
+	// 热补丁通道：下载的是新版 rescene.exe（rescene-new.exe）→ 写替换脚本直接换 exe，
+	// 免 NSIS 安装向导（2026-08-13）。脚本流程：等本进程退出（释放文件锁）→ copy 覆盖
+	// 安装目录 exe → 删除临时 exe → 启动新版 → 删除脚本。
+	if filepath.Base(path) == updateHotPatchFileName {
+		exePath, err := os.Executable() // 运行中的 rescene.exe 完整路径（含安装目录）
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "定位程序路径失败"})
+			return
+		}
+		batPath := filepath.Join(filepath.Dir(path), "apply-update.bat")
+		bat := hotPatchBatTemplate(path, exePath)
+		if err := os.WriteFile(batPath, []byte(bat), 0o755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "写热补丁脚本失败：" + err.Error()})
+			return
+		}
+		cmd := exec.Command("cmd", "/c", "start", "", batPath)
+		if err := cmd.Start(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "启动热补丁失败：" + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "hot_patch": true, "path": path})
+		// 延时退出本进程：给 HTTP 响应刷完 + 脚本完全拉起的时间，
+		// 然后让出 rescene.exe 文件锁，脚本才能 copy 覆盖。
+		go func() {
+			time.Sleep(3 * time.Second)
+			os.Exit(0)
+		}()
+		return
+	}
+
 	// cmd /c start "" "path"：分离启动，安装程序不继承本进程句柄
 	cmd := exec.Command("cmd", "/c", "start", "", path)
 	if err := cmd.Start(); err != nil {
@@ -535,4 +781,58 @@ func isNumeric(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// hotPatchBatTemplate 生成热补丁替换脚本：等待旧进程释放文件锁，最多重试十次。
+// 只有覆盖成功才删除新 exe；失败时重启旧版并保留补丁，避免“更新失败且程序消失”。
+func hotPatchBatTemplate(newExe, exePath string) string {
+	newExe = strings.ReplaceAll(newExe, "%", "%%")
+	exePath = strings.ReplaceAll(exePath, "%", "%%")
+	return fmt.Sprintf(`@echo off
+setlocal
+timeout /t 3 /nobreak >nul
+for /l %%%%I in (1,1,10) do (
+  copy /y "%s" "%s" >nul 2>&1
+  if not errorlevel 1 goto copied
+  timeout /t 1 /nobreak >nul
+)
+start "" "%s"
+exit /b 1
+:copied
+del /q "%s"
+start "" "%s"
+del /q "%%~f0"
+`, newExe, exePath, exePath, newExe, exePath)
+}
+
+// ApplyPendingHotPatch 启动早期调用（main 入口，wails.Run 之前）：
+// 上次会话下载了热补丁 exe（rescene-new.exe，用户选了「下次启动时更新」/「稍后」关闭）且
+// 未被跳过 → 本次启动直接应用：写替换脚本 → 分离启动 → 等 3 秒让脚本拉起 → 退出本进程，
+// 脚本 copy 覆盖 exe 后启动新版。返回 true 表示本进程即将退出，调用方应立即 return。
+func ApplyPendingHotPatch() bool {
+	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
+	newExe := filepath.Join(localDir, updateHotPatchFileName)
+	fi, err := os.Stat(newExe)
+	if err != nil || fi.Size() < 1024*1024 {
+		return false // 没有待应用的热补丁
+	}
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	batPath := filepath.Join(localDir, "apply-update.bat")
+	bat := hotPatchBatTemplate(newExe, exePath)
+	if bat == "" {
+		return false
+	}
+	if err := os.WriteFile(batPath, []byte(bat), 0o755); err != nil {
+		return false
+	}
+	cmd := exec.Command("cmd", "/c", "start", "", batPath)
+	if err := cmd.Start(); err != nil {
+		return false
+	}
+	time.Sleep(3 * time.Second)
+	os.Exit(0)
+	return true
 }

@@ -22,18 +22,18 @@ import (
 
 // FreeModel 免费模型条目
 type FreeModel struct {
-	ID       string // 唯一标识，如 free_zen_deepseek_v4_flash
-	Vendor   string
-	Name     string
-	Endpoint string // 如 https://opencode.ai/zen/v1
-	Model    string // 上游模型名，如 deepseek-v4-flash-free
-	KeyEnv   string // 环境变量名，空=免 key
-	KeyURL   string // 申请 Key 的页面
-	Keyless  bool   // 免 key 网关
-	Vision   bool
+	ID        string // 唯一标识，如 free_zen_deepseek_v4_flash
+	Vendor    string
+	Name      string
+	Endpoint  string // 如 https://opencode.ai/zen/v1
+	Model     string // 上游模型名，如 deepseek-v4-flash-free
+	KeyEnv    string // 环境变量名，空=免 key
+	KeyURL    string // 申请 Key 的页面
+	Keyless   bool   // 免 key 网关
+	Vision    bool
 	Reasoning bool
 	CtxWindow int
-	ParamsB  float64 // 参数规模
+	ParamsB   float64 // 参数规模
 }
 
 // 免费模型目录 — 直接从 re0 的 freeModelCatalog 同步
@@ -96,6 +96,9 @@ var freeModels = []FreeModel{
 	{ID: "free_sensenova_6_7_flash_lite", Vendor: "SenseNova", Name: "SenseNova 6.7 Flash-Lite（免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "sensenova-6.7-flash-lite", KeyEnv: "SENSENOVA_API_KEY", Vision: true, CtxWindow: 262144, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
 	{ID: "free_sensenova_deepseek_v4_flash", Vendor: "SenseNova", Name: "DeepSeek V4 Flash（商汤·免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "deepseek-v4-flash", KeyEnv: "SENSENOVA_API_KEY", CtxWindow: 1048576, Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
 	{ID: "free_sensenova_glm_5_2", Vendor: "SenseNova", Name: "GLM-5.2（商汤·免费）", Endpoint: "https://token.sensenova.cn/v1", Model: "glm-5.2", KeyEnv: "SENSENOVA_API_KEY", Reasoning: true, KeyURL: "https://platform.sensenova.cn/console/keys"},
+
+	// —— DeepSeek 官方 API ——
+	{ID: "deepseek_v4_pro", Vendor: "DeepSeek", Name: "DeepSeek V4 Pro（正式版0813）", Endpoint: "https://api.deepseek.com/v1", Model: "deepseek-v4-pro", KeyEnv: "DEEPSEEK_API_KEY", CtxWindow: 1048576, Reasoning: true, KeyURL: "https://platform.deepseek.com/api_keys"},
 
 	// —— ModelScope 魔搭 ——
 	{ID: "free_modelscope_qwen3_5_397b", Vendor: "ModelScope", Name: "Qwen3.5-397B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3.5-397B-A17B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 397, Reasoning: true, KeyURL: "https://modelscope.cn"},
@@ -306,7 +309,8 @@ func refreshModels() {
 
 // userConfigKeys 从 ~/rescene_data/user_configs/default.json 读取用户配置的 API key。
 // 返回两张表：byID（模型 ID → key）、byEnv（KeyEnv 服务商 → key，同服务商 key 共用）。
-// agent-os 环境变量优先；default.json 兜底——用户主项目（re0 网页端）配过的 key 直接共用，
+// default.json 优先；agent-os 环境变量兜底——用户在 Rescene 前端刚保存/选定的 key
+// 必须覆盖可能随父进程继承进来的陈旧环境变量，避免“聊天能用、公司 401”。
 // 24H 自转才有足够大的免费模型池（ModelScope 每日 2000 次等）。
 // 安全：脱敏条目（含 "..."）跳过；key 绝不打印。
 func userConfigKeys() (byID, byEnv map[string]string) {
@@ -322,8 +326,10 @@ func userConfigKeys() (byID, byEnv map[string]string) {
 		return byID, byEnv
 	}
 	var list []struct {
-		ID     string `json:"id"`
-		APIKey string `json:"api_key"`
+		ID           string `json:"id"`
+		APIKey       string `json:"api_key"`
+		Endpoint     string `json:"endpoint"`
+		DefaultModel string `json:"default_model"`
 	}
 	if json.Unmarshal(data, &list) != nil {
 		return byID, byEnv
@@ -336,6 +342,13 @@ func userConfigKeys() (byID, byEnv map[string]string) {
 			continue // 脱敏条目不可用
 		}
 		byID[it.ID] = it.APIKey
+		// 前端创建的自定义 DeepSeek 配置使用动态 cfg_* ID；Agent OS
+		// 仍需把同一把 key 映射到官方模型的服务商环境名。
+		// 只认官方端点。SenseNova 等兼容服务也会把 default_model 命名为
+		// deepseek-*，按模型名前缀映射会让后出现的第三方 key 覆盖官方 key。
+		if strings.Contains(strings.ToLower(it.Endpoint), "api.deepseek.com") {
+			byEnv["DEEPSEEK_API_KEY"] = it.APIKey
+		}
 		// 顺带登记服务商级 key（同 KeyEnv 的模型共用）
 		for _, m := range freeModels {
 			if m.ID == it.ID && m.KeyEnv != "" {
@@ -395,11 +408,11 @@ func pickFreeModel(seed int) *FreeModel {
 
 // ChatRequest 聊天请求
 type ChatRequest struct {
-	Model       string           `json:"model"`
-	Messages    []ChatMessage    `json:"messages"`
-	Stream      bool             `json:"stream"`
-	MaxTokens   int              `json:"max_tokens"`
-	Temperature float64          `json:"temperature"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	Stream      bool          `json:"stream"`
+	MaxTokens   int           `json:"max_tokens"`
+	Temperature float64       `json:"temperature"`
 }
 
 type ChatMessage struct {
@@ -433,7 +446,7 @@ func buildWireMessages(msgs []ChatMessage) []any {
 		}
 		for _, img := range m.Images {
 			content = append(content, map[string]any{
-				"type": "image_url",
+				"type":      "image_url",
 				"image_url": map[string]any{"url": img},
 			})
 		}
@@ -447,13 +460,13 @@ func buildWireMessages(msgs []ChatMessage) []any {
 func callModel(ctx context.Context, m FreeModel, req ChatRequest, onChunk func(content, reasoning string)) (string, error) {
 	key := ""
 	if !m.Keyless {
-		key = os.Getenv(m.KeyEnv)
+		byID, byEnv := userConfigKeys()
+		key = byID[m.ID] // Rescene 前端当前配置优先（按模型 ID）
 		if key == "" {
-			byID, byEnv := userConfigKeys()
-			key = byID[m.ID]    // default.json 兜底（按模型 ID）
-			if key == "" {
-				key = byEnv[m.KeyEnv] // 同服务商 key 共用
-			}
+			key = byEnv[m.KeyEnv] // 同服务商 key 共用
+		}
+		if key == "" {
+			key = os.Getenv(m.KeyEnv) // 服务进程环境变量仅作兜底
 		}
 	}
 
@@ -608,7 +621,22 @@ func CompleteWithModel(ctx context.Context, modelID string, req ChatRequest, onC
 		}
 	}
 	if target == nil {
-		return "", fmt.Errorf("模型不可用或未配置 key: %s", modelID)
+		// 付费模型不进入自动免费轮换池，但用户明确点名时允许精确调用。
+		// 这条路径不做 failover，失败就把原模型错误返回给界面。
+		byID, byEnv := userConfigKeys()
+		for i := range freeModels {
+			candidate := freeModels[i]
+			if candidate.ID != modelID {
+				continue
+			}
+			if candidate.Keyless || os.Getenv(candidate.KeyEnv) != "" || byID[candidate.ID] != "" || byEnv[candidate.KeyEnv] != "" {
+				target = &candidate
+			}
+			break
+		}
+		if target == nil {
+			return "", fmt.Errorf("模型不可用或未配置 key: %s", modelID)
+		}
 	}
 	if circuitIsOpen(*target) {
 		return "", fmt.Errorf("模型熔断中: %s", modelID)
@@ -704,10 +732,10 @@ func probeOne(m FreeModel) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	msg := ChatRequest{
-		Model:      m.Model,
-		Messages:   []ChatMessage{{Role: "user", Content: "ping"}},
-		Stream:     false,
-		MaxTokens:  1,
+		Model:       m.Model,
+		Messages:    []ChatMessage{{Role: "user", Content: "ping"}},
+		Stream:      false,
+		MaxTokens:   1,
 		Temperature: 0,
 	}
 	_, err := callModel(ctx, m, msg, nil)

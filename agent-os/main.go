@@ -61,6 +61,10 @@ func main() {
 		case "demo-delivery":
 			runDemoDelivery()
 			return
+		case "directive-delivery":
+			model, directive := parseDirectiveDeliveryArgs(os.Args[2:])
+			runDirectiveDelivery(directive, directive, model)
+			return
 		case "help", "--help", "-h":
 			printHelp()
 			return
@@ -174,6 +178,7 @@ func printHelp() {
   rescene company       多 Agent 公司（百人并行自转协作）
   rescene demo-delivery 生成一套通过硬门槛的全链路演示项目
     rescene chrome-login  打开发布专用 Chrome
+  rescene directive-delivery <instruction> Build a project with the selected model
   rescene version      显示版本
   rescene help         显示帮助
 

@@ -52,6 +52,7 @@ type companyGoal struct {
 	Events        []companyEvent    `json:"events"`
 	UserFeedback  string            `json:"userFeedback,omitempty"`
 	FailureReason string            `json:"failureReason,omitempty"`
+	Tags          []string          `json:"tags,omitempty"`
 	CreatedAt     time.Time         `json:"createdAt"`
 	UpdatedAt     time.Time         `json:"updatedAt"`
 }
@@ -604,7 +605,17 @@ func HandleCreateCompanyGoal(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入至少 4 个字的公司目标"})
 		return
 	}
+	// 目标创建时把当前标签方向记入目标（标签驱动调研方向）
+	tags := loadTags()
+	var tagNames []string
+	for _, t := range tags {
+		tagNames = append(tagNames, t.Name)
+	}
+	if len(tagNames) > 0 && !strings.Contains(req.Objective, "标签") {
+		req.Objective = req.Objective + "（方向标签：" + strings.Join(tagNames, "、") + "）"
+	}
 	g := newContentGoal(req.Objective, req.SuccessMetric)
+	g.Tags = tagNames
 	companyWorkflowMu.Lock()
 	err := saveCompanyGoal(g)
 	companyWorkflowMu.Unlock()

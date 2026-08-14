@@ -34,20 +34,25 @@
     <!-- 竖标签：审批台 / 实时运行 / 会议室 -->
     <div class="company-layout">
       <nav class="section-tabs">
-        <button class="section-tab" :class="{ active: activeSection === 'approval' }" @click="activeSection = 'approval'">
-          <Icon icon="mdi:clipboard-check-outline" width="18" />
-          <span>审批台</span>
-          <span class="st-badge">{{ approvalProjects.length }}</span>
+        <button class="section-tab" :class="{ active: activeSection === 'tags' }" @click="activeSection = 'tags'; loadTags(); loadIterate(); loadDirective()">
+          <Icon icon="mdi:auto-fix" width="18" />
+          <span>预设</span>
+          <span class="st-badge">{{ tagsList.length + iteratePlans.length }}</span>
+        </button>
+        <button class="section-tab" :class="{ active: activeSection === 'meeting' }" @click="activeSection = 'meeting'">
+          <Icon icon="mdi:account-group-outline" width="18" />
+          <span>会议室</span>
+          <span class="st-badge">{{ meetings.length }}</span>
         </button>
         <button class="section-tab" :class="{ active: activeSection === 'live' }" @click="activeSection = 'live'">
           <Icon icon="mdi:chart-timeline-variant" width="18" />
           <span>实时运行</span>
           <span class="st-badge">{{ osStats.totalAgents || 0 }}</span>
         </button>
-        <button class="section-tab" :class="{ active: activeSection === 'meeting' }" @click="activeSection = 'meeting'">
-          <Icon icon="mdi:account-group-outline" width="18" />
-          <span>会议室</span>
-          <span class="st-badge">{{ meetings.length }}</span>
+        <button class="section-tab" :class="{ active: activeSection === 'approval' }" @click="activeSection = 'approval'">
+          <Icon icon="mdi:clipboard-check-outline" width="18" />
+          <span>审批台</span>
+          <span class="st-badge">{{ approvalProjects.length }}</span>
         </button>
       </nav>
       <div class="section-content">
@@ -205,22 +210,31 @@
     <!-- 多 Agent 作战室 -->
     <div v-show="activeSection === 'live'" class="war-room">
       <section class="orchestration-strip">
-        <div class="strip-heading">
-          <div><span>PRODUCTION AUDIT</span><h2>各部门有没有交出该交的东西</h2></div>
-          <span class="supervisor-pill" :class="{ danger: productionAudit.passed !== productionAudit.total }"><i></i> {{ productionAudit.passed || 0 }}/{{ productionAudit.total || 6 }} 部门通过</span>
+        <div class="production-overview">
+          <div class="production-project">
+            <span class="production-eyebrow"><i></i> CURRENT PROJECT</span>
+            <h2>{{ currentProductionProject?.title || activeGoal?.objective || '等待项目进入生产线' }}</h2>
+            <div class="production-tags" aria-label="项目标签">
+              <span v-for="tag in currentProjectTags" :key="tag">{{ tag }}</span>
+            </div>
+          </div>
+          <div class="production-score" :class="{ complete: productionProgressPercent === 100 }">
+            <strong>{{ productionProgressPercent }}</strong><span>%</span>
+            <small>{{ productionProgressLabel }}</small>
+          </div>
         </div>
-        <div class="pipeline audit-pipeline">
-          <button v-for="(dept, i) in departmentAudits" :key="dept.role" class="pipeline-node" :class="{ active: activeDept === dept.role, verified: dept.passed, failed: !dept.passed }" @click="activeDept = dept.role">
-            <span class="pipeline-index">0{{ i + 1 }}</span>
-            <span class="pipeline-icon"><Icon :icon="deptMeta[dept.role]?.icon || 'mdi:alert-circle-outline'" width="20" /></span>
-            <span class="pipeline-copy"><strong>{{ dept.name }}</strong><small>{{ dept.responsibility }}</small></span>
-            <span class="pipeline-state">{{ dept.passed ? 'VERIFIED' : 'EVIDENCE MISSING' }}</span>
-          </button>
-        </div>
-        <div v-if="selectedAudit" class="audit-detail">
-          <strong>{{ selectedAudit.issue || '职责与交付证据匹配' }}</strong>
-          <span>应交：{{ selectedAudit.expected.join(' · ') }}</span>
-          <span>现有非文本证据：{{ selectedAudit.evidence.length ? selectedAudit.evidence.join('、') : '无' }}</span>
+        <div class="department-progress" role="progressbar" aria-label="项目部门进度"
+          aria-valuemin="0" aria-valuemax="100" :aria-valuenow="productionProgressPercent">
+          <div v-for="(phase, i) in departmentProgress" :key="phase.role" class="department-phase"
+            :class="{ done: phase.done, current: phase.current, pending: !phase.done && !phase.current }"
+            :style="{ '--dept-color': phase.color, '--dept-rgb': phase.rgb }">
+            <div class="phase-rail"><span></span><i></i></div>
+            <div class="phase-copy">
+              <span class="phase-icon"><Icon :icon="phase.icon" width="17" /></span>
+              <span><b>{{ phase.name }}</b><small>{{ phase.status }}</small></span>
+              <em>0{{ i + 1 }}</em>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -316,8 +330,161 @@
       </section>
     </div>
 
+      <section v-show="activeSection === 'tags'" class="tags-room">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">0 · 预设</p>
+          <h2>标签管理 · 前沿技术迭代</h2>
+        </div>
+      </div>
+
+      <div class="tags-input-row">
+              <input v-model="tagInput" class="tags-input" placeholder="输入标签，如 AI Agent、多模态、融资…" @keyup.enter="addTag" />
+              <button class="tags-add-btn" :disabled="!tagInput.trim() || tagAdding" @click="addTag">{{ tagAdding ? '添加中…' : '添加标签' }}</button>
+            </div>
+
+            <!-- 下达指令：用户自定义考题/项目目标，立项最高优先级（1vs100 考题通道） -->
+            <div class="directive-zone">
+              <div class="directive-head">
+                <h3>📢 下达指令（考题）</h3>
+                <span class="directive-tip">指令优先于标签/热点，公司立项必须围绕它执行</span>
+              </div>
+              <div class="directive-input-row">
+                        <input v-model="directiveInput" class="directive-input" placeholder="例：做一个番茄钟+待办小工具，要能运行，限 30 分钟" @keyup.enter="saveDirective" />
+                        <select v-model="directiveModel" class="directive-model-select" title="指定公司用哪个模型跑（留空=自动轮换）" @change="directiveModelTouched = true">
+                          <option value="">模型：自动轮换</option>
+                          <option v-for="m in directiveModelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                        </select>
+                        <button class="directive-save-btn" :disabled="directiveSaving" @click="saveDirective">{{ directiveSaving ? '下达中…' : '下达指令' }}</button>
+                        <button v-if="directiveText" class="directive-clear-btn" :disabled="directiveSaving" @click="clearDirective">清除</button>
+                      </div>
+                      <div v-if="directiveError" class="directive-error">{{ directiveError }}</div>
+                      <div v-if="directiveText" class="directive-current">
+                        <Icon icon="mdi:bullhorn" width="16" />
+                        <span>当前指令：<strong>{{ directiveText }}</strong><template v-if="directiveModel"><em> · 模型：{{ directiveModel }}</em></template></span>
+                      </div>
+            </div>
+
+      <div class="tags-hot" v-if="hotTags.length">
+        <h3>🔥 热门标签</h3>
+        <div class="tags-shell">
+          <span v-for="t in hotTags" :key="t.id" class="tag-pill hot" @click="tagInput = t.name; addTag()">
+            {{ t.name }}
+            <small>{{ t.usedCount }}</small>
+          </span>
+        </div>
+      </div>
+
+      <div class="tags-list" v-if="tagsList.length">
+        <h3>我的标签（{{ tagsList.length }}）</h3>
+        <div class="tags-shell">
+          <span v-for="t in tagsList" :key="t.id" class="tag-pill">
+            {{ t.name }}
+            <small>×{{ t.usedCount }}</small>
+            <button class="tag-del" @click="deleteTag(t.id)" title="删除标签">×</button>
+          </span>
+        </div>
+      </div>
+      <div v-else-if="!loadingTags" class="tags-empty">
+        <Icon icon="mdi:tag-plus-outline" width="32" />
+        <p>还没有标签，输入一个开始记录调研方向吧</p>
+      </div>
+
+      <!-- 迭代区：从已审批项目选，每天调研前沿技术迭代产品 -->
+      <div class="iterate-zone">
+        <h3 class="iterate-title">⚡ 前沿技术迭代</h3>
+        <p class="iterate-desc">从已审批的项目里选一个，让 agents 每天调研最前沿技术来迭代该产品。</p>
+
+        <div v-if="iteratePlans.length" class="iterate-plans">
+          <h4>迭代中（{{ iteratePlans.length }}）</h4>
+          <div v-for="p in iteratePlans" :key="p.project" class="iterate-plan-card">
+            <div class="iterate-plan-head">
+              <strong>{{ p.name }}</strong>
+              <div class="iterate-plan-actions">
+                <span class="iterate-badge">LIVE</span>
+                <button class="iterate-stop-btn" @click="stopIterate(p)">停止</button>
+              </div>
+            </div>
+            <p class="iterate-summary">{{ p.lastReport || '报告生成中…' }}</p>
+            <small class="iterate-meta">开始于 {{ formatTime(p.startedAt) }}</small>
+          </div>
+        </div>
+
+        <div v-if="iterateCandidates.length && !iteratePlans.length" class="iterate-candidates">
+          <h4>候选项目（已审批，可开始迭代）</h4>
+          <div v-for="cd in iterateCandidates" :key="cd.project" class="iterate-candidate-row">
+            <span class="iterate-cand-name">{{ cd.name }}</span>
+            <button class="iterate-start-btn" :disabled="iterateStarting" @click="startIterate(cd)">{{ iterateStarting ? '启动中…' : '开始迭代' }}</button>
+          </div>
+        </div>
+        <div v-else class="iterate-empty">
+          <Icon icon="mdi:rocket-launch-outline" width="30" />
+          <p>还没有可迭代的已审批项目。去审批台通过一个项目后，就能在这里让它每天自我迭代。</p>
+        </div>
+      </div>
+    </section>
+
+      <!-- 发行评测：产品发布后 Agent 打分评论（已隐藏，待实装） -->
+            <section v-if="false" class="reviews-room">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">LIVE · 发行评测</p>
+            <h2>用户 Agent 打分评论</h2>
+          </div>
+          <span v-if="reviewsList.length" class="reviews-total">{{ reviewsList.length }} 个产品已发行</span>
+        </div>
+        <div v-if="reviewsList.length" class="reviews-list">
+          <article v-for="rv in reviewsList" :key="rv.agent + rv.project" class="review-card">
+            <header class="review-head">
+              <div class="review-title">
+                <strong>《{{ rv.project }}》</strong>
+                <span class="review-agent">{{ rv.agent }}</span>
+                <small>{{ rv.generated_at }}</small>
+              </div>
+              <div class="review-score" :class="{ good: rv.avg_score >= 7, mid: rv.avg_score >= 5 && rv.avg_score < 7 }">
+                <strong>{{ rv.avg_score.toFixed(1) }}</strong><small>/10</small>
+              </div>
+            </header>
+            <p class="review-summary">{{ rv.summary }}</p>
+            <div class="review-users">
+              <div v-for="u in rv.users" :key="u.name" class="review-user">
+                <span class="ru-avatar">{{ u.emoji }}</span>
+                <div class="ru-body">
+                  <header>
+                    <strong>{{ u.name }}</strong>
+                    <span class="ru-stars">{{ '★'.repeat(Math.max(1, Math.round(u.score / 2))) }}<i>{{ u.score }}</i></span>
+                    <em v-if="u.model_tag" class="ru-model">{{ u.model_tag }}</em>
+                  </header>
+                  <p>{{ u.comment }}</p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div v-else class="reviews-empty">
+          <Icon icon="mdi:star-outline" width="30" />
+          <p>还没有产品发行。等 coder 完成交付（delivery 门禁通过）后，用户 Agent 会自动打分评论。</p>
+        </div>
+      </section>
+
       </div><!-- /section-content -->
     </div><!-- /company-layout -->
+
+    <!-- 技能习得气泡（实机：agent 提炼技能时弹出） -->
+    <Teleport to="body">
+      <div class="skill-toast-layer">
+        <TransitionGroup name="skill-pop">
+          <div v-for="t in skillToasts" :key="t.id" class="skill-toast">
+            <div class="st-icon"><Icon icon="mdi:lightbulb-on-outline" width="18" /></div>
+            <div class="st-body">
+              <span class="st-tag">技能习得 · {{ t.agent }}</span>
+              <strong>{{ t.name }}</strong>
+            </div>
+            <span class="st-xp">+{{ t.xp }} XP</span>
+          </div>
+        </TransitionGroup>
+      </div>
+    </Teleport>
 
     <div v-if="artifactModal.open" class="modal-backdrop" @click.self="artifactModal.open = false">
       <section class="artifact-modal" role="dialog" aria-modal="true" aria-label="交付物内容">
@@ -368,6 +535,7 @@
 <script setup>
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { API_BASE_URL } from '../config.js'
 import { parsePptxPreview, pptxElementStyle } from '../utils/pptxPreview.js'
 import { parseXlsxPreview, parseDelimitedPreview } from '../utils/xlsxPreview.js'
 const goals = ref([])
@@ -377,6 +545,146 @@ const pendingApprovals = ref([])
 const decidingProject = ref('')
 const hiddenApprovalProjects = ref(new Set())
 const meetings = ref([]) // 会议纪要（会议室 tab 展示真实开会内容）
+// ===== 标签系统（调研方向 + 历史记录 + 热门标签）=====
+const tagsList = ref([])
+const hotTags = ref([])
+const tagInput = ref('')
+const tagAdding = ref(false)
+const loadingTags = ref(true)
+// ===== 下达指令（用户自定义考题/项目目标，立项最高优先级）=====
+const directiveText = ref('')
+const directiveInput = ref('')
+const directiveModel = ref('')
+const directiveModelTouched = ref(false)
+const directiveSaving = ref(false)
+const directiveModelOptions = ref([])
+const directiveRun = ref({ status: 'idle', project: '', error: '', updatedAt: '' })
+const directiveError = ref('')
+const iteratePlans = ref([])
+const iterateCandidates = ref([])
+const iterateStarting = ref(false)
+const reviewsList = ref([])
+async function loadIterate() {
+  try {
+    const d = await api('/api/company/iterate')
+    iteratePlans.value = d.plans || []
+    iterateCandidates.value = d.candidates || []
+  } catch (e) {}
+}
+async function loadReviews() {
+  try {
+    const d = await api('/api/company/reviews')
+    if (d && Array.isArray(d.reviews)) reviewsList.value = d.reviews
+  } catch (e) { /* 后端没起静默 */ }
+}
+async function startIterate(cd) {
+  iterateStarting.value = true
+  try {
+    const plan = await api('/api/company/iterate', { method: 'POST', body: JSON.stringify({ project: cd.project, name: cd.name }), headers: { 'Content-Type': 'application/json' } })
+    iteratePlans.value = [plan, ...iteratePlans.value.filter(item => item.project !== plan.project)]
+    await loadIterate()
+    activeSection.value = 'live'
+  } catch (e) { console.error(e) } finally { iterateStarting.value = false }
+}
+async function stopIterate(p) {
+  if (!p || !p.project) return
+  try {
+    const r = await api('/api/company/iterate/stop', { method: 'POST', body: JSON.stringify({ project: p.project }), headers: { 'Content-Type': 'application/json' } })
+    if (r && r.ok) {
+      iteratePlans.value = iteratePlans.value.filter(item => item.project !== p.project)
+      await loadIterate()
+    }
+  } catch (e) { console.error('stopIterate', e) }
+}
+async function loadTags() {
+  try {
+    loadingTags.value = true
+    const [mine, hot] = await Promise.allSettled([
+      api('/api/company/tags'),
+      api('/api/company/tags/hot'),
+    ])
+    if (mine.status === 'fulfilled') tagsList.value = mine.value.tags || []
+    if (hot.status === 'fulfilled') hotTags.value = hot.value.hot || []
+  } catch (e) { /* 后端没起静默 */ } finally { loadingTags.value = false }
+}
+async function loadDirective() {
+  try {
+    const [d, cfg] = await Promise.allSettled([
+      directiveApi('/api/company/directive'),
+      api('/api/models/config'),
+    ])
+    if (d.status === 'fulfilled' && d.value) {
+      directiveText.value = d.value.directive || ''
+      directiveInput.value = d.value.directive || ''
+      // 轮询只同步已经持久化的值，不能覆盖用户刚在下拉框里做出的选择。
+      if (!directiveModelTouched.value && !directiveSaving.value) directiveModel.value = d.value.model || ''
+      directiveRun.value = d.value.run || { status: 'idle', project: '', error: '', updatedAt: '' }
+      directiveError.value = ''
+    } else if (d.status === 'rejected') {
+      directiveError.value = d.reason?.message || '指令服务未启动'
+    }
+    if (cfg.status === 'fulfilled' && cfg.value) {
+          // 用户已经接入的自定义模型优先；再补免费池。旧逻辑只截前 60 个
+          // free_models，导致 DeepSeek 自定义 API 明明已配置却不在下拉框里。
+          const providers = [
+            ...(cfg.value.custom_models || []),
+            ...(cfg.value.free_models || []),
+            ...(cfg.value.configs || []),
+          ]
+          const seen = new Set()
+          directiveModelOptions.value = providers
+            .filter(p => p && p.id && !seen.has(p.id) && seen.add(p.id))
+            .map(p => ({
+              id: p.id,
+              name: p.vendor ? `${p.vendor} · ${p.name || p.default_model || p.id}` : (p.name || p.default_model || p.id),
+            }))
+        }
+  } catch (e) { /* 后端没起静默 */ }
+}
+async function saveDirective() {
+  const d = directiveInput.value.trim()
+  if (directiveSaving.value) return
+  const requestedModel = directiveModel.value
+  directiveSaving.value = true
+  directiveError.value = ''
+  try {
+    const r = await directiveApi('/api/company/directive', { method: 'PUT', body: JSON.stringify({ directive: d, model: requestedModel }), headers: { 'Content-Type': 'application/json' } })
+    if (r && r.ok) {
+      directiveText.value = r.directive || ''
+      directiveInput.value = r.directive || ''
+      directiveModel.value = r.model || ''
+      directiveModelTouched.value = false
+      directiveRun.value = r.run || { status: 'queued', project: '', error: '', updatedAt: '' }
+      activeSection.value = 'live'
+      await Promise.allSettled([loadData({ quiet: true }), loadApprovals(), loadProductionAudit()])
+    }
+  } catch (e) {
+    directiveError.value = `下达失败：${e?.message || '交付服务不可用'}`
+    console.error('saveDirective', e)
+  } finally { directiveSaving.value = false }
+}
+async function clearDirective() {
+  directiveInput.value = ''
+  await saveDirective()
+}
+async function addTag() {
+  const name = tagInput.value.trim()
+  if (!name || tagAdding.value) return
+  tagAdding.value = true
+  try {
+    const r = await api('/api/company/tags', { method: 'POST', body: JSON.stringify({ name }) })
+    if (r.ok) {
+      await loadTags()
+      tagInput.value = ''
+    }
+  } catch (e) { console.error('addTag', e) } finally { tagAdding.value = false }
+}
+async function deleteTag(id) {
+  try {
+    await api('/api/company/tags/' + id, { method: 'DELETE' })
+    await loadTags()
+  } catch (e) { console.error('deleteTag', e) }
+}
 const integrations = ref({ microsoft: {}, database: {}, navicat: {} })
 const productionAudit = ref({ counts: {}, departments: [], passed: 0, total: 6 })
 const activeSection = ref('live') // 竖标签：approval | live | meeting
@@ -471,6 +779,111 @@ const allApprovalProjects = computed(() => {
 })
 const approvalProjects = computed(() => allApprovalProjects.value.filter(project => project.agents.length >= 2 && !hiddenApprovalProjects.value.has(project.key)))
 const soloProductionCount = computed(() => allApprovalProjects.value.filter(project => project.agents.length < 2).length)
+
+const productionDepartmentPlan = [
+  { role: 'researcher', name: '研究部', icon: 'mdi:microscope', stages: ['research', 'data'], color: '#8b5cf6', rgb: '139, 92, 246' },
+  { role: 'writer', name: '作者部', icon: 'ph:pen-nib-bold', stages: ['meeting', 'requirements', 'docs'], color: '#f59e0b', rgb: '245, 158, 11' },
+  { role: 'designer', name: '设计部', icon: 'mdi:palette', stages: ['ui'], color: '#ec4899', rgb: '236, 72, 153' },
+  { role: 'coder', name: '程序部', icon: 'mdi:code-tags', stages: ['code', 'runnable'], color: '#2563eb', rgb: '37, 99, 235' },
+  { role: 'promoter', name: '宣传部', icon: 'mdi:megaphone', stages: ['ppt', 'pv'], color: '#14b8a6', rgb: '20, 184, 166' },
+  { role: 'publisher', name: '发布部', icon: 'mdi:bullhorn', stages: ['promotion'], color: '#ef4444', rgb: '239, 68, 68' },
+]
+const latestReviewedProject = computed(() => {
+  const meeting = meetings.value.find(item => item.kind === 'project_review')
+  if (!meeting) return null
+  return {
+    title: String(meeting.topic || '').replace(/\s*·\s*完整交付评审\s*$/, '') || '最近完整交付项目',
+    agents: meeting.agent ? [meeting.agent] : [],
+    completedStageCount: projectStages.length,
+    ready: true,
+    stageEvidence: null,
+    reviewed: true,
+  }
+})
+const currentIterationProject = computed(() => {
+  const plan = [...iteratePlans.value].sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))[0]
+  if (!plan) return null
+  const researchDelivered = Boolean(plan.reportFile) && !String(plan.lastReport || '').startsWith('首次调研失败')
+  return {
+    title: `${plan.name || plan.project || '未命名项目'} · 迭代`,
+    iteration: true,
+    researchDelivered,
+    startedAt: plan.startedAt,
+    agents: [],
+    completedStageCount: researchDelivered ? 1 : 0,
+    ready: false,
+  }
+})
+const directiveProductionProject = computed(() => {
+  if (!directiveText.value) return null
+  const run = directiveRun.value || {}
+  const delivered = run.project
+    ? allApprovalProjects.value.find(project => project.items.some(item => String(item.file || '').replace(/^project\//, '') === run.project))
+    : null
+  if (delivered) return { ...delivered, directive: true, runStatus: 'completed' }
+  return {
+    title: directiveText.value,
+    directive: true,
+    runStatus: run.status || 'queued',
+    runError: run.error || '',
+    agents: [], completedStageCount: 0, ready: false, stageEvidence: {},
+  }
+})
+const currentProductionProject = computed(() => directiveProductionProject.value || currentIterationProject.value || approvalProjects.value[0] || allApprovalProjects.value[0] || latestReviewedProject.value || null)
+const currentProjectTags = computed(() => {
+  const project = currentProductionProject.value
+  if (!project) return ['尚未排产', '等待真实交付']
+  if (project.directive && !project.ready) return ['用户指令', project.runStatus === 'failed' ? '生产失败' : '多 Agent 生产中', '等待真实交付']
+  if (project.iteration) return ['迭代中', '前沿技术调研', project.researchDelivered ? '本轮报告已落盘' : '首轮调研中']
+  if (project.reviewed) return [`${project.completedStageCount}/${projectStages.length} 阶段`, '完整交付', '评审留痕']
+  return [
+    `${project.agents.length} AGENTS`,
+    `${project.completedStageCount}/${projectStages.length} 阶段`,
+    project.ready ? '完整交付' : '生产中',
+  ]
+})
+const productionProgressPercent = computed(() => {
+  const project = currentProductionProject.value
+  if (project?.iteration) return project.researchDelivered ? Math.round(100 / productionDepartmentPlan.length) : 0
+  if (project) return Math.round((project.completedStageCount / projectStages.length) * 100)
+  const total = Number(productionAudit.value.total) || productionDepartmentPlan.length
+  return Math.round(((Number(productionAudit.value.passed) || 0) / total) * 100)
+})
+const productionProgressLabel = computed(() => {
+  if (currentProductionProject.value?.directive && !currentProductionProject.value.ready) {
+    if (currentProductionProject.value.runStatus === 'failed') return `生产失败 · ${currentProductionProject.value.runError || '请检查交付引擎'}`
+    return currentProductionProject.value.runStatus === 'queued' ? '已立项 · 正在唤醒多 Agent' : '多 Agent 正在生成完整交付'
+  }
+  if (currentProductionProject.value?.iteration) return currentProductionProject.value.researchDelivered ? '本轮调研已交付 · 迭代继续' : '研究部正在执行首轮调研'
+  if (productionProgressPercent.value === 100) return '已完成 · 等待人类审批'
+  if (productionProgressPercent.value > 0) return '多 Agent 正在接力'
+  return currentProductionProject.value ? '项目已排产' : '等待生产证据'
+})
+const departmentProgress = computed(() => {
+  const project = currentProductionProject.value
+  const audits = new Map(departmentAudits.value.map(dept => [dept.role, dept]))
+  if (project?.iteration) {
+    return productionDepartmentPlan.map((phase, index) => ({
+      ...phase,
+      done: index === 0 && project.researchDelivered,
+      current: index === 0,
+      status: index === 0 ? (project.researchDelivered ? '本轮已交付' : '正在调研') : '等待真实接力',
+    }))
+  }
+  const phases = productionDepartmentPlan.map(phase => {
+    const done = project?.stageEvidence
+      ? phase.stages.every(stage => (project.stageEvidence[stage] || []).length > 0)
+      : Boolean(audits.get(phase.role)?.passed)
+    return { ...phase, done }
+  })
+  const firstPending = phases.findIndex(phase => !phase.done)
+  const currentIndex = firstPending === -1 ? phases.length - 1 : firstPending
+  return phases.map((phase, index) => ({
+    ...phase,
+    current: index === currentIndex,
+    status: phase.done ? (index === currentIndex ? '交付完成' : '已交付') : (index === currentIndex ? '当前阶段' : '等待接力'),
+  }))
+})
 
 const showcaseStageOrder = ['pv', 'runnable', 'ui', 'data', 'ppt', 'promotion']
 function projectShowcase(project) {
@@ -642,8 +1055,7 @@ const draggingNodeName = ref('')
 const graphGesture = ref(null)
 let suppressNodeClick = false
 
-watch(collabGraph, g => {
-  const previous = new Map(graphState.value.nodes.map(n => [n.name, { x: n.x, y: n.y }]))
+watch(collabGraph, g => {  const previous = new Map(graphState.value.nodes.map(n => [n.name, { x: n.x, y: n.y }]))
   graphState.value = {
     ...g,
     nodes: g.nodes.map(n => ({ ...n, ...(savedGraphPositions.get(n.name) || previous.get(n.name) || {}) })),
@@ -1053,16 +1465,41 @@ async function api(url, options) {
   }
 }
 
+async function directiveApi(url, options) {
+  const bases = API_BASE_URL ? ['', API_BASE_URL] : ['']
+  let lastError
+  for (const base of bases) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 8000)
+    try {
+      const response = await fetch(`${base}${url}`, { ...options, signal: ctrl.signal })
+      const text = await response.text()
+      let data
+      try { data = JSON.parse(text) } catch { throw new Error('指令服务返回了无效响应') }
+      if (!response.ok) throw new Error(data.error || `指令服务请求失败 (${response.status})`)
+      return data
+    } catch (err) {
+      lastError = err?.name === 'AbortError' ? new Error('指令服务连接超时') : err
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  throw lastError || new Error('指令服务不可用')
+}
+
 async function loadData({ quiet = false } = {}) {
   try {
-    const [goalData, agentData, osData] = await Promise.all([
+    const [goalResult, agentResult, osResult] = await Promise.allSettled([
       api('/api/company/goals'),
-      api('/api/company/agents').catch(() => ({ agents: [] })),
-      api('/api/company/os-stats').catch(() => ({}))
+      api('/api/company/agents'),
+      api('/api/company/os-stats')
     ])
-    goals.value = goalData.goals || []
-    agents.value = agentData.agents || []
-    if (osData && osData.totalAgents) osStats.value = osData
+    if (goalResult.status === 'fulfilled') goals.value = goalResult.value.goals || []
+    if (agentResult.status === 'fulfilled') agents.value = agentResult.value.agents || []
+    if (osResult.status === 'fulfilled') osStats.value = osResult.value || osStats.value
+    if (!quiet && [goalResult, agentResult, osResult].every(result => result.status === 'rejected')) {
+      throw goalResult.reason || agentResult.reason || osResult.reason
+    }
     if (!activeDept.value && agents.value.length) {
       // 默认选第一个有人的部门
       const roles = [...new Set(agents.value.map(a => a.role))]
@@ -1149,11 +1586,14 @@ onMounted(() => {
   loadMeetings()
   loadIntegrations()
   loadProductionAudit()
+  loadIterate()
+  loadDirective()
+  loadReviews()
   // 2026-08-09 修复：防重入——后端重启间隙请求会挂 8s（api 超时），3s 轮询若叠加上一轮挂起请求会耗尽连接
   timer = setInterval(() => {
     if (polling) return
     polling = true
-    Promise.allSettled([loadData({ quiet: true }), loadApprovals(), loadMeetings()]).finally(() => { polling = false })
+    Promise.allSettled([loadData({ quiet: true }), loadApprovals(), loadMeetings(), loadIterate(), loadDirective(), loadReviews()]).finally(() => { polling = false })
   }, 3000)
 })
 onUnmounted(() => clearInterval(timer))
@@ -1170,6 +1610,8 @@ onUnmounted(() => clearInterval(timer))
   --warning: #a85d10;
   --danger: #b33a3a;
   max-width: 1060px;
+  width: 100%;
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 24px 20px 60px;
   color: var(--ink);
@@ -1193,7 +1635,7 @@ onUnmounted(() => clearInterval(timer))
   background: #e5e7eb; color: #374151; border-radius: 10px; font-size: 11px; font-weight: 700;
 }
 .section-tab.active .st-badge { background: #2563eb; color: #fff; }
-.section-content { flex: 1; min-width: 0; }
+.section-content { flex: 1; width: 100%; min-width: 0; box-sizing: border-box; }
 
 /* 会议产物包：回放、PPT、VTT、逐席证据同屏验收。 */
 .meeting-live.muted { background: #f1f5f9; color: #64748b; }
@@ -1259,6 +1701,43 @@ onUnmounted(() => clearInterval(timer))
 .cm-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #17201c; }
 .cm-stats { font-size: 12px; color: #64748b; }
 .cm-stats strong { color: #1d4ed8; }
+
+/* ===== 标签系统（调研方向 + 热门标签）===== */
+.tags-room { display: flex; flex-direction: column; gap: 18px; }
+.tags-input-row { display: flex; gap: 10px; }
+/* 迭代区（预设：已审批项目 → 每天前沿技术调研迭代） */
+.iterate-zone { margin-top: 8px; padding-top: 22px; border-top: 1px solid #e2e8f0; }
+.iterate-title { margin: 0 0 4px; font-size: 18px; color: #1e293b; }
+.iterate-desc { margin: 0 0 16px; color: #64748b; font-size: 13px; }
+.iterate-plans, .iterate-candidates { margin-bottom: 18px; }
+.iterate-plans h4, .iterate-candidates h4 { margin: 0 0 10px; font-size: 13px; color: #64748b; }
+.iterate-plan-card { padding: 14px 16px; border: 1px solid #dfe6f0; border-radius: 12px; background: #fff; margin-bottom: 10px; }
+.iterate-plan-head { display: flex; align-items: center; justify-content: space-between; }
+.iterate-plan-head strong { font-size: 15px; color: #1e293b; }
+.iterate-badge { padding: 3px 8px; border-radius: 6px; background: #eef2ff; color: #4338ca; font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+.iterate-summary { margin: 8px 0 4px; color: #334155; font-size: 13px; line-height: 1.55; }
+.iterate-meta { color: #94a3b8; font-size: 11px; }
+.iterate-candidate-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 4px; border-bottom: 1px solid #eef2f7; }
+.iterate-cand-name { font-weight: 700; color: #1e293b; }
+.iterate-start-btn { padding: 7px 16px; border: 0; border-radius: 8px; background: #6366f1; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity .15s; flex: 0 0 auto; }
+.iterate-start-btn:hover:not(:disabled) { opacity: .85; }
+.iterate-start-btn:disabled { opacity: .5; cursor: default; }
+.iterate-stop-btn { padding: 5px 12px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; flex: 0 0 auto; }
+.iterate-stop-btn:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+.iterate-empty { display: flex; align-items: center; gap: 12px; padding: 20px; border: 1px dashed #dbe3ef; border-radius: 12px; color: #94a3b8; font-size: 13px; }
+.tags-input { flex: 1; min-width: 0; height: 42px; padding: 0 14px; border: 1.5px solid #dfe4df; border-radius: 12px; font-size: 14px; color: #17201c; background: #fff; outline: none; }
+.tags-input:focus { border-color: #4f7cff; }
+.tags-add-btn { height: 42px; padding: 0 18px; border: none; border-radius: 12px; background: #4f7cff; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.tags-add-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.tags-hot h3, .tags-list h3 { margin: 0 0 10px; font-size: 13px; font-weight: 800; color: #17201c; }
+.tags-shell { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #eef4ff; color: #2f54a0; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #d6e4ff; }
+.tag-pill:hover { background: #e0ecff; }
+.tag-pill.hot { background: #fff7e6; border-color: #ffd591; color: #ad6800; }
+.tag-pill small { font-size: 11px; opacity: 0.7; font-weight: 700; }
+.tag-del { border: none; background: transparent; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1; }
+.tag-del:hover { color: #d94834; }
+.tags-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 0; color: #94a3b8; font-size: 13px; }
 .collab-svg { width: 100%; height: auto; display: block; }
 .cm-dept-label { font-size: 12px; font-weight: 800; fill: #94a3b8; }
 .cm-node { cursor: pointer; }
@@ -1535,7 +2014,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .os-ev-empty { color: #9ca3af; font-size: 14px; text-align: center; padding: 30px 0; }
 
 /* 2026 多 Agent 作战室：可观测、可接力、可审批 */
-.company-view { max-width: 1380px; padding: 18px 84px 72px 24px; background: #f3f5f2; }
+.company-view { width: 100%; max-width: 1380px; box-sizing: border-box; padding: 18px 84px 72px 24px; background: #f3f5f2; }
 .command-hero { position: relative; overflow: hidden; padding: 24px 30px 0; border: 1px solid #26354a; border-radius: 24px; color: #f8fafc; background: #101827; box-shadow: 0 24px 70px rgba(15,23,42,.18); }
 .command-hero::after { content: ''; position: absolute; right: -90px; top: -130px; width: 420px; height: 420px; border: 1px solid rgba(74,222,128,.2); border-radius: 50%; box-shadow: 0 0 0 70px rgba(74,222,128,.025), 0 0 0 140px rgba(74,222,128,.018); pointer-events: none; }
 .command-topline { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; padding-bottom: 21px; border-bottom: 1px solid rgba(148,163,184,.2); color: #94a3b8; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
@@ -1571,11 +2050,48 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .section-tab:hover { border: 0; background: #f1f5f2; color: #101827; }
 .section-tab.active { border: 0; color: #fff; background: #101827; box-shadow: 0 5px 16px rgba(15,23,42,.16); }
 .section-tab.active .st-badge { color: #102017; background: #4ade80; }
-.section-content { margin-top: 18px; }
+.section-content { width: 100%; min-width: 0; box-sizing: border-box; margin-top: 18px; }
+.section-content > .tags-room,
+.section-content > .meeting-room,
+.section-content > .war-room,
+.section-content > .approval-desk { width: 100%; min-width: 0; box-sizing: border-box; }
 
 .war-room { display: flex; flex-direction: column; gap: 18px; }
 .orchestration-strip, .graph-panel, .trace-panel, .agent-console { border: 1px solid #dfe4df; border-radius: 18px; background: #fff; box-shadow: 0 10px 30px rgba(15,23,42,.045); }
-.orchestration-strip { padding: 22px; }
+.orchestration-strip { overflow: hidden; padding: 24px 26px 26px; }
+.production-overview { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 26px; }
+.production-project { min-width: 0; }
+.production-eyebrow { display: inline-flex; align-items: center; gap: 7px; color: #718078; font-size: 9px; font-weight: 900; letter-spacing: .16em; }
+.production-eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.12); }
+.production-project h2 { overflow: hidden; margin: 7px 0 10px; color: #101827; font-size: clamp(20px,2vw,27px); line-height: 1.15; letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
+.production-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.production-tags span { padding: 5px 9px; border: 1px solid #e1e7e3; border-radius: 999px; color: #5f6e66; background: #f7f9f7; font-size: 9px; font-weight: 800; letter-spacing: .035em; }
+.production-score { flex: 0 0 auto; display: grid; grid-template-columns: auto auto; align-items: end; min-width: 142px; padding-left: 24px; border-left: 1px solid #e5e9e6; color: #64748b; }
+.production-score strong { color: #142019; font-size: 38px; line-height: .9; letter-spacing: -.06em; }
+.production-score > span { margin-left: 3px; color: #8a968f; font-size: 16px; font-weight: 800; }
+.production-score small { grid-column: 1/-1; margin-top: 8px; color: #7b8880; font-size: 9px; white-space: nowrap; }
+.production-score.complete strong, .production-score.complete > span { color: #16824f; }
+.department-progress { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 7px; }
+.department-phase { min-width: 0; }
+.phase-rail { position: relative; height: 7px; margin: 0 1px 12px; border-radius: 999px; background: #e9eeeb; }
+.phase-rail span { position: absolute; inset: 0; border-radius: inherit; background: #e9eeeb; transition: background .3s ease, box-shadow .3s ease; }
+.phase-rail i { position: absolute; z-index: 2; top: 50%; right: 0; width: 11px; height: 11px; border: 3px solid #fff; border-radius: 50%; background: #cbd5ce; box-shadow: 0 0 0 1px #d9e0db; transform: translate(2px,-50%); }
+.department-phase.done .phase-rail span { background: var(--dept-color); box-shadow: 0 3px 10px rgba(var(--dept-rgb),.18); }
+.department-phase.done .phase-rail i, .department-phase.current .phase-rail i { background: var(--dept-color); box-shadow: 0 0 0 1px rgba(var(--dept-rgb),.28); }
+.department-phase.current .phase-rail span { background: linear-gradient(90deg, rgba(var(--dept-rgb),.28), var(--dept-color), rgba(var(--dept-rgb),.38)); background-size: 180% 100%; box-shadow: 0 0 14px rgba(var(--dept-rgb),.38); animation: department-flow 1.45s linear infinite; }
+.department-phase.current .phase-rail i { animation: department-pulse 1.45s ease-out infinite; }
+.phase-copy { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 9px; min-width: 0; padding: 8px 8px 8px 6px; border-radius: 11px; transition: background .2s ease, transform .2s ease; }
+.department-phase.current .phase-copy { background: rgba(var(--dept-rgb),.07); transform: translateY(-1px); }
+.phase-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: #89958e; background: #eef2ef; }
+.department-phase.done .phase-icon, .department-phase.current .phase-icon { color: var(--dept-color); background: rgba(var(--dept-rgb),.11); }
+.phase-copy > span:nth-child(2) { min-width: 0; }
+.phase-copy b, .phase-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phase-copy b { color: #26332c; font-size: 11px; }
+.phase-copy small { margin-top: 3px; color: #9aa49e; font-size: 8px; }
+.department-phase.done .phase-copy small { color: var(--dept-color); }
+.phase-copy em { align-self: start; color: #b4beb8; font: 800 8px ui-monospace,monospace; font-style: normal; }
+@keyframes department-flow { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+@keyframes department-pulse { 0% { box-shadow: 0 0 0 0 rgba(var(--dept-rgb),.5); } 70%,100% { box-shadow: 0 0 0 9px rgba(var(--dept-rgb),0); } }
 .strip-heading, .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .strip-heading span, .panel-heading > div > span { color: #718078; font-size: 9px; font-weight: 900; letter-spacing: .16em; }
 .strip-heading h2, .panel-heading h2 { margin: 4px 0 0; color: #101827; font-size: 19px; letter-spacing: -.025em; }
@@ -1640,7 +2156,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   to { stroke-dashoffset: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .graph-stage .cm-link-pulse { animation: none; stroke-dasharray: 3 13; }
+  .graph-stage .cm-link-pulse, .department-phase.current .phase-rail span, .department-phase.current .phase-rail i { animation: none; }
+  .graph-stage .cm-link-pulse { stroke-dasharray: 3 13; }
 }
 .graph-tools { position: absolute; z-index: 4; top: 10px; left: 10px; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid #334258; border-radius: 9px; background: rgba(10,17,29,.88); backdrop-filter: blur(8px); }
 .graph-tools button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; color: #cbd5e1; background: transparent; font-size: 17px; cursor: pointer; }
@@ -1688,7 +2205,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .agent-artifacts span { color: #a1aaa5; font-size: 9px; }
 .agent-output { text-align: right; color: #17291f; font-size: 16px; }
 
-.approval-desk { padding: 28px; border: 1px solid #dfe4df; border-radius: 18px; background: #fff; box-shadow: 0 10px 30px rgba(15,23,42,.045); }
+.approval-desk { }
 .approval-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; padding-bottom: 24px; border-bottom: 1px solid #e5e9e6; }
 .approval-hero h2 { margin: 0; color: #101827; font-size: clamp(28px,3vw,44px); letter-spacing: -.045em; }
 .approval-hero p:not(.section-kicker) { max-width: 680px; margin: 10px 0 0; color: #748078; font-size: 13px; line-height: 1.6; }
@@ -1771,20 +2288,32 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .approve-project:hover { background: #214431; }
 .approve-project:disabled { border-color: #d9dfdb; color: #97a19b; background: #edf0ee; cursor: not-allowed; }
 
+/* 公司长页面：弱化系统默认滚动条，同时保留清晰的当前位置反馈。 */
+.company-view,.trace-list,.meeting-minutes,.project-deliveries { scrollbar-width: thin; scrollbar-color: #5b9b7d transparent; }
+.company-view::-webkit-scrollbar,.trace-list::-webkit-scrollbar,.meeting-minutes::-webkit-scrollbar,.project-deliveries::-webkit-scrollbar { width: 8px; height: 8px; }
+.company-view::-webkit-scrollbar-track,.trace-list::-webkit-scrollbar-track,.meeting-minutes::-webkit-scrollbar-track,.project-deliveries::-webkit-scrollbar-track { margin-block: 10px; border-radius: 999px; background: rgba(15,70,49,.055); }
+.company-view::-webkit-scrollbar-thumb,.trace-list::-webkit-scrollbar-thumb,.meeting-minutes::-webkit-scrollbar-thumb,.project-deliveries::-webkit-scrollbar-thumb { min-height: 42px; border: 2px solid transparent; border-radius: 999px; background: linear-gradient(#66b68f,#39775d) padding-box; }
+.company-view::-webkit-scrollbar-thumb:hover,.trace-list::-webkit-scrollbar-thumb:hover,.meeting-minutes::-webkit-scrollbar-thumb:hover,.project-deliveries::-webkit-scrollbar-thumb:hover { background: linear-gradient(#4da477,#245f47) padding-box; }
+
 @media (max-width: 1180px) {
   .pipeline { grid-template-columns: repeat(3,1fr); }
+  .department-progress { grid-template-columns: repeat(3,minmax(0,1fr)); row-gap: 18px; }
   .pipeline-arrow { display: none; }
   .war-grid { grid-template-columns: 1fr; }
   .trace-panel { height: auto; }
   .project-approval-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
-  .company-view { padding: 12px 76px 40px 12px; }
+  .company-view { padding: 12px 12px 76px; }
   .command-copy { grid-template-columns: 1fr; gap: 24px; }
   .zero-cost-seal { width: auto; }
   .command-metrics { grid-template-columns: repeat(2,1fr); }
   .command-metric:nth-child(2) { border-right: 0; }
   .pipeline { grid-template-columns: 1fr 1fr; }
+  .production-overview { align-items: stretch; flex-direction: column; gap: 16px; }
+  .production-score { grid-template-columns: auto auto 1fr; align-items: end; padding: 14px 0 0; border-top: 1px solid #e5e9e6; border-left: 0; }
+  .production-score small { grid-column: auto; margin: 0 0 1px 9px; }
+  .department-progress { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .agent-row { grid-template-columns: 34px 90px 1fr 28px; }
   .agent-handoff, .agent-artifacts { display: none; }
   .panel-heading { flex-direction: column; }
@@ -1793,7 +2322,123 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .approval-hero { align-items: flex-start; flex-direction: column; }
   .approval-total { text-align: left; }
   .delivery-switcher { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .artifact-proof-strip { grid-template-columns: 1fr; padding: 10px 12px; }
-  .project-stage-track { grid-template-columns: repeat(6,minmax(0,1fr)); row-gap: 12px; }
-}
-</style>
+    .artifact-proof-strip { grid-template-columns: 1fr; padding: 10px 12px; }
+    .project-stage-track { grid-template-columns: repeat(6,minmax(0,1fr)); row-gap: 12px; }
+  }
+
+  /* ===== 下达指令（考题）区 ===== */
+  .directive-zone {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(23, 41, 31, .06), rgba(23, 41, 31, .02));
+    border: 1px solid rgba(23, 41, 31, .12);
+  }
+  .directive-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .directive-head h3 { margin: 0; font-size: 14px; color: #17291f; }
+  .directive-tip { font-size: 12px; color: #8a938c; }
+  .directive-input-row { display: flex; gap: 8px; }
+  .directive-input {
+    flex: 1;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid #dbe1dd;
+    background: #fff;
+    font-size: 13px;
+    color: #17291f;
+    outline: none;
+  }
+  .directive-input:focus { border-color: #5b9b7d; box-shadow: 0 0 0 2px rgba(91, 155, 125, .15); }
+  .directive-model-select {
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid #dbe1dd;
+    background: #fff;
+    font-size: 13px;
+    color: #17291f;
+    outline: none;
+    max-width: 200px;
+    white-space: nowrap;
+  }
+  .directive-model-select:focus { border-color: #5b9b7d; }
+  .directive-current em { font-style: normal; color: #1d6b45; }
+  .directive-save-btn {
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #17291f;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .directive-save-btn:hover { background: #214431; }
+  .directive-save-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .directive-clear-btn {
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: 1px solid #dbe1dd;
+    background: #fff;
+    color: #657169;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .directive-clear-btn:hover { background: #f4f6f5; }
+  .directive-current {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #17291f;
+    background: rgba(23, 41, 31, .05);
+    padding: 8px 12px;
+    border-radius: 8px;
+  }
+  .directive-current strong { color: #1d6b45; }
+  .directive-error {
+    margin-top: 8px; padding: 9px 12px; border: 1px solid #fecaca; border-radius: 10px;
+    background: #fff1f2; color: #b42318; font-size: 12px; font-weight: 700;
+  }
+  /* ===== 发行评测 ===== */
+  .reviews-room { margin-top: 28px; }
+  .reviews-total { font-size: 12px; color: #8a938c; }
+  .reviews-list { display: flex; flex-direction: column; gap: 14px; }
+  .review-card {
+    border: 1px solid rgba(23, 41, 31, .12);
+    border-radius: 14px;
+    background: #fff;
+    padding: 16px 18px;
+    box-shadow: 0 1px 3px rgba(15, 70, 49, .05);
+  }
+  .review-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .review-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .review-title strong { font-size: 16px; color: #17291f; }
+  .review-agent { font-size: 12px; color: #657169; background: #eef3f0; padding: 2px 8px; border-radius: 999px; }
+  .review-title small { font-size: 11px; color: #97a19b; }
+  .review-score { display: flex; align-items: baseline; gap: 3px; }
+  .review-score strong { font-size: 24px; }
+  .review-score.good strong { color: #1d6b45; }
+  .review-score.mid strong { color: #b45309; }
+  .review-score small { font-size: 12px; color: #97a19b; }
+  .review-summary { margin: 10px 0 12px; font-size: 13px; color: #4b5563; }
+  .review-users { display: flex; flex-direction: column; gap: 10px; }
+  .review-user { display: flex; gap: 10px; padding: 10px 12px; background: #f7faf8; border-radius: 10px; }
+  .ru-avatar { font-size: 22px; line-height: 1; }
+  .ru-body { flex: 1; min-width: 0; }
+  .ru-body header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ru-body header strong { font-size: 13px; color: #17291f; }
+  .ru-stars { color: #f0b429; font-size: 12px; letter-spacing: 1px; }
+  .ru-stars i { font-style: normal; color: #657169; margin-left: 4px; }
+  .ru-model { font-style: normal; font-size: 11px; color: #1d6b45; background: #e6f4ec; padding: 1px 8px; border-radius: 999px; }
+  .ru-body p { margin: 4px 0 0; font-size: 13px; color: #374151; line-height: 1.55; }
+  .reviews-empty {
+    border: 1px dashed rgba(23, 41, 31, .2);
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    color: #97a19b;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  </style>
