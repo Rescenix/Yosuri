@@ -77,15 +77,16 @@
 
           <!-- 展开态：复用会话面板（新对话/搜索/置顶/最近/底部账号+设置） -->
           <SessionMenuContent
-                      v-if="sidebarOpen"
-                      fill
-                      :sessions="sessionList"
-                      :projects="projects"
-                      :active-session="activeSession"
-                      :running-session="runningSession"
-                      :completed-sessions="completedSessions"
-                      :question-session="questionSession"
-            @select-session="selectSession"
+                                v-if="sidebarOpen"
+                                fill
+                                :sessions="sessionList"
+                                :projects="projects"
+                                :active-session="activeSession"
+                                :running-session="runningSession"
+                                :completed-sessions="completedSessions"
+                                :question-session="questionSession"
+                                :notif-count="notifCount"
+                      @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
             @delete-session="deleteSession"
@@ -94,7 +95,8 @@
             @open-search="openSearchPanel"
                         @open-plugins="openPluginsMarket"
                         @open-scheduled-tasks="showScheduledTaskManager = true"
-                        @create-project="createProject"
+                                                @create-project="createProject"
+                                                @open-mail="showMailPanel = true"
                       />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
@@ -765,6 +767,11 @@
                 <UserMessageRail :messages="messages" :active-id="activeUserMessageId" @jump="jumpToMessage" />
 
                 <div class="input-toolbar-right">
+                  <!-- DHS 安全插件生态：社区发现与执行层隔离的鲸鱼快捷入口 -->
+                  <button class="dhs-whale-shortcut" type="button" title="DHS 安全插件生态" aria-label="打开 DHS 安全插件生态" @click.stop="showDHSCommunity = true">
+                    <Icon icon="simple-icons:deepseek" width="16" />
+                    <span class="dhs-whale-shield"><Icon icon="mdi:shield-check" width="9" /></span>
+                  </button>
                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
                   <div v-if="messages.length > 0 && ctxTotalUsed > 0" class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
                     <svg class="ctx-reservoir" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -980,11 +987,43 @@
 
       <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
       <ScheduledTaskManager
-        v-if="showScheduledTaskManager"
-        @close="showScheduledTaskManager = false"
-        @create="openScheduledTaskCreate"
-        @toast="showGitToast"
-      />
+              v-if="showScheduledTaskManager"
+              @close="showScheduledTaskManager = false"
+              @create="openScheduledTaskCreate"
+              @toast="showGitToast"
+            />
+            <!-- 通知面板 -->
+                        <Teleport to="body">
+                          <div v-if="showMailPanel" class="mail-panel-backdrop" @click.self="showMailPanel = false">
+                            <div class="mail-panel" @click="markNotifRead">
+                              <div class="mail-panel-head">
+                                <h2><Icon icon="mdi:email-outline" width="20" /> 通知</h2>
+                                <div class="mail-panel-actions">
+                                  <button class="mail-panel-act-btn" type="button" @click.stop="markNotifRead" title="全部标为已读">
+                                    <Icon icon="mdi:email-check-outline" width="16" />
+                                  </button>
+                                  <button class="mail-panel-close" type="button" @click="showMailPanel = false">
+                                    <Icon icon="mdi:close" width="20" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div class="mail-panel-body">
+                                <div v-if="notifications.length === 0" class="mail-panel-empty">暂无通知</div>
+                                <div v-for="n in notifications" :key="n.id" class="mail-notif-row" :class="{ unread: !n.is_read }">
+                                  <div class="mail-notif-dot" v-if="!n.is_read"></div>
+                                  <div class="mail-notif-content">
+                                    <div class="mail-notif-title">{{ n.title }}</div>
+                                    <div class="mail-notif-body" v-if="n.body">{{ n.body }}</div>
+                                    <div class="mail-notif-meta">
+                                      <span class="mail-notif-type">{{ notifTypeLabel(n.type) }}</span>
+                                      <span class="mail-notif-time">{{ n.created_at }}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Teleport>
       <ScheduledTaskModal v-if="showScheduledTask" @close="closeScheduledTask" @create="onCreateScheduledTask" />
       <ModelManagerModal
               v-if="showModelManager"
@@ -1026,6 +1065,7 @@
 
     <!-- 插件市场浮层（占位入口）：独立组件 + Teleport，与 SettingsModal 保持一致 -->
     <PluginsMarketModal v-if="showPluginsPanel" @close="closePluginsPanel" />
+    <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
 
     <!-- 技能习得气泡（左下角空白区，agent 提炼新技能时弹出） -->
     <SkillToasts />
@@ -1054,6 +1094,7 @@ import ScheduledTaskManager from './ScheduledTaskManager.vue'
 import SettingsModal from './SettingsModal.vue'
 import ModelManagerModal from './ModelManagerModal.vue'
 import PluginsMarketModal from './PluginsMarketModal.vue'
+import DHSCommunityModal from './DHSCommunityModal.vue'
 import QuestionModal from './QuestionModal.vue'
 import FileToolPanel from './FileToolPanel.vue'
 import DiffPanel from './DiffPanel.vue'
@@ -2404,6 +2445,49 @@ async function onDeleteModelKey(modelId) {
 const showSettings = ref(false)
 const showScheduledTask = ref(false)
 const showScheduledTaskManager = ref(false)
+const showMailPanel = ref(false)
+const notifications = ref([])
+const notifCount = ref(0)
+let notifPollTimer = null
+function getAuthToken() {
+  try { return localStorage.getItem('token') || '' } catch { return '' }
+}
+async function pollNotifications() {
+  const token = getAuthToken()
+  if (!token) { notifCount.value = 0; return }
+  try {
+    const res = await fetch('/api/notifications?limit=50&unread_only=false', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    })
+    if (!res.ok) { notifCount.value = 0; return }
+    const data = await res.json()
+    notifications.value = data.notifications || []
+    notifCount.value = data.unread_count || 0
+  } catch { /* 后端没起就静默 */ }
+}
+function startNotifPoll() {
+  pollNotifications()
+  notifPollTimer = setInterval(pollNotifications, 30000)
+}
+function stopNotifPoll() {
+  if (notifPollTimer) { clearInterval(notifPollTimer); notifPollTimer = null }
+}
+async function markNotifRead() {
+  const token = getAuthToken()
+  if (!token) return
+  try {
+    await fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: '{}'
+    })
+    notifCount.value = 0
+  } catch {}
+}
+function notifTypeLabel(type) {
+  const labels = { system: '系统', invite: '邀请码', cron: '定时任务', vip: '会员' }
+  return labels[type] || type
+}
 // 新建弹窗是否从管理面板进入（取消/关闭时回到管理面板）
 const scheduledTaskFromManager = ref(false)
 function openScheduledTaskCreate() {
@@ -2788,6 +2872,7 @@ function onSearchSelect(id) {
 
 // 插件市场：当前为占位入口，后续可接入真实插件商店接口
 const showPluginsPanel = ref(false)
+const showDHSCommunity = ref(false)
 function openPluginsMarket() {
   showPluginsPanel.value = true
 }
@@ -3373,15 +3458,17 @@ onMounted(() => {
   // 监听会话标题更新事件（来自 useAgentWorkflow 的 onTitleUpdate）
   window.addEventListener('session-title-update', onSessionTitleUpdate)
   // 监听 AI 标题生成中事件：列表刷新时保持「新对话」，避免后端派生的原文标题抢先替换
-  window.addEventListener('session-title-pending', onSessionTitlePending)
-})
-onUnmounted(() => {
-  window.removeEventListener('keydown', onGlobalDockShortcut)
-  window.removeEventListener('resize', syncAgentFSTreeViewport)
-  window.clearInterval(agentFSPollTimer)
-  window.removeEventListener('session-title-update', onSessionTitleUpdate)
-  window.removeEventListener('session-title-pending', onSessionTitlePending)
-})
+    window.addEventListener('session-title-pending', onSessionTitlePending)
+    startNotifPoll()
+  })
+  onUnmounted(() => {
+    window.removeEventListener('keydown', onGlobalDockShortcut)
+    window.removeEventListener('resize', syncAgentFSTreeViewport)
+    window.clearInterval(agentFSPollTimer)
+    window.removeEventListener('session-title-update', onSessionTitleUpdate)
+    window.removeEventListener('session-title-pending', onSessionTitlePending)
+    stopNotifPoll()
+  })
 async function refreshGitGraph() {
   try {
     const res = await fetch('/api/git/graph')
@@ -3624,5 +3711,146 @@ async function refreshGitGraph() {
 .chat-window .chat-input-area textarea.chat-input {
   font-size: 16px !important;
   line-height: 1.6 !important;
+}
+
+/* ===== 通知面板 ===== */
+.mail-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+}
+.mail-panel {
+  width: 480px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-surface, #1e293b);
+  border: 1px solid var(--app-border, #334155);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+.mail-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--app-border, #334155);
+}
+.mail-panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--app-text, #f1f5f9);
+  margin: 0;
+}
+.mail-panel-close {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text-soft, #94a3b8);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.mail-panel-close:hover {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 92%);
+  color: var(--app-text, #f1f5f9);
+}
+.mail-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mail-panel-act-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text-soft, #94a3b8);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.mail-panel-act-btn:hover {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 92%);
+  color: var(--app-text, #f1f5f9);
+}
+.mail-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  min-height: 200px;
+}
+.mail-panel-empty {
+  text-align: center;
+  color: var(--app-text-faint, #64748b);
+  font-size: 14px;
+  padding: 48px 0;
+}
+/* 通知行 */
+.mail-notif-row {
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border, #334155), transparent 60%);
+  transition: background .15s ease;
+}
+.mail-notif-row:hover {
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 96%);
+}
+.mail-notif-row.unread {
+  background: color-mix(in srgb, var(--app-accent), transparent 94%);
+}
+.mail-notif-row.unread:hover {
+  background: color-mix(in srgb, var(--app-accent), transparent 90%);
+}
+.mail-notif-dot {
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--app-accent, #6366f1);
+}
+.mail-notif-content {
+  flex: 1;
+  min-width: 0;
+}
+.mail-notif-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text, #f1f5f9);
+  margin-bottom: 2px;
+}
+.mail-notif-body {
+  font-size: 13px;
+  color: var(--app-text-2, #94a3b8);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+.mail-notif-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--app-text-faint, #64748b);
+}
+.mail-notif-type {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 92%);
 }
 </style>

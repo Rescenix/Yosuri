@@ -79,13 +79,18 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/studio/files/:file", HandleStudioFiles)
 	r.POST("/api/translate", HandleTranslate)
 
-	// 设置面板：技能库 / MCP 生态 / 用户档案（含自定义指令）
+	// 设置面板：技能库 / DHS 生态 / 用户档案（含自定义指令）
 	r.GET("/api/skills", HandleListSkills)
 	r.POST("/api/skills/:name/status", HandleUpdateSkillStatus)
 	r.DELETE("/api/skills/:name", HandleDeleteSkill)
 	r.GET("/api/skills/registry", HandleSkillRegistry)
 	r.POST("/api/skills/registry/install", HandleInstallHostedSkill)
 	r.DELETE("/api/skills/external/:id", HandleDeleteExternalSkill)
+	// DHS 社区：发现只读，安装前固定 commit 并通过代码层 + 执行层沙盒审计。
+	r.GET("/api/dhs/community", HandleDHSCommunitySearch)
+	r.GET("/api/dhs/community/preview", HandleDHSCommunityPreview)
+	r.POST("/api/dhs/community/audit", HandleDHSCommunityAudit)
+	r.POST("/api/dhs/community/install", HandleDHSCommunityInstall)
 	r.GET("/api/mcp", HandleMCPStatus)
 	r.GET("/api/mcp/registry", HandleMCPRegistry)
 	r.POST("/api/mcp/registry/install", HandleInstallRegistryMCP)
@@ -252,6 +257,11 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/chat/shared-pool", HandleSharedPoolChat)
 	// 配额查询：本地网关路由前检查公益免费模型配额
 	r.GET("/api/shared-pool/quota", HandleSharedPoolQuotaProxy)
+
+	// 云端通知：透传 Authorization 到 ResceneCloud
+	r.GET("/api/notifications", CloudNotificationProxy)
+	r.POST("/api/notifications/read", CloudNotificationProxy)
+	r.POST("/api/notifications/clear", CloudNotificationProxy)
 
 	r.Static("/images", "./public/images")
 

@@ -205,6 +205,11 @@ func CloudStatsGetProxy(c *gin.Context) {
 	proxyToCloud(c, "/api/stats?"+q.Encode())
 }
 
+// CloudNotificationProxy 透传 /api/notifications/* 到 ResceneCloud（带 Authorization）。
+func CloudNotificationProxy(c *gin.Context) {
+	proxyToCloudAuth(c, c.Request.URL.Path)
+}
+
 // CloudAuthConfig 把 ResceneCloud 基址暴露给前端，供其直接发起 GitHub 登录跳转。
 func CloudAuthConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{

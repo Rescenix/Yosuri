@@ -200,6 +200,10 @@
           <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : '未登录' }}</span>
         </span>
       </div>
+      <button class="fm-footer-mail" type="button" title="通知" @click.stop="$emit('open-mail')">
+              <Icon icon="mdi:email-outline" width="18" />
+              <span v-if="notifCount > 0" class="fm-mail-badge">{{ notifCount > 99 ? '99+' : notifCount }}</span>
+            </button>
       <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
         <Icon icon="mdi:cog-outline" width="18" />
       </button>
@@ -357,9 +361,10 @@ const props = defineProps({
   runningSession: { type: String, default: '' },
   completedSessions: { type: Set, default: () => new Set() },
   questionSession: { type: String, default: '' },
-  fill: { type: Boolean, default: false }
-})
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks'])
+    fill: { type: Boolean, default: false },
+    notifCount: { type: Number, default: 0 }
+  })
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks', 'open-mail'])
 
 // ========== 搜索框 ==========
 const searchInputRef = ref(null)
@@ -1141,7 +1146,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .fm-footer-settings {
   width: 36px;
   height: 36px;
-  margin-left: auto;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -1152,9 +1156,43 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   cursor: pointer;
   transition: background .15s ease, color .15s ease;
 }
-.fm-footer-settings:hover {
+.fm-footer-settings:hover,
+.fm-footer-mail:hover {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
+}
+.fm-footer-mail {
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  color: var(--app-text-soft);
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: background .15s ease, color .15s ease;
+}
+.fm-mail-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
 }
 .fm-user {
   min-width: 0;
