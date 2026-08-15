@@ -2453,12 +2453,8 @@ function getAuthToken() {
   try { return localStorage.getItem('token') || '' } catch { return '' }
 }
 async function pollNotifications() {
-  const token = getAuthToken()
-  if (!token) { notifCount.value = 0; return }
   try {
-    const res = await fetch('/api/notifications?limit=50&unread_only=false', {
-      headers: { 'Authorization': 'Bearer ' + token }
-    })
+    const res = await fetch('/api/notifications?limit=50&unread_only=false')
     if (!res.ok) { notifCount.value = 0; return }
     const data = await res.json()
     notifications.value = data.notifications || []
