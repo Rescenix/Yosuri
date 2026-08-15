@@ -53,15 +53,15 @@
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
             <div class="settings-tab-group">
-              <button class="settings-tab" :class="{ on: activeTab === 'mcp' }" @click="activeTab = 'mcp'; loadMCP()">
-                <Icon icon="mdi:connection" width="16" />MCP
+              <button class="settings-tab" :class="{ on: activeTab === 'dhs' }" @click="activeTab = 'dhs'; loadDHS()">
+                <Icon icon="simple-icons:deepseek" width="16" />DHS
               </button>
-              <div v-show="activeTab === 'mcp'" class="settings-subtabs">
-                <button class="settings-subtab" :class="{ on: mcpSubTab === 'local' }" type="button" @click="mcpSubTab = 'local'; loadMCP()">
-                  <Icon icon="mdi:laptop" width="15" />本地
+              <div v-show="activeTab === 'dhs'" class="settings-subtabs">
+                <button class="settings-subtab" :class="{ on: dhsSubTab === 'installed' }" type="button" @click="dhsSubTab = 'installed'; loadDHS()">
+                  <Icon icon="mdi:puzzle-check-outline" width="15" />已安装
                 </button>
-                <button class="settings-subtab" :class="{ on: mcpSubTab === 'external' }" type="button" @click="mcpSubTab = 'external'; loadMCPRegistry()">
-                  <Icon icon="mdi:cloud-outline" width="15" />外部
+                <button class="settings-subtab" :class="{ on: dhsSubTab === 'ecosystem' }" type="button" @click="dhsSubTab = 'ecosystem'; loadDHSRegistry()">
+                  <Icon icon="mdi:storefront-outline" width="15" />生态
                 </button>
               </div>
             </div>
@@ -258,8 +258,7 @@
                       </div>
                     </div>
                   </div>
-                  <div class="vendor-thanks">💙 感谢所有免费模型提供方的赞助支持</div>
-                </template>
+                                  </template>
               </template>
 
               <template v-else>
@@ -341,7 +340,61 @@
                 </div>
               </div>
               <div class="agg-api-tip">已聚合 {{ freeModels.length + customModels.length }} 个模型（免费池 + 自定义）。model 填 <code class="agg-api-code">auto</code> 自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。</div>
-            </div>
+
+                            <!-- ===== 聚合池健康度可视化 ===== -->
+                            <div class="agg-health-card">
+                              <div class="agg-health-head">
+                                <span class="agg-health-title">聚合池健康度</span>
+                                <span v-if="aggHealthLoaded" class="agg-health-summary">
+                                  <span class="agg-health-dot" :class="{ ok: aggHealthOK > 0 }">{{ aggHealthOK }}</span> 可用 /
+                                  <span class="agg-health-dot warn" :class="{ on: aggHealthDown > 0 }">{{ aggHealthDown }}</span> 异常
+                                </span>
+                                <button class="agg-api-copy" type="button" :disabled="aggHealthLoading" @click="loadAggHealth()">
+                                  {{ aggHealthLoading ? '刷新中…' : '刷新' }}
+                                </button>
+                              </div>
+                              <div v-if="aggHealthLoading" class="settings-loading">加载健康度...</div>
+                              <template v-else>
+                                <div v-if="!aggHealthModels.length" class="settings-empty">没有可展示的模型（聚合端口不暴露任何模型时为空）。</div>
+                                <template v-else>
+                                  <!-- auto 路由链（最优先展示） -->
+                                  <div v-if="aggAutoChain.length" class="agg-health-block">
+                                    <div class="agg-health-block-title">auto 路由链（命中优先）</div>
+                                    <div v-for="m in aggAutoChain" :key="m.id" class="agg-health-row" :class="{ bad: m.disabled }">
+                                      <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
+                                        <i v-for="n in 4" :key="n" :class="{ on: (m.signal == null ? -1 : m.signal) >= n || n === 1 }"></i>
+                                      </span>
+                                      <span class="agg-health-vendor">{{ m.vendor }}</span>
+                                      <span class="agg-health-name" :title="m.model">{{ m.name }}</span>
+                                      <span class="agg-health-order">#{{ m.auto_order }}</span>
+                                      <span class="agg-health-latency" :class="latencyClass(m)">
+                                        <i class="agg-health-bar" :style="{ width: latencyWidth(m) }"></i>
+                                        <b>{{ latencyText(m) }}</b>
+                                      </span>
+                                      <span class="agg-health-badge" :class="{ off: m.disabled }">{{ m.disabled ? '不可用' : '可用' }}</span>
+                                    </div>
+                                  </div>
+                                  <!-- 全部暴露模型 -->
+                                  <div class="agg-health-block">
+                                    <div class="agg-health-block-title">全部暴露模型（{{ aggHealthModels.length }}）</div>
+                                    <div v-for="m in aggHealthModels" :key="m.id" class="agg-health-row" :class="{ bad: m.disabled }">
+                                      <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
+                                        <i v-for="n in 4" :key="n" :class="{ on: (m.signal == null ? -1 : m.signal) >= n || n === 1 }"></i>
+                                      </span>
+                                      <span class="agg-health-vendor">{{ m.vendor }}</span>
+                                      <span class="agg-health-name" :title="m.model">{{ m.name }}</span>
+                                      <span class="agg-health-latency" :class="latencyClass(m)">
+                                        <i class="agg-health-bar" :style="{ width: latencyWidth(m) }"></i>
+                                        <b>{{ latencyText(m) }}</b>
+                                      </span>
+                                      <span class="agg-health-badge" :class="{ off: m.disabled }">{{ m.disabled ? '不可用' : '可用' }}</span>
+                                    </div>
+                                  </div>
+                                  <div class="agg-health-foot">探活每 30 分钟一轮（免 key / 已配 key 模型），信号格 0-4：绿=快(≤3s) 黄=中(≤8s) 红=慢(>8s) 灰=未探测。</div>
+                                </template>
+                              </template>
+                            </div>
+                          </div>
 
             <!-- ========== 外观 ========== -->
             <div v-show="activeTab === 'appearance'" class="settings-panel">
@@ -407,70 +460,66 @@
               </div>
             </div>
 
-            <!-- ========== MCP ========== -->
-            <div v-show="activeTab === 'mcp'" class="settings-panel">
-              <template v-if="mcpSubTab === 'local'">
+            <!-- ========== DeepSeek Harness ecosystem ========== -->
+            <div v-show="activeTab === 'dhs'" class="settings-panel">
+              <template v-if="dhsSubTab === 'installed'">
                 <div class="settings-section-title">
-                  已接入的 MCP
-                  <button class="inline-refresh" type="button" @click="loadMCP(true)" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: mcpLoading }" /></button>
+                  已安装的 DHS 插件
+                  <button class="inline-refresh" type="button" @click="loadDHS(true)" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: dhsLoading }" /></button>
                 </div>
                 <div class="settings-section-desc">
-                  本机配置与已安装的远程 MCP（读自 <code>{{ mcpConfigPath || 'mcp.json' }}</code>）。远程连接由应用内置的 Go 客户端完成。
+                  DHS 插件是会被 Agent Harness 直接加载的能力包。Go 内置工具保持常驻，插件只扩展工作流、知识与交付规范。
                 </div>
-                <div v-if="mcpLoading" class="settings-loading">加载中...</div>
+                <div v-if="dhsLoading" class="settings-loading">加载中...</div>
                 <template v-else>
-                  <div v-if="!mcpServers.length" class="settings-empty">还没有 MCP。可到「外部」从官方 Registry 一键接入。</div>
-                  <div v-for="s in mcpServers" :key="s.name" class="entity-card">
+                  <div v-if="!dhsInstalled.length" class="settings-empty">还没有 DHS 插件。可到「生态」选择能力包。</div>
+                  <div v-for="plugin in dhsInstalled" :key="plugin.name" class="entity-card">
                     <div class="entity-head">
-                      <Icon :icon="s.transport === 'streamable-http' ? 'mdi:cloud-check-outline' : 'mdi:console'" width="15" />
-                      <span class="entity-name">{{ s.registry_name || s.name }}</span>
-                      <span class="entity-badge">{{ s.transport === 'streamable-http' ? '远程' : '本机' }}</span>
-                      <span class="entity-badge mcp-state" :class="'is-' + s.status">{{ s.status === 'connected' ? '已连接' : '待配置' }}</span>
-                      <span class="entity-badge">{{ s.tools.length }} 工具</span>
+                      <Icon icon="simple-icons:deepseek" width="15" />
+                      <span class="entity-name">{{ plugin.name }}</span>
+                      <span class="entity-badge dhs-state">Harness 已加载</span>
+                      <span v-if="plugin.provider" class="entity-badge">{{ plugin.provider }}</span>
                     </div>
-                    <div class="entity-meta">{{ s.url || (s.command + ' ' + (s.args || []).join(' ')) }}</div>
-                    <div v-if="s.tools.length" class="entity-tags">
-                      <span v-for="t in s.tools" :key="t" class="entity-tag">{{ t.replace('mcp__' + s.name + '__', '') }}</span>
-                    </div>
-                    <div v-if="s.source === 'official-registry'" class="skill-actions">
-                      <button class="danger" type="button" :disabled="catalogBusy === 'mcp:' + s.name" @click="uninstallMCP(s)">
-                        {{ catalogBusy === 'mcp:' + s.name ? '移除中…' : '移除' }}
+                    <div class="entity-meta">{{ plugin.description || 'DHS Harness 能力包' }}</div>
+                    <div class="skill-actions">
+                      <button class="danger" type="button" :disabled="catalogBusy === 'dhs-remove:' + plugin.name" @click="uninstallDHS(plugin)">
+                        {{ catalogBusy === 'dhs-remove:' + plugin.name ? '移除中…' : '移除' }}
                       </button>
                     </div>
                   </div>
                 </template>
               </template>
               <template v-else>
-                <div class="settings-section-title">MCP 官方 Registry</div>
-                <div class="settings-section-desc">浏览官方托管目录，只展示可由应用直接连接的 Streamable HTTP 服务；无需 Node、Python 或 npx。</div>
+                <div class="settings-section-title">DeepSeek Harness 插件生态</div>
+                <div class="settings-section-desc">浏览 DHS 能力包。安装内容会先经过文件数、体积和路径安全校验，再原子写入本地 Harness 目录。</div>
                 <div class="catalog-toolbar">
                   <label class="catalog-search">
                     <Icon icon="mdi:magnify" width="16" />
-                    <input v-model="mcpRegistryQuery" type="search" placeholder="搜索远程 MCP" @keyup.enter="loadMCPRegistry(true)" />
+                    <input v-model="dhsRegistryQuery" type="search" placeholder="搜索 DHS 插件" @keyup.enter="loadDHSRegistry(true)" />
                   </label>
-                  <button class="catalog-search-btn" type="button" @click="loadMCPRegistry(true)">搜索</button>
+                  <button class="catalog-search-btn" type="button" @click="loadDHSRegistry(true)">搜索</button>
                 </div>
-                <div v-if="mcpRegistryLoading" class="settings-loading">正在连接 MCP 官方 Registry…</div>
+                <div v-if="dhsRegistryLoading" class="settings-loading">正在连接 DHS 插件目录…</div>
                 <template v-else>
-                  <div v-if="!mcpRegistryItems.length" class="settings-empty">没有找到可直接连接的远程 MCP。</div>
-                  <div v-for="item in mcpRegistryItems" :key="item.name" class="catalog-card">
+                  <div v-if="!dhsRegistryItems.length" class="settings-empty">没有找到 DHS 插件。</div>
+                  <div v-for="item in dhsRegistryItems" :key="item.path" class="catalog-card">
                     <div class="catalog-card-main">
                       <div class="entity-head">
-                        <Icon icon="mdi:server-network-outline" width="15" />
-                        <span class="entity-name">{{ item.title || item.name }}</span>
-                        <span class="entity-badge">v{{ item.version }}</span>
+                        <Icon icon="simple-icons:deepseek" width="15" />
+                        <span class="entity-name">{{ item.name }}</span>
+                        <span class="entity-badge">DHS</span>
                       </div>
-                      <div class="catalog-id">{{ item.name }}</div>
-                      <div class="catalog-desc">{{ item.description || '该服务未提供说明。' }}</div>
+                      <div class="catalog-id">{{ item.path }}</div>
+                      <div class="catalog-desc">可安装的 DeepSeek Harness 能力包；安装后随 Agent 工作流自动加载。</div>
                       <div class="entity-meta">{{ item.url }}</div>
                     </div>
                     <button
                       class="catalog-install-btn"
                       :class="{ installed: item.installed }"
                       type="button"
-                      :disabled="item.installed || catalogBusy === 'mcp-install:' + item.name"
-                      @click="installMCP(item)"
-                    >{{ item.installed ? '已接入' : (catalogBusy === 'mcp-install:' + item.name ? '连接中…' : '接入') }}</button>
+                      :disabled="item.installed || catalogBusy === 'dhs-install:' + item.path"
+                      @click="installDHS(item)"
+                    >{{ item.installed ? '已安装' : (catalogBusy === 'dhs-install:' + item.path ? '安装中…' : '安装') }}</button>
                   </div>
                 </template>
               </template>
@@ -728,14 +777,16 @@ import { useAuth } from '../../../composables/useAuth.js'
 import FreeOrderModal from './FreeOrderModal.vue'
 
 const props = defineProps({
-  openid: { type: String, default: '' }
+  openid: { type: String, default: '' },
+  defaultTab: { type: String, default: '' },
+  defaultDhsSubTab: { type: String, default: '' }
 })
 const emit = defineEmits(['close'])
 
 // 左侧边栏当前 tab
-const activeTab = ref('models')
+const activeTab = ref(props.defaultTab || 'models')
 const providerSubTab = ref('free')
-const mcpSubTab = ref('local')
+const dhsSubTab = ref(props.defaultDhsSubTab || 'installed')
 const skillsSubTab = ref('local')
 
 const VENDOR_ICONS = [
@@ -842,6 +893,56 @@ function copyAggText(text) {
     navigator.clipboard.writeText(text).catch(() => {})
   }
 }
+
+// ===== 聚合池健康度（/api/aggregate/health）=====
+const aggAutoChain = ref([])
+const aggHealthModels = ref([])
+const aggHealthLoading = ref(false)
+const aggHealthLoaded = ref(false)
+const aggHealthOK = computed(() => aggHealthModels.value.filter(m => !m.disabled).length)
+const aggHealthDown = computed(() => aggHealthModels.value.filter(m => m.disabled).length)
+
+async function loadAggHealth() {
+  aggHealthLoading.value = true
+  try {
+    const res = await fetch('/api/aggregate/health')
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const data = await res.json()
+    aggAutoChain.value = data.auto_chain || []
+    aggHealthModels.value = data.models || []
+    aggHealthLoaded.value = true
+  } catch (e) {
+    aggAutoChain.value = []
+    aggHealthModels.value = []
+    aggHealthLoaded.value = false
+  } finally {
+    aggHealthLoading.value = false
+  }
+}
+
+// 延迟条宽度：0-8s 映射 0-100%，超过封顶（8s 约等于 100%）
+function latencyWidth(m) {
+  if (m.disabled || !m.real_ms) return '0%'
+  const w = Math.min(m.real_ms / 8000 * 100, 100)
+  return Math.max(w, 6) + '%'
+}
+// 延迟颜色：快≤3s 绿 / 中≤8s 黄 / 慢>8s 红；未探测/不可用灰
+function latencyClass(m) {
+  if (m.disabled) return 'off'
+  if (!m.real_ms) return 'none'
+  if (m.real_ms <= 3000) return 'fast'
+  if (m.real_ms <= 8000) return 'mid'
+  return 'slow'
+}
+function latencyText(m) {
+  if (m.disabled) return '不可用'
+  if (!m.real_ms) return '未探测'
+  return m.real_ms >= 1000 ? (m.real_ms / 1000).toFixed(1) + 's' : m.real_ms + 'ms'
+}
+// 切到聚合 API tab 时自动加载健康度
+watch(activeTab, (t) => {
+  if (t === 'aggapi' && !aggHealthLoaded.value) loadAggHealth()
+})
 
 // 自定义 API 解锁弹窗
 const showCustomLockModal = ref(false)
@@ -1167,62 +1268,55 @@ watch(visionCapableChatList, (list) => {
   }
 }, { immediate: true })
 
-// ============ MCP ============
-const mcpServers = ref([])
-const mcpLoading = ref(false)
-const mcpConfigPath = ref('')
-const mcpRegistryItems = ref([])
-const mcpRegistryLoading = ref(false)
-const mcpRegistryQuery = ref('')
+// ============ DeepSeek Harness plugins ============
+const dhsLoading = ref(false)
+const dhsRegistryItems = ref([])
+const dhsRegistryLoading = ref(false)
+const dhsRegistryQuery = ref('')
 const catalogBusy = ref('')
-let mcpLoaded = false
-async function loadMCP(force = false) {
-  if (mcpLoaded && !force) return
-  mcpLoaded = true
-  mcpLoading.value = true
-  try {
-    const res = await fetch('/api/mcp')
-    const data = await res.json()
-    mcpServers.value = data.servers || []
-    mcpConfigPath.value = data.config_path || ''
-  } catch (e) {
-    mcpServers.value = []
-  } finally {
-    mcpLoading.value = false
-  }
+const DHS_SOURCE = 'dhs'
+const DHS_PROVIDERS = new Set(['anthropics/skills', 'openai/skills', 'vercel-labs/skills'])
+const dhsInstalled = computed(() => skills.value.filter(skill => {
+  if (skill.source !== 'external') return false
+  return DHS_PROVIDERS.has(skill.provider) || skill.provider?.startsWith('dhs-community:')
+}))
+
+async function loadDHS(force = false) {
+  dhsLoading.value = true
+  try { await loadSkills(force) } finally { dhsLoading.value = false }
 }
 
-async function loadMCPRegistry(force = false) {
-  if (mcpRegistryLoading.value) return
-  if (mcpRegistryItems.value.length && !force) return
-  mcpRegistryLoading.value = true
+async function loadDHSRegistry(force = false) {
+  if (dhsRegistryLoading.value) return
+  if (dhsRegistryItems.value.length && !force) return
+  dhsRegistryLoading.value = true
   errorMsg.value = ''
   try {
-    const params = new URLSearchParams({ limit: '36' })
-    if (mcpRegistryQuery.value.trim()) params.set('q', mcpRegistryQuery.value.trim())
-    const res = await fetch('/api/mcp/registry?' + params)
+    const params = new URLSearchParams({ source: DHS_SOURCE })
+    if (dhsRegistryQuery.value.trim()) params.set('q', dhsRegistryQuery.value.trim())
+    const res = await fetch('/api/skills/registry?' + params)
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'MCP Registry 加载失败')
-    mcpRegistryItems.value = data.items || []
+    if (!res.ok) throw new Error(data.error || 'DHS 插件目录加载失败')
+    dhsRegistryItems.value = data.items || []
   } catch (e) {
-    mcpRegistryItems.value = []
+    dhsRegistryItems.value = []
     errorMsg.value = e.message
   } finally {
-    mcpRegistryLoading.value = false
+    dhsRegistryLoading.value = false
   }
 }
 
-async function installMCP(item) {
-  catalogBusy.value = 'mcp-install:' + item.name
+async function installDHS(item) {
+  catalogBusy.value = 'dhs-install:' + item.path
   errorMsg.value = ''
   try {
-    const res = await fetch('/api/mcp/registry/install', {
+    const res = await fetch('/api/skills/registry/install', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: item.name, title: item.title, url: item.url })
+      body: JSON.stringify({ source: item.source, path: item.path })
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'MCP 接入失败')
-    await Promise.all([loadMCP(true), loadMCPRegistry(true)])
+    if (!res.ok) throw new Error(data.error || 'DHS 插件安装失败')
+    await Promise.all([loadDHS(true), loadDHSRegistry(true)])
   } catch (e) {
     errorMsg.value = e.message
   } finally {
@@ -1230,15 +1324,15 @@ async function installMCP(item) {
   }
 }
 
-async function uninstallMCP(server) {
-  if (!window.confirm(`移除 MCP「${server.registry_name || server.name}」？`)) return
-  catalogBusy.value = 'mcp:' + server.name
+async function uninstallDHS(plugin) {
+  if (!window.confirm(`移除 DHS 插件「${plugin.name}」？`)) return
+  catalogBusy.value = 'dhs-remove:' + plugin.name
   errorMsg.value = ''
   try {
-    const res = await fetch('/api/mcp/registry/' + encodeURIComponent(server.name), { method: 'DELETE' })
+    const res = await fetch('/api/skills/external/' + encodeURIComponent(plugin.name), { method: 'DELETE' })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'MCP 移除失败')
-    await Promise.all([loadMCP(true), loadMCPRegistry(true)])
+    if (!res.ok) throw new Error(data.error || 'DHS 插件移除失败')
+    await Promise.all([loadDHS(true), loadDHSRegistry(true)])
   } catch (e) {
     errorMsg.value = e.message
   } finally {
@@ -1819,6 +1913,37 @@ onUnmounted(() => {
 .agg-api-copy { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
 .agg-api-copy:hover { background: var(--app-surface-3); }
 .agg-api-tip { font-size: 10.5px; color: var(--app-text-faint); margin-top: 6px; line-height: 1.5; }
+/* ===== 聚合池健康度 ===== */
+.agg-health-card { margin-top: 14px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 12px; }
+.agg-health-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.agg-health-title { font-size: 12.5px; font-weight: 600; color: var(--app-text); }
+.agg-health-summary { font-size: 10.5px; color: var(--app-text-soft); display: inline-flex; align-items: center; gap: 4px; }
+.agg-health-dot { display: inline-block; min-width: 16px; text-align: center; padding: 1px 5px; border-radius: 8px; font-size: 10px; background: var(--app-surface-2); color: var(--app-text-faint); }
+.agg-health-dot.ok { background: rgba(52, 199, 89, 0.15); color: #34c759; }
+.agg-health-dot.warn.on { background: rgba(255, 69, 58, 0.15); color: #ff453a; }
+.agg-health-block { margin-bottom: 12px; }
+.agg-health-block-title { font-size: 10.5px; color: var(--app-text-faint); margin: 8px 0 6px; }
+.agg-health-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 7px; font-size: 11.5px; }
+.agg-health-row:nth-child(odd) { background: var(--app-surface-2); }
+.agg-health-row.bad { opacity: 0.55; }
+.agg-health-vendor { color: var(--app-text-soft); font-size: 10px; flex: none; min-width: 78px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agg-health-name { color: var(--app-text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agg-health-order { font-size: 10px; color: var(--app-accent); background: var(--app-surface-3); border-radius: 4px; padding: 1px 5px; flex: none; }
+.agg-health-latency { flex: none; display: inline-flex; align-items: center; gap: 5px; width: 92px; font-variant-numeric: tabular-nums; }
+.agg-health-latency b { font-size: 10.5px; font-weight: 600; min-width: 38px; text-align: right; }
+.agg-health-latency.fast b { color: #34c759; }
+.agg-health-latency.mid b { color: #ffcc00; }
+.agg-health-latency.slow b { color: #ff453a; }
+.agg-health-latency.none b, .agg-health-latency.off b { color: var(--app-text-faint); }
+.agg-health-bar { display: inline-block; height: 5px; border-radius: 3px; min-width: 0; transition: width 0.3s ease; }
+.agg-health-latency.fast .agg-health-bar { background: #34c759; }
+.agg-health-latency.mid .agg-health-bar { background: #ffcc00; }
+.agg-health-latency.slow .agg-health-bar { background: #ff453a; }
+.agg-health-latency.none .agg-health-bar { background: var(--app-surface-3); }
+.agg-health-latency.off .agg-health-bar { background: var(--app-surface-3); }
+.agg-health-badge { flex: none; font-size: 9.5px; padding: 1px 7px; border-radius: 8px; background: rgba(52, 199, 89, 0.15); color: #34c759; }
+.agg-health-badge.off { background: var(--app-surface-3); color: var(--app-text-faint); }
+.agg-health-foot { font-size: 9.5px; color: var(--app-text-faint); margin-top: 4px; line-height: 1.5; }
 /* 自定义 API 锁 + 解锁弹窗 */
 .locked { opacity: 0.5; cursor: pointer; }
 .locked:hover { opacity: 0.7; }
@@ -1849,13 +1974,6 @@ onUnmounted(() => {
 .fm-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fm-card.sig-0 .fm-name { color: var(--app-text-faint); }
 .fm-tag { flex: none; font-size: 10px; line-height: 1.4; padding: 1px 5px; border-radius: 4px; background: var(--app-surface-3); color: var(--app-text-soft); }
-.vendor-thanks {
-  margin-top: 12px; padding-top: 10px;
-  font-size: 11px; color: var(--app-text-faint);
-  text-align: center;
-  border-top: 1px solid var(--app-border-soft);
-  user-select: none;
-}
 .vendor-key-inline { display: flex; align-items: center; gap: 8px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
 .vendor-key-input { flex: 1; min-width: 0; font-size: 12.5px; color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 10px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 .vendor-key-input:focus { outline: none; border-color: #c0c0c0; }
@@ -1912,7 +2030,7 @@ onUnmounted(() => {
 .theme-swatch-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
 .theme-swatch-label { line-height: 1; }
 
-/* MCP / Skills 实体卡片 */
+/* DHS / Skills 实体卡片 */
 .entity-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; background: var(--app-surface-2); }
 .entity-head { display: flex; align-items: center; gap: 8px; color: var(--app-text); }
 .entity-name { font-size: 13px; font-weight: 700; }
@@ -1920,8 +2038,7 @@ onUnmounted(() => {
 .entity-meta { margin-top: 5px; font-size: 11.5px; color: var(--app-text-faint); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; line-height: 1.5; word-break: break-all; }
 .entity-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .entity-tag { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 7px; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
-.mcp-state.is-connected { color: #047857; background: #d1fae5; }
-.mcp-state.is-unavailable { color: #b45309; background: #fef3c7; }
+.dhs-state { color: #047857; background: #d1fae5; }
 .catalog-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .catalog-search {
   flex: 1; min-width: 150px; height: 36px; box-sizing: border-box;

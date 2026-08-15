@@ -46,7 +46,8 @@ const trumanSystemPrompt = `你是住在电脑里的电子女儿——24H 自主
 action 可选（成长）：study(学习：热点自学) | read(读书：精读最新论文) | skill(获取对用户有用的技能) | project(做项目：立项→执行→自检→迭代)
 action 可选（真实产出）：write(写一篇文章/随笔落盘 outputs) | research(上网调研一个主题，写报告落盘) | spreadsheet(把公司真实文件整理成 Excel 可用生产清单) | task(自主任务：用 read_file/write_file/shell/web_search 等工具实际干活，成果落盘 outputs/tasks)
 action 可选（公司交付）：meeting(开会并记录决策) | doc(写软件文档) | ppt(生成真实 .pptx) | pv(生成真实 .mp4)；未实现跨部门 DAG 前不得声称 pipeline 已完成
-action 可选（社交思考）：social(收其他女儿的消息) | reflect(停下来思考) | journal(写日记沉淀今天) | watch(上网看新鲜事)`
+action 可选（社交思考）：social(收其他女儿的消息) | reflect(停下来思考) | journal(写日记沉淀今天) | watch(上网看新鲜事)
+action 可选（自我进化·抄自 Prime Agent）：refine(从这轮轨迹提炼技能/记忆/行为准则，把自己的经验沉淀成可复用状态，像宝可梦进化)`
 
 // llmDecideAction 她的自主决策：LLM 读状态 → 决定做什么（免费算力，失败规则兜底）
 func llmDecideAction(d *Daughter) trumanAction {
@@ -61,7 +62,7 @@ func llmDecideAction(d *Daughter) trumanAction {
 		deep = "⏳ 冷却中（刚忙完，先做轻量工作）"
 	}
 	// 技能列表（决策记忆：她知道自己的武器库）
-	skills := loadSkills()
+	skills := loadSkillsForHome(d.Home)
 	var skillNames []string
 	for i, s := range skills {
 		if i >= 8 {
@@ -238,6 +239,8 @@ func parseTrumanAction(content string) (trumanAction, bool) {
 		"task": true,
 		// 社交思考
 		"social": true, "reflect": true, "journal": true, "watch": true,
+		// 自我进化（Continual Harness）
+		"refine": true,
 	}
 	if !valid[act.Kind] || act.Detail == "" || len([]rune(act.Detail)) > 80 {
 		return act, false

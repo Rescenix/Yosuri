@@ -654,6 +654,7 @@ def main():
     ap.add_argument("--voice", default=DEFAULT_VOICE)
     ap.add_argument("--rate", default=DEFAULT_RATE)
     ap.add_argument("--media", default=DEFAULT_MEDIA_DIR, help="素材池目录")
+    ap.add_argument("--ordered-media", action="store_true", help="按文件名顺序逐段使用本地素材（PPT/会议回放）")
     ap.add_argument("--pexels-key", default="", help="Pexels API Key（有 key 时优先用 Pexels 搜视频素材）")
     ap.add_argument("--semantic", default="", help="LLM 语义分析结果 JSON：{\"topic\":..., \"segments\":[{\"sentence\":..., \"topic\":..., \"search_terms\":[...]}]}")
     ap.add_argument("--video-only", action="store_true", help="素材模式：不配音不字幕，只输出每段无声素材片段到 --out 目录（供必剪/剪映自行配音字幕）")
@@ -735,7 +736,7 @@ def main():
             seg_mp4 = os.path.join(args.out if args.video_only else workdir,
                                    f"seg_{i:03d}.mp4" if args.video_only else f"seg{i}.mp4")
 
-            matched = match_media(kws, pool)
+            matched = (pool[i % len(pool)] if args.ordered_media and pool else match_media(kws, pool))
             source = ""
             try:
                 if matched:

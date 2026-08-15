@@ -36,6 +36,7 @@ type Skill struct {
 	Steps       []string `json:"steps,omitempty"`
 	Body        string   `json:"body,omitempty"`        // 外部 SKILL.md 正文（markdown）
 	Source      string   `json:"source,omitempty"`      // builtin | learned | external
+	Provider    string   `json:"provider,omitempty"`    // 外部包的托管来源，如 openai/skills
 	ExternalID  string   `json:"external_id,omitempty"` // 外部技能在 skills-ext 下的安全目录标识
 	// Status 只作用于自研技能：active 可按需加载，archived 保留在磁盘供恢复，
 	// 不再使用候选/审阅状态，避免把治理成本推给用户。
@@ -291,9 +292,18 @@ func loadExternalSkills() []Skill {
 		if name == "" {
 			return
 		}
+		provider := ""
+		if fallbackName != "" {
+			if metaData, metaErr := os.ReadFile(filepath.Join(filepath.Dir(path), ".rescene-skill.json")); metaErr == nil {
+				var meta installedSkillMetadata
+				if json.Unmarshal(metaData, &meta) == nil {
+					provider = meta.Source
+				}
+			}
+		}
 		skills = append(skills, Skill{
 			Name: name, Description: desc, Body: body, Source: "external",
-			Status: skillStatusActive, ExternalID: fallbackName,
+			Provider: provider, Status: skillStatusActive, ExternalID: fallbackName,
 		})
 	}
 	for _, e := range entries {

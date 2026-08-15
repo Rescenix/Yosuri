@@ -18,6 +18,8 @@ import (
 // nativeToolDefs 返回本机工具定义列表
 func nativeToolDefs() []ToolDefinition {
 	extra := append(computerUseToolDefs(), daughterToolDefs()...)
+	extra = append(extra, biliReviewToolDef())
+	extra = append(extra, biliDMToolDefs()...)
 	return append([]ToolDefinition{
 		nativeTool("read_file", "按行读取文本文件，返回带行号的内容；一次最多 400 行。offset 从 1 开始，limit 是行数。", map[string]ToolProperty{
 			"path":   {Type: "string", Description: "文件路径；相对路径按当前工作目录解析"},
@@ -89,6 +91,10 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (ToolResult, err
 		return callComputerUseTool(ctx, name, argsJSON)
 	case "browser_fetch", "skills_list", "read_memory", "outputs_list":
 		return callDaughterTool(ctx, name, unmarshalToolArgsJSON(argsJSON))
+	case "bili_review":
+		return callBiliReview(ctx, argsJSON)
+	case "bili_dm_list", "bili_dm_reply":
+		return callBiliDM(ctx, name, argsJSON)
 	default:
 		return ToolResult{}, fmt.Errorf("未知工具: %s", name)
 	}

@@ -92,6 +92,17 @@ func runDaughterProject(d *Daughter, home string) string {
 	}
 	toolEventByName("agent.project.delivery_gate", "done", fmt.Sprintf("%d/%d 阶段通过", len(manifest.Evidence), len(mandatoryDeliveryStages)))
 
+	// 发行反馈：产品发布（delivery.manifest.json verified）后，用户 Agent 打分评论。
+	// 异步执行不阻塞主流程；失败静默（免费模型不可用不影响项目交付）。
+	if strings.Contains(home, "company") {
+		safeGo("user-reviews-"+name, func() {
+			if rb, err := releaseUserReviews(projDir, name, brief); err == nil {
+				logLive(filepath.Join(home, "live.log"),
+					fmt.Sprintf("[%s] 📊《%s》发行评测：平均 %.1f 分 · %d 位用户", time.Now().Format("15:04"), name, rb.AvgScore, len(rb.Reviews)))
+			}
+		})
+	}
+
 	// 项目成果技能化：方法沉淀进技能库（做过的事变成可复用能力——自循环自迭代）
 	safeGo("project-skill", func() { skillFromContext(name, brief) })
 
@@ -182,9 +193,14 @@ func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 	}
 	// 公司协作：团队产出注入（设计师的设计稿/作者的文案/宣传官的 PPT——照着协作，不各自为政）
 	teamOutputs := companyTeamOutputs(d.Name)
+	// 用户标签 = 调研方向（tags.json 里用户维护的方向标签，立项必须优先对齐）
+	directionTags := companyDirectionTags()
+	// 用户自定义指令（前端「下达指令」下的考题/项目目标）——最高优先级，必须围绕它立项
+	directive := companyDirective()
 
 	prompt := fmt.Sprintf(`你是 Rescene Agent OS 的立项官。基于以下今日前沿话题，选择一个最有价值的做项目。
 
+%s
 今日话题:
 %s
 
@@ -192,9 +208,11 @@ func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 已有技能：%s
 公司团队最近产出（可参考/协作，尤其是 UI 设计师的设计稿要照着实现）:
 %s
+公司调研方向标签（用户指定的方向，优先选这些方向立项）:
+%s
 
 要求（遵循 需求→计划 方法论）:
-1. 【选题】一句话说明选哪个、为什么（用户价值 + 可行性；有团队产出时优先选能消化团队产出的方向）
+1. 【选题】一句话说明选哪个、为什么（用户价值 + 可行性；有团队产出时优先选能消化团队产出的方向；有方向标签时优先选与标签方向一致的话题）
 2. 【需求】目标用户、核心功能、验收标准（3条）
 3. 【计划】实现步骤（5步以内，可在一台普通电脑上完成，纯代码/脚本/文档类）
 
@@ -204,10 +222,12 @@ func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 ...
 ---计划---
 ...`,
+		directive,
 		strings.Join(topics, "\n"),
 		d.World.abilitySummary(),
 		strings.Join(skillNames, "、"),
-		teamOutputs)
+		teamOutputs,
+		directionTags)
 
 	content := daughterCallModel(models, prompt)
 	if content == "" {
@@ -222,6 +242,21 @@ func daughterKickoff(d *Daughter, models []FreeModel) (string, string) {
 
 // daughterCallModel 免费模型调用（熔断跳过 + 失败静默），复用 marathon 的重试逻辑
 func daughterCallModel(models []FreeModel, prompt string) string {
+	// 下达指令时指定了模型 → 优先用指定模型（1vs100 对决：两边同模型才公平）
+	if want := companyDirectiveModel(); want != "" {
+		for i := range models {
+			if models[i].ID == want && !circuitIsOpen(models[i]) {
+				m := models[i]
+				content, err := callWithRetry(&m, prompt, 2, 5*time.Second)
+				if err == nil {
+					return content
+				}
+				// 指定模型失败：记录后回退轮换（不要因单个模型挂掉阻塞公司）
+				logLive(filepath.Join(daughterHome(), "live.log"),
+					fmt.Sprintf("[%s] ⚠️ 指定模型 %s 失败，回退轮换", time.Now().Format("15:04"), want))
+			}
+		}
+	}
 	model := pickModel(models, int(time.Now().UnixNano()))
 	if model == nil {
 		return ""

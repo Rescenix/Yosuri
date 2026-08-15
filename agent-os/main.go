@@ -55,6 +55,9 @@ func main() {
 		case "company", "org":
 			runCompany(os.Args[2:])
 			return
+		case "frontdesk", "reception":
+			runFrontdesk()
+			return
 		case "company-repo", "repo":
 			runCompanyRepo(os.Args[2:])
 			return
@@ -64,6 +67,9 @@ func main() {
 		case "directive-delivery":
 			model, directive := parseDirectiveDeliveryArgs(os.Args[2:])
 			runDirectiveDelivery(directive, directive, model)
+			return
+		case "refine", "evolve":
+			runRefineCLI(os.Args[2:])
 			return
 		case "help", "--help", "-h":
 			printHelp()
@@ -177,8 +183,8 @@ func printHelp() {
   rescene edge-debug   让 Edge 常驻调试端口（cookie 自动读取，浏览器不关）
   rescene company       多 Agent 公司（百人并行自转协作）
   rescene demo-delivery 生成一套通过硬门槛的全链路演示项目
+  rescene directive-delivery <指令> 立即把指令生产为可审批的完整项目
     rescene chrome-login  打开发布专用 Chrome
-  rescene directive-delivery <instruction> Build a project with the selected model
   rescene version      显示版本
   rescene help         显示帮助
 

@@ -1,21 +1,20 @@
 <template>
-  <!-- 右侧统一工具条（iconify 图标 + 亮色） -->
+  <!-- 底部竖排圆胶囊工具条（纯图标，样式对齐聊天界面工具条 icon-pill） -->
   <nav class="app-tool-rail">
-    <router-link to="/chat" class="app-tool-btn" title="对话" active-class="active">
-      <Icon icon="mdi:chat" width="20" />
-      <span class="tool-lbl">对话</span>
+    <router-link to="/chat" class="app-tool-btn" title="编码" active-class="active">
+      <Icon icon="mdi:code-tags" width="16" />
     </router-link>
-    <router-link to="/company" class="app-tool-btn" title="公司目标与协作" active-class="active">
-      <Icon icon="mdi:target-arrow" width="20" />
-      <span class="tool-lbl">目标</span>
+    <router-link to="/company" class="app-tool-btn" title="Agent 公司" active-class="active">
+      <Icon icon="mdi:domain" width="16" />
     </router-link>
-    <router-link to="/publish" class="app-tool-btn" title="多平台一键发布" active-class="active">
-      <Icon icon="mdi:rocket-launch" width="20" />
-      <span class="tool-lbl">发布</span>
-    </router-link>
-    <router-link to="/studio" class="app-tool-btn" title="创作工作台" active-class="active">
-      <Icon icon="mdi:movie-open" width="20" />
-      <span class="tool-lbl">工作台</span>
+    <router-link to="/publish" class="app-tool-btn" title="网文创作与发布" active-class="active">
+          <Icon icon="mdi:book-open-page-variant-outline" width="16" />
+        </router-link>
+        <router-link to="/comic" class="app-tool-btn" title="漫画创作" active-class="active">
+                  <Icon icon="mdi:brush" width="16" />
+                </router-link>
+        <router-link to="/studio" class="app-tool-btn" title="视频剪辑" active-class="active">
+      <Icon icon="mdi:movie-edit-outline" width="16" />
     </router-link>
   </nav>
   <router-view />
@@ -83,37 +82,50 @@ onMounted(async () => {
 </script>
 
 <style>
-/* 右侧统一工具条（亮色 + iconify） */
+/* 底部横排圆胶囊工具条（纯图标，2026-08-13 用户定稿：
+   照搬聊天界面终端预览工具条 .terminal-tabs-bar 样式：容器 surface-2 底 + 边框，
+   按钮无边框透明，hover/active 背景变化；横排，右下角） */
 .app-tool-rail {
   position: fixed;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  right: 30px;
+  bottom: 18px;
   z-index: 9999;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 6px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.08);
-}
-.app-tool-btn {
-  display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 2px;
+  padding: 4px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(15,23,42,.08);
+}
+.app-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
   border: none;
   background: transparent;
-  color: #9ca3af;
-  border-radius: 8px;
-  padding: 6px 8px;
-  width: 52px;
+  color: var(--app-text-faint);
+  font-size: 11.5px;
   text-decoration: none;
-  transition: all .15s;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.app-tool-btn:hover { background: #f3f4f6; color: #1a1a2e; }
-.app-tool-btn.active { background: #eff6ff; color: #2563eb; }
-.tool-lbl { font-size: 10px; }
+.app-tool-btn:hover { background: var(--app-surface-3); color: var(--app-text-soft); }
+.app-tool-btn.active { background: var(--app-surface); color: var(--app-text); font-weight: 600; }
+html:has(.company-view),html:has(.publish-view) { scrollbar-width: thin; scrollbar-color: #aa8fa0 #f4f1f3; }
+html:has(.company-view)::-webkit-scrollbar,html:has(.publish-view)::-webkit-scrollbar { width: 9px; }
+html:has(.company-view)::-webkit-scrollbar-track,html:has(.publish-view)::-webkit-scrollbar-track { background: #f4f1f3; }
+html:has(.company-view)::-webkit-scrollbar-thumb { border: 2px solid #f4f1f3; border-radius: 999px; background: linear-gradient(#73b895,#39775d); }
+html:has(.publish-view)::-webkit-scrollbar-thumb { border: 2px solid #f4f1f3; border-radius: 999px; background: linear-gradient(#dba8bc,#aaa4d4); }
+html:has(.company-view)::-webkit-scrollbar-thumb:hover { background: linear-gradient(#55a77d,#245f47); }
+html:has(.publish-view)::-webkit-scrollbar-thumb:hover { background: linear-gradient(#c77f9d,#8883bf); }
+@media (max-width: 620px) {
+  .app-tool-rail { right: 22px; bottom: 10px; padding: 3px; gap: 1px; }
+  .app-tool-btn { height: 24px; padding: 0 8px; }
+}
 </style>

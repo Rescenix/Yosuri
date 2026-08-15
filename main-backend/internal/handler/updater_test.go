@@ -270,11 +270,22 @@ func TestDownloadHotPatchZipExtractsNestedCaseInsensitiveExe(t *testing.T) {
 }
 
 func TestHotPatchBatKeepsPatchUntilCopySucceeds(t *testing.T) {
-	script := hotPatchBatTemplate(`C:\Users\A%20\rescene-new.exe`, `C:\Apps\rescene.exe`)
-	if !strings.Contains(script, "for /l %%I in (1,1,10)") {
+	script := hotPatchBatTemplate(
+		`C:\Users\A%20\rescene-applying.exe`,
+		`C:\Users\A%20\rescene-new.exe`,
+		`C:\Apps\rescene.exe`,
+		4321,
+	)
+	if !strings.Contains(script, "for /l %%I in (1,1,120)") {
+		t.Fatalf("hot patch script does not wait for the old process: %q", script)
+	}
+	if !strings.Contains(script, `tasklist /fi "PID eq %OLDPID%"`) {
+		t.Fatalf("hot patch script does not check the old process id: %q", script)
+	}
+	if !strings.Contains(script, "for /l %%I in (1,1,30)") {
 		t.Fatalf("hot patch script does not retry copy: %q", script)
 	}
-	if !strings.Contains(script, `C:\Users\A%%20\rescene-new.exe`) {
+	if !strings.Contains(script, `C:\Users\A%%20\rescene-applying.exe`) {
 		t.Fatalf("hot patch script did not escape percent signs: %q", script)
 	}
 	copyAt := strings.Index(script, "copy /y")
@@ -282,5 +293,28 @@ func TestHotPatchBatKeepsPatchUntilCopySucceeds(t *testing.T) {
 	deleteAt := strings.LastIndex(script, "del /q")
 	if copyAt < 0 || copiedAt < copyAt || deleteAt < copiedAt {
 		t.Fatalf("hot patch script deletes the patch before a successful copy: %q", script)
+	}
+	if !strings.Contains(script, `move /y "C:\Users\A%%20\rescene-applying.exe" "C:\Users\A%%20\rescene-new.exe"`) {
+		t.Fatalf("hot patch script does not restore a failed patch for retry: %q", script)
+	}
+	if strings.Contains(script, `start "" "`) {
+		t.Fatalf("hot patch script may open a visible console: %q", script)
+	}
+}
+
+func TestClaimHotPatchIsSingleWinner(t *testing.T) {
+	pending := filepath.Join(t.TempDir(), updateHotPatchFileName)
+	if err := os.WriteFile(pending, []byte("patch"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := claimHotPatch(pending)
+	if err != nil {
+		t.Fatalf("first claim failed: %v", err)
+	}
+	if _, err := os.Stat(claimed); err != nil {
+		t.Fatalf("claimed patch missing: %v", err)
+	}
+	if _, err := claimHotPatch(pending); err == nil {
+		t.Fatal("second claim unexpectedly succeeded")
 	}
 }

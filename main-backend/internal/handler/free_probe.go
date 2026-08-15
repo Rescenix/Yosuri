@@ -39,12 +39,22 @@ var (
 	// lastUsedAt 记录每个免费条目最近一次真实请求成功的时刻（LRU 新鲜度）。
 	lastUsedMu     sync.Mutex
 	lastUsedAt     = map[string]time.Time{}
+	// lastLatency 记录每个条目最近一次真实请求成功的延迟（用于 auto 排序，零额外探活）。
+	lastLatencyMu sync.Mutex
+	lastLatency    = map[string]time.Duration{}
 	// autoDisabled 记录自动发现模型（auto_ 前缀）的确定性不可用标记：
 	// key = endpoint|model（与 probeStates 同键）。401/403/404 等确定性错误
 	// 时标记；探活成功（200）自动移除（拉起）。聚合 API /v1/models 输出时
 	// 跳过被标记的模型，避免外部工具选到付费墙/已下架的模型。
 	autoDisabledMu sync.Mutex
 	autoDisabled   = map[string]bool{}
+	// aggAutoTier 聚合端口 auto 候选梯队（2026-08-13 用户「auto 应该有预备役机制」）：
+	// key = backend ID，value = 梯队编号（1=最快/60s, 2=备用/120s, 3=兜底/180s）。
+	// 梯队越小探测越频繁，auto 链按梯队+延迟排序，最快的先上。
+	// ⚠️ 2026-08-13 废除探活梯队：商汤 5h/500 次探活烧额度。
+	// 改为完全靠真实请求延迟排序，零额外探测。
+	aggAutoTierMu sync.Mutex
+	aggAutoTier    = map[string]int{}
 )
 
 // isProtectedModel 判断模型是否受保护（DeepSeek 系永不淘汰）。
@@ -125,12 +135,17 @@ func freeLastUsedByDef(f FreeModelDef) time.Time {
 	return freeLastUsed(RouterBackend{BaseURL: f.Endpoint, Model: f.Model})
 }
 
-// markFreeUsed 真实请求成功时记录 LRU 新鲜度。由 circuitSuccess 统一调用
+// markFreeUsed 真实请求成功时记录 LRU 新鲜度 + 延迟。由 circuitSuccess 统一调用
 // （该函数只对 Source=="free" 生效，正好覆盖免费池成功路径）。
+// 延迟用于 auto 排序（零额外探活，纯真实使用数据）。
 func markFreeUsed(b RouterBackend) {
 	lastUsedMu.Lock()
 	lastUsedAt[probeKey(b)] = time.Now()
 	lastUsedMu.Unlock()
+	// 记录真实请求延迟（从 circuitSuccess 捎带，不额外烧额度）
+	lastLatencyMu.Lock()
+	lastLatency[probeKey(b)] = b.Timeout
+	lastLatencyMu.Unlock()
 }
 
 // probeCatalogEntry 对单个条目探活一次，更新信号。
@@ -196,7 +211,20 @@ func probeChatOnce(b RouterBackend) (bool, int) {
 		return false, 0
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK, resp.StatusCode
+	if resp.StatusCode != http.StatusOK {
+		return false, resp.StatusCode
+	}
+	// 200 但 usage=0 = 请求未真正处理（魔搭 DS 间歇空回复 bug，实测 usage=0 空 content）
+	// → 判失败，防「200 空回复」模型靠状态码混进可用池（2026-08-13）
+	var probeResp struct {
+		Usage struct {
+			TotalTokens int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&probeResp) == nil && probeResp.Usage.TotalTokens == 0 {
+		return false, resp.StatusCode
+	}
+	return true, resp.StatusCode
 }
 
 // recordProbeResult 按一次探活结果更新信号格。

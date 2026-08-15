@@ -68,7 +68,10 @@ try {
 
     # 使用独立输出名，不清空 build/bin。开发者可能正运行上一版 rescene.exe；
     # 旧脚本的 -clean 会因 Windows 文件锁直接打包失败。
-    & $wailsPath build -nopackage -o $wailsBinaryName -installscope user -webview2 embed -ldflags "-X backend/internal/handler.AppVersion=$appVersion"
+    # ⚠️ 不能省 -nsis / 不能换回 -nopackage（alpha.3 血泪）：Wails 只在
+    # Pack=true 时生成 rescene-res.syso 资源（build.go: options.Pack && platform==windows），
+    # 图标+版本信息全靠它；-nopackage 会导致 exe 无 .rsrc → 桌面快捷方式无图标。
+    & $wailsPath build -nsis -o $wailsBinaryName -installscope user -webview2 embed -ldflags "-X backend/internal/handler.AppVersion=$appVersion"
     if ($LASTEXITCODE -ne 0) { throw "wails build 失败，退出码 $LASTEXITCODE" }
 
     # Wails/Windows resources require a numeric file version. Recompile only the

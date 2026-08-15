@@ -90,5 +90,6 @@ func handleRemember(argsJSON string) string {
 	}
 	// 云端记忆同步（可选）：记忆变了，异步推送
 	pushMemorySync()
-	return "已记住 ✅ 已写入 memory/" + args.File + ".md，下次对话时我会自动想起。"
+	// 去 emoji 保留精髓：「下次对话时我会自动想起」是这句话的灵魂，不能删
+	return "已写入 memory/" + args.File + ".md，下次对话时我会自动想起。"
 }

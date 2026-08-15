@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
 
 // wsCall 连接 WS → 发一条命令 → 读一条响应 → 关闭
@@ -22,7 +23,7 @@ func wsCall(wsURL string, payload []byte) ([]byte, error) {
 		host = u[:i]
 		path = u[i:]
 	}
-	conn, err := net.Dial("tcp", host)
+	conn, err := net.DialTimeout("tcp", host, 5*time.Second)
 	if err != nil {
 		return nil, err
 	}

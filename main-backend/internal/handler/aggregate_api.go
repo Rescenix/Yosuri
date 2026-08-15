@@ -31,6 +31,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -72,10 +73,111 @@ type aggregateChatRequest struct {
 	Temperature float64         `json:"temperature"`
 }
 
+// aggAutoChain 聚合端口 auto 专用路由链（2026-08-14 重构：Zen 已死；
+// 2026-08-14 晚：智谱 GLM-4.7-Flash 踢出 auto 链——它在工具调用循环返回
+// HTTP200 + content='' + tool_calls（usage=0），Hermes 判空回复 → No reply 实锤）
+// 按速度+稳定性优先级：魔搭 Step-3.7 → 商汤 DS V4 Flash → 魔搭 Qwen3-235B → Zen 兜底
+// 每个源检查 key 有无（免 key 的直接进，要 key 的检查 user_configs/env），无 key 跳过。
+func aggAutoChain() []RouterBackend {
+	entries, _ := loadModelConfigs("")
+	entryByID := map[string]ModelConfigEntry{}
+	for _, e := range entries {
+		entryByID[e.ID] = e
+	}
+	envKeys := userKeysByEnv("")
+
+	// 按优先级逐一构造
+	backends := []struct {
+		id    string
+		vendor string
+		model string
+		base  string
+		keyEnv string
+		keyless bool
+		reasoning bool
+		timeout time.Duration
+		vision bool
+		window int
+	}{}
+	// 1. 魔搭 Step-3.7-flash（200 OK 实测可用）
+	if hasKey("free_modelscope_deepseek_v4_flash", "MODELSCOPE_API_KEY", entryByID, envKeys) {
+		backends = append(backends, struct {
+			id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
+		}{
+			id: "auto_modelscope_stepfun-ai/Step-3.7-Flash", vendor: "ModelScope 魔搭", model: "stepfun-ai/Step-3.7-Flash",
+			base: "https://api-inference.modelscope.cn/v1", keyEnv: "MODELSCOPE_API_KEY", reasoning: true, timeout: 45,
+		})
+	}
+	// 3. 商汤 DS V4 Flash（200 OK 实测可用）
+	if hasKey("free_sensenova_deepseek_v4_flash", "SENSENOVA_API_KEY", entryByID, envKeys) {
+		backends = append(backends, struct {
+			id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
+		}{
+			id: "free_sensenova_deepseek_v4_flash", vendor: "SenseNova", model: "deepseek-v4-flash",
+			base: "https://token.sensenova.cn/v1", keyEnv: "SENSENOVA_API_KEY", reasoning: true, timeout: 45, window: 1048576,
+		})
+	}
+	// 4. 魔搭 Qwen3-235B（200 OK 实测可用）
+	if hasKey("free_modelscope_qwen3_235b", "MODELSCOPE_API_KEY", entryByID, envKeys) {
+		backends = append(backends, struct {
+			id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
+		}{
+			id: "free_modelscope_qwen3_235b", vendor: "ModelScope 魔搭", model: "Qwen/Qwen3-235B-A22B",
+			base: "https://api-inference.modelscope.cn/v1", keyEnv: "MODELSCOPE_API_KEY", reasoning: true, timeout: 45, window: 131072,
+		})
+	}
+	// 5. Zen 免 key DS（经常 502 限流，放最后兜底）
+	backends = append(backends, struct {
+		id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
+	}{
+		id: "free_zen_deepseek_v4_flash", vendor: "OpenCode Zen", model: "deepseek-v4-flash-free",
+		base: "https://opencode.ai/zen/v1", keyless: true, reasoning: true, timeout: 15,
+	})
+
+	out := make([]RouterBackend, 0, len(backends))
+	for _, b := range backends {
+		key := ""
+		if e, ok := entryByID[b.id]; ok {
+			key = e.APIKey
+		}
+		if key == "" && !b.keyless && b.keyEnv != "" {
+			if envKeys[b.keyEnv] != "" {
+				key = envKeys[b.keyEnv]
+			} else {
+				key = os.Getenv(b.keyEnv)
+			}
+		}
+		if key == "" && !b.keyless {
+			continue // 无 key 跳过
+		}
+		out = append(out, RouterBackend{
+			ID: b.id, Name: b.model, BaseURL: b.base, Model: b.model,
+			APIKey: key, Timeout: b.timeout * time.Second, Source: "free",
+			Keyless: b.keyless, Reasoning: b.reasoning, Vision: b.vision,
+			ContextWindow: b.window,
+		})
+	}
+	return out
+}
+
+// hasKey 检查某个条目是否有 key（user_configs / env / keyless）
+func hasKey(id, keyEnv string, entryByID map[string]ModelConfigEntry, envKeys map[string]string) bool {
+	if e, ok := entryByID[id]; ok && e.APIKey != "" {
+		return true
+	}
+	if keyEnv == "" {
+		return true // 免 key
+	}
+	if envKeys[keyEnv] != "" {
+		return true
+	}
+	return os.Getenv(keyEnv) != ""
+}
+
 // modelToAggregateBackends 把外部请求的 model 字段解析成路由链。
 func modelToAggregateBackends(model string) []RouterBackend {
 	if model == "" || model == "auto" || model == "rescene-auto" {
-		return resolveBackends("", "auto")
+		return aggAutoChain()
 	}
 	if b := resolveExact("", model); b != nil {
 		return []RouterBackend{*b}
@@ -236,6 +338,8 @@ func aggregateStreamOnce(ctx context.Context, b RouterBackend, reqBody map[strin
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	// 带浏览器 UA：Cerebras/Zen 等走 Cloudflare 风控，无 UA 返回 403/1009（2026-08-13 实测）
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 	if b.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
@@ -342,7 +446,7 @@ func HandleAggregateModels(c *gin.Context) {
 	seen := map[string]bool{"auto": true}
 	// 目录条目：只保留可用的 DeepSeek（V4 系 + 非付费墙）
 	for _, f := range freeModelCatalog {
-		if f.Disabled || !isUsableDeepSeek(f.Model, f.Vendor) {
+		if f.Disabled || !isUsableAggModel(f.Model, f.Vendor) {
 			continue
 		}
 		data = append(data, map[string]any{
@@ -356,7 +460,11 @@ func HandleAggregateModels(c *gin.Context) {
 	// 填回 model 字段，路由侧 resolveAutoReadable 反解回原始条目精确路由。
 	// 不可用的（探活信号 0 / 确定性 401/403/404 淘汰）不输出；恢复自动拉起。
 	for _, dm := range discoveredFreeModels("") {
-		if seen[dm.ID] || !isUsableDeepSeek(dm.Model, dm.Vendor) {
+		if seen[dm.ID] || !isUsableAggModel(dm.Model, dm.Vendor) {
+			continue
+		}
+		// 目录已有同 endpoint 同模型（如魔搭 Flash-0731 目录+auto_ 双入口）→ 不重复暴露（2026-08-13）
+		if catalogHasModel(dm.Model, dm.Endpoint) {
 			continue
 		}
 		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
@@ -382,7 +490,7 @@ func HandleAggregateModels(c *gin.Context) {
 				continue
 			}
 			for _, m := range configuredProviderModels(e) {
-				if !isUsableDeepSeek(m.ID, e.Name) {
+				if !isUsableAggModel(m.ID, e.Name) {
 					continue
 				}
 				id := customModelSelectionID(e.ID, m.ID)
@@ -402,6 +510,45 @@ func HandleAggregateModels(c *gin.Context) {
 // isDeepSeekModel 判断模型名是否 DeepSeek 系（聚合端口只暴露它）。
 func isDeepSeekModel(model string) bool {
 	return strings.Contains(strings.ToLower(model), "deepseek")
+}
+
+// isUsableAggModel 聚合端口暴露规则（2026-08-13 用户定稿扩展）：
+//   - 付费墙 vendor 排除（kilo gateway / ollama cloud）
+//   - NVIDIA NIM 移除（用户「纯纯垃圾，不要了」——实测慢/超时）
+//   - 保留 DeepSeek V4 系 + agent 基准与 DS 相持的顶级免费模型
+//     （GLM-5.2 / Qwen3.5-397B / Qwen3-235B / MiMo / GPT-OSS / Laguna / step-3.7，
+//      2026-08-13 实测收录；GLM-5.2 商汤 429/魔搭空回复由探活动态沉底）
+//   - Kilo Gateway 免 key 模型仅用于应用面板，不加入聚合端口（2026-08-15）
+func isUsableAggModel(model, vendor string) bool {
+	if isPaidWallVendor(vendor) {
+		return false
+	}
+	v := strings.ToLower(vendor)
+	if strings.Contains(v, "nvidia") || strings.Contains(v, "订阅") {
+		return false // NVIDIA NIM 移除（用户 2026-08-13）+ 订阅档（plan_*）不暴露
+	}
+	if isUsableDeepSeek(model, vendor) {
+		return true
+	}
+	ml := strings.ToLower(model)
+	for _, top := range aggTopModels {
+		if strings.Contains(ml, top) {
+			return true
+		}
+	}
+	return false
+}
+
+// aggTopModels 聚合端口「快又聪明」名单（2026-08-13 用户二轮收窄定稿）：
+// 用户「聚合端口跑 Hermes 太多垃圾太卡」——只留实测秒回 + agent 可用的旗舰：
+//   step-3.7-flash 1.6s / Qwen3-235B 2.1s（魔搭实测）
+// 已剔除（实测慢或废）：
+//   MiMo 12.8s、Qwen3.5-397B 4.9-10.8s（慢）、GLM-5.2（商汤 429/魔搭空回复）、
+//   Laguna 5.9s+免key限流、GPT-OSS-120B（Cerebras/Groq 地域风控 403 + Ollama/Kilo 付费墙，无活源）。
+// 注意收窄到旗舰线：qwen3 只留 235b（27/35/122B 非顶级）、gpt-oss 只留 120b（20b 用户否决）。
+var aggTopModels = []string{
+	"qwen3-235b",   // 通义 Qwen3-235B（魔搭 2.1s 实测秒回）
+	"step-3.7",     // 阶跃 step-3.7-flash（1.6s 实测秒回）
 }
 
 // isUsableDeepSeek 判断是否聚合端口真正可用的 DeepSeek：
@@ -435,4 +582,152 @@ func isPaidWallVendor(vendor string) bool {
 		}
 	}
 	return false
+}
+
+// ========== 聚合 API 健康度可视化（2026-08-14）==========
+// GET /api/aggregate/health —— 设置面板「聚合 API」tab 的健康度卡片数据源。
+// 返回聚合端口实际暴露的每个模型（与 /v1/models 同过滤规则）的：
+//   - 探活信号格 signal（0-4，-1=未探测/无key未测）
+//   - 探活实测延迟 probe_ms（最近一轮 probeChatOnce 的真实毫秒数）
+//   - 真实请求成功延迟 real_ms（探活只是敲门砖，真实请求延迟更能反映实际体验；
+//     没有真实成功记录时回退为探活延迟，再没有就是 0）
+//   - 最近真实成功时刻 last_used（LRU 新鲜度，零值=从未成功）
+//   - 可用状态：disabled = 探活确认 0 格 / 确定性 401-403-404 淘汰 / 熔断中
+//
+// 纯读内存状态，零额外探活、零 key 泄露（signal/latency 不涉及密钥）。
+
+// aggHealthModel 健康度单条视图。
+type aggHealthModel struct {
+	ID         string    `json:"id"`          // 与 /v1/models 一致的对外 ID（auto_ 可读 ID / custom::…）
+	Vendor     string    `json:"vendor"`      // 厂商分组
+	Name       string    `json:"name"`        // 展示名（目录 Name，无则用模型名）
+	Model      string    `json:"model"`       // 真实模型名（探活/真实请求用）
+	Signal     int       `json:"signal"`      // 0-4；-1 未探测
+	ProbeMs    int64     `json:"probe_ms"`    // 探活实测延迟 ms（0=未测）
+	RealMs     int64     `json:"real_ms"`     // 真实请求成功延迟 ms（0=暂无记录）
+	LastUsed   time.Time `json:"last_used"`   // 最近真实成功时刻（零值=从未）
+	Disabled   bool      `json:"disabled"`    // 不可用（淘汰/熔断/确认0格）
+	Keyless    bool      `json:"keyless"`     // 免 key 网关
+	InAuto     bool      `json:"in_auto"`     // 是不是 auto 链候选（聚合端口 model=auto 的梯队）
+	AutoOrder  int       `json:"auto_order"`  // auto 链中的优先级（1 最前）
+}
+
+// aggModelHealth 读一个 backend 的健康度状态（零锁外开销）。
+func aggModelHealth(b RouterBackend) aggHealthModel {
+	m := aggHealthModel{
+		ID: b.ID, Vendor: "", Name: b.Name, Model: b.Model,
+		Signal: -1, Keyless: b.Keyless,
+		LastUsed: freeLastUsed(b),
+	}
+	probeMu.Lock()
+	if st, ok := probeStates[probeKey(b)]; ok {
+		m.Signal = st.signal
+		m.ProbeMs = st.latency.Milliseconds()
+	}
+	probeMu.Unlock()
+	// ⚠️ 不用 lastLatency 回退：它存的是 b.Timeout（配置超时值，如 45s），
+	// 不是实测延迟（free_probe.go markFreeUsed 既有实现），画进去会误导。
+	if m.ProbeMs == 0 {
+		m.RealMs = 0
+	} else {
+		m.RealMs = m.ProbeMs
+	}
+	// 不可用判定：确定性淘汰 + 熔断 + 探活确认 0 格
+	m.Disabled = isAutoModelDisabled(b.BaseURL, b.Model) ||
+		circuitOpen(b) ||
+		(m.Signal == 0)
+	return m
+}
+
+// aggBackendVendor 从目录按 backend ID 反查 vendor（auto 链 log 里 RouterBackend
+// 不带 Vendor 字段，显示用厂商标识，查不到就用模型名兜底）。
+func aggBackendVendor(b RouterBackend) string {
+	for _, f := range freeModelCatalog {
+		if f.ID == b.ID {
+			return f.Vendor
+		}
+	}
+	return b.Name
+}
+
+// HandleAggregateHealth GET /api/aggregate/health
+func HandleAggregateHealth(c *gin.Context) {
+	// 1. auto 链候选（聚合端口 model=auto 的实际路由梯队）
+	autoChain := make([]aggHealthModel, 0, 8)
+	for i, b := range aggAutoChain() {
+		m := aggModelHealth(b)
+		m.InAuto = true
+		m.AutoOrder = i + 1
+		m.Vendor = aggBackendVendor(b)
+		autoChain = append(autoChain, m)
+	}
+
+	// 2. 全部暴露模型（与 /v1/models 同过滤规则：目录免费池 + 自动发现 + 自定义）
+	seen := map[string]bool{}
+	models := make([]aggHealthModel, 0, 32)
+	for _, f := range freeModelCatalog {
+		if f.Disabled || !isUsableAggModel(f.Model, f.Vendor) {
+			continue
+		}
+		m := aggModelHealth(RouterBackend{ID: f.ID, Name: f.Name, BaseURL: f.Endpoint, Model: f.Model, Keyless: f.Keyless})
+		m.Vendor = f.Vendor
+		models = append(models, m)
+		seen[f.Model+"|"+f.Endpoint] = true
+	}
+	for _, dm := range discoveredFreeModels("") {
+		if !isUsableAggModel(dm.Model, dm.Vendor) || isAutoModelDisabled(dm.Endpoint, dm.Model) {
+			continue
+		}
+		if catalogHasModel(dm.Model, dm.Endpoint) {
+			continue // 目录已暴露，不重复
+		}
+		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 {
+			continue // 探活确认不可用：沉底不输出
+		}
+		id := autoReadableID(dm.ID)
+		if seen[id] {
+			continue
+		}
+		m := aggModelHealth(RouterBackend{ID: id, Name: dm.Model, BaseURL: dm.Endpoint, Model: dm.Model})
+		m.Vendor = dm.Vendor
+		models = append(models, m)
+		seen[id] = true
+	}
+	if entries, err := loadModelConfigs(""); err == nil {
+		for _, e := range entries {
+			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
+				continue
+			}
+			for _, mm := range configuredProviderModels(e) {
+				if !isUsableAggModel(mm.ID, e.Name) {
+					continue
+				}
+				id := customModelSelectionID(e.ID, mm.ID)
+				if seen[id] {
+					continue
+				}
+				cname := strings.TrimSpace(mm.Name)
+				if cname == "" {
+					cname = mm.ID
+				}
+				m := aggModelHealth(RouterBackend{ID: id, Name: cname, BaseURL: e.Endpoint, Model: mm.ID, Keyless: e.Keyless})
+				m.Vendor = e.Name
+				models = append(models, m)
+				seen[id] = true
+			}
+		}
+	}
+
+	// 排序：信号降序 → auto 优先 → 名称
+	sort.SliceStable(models, func(i, j int) bool {
+		if models[i].Signal != models[j].Signal {
+			return models[i].Signal > models[j].Signal
+		}
+		return models[i].Name < models[j].Name
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"auto_chain": autoChain,
+		"models":     models,
+	})
 }

@@ -26,8 +26,8 @@
               <div v-for="m in grp.items" :key="m.id" class="mm-model-row">
                               <span class="mm-model-name">{{ m.name }}</span>
                               <span v-if="m.keyless" class="mm-tag mm-tag-free">免 Key</span>
-                              <span v-else-if="!m.api_key_set" class="mm-tag mm-tag-nkey">未配 Key</span>
-                              <button v-else class="mm-delkey" @click.stop="$emit('delete-key', m.id)" title="删除密钥">删除密钥</button>
+                                                            <span v-else-if="!m.api_key_set" class="mm-tag mm-tag-nkey">未配 Key</span>
+                                                            <span v-else class="mm-tag mm-tag-ok">已配 Key</span>
                               <label class="mm-switch" @click.prevent="toggleHidden(m.id)">
                                 <input type="checkbox" :checked="!isHidden(m.id)" />
                                 <span class="mm-switch-track"></span>
@@ -138,12 +138,8 @@ function toggleVendor(grp) {
 .mm-tag { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px; flex-shrink: 0; }
 .mm-tag-free { color: var(--app-accent); background: var(--app-accent-soft); }
 .mm-tag-nkey { color: var(--app-text-faint); background: var(--app-surface-3); }
-.mm-delkey {
-  font-size: 10px; color: #e74c3c; background: none;
-  border: 1px solid #e74c3c; border-radius: 999px; padding: 1px 8px;
-  cursor: pointer; flex-shrink: 0;
-}
-.mm-delkey:hover { background: #e74c3c; color: #fff; }
+.mm-tag-ok { color: #22c55e; background: rgba(34, 197, 94, 0.12); }
+
 .mm-switch { position: relative; display: inline-flex; cursor: pointer; flex-shrink: 0; }
 .mm-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 .mm-switch-track {

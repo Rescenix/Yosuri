@@ -78,6 +78,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/studio/mambo", HandleStudioMambo)
 	r.GET("/api/studio/files/:file", HandleStudioFiles)
 	r.POST("/api/translate", HandleTranslate)
+	r.POST("/api/translate/batch", HandleTranslateBatch)
 
 	// 设置面板：技能库 / DHS 生态 / 用户档案（含自定义指令）
 	r.GET("/api/skills", HandleListSkills)
@@ -91,6 +92,14 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/dhs/community/preview", HandleDHSCommunityPreview)
 	r.POST("/api/dhs/community/audit", HandleDHSCommunityAudit)
 	r.POST("/api/dhs/community/install", HandleDHSCommunityInstall)
+	r.POST("/api/dhs/community/install-dhs", HandleDHSCommunityInstallDHS)
+	r.POST("/api/dhs/community/uninstall-dhs", HandleDHSCommunityUninstallDHS)
+	// DHS 审计账本：云端持久化（读公开，上报带 JWT 透传云端验）
+	r.GET("/api/dhs/audits", CloudDHSAuditsProxy)
+	r.POST("/api/dhs/audits", CloudDHSAuditsProxy)
+	// DHS 爱心收藏：云端按 uid 持久化（登录后跨设备恢复）
+	r.GET("/api/dhs/favorites", CloudDHSFavoritesProxy)
+	r.POST("/api/dhs/favorites/toggle", CloudDHSFavoritesProxy)
 	r.GET("/api/mcp", HandleMCPStatus)
 	r.GET("/api/mcp/registry", HandleMCPRegistry)
 	r.POST("/api/mcp/registry/install", HandleInstallRegistryMCP)

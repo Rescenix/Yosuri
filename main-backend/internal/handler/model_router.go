@@ -84,6 +84,23 @@ type FreeModelDef struct {
 // 参数规模是公开估计值；未知者写 0，排序时排免费池末段，绝不伪造。
 // Vendor 字段用于前端按厂商折叠分组（仿 Hermes 提供方分类）。
 var freeModelCatalog = []FreeModelDef{
+	// —— Kilo Gateway 免 key 网关（api.kilo.ai/api/gateway/v1，OpenAI 兼容）——
+	// 2026-08-15 新增：Kilo 支持匿名访问 :free 后缀模型，无需 API Key，
+	// 每小时 200 次/IP 限流。实测 /v1/models 返回 13 个 isFree=true 模型，全部加入。
+	{ID: "kilo_auto_free", Vendor: "Kilo Gateway", Name: "Kilo Auto Free（免 key）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "kilo-auto/free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key 自动路由·200次/h/IP", Keyless: true, Reasoning: true, ContextWindow: 256000},
+	{ID: "kilo_step_3_7_flash_free", Vendor: "Kilo Gateway", Name: "Step 3.7 Flash（免 key）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "stepfun/step-3.7-flash:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key·step-3.7-flash·识图·262K", Keyless: true, Vision: true, Reasoning: true, ContextWindow: 262144},
+	{ID: "kilo_tencent_hy3_free", Vendor: "Kilo Gateway", Name: "Tencent Hy3（免 key·295B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "tencent/hy3:free", KeyEnv: "", ParamsB: 295, Note: "Kilo 免 key·腾讯 Hy3 295B MoE·262K", Keyless: true, Reasoning: true, ContextWindow: 262144},
+	{ID: "kilo_laguna_s_2_1_free", Vendor: "Kilo Gateway", Name: "Laguna S 2.1（免 key·118B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "poolside/laguna-s-2.1:free", KeyEnv: "", ParamsB: 118, Note: "Kilo 免 key·Poolside Laguna S 2.1·262K", Keyless: true, Reasoning: true, ContextWindow: 262144},
+	{ID: "kilo_laguna_xs_2_1_free", Vendor: "Kilo Gateway", Name: "Laguna XS 2.1（免 key·33B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "poolside/laguna-xs-2.1:free", KeyEnv: "", ParamsB: 33, Note: "Kilo 免 key·Poolside Laguna XS 2.1·262K", Keyless: true, Reasoning: true, ContextWindow: 262144},
+	{ID: "kilo_north_mini_code_free", Vendor: "Kilo Gateway", Name: "North Mini Code（免 key）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "cohere/north-mini-code:free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key·Cohere North Mini Code·256K", Keyless: true, Reasoning: true, ContextWindow: 256000},
+	{ID: "kilo_nemotron_lightning_free", Vendor: "Kilo Gateway", Name: "Nemotron 3.5 Lightning（免 key·3B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "nvidia/nemotron-3.5-lightning:free", KeyEnv: "", ParamsB: 3, Note: "Kilo 免 key·NVIDIA Nemotron 3.5 Lightning·1M", Keyless: true, Reasoning: true, ContextWindow: 1000000},
+	{ID: "kilo_nemotron_nano_free", Vendor: "Kilo Gateway", Name: "Nemotron 3 Nano Omni（免 key·30B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", KeyEnv: "", ParamsB: 30, Note: "Kilo 免 key·NVIDIA Nemotron 3 Nano·识图·256K", Keyless: true, Vision: true, Reasoning: true, ContextWindow: 256000},
+	{ID: "kilo_nemotron_super_free", Vendor: "Kilo Gateway", Name: "Nemotron 3 Super（免 key·120B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "nvidia/nemotron-3-super-120b-a12b:free", KeyEnv: "", ParamsB: 120, Note: "Kilo 免 key·NVIDIA Nemotron 3 Super·262K", Keyless: true, Reasoning: true, ContextWindow: 262144},
+	{ID: "kilo_nemotron_ultra_free", Vendor: "Kilo Gateway", Name: "Nemotron 3 Ultra（免 key·550B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "nvidia/nemotron-3-ultra-550b-a55b:free", KeyEnv: "", ParamsB: 550, Note: "Kilo 免 key·NVIDIA Nemotron 3 Ultra·1M", Keyless: true, Reasoning: true, ContextWindow: 1000000},
+	{ID: "kilo_liquid_lfm_free", Vendor: "Kilo Gateway", Name: "Liquid LFM2.5-2.6B（免 key）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "liquid/lfm-2.5-2.6b:free", KeyEnv: "", ParamsB: 2.6, Note: "Kilo 免 key·LiquidAI LFM2.5·128K", Keyless: true, Reasoning: true, ContextWindow: 128000},
+	{ID: "kilo_nemotron_safety_free", Vendor: "Kilo Gateway", Name: "Nemotron 3.5 Safety（免 key·4B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "nvidia/nemotron-3.5-content-safety:free", KeyEnv: "", ParamsB: 4, Note: "Kilo 免 key·NVIDIA 内容安全护栏·识图·非对话", Keyless: true, Vision: true, ContextWindow: 128000},
+	{ID: "kilo_openrouter_free", Vendor: "Kilo Gateway", Name: "OpenRouter Free（免 key）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "openrouter/free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key·OpenRouter 免费路由·200K", Keyless: true, Vision: true, Reasoning: true, ContextWindow: 200000},
+
 	// —— OpenRouter 已整体移除：免费档全部 slug 限流 429（连 llama-3.3-70b/405b 都 429），
 	// 无专属免费模型，作为网关接入价值为零，徒增链尾失败噪声。2026-07-15 实测确认。
 

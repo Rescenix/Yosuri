@@ -90,6 +90,13 @@
         <img :src="group.block.image" :alt="group.block.content || 'Agent 截图'" />
       </button>
 
+      <!-- 记忆写入：单行彩虹反馈（不占卡片，直接铺在聊天流里） -->
+      <div v-else-if="group.type === 'memory-saved'" class="flow-memory-saved">
+        <span class="fms-scanline"></span>
+        <span class="fms-label">已保存到记忆</span>
+        <span class="fms-text">{{ group.block.text }}</span>
+      </div>
+
       <!-- 中途插话：轻量提示条，用户插话后模型会按此转向 -->
       <div v-else-if="group.type === 'steer'" class="flow-steer">
         <span class="flow-steer-text">{{ group.block.text }}</span>
@@ -265,8 +272,11 @@ const blockGroups = computed(() => {
               // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
               groups.push({ type: 'search-tool', block: b })
             } else if (b.type === 'steer') {
-        // 中途插话：轻量提示条，用户插话后模型会按此转向，给个可见反馈
-        groups.push({ type: 'steer', block: b })
+              // 中途插话：轻量提示条，用户插话后模型会按此转向，给个可见反馈
+              groups.push({ type: 'steer', block: b })
+            } else if (b.type === 'memory-saved') {
+              // 记忆写入：单行彩虹反馈，直接平铺
+              groups.push({ type: 'memory-saved', block: b })
       } else if (b.type === 'preview') {
         // 自动预览提示：弱化条，不抢正文注意力
         groups.push({ type: 'preview', block: b })
@@ -971,6 +981,49 @@ function toolBodyText(b) {
   line-height: 1.6;
 }
 .flow-steer-text { flex: 1; min-width: 0; }
+/* 记忆写入反馈：单行彩虹渐变文字 + 左侧发光扫描线，不占卡片 */
+.flow-memory-saved {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 8px 14px;
+  padding: 5px 0 5px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  border-left: 3px solid rgba(179, 157, 219, 0.6);
+}
+.fms-scanline {
+  position: absolute;
+  left: -14px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #ff9a5c, #ff7eb3, #b39ddb);
+  animation: fms-pulse 1.6s ease-in-out infinite;
+  border-radius: 2px;
+}
+@keyframes fms-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.fms-label {
+  background: linear-gradient(90deg, #ff9a5c, #ff7eb3, #b39ddb);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  white-space: nowrap;
+}
+.fms-text {
+  color: var(--app-text-soft, #6b6b6b);
+  font-weight: 400;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 /* 自动预览提示：跟插话提示同款弱化条 */
 .flow-preview {
   display: flex;

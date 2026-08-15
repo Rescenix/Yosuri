@@ -33,7 +33,7 @@ func defaultLiveConfig() liveConfig {
 
 // deepActivityKinds 深度动作（烧算力/免费额度）
 var deepActivityKinds = map[string]bool{
-	"study": true, "read": true, "skill": true, "project": true, "watch": true, "spreadsheet": true, "ppt": true, "design": true, "meeting": true, "doc": true, "pv": true,
+	"study": true, "read": true, "skill": true, "project": true, "watch": true, "spreadsheet": true, "ppt": true, "design": true, "meeting": true, "doc": true, "pv": true, "refine": true,
 }
 
 // deepActivityDue 距上次深度活动是否已过冷却期（免费额度管理）
@@ -455,6 +455,8 @@ func actionEmoji(kind string) string {
 		return "💭"
 	case "journal":
 		return "📝"
+	case "refine":
+		return "🧬"
 	}
 	return "✨"
 }
@@ -549,6 +551,21 @@ func executeTrumanAction(d *Daughter, home string, act trumanAction) {
 			w.save(home)
 		} else {
 			logLive(liveLog, fmt.Sprintf("[%s] 🛠️ 技能获取未成功（模型/限流）", time.Now().Format("15:04")))
+		}
+
+	case "refine":
+		// 自我进化（抄自 Prime Agent Continual Harness）：读轨迹 → 提炼成技能/记忆/行为准则
+		pushToolCall("agent.refine", fmt.Sprintf("focus=%q", runeClip(act.Detail, 18)), "running", "")
+		summary := runRefine(d, home, act.Detail)
+		if summary != "" {
+			logLive(liveLog, fmt.Sprintf("[%s] 🧬 进化：%s", time.Now().Format("15:04"), summary))
+			toolEventByName("agent.refine", "done", runeClip(summary, 40))
+			w.LastDeepAt = time.Now().Format("15:04")
+			w.LastMove = fmt.Sprintf("%s 🧬 自我进化（提炼经验）", time.Now().Format("01-02 15:04"))
+			w.save(home)
+		} else {
+			toolEventByName("agent.refine", "fail", "模型/解析失败")
+			logLive(liveLog, fmt.Sprintf("[%s] 🧬 进化未完成（模型/解析失败）", time.Now().Format("15:04")))
 		}
 
 	case "project":

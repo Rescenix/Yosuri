@@ -423,6 +423,17 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
                 if (d.ok && /^(write_file|edit_file|apply_patch|mcp__fs__(write_file|edit_file|create_file))$/.test(d.name || t.name)) {
                     window.dispatchEvent(new CustomEvent('agent-working-diff-changed'))
                 }
+                // 记忆写入成功 → 聊天流里插一行彩虹「已保存到记忆」（单行，不占卡片）
+                if (d.ok && /^(remember|memory_append|memory_pin|memory_handoff)$/.test(d.name || t.name)) {
+                    try {
+                        const sub = (d.output || t.output || '').trim().slice(0, 80) || '已写入长期记忆'
+                        const done = flow.blocks.find(b => b.type === 'memory-saved' && b.key === d.id)
+                        if (!done) {
+                            flow.blocks.push({ type: 'memory-saved', id: d.id, text: sub })
+                            onStreamUpdate?.()
+                        }
+                    } catch (e) { /* 静默 */ }
+                }
             }
             // Agent 调用了 generate_pptx → 自动渲染 .pptx + 预览窗口
             maybeAutoPptx(d)

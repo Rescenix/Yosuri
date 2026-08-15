@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -10,6 +11,19 @@ func TestParsePPTMarkdown(t *testing.T) {
 	source := parsePPTMarkdown("真实多 Agent", "## 为什么\n- 文本不等于交付\n- 要能运行\n## 怎么做\n- PPTX\n- MP4")
 	if source.Topic != "真实多 Agent" || len(source.Slides) != 2 || len(source.Slides[0].Points) != 2 {
 		t.Fatalf("unexpected source: %#v", source)
+	}
+}
+
+func TestMeetingVideoEngineSupportsOrderedSlides(t *testing.T) {
+	data, err := os.ReadFile(findRepoFile("main-backend", "scripts", "mambo_video.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{"--ordered-media", "pool[i % len(pool)]"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("meeting slide support missing %q", want)
+		}
 	}
 }
 

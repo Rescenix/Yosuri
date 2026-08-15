@@ -148,8 +148,48 @@ func TestInstallHostedSkillFromGitHubAPI(t *testing.T) {
 		t.Fatalf("附属文件未安装: %v", err)
 	}
 	loaded := loadExternalSkills()
-	if len(loaded) != 1 || loaded[0].Name != "demo-skill" {
+	if len(loaded) != 1 || loaded[0].Name != "demo-skill" || loaded[0].Provider != "anthropics/skills" {
 		t.Fatalf("安装后未进入技能库: %+v", loaded)
+	}
+}
+
+func TestDHSRegistryAggregatesHarnessSources(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) == 3 && parts[0] == "repos" {
+			_, _ = w.Write([]byte(`{"default_branch":"main"}`))
+			return
+		}
+		if len(parts) == 6 && parts[0] == "repos" && parts[3] == "git" && parts[4] == "trees" {
+			name := parts[2]
+			_, _ = fmt.Fprintf(w, `{"tree":[{"path":"skills/%s/SKILL.md","type":"blob","sha":"sha","size":64}],"truncated":false}`, name)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	oldBase := githubAPIBaseURL
+	githubAPIBaseURL = server.URL
+	githubSkillTreeMu.Lock()
+	githubSkillTreeCache = map[string]cachedGitHubSkillTree{}
+	githubSkillTreeMu.Unlock()
+	t.Cleanup(func() { githubAPIBaseURL = oldBase })
+
+	items, err := listHostedSkills("dhs", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != len(dhsHarnessSources) {
+		t.Fatalf("DHS 聚合数量=%d，期望 %d: %+v", len(items), len(dhsHarnessSources), items)
+	}
+	seen := map[string]bool{}
+	for _, item := range items {
+		seen[item.Source] = true
+	}
+	for _, source := range dhsHarnessSources {
+		if !seen[source] {
+			t.Errorf("DHS 目录缺少来源 %s", source)
+		}
 	}
 }
 

@@ -5,9 +5,8 @@ import { dirname, resolve } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// 8080 may still be occupied by an older elevated desktop build. Keep the
-// development/demo UI on the current audited backend without changing URLs.
-const apiTarget = process.env.AURORA_API_TARGET || 'http://localhost:8081';
+// 默认跟随桌面端正式 API；需要联调其他实例时再显式覆盖目标端口。
+const apiTarget = process.env.AURORA_API_TARGET || 'http://localhost:8080';
 
 export default defineConfig({
   plugins: [vue()],

@@ -89,3 +89,14 @@ runtime/chromium/*
 scripts/.star-history-cache.json
 test.c
 Thumbs.db
+
+# —— B站自动化前台（含密码/引流逻辑，防止举报溯源，绝不追踪）——
+agent-os/frontdesk.go
+agent-os/frontdesk_bili.py
+agent-os/watchdog.sh
+agent-os/watchdog.log
+agent-os/tools_bili_dm.go
+agent-os/tools_bili_review.go
+agent-os/output.txt
+agent-os/outputs/
+agent-os/workdir/

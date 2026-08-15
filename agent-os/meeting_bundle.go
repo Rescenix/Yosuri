@@ -240,6 +240,14 @@ func runMeetingBundle(d *Daughter, home, topic string) (meetingBundle, error) {
 	}
 	now := time.Now()
 	id := fmt.Sprintf("%s-%02d", now.Format("2006-01-02-150405"), now.UnixNano()%100)
+	// 社长指令注入——directive.json 存在则作为会议最高议题
+	bossDirective := companyDirective()
+	if bossDirective != "" {
+		topic = strings.TrimSpace(topic)
+		if !strings.Contains(topic, bossDirective) {
+			topic = "社长指令专题会 · " + bossDirective
+		}
+	}
 	speeches := buildMeetingSpeeches(d, topic, evidence)
 	bundle := meetingBundle{
 		ID: id, Topic: topic, Host: d.Name, StartedAt: now.Format(time.RFC3339),
@@ -247,6 +255,9 @@ func runMeetingBundle(d *Daughter, home, topic string) (meetingBundle, error) {
 		MinutesFile: "会议-" + id + ".md", TranscriptFile: "会议-" + id + ".vtt",
 	}
 	minutes := buildMeetingMinutes(topic, now.Format("2006-01-02 15:04"), speeches)
+	if bossDirective != "" {
+		minutes += fmt.Sprintf("\n\n## 社长通报（用户指令）\n\n> 社长指令：**%s**\n\n各部门已围绕该指令汇报进展，下一步由 CEO 统筹分配接力。社长的审批决定项目是否进入生产。\n", bossDirective)
+	}
 	if err := os.WriteFile(filepath.Join(outDir, bundle.MinutesFile), []byte(outputMeta("会议")+minutes), 0o644); err != nil {
 		return bundle, err
 	}
@@ -258,10 +269,18 @@ func runMeetingBundle(d *Daughter, home, topic string) (meetingBundle, error) {
 	} else {
 		bundle.PPTFile = name
 	}
-	if name, err := renderPV(outDir, "AI 重建会议 · "+topic, buildMeetingReplayScript(topic, speeches)); err != nil {
-		bundle.ReplayError = err.Error()
+	if bundle.PPTFile == "" {
+		bundle.ReplayError = "会议 PPT 未生成，拒绝用色块兜底生成回放"
 	} else {
-		bundle.ReplayFile = name
+		slideDir := filepath.Join(outDir, ".meeting-slides-"+id)
+		defer os.RemoveAll(slideDir)
+		if err := renderPPTXSlides(filepath.Join(outDir, bundle.PPTFile), slideDir); err != nil {
+			bundle.ReplayError = err.Error()
+		} else if name, err := renderPVWithMedia(outDir, "AI 重建会议 · "+topic, buildMeetingReplayScript(topic, speeches), slideDir); err != nil {
+			bundle.ReplayError = err.Error()
+		} else {
+			bundle.ReplayFile = name
+		}
 	}
 	manifest := "会议-" + id + ".meeting.json"
 	data, _ := json.MarshalIndent(bundle, "", "  ")

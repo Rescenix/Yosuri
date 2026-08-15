@@ -1067,8 +1067,8 @@
     <PluginsMarketModal v-if="showPluginsPanel" @close="closePluginsPanel" />
     <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
 
-    <!-- 技能习得气泡（左下角空白区，agent 提炼新技能时弹出） -->
-    <SkillToasts />
+    <!-- 彩虹 toast（技能习得 + 全局 showRainbowToast 触发；样式升级版） -->
+    <RainbowToast />
 
   </div>
 </template>
@@ -1088,7 +1088,7 @@ import { useChatWidget } from './useChatWidget.js'
 import { useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
-import SkillToasts from './SkillToasts.vue'
+import RainbowToast from './RainbowToast.vue'
 import ScheduledTaskModal from './ScheduledTaskModal.vue'
 import ScheduledTaskManager from './ScheduledTaskManager.vue'
 import SettingsModal from './SettingsModal.vue'
@@ -2470,15 +2470,16 @@ function stopNotifPoll() {
 }
 async function markNotifRead() {
   const token = getAuthToken()
-  if (!token) return
   try {
     await fetch('/api/notifications/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: '{}'
     })
-    notifCount.value = 0
   } catch {}
+  // ⚠️ 只清 count 不够——行内红点读的是 notifications[].is_read，必须同步更新数组（后端挂了也本地清）
+  notifications.value = (notifications.value || []).map(n => ({ ...n, is_read: true }))
+  notifCount.value = 0
 }
 function notifTypeLabel(type) {
   const labels = { system: '系统', invite: '邀请码', cron: '定时任务', vip: '会员' }

@@ -23,17 +23,36 @@ import (
 var (
 	githubAPIBaseURL = "https://api.github.com"
 	githubRawBaseURL = "https://raw.githubusercontent.com"
+	// githubMirrorBase GitHub 镜像加速前缀（ghfast.top 类 gh-proxy）：
+	// 默认 https://ghfast.top/，env DHS_GITHUB_MIRROR 可覆盖（空 = 直连）。
+	// 镜像形式 https://ghfast.top/https://raw.githubusercontent.com/... 
+	githubMirrorBase = func() string {
+		if v := strings.TrimSpace(os.Getenv("DHS_GITHUB_MIRROR")); v != "" {
+			return strings.TrimRight(v, "/")
+		}
+		return "https://ghfast.top"
+	}()
 )
+
+// githubMirroredURL 给原始 GitHub URL 加镜像前缀；镜像未配置时原样返回。
+func githubMirroredURL(originalURL string) string {
+	if githubMirrorBase == "" {
+		return originalURL
+	}
+	return githubMirrorBase + "/" + originalURL
+}
 
 var hostedSkillSources = []struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 }{
+	{ID: "dhs", Label: "DeepSeek Harness（DHS）"},
 	{ID: "anthropics/skills", Label: "Anthropic Skills"},
 	{ID: "openai/skills", Label: "OpenAI Skills"},
 	{ID: "vercel-labs/skills", Label: "Vercel Labs Skills"},
-	{ID: "rescene-cloud", Label: "ResceneCloud 插件库"},
 }
+
+var dhsHarnessSources = []string{"anthropics/skills", "openai/skills", "vercel-labs/skills"}
 
 type githubTreeEntry struct {
 	Path string `json:"path"`
@@ -69,7 +88,20 @@ type installedSkillMetadata struct {
 }
 
 func githubRequest(path string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(githubAPIBaseURL, "/")+path, nil)
+	// 先走镜像（国内加速）；网络错误时回退直连一次，避免镜像故障拖垮整个发现链路。
+	resp, err := githubRequestOnce(path, githubMirrorBase != "")
+	if err != nil && githubMirrorBase != "" {
+		resp, err = githubRequestOnce(path, false)
+	}
+	return resp, err
+}
+
+func githubRequestOnce(path string, mirrored bool) (*http.Response, error) {
+	u := strings.TrimRight(githubAPIBaseURL, "/") + path
+	if mirrored {
+		u = githubMirroredURL(u)
+	}
+	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +115,16 @@ func githubRequest(path string) (*http.Response, error) {
 }
 
 func githubJSON(path string, out any) error {
-	resp, err := githubRequest(path)
+	// 完整重试语义：镜像返回非 JSON / 非 200（如 ghfast.top 不支持 api.github.com）
+	// 也会回退直连一次，避免镜像半通状态打挂 GitHub 发现源。
+	if err := githubJSONOnce(path, out, githubMirrorBase != ""); err != nil && githubMirrorBase != "" {
+		return githubJSONOnce(path, out, false)
+	}
+	return nil
+}
+
+func githubJSONOnce(path string, out any, mirrored bool) error {
+	resp, err := githubRequestOnce(path, mirrored)
 	if err != nil {
 		return fmt.Errorf("GitHub 连接失败: %w", err)
 	}
@@ -149,10 +190,27 @@ func listHostedSkills(source, query string) ([]hostedSkillItem, error) {
 	if !isHostedSkillSource(source) {
 		return nil, fmt.Errorf("不支持的技能托管源")
 	}
-	// ResceneCloud 插件库由前端直接通过 /api/plugins 访问，
-	// 这里只处理 GitHub 源（anthropics/skills、openai/skills、vercel-labs/skills）。
-	if source == "rescene-cloud" {
-		return nil, fmt.Errorf("ResceneCloud 插件库请通过前端插件市场访问")
+	if source == "dhs" {
+		items := make([]hostedSkillItem, 0)
+		var failures []string
+		for _, upstream := range dhsHarnessSources {
+			part, err := listHostedSkills(upstream, query)
+			if err != nil {
+				failures = append(failures, upstream+": "+err.Error())
+				continue
+			}
+			items = append(items, part...)
+		}
+		if len(items) == 0 && len(failures) == len(dhsHarnessSources) {
+			return nil, fmt.Errorf("DHS 目录暂不可用: %s", strings.Join(failures, "; "))
+		}
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].Name == items[j].Name {
+				return items[i].Source < items[j].Source
+			}
+			return items[i].Name < items[j].Name
+		})
+		return items, nil
 	}
 	tree, _, err := loadGitHubSkillTree(source)
 	if err != nil {
@@ -313,7 +371,18 @@ func HandleInstallHostedSkill(c *gin.Context) {
 }
 
 func fetchGitHubRawFile(source, branch, path string) ([]byte, error) {
+	contents, err := fetchGitHubRawFileOnce(source, branch, path, githubMirrorBase != "")
+	if err != nil && githubMirrorBase != "" {
+		contents, err = fetchGitHubRawFileOnce(source, branch, path, false)
+	}
+	return contents, err
+}
+
+func fetchGitHubRawFileOnce(source, branch, path string, mirrored bool) ([]byte, error) {
 	endpoint := strings.TrimRight(githubRawBaseURL, "/") + "/" + source + "/" + url.PathEscape(branch) + "/" + path
+	if mirrored {
+		endpoint = githubMirroredURL(endpoint)
+	}
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err

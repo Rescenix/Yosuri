@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,6 +28,53 @@ type publishRequest struct {
 	Content   string   `json:"content" binding:"required"`
 	Platforms []string `json:"platforms" binding:"required"`
 	Format    string   `json:"format"` // xhs=小红书格式排版（默认空=纯文本）
+}
+
+// publishComposeRequest 发布前的 Agent 创作流水线请求。
+type publishComposeRequest struct {
+	Stage    string `json:"stage" binding:"required"`
+	Brief    string `json:"brief"`
+	Audience string `json:"audience"`
+	Style    string `json:"style"`
+	Title    string `json:"title"`
+	Content  string `json:"content" binding:"required"`
+}
+
+// HandlePublishCompose POST /api/publish/compose —— 构思、提纲、成稿、润色。
+func HandlePublishCompose(c *gin.Context) {
+	var req publishComposeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		return
+	}
+	if len([]rune(req.Content)) > 60000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "单次创作内容不能超过 60000 字"})
+		return
+	}
+
+	context := fmt.Sprintf("故事脑洞/任务：%s\n作品定位：%s\n作者自定义文风与要求：%s\n小说名或章节名：%s\n\n当前故事材料：\n%s",
+		strings.TrimSpace(req.Brief), strings.TrimSpace(req.Audience), strings.TrimSpace(req.Style), strings.TrimSpace(req.Title), strings.TrimSpace(req.Content))
+	var instruction string
+	switch req.Stage {
+	case "ideation":
+		instruction = "你是网文小说灵感策划师。基于作者材料补齐可持续连载的故事方案：题材与一句话卖点、世界观规则、主角身份与欲望、金手指或核心设定、主要矛盾、关键配角、开篇冲突、长线悬念、3 个候选书名。不得把作者没有指定的文风当成固定要求，不要直接写章节正文。"
+	case "outline":
+		instruction = "你是网文小说故事结构师。把材料整理成可直接续写的卷纲或章节细纲：主线目标、阶段冲突、人物关系变化、伏笔与回收位置、情绪高低点、每章核心事件和章末钩子。严格遵守已有世界观与人设，不要替作者擅自指定文风。"
+	case "draft":
+		instruction = "你是网文小说文字创作师。严格根据作者设定、提纲和自定义文风要求，续写一章可发布的中文小说正文。第一行使用 # 章节标题。以场景、人物动作、对话和心理推动情节，保持人设与世界观一致，避免总结腔、说明书腔和套路化 AI 表达；不得擅自改动核心设定。"
+	case "polish":
+		instruction = "你是网文小说风格编辑师。按作者填写的文风与创作要求校对完整章节：保持人设、视角、称谓、时间线和世界观一致，改善场景感、对话自然度、节奏、转场与章末钩子，删除重复和 AI 套话。不得统一成你自己的文风。返回完整章节，第一行使用 # 章节标题，不要解释修改过程。"
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未知创作阶段"})
+		return
+	}
+
+	result, err := callLocalAggregate(instruction + "\n\n" + context)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Agent 创作失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stage": req.Stage, "content": strings.TrimSpace(result)})
 }
 
 // stripMarkdown 去掉常见 markdown 格式标记，保留纯文本
@@ -277,34 +323,27 @@ func HandlePublish(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"results": results})
 }
 
-// guiPublishOne 发布到单平台：优先无头 Chrome 自动发布（登录态在发布专用 profile）
+// guiPublishOne 发布到单平台：通过运行中 Edge CDP 自动发布（复用登录态）
 func guiPublishOne(p PubPlatform, title, content string) error {
-	cfg := loadPubAccount(p.ID)
-	if cfg.PublishURL == "" {
-		return headlessChromePublish(p, title, content)
-	}
-	// 端点模式：cookie + HTTP POST
-	cookie, err := edgeCookieDomain(p.Domain)
-	if err != nil {
-		return err
-	}
-	if cookie == "" {
-		return fmt.Errorf("未找到 %s 登录态", p.Name)
-	}
-	return guiPostArticle(cfg, cookie, title, content)
+	// 优先通过 CDP 连运行中 Edge（不启动新浏览器）
+	return cdpPublishOne(p, title, content)
 }
 
-// HandlePublishLoginChrome POST /api/publish/login-chrome —— 打开发布专用 Chrome 登录
-func HandlePublishLoginChrome(c *gin.Context) {
-	exe := chromeExePath()
+// HandlePublishLoginEdge POST /api/publish/login-edge —— 检查 Edge 调试端口状态
+func HandlePublishLoginEdge(c *gin.Context) {
+	exe := edgeExePath()
 	if _, err := os.Stat(exe); err != nil {
-		c.JSON(http.StatusOK, gin.H{"ok": false, "message": "未找到 Chrome，请先安装 https://www.google.com/chrome/"})
+		c.JSON(http.StatusOK, gin.H{"ok": false, "message": "未找到 Edge，请先安装 Microsoft Edge"})
 		return
 	}
-	os.MkdirAll(chromeProfileDir(), 0o755)
-	cmd := exec.Command(exe, "--user-data-dir="+chromeProfileDir())
-	cmd.Start()
-	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "发布专用 Chrome 已打开，请登录要发布的平台后关闭窗口"})
+	if edgeBrowserWS() != "" {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Edge 调试端口已连接，可直接发布"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      false,
+		"message": "Edge 调试端口未开。请关闭所有 Edge 窗口，然后运行桌面上的「Edge调试启动.bat」重启 Edge，再登录晋江/番茄",
+	})
 }
 
 // pubAccountCfg 平台账号配置（publish_config.json）

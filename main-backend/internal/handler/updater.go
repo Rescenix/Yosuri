@@ -249,6 +249,7 @@ type updateDownloadState struct {
 	Percent    float64 `json:"percent"`
 	Path       string  `json:"path"`
 	ErrMsg     string  `json:"error"`
+	Applying   bool    `json:"-"`
 }
 
 var updateDL = &updateDownloadState{State: "idle"}
@@ -565,13 +566,27 @@ func downloadInstaller(url, dest string) error {
 //  2. 返回响应后延时退出本进程，释放 exe 文件锁，安装程序才能覆盖
 func HandleInstallUpdate(c *gin.Context) {
 	updateDL.mu.Lock()
+	if updateDL.Applying {
+		updateDL.mu.Unlock()
+		c.JSON(http.StatusConflict, gin.H{"error": "更新正在安装，请勿重复点击"})
+		return
+	}
 	state, path := updateDL.State, updateDL.Path
+	if state == "done" && path != "" {
+		updateDL.Applying = true
+	}
 	updateDL.mu.Unlock()
 	if state != "done" || path == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "安装包尚未就绪"})
 		return
 	}
+	resetApplying := func() {
+		updateDL.mu.Lock()
+		updateDL.Applying = false
+		updateDL.mu.Unlock()
+	}
 	if _, err := os.Stat(path); err != nil {
+		resetApplying()
 		c.JSON(http.StatusBadRequest, gin.H{"error": "安装包文件不存在"})
 		return
 	}
@@ -582,17 +597,12 @@ func HandleInstallUpdate(c *gin.Context) {
 	if filepath.Base(path) == updateHotPatchFileName {
 		exePath, err := os.Executable() // 运行中的 rescene.exe 完整路径（含安装目录）
 		if err != nil {
+			resetApplying()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "定位程序路径失败"})
 			return
 		}
-		batPath := filepath.Join(filepath.Dir(path), "apply-update.bat")
-		bat := hotPatchBatTemplate(path, exePath)
-		if err := os.WriteFile(batPath, []byte(bat), 0o755); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "写热补丁脚本失败：" + err.Error()})
-			return
-		}
-		cmd := exec.Command("cmd", "/c", "start", "", batPath)
-		if err := cmd.Start(); err != nil {
+		if err := startHotPatch(path, exePath); err != nil {
+			resetApplying()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "启动热补丁失败：" + err.Error()})
 			return
 		}
@@ -609,6 +619,7 @@ func HandleInstallUpdate(c *gin.Context) {
 	// cmd /c start "" "path"：分离启动，安装程序不继承本进程句柄
 	cmd := exec.Command("cmd", "/c", "start", "", path)
 	if err := cmd.Start(); err != nil {
+		resetApplying()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "启动安装程序失败：" + err.Error()})
 		return
 	}
@@ -783,26 +794,70 @@ func isNumeric(s string) bool {
 	return s != ""
 }
 
-// hotPatchBatTemplate 生成热补丁替换脚本：等待旧进程释放文件锁，最多重试十次。
-// 只有覆盖成功才删除新 exe；失败时重启旧版并保留补丁，避免“更新失败且程序消失”。
-func hotPatchBatTemplate(newExe, exePath string) string {
+// claimHotPatch 用同目录原子重命名认领补丁。安装接口和下次启动逻辑即使同时触发，
+// 也只有一个进程能成功认领，避免两个批处理争抢同一个 exe。
+func claimHotPatch(path string) (string, error) {
+	claimed := filepath.Join(filepath.Dir(path), fmt.Sprintf("rescene-applying-%d-%d.exe", os.Getpid(), time.Now().UnixNano()))
+	if err := os.Rename(path, claimed); err != nil {
+		return "", err
+	}
+	return claimed, nil
+}
+
+// startHotPatch 认领补丁并用唯一脚本隐藏执行。启动失败时恢复标准文件名，允许重试。
+func startHotPatch(path, exePath string) error {
+	claimed, err := claimHotPatch(path)
+	if err != nil {
+		return fmt.Errorf("更新已被另一个进程接管或文件不可用: %w", err)
+	}
+	restore := func() { _ = os.Rename(claimed, path) }
+	scriptPath := filepath.Join(filepath.Dir(path), fmt.Sprintf("apply-update-%d-%d.cmd", os.Getpid(), time.Now().UnixNano()))
+	script := hotPatchBatTemplate(claimed, path, exePath, os.Getpid())
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		restore()
+		return fmt.Errorf("写更新脚本: %w", err)
+	}
+	if err := launchUpdateScript(scriptPath); err != nil {
+		_ = os.Remove(scriptPath)
+		restore()
+		return fmt.Errorf("运行更新脚本: %w", err)
+	}
+	return nil
+}
+
+// hotPatchBatTemplate 生成热补丁替换脚本：先精确等待旧进程退出，再重试覆盖。
+// 只有覆盖成功才删除新 exe；失败时恢复标准补丁名并重启旧版，允许下次重试。
+func hotPatchBatTemplate(newExe, pendingExe, exePath string, oldPID int) string {
 	newExe = strings.ReplaceAll(newExe, "%", "%%")
+	pendingExe = strings.ReplaceAll(pendingExe, "%", "%%")
 	exePath = strings.ReplaceAll(exePath, "%", "%%")
 	return fmt.Sprintf(`@echo off
-setlocal
-timeout /t 3 /nobreak >nul
-for /l %%%%I in (1,1,10) do (
+setlocal DisableDelayedExpansion
+set "OLDPID=%d"
+for /l %%%%I in (1,1,120) do (
+  tasklist /fi "PID eq %%OLDPID%%" /nh 2>nul | find "%%OLDPID%%" >nul
+  if errorlevel 1 goto replace
+  timeout /t 1 /nobreak >nul
+)
+goto failed
+:replace
+for /l %%%%I in (1,1,30) do (
   copy /y "%s" "%s" >nul 2>&1
   if not errorlevel 1 goto copied
   timeout /t 1 /nobreak >nul
 )
-start "" "%s"
+goto failed
+:failed
+if exist "%s" move /y "%s" "%s" >nul 2>&1
+start "" /b "%s"
+del /q "%%~f0" >nul 2>&1
 exit /b 1
 :copied
 del /q "%s"
-start "" "%s"
-del /q "%%~f0"
-`, newExe, exePath, exePath, newExe, exePath)
+start "" /b "%s"
+del /q "%%~f0" >nul 2>&1
+exit /b 0
+`, oldPID, newExe, exePath, newExe, newExe, pendingExe, exePath, newExe, exePath)
 }
 
 // ApplyPendingHotPatch 启动早期调用（main 入口，wails.Run 之前）：
@@ -820,16 +875,7 @@ func ApplyPendingHotPatch() bool {
 	if err != nil {
 		return false
 	}
-	batPath := filepath.Join(localDir, "apply-update.bat")
-	bat := hotPatchBatTemplate(newExe, exePath)
-	if bat == "" {
-		return false
-	}
-	if err := os.WriteFile(batPath, []byte(bat), 0o755); err != nil {
-		return false
-	}
-	cmd := exec.Command("cmd", "/c", "start", "", batPath)
-	if err := cmd.Start(); err != nil {
+	if err := startHotPatch(newExe, exePath); err != nil {
 		return false
 	}
 	time.Sleep(3 * time.Second)

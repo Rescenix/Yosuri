@@ -46,7 +46,7 @@ func cdpNavigate(wsURL, url string) error {
 // cdpEval 执行 JS，返回结果值（字符串）
 func cdpEval(wsURL, js string) (string, error) {
 	c := &cdpConn{wsURL: wsURL}
-	resp, err := c.call("Runtime.evaluate", map[string]any{"expression": js, "returnByValue": true})
+	resp, err := c.call("Runtime.evaluate", map[string]any{"expression": js, "returnByValue": true, "awaitPromise": true})
 	if err != nil {
 		return "", err
 	}

@@ -4215,6 +4215,43 @@ img.gem-rail-avatar {
   flex: 0 0 auto;
 }
 .input-toolbar-right { justify-content: flex-end; }
+.dhs-whale-shortcut {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  padding: 0;
+  color: #8750ff;
+  background: color-mix(in srgb, #8750ff 9%, var(--app-surface));
+  border: 1px solid color-mix(in srgb, #8750ff 28%, var(--app-border));
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(126, 73, 255, 0.10);
+  transition: transform .16s ease, color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.dhs-whale-shortcut:hover {
+  color: #fff;
+  background: linear-gradient(135deg, #7548ff, #a245ff);
+  box-shadow: 0 7px 18px rgba(126, 73, 255, 0.24);
+  transform: translateY(-1px);
+}
+.dhs-whale-shortcut:focus-visible { outline: 2px solid color-mix(in srgb, #8750ff 55%, transparent); outline-offset: 2px; }
+.dhs-whale-shield {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  color: #087a57;
+  background: #e6fff5;
+  border: 2px solid var(--app-surface);
+  border-radius: 50%;
+}
+.dhs-whale-shortcut:hover .dhs-whale-shield { color: #067647; background: #d7ffef; }
 .toolbar-pill-btn {
   display: flex;
   align-items: center;

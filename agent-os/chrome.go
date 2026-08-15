@@ -17,9 +17,12 @@ import (
 	"time"
 )
 
-// chromeExePath 找 Chrome 可执行文件
+// chromeExePath 找浏览器可执行文件（Edge 优先——Chrome 无限验证码，Edge 更稳）
 func chromeExePath() string {
 	cands := []string{
+		filepath.Join(os.Getenv("PROGRAMFILES"), "Microsoft", "Edge", "Application", "msedge.exe"),
+		filepath.Join(os.Getenv("PROGRAMFILES(X86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "Microsoft", "Edge", "Application", "msedge.exe"),
 		filepath.Join(os.Getenv("PROGRAMFILES"), "Google", "Chrome", "Application", "chrome.exe"),
 		filepath.Join(os.Getenv("PROGRAMFILES(X86)"), "Google", "Chrome", "Application", "chrome.exe"),
 		filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
@@ -32,8 +35,13 @@ func chromeExePath() string {
 	return "chrome"
 }
 
-// chromeProfileDir 发布专用 Chrome profile（登录态存这里）
+// chromeProfileDir 发布专用 Chrome profile
+// 优先用用户现有 Edge profile（已有 B 站登录态），不新建独立文件夹
 func chromeProfileDir() string {
+	edgeProfile := filepath.Join(os.Getenv("LOCALAPPDATA"), "Microsoft", "Edge", "User Data")
+	if _, err := os.Stat(edgeProfile); err == nil {
+		return edgeProfile
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "rescene_data", "publish-chrome")
 }

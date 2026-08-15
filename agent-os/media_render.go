@@ -84,6 +84,10 @@ func renderPPTX(outDir, topic, content string) (string, error) {
 var narrationLine = regexp.MustCompile(`(?m)^\s*-\s*旁白[:：]\s*(.+?)\s*$`)
 
 func renderPV(outDir, topic, scriptText string) (string, error) {
+	return renderPVWithMedia(outDir, topic, scriptText, "")
+}
+
+func renderPVWithMedia(outDir, topic, scriptText, mediaDir string) (string, error) {
 	engine := findRepoFile("main-backend", "scripts", "mambo_video.py")
 	if engine == "" {
 		return "", fmt.Errorf("找不到视频渲染引擎")
@@ -106,7 +110,11 @@ func renderPV(outDir, topic, scriptText string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, python, engine, "--topic", topic, "--text", strings.Join(segments, "|"), "--out", filepath.Join(outDir, name), "--no-online")
+	args := []string{engine, "--topic", topic, "--text", strings.Join(segments, "|"), "--out", filepath.Join(outDir, name), "--no-online"}
+	if strings.TrimSpace(mediaDir) != "" {
+		args = append(args, "--media", mediaDir, "--ordered-media", "--width", "1920", "--height", "1080")
+	}
+	cmd := exec.CommandContext(ctx, python, args...)
 	cmd.Dir = filepath.Dir(filepath.Dir(engine))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		text := strings.TrimSpace(string(output))
@@ -116,4 +124,45 @@ func renderPV(outDir, topic, scriptText string) (string, error) {
 		return "", fmt.Errorf("PV 渲染失败: %s", text)
 	}
 	return name, nil
+}
+
+// renderPPTXSlides 使用本机 PowerPoint 将真实幻灯片逐页导出，供会议回放按顺序使用。
+func renderPPTXSlides(pptxPath, outputDir string) error {
+	if strings.TrimSpace(pptxPath) == "" {
+		return fmt.Errorf("PPTX 路径为空")
+	}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return err
+	}
+	scriptPath := filepath.Join(outputDir, ".export-slides.ps1")
+	script := `param([string]$Deck,[string]$Out)
+$ErrorActionPreference='Stop'
+$powerpoint=$null
+$presentation=$null
+try {
+  $powerpoint=New-Object -ComObject PowerPoint.Application
+  $presentation=$powerpoint.Presentations.Open($Deck,$true,$false,$false)
+  foreach($slide in $presentation.Slides){
+    $name=('slide-{0:D3}.png' -f [int]$slide.SlideIndex)
+    $slide.Export((Join-Path $Out $name),'PNG',1920,1080)
+  }
+} finally {
+  if($presentation -ne $null){$presentation.Close()}
+  if($powerpoint -ne $null){$powerpoint.Quit()}
+}`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		return err
+	}
+	defer os.Remove(scriptPath)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoLogo", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", scriptPath, pptxPath, outputDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("PowerPoint 逐页导出失败: %s", strings.TrimSpace(string(output)))
+	}
+	images, _ := filepath.Glob(filepath.Join(outputDir, "slide-*.png"))
+	if len(images) == 0 {
+		return fmt.Errorf("PowerPoint 未导出任何幻灯片")
+	}
+	return nil
 }
