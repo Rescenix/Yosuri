@@ -25,7 +25,7 @@
 import { onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
-import { getSkippedVersion, isUpdateNotifyDisabled } from './composables/updatePrefs.js'
+import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 
 const auth = useAuth()
@@ -51,6 +51,8 @@ onMounted(async () => {
     const data = await res.json()
     if (data.ok && data.update?.has_update) {
       if (getSkippedVersion() === data.update.latest_version) return
+      // 关闭「热更新测试版本」时忽略预发布（alpha/beta/rc）更新（2026-08-16）
+      if (!isTestUpdatesEnabled() && isPrereleaseVersionString(data.update.latest_version)) return
       updateInfo.value = data.update
       // 第一次进应用：静默后台下载安装包（用户无感知、不弹窗）。
       // 下完本次不打扰；下次启动本地已有安装包 → 直接弹「一键安装」。

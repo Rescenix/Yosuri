@@ -696,19 +696,11 @@
                 <div v-else class="memory-empty">{{ versionInfo.has_update ? '本次更新没有附带更新说明。' : '—' }}</div>
               </div>
 
-              <div class="profile-actions" style="margin-top: 14px; align-items: center;">
+              <div v-if="versionInfo.has_update" class="profile-actions" style="margin-top: 14px; align-items: center;">
                 <button
                   class="api-form-btn save"
                   type="button"
-                  v-if="dlState === 'idle'"
-                  @click="startAutoDownload"
-                  :disabled="!versionInfo.has_update || dlWorking"
-                >{{ dlWorking ? '开始下载…' : '一键更新' }}</button>
-                <button
-                  class="api-form-btn save"
-                  type="button"
-                  v-else-if="dlState === 'downloading'"
-                  @click="startAutoDownload"
+                  v-if="dlState === 'downloading'"
                   disabled
                 >正在准备安装包…</button>
                 <button
@@ -721,15 +713,29 @@
                 <button
                   class="api-form-btn save"
                   type="button"
-                  v-else-if="dlState === 'error'"
-                  @click="startAutoDownload"
-                >重试下载</button>
+                  v-else
+                  disabled
+                >安装包未就绪</button>
                 <span v-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
+                <label class="param-switch" title="开启后接收测试版（alpha/beta）更新并热更新直更；关闭后只接收正式版更新">
+                  <input type="checkbox" v-model="testUpdates" @change="onTestUpdatesChange" />
+                  <span class="param-switch-track"></span>
+                </label>
+                <span class="param-value">热更新测试版本</span>
                 <label class="param-switch" style="margin-left: auto;" title="关闭后启动不再检查/弹窗提示更新">
                   <input type="checkbox" v-model="notifyDisabled" @change="onNotifyDisabledChange" />
                   <span class="param-switch-track"></span>
                 </label>
                 <span class="param-value">不提示版本更新</span>
+              </div>
+            </div>
+
+            <!-- 更新进度占位层：版本 tab 一键安装后显示（2026-08-16） -->
+            <div v-if="installing" class="settings-update-progress-mask">
+              <div class="update-progress-card">
+                <div class="update-progress-title">正在更新…</div>
+                <div class="update-progress-track"><div class="update-progress-bar" /></div>
+                <div class="update-progress-hint">更新完成后应用将自动重启</div>
               </div>
             </div>
           </div>
@@ -772,7 +778,7 @@ import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
-import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
+import { isUpdateNotifyDisabled, setUpdateNotifyDisabled, isTestUpdatesEnabled, setTestUpdatesEnabled, isPrereleaseVersionString } from '../../../composables/updatePrefs.js'
 import { useAuth } from '../../../composables/useAuth.js'
 import FreeOrderModal from './FreeOrderModal.vue'
 
@@ -1543,10 +1549,13 @@ async function saveProfile() {
 const versionLoading = ref(false)
 const versionInfo = ref({})
 const notifyDisabled = ref(isUpdateNotifyDisabled())
+// 是否接收测试版（alpha）更新：默认开启（2026-08-16）
+const testUpdates = ref(isTestUpdatesEnabled())
 // 自动下载状态：idle | downloading | done | error
 const dlState = ref('idle')
 const dlError = ref('')
 const dlWorking = ref(false)
+const installing = ref(false) // 版本 tab 一键安装后显示进度占位层（2026-08-16）
 let dlTimer = null
 
 async function loadVersion() {
@@ -1555,17 +1564,42 @@ async function loadVersion() {
     const res = await fetch('/api/update/check')
     if (res.ok) {
       const data = await res.json()
-      versionInfo.value = data.ok && data.update ? data.update : {}
+      const u = data.ok && data.update ? data.update : {}
+      // 关闭「热更新测试版本」时忽略预发布（alpha/beta/rc）更新（2026-08-16）
+      if (u.has_update && !testUpdates.value && isPrereleaseVersionString(u.latest_version)) {
+        versionInfo.value = { ...u, has_update: false }
+      } else {
+        versionInfo.value = u
+      }
     }
   } catch (e) {
     versionInfo.value = {}
   } finally {
     versionLoading.value = false
-    // 检测到新版本且未关闭提示 → 自动开始后台下载
-    if (versionInfo.value.has_update && !notifyDisabled.value && dlState.value === 'idle') {
-      startAutoDownload()
+    // 只查询后台下载状态（下载由启动时 App.vue 静默完成，版本 tab 不再触发下载，2026-08-16 用户定稿）
+    if (versionInfo.value.has_update) {
+      refreshDlStatus()
     }
   }
+}
+
+async function refreshDlStatus() {
+  try {
+    const res = await fetch('/api/update/download/status')
+    if (!res.ok) return
+    const d = await res.json()
+    if (d.state === 'done') {
+      dlState.value = 'done'
+    } else if (d.state === 'downloading') {
+      dlState.value = 'downloading'
+      pollDownloadStatus()
+    } else if (d.state === 'error') {
+      dlState.value = 'error'
+      dlError.value = d.error || '下载失败'
+    } else {
+      dlState.value = 'idle'
+    }
+  } catch { /* 轮询失败忽略 */ }
 }
 
 async function startAutoDownload() {
@@ -1622,6 +1656,8 @@ async function installUpdate() {
     const res = await fetch('/api/update/install', { method: 'POST' })
     if (res.ok) {
       dlState.value = 'done'
+      // 应用即将退出重启，显示进度占位层（2026-08-16）
+      installing.value = true
     } else {
       const d = await res.json().catch(() => ({}))
       dlError.value = d.error || '启动安装失败'
@@ -1637,6 +1673,11 @@ async function installUpdate() {
 
 function onNotifyDisabledChange() {
   setUpdateNotifyDisabled(notifyDisabled.value)
+}
+
+function onTestUpdatesChange() {
+  setTestUpdatesEnabled(testUpdates.value)
+  loadVersion() // 切换后重新检查（关闭时立即隐藏测试版更新）
 }
 
 function handleEsc(e) {
@@ -2233,6 +2274,52 @@ onUnmounted(() => {
   transition: width .3s ease;
 }
 .update-err { color: #e5484d; font-size: 12.5px; word-break: break-all; }
+.settings-update-progress-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 15, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 20030;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-update-progress-mask .update-progress-card {
+  width: 320px;
+  background: var(--app-surface);
+  border-radius: 14px;
+  padding: 24px 24px 20px;
+  box-shadow: var(--app-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.settings-update-progress-mask .update-progress-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+.settings-update-progress-mask .update-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--app-surface-3);
+  overflow: hidden;
+}
+.settings-update-progress-mask .update-progress-bar {
+  width: 40%;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--app-accent);
+  animation: settings-update-progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes settings-update-progress-slide {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+.settings-update-progress-mask .update-progress-hint {
+  font-size: 11.5px;
+  color: var(--app-text-faint);
+}
 .update-notes {
   flex: 1;
   min-height: 0;

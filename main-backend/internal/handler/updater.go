@@ -90,7 +90,12 @@ func checkUpdate() (*updateInfo, error) {
 	}
 
 	// 1) 官网 update.json（优先，国内可达）
-	rel, err := fetchRelease(siteUpdateURL)
+	// 支持 RESCENE_UPDATE_URL env 覆盖（本地/内网测试更新源，2026-08-16）
+	updateURL := siteUpdateURL
+	if v := os.Getenv("RESCENE_UPDATE_URL"); v != "" {
+		updateURL = v
+	}
+	rel, err := fetchRelease(updateURL)
 	fromSite := err == nil
 	if err != nil {
 		// 2) GitHub API 兜底
@@ -137,7 +142,10 @@ func checkUpdate() (*updateInfo, error) {
 		hasUpdate = compareVersions(AppVersion, latestNum)
 	}
 	hotPatchURL := resolveHotPatchURL(rel, fromSite)
-	hotPatch := hotPatchURL != ""
+	// 按钮文案语义（2026-08-16 用户定稿修订）：hot_patch 不只表示「走 zip 热补丁通道」，
+	// 还区分升级语义——目标版本是预发布 → 「立即更新」（测试通道热更新直更）；
+	// 目标版本是正式版 → 「一键安装」（正式安装语义，虽然机制仍是 zip 替换）。
+	hotPatch := hotPatchURL != "" && isPrereleaseVersion(latestNum)
 	info := &updateInfo{
 		HasUpdate:      hasUpdate,
 		CurrentVersion: cur,
@@ -315,7 +323,12 @@ func HandleAutoDownload(c *gin.Context) {
 
 	go func() {
 		// 热补丁：下载官网 zip → 解压提取 exe 存为待应用补丁。
-		err := downloadHotPatchZip(exeURL, dest)
+		// version 用于 zip 缓存隔离（rescene-update-<version>.zip，2026-08-16）
+		targetVersion := ""
+		if info != nil {
+			targetVersion = info.LatestVersion
+		}
+		err := downloadHotPatchZip(exeURL, dest, targetVersion)
 		updateDL.mu.Lock()
 		defer updateDL.mu.Unlock()
 		if err != nil {
@@ -330,7 +343,13 @@ func HandleAutoDownload(c *gin.Context) {
 
 // downloadHotPatchZip 下载官网 zip（内含 rescene.exe + setup.exe）→ 解压提取 rescene.exe
 // → 存为待应用热补丁（rescene-new.exe）→ 删除 zip。更新包只传 zip 一个文件（2026-08-13）。
-func downloadHotPatchZip(zipURL, dest string) error {
+//
+// ⚠️ zip 缓存按目标版本隔离（2026-08-16 修复）：
+// 旧实现用固定文件名 rescene-update.zip，本地残留（上次中断/解压前崩溃）会永远复用旧 zip
+// → 线上发了新版本但解压出的永远是旧 exe → 「更新了还是旧版本」死循环（mock 实测复现：
+// 08-14 的 alpha.3 zip 被 08-16 的 alpha.5 更新流程复用）。现在 zip 名带版本
+// （rescene-update-<version>.zip），版本变了必然重新下载；同版本重试才复用本地缓存。
+func downloadHotPatchZip(zipURL, dest, version string) error {
 	localDir := filepath.Dir(dest)
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		return err
@@ -342,7 +361,11 @@ func downloadHotPatchZip(zipURL, dest string) error {
 		updateDL.mu.Unlock()
 		return nil
 	}
-	zipPath := filepath.Join(localDir, "rescene-update.zip")
+	zipName := "rescene-update.zip"
+	if version != "" {
+		zipName = fmt.Sprintf("rescene-update-%s.zip", sanitizeVersionForFilename(version))
+	}
+	zipPath := filepath.Join(localDir, zipName)
 	fi, err := os.Stat(zipPath)
 	if err != nil || fi.Size() < 1024*1024 {
 		// 下载 zip（带进度）
@@ -455,6 +478,40 @@ func downloadHotPatchZip(zipURL, dest string) error {
 	return nil
 }
 
+// sanitizeVersionForFilename 把版本号转成安全的文件名片段（去空格/斜杠等非法字符）。
+func sanitizeVersionForFilename(v string) string {
+	re := regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+	return re.ReplaceAllString(v, "_")
+}
+
+// isPrereleaseVersion 判断版本串是否为预发布（semver 预发布标识：-alpha / -beta / -rc / -dev 等）。
+// 开发版 0.0.0-dev（未注入版本）按预发布处理（测试通道）。正式版（v0.1.2 等无后缀）返回 false。
+func isPrereleaseVersion(v string) bool {
+	if v == "" || v == "0.0.0-dev" {
+		return true
+	}
+	return regexp.MustCompile(`-[A-Za-z]`).MatchString(v)
+}
+
+// patchTargetIsStable 读补丁 exe 内嵌版本串判断升级目标是否为正式版：
+// 存在无预发布后缀的裸 semver（如 0.1.3）→ 正式版补丁（应弹窗确认）；
+// 只有 alpha/beta/rc/dev 后缀串 → 预发布补丁（应自动应用）。
+// 依据：ldflags 注入的 AppVersion 是 UTF-8 裸串；实测预发布 exe 只含 alpha 串、
+// 正式版 exe 必含裸 semver 串（versionRe 不匹配 UTF-16 版本资源里的 \x00 间隔，无干扰）。
+func patchTargetIsStable(exePath string) bool {
+	data, err := os.ReadFile(exePath)
+	if err != nil {
+		return false // 读不到按预发布处理（脚本会校验 MZ 头/大小）
+	}
+	for _, m := range versionRe.FindAll(data, -1) {
+		s := strings.ToLower(string(m))
+		if !strings.ContainsAny(s, "-+") {
+			return true // 裸 semver = 正式版
+		}
+	}
+	return false
+}
+
 func isLikelyWindowsExecutable(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
@@ -471,9 +528,19 @@ func isLikelyWindowsExecutable(path string) bool {
 }
 
 // HandleUpdateDownloadStatus 返回下载进度。
+// idle 时检查磁盘：后台已自动下载的补丁（重启后内存态丢失）→ 报 done，
+// 让版本 tab / 弹窗能识别「后台已下好」并直接提供一键安装（2026-08-16 用户定稿）。
 func HandleUpdateDownloadStatus(c *gin.Context) {
 	updateDL.mu.Lock()
 	defer updateDL.mu.Unlock()
+	if updateDL.State == "idle" {
+		localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
+		dest := filepath.Join(localDir, updateHotPatchFileName)
+		if isLikelyWindowsExecutable(dest) {
+			updateDL.State = "done"
+			updateDL.Path = dest
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"ok":          updateDL.State != "error",
 		"state":       updateDL.State,
@@ -837,19 +904,19 @@ set "OLDPID=%d"
 for /l %%%%I in (1,1,120) do (
   tasklist /fi "PID eq %%OLDPID%%" /nh 2>nul | find "%%OLDPID%%" >nul
   if errorlevel 1 goto replace
-  timeout /t 1 /nobreak >nul
+  ping -n 2 127.0.0.1 >nul
 )
 goto failed
 :replace
 for /l %%%%I in (1,1,30) do (
   copy /y "%s" "%s" >nul 2>&1
   if not errorlevel 1 goto copied
-  timeout /t 1 /nobreak >nul
+  ping -n 2 127.0.0.1 >nul
 )
 goto failed
 :failed
 if exist "%s" move /y "%s" "%s" >nul 2>&1
-start "" /b "%s"
+start "" /b "%s" -no-hotpatch
 del /q "%%~f0" >nul 2>&1
 exit /b 1
 :copied
@@ -864,12 +931,22 @@ exit /b 0
 // 上次会话下载了热补丁 exe（rescene-new.exe，用户选了「下次启动时更新」/「稍后」关闭）且
 // 未被跳过 → 本次启动直接应用：写替换脚本 → 分离启动 → 等 3 秒让脚本拉起 → 退出本进程，
 // 脚本 copy 覆盖 exe 后启动新版。返回 true 表示本进程即将退出，调用方应立即 return。
+//
+// ⚠️ 自动应用按【目标版本】判断（2026-08-16 用户定稿修订）：
+//   补丁是正式版（无预发布后缀）→ 不自动应用，补丁留原地，前端弹窗「一键安装」确认；
+//   补丁是预发布（alpha/beta/rc/dev）→ 静默自动应用（测试通道直更，不打扰）。
+// 从 exe 内嵌版本串识别目标版本（ldflags 注入的 AppVersion；预发布 exe 无裸 semver 串，
+// 正式版 exe 必含裸 semver 串——实测 .6 只有 alpha 串、0.1.3 含 0.1.3 裸串）。
 func ApplyPendingHotPatch() bool {
 	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
 	newExe := filepath.Join(localDir, updateHotPatchFileName)
 	fi, err := os.Stat(newExe)
 	if err != nil || fi.Size() < 1024*1024 {
 		return false // 没有待应用的热补丁
+	}
+	// 正式版补丁：不自动应用，留给前端弹窗确认（App.vue 检测到本地已有补丁 → showUpdate=true）
+	if patchTargetIsStable(newExe) {
+		return false
 	}
 	exePath, err := os.Executable()
 	if err != nil {

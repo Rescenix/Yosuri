@@ -18,9 +18,11 @@ var frontendAssets embed.FS
 
 func main() {
 	_ = godotenv.Load()
-	// 待应用热补丁检查：上次会话选择了「下次启动时更新」→ 启动即应用（替换 exe 后自动重启）。
-	// 必须在 wails.Run 之前：检测到待应用补丁时整个 GUI 不启动，静默完成替换。
-	if handler.ApplyPendingHotPatch() {
+	// 待应用热补丁检查：仅预发布版（alpha/beta）在启动时静默自动应用（热更新）；
+	// 正式版不自动应用，由前端弹窗「一键安装」确认后走 /api/update/install（2026-08-16 定稿）。
+	// 必须在 wails.Run 之前：预发布版检测到待应用补丁时整个 GUI 不启动，静默完成替换。
+	// -no-hotpatch：热补丁脚本 :failed 拉起旧版时跳过自动应用，避免循环（见 desktop_launch.go）。
+	if !hasNoHotPatchFlag(os.Args[1:]) && handler.ApplyPendingHotPatch() {
 		return
 	}
 	app := NewDesktopApp()

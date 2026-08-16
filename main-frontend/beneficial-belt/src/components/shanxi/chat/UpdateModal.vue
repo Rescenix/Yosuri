@@ -28,7 +28,7 @@
           type="button"
           :disabled="opening"
           @click="onInstall"
-        >{{ opening ? '正在启动…' : (update.hot_patch ? '立即更新' : '一键安装') }}</button>
+        >{{ opening ? '正在启动…' : '一键安装' }}</button>
         <button
           v-else-if="dlState === 'downloading'"
           class="update-modal-btn primary"
@@ -39,10 +39,18 @@
           v-else
           class="update-modal-btn primary"
           type="button"
-          @click="startDownload"
-        >{{ dlState === 'error' ? '重试下载' : '开始下载' }}</button>
+          disabled
+        >安装包未就绪</button>
       </div>
       <div v-if="dlState === 'error'" class="update-modal-dlerr">{{ dlError }}</div>
+    </div>
+    <!-- 更新进度占位层：点击一键安装后显示动画进度条，应用重启前有反馈（2026-08-16） -->
+    <div v-if="installing" class="update-progress-mask">
+      <div class="update-progress-card">
+        <div class="update-progress-title">正在更新…</div>
+        <div class="update-progress-track"><div class="update-progress-bar" /></div>
+        <div class="update-progress-hint">更新完成后应用将自动重启</div>
+      </div>
     </div>
   </div>
 </template>
@@ -58,6 +66,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const opening = ref(false)
+const installing = ref(false) // 一键安装后显示进度占位层（应用即将重启，2026-08-16）
 const dlState = ref('downloading') // downloading | done | error
 const dlError = ref('')
 let dlTimer = null
@@ -78,10 +87,33 @@ function onSkip() {
   emit('close')
 }
 
-// 挂载时若安装包未就绪则补齐下载（App.vue 启动时已静默预下载，此处兜底）
+// 挂载时只查询后台下载状态（下载由启动时 App.vue 静默完成，弹窗不再触发下载，2026-08-16 用户定稿）
 onMounted(() => {
-  startDownload()
+  refreshStatus()
 })
+
+async function refreshStatus() {
+  try {
+    const r = await fetch('/api/update/download/status')
+    const d = await r.json().catch(() => ({}))
+    if (d.state === 'done') {
+      dlState.value = 'done'
+    } else if (d.state === 'downloading') {
+      dlState.value = 'downloading'
+      pollStatus()
+    } else if (d.state === 'error') {
+      dlState.value = 'error'
+      dlError.value = d.error || '下载失败'
+    } else {
+      // idle：后台未下载/重启后磁盘无补丁 → 不提供下载按钮，提示未就绪
+      dlState.value = 'error'
+      dlError.value = '安装包未就绪，请下次启动时自动下载'
+    }
+  } catch {
+    dlState.value = 'error'
+    dlError.value = '安装包未就绪'
+  }
+}
 
 async function startDownload() {
   dlError.value = ''
@@ -131,7 +163,8 @@ async function onInstall() {
   try {
     const res = await fetch('/api/update/install', { method: 'POST' })
     if (res.ok) {
-      emit('close')
+      // 不关闭弹窗：显示进度占位层，应用将在 3 秒后退出并自动重启（2026-08-16）
+      installing.value = true
     } else {
       const d = await res.json().catch(() => ({}))
       dlError.value = d.error || '启动安装失败'
@@ -302,5 +335,51 @@ onUnmounted(() => {
   color: #e5484d;
   font-size: 12px;
   text-align: right;
+}
+.update-progress-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 15, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 20020;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.update-progress-card {
+  width: 320px;
+  background: var(--app-surface);
+  border-radius: 14px;
+  padding: 24px 24px 20px;
+  box-shadow: var(--app-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.update-progress-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+.update-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--app-surface-3);
+  overflow: hidden;
+}
+.update-progress-bar {
+  width: 40%;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--app-accent);
+  animation: update-progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes update-progress-slide {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+.update-progress-hint {
+  font-size: 11.5px;
+  color: var(--app-text-faint);
 }
 </style>

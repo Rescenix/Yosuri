@@ -257,7 +257,7 @@ func TestDownloadHotPatchZipExtractsNestedCaseInsensitiveExe(t *testing.T) {
 	defer srv.Close()
 
 	dest := filepath.Join(t.TempDir(), updateHotPatchFileName)
-	if err := downloadHotPatchZip(srv.URL, dest); err != nil {
+	if err := downloadHotPatchZip(srv.URL, dest, "0.1.3-test"); err != nil {
 		t.Fatalf("downloadHotPatchZip: %v", err)
 	}
 	got, err := os.ReadFile(dest)
@@ -278,6 +278,12 @@ func TestHotPatchBatKeepsPatchUntilCopySucceeds(t *testing.T) {
 	)
 	if !strings.Contains(script, "for /l %%I in (1,1,120)") {
 		t.Fatalf("hot patch script does not wait for the old process: %q", script)
+	}
+	if strings.Contains(script, "timeout /t") {
+		t.Fatalf("hot patch script uses timeout.exe — returns instantly in a no-console hidden cmd (2026-08-16 实测): %q", script)
+	}
+	if !strings.Contains(script, "ping -n 2 127.0.0.1") {
+		t.Fatalf("hot patch script lost the no-console-safe wait (ping): %q", script)
 	}
 	if !strings.Contains(script, `tasklist /fi "PID eq %OLDPID%"`) {
 		t.Fatalf("hot patch script does not check the old process id: %q", script)
@@ -300,6 +306,10 @@ func TestHotPatchBatKeepsPatchUntilCopySucceeds(t *testing.T) {
 	if strings.Contains(script, `start "" "`) {
 		t.Fatalf("hot patch script may open a visible console: %q", script)
 	}
+	// :failed 拉起旧版必须带 -no-hotpatch（防补丁恢复→旧版启动→再触发→循环，2026-08-16 实测）
+	if !strings.Contains(script, "-no-hotpatch") {
+		t.Fatalf("hot patch script :failed must relaunch old version with -no-hotpatch to break the loop: %q", script)
+	}
 }
 
 func TestClaimHotPatchIsSingleWinner(t *testing.T) {
@@ -316,5 +326,58 @@ func TestClaimHotPatchIsSingleWinner(t *testing.T) {
 	}
 	if _, err := claimHotPatch(pending); err == nil {
 		t.Fatal("second claim unexpectedly succeeded")
+	}
+}
+
+func TestIsPrereleaseVersion(t *testing.T) {
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{"0.1.3-alpha.5", true}, // 预发布测试版
+		{"0.1.3-beta.1", true},  // beta
+		{"0.1.3-rc.1", true},    // rc
+		{"0.0.0-dev", true},     // 未注入版本（开发版）按测试通道
+		{"", true},              // 空版本按测试通道
+		{"0.1.2", false},        // 正式版
+		{"0.1.3", false},        // 正式版
+		{"1.0.0", false},        // 正式版
+	}
+	for _, c := range cases {
+		if got := isPrereleaseVersion(c.version); got != c.want {
+			t.Errorf("isPrereleaseVersion(%q) = %v, want %v", c.version, got, c.want)
+		}
+	}
+}
+
+// TestPatchTargetIsStable 自动应用按【目标版本】判断：正式版补丁弹窗、预发布补丁直更
+// （2026-08-16 用户定稿修订，从 exe 内嵌版本串识别）。
+func TestPatchTargetIsStable(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	// 预发布 exe（只有 alpha 串）→ 预发布补丁 → 自动应用（false）
+	if patchTargetIsStable(write("pre.exe", "version 0.1.3-alpha.6 build")) {
+		t.Fatal("alpha 串应判预发布（自动应用）")
+	}
+	// 正式版 exe（裸 semver）→ 正式版补丁 → 弹窗（true）
+	if !patchTargetIsStable(write("stable.exe", "version 0.1.3 build")) {
+		t.Fatal("裸 semver 应判正式版（弹窗确认）")
+	}
+	// 正式版 exe 可能残留旧 alpha 串（前端 JS）→ 有裸 semver 即正式版
+	if !patchTargetIsStable(write("mixed.exe", "0.1.3-alpha.3 x 0.1.3")) {
+		t.Fatal("混合串含裸 semver 应判正式版")
+	}
+	// 无版本串/文件不存在 → 按预发布处理
+	if patchTargetIsStable(write("none.exe", "no version here")) {
+		t.Fatal("无版本串应判预发布")
+	}
+	if patchTargetIsStable(filepath.Join(dir, "missing.exe")) {
+		t.Fatal("文件不存在应判预发布")
 	}
 }
