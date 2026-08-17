@@ -188,7 +188,9 @@ func nativeGrep(args map[string]any) (nativeToolResult, error) {
 
 	var argFiles []string
 	for ext := range exts {
-		argFiles = append(argFiles, "*"+ext)
+		// 用 rg 自身的 -g glob（跨平台安全）：Windows 不展开 *.go 通配符，
+		// 传字面量当文件名会 IO error 123（2026-08-16 实测修复）
+		argFiles = append(argFiles, "-g", "*"+ext)
 	}
 	if len(argFiles) > 0 {
 		cmd.Args = append(cmd.Args, argFiles...)

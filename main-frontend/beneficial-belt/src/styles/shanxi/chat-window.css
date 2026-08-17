@@ -2222,48 +2222,14 @@ min-height: 90px !important;
   padding: 0;
   gap: 0;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--app-surface);
-  box-shadow: 0 6px 24px rgba(27, 26, 24, 0.08);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: none;
+  transition: border-color 0.2s ease;
 }
-/* 聚焦：蓝色边框 + 柔和蓝光晕（就算下面的流光动画降级，静态态也是蓝的不会露红） */
-.input-wrapper:focus-within { border-color: var(--app-accent); box-shadow: 0 8px 28px color-mix(in srgb, var(--app-accent) 18%, transparent); }
+/* 聚焦：主题色边框，与上方 todo/提问条连成一块时不打架 */
+.input-wrapper:focus-within { border-color: var(--app-accent); }
 
-/* 流光边框：一圈旋转的锥形渐变，用 mask 抠成只剩描边的环，聚焦时淡入并转起来。
-   --ring-angle 借助 @property 声明成 <angle> 类型，浏览器才能对它做连续插值动画，
-   否则自定义属性只能离散跳变、转不起来 */
-@property --ring-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-.input-wrapper::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: conic-gradient(from var(--ring-angle),
-    transparent 0deg, transparent 190deg,
-    var(--app-accent-soft) 250deg, var(--app-accent) 300deg,
-    var(--app-accent-soft) 340deg, transparent 360deg);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-  z-index: 2;
-}
-.input-wrapper:focus-within::before {
-  opacity: 1;
-  animation: input-border-flow 2.6s linear infinite;
-}
-@keyframes input-border-flow {
-  to { --ring-angle: 360deg; }
-}
 .input-row { display: flex; align-items: flex-end; gap: 4px; padding: 0 12px 0 16px; }
 
 /* 附件 chip 行本体样式挪进 AttachmentChipRow.vue（输入框上方/用户气泡两处共用）；
@@ -2721,20 +2687,16 @@ min-height: 90px !important;
   min-height: 0;
   overflow: hidden;
   background: var(--app-surface);   /* 白色面（暗色自动跟随主题） */
-  border-radius: 16px;
-  border: 1px solid var(--app-border);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.45) inset,
-    0 10px 32px rgba(0, 0, 0, 0.10),
-    0 3px 8px rgba(0, 0, 0, 0.06);
-  transition: width 0.18s ease, box-shadow 0.2s ease;
+  /* 展开/折叠统一「无圆角、无悬浮」竖条（图2 Gemini 风）：
+     去圆角/边框/阴影；负 margin 抵消 .chat-body-row 的 padding(8px)，顶部左侧无缝贴边 */
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  margin-top: -8px;
+  margin-left: -8px;
+  margin-bottom: -8px;
+  transition: width 0.18s ease;
   position: relative;
-}
-.chat-window.expanded .chat-body-row:hover .gem-sidebar {
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.45) inset,
-    0 14px 40px rgba(0, 0, 0, 0.13),
-    0 4px 10px rgba(0, 0, 0, 0.07);
 }
 /* 展开态右侧拖拽条：仿右侧 tool-panel 的 resize handle */
 .gem-sidebar-resize-handle {
@@ -2763,7 +2725,7 @@ min-height: 90px !important;
   display: flex;
   flex-direction: column;
   background: var(--app-surface);
-  border-radius: 14px;
+  border-radius: 0;   /* 侧栏已无圆角，覆盖面板同步去圆角 */
   z-index: 10;
   overflow: hidden;
 }
@@ -4160,13 +4122,14 @@ img.gem-rail-avatar {
 /* Agent TODO：克制的任务轨迹，信息层级向 IDE/终端工作台靠拢。 */
 .todo-bar {
   position: relative;
-  margin-bottom: 6px;
+  margin-bottom: -1px;
   padding: 9px 14px 11px;
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--app-surface);
   box-shadow: none;
+  transition: opacity 0.18s ease;
   animation: todo-bar-in 0.16s ease-out;
 }
 /* 全部完成后整条淡出（配合 <Transition name="todo-fade">） */
@@ -4176,7 +4139,7 @@ img.gem-rail-avatar {
 .todo-fade-leave-to {
   opacity: 0;
   transform: translateY(6px);
-  margin-bottom: 0;
+  margin-bottom: -1px;
 }
 .todo-bar-head { display: flex; align-items: center; gap: 5px; min-height: 18px; }
 .todo-bar-chevron,
@@ -4338,13 +4301,13 @@ img.gem-rail-avatar {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 8px;
+  margin: 0 0 -1px;
   padding: 7px 10px 7px 8px;
   background: var(--app-surface);
-  border: 1px solid var(--app-accent-soft);
+  border: 1px solid var(--app-border);
   border-left: 3px solid var(--app-accent);
-  border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  border-radius: 0;
+  box-shadow: none;
   animation: approval-bar-in 0.16s ease-out;
   box-sizing: border-box;
   max-width: 100%;
@@ -4455,12 +4418,12 @@ img.gem-rail-avatar {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 8px;
+  margin: 0 0 -1px;
   padding: 7px 10px;
   background: var(--app-surface);
   border: 1px solid var(--app-border);
-  border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  border-radius: 0;
+  box-shadow: none;
   animation: approval-bar-in 0.16s ease-out;
   box-sizing: border-box;
   max-width: 100%;

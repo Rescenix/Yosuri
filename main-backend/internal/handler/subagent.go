@@ -12,12 +12,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"backend/internal/ai/core"
 )
 
 const subAgentMaxRounds = 6
 const subAgentResultMaxChars = 8000
+const subAgentMaxDepth = 3 // 代理嵌套深度上限：主(0)→子(1)→孙(2)→重孙(3 禁派)（2026-08-16 加，对齐 Codex 孙代理能力）
 
 const subAgentUsagePrompt = `
 ━━━ 子代理（调研代理） ━━━
@@ -61,6 +63,9 @@ var subAgentNativeTools = map[string]bool{
 	"view_image":     true,
 	"memory_search":  true,
 	"workdir_read":   true,
+	// 2026-08-16：子代理可派孙代理（对齐 Codex 嵌套能力）；只读白名单不变，
+	// 孙代理同样只有只读工具，递归深度受 subAgentMaxDepth 限制
+	"dispatch_agent": true,
 }
 
 // 子代理可用的 MCP server 白名单：给用户主动配置的外部扩展保留兼容。
@@ -112,9 +117,14 @@ func subAgentToolsWire() []map[string]any {
 // 走完整模型路由链（与主 Agent 同一条链，失败秒切）。
 // id 用主 Agent 的 tool_call ID，前端据此把生命周期事件挂到对应的后台任务卡片；
 // emit 把 subagent_start/progress/done 实时写进 SSE 流（可为 nil）。
-func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON string, emit func(string, map[string]any)) (string, error) {
+// depth 为嵌套深度（主=0，子=1，孙=2）；超过 subAgentMaxDepth 禁止再派。
+func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON string, emit func(string, map[string]any), depth ...int) (string, error) {
 	if emit == nil {
 		emit = func(string, map[string]any) {}
+	}
+	d := 0
+	if len(depth) > 0 {
+		d = depth[0]
 	}
 	var args struct {
 		Task    string `json:"task"`
@@ -124,7 +134,7 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 		return "", fmt.Errorf("dispatch_agent 需要 task 参数")
 	}
 
-	emit("subagent_start", map[string]any{"id": id, "task": args.Task})
+	emit("subagent_start", map[string]any{"id": id, "task": args.Task, "depth": d})
 
 	userMsg := args.Task
 	if args.Context != "" {
@@ -132,10 +142,11 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 	}
 
 	msgs := []map[string]any{
-		{"role": "system", "content": fmt.Sprintf(`你是一个调研子代理，负责独立完成一个只读调研子任务。
-用最少的工具调用拿到答案，然后输出简明结论（要点式，不要铺陈）——你的输出会直接回给主 Agent 当调研结果用，token 是成本。
+		{"role": "system", "content": fmt.Sprintf(`你是一个调研子代理（深度 %d），负责独立完成一个只读调研子任务。
+用最少的工具调用拿到答案，然后输出简明结论（要点式，不要铺陈）——你的输出会直接回给上级 Agent 当调研结果用，token 是成本。
 你只有只读工具：读文件用 read_file，列目录用 list_directory，全文检索用 grep。
-不要尝试修改任何文件。工作目录是 %s。`, core.GetProjectRoot())},
+若调研范围过大，可以继续用 dispatch_agent 派发孙代理拆分任务（嵌套上限 3 层），孙代理同样只有只读工具。
+不要尝试修改任何文件。工作目录是 %s。`, d, core.GetProjectRoot())},
 		{"role": "user", "content": userMsg},
 	}
 	tools := subAgentToolsWire()
@@ -173,9 +184,44 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 		}
 		msgs = append(msgs, map[string]any{"role": "assistant", "content": content, "tool_calls": dsCalls})
 
-		for _, tc := range calls {
+		// 孙代理：dispatch_agent 递归派发，与其他工具并行（子代理自己也是 goroutine 里跑的，这里再并行）
+		type agentCall struct {
+			tc  core.ToolCall
+			idx int
+		}
+		var agentCalls []agentCall
+		var agentWG sync.WaitGroup
+		agentOuts := make(map[int]string)
+		for i, tc := range calls {
+			if tc.Function.Name == "dispatch_agent" {
+				agentCalls = append(agentCalls, agentCall{tc, i})
+			}
+		}
+		if len(agentCalls) > 0 {
+			agentWG.Add(len(agentCalls))
+			for _, ac := range agentCalls {
+				go func(ac agentCall) {
+					defer agentWG.Done()
+					if d >= subAgentMaxDepth {
+						agentOuts[ac.idx] = fmt.Sprintf("嵌套深度已达上限(%d)，孙代理不再派发", subAgentMaxDepth)
+						return
+					}
+					res, err := runSubAgent(ctx, backends, ac.tc.ID, ac.tc.Function.Arguments, emit, d+1)
+					if err != nil {
+						agentOuts[ac.idx] = "孙代理执行失败: " + err.Error()
+						return
+					}
+					agentOuts[ac.idx] = res
+				}(ac)
+			}
+			agentWG.Wait()
+		}
+
+		for i, tc := range calls {
 			var out string
-			if subAgentNativeTools[tc.Function.Name] {
+			if tc.Function.Name == "dispatch_agent" {
+				out = agentOuts[i]
+			} else if subAgentNativeTools[tc.Function.Name] {
 				if res, err := callNativeTool(ctx, tc.Function.Name, tc.Function.Arguments); err != nil {
 					out = "工具执行失败: " + err.Error()
 				} else {

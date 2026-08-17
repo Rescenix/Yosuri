@@ -276,6 +276,17 @@ async function switchSession(id) {
 }
 
   let lastScrollTop = 0
+  // 输入框上方悬浮条（todo / askuser）随上滑淡出：距底部越远越透明（仿 Hermes）。
+  // scroll 事件里直接算，离底部 0→FADE_RANGE 线性降到保底值，滚回底部恢复 1。
+  const inputBarFade = ref(1)
+  const INPUT_BAR_FADE_RANGE = 160 // px：滚出这么远就淡到底
+  const INPUT_BAR_FADE_MIN = 0.15 // 保底透明度：完全消失会让区域突然空掉，留一点存在感
+  function updateInputBarFade(el) {
+    const maxScroll = el.scrollHeight - el.clientHeight
+    const dist = Math.max(0, maxScroll - el.scrollTop)
+    const t = Math.min(1, dist / INPUT_BAR_FADE_RANGE)
+    inputBarFade.value = 1 - t * (1 - INPUT_BAR_FADE_MIN)
+  }
   onMounted(async () => {
     if (window.location.pathname.startsWith('/chat')) {
       isOpen.value = true
@@ -303,6 +314,7 @@ async function switchSession(id) {
   watch(messagesContainer, (el) => {
     if (!el) return
     lastScrollTop = el.scrollTop
+    updateInputBarFade(el)
     el.addEventListener('scroll', () => {
       const cur = el.scrollTop
       const maxScroll = el.scrollHeight - el.clientHeight
@@ -314,6 +326,7 @@ async function switchSession(id) {
         userScrolledUp.value = true
       }
       lastScrollTop = cur
+      updateInputBarFade(el)
     }, { passive: true })
   }, { immediate: true })
 
@@ -386,7 +399,7 @@ async function switchSession(id) {
     isOpen, isExpanded, userInput, messages, sessionId,
     isLoggedIn, debugTemp, debugTopP, debugReasoning, debugMaxTokens, balance,
     welcomeMessage, welcomeLoading, currentStatus, statusDotColor,
-    messagesContainer, chatInputRef, userScrolledUp,
+    messagesContainer, chatInputRef, userScrolledUp, inputBarFade,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     backgroundTaskList,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,

@@ -11,6 +11,9 @@ import (
 )
 
 func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
+	// 全局会话存储引用，供 session_search 等工具使用
+	globalSessionStore = sessionStore
+
 	// 全局 CORS 处理
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -260,6 +263,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/v1/models", HandleAggregateModels)
 	// 聚合 API 健康度可视化（设置面板「聚合 API」tab）
 	r.GET("/api/aggregate/health", HandleAggregateHealth)
+	// 聚合 API 暴露模型配置（official 官方遴选 / custom 用户自定义，issue #5）
+	r.GET("/api/aggregate/config", HandleGetAggregateConfig)
+	r.PUT("/api/aggregate/config", HandlePutAggregateConfig)
 
 	// 共享池（公益免费）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
 	r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)

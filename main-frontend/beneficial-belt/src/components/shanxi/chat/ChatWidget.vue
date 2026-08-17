@@ -86,11 +86,13 @@
                                 :completed-sessions="completedSessions"
                                 :question-session="questionSession"
                                 :notif-count="notifCount"
+                                :current-workdir="currentWorkDir.name"
                       @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
             @delete-session="deleteSession"
             @delete-sessions="deleteSessions"
+            @delete-project="deleteProject"
             @open-settings="showSettings = true"
             @open-search="openSearchPanel"
                         @open-plugins="openPluginsMarket"
@@ -428,7 +430,7 @@
                    后端推 todo 事件 → todoState.items 全量覆盖。全部完成后延迟 3.5s 淡出，
                    让用户先看到 N/N 再整条消失；中途出现新/未完成项则取消淡出。 -->
               <Transition name="todo-fade">
-                <div v-if="todoState.items.length" class="todo-bar">
+                <div v-if="todoState.items.length" class="todo-bar" :style="inputBarFadeStyle">
                   <div class="todo-bar-head">
                     <Icon icon="mdi:chevron-down" width="14" class="todo-bar-chevron" />
                     <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
@@ -457,6 +459,7 @@
               <QuestionModal
                 v-if="questionState.pending"
                 :question="questionState.pending"
+                :style="inputBarFadeStyle"
                 @answer="answerQuestion"
               />
 
@@ -1187,6 +1190,18 @@ onMounted(loadSessionList)
 function selectSession(id) {
   switchSession(id)
   loadSessionList()
+  // 切换会话时工作目录跟随该会话所属项目：会话有明确归属且不在当前项目时才切，
+  // recordSession:false 只切 cwd 不动会话归属（会话本来就属于目标项目）
+  followSessionWorkdir(id)
+}
+async function followSessionWorkdir(id) {
+  const target = sessionList.value.find(s => s.id === id)
+  const wdName = target?.workdir || ''
+  if (!wdName) return
+  if (currentWorkDir.value?.name === wdName) return
+  const project = projects.value.find(p => p.name === wdName)
+  if (!project) return
+  await selectWorkDir({ name: project.name, path: project.path }, { recordSession: false })
 }
 // ==================== 工作目录 → 会话分组 ====================
 const WD_MAP_KEY = 'shanxi_session_workdir'
@@ -1235,6 +1250,7 @@ function getSessionWorkdir(sid) {
 }
 function recordSessionWorkdir(sid) {
   if (!sid) return
+  // 与 newSession 同口径：只认显式创建过的项目，未选择不自动归组
   const wd = findProjectByPath(currentWorkDir.value?.path)?.name || ''
   if (!wd) return
   const m = loadWorkdirMapping()
@@ -1261,6 +1277,8 @@ migrateLegacyWorkdirMapping()
 
 function newSession() {
   const id = 'sess_' + Date.now().toString(36)
+  // 只有显式创建过的项目才归组；后端启动目录等未选目录不自动挂名（避免凭空冒出 re0 之类），
+  // 新建对话保持未分组（home 空态），用户显式选择目录后由 selectWorkDir 归入项目
   const workdir = findProjectByPath(currentWorkDir.value?.path)?.name || ''
   sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0, workdir }, ...sessionList.value]
   recordSessionWorkdir(id)
@@ -1338,6 +1356,33 @@ async function deleteSessions(ids) {
   if (ids.includes(activeSession.value)) {
     const next = sessionList.value.find(s => !ids.includes(s.id))?.id || ('sess_' + Date.now().toString(36))
     switchSession(next)
+  }
+  await loadSessionList()
+}
+// 删除整个项目：其下所有会话 + 项目实体 + workdir 归属映射 + 置顶记录
+async function deleteProject(name) {
+  const ids = sessionList.value.filter(s => s.workdir === name).map(s => s.id)
+  if (ids.length) await deleteSessions(ids)
+  // 项目实体：从 projects 移除（workdirMap 靠它撑起空项目分组，不删的话侧栏会留下空壳）
+  projects.value = projects.value.filter(p => p.name !== name)
+  saveProjects()
+  // 归属映射：清掉所有指向该项目的会话记录
+  const m = loadWorkdirMapping()
+  let changed = false
+  for (const [sid, wd] of Object.entries(m)) {
+    if (wd === name) { delete m[sid]; changed = true }
+  }
+  if (changed) saveWorkdirMapping(m)
+  // 置顶记录
+  try {
+    const pinned = JSON.parse(localStorage.getItem('shanxi_pinned_projects') || '[]')
+    const next = pinned.filter(p => p !== name)
+    if (next.length !== pinned.length) localStorage.setItem('shanxi_pinned_projects', JSON.stringify(next))
+  } catch {}
+  // 若删除的正是当前工作目录，重置为空（避免工作目录条指着已删除项目）
+  if (currentWorkDir.value?.name === name) {
+    currentWorkDir.value = { name: '', path: '' }
+    saveWorkDirState()
   }
   await loadSessionList()
 }
@@ -1903,10 +1948,24 @@ function toggleWorkDirMenu() {
 
 function openSystemWorkDirPicker() {
   showWorkDirMenu.value = false
-  // 清空旧值后，同一个目录也能再次触发 change。
-  if (workDirFolderInputRef.value) {
-    workDirFolderInputRef.value.value = ''
-    workDirFolderInputRef.value.click()
+  // 系统原生文件夹选择器（后端 PowerShell IFileOpenDialog）：
+  // 浏览器拿不到本地绝对路径，file input(webkitdirectory) 只能给目录名，
+  // 选仓库根目录时会被后端 Join(GitRepoRoot, name) 拼错路径而失败（400 目录不存在）。
+  // 原生选择器一次拿到绝对路径，这才是正路（workdir_handler.go 注释原话）。
+  systemPickWorkdir()
+}
+async function systemPickWorkdir() {
+  try {
+    const res = await fetch('/api/workdir/pick', { method: 'POST' })
+    const data = await res.json()
+    if (!data || data.cancelled) return
+    if (!data.path) {
+      showGitToast('无法识别所选目录')
+      return
+    }
+    await selectWorkDir({ name: data.name || data.path, path: data.path })
+  } catch (e) {
+    showGitToast(e.message || '选择目录失败')
   }
 }
 async function onSystemWorkDirSelected(event) {
@@ -1921,9 +1980,15 @@ async function onSystemWorkDirSelected(event) {
   }
 
   // Electron/WebView 会暴露 File.path，可保留系统选择器返回的完整路径；
-  // 普通浏览器出于安全原因只提供目录名，此时仍可选择仓库根目录下的子目录。
-  let path = folderName
+  // 普通浏览器出于安全原因只提供目录名——此时目录名不可信（后端会按
+  // GitRepoRoot 相对路径解析），必须改走系统原生选择器拿绝对路径。
   const nativeFilePath = files[0].path
+  if (!nativeFilePath) {
+    showGitToast('浏览器拿不到本地路径，改用系统选择器')
+    await systemPickWorkdir()
+    return
+  }
+  let path = folderName
   if (nativeFilePath && relativeParts.length > 1) {
     const normalized = nativeFilePath.replace(/\\/g, '/')
     const relativeTail = relativeParts.slice(1).join('/')
@@ -1933,7 +1998,7 @@ async function onSystemWorkDirSelected(event) {
   }
   await selectWorkDir({ name: folderName, path })
 }
-async function selectWorkDir(dir) {
+async function selectWorkDir(dir, opts = {}) {
   if (workDirSwitching.value) return
   workDirSwitching.value = true
   try {
@@ -1953,7 +2018,9 @@ async function selectWorkDir(dir) {
     // 去重后塞到最前面，最多保留 6 条最近记录
     workDirRecents.value = [resolved, ...workDirRecents.value.filter(d => normalizeProjectPath(d.path) !== normalizeProjectPath(resolved.path))].slice(0, 6)
     // 切换目录就是把当前会话归入该项目；旧实现只切了 agent cwd，侧栏不会更新。
-    recordSessionWorkdir(activeSession.value)
+    // 创建项目（opts.recordSession=false）只切 cwd 不动会话归属——当前对话仍留在原项目，
+    // 否则会话会被凭空塞进刚建的空项目。
+    if (opts.recordSession !== false) recordSessionWorkdir(activeSession.value)
     saveWorkDirState()
     showWorkDirMenu.value = false
     showGitToast(`已切换工作目录: ${resolved.name}`)
@@ -1971,7 +2038,9 @@ async function createProject({ name, sourceFolder }) {
     showGitToast('项目名称或源文件夹无效')
     return
   }
-  await selectWorkDir({ name: projectName, path: sourceFolder.path })
+  // 创建项目 = 新建实体 + 切 cwd，但不动当前会话归属（recordSession: false）：
+  // 会话属于它原来所在的项目，等用户在新项目里新建对话才归入新项目
+  await selectWorkDir({ name: projectName, path: sourceFolder.path }, { recordSession: false })
 }
 async function openFolderBrowser() {
   workDirMenuView.value = 'browse'
@@ -2704,7 +2773,7 @@ const {
   isOpen, isExpanded, userInput, messages, sessionId,
   isLoggedIn, debugTemp, debugTopP, debugReasoning, debugMaxTokens, balance,
   currentStatus, statusDotColor,
-  messagesContainer, chatInputRef, userScrolledUp,
+  messagesContainer, chatInputRef, userScrolledUp, inputBarFade,
   forceScrollToBottom, adjustInputHeight, switchSession,
   onStreamUpdate,
   backgroundTaskList,
@@ -2719,6 +2788,16 @@ const {
 const todoDoneCount = computed(() =>
   (todoState.items || []).filter(it => it.status === 'done').length
 )
+
+// 上滑时 todo/askuser 随滚动淡出（仿 Hermes）：透明度来自 useChatWidget 的 inputBarFade。
+// 在底部（≈1）时不写 opacity，避免内联样式压住 todo 全部完成时的 todo-fade 淡出动画；
+// 淡出到阈值以下时禁点击，防止半透明的选项条被误触。
+const inputBarFadeStyle = computed(() => {
+  const s = {}
+  if (inputBarFade.value < 0.999) s.opacity = inputBarFade.value
+  if (inputBarFade.value < 0.5) s.pointerEvents = 'none'
+  return s
+})
 
 // 全部完成后延迟淡出：先让用户看到 N/N，再整条消失（仿 Hermes 收尾）。
 // agent 每次 update_todo 会全量覆盖 items，所以中途插入新/未完成项要取消定时。

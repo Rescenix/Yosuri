@@ -6,7 +6,6 @@
       <span v-if="question.multi" class="question-bar-hint">可多选</span>
       <button class="question-bar-close" type="button" title="跳过" aria-label="跳过此问题" @click="onCancel">×</button>
     </div>
-
     <div v-if="question.options.length" class="question-bar-options">
       <button
         v-for="(opt, i) in question.options"
@@ -118,24 +117,27 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <style scoped>
+/* ask_user 提问条：与 todo-bar 同一套「简洁白色卡片」语言——直角、细灰边、
+   无主题色、无投影；margin-bottom:-1px 让边框和下方输入框重叠合并成一条线，
+   视觉上连成一块。 */
 .question-bar {
   display: grid;
   gap: 8px;
-  margin: 0 0 8px;
-  padding: 10px 12px;
+  margin: 0 0 -1px;
+  padding: 9px 14px 11px;
   box-sizing: border-box;
   max-width: 100%;
   color: var(--app-text);
   background: var(--app-surface);
-  border: 1px solid var(--app-accent-soft);
-  border-left: 3px solid var(--app-accent);
-  border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+  box-shadow: none;
+  transition: opacity 0.18s ease;
   animation: question-bar-in 0.14s ease-out;
 }
 .question-error {
   padding: 7px 9px;
-  border-radius: 7px;
+  border-radius: 0;
   background: color-mix(in srgb, #d94834 8%, transparent);
   color: #c43d32;
   font-size: 12px;
@@ -152,14 +154,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .question-bar-mark {
   display: grid;
-  flex: 0 0 22px;
-  height: 22px;
+  flex: 0 0 18px;
+  height: 18px;
   place-items: center;
-  border-radius: 999px;
-  color: var(--app-accent);
-  background: var(--app-accent-soft);
+  border-radius: 0;
+  color: var(--app-text-faint);
+  background: transparent;
   font-size: 12px;
   font-weight: 750;
+  line-height: 1;
 }
 .question-bar-title {
   min-width: 0;
@@ -179,7 +182,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   color: var(--app-text-faint);
   background: transparent;
   font-size: 18px;
@@ -197,7 +200,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .question-option,
 .question-submit {
   min-height: 30px;
-  border-radius: 8px;
+  border-radius: 0;
   cursor: pointer;
   font: inherit;
 }
@@ -210,8 +213,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   max-width: 100%;
   box-sizing: border-box;
   padding: 4px 9px 4px 5px;
-  color: var(--app-text-soft);
-  background: var(--app-surface-2);
+  color: var(--app-text);
+  background: var(--app-surface);
   border: 1px solid var(--app-border);
   font-size: 12px;
   transition: border-color .14s ease, background .14s ease, color .14s ease;
@@ -226,7 +229,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .question-option:hover,
 .question-option.checked {
-  color: var(--app-text);
+  color: var(--app-accent);
   border-color: var(--app-accent);
   background: var(--app-accent-soft);
 }
@@ -237,8 +240,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   padding: 0 3px;
   place-items: center;
   box-sizing: border-box;
-  border-radius: 5px;
-  color: var(--app-accent);
+  border-radius: 0;
+  color: var(--app-text-soft);
   background: var(--app-surface);
   border: 1px solid var(--app-border-soft);
   font-size: 10px;
@@ -261,10 +264,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   box-sizing: border-box;
   padding: 4px 9px;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: 0;
   outline: none;
   color: var(--app-text);
-  background: var(--app-surface-2);
+  background: var(--app-surface);
   font: inherit;
   font-size: 12px;
 }

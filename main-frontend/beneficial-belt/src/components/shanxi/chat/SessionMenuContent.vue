@@ -92,9 +92,15 @@
         </div>
         <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder">
           <div class="smc-folder-head" @click="toggleGroup(grp.name)">
+            <span v-if="bulkMode" class="smc-bulk-check smc-group-check" @click.stop="toggleGroupSelect(grp.name)">
+              <Icon :icon="groupAllSelected(grp.name) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
+            </span>
             <span class="smc-folder-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
             <span class="smc-folder-name">{{ grp.name }}</span>
+            <button v-if="bulkMode" class="smc-group-delete" type="button" title="删除项目（含其下所有会话）" @click.stop="onDeleteProject(grp.name)">
+              <Icon icon="mdi:trash-can-outline" width="15" />
+            </button>
           </div>
           <div v-if="isGroupOpen(grp.name)" class="smc-folder-children">
             <div
@@ -362,9 +368,10 @@ const props = defineProps({
   completedSessions: { type: Set, default: () => new Set() },
   questionSession: { type: String, default: '' },
     fill: { type: Boolean, default: false },
-    notifCount: { type: Number, default: 0 }
+    notifCount: { type: Number, default: 0 },
+    currentWorkdir: { type: String, default: '' }
   })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks', 'open-mail'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'delete-project', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks', 'open-mail'])
 
 // ========== 搜索框 ==========
 const searchInputRef = ref(null)
@@ -380,9 +387,13 @@ const projectNameInput = ref(null)
 
 function openCreateProject() {
   showCreateProject.value = true
-  newProjectName.value = ''
+  // 默认预填当前选中项目名——多数场景是在当前项目基础上新建/改名，少打几个字
+  newProjectName.value = props.currentWorkdir || ''
   selectedSourceFolder.value = null
-  nextTick(() => projectNameInput.value?.focus())
+  nextTick(() => {
+    projectNameInput.value?.focus()
+    projectNameInput.value?.select()
+  })
 }
 function closeCreateProject() { showCreateProject.value = false }
 async function pickSourceFolder() {
@@ -752,6 +763,27 @@ function onBulkDelete() {
   emit('delete-sessions', ids)
   toggleBulkMode()
 }
+// 项目级批量选择：勾选/取消该项目下的全部会话（配合批量删除删会话）
+function toggleGroupSelect(name) {
+  const grp = taskGroups.value.find(g => g.name === name)
+  if (!grp || !grp.sessions.length) return
+  const ids = grp.sessions.map(s => s.id)
+  const set = new Set(bulkSelected.value)
+  if (groupAllSelected(name)) ids.forEach(id => set.delete(id))
+  else ids.forEach(id => set.add(id))
+  bulkSelected.value = set
+}
+function groupAllSelected(name) {
+  const grp = taskGroups.value.find(g => g.name === name)
+  if (!grp || !grp.sessions.length) return false
+  return grp.sessions.every(s => bulkSelected.value.has(s.id))
+}
+// 删除整个项目：项目实体 + 其下所有会话 + 归属映射（由 ChatWidget 落地）
+function onDeleteProject(name) {
+  if (!window.confirm(`删除项目「${name}」？其下所有会话将一并删除，无法恢复。`)) return
+  emit('delete-project', name)
+  toggleBulkMode()
+}
 function onDocClick() { openMenuId.value = null; showUserMenu.value = false }
 
 onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick); window.addEventListener('auth-change', refreshLoginState) })
@@ -946,6 +978,27 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   justify-content: center;
   cursor: pointer;
   color: var(--app-text-soft);
+}
+/* 项目头删除按钮：bulkMode 下显示，悬停变红 */
+.smc-group-delete {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-text-faint);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.smc-group-delete:hover {
+  background: rgba(217, 72, 52, 0.12);
+  color: #d94834;
 }
 
 /* ===== Folder ===== */

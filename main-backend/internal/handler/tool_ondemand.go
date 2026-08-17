@@ -71,6 +71,8 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// web_search：联网搜索（Firecrawl）。默认开通——模型自主判断要不要搜，
 		// 不需要时零开销；需要时直接调，无需 load_tools。
 		webSearchToolDef,
+		// session_search：搜索所有历史对话记录，让 agent 回忆过去说过什么、做过什么。
+		sessionSearchToolDef,
 	}
 }
 

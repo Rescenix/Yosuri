@@ -60,10 +60,35 @@ func loadInitialProjectRoot() string {
 	if root := os.Getenv("SHANXI_PROJECT_ROOT"); root != "" {
 		return root
 	}
+	// 兜底：从进程启动目录向上找仓库根（.git 所在），不再硬编码开发机路径。
+	// 后端从仓库任意子目录启动都能落到正确的仓库根。
+	if cwd, err := os.Getwd(); err == nil {
+		if root := findGitRootFrom(cwd); root != "" {
+			return root
+		}
+	}
 	if runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
 		return "/data/data/com.termux/files/home"
 	}
-	return "C:\\Pro2026\\re0"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return home
+}
+
+// findGitRootFrom 从 dir 开始逐级向上找 .git 目录，找到返回该目录，否则空串。
+func findGitRootFrom(dir string) string {
+	for {
+		if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil && info.IsDir() {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
 
 // GetProjectRoot 返回当前生效的工作目录——所有工具调用（内置 read_file/list_dir

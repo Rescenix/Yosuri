@@ -39,6 +39,13 @@ type SessionStore struct {
 	path string
 	// 用户显式设置的会话标题；未设置时前端用首条用户消息当标题。
 	sessionTitles map[string]string
+	// ── 最近对话快速索引（Redis ZSET 语义，纯内存）──
+	// recentIndex: 会话 ID 按最近更新时间降序（类似 ZREVRANGE 0 -1）
+	// updatedAt:   sessionID → 最后活动时间（ZSET 的 score）
+	// 每次 Append/Upsert/Fork/Delete 增量维护，List() 与 SearchSessions()
+	// 直接按序取，不再全量 sort；崩溃后由 loadFromFile 从消息重建。
+	recentIndex []string
+	updatedAt   map[string]time.Time
 
 	fileMu sync.Mutex // 串行化本地文件写入，避免并发重写互相踩踏
 }
@@ -129,6 +136,9 @@ type legacySessionFileData struct {
 	LastCompressIndexes map[string]int                `json:"last_compress_indexes"`
 }
 
+// 全局会话存储引用，供 session_search 等工具访问
+var globalSessionStore *SessionStore
+
 // NewSessionStore 创建一个绑定到指定域（如 ChatSessionsDomain）的会话存储。
 // 启动时从该域对应的本地文件加载已有会话；如果该文件不存在且发现更早期的
 // 单文件旧版格式（sessions.json，PrismD 迁移前遗留），会做一次性迁移。
@@ -139,6 +149,7 @@ func NewSessionStore(domain string) *SessionStore {
 		approvalRules:       make(map[string]map[string]bool),
 		forkMeta:            make(map[string]forkInfo),
 		sessionTitles:       make(map[string]string),
+		updatedAt:           make(map[string]time.Time),
 		domain:              domain,
 		path:                sessionsFilePath(domain),
 	}
@@ -163,6 +174,91 @@ func sessionsFilePath(domain string) string {
 		dataDir = filepath.Join(homeDir, "rescene_data")
 	}
 	return filepath.Join(dataDir, "sessions_"+domain+".json")
+}
+
+// ── 最近对话快速索引（Redis ZSET 语义）──────────────────────────────
+// 调用约定：所有方法都要求调用方已持有写锁（s.mu.Lock），内部不再加锁。
+
+// rebuildRecentIndex 从 sessions 全量重建索引（启动加载后调用一次）。
+// 排序键 = 会话最后一条消息的时间戳；空会话（惰性建表）时间零值沉底。
+func (s *SessionStore) rebuildRecentIndex() {
+	s.recentIndex = s.recentIndex[:0]
+	s.updatedAt = make(map[string]time.Time, len(s.sessions))
+	for sid, msgs := range s.sessions {
+		if len(msgs) == 0 {
+			continue
+		}
+		last := msgs[len(msgs)-1].Timestamp
+		if last.IsZero() {
+			// 旧数据迁移常见：时间戳零值。用首条时间兜底，还为零就跳过索引
+			for _, m := range msgs {
+				if !m.Timestamp.IsZero() {
+					last = m.Timestamp
+					break
+				}
+			}
+		}
+		if last.IsZero() {
+			continue
+		}
+		s.updatedAt[sid] = last
+		s.recentIndex = append(s.recentIndex, sid)
+	}
+	sort.SliceStable(s.recentIndex, func(i, j int) bool {
+		return s.updatedAt[s.recentIndex[i]].After(s.updatedAt[s.recentIndex[j]])
+	})
+}
+
+// touchRecent 将会话的最近活动时间更新为 t 并移到正确位置（最新在前）。
+// 新会话直接插入；已存在的先移除旧位再按时间二分插入。
+func (s *SessionStore) touchRecent(sid string, t time.Time) {
+	if t.IsZero() {
+		t = time.Now()
+	}
+	old, existed := s.updatedAt[sid]
+	s.updatedAt[sid] = t
+	if !existed {
+		// 二分找到第一个时间 ≤ t 的位置（降序），插到它前面
+		pos := sort.Search(len(s.recentIndex), func(i int) bool {
+			return s.updatedAt[s.recentIndex[i]].Before(t) || s.updatedAt[s.recentIndex[i]].Equal(t)
+		})
+		s.recentIndex = append(s.recentIndex, "")
+		copy(s.recentIndex[pos+1:], s.recentIndex[pos:])
+		s.recentIndex[pos] = sid
+		return
+	}
+	if old.Equal(t) {
+		return // 时间没变，位置不动
+	}
+	// 移除旧位置
+	pos := -1
+	for i, id := range s.recentIndex {
+		if id == sid {
+			pos = i
+			break
+		}
+	}
+	if pos >= 0 {
+		s.recentIndex = append(s.recentIndex[:pos], s.recentIndex[pos+1:]...)
+	}
+	// 插入新位置（时间只会往后走，一般直接到最前）
+	npos := sort.Search(len(s.recentIndex), func(i int) bool {
+		return s.updatedAt[s.recentIndex[i]].Before(t) || s.updatedAt[s.recentIndex[i]].Equal(t)
+	})
+	s.recentIndex = append(s.recentIndex, "")
+	copy(s.recentIndex[npos+1:], s.recentIndex[npos:])
+	s.recentIndex[npos] = sid
+}
+
+// removeRecent 从索引中移除一个会话（Delete 时调用）。
+func (s *SessionStore) removeRecent(sid string) {
+	delete(s.updatedAt, sid)
+	for i, id := range s.recentIndex {
+		if id == sid {
+			s.recentIndex = append(s.recentIndex[:i], s.recentIndex[i+1:]...)
+			return
+		}
+	}
 }
 
 // loadFromFile 从本地文件加载该域的全部会话到内存
@@ -197,6 +293,8 @@ func (s *SessionStore) loadFromFile() error {
 			s.sessionTitles[sid] = rec.SessionTitle
 		}
 	}
+	// 加载完重建最近对话索引（ZSET：sessionID → 最后消息时间，降序）
+	s.rebuildRecentIndex()
 	return nil
 }
 
@@ -230,6 +328,7 @@ func (s *SessionStore) migrateLegacyJSONFile() {
 		s.sessions[sid] = fromPersistedMessages(msgs)
 		s.lastCompressIndexes[sid] = legacy.LastCompressIndexes[sid]
 	}
+	s.rebuildRecentIndex()
 	s.mu.Unlock()
 
 	if err := s.persistAll(); err != nil {
@@ -302,6 +401,8 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 		msg.Timestamp = time.Now()
 	}
 	s.sessions[sessionID] = append(s.sessions[sessionID], msg)
+	// 最近对话索引：这条消息是新的最后活动
+	s.touchRecent(sessionID, msg.Timestamp)
 	s.mu.Unlock()
 
 	if err := s.persistAll(); err != nil {
@@ -360,6 +461,8 @@ func (s *SessionStore) UpsertWorkflowPair(sessionID, workflowID string, user, as
 	filtered[first] = user
 	filtered[first+1] = assistant
 	s.sessions[sessionID] = filtered
+	// 最近对话索引：工作流收尾即最后活动
+	s.touchRecent(sessionID, now)
 	s.mu.Unlock()
 
 	// 工作流已经进入终态，停止接口会等待这里完成后再返回；同步落盘确保用户随后
@@ -416,6 +519,8 @@ func (s *SessionStore) Fork(parentID string, keep int) (string, bool) {
 	if parentRules := s.approvalRules[parentID]; len(parentRules) > 0 {
 		s.approvalRules[newID] = maps.Clone(parentRules)
 	}
+	// 最近对话索引：新分支立即进入索引（时间 = 分叉时刻，最新）
+	s.touchRecent(newID, time.Now())
 	s.mu.Unlock()
 
 	// 同步落盘（不像 Append 起 goroutine）：分叉正是"原分支得以保全"这个承诺
@@ -435,6 +540,8 @@ func (s *SessionStore) Delete(sessionID string) {
 	delete(s.lastCompressIndexes, sessionID)
 	delete(s.approvalRules, sessionID)
 	delete(s.forkMeta, sessionID)
+	// 最近对话索引：删除即移除
+	s.removeRecent(sessionID)
 	for childID, fm := range s.forkMeta {
 		if fm.ParentID == sessionID {
 			// 只清掉父指针（ParentID 空即为根），ForkIndex 要留着：
@@ -565,30 +672,235 @@ func (s *SessionStore) AllSessions() map[string][]DSMessage {
 	return out
 }
 
-// List 列出所有会话摘要
-func (s *SessionStore) List() []SessionInfo {
+// SearchResult 一条会话搜索匹配结果
+type SearchResult struct {
+	SessionID string    `json:"session_id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	Role      string    `json:"role"`
+	Timestamp time.Time `json:"timestamp"`
+	Model     string    `json:"model,omitempty"`
+}
+
+// sessionTitleLocked 返回会话标题（调用方需持有读锁）。
+func (s *SessionStore) sessionTitleLocked(sid string) string {
+	if t, ok := s.sessionTitles[sid]; ok && t != "" {
+		return t
+	}
+	msgs := s.sessions[sid]
+	fm := s.forkMeta[sid]
+	start := min(fm.ForkIndex, len(msgs))
+	for _, m := range msgs[start:] {
+		if m.Role == "user" && strings.TrimSpace(m.Content) != "" {
+			return strings.TrimSpace(m.Content)
+		}
+	}
+	return "新对话"
+}
+
+// SearchSessions 在全部会话中搜索文本，返回匹配的消息片段。
+// 按最近对话索引顺序扫描（最新的先命中），query 大小写不敏感，
+// limit 限制返回条数（默认 10，最大 50）。
+func (s *SessionStore) SearchSessions(query string, limit int) []SearchResult {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return nil
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var infos []SessionInfo
-	for id, msgs := range s.sessions {
+
+	var results []SearchResult
+	for _, sid := range s.recentIndex {
+		msgs := s.sessions[sid]
+		title := s.sessionTitleLocked(sid)
+		if len([]rune(title)) > 40 {
+			title = string([]rune(title)[:40]) + "…"
+		}
+		for _, msg := range msgs {
+			content := msg.Content
+			if content == "" {
+				continue
+			}
+			if !strings.Contains(strings.ToLower(content), q) {
+				continue
+			}
+			// 截取匹配片段：前后各取 60 字
+			idx := strings.Index(strings.ToLower(content), q)
+			start := idx - 60
+			if start < 0 {
+				start = 0
+			}
+			end := idx + len(q) + 60
+			if end > len(content) {
+				end = len(content)
+			}
+			snippet := content[start:end]
+			// 如果不是从头开始，加 …
+			if start > 0 {
+				snippet = "…" + snippet
+			}
+			if end < len(content) {
+				snippet = snippet + "…"
+			}
+
+			results = append(results, SearchResult{
+				SessionID: sid,
+				Title:     title,
+				Content:   snippet,
+				Role:      msg.Role,
+				Timestamp: msg.Timestamp,
+				Model:     msg.Model,
+			})
+			if len(results) >= limit {
+				return results
+			}
+		}
+	}
+	return results
+}
+
+// RecentSessionItem 最近对话浏览条目：会话摘要 + 最近几条消息内容
+// （Hermes session_search 的 BROWSE 模式：无关键词直接看最近聊了什么）。
+type RecentSessionItem struct {
+	SessionID string    `json:"session_id"`
+	Title     string    `json:"title"`
+	UpdatedAt time.Time `json:"updated_at"`
+	MessageCount int    `json:"message_count"`
+	// Recent 最近几条消息（按时间正序，最多 preview 条）
+	Recent []SearchResult `json:"recent"`
+}
+
+// RecentSessions 返回最近对话列表（按更新时间降序），每个会话带最近 preview 条消息。
+// 直接走 recentIndex 有序表，O(limit) 出结果，不扫描全量会话。
+func (s *SessionStore) RecentSessions(limit, preview int) []RecentSessionItem {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	if preview <= 0 {
+		preview = 3
+	}
+	if preview > 10 {
+		preview = 10
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	out := make([]RecentSessionItem, 0, limit)
+	for _, sid := range s.recentIndex {
+		msgs := s.sessions[sid]
 		if len(msgs) == 0 {
 			continue
 		}
-		// 分支标题从分岐点之后开始找：分支共享父会话的前缀，从头扫的话
-		// 所有分支的标题会跟父会话一模一样，侧边栏根本分不出谁是谁。
+		title := s.sessionTitleLocked(sid)
+		if len([]rune(title)) > 40 {
+			title = string([]rune(title)[:40]) + "…"
+		}
+		item := RecentSessionItem{
+			SessionID:    sid,
+			Title:        title,
+			UpdatedAt:    s.updatedAt[sid],
+			MessageCount: len(msgs),
+		}
+		// 取最近 preview 条非空消息
+		start := len(msgs) - preview
+		if start < 0 {
+			start = 0
+		}
+		for _, m := range msgs[start:] {
+			if strings.TrimSpace(m.Content) == "" {
+				continue
+			}
+			content := m.Content
+			if len([]rune(content)) > 120 {
+				content = string([]rune(content)[:120]) + "…"
+			}
+			item.Recent = append(item.Recent, SearchResult{
+				SessionID: sid,
+				Title:     title,
+				Content:   content,
+				Role:      m.Role,
+				Timestamp: m.Timestamp,
+				Model:     m.Model,
+			})
+		}
+		out = append(out, item)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+// ReadSession 读取单个会话的最近 limit 条消息（Hermes session_search 的 READ 模式）。
+// 会话不存在返回 nil。
+func (s *SessionStore) ReadSession(sessionID string, limit int) []SearchResult {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	msgs := s.sessions[sessionID]
+	if len(msgs) == 0 {
+		return nil
+	}
+	title := s.sessionTitleLocked(sessionID)
+	if len([]rune(title)) > 40 {
+		title = string([]rune(title)[:40]) + "…"
+	}
+	start := len(msgs) - limit
+	if start < 0 {
+		start = 0
+	}
+	out := make([]SearchResult, 0, len(msgs)-start)
+	for _, m := range msgs[start:] {
+		if strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		out = append(out, SearchResult{
+			SessionID: sessionID,
+			Title:     title,
+			Content:   m.Content,
+			Role:      m.Role,
+			Timestamp: m.Timestamp,
+			Model:     m.Model,
+		})
+	}
+	return out
+}
+
+// List 列出所有会话摘要（按最近对话索引顺序，无需全量排序）
+func (s *SessionStore) List() []SessionInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	infos := make([]SessionInfo, 0, len(s.recentIndex))
+	for _, id := range s.recentIndex {
+		msgs := s.sessions[id]
+		if len(msgs) == 0 {
+			continue
+		}
 		fm := s.forkMeta[id]
-		// 钳制是防手改文件；标题派生在 SessionTitle 里处理
-		title := s.SessionTitle(id)
 		infos = append(infos, SessionInfo{
 			ID:        id,
-			Title:     title,
+			Title:     s.sessionTitleLocked(id),
 			UpdatedAt: msgs[len(msgs)-1].Timestamp,
 			ParentID:  fm.ParentID,
 			ForkIndex: fm.ForkIndex,
 		})
 	}
-	// map 遍历顺序随机，"最近会话"列表不排序的话每次刷新顺序都在跳——按更新时间降序
-	sort.Slice(infos, func(i, j int) bool { return infos[i].UpdatedAt.After(infos[j].UpdatedAt) })
 	return infos
 }
 

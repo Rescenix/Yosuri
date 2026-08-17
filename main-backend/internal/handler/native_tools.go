@@ -161,7 +161,7 @@ func isNativeOnDemandTool(name string) bool {
 }
 
 func isNativeExecutableTool(name string) bool {
-	return name == "apply_patch" || name == "web_search" || isNativeOnDemandTool(name)
+	return name == "apply_patch" || name == "web_search" || name == "session_search" || isNativeOnDemandTool(name)
 }
 
 func allOnDemandToolDefs() []core.ToolDefinition {
@@ -195,6 +195,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
 		"workdir_read", "workdir_write", "workdir_append":
 		return callNativeMemoryTool(name, argsJSON)
+	case "session_search":
+		return callNativeSessionSearch(argsJSON)
 	case "computer_screenshot", "computer_mouse_move", "computer_mouse_click",
 		"computer_mouse_drag", "computer_type", "computer_key",
 		"computer_screen_size", "computer_scroll":

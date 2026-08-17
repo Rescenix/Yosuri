@@ -987,9 +987,16 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 	maybeRequestApproval := func(tc core.ToolCall) bool {
 		name := tc.Function.Name
 		if mode == "yolo" {
-			// Yolo 畅通无阻：危险工具与越界访问一律不拦——但不可逆文件操作
-			// （删除/移动/重命名）除外，必须进下方审批，避免 agent 全自动误删。
-			if !isIrreversibleToolCall(name, tc.Function.Arguments) {
+			// Yolo 畅通无阻：危险工具与越界访问一律不拦——但三类操作除外，
+			// 必须进下方审批，避免 agent 全自动毁掉不可挽回的东西：
+			//  1. 不可逆文件操作（删除/移动/重命名）
+			//  2. 敏感文件整体覆写（README/依赖清单/.env 等已存在文件被
+			//     write_file 覆盖——2026-08-16 README 被模板覆盖实锤）
+			//  3. 破坏性 shell 命令（git checkout -- / restore / reset --hard /
+			//     rm -rf 等，一条命令就能抹掉工作区全部未提交改动）
+			if !isIrreversibleToolCall(name, tc.Function.Arguments) &&
+				!isSensitiveOverwrite(name, tc.Function.Arguments) &&
+				!isDestructiveToolCall(name, tc.Function.Arguments) {
 				return true
 			}
 		}

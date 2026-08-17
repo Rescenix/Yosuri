@@ -88,6 +88,119 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 	}
 }
 
+// session_search 工具：三种调用形态（对应 Hermes session_search 的
+// SEARCH / BROWSE / READ 模式）：
+//   - query 非空            → 全文搜索所有历史对话，返回匹配片段
+//   - query 空（不传）      → 列出最近对话（标题 + 最近几条消息），先看聊了什么
+//   - session_id 非空       → 读取指定会话的最近消息内容
+var sessionSearchToolDef = core.ToolDefinition{
+	Type: "function",
+	Function: core.ToolFunctionDetail{
+		Name: "session_search",
+		Description: "查看历史对话，三种用法：①query 传关键词→搜索所有历史对话找到匹配消息；" +
+			"②不传参数（或 query 为空）→直接列出最近对话的标题和最近几条消息，先看最近聊了什么；" +
+			"③传 session_id→读取该会话的最近消息内容。当你想不起过去说过什么、做过什么，" +
+			"或需要参考之前的讨论结果时调用。",
+		Parameters: core.ToolParameters{
+			Type: "object",
+			Properties: map[string]core.ToolProperty{
+				"query":      {Type: "string", Description: "搜索关键词，大小写不敏感；不传则浏览最近对话"},
+				"session_id": {Type: "string", Description: "要读取的会话 ID；传了就读该会话的最近消息"},
+				"limit":      {Type: "integer", Description: "最大返回条数，默认 10，最大 50"},
+			},
+		},
+	},
+}
+
+func callNativeSessionSearch(argsJSON string) (nativeToolResult, error) {
+	var args struct {
+		Query     string `json:"query"`
+		SessionID string `json:"session_id"`
+		Limit     int    `json:"limit"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return nativeToolResult{}, fmt.Errorf("参数解析失败: %w", err)
+	}
+	if args.Limit <= 0 {
+		args.Limit = 10
+	}
+	if args.Limit > 50 {
+		args.Limit = 50
+	}
+
+	store := globalSessionStore
+	if store == nil {
+		return nativeToolResult{Text: "会话存储尚未初始化，无法查看。"}, nil
+	}
+
+	// 形态③：读指定会话
+	if args.SessionID != "" {
+		msgs := store.ReadSession(args.SessionID, args.Limit)
+		if len(msgs) == 0 {
+			return nativeToolResult{Text: fmt.Sprintf("会话 %s 不存在或没有消息。", args.SessionID)}, nil
+		}
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("会话「%s」（%s，共显示 %d 条最近消息）：\n\n",
+			msgs[0].Title, args.SessionID, len(msgs)))
+		for _, m := range msgs {
+			roleLabel := "用户"
+			if m.Role == "assistant" {
+				roleLabel = "助手"
+			}
+			ts := m.Timestamp.Format("01-02 15:04")
+			b.WriteString(fmt.Sprintf("【%s %s】%s\n\n", roleLabel, ts, m.Content))
+		}
+		return nativeToolResult{Text: b.String()}, nil
+	}
+
+	// 形态②：浏览最近对话
+	if strings.TrimSpace(args.Query) == "" {
+		items := store.RecentSessions(args.Limit, 3)
+		if len(items) == 0 {
+			return nativeToolResult{Text: "还没有任何历史对话。"}, nil
+		}
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("最近的 %d 个对话（按最后活动排序）：\n\n", len(items)))
+		for i, it := range items {
+			ts := it.UpdatedAt.Format("01-02 15:04")
+			b.WriteString(fmt.Sprintf("【%d】%s（%s，%d 条消息）session_id=%s\n", i+1, it.Title, ts, it.MessageCount, it.SessionID))
+			for _, m := range it.Recent {
+				roleLabel := "用户"
+				if m.Role == "assistant" {
+					roleLabel = "助手"
+				}
+				b.WriteString(fmt.Sprintf("   · %s：%s\n", roleLabel, m.Content))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("想读某个对话的完整内容，用 session_id 参数再调一次本工具。")
+		return nativeToolResult{Text: b.String()}, nil
+	}
+
+	// 形态①：关键词搜索
+	results := store.SearchSessions(args.Query, args.Limit)
+	if len(results) == 0 {
+		return nativeToolResult{Text: fmt.Sprintf("未找到与 %q 相关的历史对话。", args.Query)}, nil
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("在历史对话中找到 %d 条与 %q 相关的消息：\n\n", len(results), args.Query))
+	for i, r := range results {
+		ts := r.Timestamp.Format("01-02 15:04")
+		roleLabel := "用户"
+		if r.Role == "assistant" {
+			roleLabel = "助手"
+		}
+		b.WriteString(fmt.Sprintf("【%d】会话：%s（session_id=%s）\n", i+1, r.Title, r.SessionID))
+		b.WriteString(fmt.Sprintf("   时间：%s ｜ 角色：%s", ts, roleLabel))
+		if r.Model != "" {
+			b.WriteString(fmt.Sprintf(" ｜ 模型：%s", r.Model))
+		}
+		b.WriteString(fmt.Sprintf("\n   内容：%s\n\n", r.Content))
+	}
+	return nativeToolResult{Text: b.String()}, nil
+}
+
 // memoryFileForCluster 把 memory_append 的 cluster 分类映射到 memorydir 文件名。
 // 大小写不敏感 + 中文别名；未知名归到 memories.md，避免每个新分类都建一个文件。
 func memoryFileForCluster(cluster string) string {

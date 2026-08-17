@@ -341,6 +341,44 @@
               </div>
               <div class="agg-api-tip">已聚合 {{ freeModels.length + customModels.length }} 个模型（免费池 + 自定义）。model 填 <code class="agg-api-code">auto</code> 自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。</div>
 
+                            <!-- ===== 暴露模型配置（官方遴选 / 用户自定义，issue #5）===== -->
+                            <div class="agg-api-card" style="margin-top:10px">
+                              <div class="agg-api-row">
+                                <span class="agg-api-label">暴露模型</span>
+                                <div class="agg-mode-toggle">
+                                  <button type="button" :class="{ on: aggMode === 'official' }" @click="aggMode = 'official'">官方遴选</button>
+                                  <button type="button" :class="{ on: aggMode === 'custom' }" @click="aggMode = 'custom'">用户自定义</button>
+                                </div>
+                                <button class="agg-api-copy" type="button" :disabled="aggCfgSaving" @click="saveAggConfig()">{{ aggCfgSaving ? '保存中…' : '保存' }}</button>
+                              </div>
+                              <div class="agg-api-tip">官方遴选 = Rescene 精选能跑 Agent 的模型（DeepSeek V4 系 + 快又聪明），默认推荐；用户自定义 = 自己勾选任意模型进聚合端口，不受精选限制。</div>
+                              <template v-if="aggMode === 'custom'">
+                                <input v-model="aggCfgSearch" class="agg-cfg-search" placeholder="搜索模型名 / 厂商…" />
+                                <div class="agg-cfg-list">
+                                  <div v-for="g in aggCfgGroups" :key="g.vendor" class="agg-cfg-group">
+                                    <div class="agg-cfg-group-head">
+                                      <button type="button" class="agg-cfg-toggle" @click="toggleAggGroup(g.vendor)">
+                                        <span class="agg-cfg-chevron" :class="{ open: aggOpen[g.vendor] }">▸</span>
+                                        <span class="agg-cfg-vendor">{{ g.vendor }}</span>
+                                        <span class="agg-cfg-count">{{ g.items.length }}</span>
+                                      </button>
+                                      <button type="button" class="agg-cfg-select-all" @click="toggleAggGroupAll(g.vendor)">{{ aggGroupAllState(g.vendor) ? '取消全选' : '全选' }}</button>
+                                    </div>
+                                    <div v-if="aggOpen[g.vendor]" class="agg-cfg-group-body">
+                                      <label v-for="c in g.items" :key="c.id" class="agg-cfg-item" :class="{ off: !c.key_set }">
+                                        <input type="checkbox" :value="c.id" v-model="aggModelIDs" :disabled="!c.key_set" />
+                                        <span class="agg-cfg-name" :title="c.model">{{ c.name }}</span>
+                                        <span class="agg-cfg-model">{{ c.model }}</span>
+                                        <span v-if="!c.chat" class="agg-cfg-nochat">非对话</span>
+                                        <span v-if="!c.key_set" class="agg-cfg-nokey">未配 key</span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <div v-if="!aggCfgGroups.length" class="settings-empty">没有匹配的模型。</div>
+                                </div>
+                              </template>
+                            </div>
+
                             <!-- ===== 聚合池健康度可视化 ===== -->
                             <div class="agg-health-card">
                               <div class="agg-health-head">
@@ -717,6 +755,10 @@
                   disabled
                 >安装包未就绪</button>
                 <span v-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
+              </div>
+
+              <!-- 偏好开关：总是显示（不依赖是否有更新，2026-08-16 修复） -->
+              <div class="profile-actions" style="margin-top: 10px; align-items: center;">
                 <label class="param-switch" title="开启后接收测试版（alpha/beta）更新并热更新直更；关闭后只接收正式版更新">
                   <input type="checkbox" v-model="testUpdates" @change="onTestUpdatesChange" />
                   <span class="param-switch-track"></span>
@@ -773,7 +815,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
 
@@ -945,10 +987,87 @@ function latencyText(m) {
   if (!m.real_ms) return '未探测'
   return m.real_ms >= 1000 ? (m.real_ms / 1000).toFixed(1) + 's' : m.real_ms + 'ms'
 }
-// 切到聚合 API tab 时自动加载健康度
+// 切到聚合 API tab 时自动加载健康度 + 暴露模型配置
 watch(activeTab, (t) => {
-  if (t === 'aggapi' && !aggHealthLoaded.value) loadAggHealth()
+  if (t === 'aggapi') {
+    if (!aggHealthLoaded.value) loadAggHealth()
+    loadAggConfig()
+  }
 })
+
+// ===== 聚合 API 暴露模型配置（官方遴选 / 用户自定义，issue #5）=====
+const aggMode = ref('official')
+const aggModelIDs = ref([])
+const aggCandidates = ref([])
+const aggCfgSaving = ref(false)
+const aggCfgSearch = ref('')
+const aggOpen = reactive({}) // vendor → 是否展开（默认全展开）
+// 候选按 vendor 分组（后端已做 free 过滤：有 free 后缀只显示 free，没有才全显示）
+const aggCfgGroups = computed(() => {
+  const q = aggCfgSearch.value.trim().toLowerCase()
+  const list = q
+    ? aggCandidates.value.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.model || '').toLowerCase().includes(q) ||
+        (c.vendor || '').toLowerCase().includes(q))
+    : aggCandidates.value
+  const groups = []
+  const byVendor = {}
+  for (const c of list) {
+    if (!byVendor[c.vendor]) { byVendor[c.vendor] = []; groups.push({ vendor: c.vendor, items: byVendor[c.vendor] }) }
+    byVendor[c.vendor].push(c)
+  }
+  // 搜索时自动展开所有有匹配的组
+  if (q) { for (const g of groups) aggOpen[g.vendor] = true }
+  return groups
+})
+function toggleAggGroup(vendor) {
+  aggOpen[vendor] = !aggOpen[vendor]
+}
+// 组全选：组内所有「可勾选」的模型加入 / 移出勾选（key_set=true 且 chat=true）
+function toggleAggGroupAll(vendor) {
+  const g = aggCfgGroups.value.find(x => x.vendor === vendor)
+  if (!g) return
+  const ids = g.items.filter(c => c.key_set && c.chat).map(c => c.id)
+  if (!ids.length) return
+  const sel = new Set(aggModelIDs.value)
+  const allSelected = ids.every(id => sel.has(id))
+  if (allSelected) ids.forEach(id => sel.delete(id))
+  else ids.forEach(id => sel.add(id))
+  aggModelIDs.value = [...sel]
+}
+// 组是否已全部选中（决定按钮显示「取消全选」还是「全选」）
+function aggGroupAllState(vendor) {
+  const g = aggCfgGroups.value.find(x => x.vendor === vendor)
+  if (!g) return false
+  const ids = g.items.filter(c => c.key_set && c.chat).map(c => c.id)
+  return ids.length > 0 && ids.every(id => aggModelIDs.value.includes(id))
+}
+async function loadAggConfig() {
+  try {
+    const res = await fetch('/api/aggregate/config')
+    if (!res.ok) return
+    const data = await res.json()
+    aggMode.value = data.mode === 'custom' ? 'custom' : 'official'
+    aggModelIDs.value = data.model_ids || []
+    aggCandidates.value = data.candidates || []
+    // 默认全部展开
+    for (const c of aggCandidates.value) aggOpen[c.vendor] = true
+  } catch (e) { /* 旧后端无此接口时静默保持默认 */ }
+}
+async function saveAggConfig() {
+  aggCfgSaving.value = true
+  try {
+    await fetch('/api/aggregate/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: aggMode.value, model_ids: aggModelIDs.value }),
+    })
+    if (aggHealthLoaded.value) loadAggHealth() // 暴露范围变了，刷新健康度
+  } finally {
+    aggCfgSaving.value = false
+  }
+}
 
 // 自定义 API 解锁弹窗
 const showCustomLockModal = ref(false)
@@ -1954,6 +2073,32 @@ onUnmounted(() => {
 .agg-api-copy { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
 .agg-api-copy:hover { background: var(--app-surface-3); }
 .agg-api-tip { font-size: 10.5px; color: var(--app-text-faint); margin-top: 6px; line-height: 1.5; }
+/* ===== 聚合 API 暴露模型配置（官方遴选 / 用户自定义，issue #5）===== */
+.agg-mode-toggle { display: inline-flex; gap: 4px; flex: 1; }
+.agg-mode-toggle button { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.agg-mode-toggle button.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
+.agg-cfg-search { width: 100%; box-sizing: border-box; margin-top: 8px; font-size: 11.5px; color: var(--app-text); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 5px 9px; outline: none; }
+.agg-cfg-list { max-height: 260px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--app-border-soft); border-radius: 8px; padding: 4px; }
+.agg-cfg-group { border-bottom: 1px solid var(--app-border-soft); }
+.agg-cfg-group:last-child { border-bottom: none; }
+.agg-cfg-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0; }
+.agg-cfg-toggle { display: flex; align-items: center; gap: 8px; padding: 7px 8px; background: none; border: none; cursor: pointer; text-align: left; border-radius: 6px; flex: 1; }
+.agg-cfg-toggle:hover { background: var(--app-surface-2); }
+.agg-cfg-select-all { font-size: 10px; color: var(--app-accent); background: none; border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; margin-right: 4px; }
+.agg-cfg-select-all:hover { background: var(--app-surface-2); }
+.agg-cfg-chevron { font-size: 9px; color: var(--app-text-faint); transition: transform 0.15s; flex: none; }
+.agg-cfg-chevron.open { transform: rotate(90deg); }
+.agg-cfg-count { font-size: 9.5px; color: var(--app-text-faint); background: var(--app-surface-2); border-radius: 8px; padding: 0 6px; flex: none; }
+.agg-cfg-group-body { padding: 2px 0 4px 18px; }
+.agg-cfg-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
+.agg-cfg-item:hover { background: var(--app-surface-2); }
+.agg-cfg-item.off { opacity: 0.45; cursor: not-allowed; }
+.agg-cfg-item input { flex: none; }
+.agg-cfg-vendor { font-size: 10.5px; color: var(--app-accent); flex: none; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agg-cfg-name { font-size: 11.5px; color: var(--app-text); flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agg-cfg-model { font-size: 10px; color: var(--app-text-faint); font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agg-cfg-nokey { font-size: 9.5px; color: #d97b4a; flex: none; }
+.agg-cfg-nochat { font-size: 9px; color: var(--app-text-faint); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 4px; padding: 0 4px; flex: none; }
 /* ===== 聚合池健康度 ===== */
 .agg-health-card { margin-top: 14px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 12px; }
 .agg-health-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }

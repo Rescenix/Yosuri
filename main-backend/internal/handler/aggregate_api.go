@@ -31,6 +31,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -432,8 +433,10 @@ func aggregateForwardSSE(c *gin.Context, b RouterBackend, resp *http.Response) {
 }
 
 // HandleAggregateModels GET /v1/models —— 列出可用模型（OpenAI 格式）。
-// 只提供 DeepSeek 系模型（核心卖点）+ auto 智能路由入口，其他模型一律不暴露，
-// 外部工具（Hermes 等）看到的列表干净聚焦。
+// 暴露范围由配置决定（~/rescene_data/aggregate_config.json）：
+//   - official（默认）：官方遴选 = DS V4 系 + auto + 「快又聪明」精选，干净聚焦
+//   - custom：用户自定义 = 只暴露用户勾选的模型 ID（目录 / auto_ 发现 / 自定义提供方）
+// auto 智能路由入口永远在列表里。
 func HandleAggregateModels(c *gin.Context) {
 	if !aggregateAuth(c) {
 		return
@@ -444,65 +447,14 @@ func HandleAggregateModels(c *gin.Context) {
 		"id": "auto", "object": "model", "owned_by": "Rescene", "created": 0,
 	})
 	seen := map[string]bool{"auto": true}
-	// 目录条目：只保留可用的 DeepSeek（V4 系 + 非付费墙）
-	for _, f := range freeModelCatalog {
-		if f.Disabled || !isUsableAggModel(f.Model, f.Vendor) {
+	for _, m := range aggregateExposedModels() {
+		if seen[m.ID] {
 			continue
 		}
 		data = append(data, map[string]any{
-			"id": f.ID, "object": "model", "owned_by": f.Vendor, "created": 0,
+			"id": m.ID, "object": "model", "owned_by": m.Vendor, "created": 0,
 		})
-		seen[f.ID] = true
-	}
-	// 自动发现的免费池模型：只保留可用的 DeepSeek（V4 系 + 非付费墙）。
-	// 内部 ID 是 auto_<vendor>_<hex>（hex 编码真实模型名，防 / : 特殊字符进 URL），
-	// 对外解码成 auto_<vendor>_<真实模型名>，外部工具看到可读名字，选它后原样
-	// 填回 model 字段，路由侧 resolveAutoReadable 反解回原始条目精确路由。
-	// 不可用的（探活信号 0 / 确定性 401/403/404 淘汰）不输出；恢复自动拉起。
-	for _, dm := range discoveredFreeModels("") {
-		if seen[dm.ID] || !isUsableAggModel(dm.Model, dm.Vendor) {
-			continue
-		}
-		// 目录已有同 endpoint 同模型（如魔搭 Flash-0731 目录+auto_ 双入口）→ 不重复暴露（2026-08-13）
-		if catalogHasModel(dm.Model, dm.Endpoint) {
-			continue
-		}
-		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
-			continue
-		}
-		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 {
-			continue // 探活确认不可用：沉底不输出
-		}
-		id := autoReadableID(dm.ID)
-		if seen[id] {
-			continue
-		}
-		data = append(data, map[string]any{
-			"id": id, "object": "model", "owned_by": dm.Vendor, "created": 0,
-		})
-		seen[dm.ID] = true
-		seen[id] = true
-	}
-	// 自定义提供方模型：只保留可用的 DeepSeek（V4 系 + 非付费墙）
-	if entries, err := loadModelConfigs(""); err == nil {
-		for _, e := range entries {
-			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
-				continue
-			}
-			for _, m := range configuredProviderModels(e) {
-				if !isUsableAggModel(m.ID, e.Name) {
-					continue
-				}
-				id := customModelSelectionID(e.ID, m.ID)
-				if seen[id] {
-					continue
-				}
-				data = append(data, map[string]any{
-					"id": id, "object": "model", "owned_by": e.Name, "created": 0,
-				})
-				seen[id] = true
-			}
-		}
+		seen[m.ID] = true
 	}
 	c.JSON(http.StatusOK, gin.H{"object": "list", "data": data})
 }
@@ -662,60 +614,12 @@ func HandleAggregateHealth(c *gin.Context) {
 		autoChain = append(autoChain, m)
 	}
 
-	// 2. 全部暴露模型（与 /v1/models 同过滤规则：目录免费池 + 自动发现 + 自定义）
-	seen := map[string]bool{}
+	// 2. 全部暴露模型（与 /v1/models 同规则：official 官方遴选 / custom 用户自定义）
 	models := make([]aggHealthModel, 0, 32)
-	for _, f := range freeModelCatalog {
-		if f.Disabled || !isUsableAggModel(f.Model, f.Vendor) {
-			continue
-		}
-		m := aggModelHealth(RouterBackend{ID: f.ID, Name: f.Name, BaseURL: f.Endpoint, Model: f.Model, Keyless: f.Keyless})
-		m.Vendor = f.Vendor
-		models = append(models, m)
-		seen[f.Model+"|"+f.Endpoint] = true
-	}
-	for _, dm := range discoveredFreeModels("") {
-		if !isUsableAggModel(dm.Model, dm.Vendor) || isAutoModelDisabled(dm.Endpoint, dm.Model) {
-			continue
-		}
-		if catalogHasModel(dm.Model, dm.Endpoint) {
-			continue // 目录已暴露，不重复
-		}
-		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 {
-			continue // 探活确认不可用：沉底不输出
-		}
-		id := autoReadableID(dm.ID)
-		if seen[id] {
-			continue
-		}
-		m := aggModelHealth(RouterBackend{ID: id, Name: dm.Model, BaseURL: dm.Endpoint, Model: dm.Model})
-		m.Vendor = dm.Vendor
-		models = append(models, m)
-		seen[id] = true
-	}
-	if entries, err := loadModelConfigs(""); err == nil {
-		for _, e := range entries {
-			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
-				continue
-			}
-			for _, mm := range configuredProviderModels(e) {
-				if !isUsableAggModel(mm.ID, e.Name) {
-					continue
-				}
-				id := customModelSelectionID(e.ID, mm.ID)
-				if seen[id] {
-					continue
-				}
-				cname := strings.TrimSpace(mm.Name)
-				if cname == "" {
-					cname = mm.ID
-				}
-				m := aggModelHealth(RouterBackend{ID: id, Name: cname, BaseURL: e.Endpoint, Model: mm.ID, Keyless: e.Keyless})
-				m.Vendor = e.Name
-				models = append(models, m)
-				seen[id] = true
-			}
-		}
+	for _, m := range aggregateExposedModels() {
+		hm := aggModelHealth(RouterBackend{ID: m.ID, Name: m.Name, BaseURL: m.Endpoint, Model: m.Model, Keyless: m.Keyless})
+		hm.Vendor = m.Vendor
+		models = append(models, hm)
 	}
 
 	// 排序：信号降序 → auto 优先 → 名称
@@ -730,4 +634,368 @@ func HandleAggregateHealth(c *gin.Context) {
 		"auto_chain": autoChain,
 		"models":     models,
 	})
+}
+
+// ========== 聚合 API 暴露模型配置（2026-08-17，issue #5）==========
+// 用户诉求：聚合 API 可以自行设置添加哪些模型。
+// 两个模式：
+//   - official（默认）：官方遴选 = isUsableAggModel 精选（DS V4 系 + 快又聪明），
+//     保证聚合端口跑 Agent 又快又稳，这是给普通用户的默认体验。
+//   - custom：用户自定义 = 只暴露用户在设置面板勾选的模型 ID，想加什么加什么
+//     （如 Kilo 免 key 的 kilo-auto/free），不受官方精选限制。
+//
+// 配置存 ~/rescene_data/aggregate_config.json（与 free_model_order.json 同目录，
+// 全局共享不分用户）。
+
+// aggExposedModel 聚合端口实际暴露的单个模型（列表与健康度共用）。
+type aggExposedModel struct {
+	ID       string // 对外 ID（目录 ID / auto_ 可读 ID / custom:: 选择 ID）
+	Vendor   string
+	Name     string // 展示名
+	Model    string // 真实模型名（上游请求用）
+	Endpoint string
+	Keyless  bool
+}
+
+// aggregateExposeConfig 聚合 API 暴露模型配置。
+type aggregateExposeConfig struct {
+	Mode     string   `json:"mode"`      // official=官方遴选（默认）| custom=用户自定义
+	ModelIDs []string `json:"model_ids"` // custom 模式暴露的模型 ID（目录 / auto_ 可读 / custom::）
+}
+
+func aggregateConfigPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, "rescene_data", "aggregate_config.json"), nil
+}
+
+func loadAggregateExposeConfig() aggregateExposeConfig {
+	cfg := aggregateExposeConfig{Mode: "official"}
+	path, err := aggregateConfigPath()
+	if err != nil {
+		return cfg
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return cfg
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return cfg
+	}
+	if cfg.Mode != "custom" {
+		cfg.Mode = "official"
+	}
+	return cfg
+}
+
+func saveAggregateExposeConfig(cfg aggregateExposeConfig) error {
+	path, err := aggregateConfigPath()
+	if err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o644)
+}
+
+// aggregateExposedModels 按配置返回聚合端口实际暴露的模型（列表 + 健康度共用）。
+func aggregateExposedModels() []aggExposedModel {
+	cfg := loadAggregateExposeConfig()
+	if cfg.Mode == "custom" {
+		return exposeByCustomIDs(cfg)
+	}
+	return exposeOfficial()
+}
+
+// exposeOfficial 官方遴选：DS V4 系 + 快又聪明精选（2026-08-13 用户定稿规则）。
+func exposeOfficial() []aggExposedModel {
+	out := []aggExposedModel{}
+	seen := map[string]bool{}
+	for _, f := range freeModelCatalog {
+		if f.Disabled || !isUsableAggModel(f.Model, f.Vendor) {
+			continue
+		}
+		out = append(out, aggExposedModel{ID: f.ID, Vendor: f.Vendor, Name: f.Name, Model: f.Model, Endpoint: f.Endpoint, Keyless: f.Keyless})
+		seen[f.ID] = true
+	}
+	for _, dm := range discoveredFreeModels("") {
+		if seen[dm.ID] || !isUsableAggModel(dm.Model, dm.Vendor) {
+			continue
+		}
+		if catalogHasModel(dm.Model, dm.Endpoint) {
+			continue // 目录已有同 endpoint 同模型，不重复暴露
+		}
+		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
+			continue
+		}
+		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 {
+			continue // 探活确认不可用：沉底不输出
+		}
+		id := autoReadableID(dm.ID)
+		if seen[id] {
+			continue
+		}
+		out = append(out, aggExposedModel{ID: id, Vendor: dm.Vendor, Name: dm.Model, Model: dm.Model, Endpoint: dm.Endpoint, Keyless: dm.Keyless})
+		seen[dm.ID] = true
+		seen[id] = true
+	}
+	if entries, err := loadModelConfigs(""); err == nil {
+		for _, e := range entries {
+			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
+				continue
+			}
+			for _, m := range configuredProviderModels(e) {
+				if !isUsableAggModel(m.ID, e.Name) {
+					continue
+				}
+				id := customModelSelectionID(e.ID, m.ID)
+				if seen[id] {
+					continue
+				}
+				cname := strings.TrimSpace(m.Name)
+				if cname == "" {
+					cname = m.ID
+				}
+				out = append(out, aggExposedModel{ID: id, Vendor: e.Name, Name: cname, Model: m.ID, Endpoint: e.Endpoint, Keyless: e.Keyless})
+				seen[id] = true
+			}
+		}
+	}
+	return out
+}
+
+// exposeByCustomIDs 用户自定义：只暴露用户勾选的模型 ID，用户自己负责挑选。
+// 三类 ID 都支持：免费池目录 ID / auto_ 可读 ID（或内部 ID）/ 自定义提供方选择 ID。
+// 无 key 且非免 key 的目录条目跳过（列表里出现的都保证能路由）。
+func exposeByCustomIDs(cfg aggregateExposeConfig) []aggExposedModel {
+	out := []aggExposedModel{}
+	seen := map[string]bool{}
+	entries, _ := loadModelConfigs("")
+	entryByID := map[string]ModelConfigEntry{}
+	for _, e := range entries {
+		entryByID[e.ID] = e
+	}
+	envKeys := userKeysByEnv("")
+next:
+	for _, id := range cfg.ModelIDs {
+		if seen[id] {
+			continue
+		}
+		// 1. 免费池目录 ID
+		for _, f := range freeModelCatalog {
+			if f.Disabled || f.ID != id {
+				continue
+			}
+			if !f.Keyless && !f.Local && !hasKey(f.ID, f.KeyEnv, entryByID, envKeys) {
+				continue next // 没配 key 的模型不进列表（选了必挂）
+			}
+			out = append(out, aggExposedModel{ID: f.ID, Vendor: f.Vendor, Name: f.Name, Model: f.Model, Endpoint: f.Endpoint, Keyless: f.Keyless})
+			seen[id] = true
+			continue next
+		}
+		// 2. auto_ 自动发现模型（可读 ID 或内部 ID 都能认）
+		for _, dm := range discoveredFreeModels("") {
+			if autoReadableID(dm.ID) != id && dm.ID != id {
+				continue
+			}
+			if isAutoModelDisabled(dm.Endpoint, dm.Model) {
+				continue next // 确定性淘汰的模型不暴露
+			}
+			out = append(out, aggExposedModel{ID: autoReadableID(dm.ID), Vendor: dm.Vendor, Name: dm.Model, Model: dm.Model, Endpoint: dm.Endpoint, Keyless: dm.Keyless})
+			seen[id] = true
+			continue next
+		}
+		// 3. 自定义提供方选择 ID（custom::…）
+		if providerID, modelID, ok := parseCustomModelSelectionID(id); ok {
+			for _, e := range entries {
+				if e.ID != providerID || isFreeCatalogID(e.ID) {
+					continue
+				}
+				if e.APIKey == "" && !e.Keyless {
+					continue next
+				}
+				for _, mm := range configuredProviderModels(e) {
+					if mm.ID != modelID {
+						continue
+					}
+					cname := strings.TrimSpace(mm.Name)
+					if cname == "" {
+						cname = mm.ID
+					}
+					out = append(out, aggExposedModel{ID: id, Vendor: e.Name, Name: cname, Model: mm.ID, Endpoint: e.Endpoint, Keyless: e.Keyless})
+					seen[id] = true
+					continue next
+				}
+			}
+		}
+	}
+	return out
+}
+
+// aggCandidate 聚合端口可选模型（设置面板「用户自定义」勾选列表）。
+type aggCandidate struct {
+	ID     string `json:"id"`     // 对外暴露 ID
+	Name   string `json:"name"`   // 展示名
+	Vendor string `json:"vendor"` // 厂商分组
+	Model  string `json:"model"`  // 真实模型名
+	KeySet bool   `json:"key_set"` // 已配 key 或免 key（false = 勾了也路由不了，前端禁用）
+	Chat   bool   `json:"chat"`   // 是否聊天模型（false = TTS/ASR/生图/实时等非对话，勾了 chat/completions 必挂）
+}
+
+// isChatModel 判断模型是不是聊天模型。排除明显非对话的：
+// 语音合成 TTS / 语音识别 ASR / 生图编辑 image-edit / 实时音频 realtime /
+// 音频生成 overture / 路由 router / 专用搜索 API（dr-search / search-image）。
+// ⚠️ vision 不算非聊天（聊天+识图），audio 语音对话系列（step-audio-2 等）保留。
+func isChatModel(model string) bool {
+	m := strings.ToLower(model)
+	for _, kw := range []string{"tts", "asr", "image-edit", "image_edit", "router", "realtime", "overture", "dr-search", "search-image"} {
+		if strings.Contains(m, kw) {
+			return false
+		}
+	}
+	return true
+}
+
+// aggregateCandidates 全部可选模型：免费池目录（全量，不受官方精选限制）+
+// auto_ 自动发现（可读 ID）+ 自定义提供方模型。
+func aggregateCandidates() []aggCandidate {
+	out := []aggCandidate{}
+	seen := map[string]bool{}
+	entries, _ := loadModelConfigs("")
+	entryByID := map[string]ModelConfigEntry{}
+	for _, e := range entries {
+		entryByID[e.ID] = e
+	}
+	envKeys := userKeysByEnv("")
+	for _, f := range freeModelCatalog {
+		if f.Disabled {
+			continue
+		}
+		keySet := f.Keyless || f.Local || hasKey(f.ID, f.KeyEnv, entryByID, envKeys)
+		out = append(out, aggCandidate{ID: f.ID, Name: f.Name, Vendor: f.Vendor, Model: f.Model, KeySet: keySet, Chat: isChatModel(f.Model)})
+		seen[f.ID] = true
+	}
+	for _, dm := range discoveredFreeModels("") {
+		if catalogHasModel(dm.Model, dm.Endpoint) {
+			continue // 目录已覆盖，不重复
+		}
+		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
+			continue
+		}
+		id := autoReadableID(dm.ID)
+		if seen[id] {
+			continue
+		}
+		// 自动发现快照只对有 key 的提供方拉取（免 key 网关也在列）——
+		// 能进快照 = key 已配好或本身免 key，一律可勾选（2026-08-17 bug 修复：
+		// 之前写成 dm.Keyless，把「需 key 的提供方」误标成未配 key 禁用）。
+		out = append(out, aggCandidate{ID: id, Name: dm.Model, Vendor: dm.Vendor, Model: dm.Model, KeySet: true, Chat: isChatModel(dm.Model)})
+		seen[id] = true
+	}
+	for _, e := range entries {
+		if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
+			continue
+		}
+		for _, mm := range configuredProviderModels(e) {
+			id := customModelSelectionID(e.ID, mm.ID)
+			if seen[id] {
+				continue
+			}
+			cname := strings.TrimSpace(mm.Name)
+			if cname == "" {
+				cname = mm.ID
+			}
+			out = append(out, aggCandidate{ID: id, Name: cname, Vendor: e.Name, Model: mm.ID, KeySet: e.APIKey != "" || e.Keyless, Chat: isChatModel(mm.ID)})
+			seen[id] = true
+		}
+	}
+	// 按 vendor 分组 + free 过滤（2026-08-17 issue #5 二轮）：
+	// 提供方模型列表里有 free 后缀（:free / /free / -free）→ 只显示 free 的；
+	// 没有 free 后缀 → 全显示。避免 Kilo 这类网关 361 个付费模型全列出来。
+	groups := map[string][]aggCandidate{}
+	var order []string
+	for _, c := range out {
+		if _, ok := groups[c.Vendor]; !ok {
+			order = append(order, c.Vendor)
+		}
+		groups[c.Vendor] = append(groups[c.Vendor], c)
+	}
+	filtered := []aggCandidate{}
+	for _, v := range order {
+		list := groups[v]
+		hasFree := false
+		for _, c := range list {
+			if hasFreeSuffix(c.Model) {
+				hasFree = true
+				break
+			}
+		}
+		if hasFree {
+			for _, c := range list {
+				if hasFreeSuffix(c.Model) {
+					filtered = append(filtered, c)
+				}
+			}
+		} else {
+			filtered = append(filtered, list...)
+		}
+	}
+	return filtered
+}
+
+// hasFreeSuffix 模型名是否带免费后缀标记（:free / /free / -free）。
+// 如 stepfun/step-3.7-flash:free、kilo-auto/free、deepseek-v4-flash-free。
+func hasFreeSuffix(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, ":free") || strings.Contains(m, "/free") || strings.Contains(m, "-free")
+}
+
+// HandleGetAggregateConfig GET /api/aggregate/config —— 读取暴露模式配置 + 可选模型清单。
+func HandleGetAggregateConfig(c *gin.Context) {
+	cfg := loadAggregateExposeConfig()
+	c.JSON(http.StatusOK, gin.H{
+		"mode":       cfg.Mode,
+		"model_ids":  cfg.ModelIDs,
+		"candidates": aggregateCandidates(),
+	})
+}
+
+// HandlePutAggregateConfig PUT /api/aggregate/config —— 保存暴露模式配置。
+// mode ∈ {official, custom}；model_ids 只保留候选清单里真实存在的 ID（过滤脏 ID）。
+func HandlePutAggregateConfig(c *gin.Context) {
+	var req struct {
+		Mode     string   `json:"mode"`
+		ModelIDs []string `json:"model_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if req.Mode != "official" && req.Mode != "custom" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "mode 必须是 official 或 custom"})
+		return
+	}
+	valid := map[string]bool{}
+	for _, cand := range aggregateCandidates() {
+		valid[cand.ID] = true
+	}
+	ids := []string{}
+	seen := map[string]bool{}
+	for _, id := range req.ModelIDs {
+		if seen[id] || !valid[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	cfg := aggregateExposeConfig{Mode: req.Mode, ModelIDs: ids}
+	if err := saveAggregateExposeConfig(cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "mode": cfg.Mode, "model_ids": cfg.ModelIDs})
 }

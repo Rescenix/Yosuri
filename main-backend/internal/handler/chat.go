@@ -77,7 +77,14 @@ type DSResp struct {
 // ========== 核心处理函数 ==========
 
 func init() {
-	// 每日提供方模型列表重探（存在性：下架/恢复）+ 30 分钟免费池探活（可用性信号）
+	// 每日提供方模型列表重探（存在性：下架/恢复；只拉 /v1/models，不烧 chat 额度）
 	startProviderDailyRefresh()
-	startFreeProbeLoop()
+	// ⚠️ 30 分钟免费池探活已禁用（2026-08-15）：probeOnce 会并发探测 freeModelCatalog
+	// 全部条目 + probeAutoDiscovered 自动发现快照里每一个模型（魔搭 43 个 / Zen 54 个 /
+	// NVIDIA 100+），30min 一轮 × 全天 48 轮 = 一天把魔搭 2000 次、商汤 500 次/5h 的免费
+	// 额度全部烧光（用户实测：付费 DS 一整天正常，免费 DS 用一次就 429 insufficient_quota，
+	// 正是探活先烧穿了额度）。信号格/淘汰/拉起全部改由真实请求驱动（circuitSuccess 钩子
+	// 已更新延迟与信号，disableFreeModel/disableAutoModel/enableAutoModel 已按真实请求的
+	// 401/403/404/200 生效），无需后台探活。需要手动校准信号时再调用 startFreeProbeLoop()。
+	// startFreeProbeLoop()
 }

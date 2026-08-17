@@ -13,7 +13,9 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -152,6 +154,142 @@ func isIrreversibleToolCall(name, argsJSON string) bool {
 		return true
 	}
 	return name == "apply_patch" && nativePatchContainsDelete(argsJSON)
+}
+
+// ---- 敏感文件覆写保护（YOLO 模式也强制审批）----
+//
+// 教训（2026-08-16 实锤）：agent 曾用「项目初始化」模板整体覆盖 README.md，
+// 116 行品牌文档被 14 行模板替换。这类文件被 write_file 整体覆写 = 内容直接
+// 蒸发，YOLO 全自动模式下没有人工确认就等于允许 agent 随手毁掉仓库门面/
+// 依赖清单/密钥文件。所以对「已存在的敏感文件」做整文件覆写时，与不可逆
+// 删除同级，YOLO 模式也必须进审批。
+//
+// edit_file / mcp__fs__edit_file（定向行级编辑）刻意不在集合里：改动小、
+// AgentFS 影子仓可还原，日常维护不必每次都弹窗。
+
+// sensitiveWriteToolSet 整文件覆写/新建类写工具。
+var sensitiveWriteToolSet = map[string]bool{
+	"write_file":              true,
+	"apply_patch":             true,
+	"create_file":             true,
+	"mcp__fs__write_file":     true,
+	"mcp__fs__create_file":    true,
+}
+
+// isSensitiveFile 判定路径是否命中「敏感文件」名单：仓库门面文档（README*/
+// LICENSE）、依赖清单与锁文件、密钥凭据（.env*/证书/私钥）、协作规范
+// （AGENTS.md/CLAUDE.md/.cursorrules/.gitignore）。这些被整体覆写 = 信息丢失
+// 或安全风险。
+func isSensitiveFile(p string) bool {
+	base := strings.ToLower(filepath.Base(absAgainstRoot(p)))
+	// 仓库门面文档（覆盖四语 README.*）
+	if base == "readme" || base == "readme.md" || strings.HasPrefix(base, "readme.") {
+		return true
+	}
+	if base == "license" || base == "license.md" || base == "license.txt" || base == "copying" {
+		return true
+	}
+	// 密钥/凭据（基名以 .env 开头：.env / .env.local / .env.production 等）
+	if strings.HasPrefix(base, ".env") {
+		return true
+	}
+	for _, suf := range []string{".pem", ".key", ".p12", ".pfx", ".crt", ".cer"} {
+		if strings.HasSuffix(base, suf) {
+			return true
+		}
+	}
+	// 依赖清单 / 锁文件 / 构建脚本 / 协作规范
+	switch base {
+	case "go.mod", "go.sum", "package.json", "package-lock.json", "pnpm-lock.yaml",
+		"yarn.lock", "cargo.toml", "cargo.lock", "pyproject.toml", "requirements.txt",
+		"composer.json", "composer.lock", "gemfile", "gemfile.lock", "pom.xml",
+		"build.gradle", "dockerfile", "makefile", "cmakelists.txt",
+		"agents.md", "claude.md", ".cursorrules", ".gitignore", ".gitattributes",
+		"security.md", "contributing.md", "code_of_conduct.md":
+		return true
+	}
+	return false
+}
+
+// fileExists 判断文件是否已存在（覆写才危险，新建不拦）。
+// 复用 verify.go 的同包实现，避免重复声明。
+func pathExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
+}
+
+// isSensitiveOverwrite 判定：写类工具 + 目标为「已存在的敏感文件」→ 即使
+// YOLO 模式也必须审批。apply_patch 的路径藏在 patch 头里，其余走通用参数。
+func isSensitiveOverwrite(name, argsJSON string) bool {
+	if !sensitiveWriteToolSet[name] {
+		return false
+	}
+	var paths []string
+	if name == "apply_patch" {
+		paths = nativePatchHeaderPaths(argsJSON)
+	} else {
+		paths = toolPathArgs(argsJSON)
+	}
+	for _, p := range paths {
+		if isSensitiveFile(p) && pathExists(absAgainstRoot(p)) {
+			return true
+		}
+	}
+	return false
+}
+
+// ---- 破坏性 shell 命令保护（YOLO 模式也强制审批）----
+//
+// 教训（仓库铁律）：git checkout -- / git restore 会把工作区整体覆盖回 HEAD，
+// agent 一句命令就能抹掉用户全部未提交改动。这类命令 Ask 模式本来就因
+// run_command 危险被拦，但 YOLO 模式畅通——必须单独点名拦截，与不可逆
+// 删除同级。
+
+// destructiveCommandPatterns 破坏性命令特征（命令转小写后匹配）。
+// 覆盖工作区：git checkout --/.、git restore、git reset --hard、git clean
+// 文件删除：git rm、rm -rf/-r、Remove-Item 递归、rd/rmdir /s、del /f|/s
+// 远程强推：git push --force / -f
+var destructiveCommandPatterns = []struct {
+	label string
+	re    *regexp.Regexp
+}{
+	{"git checkout 恢复工作区", regexp.MustCompile(`git\s+checkout\s+--`)},
+	{"git checkout 点(整个目录)", regexp.MustCompile(`git\s+checkout\s+\.`)},
+	{"git restore 覆盖工作区", regexp.MustCompile(`git\s+restore\b`)},
+	{"git reset --hard", regexp.MustCompile(`git\s+reset\s+--hard`)},
+	{"git clean 清除文件", regexp.MustCompile(`git\s+clean\b`)},
+	{"git rm 删除", regexp.MustCompile(`git\s+rm\b`)},
+	{"rm 强制/递归删除", regexp.MustCompile(`\brm\s+(?:-{1,2}[a-z]*[rf][a-z]*|--recursive|--force)\b`)},
+	{"Remove-Item 递归删除", regexp.MustCompile(`remove-item[^\n]*-(?:r|recurse|force)` )},
+	{"rd/rmdir 递归删除", regexp.MustCompile(`\b(?:rd|rmdir)\s+/s\b`)},
+	{"del 强制/递归删除", regexp.MustCompile(`\bdel\s+/(?:f|s|q)` )},
+	{"git push 强推", regexp.MustCompile(`git\s+push\s+[^\n]*?(?:--force|-f\b)`)},
+}
+
+// isDestructiveCommand 判定一条 shell 命令是否含破坏性操作（大小写不敏感）。
+func isDestructiveCommand(command string) bool {
+	lower := strings.ToLower(command)
+	for _, p := range destructiveCommandPatterns {
+		if p.re.MatchString(lower) {
+			return true
+		}
+	}
+	return false
+}
+
+// isDestructiveToolCall 判定一次工具调用是否为破坏性 shell 命令
+// （run_command / mcp__shell__run 专用，YOLO 模式也强制审批）。
+func isDestructiveToolCall(name, argsJSON string) bool {
+	if name != "run_command" && name != "mcp__shell__run" {
+		return false
+	}
+	var args struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal([]byte(argsJSON), &args) != nil {
+		return false
+	}
+	return isDestructiveCommand(args.Command)
 }
 
 // ---- 工作目录越界判定 ----
