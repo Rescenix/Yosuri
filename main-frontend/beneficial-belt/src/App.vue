@@ -18,11 +18,17 @@
     </router-link>
   </nav>
   <router-view />
-  <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
-</template>
+    <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
+    <!-- 顶部轻量更新提示：15s 自动消失，点击才弹全窗（2026-08-17 用户定稿：堵塞弹窗破坏体验） -->
+    <button v-if="showUpdateBanner" class="update-banner" type="button" @click="openUpdateModal">
+      <span class="update-banner-dot" />
+      <span>发现新版本 <b>{{ updateInfo && updateInfo.latest_version }}</b>，点击查看</span>
+      <span class="update-banner-arrow">›</span>
+    </button>
+  </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString } from './composables/updatePrefs.js'
@@ -31,6 +37,20 @@ import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 const auth = useAuth()
 const showUpdate = ref(false)
 const updateInfo = ref(null)
+// 顶部轻量更新横幅：检测到新安装包已就绪时显示 15s，点击才弹全窗（2026-08-17 用户定稿）
+const showUpdateBanner = ref(false)
+let updateBannerTimer = null
+
+function openUpdateModal() {
+  clearTimeout(updateBannerTimer)
+  updateBannerTimer = null
+  showUpdateBanner.value = false
+  showUpdate.value = true
+}
+
+onBeforeUnmount(() => {
+  if (updateBannerTimer) clearTimeout(updateBannerTimer)
+})
 
 onMounted(() => {
   const params = new URLSearchParams(window.location.search)
@@ -60,10 +80,15 @@ onMounted(async () => {
         const dl = await fetch('/api/update/download', { method: 'POST' })
         const dlData = await dl.json()
         if (dlData.state === 'done') {
-          // 安装包已就绪（上次启动已下载完）→ 本次弹一键安装
-          showUpdate.value = true
-          return
-        }
+                  // 安装包已就绪（上次启动已下载完）→ 顶部轻量横幅提示 15s，不堵塞界面；
+                  // 用户点击横幅才弹「一键安装」全窗（2026-08-17 用户定稿，替代原直接弹窗）
+                  showUpdateBanner.value = true
+                  updateBannerTimer = setTimeout(() => {
+                    showUpdateBanner.value = false
+                    updateBannerTimer = null
+                  }, 15000)
+                  return
+                }
         // 本次开始下载：轮询等待完成，完成后静默，不弹窗
         const timer = setInterval(async () => {
           try {
@@ -84,6 +109,42 @@ onMounted(async () => {
 </script>
 
 <style>
+/* 顶部轻量更新横幅：fixed 顶部居中，不堵塞界面；15s 自动消失，点击弹全窗（2026-08-17） */
+.update-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 7px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-surface-2);
+  color: var(--app-text-soft);
+  font-size: 12.5px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.12);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.update-banner:hover { background: var(--app-surface-3); color: var(--app-text); border-color: var(--app-accent); }
+.update-banner b { font-weight: 600; color: var(--app-accent); }
+.update-banner-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--app-accent);
+  flex: none;
+  animation: update-banner-pulse 1.2s ease-in-out infinite;
+}
+.update-banner-arrow { color: var(--app-text-faint); font-size: 14px; }
+@keyframes update-banner-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 35%, transparent); }
+  50% { opacity: 0.75; box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-accent) 0%, transparent); }
+}
 /* 底部横排圆胶囊工具条（纯图标，2026-08-13 用户定稿：
    照搬聊天界面终端预览工具条 .terminal-tabs-bar 样式：容器 surface-2 底 + 边框，
    按钮无边框透明，hover/active 背景变化；横排，右下角） */
