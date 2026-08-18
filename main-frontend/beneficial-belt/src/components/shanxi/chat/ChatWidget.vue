@@ -769,13 +769,8 @@
                 <!-- 用户消息导航轴：占据工具栏中间的弹性空间 -->
                 <UserMessageRail :messages="messages" :active-id="activeUserMessageId" @jump="jumpToMessage" />
 
-                <div class="input-toolbar-right">
-                  <!-- DHS 安全插件生态：社区发现与执行层隔离的鲸鱼快捷入口 -->
-                  <button class="dhs-whale-shortcut" type="button" title="DHS 安全插件生态" aria-label="打开 DHS 安全插件生态" @click.stop="showDHSCommunity = true">
-                    <Icon icon="simple-icons:deepseek" width="16" />
-                    <span class="dhs-whale-shield"><Icon icon="mdi:shield-check" width="9" /></span>
-                  </button>
-                  <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
+                                <div class="input-toolbar-right">
+                                  <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
                   <div v-if="messages.length > 0 && ctxTotalUsed > 0" class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
                     <svg class="ctx-reservoir" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
                       <defs>
@@ -1068,7 +1063,6 @@
 
     <!-- 插件市场浮层（占位入口）：独立组件 + Teleport，与 SettingsModal 保持一致 -->
     <PluginsMarketModal v-if="showPluginsPanel" @close="closePluginsPanel" />
-    <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
 
     <!-- 彩虹 toast（技能习得 + 全局 showRainbowToast 触发；样式升级版） -->
     <RainbowToast />
@@ -1097,7 +1091,6 @@ import ScheduledTaskManager from './ScheduledTaskManager.vue'
 import SettingsModal from './SettingsModal.vue'
 import ModelManagerModal from './ModelManagerModal.vue'
 import PluginsMarketModal from './PluginsMarketModal.vue'
-import DHSCommunityModal from './DHSCommunityModal.vue'
 import QuestionModal from './QuestionModal.vue'
 import FileToolPanel from './FileToolPanel.vue'
 import DiffPanel from './DiffPanel.vue'
@@ -2948,7 +2941,6 @@ function onSearchSelect(id) {
 
 // 插件市场：当前为占位入口，后续可接入真实插件商店接口
 const showPluginsPanel = ref(false)
-const showDHSCommunity = ref(false)
 function openPluginsMarket() {
   showPluginsPanel.value = true
 }

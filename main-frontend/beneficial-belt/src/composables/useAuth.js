@@ -10,9 +10,9 @@ import { ref, computed, readonly } from 'vue'
 import { computeHardwareFingerprint } from '../utils/hardwareFingerprint.js'
 
 const isLoggedIn = ref(false)
-const login = ref('')   // GitHub 登录名
-const name = ref('')    // GitHub 显示名
-const avatar = ref('')  // GitHub 头像 URL
+const login = ref('')   // Rescene Cloud 账号名
+const name = ref('')    // 账号显示名
+const avatar = ref('')  // 账号头像 URL
 const uid = ref(null)   // cloud 分发的账号 UID（游客/登录都有）
 const isVip = ref(false) // 会员标识：仅由服务端 JWT 的 is_vip 决定，绝不读 localStorage（堵住游客伪造）
 const intimacy = ref(0) // 亲密度：无上限互动值（云端权威，随 UID 账号存储、跨设备保留）
@@ -148,14 +148,14 @@ async function pullCloudMemory() {
   }
 }
 
-// 展示名：登录用 GitHub 名，未登录用 cloud 分发的 UID
+// 展示名：登录用账号名，未登录用 cloud 分发的 UID
 const displayName = computed(() => {
-  if (isLoggedIn.value) return name.value || login.value || 'GitHub 用户'
+  if (isLoggedIn.value) return name.value || login.value || 'Rescene 用户'
   const u = uid.value
   return u ? 'UID ' + u : '未登录'
 })
 
-// 展示头像：登录用 GitHub 头像，未登录用 null（UI 回退到默认图标）
+// 展示头像：登录用账号头像，未登录用 null（UI 回退到默认图标）
 const displayAvatar = computed(() => {
   if (isLoggedIn.value) return avatar.value || ''
   return ''

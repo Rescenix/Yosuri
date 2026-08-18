@@ -288,14 +288,15 @@
             <button v-if="isLoggedIn" class="smc-user-card-item danger" @click="logout"><Icon icon="mdi:logout-variant" width="16" />退出登录</button>
           </footer>
           <div v-if="!isLoggedIn" class="smc-login-panel">
-          <a class="smc-user-card-item" :href="githubAuthUrl">使用 GitHub 登录</a>
-          <div class="smc-rc-sep">或 · Rescene Cloud 账号</div>
           <div class="smc-rc-login">
-            <input v-model="rcUser" class="smc-rc-input" placeholder="Rescene Cloud 账号" @keyup.enter="loginResceneCloud" />
-            <input v-model="rcPwd" type="password" class="smc-rc-input" placeholder="密码" @keyup.enter="loginResceneCloud" />
-            <button class="smc-rc-btn" :disabled="rcLoading" @click="loginResceneCloud">{{ rcLoading ? '登录中…' : '登录' }}</button>
+            <input v-model="rcUser" class="smc-rc-input" :placeholder="rcMode === 'login' ? 'Rescene Cloud 账号' : '用户名（3-32 字符）'" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+            <input v-model="rcPwd" type="password" class="smc-rc-input" :placeholder="rcMode === 'login' ? '密码' : '密码（6-64 字符）'" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+            <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? '处理中…' : (rcMode === 'login' ? '登录' : '注册') }}</button>
             <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
-            <div class="smc-rc-hint">没有账号？官网用 3 个邀请码合成（80% 概率）</div>
+            <div class="smc-rc-hint">
+              <template v-if="rcMode === 'login'">没有账号？<a class="smc-rc-link" @click="rcMode = 'register'; rcError = ''">注册一个</a></template>
+              <template v-else>已有账号？<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''">去登录</a></template>
+            </div>
           </div>
           </div>
       </div>
@@ -350,11 +351,7 @@ import { useAuth } from '../../../composables/useAuth.js'
 
 const auth = useAuth()
 
-// GitHub 登录链接：桌面发行版需带后端端口前缀（否则 Wails AssetServer 不认识 /api 路由）
-const githubAuthUrl = computed(() => {
-  const base = globalThis.__RESCENE_BACKEND_URL__ || ''
-  return base + '/api/auth/github'
-})
+// Rescene Cloud 账号登录在下方 rc-login 面板（用户名+密码），登录态经 useAuth 统一管理。
 
 // UID 与亲密等级已移到「设置 → 我的」tab 展示，侧栏 footer 只保留头像和名字。
 
@@ -639,12 +636,13 @@ function shareCard() {
   a.click()
 }
 
-// ===== Rescene Cloud 账号登录（国内无需 GitHub/代理）=====
-// 注册已关闭（2026-08-14 用户定稿）：账号只能通过官网 3 个邀请码合成获得。
+// ===== Rescene Cloud 账号登录/注册（国内无需 GitHub/代理）=====
+// 开放注册（2026-08-17 用户定稿：邀请码已废弃），注册即签发 JWT 直接登录。
 const rcUser = ref('')
 const rcPwd = ref('')
 const rcLoading = ref(false)
 const rcError = ref('')
+const rcMode = ref('login') // 'login' | 'register'
 
 async function loginResceneCloud() {
   rcError.value = ''
@@ -661,6 +659,26 @@ async function loginResceneCloud() {
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
     rcUser.value = ''; rcPwd.value = ''
+    showUserMenu.value = false
+  } catch (e) { rcError.value = '网络错误，请稍后再试' } finally { rcLoading.value = false }
+}
+
+async function registerResceneCloud() {
+  rcError.value = ''
+  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = '请输入用户名和密码'; return }
+  rcLoading.value = true
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: rcUser.value.trim(), password: rcPwd.value })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.token) { rcError.value = data.error || '注册失败，请稍后再试'; return }
+    localStorage.setItem('token', data.token)
+    window.dispatchEvent(new Event('auth-change'))
+    rcUser.value = ''; rcPwd.value = ''
+    rcMode.value = 'login'
     showUserMenu.value = false
   } catch (e) { rcError.value = '网络错误，请稍后再试' } finally { rcLoading.value = false }
 }
@@ -1466,6 +1484,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-rc-input:focus { border-color: #4f7cff; }
 .smc-rc-btn { padding: 7px 0; border: 0; border-radius: 8px; background: #4f7cff; color: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; }
 .smc-rc-btn:disabled { opacity: 0.6; }
+.smc-rc-link { color: #4f7cff; cursor: pointer; text-decoration: underline; }
+.smc-rc-link:hover { color: #3a63e8; }
 .smc-rc-err { font-size: 11px; color: #e5484d; }
 .smc-rc-hint { font-size: 10.5px; color: #9aa3b2; text-align: center; }
 </style>

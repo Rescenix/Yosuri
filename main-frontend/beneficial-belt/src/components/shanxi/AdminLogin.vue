@@ -8,12 +8,6 @@
       @keypress.enter="login"
     />
     <button v-if="!auth.isLoggedIn.value" @click="login">登录</button>
-    <a
-      v-if="!auth.isLoggedIn.value"
-      class="gh-btn"
-      :href="githubAuthUrl"
-      title="使用 GitHub 账号登录"
-    >GitHub 登录</a>
 
     <!-- 已登录：展示头像 + 用户名 -->
     <div v-else class="user-chip">
@@ -32,12 +26,6 @@ import { useAuth } from '../../composables/useAuth.js'
 
 const auth = useAuth()
 const password = ref('')
-
-const githubAuthUrl = computed(() => {
-  // 桌面端：解析后端地址，使 GitHub OAuth 重定向正确回到后端
-  const base = globalThis.__RESCENE_BACKEND_URL__ || ''
-  return base + '/api/auth/github'
-})
 
 const login = async () => {
   const res = await fetch('/api/login', {

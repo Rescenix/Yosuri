@@ -117,27 +117,27 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <style scoped>
-/* ask_user 提问条：与 todo-bar 同一套「简洁白色卡片」语言——直角、细灰边、
-   无主题色、无投影；margin-bottom:-1px 让边框和下方输入框重叠合并成一条线，
-   视觉上连成一块。 */
+/* ask_user 提问条：Hermes 同款方块卡片语言——圆角卡片、浅灰底选项方块、
+   字母徽章圆角块；配色全走现有 --app-* 变量（零新颜色），hover 微上浮+accent 描边，
+   margin-bottom:-1px 让边框和下方输入框重叠合并成一条线，视觉上连成一块。 */
 .question-bar {
   display: grid;
   gap: 8px;
   margin: 0 0 -1px;
-  padding: 9px 14px 11px;
+  padding: 10px 12px 12px;
   box-sizing: border-box;
   max-width: 100%;
   color: var(--app-text);
   background: var(--app-surface);
   border: 1px solid var(--app-border);
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: opacity 0.18s ease;
   animation: question-bar-in 0.14s ease-out;
 }
 .question-error {
   padding: 7px 9px;
-  border-radius: 0;
+  border-radius: 8px;
   background: color-mix(in srgb, #d94834 8%, transparent);
   color: #c43d32;
   font-size: 12px;
@@ -154,12 +154,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .question-bar-mark {
   display: grid;
-  flex: 0 0 18px;
-  height: 18px;
+  flex: 0 0 20px;
+  height: 20px;
   place-items: center;
-  border-radius: 0;
-  color: var(--app-text-faint);
-  background: transparent;
+  border-radius: 6px;
+  color: var(--app-text-soft);
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border-soft);
   font-size: 12px;
   font-weight: 750;
   line-height: 1;
@@ -182,7 +183,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 6px;
   color: var(--app-text-faint);
   background: transparent;
   font-size: 18px;
@@ -194,13 +195,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: 6px;
   padding-left: 30px;
 }
 .question-option,
 .question-submit {
-  min-height: 30px;
-  border-radius: 0;
+  min-height: 34px;
+  border-radius: 10px;
   cursor: pointer;
   font: inherit;
 }
@@ -208,26 +209,37 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 4px 9px 4px 5px;
-  color: var(--app-text);
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  font-size: 12px;
-  transition: border-color .14s ease, background .14s ease, color .14s ease;
-}
+  padding: 7px 10px 7px 8px;
+    color: var(--app-text);
+    background: var(--app-surface);
+    border: 1px solid transparent;
+    font-size: 12px;
+    transition: border-color .14s ease, background .14s ease, color .14s ease, transform .08s ease;
+  }
 .question-other-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
+  gap: 8px;
+  min-height: 34px;
   width: 100%;
+  padding-left: 8px;
   box-sizing: border-box;
 }
-.question-option:hover,
+.question-option:hover {
+  color: var(--app-text);
+  border-color: var(--app-accent);
+  background: var(--app-accent-soft);
+  transform: translateY(-1px);
+}
+.question-option:active { transform: none; }
+.question-option:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 1px;
+}
 .question-option.checked {
   color: var(--app-accent);
   border-color: var(--app-accent);
@@ -235,17 +247,23 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .question-option-key {
   display: grid;
-  min-width: 20px;
-  height: 20px;
+  flex: none;
+  min-width: 22px;
+  height: 22px;
   padding: 0 3px;
   place-items: center;
   box-sizing: border-box;
-  border-radius: 0;
+  border-radius: 7px;
   color: var(--app-text-soft);
-  background: var(--app-surface);
+  background: var(--app-surface-3);
   border: 1px solid var(--app-border-soft);
   font-size: 10px;
   font-weight: 750;
+}
+.question-option.checked .question-option-key {
+  color: var(--app-accent);
+  border-color: var(--app-accent);
+  background: var(--app-surface);
 }
 .question-option-label {
   overflow: hidden;
@@ -260,18 +278,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .question-free-input {
   flex: 1;
   min-width: 120px;
-  height: 30px;
+  height: 34px;
   box-sizing: border-box;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border: 1px solid var(--app-border);
-  border-radius: 0;
-  outline: none;
-  color: var(--app-text);
-  background: var(--app-surface);
-  font: inherit;
-  font-size: 12px;
-}
-.question-free-input:focus { border-color: var(--app-accent); }
+    border-radius: 10px;
+    outline: none;
+    color: var(--app-text);
+    background: var(--app-surface);
+    font: inherit;
+    font-size: 12px;
+  }
+  .question-free-input:focus { border-color: var(--app-accent); background: var(--app-surface); }
 .question-submit {
   flex: none;
   padding: 4px 12px;
@@ -281,7 +299,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   font-size: 12px;
   font-weight: 600;
 }
-.question-submit:disabled { cursor: default; opacity: .45; }
+.question-submit:disabled { cursor: default; opacity: .45; transform: none; }
 @media (max-width: 640px) {
   .question-bar-options,
   .question-bar-free { padding-left: 0; }

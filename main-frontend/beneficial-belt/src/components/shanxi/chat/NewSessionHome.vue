@@ -12,6 +12,7 @@
     <div class="home-stats-card">
       <div class="home-stats-header">
         <div class="home-tabs">
+          <span class="home-user-name" :title="auth.uid.value ? 'UID ' + auth.uid.value : ''">{{ auth.displayName.value }}</span>
           <span class="home-tab" :class="{ active: homeTab === 'overview' }" @click="homeTab = 'overview'">总览</span>
           <span class="home-tab" :class="{ active: homeTab === 'models' }" @click="homeTab = 'models'">模型</span>
         </div>
@@ -317,6 +318,16 @@ const heatmapCaption = computed(() => {
   margin-bottom: 12px;
 }
 .home-tabs { display: flex; gap: 14px; flex: 1; }
+.home-user-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--app-accent, #4f7cff);
+  align-self: center;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .home-tab {
   font-size: 13px;
   font-weight: 500;

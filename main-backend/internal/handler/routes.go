@@ -203,10 +203,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/title/generate", HandleGenerateTitle)
 
 	r.POST("/api/login", CloudLoginProxy)
-	// GitHub OAuth 登录：流量转发到私有鉴权服务 ResceneCloud（/api/auth/github 发起，
-	// /api/auth/github/callback 接收回调并带回 JWT）。re0 不持有 OAuth 密钥。
-	r.GET("/api/auth/github", CloudGitHubLogin)
-	r.GET("/api/auth/github/callback", CloudGitHubCallback)
+	r.POST("/api/auth/register", CloudRegisterProxy)
 	// 校验当前 token 真伪（复用 middleware.AuthRequired 本地验 JWT_SECRET）：
 	// 仅当 token 有效时返回 200，否则 401。前端用它区分“真登录”与“伪造/过期 token”。
 	r.GET("/api/auth/me", middleware.AuthRequired(), AuthMe)

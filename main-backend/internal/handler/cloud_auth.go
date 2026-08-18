@@ -4,7 +4,7 @@ package handler
 //
 // 鉴权逻辑已全部收口到独立私有服务 ResceneCloud（C:\Pro2026\ResceneCloud，对应私有仓
 // github.com/Rescenix/ResceneCloud）。本文件只做三件事，不持有任何密钥 / OAuth 逻辑：
-//   1. 把 /api/login 与 /api/auth/github/* 的流量反向代理到 RESCENE_CLOUD_URL
+//   1. 把 /api/login 的流量反向代理到 RESCENE_CLOUD_URL
 //   2. /api/auth/me 用本地 middleware.AuthRequired() 验 JWT（与 ResceneCloud 共用
 //      JWT_SECRET），回传 is_vip 等——无需信任网络即可判定会员
 //   3. 暴露 RESCENE_CLOUD_URL 给前端（/api/auth/cloud-config），供其直接发起 GitHub 登录
@@ -33,7 +33,7 @@ func cloudAuthBase() string {
 }
 
 // proxyToCloud 把当前请求（方法/查询/body/特定头）转发到 ResceneCloud 的 targetPath，
-// 并把响应原样写回。用于 /api/login 与 /api/auth/github/callback。
+// 并把响应原样写回。用于 /api/login。
 func proxyToCloud(c *gin.Context, targetPath string) {
 	proxyToCloudOpt(c, targetPath, false)
 }
@@ -80,25 +80,15 @@ func proxyToCloudOpt(c *gin.Context, targetPath string, forwardAuth bool) {
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
 }
 
-// CloudLoginProxy 把密码登录转发到 ResceneCloud（sha256 比对在那里完成）。
+// CloudLoginProxy 转发到 ResceneCloud 的账号登录（用户名+密码 → JWT）。
 // 双模式：{username,password}=账号登录，{password}=管理员密码登录。
 func CloudLoginProxy(c *gin.Context) {
 	proxyToCloud(c, "/api/login")
 }
 
-// CloudGitHubLogin 转发到 ResceneCloud 的 GitHub 授权发起。
-func CloudGitHubLogin(c *gin.Context) {
-	// 302 重定向，直接让浏览器跳到 ResceneCloud 返回的 GitHub 授权页
-	target := cloudAuthBase() + "/api/auth/github"
-	c.Redirect(http.StatusTemporaryRedirect, target)
-}
-
-// CloudGitHubCallback 转发 GitHub 回调到 ResceneCloud；ResceneCloud 会把 JWT 通过
-// ?token= 带回前端（与前端 App.vue 的回收逻辑一致），这里直接透传重定向。
-func CloudGitHubCallback(c *gin.Context) {
-	q := c.Request.URL.Query()
-	target := cloudAuthBase() + "/api/auth/github/callback?" + q.Encode()
-	c.Redirect(http.StatusTemporaryRedirect, target)
+// CloudRegisterProxy 转发到 ResceneCloud 的开放注册（用户名+密码 → 建号 + JWT）。
+func CloudRegisterProxy(c *gin.Context) {
+	proxyToCloud(c, "/api/auth/register")
 }
 
 // CloudUidProxy 游客 UID 分发：转发到 ResceneCloud 统一验证并签发（前端不可伪造）。
@@ -222,10 +212,9 @@ func CloudDHSFavoritesProxy(c *gin.Context) {
 	proxyToCloudAuth(c, c.Request.URL.Path)
 }
 
-// CloudAuthConfig 把 ResceneCloud 基址暴露给前端，供其直接发起 GitHub 登录跳转。
+// CloudAuthConfig 把 ResceneCloud 基址暴露给前端，供其发起账号登录（/api/login）。
 func CloudAuthConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"cloud_url":        cloudAuthBase(),
-		"github_login_url": cloudAuthBase() + "/api/auth/github",
+		"cloud_url": cloudAuthBase(),
 	})
 }

@@ -14,11 +14,17 @@
                   <Icon icon="mdi:brush" width="16" />
                 </router-link>
         <router-link to="/studio" class="app-tool-btn" title="视频剪辑" active-class="active">
-      <Icon icon="mdi:movie-edit-outline" width="16" />
-    </router-link>
-  </nav>
-  <router-view />
-    <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
+              <Icon icon="mdi:movie-edit-outline" width="16" />
+            </router-link>
+            <!-- DHS 安全插件生态：鲸鱼入口挂在底部工具条右端（2026-08-18 自输入工具栏移入） -->
+            <button class="dhs-whale-shortcut" type="button" title="DHS 安全插件生态" aria-label="打开 DHS 安全插件生态" @click="showDHSCommunity = true">
+              <Icon icon="simple-icons:deepseek" width="16" />
+              <span class="dhs-whale-shield"><Icon icon="mdi:shield-check" width="9" /></span>
+            </button>
+          </nav>
+          <router-view />
+          <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
+          <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
     <!-- 顶部轻量更新提示：15s 自动消失，点击才弹全窗（2026-08-17 用户定稿：堵塞弹窗破坏体验） -->
     <button v-if="showUpdateBanner" class="update-banner" type="button" @click="openUpdateModal">
       <span class="update-banner-dot" />
@@ -33,10 +39,13 @@ import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
+import DHSCommunityModal from './components/shanxi/chat/DHSCommunityModal.vue'
 
 const auth = useAuth()
 const showUpdate = ref(false)
 const updateInfo = ref(null)
+// DHS 安全插件生态：鲸鱼入口从输入工具栏移到底部工具条右端（2026-08-18）
+const showDHSCommunity = ref(false)
 // 顶部轻量更新横幅：检测到新安装包已就绪时显示 15s，点击才弹全窗（2026-08-17 用户定稿）
 const showUpdateBanner = ref(false)
 let updateBannerTimer = null
@@ -180,6 +189,44 @@ onMounted(async () => {
 }
 .app-tool-btn:hover { background: var(--app-surface-3); color: var(--app-text-soft); }
 .app-tool-btn.active { background: var(--app-surface); color: var(--app-text); font-weight: 600; }
+/* DHS 鲸鱼入口（自 chat-window.css 的 dhs-whale-shortcut，移入底部工具条右端后样式随附） */
+.dhs-whale-shortcut {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  padding: 0;
+  color: #8750ff;
+  background: color-mix(in srgb, #8750ff 9%, var(--app-surface));
+  border: 1px solid color-mix(in srgb, #8750ff 28%, var(--app-border));
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(126, 73, 255, 0.10);
+  transition: transform .16s ease, color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.dhs-whale-shortcut:hover {
+  color: #fff;
+  background: linear-gradient(135deg, #7548ff, #a245ff);
+  box-shadow: 0 7px 18px rgba(126, 73, 255, 0.24);
+  transform: translateY(-1px);
+}
+.dhs-whale-shortcut:focus-visible { outline: 2px solid color-mix(in srgb, #8750ff 55%, transparent); outline-offset: 2px; }
+.dhs-whale-shield {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  color: #087a57;
+  background: #e6fff5;
+  border: 2px solid var(--app-surface);
+  border-radius: 50%;
+}
+.dhs-whale-shortcut:hover .dhs-whale-shield { color: #067647; background: #d7ffef; }
 html:has(.company-view),html:has(.publish-view) { scrollbar-width: thin; scrollbar-color: #aa8fa0 #f4f1f3; }
 html:has(.company-view)::-webkit-scrollbar,html:has(.publish-view)::-webkit-scrollbar { width: 9px; }
 html:has(.company-view)::-webkit-scrollbar-track,html:has(.publish-view)::-webkit-scrollbar-track { background: #f4f1f3; }

@@ -51,6 +51,10 @@ func (a *DesktopApp) StartBackend() error {
 		}
 	}()
 	log.Printf("🚀 Rescene 桌面 API 已启动：%s", a.BackendURL())
+	// 原生 Windows 开机自启（HKCU Run 注册表，正式版生效）
+	if err := ensureAutoStart(); err != nil {
+		log.Printf("⚠️ 写入开机自启失败: %v", err)
+	}
 	// 云端记忆同步（可选）：启动后自动拉取一次（换设备恢复记忆）
 	handler.StartupMemorySyncPull()
 	return nil
