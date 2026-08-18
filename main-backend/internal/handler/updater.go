@@ -212,6 +212,45 @@ func fetchRelease(url string) (*githubRelease, error) {
 // errNoRelease 表示接口正常但还没有正式 release，调用方应视为无更新而不是报错。
 var errNoRelease = fmt.Errorf("no release yet")
 
+// lastAppliedVersionFileName 是「已更新到 vX」一次性标记文件名（updates 目录内）。
+// alpha 预发布补丁启动时静默自动应用后写入；前端启动读一次显示升级完成提示即删。
+const lastAppliedVersionFileName = "last-applied.txt"
+
+// writeLastAppliedVersion 从补丁 exe 二进制里提取新版本号，写入一次性标记。
+// 版本串取自 ldflags 注入的 UTF-8 版本（versionRe 不匹配 UTF-16 版本资源），
+// 与 patchTargetIsStable 的判定同源。提取失败静默跳过（提示非关键路径）。
+func writeLastAppliedVersion(newExe, localDir string) error {
+	data, err := os.ReadFile(newExe)
+	if err != nil {
+		return err
+	}
+	ms := versionRe.FindAll(data, -1)
+	if len(ms) == 0 {
+		return nil
+	}
+	best := string(ms[0])
+	for _, m := range ms[1:] {
+		if len(m) > len(best) {
+			best = string(m)
+		}
+	}
+	return os.WriteFile(filepath.Join(localDir, lastAppliedVersionFileName), []byte(best), 0o600)
+}
+
+// HandleLastAppliedUpdate 返回上次静默自动应用的新版本号（一次性：读完即删）。
+// 前端启动时调用，有版本则显示「已更新到 vX」提示；无标记返回空串，前端静默。
+func HandleLastAppliedUpdate(c *gin.Context) {
+	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
+	mark := filepath.Join(localDir, lastAppliedVersionFileName)
+	data, err := os.ReadFile(mark)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "version": ""})
+		return
+	}
+	_ = os.Remove(mark) // 一次性：读完即删，避免每次启动重复提示
+	c.JSON(http.StatusOK, gin.H{"ok": true, "version": strings.TrimSpace(string(data))})
+}
+
 // HandleClearPendingHotPatch 删除待应用的热补丁 exe（用户「跳过此版本」时调用，
 // 防止下次启动被自动应用；「稍后再说」不删——那是下次启动更新的入口）。
 func HandleClearPendingHotPatch(c *gin.Context) {
@@ -948,6 +987,9 @@ func ApplyPendingHotPatch() bool {
 	if patchTargetIsStable(newExe) {
 		return false
 	}
+	// 写「已更新到 vX」一次性标记：前端启动时读取并显示升级完成提示（2026-08-18 用户定稿：
+	// alpha 静默自动应用保留，但升级完要让用户看到新版本号）
+	_ = writeLastAppliedVersion(newExe, localDir)
 	exePath, err := os.Executable()
 	if err != nil {
 		return false

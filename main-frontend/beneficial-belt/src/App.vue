@@ -31,13 +31,19 @@
       <span>发现新版本 <b>{{ updateInfo && updateInfo.latest_version }}</b>，点击查看</span>
       <span class="update-banner-arrow">›</span>
     </button>
+    <!-- 升级完成提示：alpha 补丁启动时静默自动应用后，下一次启动显示（2026-08-18 用户定稿） -->
+    <div v-if="showUpdatedBanner" class="updated-banner">
+      <span class="updated-banner-check">✓</span>
+      <span>已更新到 <b>{{ updatedVersion }}</b></span>
+      <button class="updated-banner-close" type="button" @click="closeUpdatedBanner" aria-label="关闭">×</button>
+    </div>
   </template>
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
-import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString } from './composables/updatePrefs.js'
+import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 import DHSCommunityModal from './components/shanxi/chat/DHSCommunityModal.vue'
 
@@ -49,6 +55,25 @@ const showDHSCommunity = ref(false)
 // 顶部轻量更新横幅：检测到新安装包已就绪时显示 15s，点击才弹全窗（2026-08-17 用户定稿）
 const showUpdateBanner = ref(false)
 let updateBannerTimer = null
+// 升级完成横幅：alpha 补丁静默自动应用后显示「已更新到 vX」15s（2026-08-18 用户定稿）
+const showUpdatedBanner = ref(false)
+const updatedVersion = ref('')
+let updatedBannerTimer = null
+let updateCheckTimer = null
+
+function showBanner() {
+  showUpdateBanner.value = true
+  updateBannerTimer = setTimeout(() => {
+    showUpdateBanner.value = false
+    updateBannerTimer = null
+  }, 15000)
+}
+
+function closeUpdatedBanner() {
+  clearTimeout(updatedBannerTimer)
+  updatedBannerTimer = null
+  showUpdatedBanner.value = false
+}
 
 function openUpdateModal() {
   clearTimeout(updateBannerTimer)
@@ -57,8 +82,53 @@ function openUpdateModal() {
   showUpdate.value = true
 }
 
+// 更新检查 + 触发后台下载。
+// silent=true（30 分钟周期）：下完静默不打扰，等下次进应用提示；
+// silent=false（启动）：安装包已就绪 → 弹轻量横幅（同版本 3 天节流）。
+async function checkAndDownload(silent) {
+  if (isUpdateNotifyDisabled()) return
+  let res
+  try {
+    res = await fetch('/api/update/check')
+  } catch { return }
+  let data
+  try { data = await res.json() } catch { return }
+  if (!(data.ok && data.update && data.update.has_update)) return
+  if (getSkippedVersion() === data.update.latest_version) return
+  if (!isTestUpdatesEnabled() && isPrereleaseVersionString(data.update.latest_version)) return
+  updateInfo.value = data.update
+  try {
+    const dl = await fetch('/api/update/download', { method: 'POST' })
+    const dlData = await dl.json()
+    if (dlData.state === 'done') {
+      // 安装包已就绪（本次启动前已下好）→ 弹轻量横幅；
+      // 同一版本 3 天内只提醒一次，3 天后没装再提醒（用户 2026-08-18 定稿）
+      if (silent) return
+      if (!shouldShowUpdateBanner(data.update.latest_version)) return
+      markUpdateBannerShown(data.update.latest_version)
+      showBanner()
+      return
+    }
+    // 下载中：轮询等待完成，完成后静默（下次进应用再提示）
+    const timer = setInterval(async () => {
+      try {
+        const r = await fetch('/api/update/download/status')
+        const d = await r.json()
+        if (d.state === 'done' || d.state === 'error') {
+          clearInterval(timer)
+          // 静默：安装包已就绪，下次启动磁盘判断 done → 弹横幅
+        }
+      } catch { /* 忽略轮询错误 */ }
+    }, 2000)
+  } catch {
+    // 下载接口不可达：本次不弹窗，下次启动再试
+  }
+}
+
 onBeforeUnmount(() => {
   if (updateBannerTimer) clearTimeout(updateBannerTimer)
+  if (updatedBannerTimer) clearTimeout(updatedBannerTimer)
+  if (updateCheckTimer) clearInterval(updateCheckTimer)
 })
 
 onMounted(() => {
@@ -74,46 +144,20 @@ onMounted(() => {
 })
 
 onMounted(async () => {
+  // 1) 升级完成提示：alpha 补丁静默自动应用后，后端留了一次性标记（读完即删）
   try {
-    if (isUpdateNotifyDisabled()) return
-    const res = await fetch('/api/update/check')
-    const data = await res.json()
-    if (data.ok && data.update?.has_update) {
-      if (getSkippedVersion() === data.update.latest_version) return
-      // 关闭「热更新测试版本」时忽略预发布（alpha/beta/rc）更新（2026-08-16）
-      if (!isTestUpdatesEnabled() && isPrereleaseVersionString(data.update.latest_version)) return
-      updateInfo.value = data.update
-      // 第一次进应用：静默后台下载安装包（用户无感知、不弹窗）。
-      // 下完本次不打扰；下次启动本地已有安装包 → 直接弹「一键安装」。
-      try {
-        const dl = await fetch('/api/update/download', { method: 'POST' })
-        const dlData = await dl.json()
-        if (dlData.state === 'done') {
-                  // 安装包已就绪（上次启动已下载完）→ 顶部轻量横幅提示 15s，不堵塞界面；
-                  // 用户点击横幅才弹「一键安装」全窗（2026-08-17 用户定稿，替代原直接弹窗）
-                  showUpdateBanner.value = true
-                  updateBannerTimer = setTimeout(() => {
-                    showUpdateBanner.value = false
-                    updateBannerTimer = null
-                  }, 15000)
-                  return
-                }
-        // 本次开始下载：轮询等待完成，完成后静默，不弹窗
-        const timer = setInterval(async () => {
-          try {
-            const r = await fetch('/api/update/download/status')
-            const d = await r.json()
-            if (d.state === 'done' || d.state === 'error') {
-              clearInterval(timer)
-              // 故意不弹窗：安装包留到下次启动再提示一键安装
-            }
-          } catch { /* 忽略轮询错误 */ }
-        }, 2000)
-      } catch {
-        // 下载接口不可达：本次不弹窗，下次启动再试
-      }
+    const r = await fetch('/api/update/last-applied')
+    const d = await r.json()
+    if (d && d.ok && d.version) {
+      updatedVersion.value = d.version
+      showUpdatedBanner.value = true
+      updatedBannerTimer = setTimeout(closeUpdatedBanner, 15000)
     }
-  } catch {}
+  } catch { /* 标记接口不可达：静默 */ }
+  // 2) 更新检查 + 后台下载：启动时一次 + 每 30 分钟周期检查
+  //    （运行中发布新版也会自动下载，下完等下次进应用提示；2026-08-18）
+  await checkAndDownload(false)
+  updateCheckTimer = setInterval(() => checkAndDownload(true), 30 * 60 * 1000)
 })
 </script>
 
@@ -154,6 +198,48 @@ onMounted(async () => {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 35%, transparent); }
   50% { opacity: 0.75; box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-accent) 0%, transparent); }
 }
+/* 升级完成横幅：alpha 静默自动应用后显示「已更新到 vX」，成功绿色（2026-08-18） */
+.updated-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 7px 14px;
+  border: 1px solid color-mix(in srgb, #22c55e 45%, var(--app-border));
+  border-radius: 999px;
+  background: var(--app-surface-2);
+  color: var(--app-text-soft);
+  font-size: 12.5px;
+  line-height: 1;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.12);
+}
+.updated-banner b { font-weight: 600; color: #22c55e; }
+.updated-banner-check {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: #fff;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.updated-banner-close {
+  border: none;
+  background: none;
+  color: var(--app-text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0 0 4px;
+}
+.updated-banner-close:hover { color: var(--app-text); }
 /* 底部横排圆胶囊工具条（纯图标，2026-08-13 用户定稿：
    照搬聊天界面终端预览工具条 .terminal-tabs-bar 样式：容器 surface-2 底 + 边框，
    按钮无边框透明，hover/active 背景变化；横排，右下角） */

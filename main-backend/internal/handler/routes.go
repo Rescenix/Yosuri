@@ -233,6 +233,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	// 自动更新：启动时检查 GitHub 最新 release，有新版则前端弹窗提示更新内容
 	r.GET("/api/update/check", HandleCheckUpdate)
+	r.GET("/api/update/last-applied", HandleLastAppliedUpdate) // 已更新到 vX 一次性提示（2026-08-18）
 	r.POST("/api/update/open", HandleOpenUpdateDownload)
 	// 后台自动下载安装包 + 进度 + 拉起安装程序
 	r.POST("/api/update/download", HandleAutoDownload)
