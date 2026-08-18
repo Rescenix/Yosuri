@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,18 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-type VisionResponse struct {
-	Output struct {
-		Choices []struct {
-			Message struct {
-				Content []struct {
-					Text string `json:"text"`
-				} `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	} `json:"output"`
-}
 
 // VisionQA 是一轮历史问答，供多轮追问时把上文带回去（见 AnalyzeImage）。
 type VisionQA struct {
@@ -96,105 +82,24 @@ func analyzeImageViaRouter(backends []RouterBackend, cleanBase64, question strin
 	return content, nil
 }
 
-// AnalyzeImage 分析图片。优先走模型路由（默认硅基流动 Kimi K2.6，见 visionBackends），
-// 没配好时回退到阿里云 qwen-vl-max 的私有多模态格式。
+// AnalyzeImage 分析图片。走模型路由（默认硅基流动 Kimi K2.6，见 visionBackends）。
 // history 非空时把之前的问答对铺在图片这一轮前面，支持"先问整体、再问细节"的连续追问——
 // image 只挂在最后一条 user 消息上即可，之前的图不需要重复携带。
 func AnalyzeImage(imageBase64 string, question string, history []VisionQA) (string, error) {
-	// 前缀清理要在分流之前做：两条路径都只接受裸 base64
-	if backends := visionBackends(); len(backends) > 0 {
-		clean := imageBase64
-		if idx := strings.Index(clean, "base64,"); idx != -1 {
-			clean = clean[idx+7:]
-		}
-		text, err := analyzeImageViaRouter(backends, clean, question, history)
-		if err == nil {
-			fmt.Printf("👁️ [视觉] 由 %s (%s) 完成分析\n", backends[0].Name, backends[0].Model)
-			return text, nil
-		}
-		// 视觉模型挂了不直接判死：DashScope 还配着就让它兜底，
-		// 一次前端自检不该因为免费池抽风就整轮失败。
-		fmt.Printf("⚠️ [视觉] %s 失败，回退 qwen-vl-max: %v\n", backends[0].Name, err)
+	backends := visionBackends()
+	if len(backends) == 0 {
+		return "", fmt.Errorf("未配置视觉模型（VISION_MODEL_ID 指向的 backend 不存在或未标记 Vision）")
 	}
-
-	apiKey := os.Getenv("DASHSCOPE_API_KEY")
-
-	// 智能清理可能存在的 base64 前缀
-	cleanBase64 := imageBase64
-	if idx := strings.Index(cleanBase64, "base64,"); idx != -1 {
-		cleanBase64 = cleanBase64[idx+7:] // 截取 "base64," 之后的部分
+	clean := imageBase64
+	if idx := strings.Index(clean, "base64,"); idx != -1 {
+		clean = clean[idx+7:]
 	}
-
-	var messages []map[string]interface{}
-	for _, h := range history {
-		if h.Q == "" && h.A == "" {
-			continue
-		}
-		messages = append(messages,
-			map[string]interface{}{"role": "user", "content": []map[string]interface{}{{"text": h.Q}}},
-			map[string]interface{}{"role": "assistant", "content": []map[string]interface{}{{"text": h.A}}},
-		)
-	}
-	messages = append(messages, map[string]interface{}{
-		"role": "user",
-		"content": []map[string]interface{}{
-			{"image": "data:image/jpeg;base64," + cleanBase64},
-			{"text": question},
-		},
-	})
-
-	reqBody := map[string]interface{}{
-		"model": "qwen-vl-max",
-		"input": map[string]interface{}{
-			"messages": messages,
-		},
-	}
-
-	reqBytes, _ := json.Marshal(reqBody)
-	fmt.Printf("📸 发送视觉请求，大小: %.2f KB\n", float64(len(reqBytes))/1024)
-
-	req, _ := http.NewRequest("POST",
-		"https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
-		bytes.NewBuffer(reqBytes))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{
-		Timeout:   30 * time.Second,
-		Transport: AliyunTransport, // 走神权代理（手机端）或默认传输（电脑端）
-	}
-	resp, err := client.Do(req)
+	text, err := analyzeImageViaRouter(backends, clean, question, history)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	fmt.Printf("📸 视觉API响应状态: %d\n", resp.StatusCode)
-
-	if resp.StatusCode != 200 {
-		var errMsg bytes.Buffer
-		errMsg.ReadFrom(resp.Body)
-		return "", fmt.Errorf("视觉API返回非200: %d, body: %s", resp.StatusCode, errMsg.String())
-	}
-
-	var visionResp VisionResponse
-	json.NewDecoder(resp.Body).Decode(&visionResp)
-
-	if len(visionResp.Output.Choices) == 0 {
-		return "图片分析未返回结果", nil
-	}
-
-	// 提取文本描述
-	var description string
-	for _, content := range visionResp.Output.Choices[0].Message.Content {
-		if content.Text != "" {
-			description += content.Text
-		}
-	}
-	if description == "" {
-		return "图片分析未返回结果", nil
-	}
-	return description, nil
+	fmt.Printf("👁️ [视觉] 由 %s (%s) 完成分析\n", backends[0].Name, backends[0].Model)
+	return text, nil
 }
 
 // VisionAnalyzeRequest 是 HandleVisionAnalyze 的请求体。

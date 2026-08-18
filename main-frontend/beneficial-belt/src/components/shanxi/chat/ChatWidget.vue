@@ -2477,11 +2477,17 @@ const modelSearch = ref('')
 // 搜索过滤后的分组（图1 顶部搜索框）
 const filteredGroupedOptions = computed(() => {
   const q = modelSearch.value.trim().toLowerCase()
-  if (!q) return groupedModelOptions.value
   return groupedModelOptions.value
-    .map(g => ({ vendor: g.vendor, items: g.items.filter(m => m.label.toLowerCase().includes(q)) }))
+    .map(g => ({
+      vendor: g.vendor,
+      items: g.items.filter(m => {
+        if (q && !m.label.toLowerCase().includes(q)) return false
+        return true
+      })
+    }))
     .filter(g => g.items.length > 0)
 })
+
 function selectModel(value) { selectedModel.value = value; localStorage.setItem('selectedModel', value); showModelMenu.value = false }
 // 图2「编辑模型」弹窗开关
 const showModelManager = ref(false)

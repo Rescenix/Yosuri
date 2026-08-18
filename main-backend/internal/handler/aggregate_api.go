@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -157,6 +158,22 @@ func aggAutoChain() []RouterBackend {
 			Keyless: b.keyless, Reasoning: b.reasoning, Vision: b.vision,
 			ContextWindow: b.window,
 		})
+	}
+	// 1. 额度优先：未耗尽排前，耗尽沉底（避免把请求发给已没额度的 Key）
+	sort.SliceStable(out, func(i, j int) bool {
+		return quotaExhausted(out[i]) != quotaExhausted(out[j]) && !quotaExhausted(out[i])
+	})
+	// 2. 负载均衡：额度同组的 backend 随机打散，避免总先试同一个慢 backend
+	if len(out) > 1 {
+		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		// 只在「未耗尽」组内打乱，耗尽组保持沉底
+		exhaustedStart := 0
+		for exhaustedStart < len(out) && !quotaExhausted(out[exhaustedStart]) {
+			exhaustedStart++
+		}
+		if exhaustedStart > 1 {
+			rnd.Shuffle(exhaustedStart, func(i, j int) { out[i], out[j] = out[j], out[i] })
+		}
 	}
 	return out
 }
@@ -459,68 +476,22 @@ func HandleAggregateModels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"object": "list", "data": data})
 }
 
-// isDeepSeekModel 判断模型名是否 DeepSeek 系（聚合端口只暴露它）。
-func isDeepSeekModel(model string) bool {
-	return strings.Contains(strings.ToLower(model), "deepseek")
-}
-
-// isUsableAggModel 聚合端口暴露规则（2026-08-13 用户定稿扩展）：
-//   - 付费墙 vendor 排除（kilo gateway / ollama cloud）
-//   - NVIDIA NIM 移除（用户「纯纯垃圾，不要了」——实测慢/超时）
-//   - 保留 DeepSeek V4 系 + agent 基准与 DS 相持的顶级免费模型
-//     （GLM-5.2 / Qwen3.5-397B / Qwen3-235B / MiMo / GPT-OSS / Laguna / step-3.7，
-//      2026-08-13 实测收录；GLM-5.2 商汤 429/魔搭空回复由探活动态沉底）
-//   - Kilo Gateway 免 key 模型仅用于应用面板，不加入聚合端口（2026-08-15）
-func isUsableAggModel(model, vendor string) bool {
-	if isPaidWallVendor(vendor) {
-		return false
-	}
-	v := strings.ToLower(vendor)
-	if strings.Contains(v, "nvidia") || strings.Contains(v, "订阅") {
-		return false // NVIDIA NIM 移除（用户 2026-08-13）+ 订阅档（plan_*）不暴露
-	}
-	if isUsableDeepSeek(model, vendor) {
+// isOfficialAllowed DeepSeek 模式准入：只放 DeepSeek 系（含 deepseek-v4-flash 等）
+// 与腾讯混元 Hy3 系（tencent/hy3:free 等），其余厂商一律挡掉。
+func isOfficialAllowed(model, vendor string) bool {
+	lower := strings.ToLower(model)
+	if strings.Contains(lower, "deepseek") {
 		return true
 	}
-	ml := strings.ToLower(model)
-	for _, top := range aggTopModels {
-		if strings.Contains(ml, top) {
-			return true
-		}
+	if strings.Contains(lower, "hy3") || strings.Contains(lower, "hunyuan") {
+		return true
 	}
 	return false
 }
 
-// aggTopModels 聚合端口「快又聪明」名单（2026-08-13 用户二轮收窄定稿）：
-// 用户「聚合端口跑 Hermes 太多垃圾太卡」——只留实测秒回 + agent 可用的旗舰：
-//   step-3.7-flash 1.6s / Qwen3-235B 2.1s（魔搭实测）
-// 已剔除（实测慢或废）：
-//   MiMo 12.8s、Qwen3.5-397B 4.9-10.8s（慢）、GLM-5.2（商汤 429/魔搭空回复）、
-//   Laguna 5.9s+免key限流、GPT-OSS-120B（Cerebras/Groq 地域风控 403 + Ollama/Kilo 付费墙，无活源）。
-// 注意收窄到旗舰线：qwen3 只留 235b（27/35/122B 非顶级）、gpt-oss 只留 120b（20b 用户否决）。
-var aggTopModels = []string{
-	"qwen3-235b",   // 通义 Qwen3-235B（魔搭 2.1s 实测秒回）
-	"step-3.7",     // 阶跃 step-3.7-flash（1.6s 实测秒回）
-}
-
-// isUsableDeepSeek 判断是否聚合端口真正可用的 DeepSeek：
-// 1. 只认 V4 系列（V4-Flash / V4-Pro 实测可用）；v3.x / r1 / chat 等低版本实测用不了
-// 2. 排除付费墙提供方（Kilo 401、Ollama Cloud 403，挂着占列表、选了必挂）
-func isUsableDeepSeek(model, vendor string) bool {
-	if !isDeepSeekModel(model) {
-		return false
-	}
-	if isPaidWallVendor(vendor) {
-		return false
-	}
-	lower := strings.ToLower(model)
-	// 只保留 V4 系；排除低版本（v3.x/r1/chat/coder 等）
-	if !strings.Contains(lower, "v4") {
-		return false
-	}
-	return true
-}
-
+// isUsableAggModel 等旧筛选函数已废弃（2026-08-18）：DeepSeek 模式改走 isOfficialAllowed，
+// 用户自定义模式走后端 model_ids。下方 paidWallVendors / isPaidWallVendor 仍被 isOfficialAllowed 之外的
+// 自动发现过滤使用，保留。
 // paidWallVendors 聚合端口直接排除的提供方：实测 DeepSeek 全是付费墙
 // （Kilo 401 PAID_MODEL_AUTH_REQUIRED、Ollama Cloud 403 requires subscription）。
 var paidWallVendors = []string{"kilo gateway", "ollama cloud"}
@@ -711,19 +682,23 @@ func aggregateExposedModels() []aggExposedModel {
 	return exposeOfficial()
 }
 
-// exposeOfficial 官方遴选：DS V4 系 + 快又聪明精选（2026-08-13 用户定稿规则）。
+// exposeOfficial DeepSeek 模式（2026-08-18 用户定稿）：只暴露 DeepSeek 系 + 腾讯混元 Hy3 系，
+// 其他厂商（qwen/step/glm 等）一律不进官方遴选列表——用户「就这个还能看」。
 func exposeOfficial() []aggExposedModel {
 	out := []aggExposedModel{}
 	seen := map[string]bool{}
 	for _, f := range freeModelCatalog {
-		if f.Disabled || !isUsableAggModel(f.Model, f.Vendor) {
+		if f.Disabled {
+			continue
+		}
+		if !isOfficialAllowed(f.Model, f.Vendor) {
 			continue
 		}
 		out = append(out, aggExposedModel{ID: f.ID, Vendor: f.Vendor, Name: f.Name, Model: f.Model, Endpoint: f.Endpoint, Keyless: f.Keyless})
 		seen[f.ID] = true
 	}
 	for _, dm := range discoveredFreeModels("") {
-		if seen[dm.ID] || !isUsableAggModel(dm.Model, dm.Vendor) {
+		if seen[dm.ID] {
 			continue
 		}
 		if catalogHasModel(dm.Model, dm.Endpoint) {
@@ -732,8 +707,8 @@ func exposeOfficial() []aggExposedModel {
 		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
 			continue
 		}
-		if sig := probeSignal(RouterBackend{BaseURL: dm.Endpoint, Model: dm.Model}); sig == 0 {
-			continue // 探活确认不可用：沉底不输出
+		if !isOfficialAllowed(dm.Model, dm.Vendor) {
+			continue
 		}
 		id := autoReadableID(dm.ID)
 		if seen[id] {
@@ -749,11 +724,11 @@ func exposeOfficial() []aggExposedModel {
 				continue
 			}
 			for _, m := range configuredProviderModels(e) {
-				if !isUsableAggModel(m.ID, e.Name) {
-					continue
-				}
 				id := customModelSelectionID(e.ID, m.ID)
 				if seen[id] {
+					continue
+				}
+				if !isOfficialAllowed(m.ID, e.Name) {
 					continue
 				}
 				cname := strings.TrimSpace(m.Name)

@@ -1716,6 +1716,51 @@ min-height: 90px !important;
   margin-left: 6px; flex-shrink: 0;
 }
 
+/* 模型标签重命名（用户自定义标签） */
+.model-menu-rename {
+  border: none; background: transparent; cursor: pointer;
+  color: var(--app-text-faint); font-size: 12px; line-height: 1;
+  padding: 2px 4px; margin-left: 4px; border-radius: 4px; flex-shrink: 0;
+  opacity: 0; transition: opacity 0.15s;
+}
+.model-menu-item:hover .model-menu-rename { opacity: 1; }
+.model-menu-rename:hover { color: var(--app-accent); background: rgba(127,127,127,0.12); }
+.model-menu-rename-input {
+  flex: 1; min-width: 60px; margin-left: 6px;
+  border: 1px solid var(--app-accent); border-radius: 4px;
+  background: var(--app-bg, #fff); color: var(--app-text, #111);
+  font-size: 12px; padding: 2px 6px; outline: none;
+}
+
+/* 模型标签筛选条（路由选择顶部） */
+.model-tag-bar {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px 16px; align-items: center;
+}
+.model-tag-chip {
+  border: 1px solid var(--app-border); background: var(--app-surface-2);
+  color: var(--app-text); font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; line-height: 1;
+}
+.model-tag-chip.on {
+  background: var(--app-accent); color: #fff; border-color: var(--app-accent);
+}
+.model-tag-del {
+  font-size: 13px; line-height: 1; opacity: 0.7; margin-left: 2px;
+}
+.model-tag-del:hover { opacity: 1; }
+.model-tag-add {
+  border: 1px dashed var(--app-border); background: transparent;
+  color: var(--app-text-faint); font-size: 12px;
+  padding: 3px 8px; border-radius: 999px; cursor: pointer;
+}
+.model-tag-add:hover { color: var(--app-accent); border-color: var(--app-accent); }
+.model-tag-add-input {
+  border: 1px solid var(--app-accent); border-radius: 999px;
+  font-size: 12px; padding: 3px 8px; outline: none; width: 80px;
+}
+
 .header-left {
   flex: 1;
   min-width: 0;

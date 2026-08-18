@@ -341,18 +341,21 @@
               </div>
               <div class="agg-api-tip">已聚合 {{ freeModels.length + customModels.length }} 个模型（免费池 + 自定义）。model 填 <code class="agg-api-code">auto</code> 自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。</div>
 
-                            <!-- ===== 暴露模型配置（官方遴选 / 用户自定义，issue #5）===== -->
+                            <!-- ===== 聚合模型选择（DeepSeek 精选 / 用户自定义命名标签）===== -->
                             <div class="agg-api-card" style="margin-top:10px">
                               <div class="agg-api-row">
-                                <span class="agg-api-label">暴露模型</span>
-                                <div class="agg-mode-toggle">
-                                  <button type="button" :class="{ on: aggMode === 'official' }" @click="aggMode = 'official'">官方遴选</button>
-                                  <button type="button" :class="{ on: aggMode === 'custom' }" @click="aggMode = 'custom'">用户自定义</button>
+                                <div class="agg-mode-tabs">
+                                  <button type="button" :class="{ on: aggMode === 'official' }" @click="switchAggOfficial()">DeepSeek</button>
+                                  <template v-for="t in customTags" :key="t.id">
+                                    <input v-if="aggMode === t.id" class="agg-tag-input" v-model="t.name" @blur="onTagRename(t)" @keyup.enter="onTagRename(t)" @click.stop="selectTag(t)" :title="'可改名'" />
+                                    <button v-else type="button" :class="{ on: aggMode === t.id }" @click="selectTag(t)">{{ t.name }}</button>
+                                    <span v-if="customTags.length > 1" class="agg-tag-del" @click="removeCustomTag(t.id)">×</span>
+                                  </template>
+                                  <button type="button" class="agg-tag-add" @click="addCustomTag">+</button>
                                 </div>
-                                <button class="agg-api-copy" type="button" :disabled="aggCfgSaving" @click="saveAggConfig()">{{ aggCfgSaving ? '保存中…' : '保存' }}</button>
                               </div>
-                              <div class="agg-api-tip">官方遴选 = Rescene 精选能跑 Agent 的模型（DeepSeek V4 系 + 快又聪明），默认推荐；用户自定义 = 自己勾选任意模型进聚合端口，不受精选限制。</div>
-                              <template v-if="aggMode === 'custom'">
+                              <div class="agg-api-tip">DeepSeek = Rescene 精选能跑 Agent 的模型；用户自定义 = 自己勾选任意模型进聚合端口，标签名可改名、可 + 新增。修改实时保存，无需点保存。</div>
+                              <template v-if="aggMode !== 'official'">
                                 <input v-model="aggCfgSearch" class="agg-cfg-search" placeholder="搜索模型名 / 厂商…" />
                                 <div class="agg-cfg-list">
                                   <div v-for="g in aggCfgGroups" :key="g.vendor" class="agg-cfg-group">
@@ -364,14 +367,37 @@
                                       </button>
                                       <button type="button" class="agg-cfg-select-all" @click="toggleAggGroupAll(g.vendor)">{{ aggGroupAllState(g.vendor) ? '取消全选' : '全选' }}</button>
                                     </div>
-                                    <div v-if="aggOpen[g.vendor]" class="agg-cfg-group-body">
-                                      <label v-for="c in g.items" :key="c.id" class="agg-cfg-item" :class="{ off: !c.key_set }">
-                                        <input type="checkbox" :value="c.id" v-model="aggModelIDs" :disabled="!c.key_set" />
-                                        <span class="agg-cfg-name" :title="c.model">{{ c.name }}</span>
-                                        <span class="agg-cfg-model">{{ c.model }}</span>
-                                        <span v-if="!c.chat" class="agg-cfg-nochat">非对话</span>
-                                        <span v-if="!c.key_set" class="agg-cfg-nokey">未配 key</span>
-                                      </label>
+                                    <div v-if="aggOpen[g.vendor] !== false" class="agg-cfg-group-body">
+                                      <div v-for="c in g.items" :key="c.id" class="agg-cfg-item-wrap">
+                                        <label class="agg-cfg-item" :class="{ off: !c.key_set }">
+                                          <input type="checkbox" :value="c.id" v-model="aggModelIDs" :disabled="!c.key_set" />
+                                          <span class="agg-cfg-name" :title="c.model">{{ c.name }}</span>
+                                          <span class="agg-cfg-model">{{ c.model }}</span>
+                                          <button v-if="reviewCountId(c.id)" class="agg-cfg-info" type="button" :class="{ on: aggReviewOpen === c.id }" :title="'大众点评（' + reviewCountId(c.id) + ' 条）'" @click="aggReviewOpen = aggReviewOpen === c.id ? '' : c.id">
+                                            <span class="agg-cfg-info-stars">{{ renderStars(avgStarsId(c.id)) }}</span>
+                                            <span class="agg-cfg-info-num">{{ avgStarsId(c.id).toFixed(1) }}</span>
+                                          </button>
+                                          <span v-if="!c.chat" class="agg-cfg-nochat">非对话</span>
+                                          <span v-if="!c.key_set" class="agg-cfg-nokey">未配 key</span>
+                                        </label>
+                                        <div v-show="aggReviewOpen === c.id" class="agg-review-card">
+                                          <div class="agg-review-card-head">
+                                            <span class="agg-review-model">{{ c.name }}</span>
+                                            <span class="agg-review-avg">{{ avgStarsId(c.id).toFixed(1) }}</span>
+                                            <span class="agg-review-stars">{{ renderStars(avgStarsId(c.id)) }}</span>
+                                            <span class="agg-review-total">{{ reviewCountId(c.id) }} 条点评</span>
+                                          </div>
+                                          <div class="agg-review-list">
+                                            <div v-for="(rv, ri) in reviewsOfId(c.id)" :key="ri" class="agg-review-item">
+                                              <div class="agg-review-item-head">
+                                                <span class="agg-review-user">{{ rv.user }}</span>
+                                                <span class="agg-review-stars">{{ renderStars(rv.stars) }}</span>
+                                              </div>
+                                              <div class="agg-review-text">{{ rv.text }}</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                   <div v-if="!aggCfgGroups.length" class="settings-empty">没有匹配的模型。</div>
@@ -409,7 +435,6 @@
                                         <i class="agg-health-bar" :style="{ width: latencyWidth(m) }"></i>
                                         <b>{{ latencyText(m) }}</b>
                                       </span>
-                                      <span class="agg-health-badge" :class="{ off: m.disabled }">{{ m.disabled ? '不可用' : '可用' }}</span>
                                     </div>
                                   </div>
                                   <!-- 全部暴露模型 -->
@@ -425,7 +450,6 @@
                                         <i class="agg-health-bar" :style="{ width: latencyWidth(m) }"></i>
                                         <b>{{ latencyText(m) }}</b>
                                       </span>
-                                      <span class="agg-health-badge" :class="{ off: m.disabled }">{{ m.disabled ? '不可用' : '可用' }}</span>
                                     </div>
                                   </div>
                                   <div class="agg-health-foot">探活每 30 分钟一轮（免 key / 已配 key 模型），信号格 0-4：绿=快(≤3s) 黄=中(≤8s) 红=慢(>8s) 灰=未探测。</div>
@@ -968,7 +992,47 @@ async function loadAggHealth() {
   }
 }
 
-// 延迟条宽度：0-8s 映射 0-100%，超过封顶（8s 约等于 100%）
+// ===== 大众点评式评分评论（演示数据，前端静态）=====
+const aggReviewOpen = ref('')
+// 演示点评：以模型 id 为 key（与 /api/aggregate/config 的 candidates[].id 一致）
+const aggDemoReviews = {
+  'free_zen_deepseek_v4_flash': [
+    { user: '阿强', stars: 5, text: '速度飞快，写代码一把好手，白嫖真香。' },
+    { user: '喵酱', stars: 4, text: '日常够用，偶尔抽风，总体好评。' },
+    { user: '老王', stars: 5, text: '替我扛了半年项目，稳。' }
+  ],
+  'kilo_tencent_hy3_free': [
+    { user: 'Tencent粉', stars: 5, text: '中文语感最自然，聊天首选。' },
+    { user: '夜猫子', stars: 4, text: '长文逻辑在线，就是夜里偶尔慢。' }
+  ],
+  'free_modelscope_qwen3_5_397b': [
+    { user: '工具人', stars: 4, text: '工具调用很听话，就是比 ds 慢半拍。' }
+  ],
+  'free_zhipu_glm_4_5_flash': [
+    { user: '学术党', stars: 4, text: '数学推导清晰，文献总结好用。' },
+    { user: '小白', stars: 3, text: '有时候答非所问，得追问。' }
+  ],
+  'free_step_3_7_flash': [
+    { user: '阶跃用户', stars: 4, text: '长上下文稳，读论文神器。' }
+  ]
+}
+function reviewsOfId(id) {
+  return aggDemoReviews[id] || []
+}
+function reviewCountId(id) {
+  return reviewsOfId(id).length
+}
+function avgStarsId(id) {
+  const list = reviewsOfId(id)
+  if (!list.length) return 0
+  return list.reduce((s, r) => s + r.stars, 0) / list.length
+}
+function renderStars(v) {
+  const full = Math.round(v)
+  return '★★★★★'.slice(0, full) + '☆☆☆☆☆'.slice(0, 5 - full)
+}
+
+// 延迟条宽度：0-8s 映射 0-100%，超过封顶（封顶约 100%）
 function latencyWidth(m) {
   if (m.disabled || !m.real_ms) return '0%'
   const w = Math.min(m.real_ms / 8000 * 100, 100)
@@ -988,8 +1052,18 @@ function latencyText(m) {
   return m.real_ms >= 1000 ? (m.real_ms / 1000).toFixed(1) + 's' : m.real_ms + 'ms'
 }
 // 切到聚合 API tab 时自动加载健康度 + 暴露模型配置
+// 初始状态用 onMounted 兜底：通过 agg-api-shortcut 打开时 activeTab 初始就是
+// aggapi，watch 默认不触发；而 immediate 会在 setup 同步阶段执行，此时
+// 后面的 let/const 声明仍在 TDZ（Cannot access 'aggLoading' before
+// initialization，2026-08-18 实锤）——onMounted 挂载后才执行则无此问题
 watch(activeTab, (t) => {
   if (t === 'aggapi') {
+    if (!aggHealthLoaded.value) loadAggHealth()
+    loadAggConfig()
+  }
+})
+onMounted(() => {
+  if (activeTab.value === 'aggapi') {
     if (!aggHealthLoaded.value) loadAggHealth()
     loadAggConfig()
   }
@@ -1002,6 +1076,62 @@ const aggCandidates = ref([])
 const aggCfgSaving = ref(false)
 const aggCfgSearch = ref('')
 const aggOpen = reactive({}) // vendor → 是否展开（默认全展开）
+// 用户自定义命名标签（前端预设，localStorage 持久化）：每个标签独立保存一组模型勾选
+const AGG_TAGS_KEY = 'aggCustomTags'
+const AGG_ACTIVE_KEY = 'aggActiveTag'
+const customTags = ref([])
+try {
+  const saved = JSON.parse(localStorage.getItem(AGG_TAGS_KEY) || '[]')
+  customTags.value = saved.length ? saved.map(t => ({ id: t.id, name: t.name, editing: false })) : [{ id: 'default', name: '用户自定义', editing: false }]
+} catch (e) {
+  customTags.value = [{ id: 'default', name: '用户自定义', editing: false }]
+}
+if (!customTags.value.find(t => t.id)) customTags.value = [{ id: 'default', name: '用户自定义', editing: false }]
+const activeTagId = ref(localStorage.getItem(AGG_ACTIVE_KEY) || (customTags.value[0] && customTags.value[0].id) || 'default')
+const activeTag = () => customTags.value.find(t => t.id === activeTagId.value) || customTags.value[0]
+function persistTags() {
+  localStorage.setItem(AGG_TAGS_KEY, JSON.stringify(customTags.value.map(t => ({ id: t.id, name: t.name }))))
+  localStorage.setItem(AGG_ACTIVE_KEY, activeTagId.value)
+}
+function loadActiveTagModels() {
+  const t = activeTag()
+  aggModelIDs.value = (t && t.modelIds) ? [...t.modelIds] : []
+}
+function selectTag(t) {
+  activeTagId.value = t.id
+  aggMode.value = t.id
+  loadActiveTagModels()
+  persistTags()
+  saveAggConfig()
+}
+// 切回 DeepSeek（官方遴选）标签：同步把后端 mode 存成 official，否则 health 仍按 custom 空列表返回（2026-08-18）
+function switchAggOfficial() {
+  aggMode.value = 'official'
+  saveAggConfig()
+}
+function addCustomTag() {
+  const id = 'tag_' + Date.now()
+  customTags.value.push({ id, name: '自定义' + customTags.value.length, editing: false, modelIds: [] })
+  activeTagId.value = id
+  aggMode.value = id
+  aggModelIDs.value = []
+  persistTags()
+  saveAggConfig()
+}
+function removeCustomTag(id) {
+  if (customTags.value.length <= 1) return
+  customTags.value = customTags.value.filter(t => t.id !== id)
+  if (activeTagId.value === id) { activeTagId.value = customTags.value[0].id; aggMode.value = activeTagId.value; loadActiveTagModels() }
+  persistTags()
+  saveAggConfig()
+}
+function onTagRename(t) {
+  t.editing = false
+  if (!t.name.trim()) t.name = '自定义'
+  persistTags()
+  saveAggConfig()
+}
+watch(aggModelIDs, (v) => { const t = activeTag(); if (t) { t.modelIds = [...v]; persistTags() } }, { deep: true })
 // 候选按 vendor 分组（后端已做 free 过滤：有 free 后缀只显示 free，没有才全显示）
 const aggCfgGroups = computed(() => {
   const q = aggCfgSearch.value.trim().toLowerCase()
@@ -1028,7 +1158,7 @@ function toggleAggGroup(vendor) {
 function toggleAggGroupAll(vendor) {
   const g = aggCfgGroups.value.find(x => x.vendor === vendor)
   if (!g) return
-  const ids = g.items.filter(c => c.key_set && c.chat).map(c => c.id)
+  const ids = g.items.filter(c => c.key_set).map(c => c.id)
   if (!ids.length) return
   const sel = new Set(aggModelIDs.value)
   const allSelected = ids.every(id => sel.has(id))
@@ -1040,34 +1170,58 @@ function toggleAggGroupAll(vendor) {
 function aggGroupAllState(vendor) {
   const g = aggCfgGroups.value.find(x => x.vendor === vendor)
   if (!g) return false
-  const ids = g.items.filter(c => c.key_set && c.chat).map(c => c.id)
+  const ids = g.items.filter(c => c.key_set).map(c => c.id)
   return ids.length > 0 && ids.every(id => aggModelIDs.value.includes(id))
 }
+let aggAutoSaveTimer = null
+let aggLoading = false // 加载后端配置期间屏蔽自动保存，避免回写覆盖
+// ⚠️ 声明必须在 loadAggConfig 之前：immediate watch 在 setup 同步阶段调用
+// loadAggConfig，若 aggLoading 在后面 let 声明则触发 TDZ ReferenceError（2026-08-18 实锤）
 async function loadAggConfig() {
+  aggLoading = true
   try {
     const res = await fetch('/api/aggregate/config')
     if (!res.ok) return
     const data = await res.json()
-    aggMode.value = data.mode === 'custom' ? 'custom' : 'official'
-    aggModelIDs.value = data.model_ids || []
     aggCandidates.value = data.candidates || []
     // 默认全部展开
     for (const c of aggCandidates.value) aggOpen[c.vendor] = true
+    if (data.mode === 'custom') {
+      if (!customTags.value.find(t => t.id === activeTagId.value)) activeTagId.value = 'default'
+      if (!customTags.value.find(t => t.id === 'default')) customTags.value.unshift({ id: 'default', name: '用户自定义', editing: false })
+      const at = customTags.value.find(t => t.id === activeTagId.value) || customTags.value.find(t => t.id === 'default')
+      at.modelIds = data.model_ids || []
+      aggMode.value = at.id
+      aggModelIDs.value = data.model_ids || []
+    } else {
+      aggMode.value = 'official'
+    }
   } catch (e) { /* 旧后端无此接口时静默保持默认 */ }
+  finally { aggLoading = false }
 }
 async function saveAggConfig() {
+  // 保护：custom 模式下空勾选不覆盖后端——新建空标签/切到空标签时若照发
+  // custom+[]，会把整个暴露池清空（health.models 与 /v1/models 变空）。
+  if (aggMode.value !== 'official' && !aggModelIDs.value.length) return
   aggCfgSaving.value = true
   try {
     await fetch('/api/aggregate/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: aggMode.value, model_ids: aggModelIDs.value }),
+      body: JSON.stringify({ mode: aggMode.value === 'official' ? 'official' : 'custom', model_ids: aggModelIDs.value }),
     })
     if (aggHealthLoaded.value) loadAggHealth() // 暴露范围变了，刷新健康度
+    persistTags()
   } finally {
     aggCfgSaving.value = false
   }
 }
+// 实时保存：勾选变化自动 PUT（防抖 400ms，加载期间不触发）
+watch(aggModelIDs, () => {
+  if (aggLoading || !aggCandidates.value.length) return
+  clearTimeout(aggAutoSaveTimer)
+  aggAutoSaveTimer = setTimeout(saveAggConfig, 400)
+}, { deep: true })
 
 // 自定义 API 解锁弹窗
 const showCustomLockModal = ref(false)
@@ -2077,6 +2231,14 @@ onUnmounted(() => {
 .agg-mode-toggle { display: inline-flex; gap: 4px; flex: 1; }
 .agg-mode-toggle button { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
 .agg-mode-toggle button.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
+.agg-mode-tabs { display: inline-flex; gap: 4px; flex: 1; flex-wrap: wrap; align-items: center; }
+.agg-mode-tabs > button { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.agg-mode-tabs > button.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
+.agg-tag-input { font-size: 10.5px; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-accent); border-radius: 6px; padding: 1px 6px; outline: none; width: 76px; }
+.agg-tag-add { font-size: 13px; line-height: 1; color: var(--app-accent); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 1px 8px; cursor: pointer; flex: none; }
+.agg-tag-add:hover { background: var(--app-surface-3); }
+.agg-tag-del { color: var(--app-text-faint); cursor: pointer; font-size: 12px; padding: 0 2px; flex: none; }
+.agg-tag-del:hover { color: #ff453a; }
 .agg-cfg-search { width: 100%; box-sizing: border-box; margin-top: 8px; font-size: 11.5px; color: var(--app-text); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 5px 9px; outline: none; }
 .agg-cfg-list { max-height: 260px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--app-border-soft); border-radius: 8px; padding: 4px; }
 .agg-cfg-group { border-bottom: 1px solid var(--app-border-soft); }
@@ -2099,6 +2261,26 @@ onUnmounted(() => {
 .agg-cfg-model { font-size: 10px; color: var(--app-text-faint); font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agg-cfg-nokey { font-size: 9.5px; color: #d97b4a; flex: none; }
 .agg-cfg-nochat { font-size: 9px; color: var(--app-text-faint); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 4px; padding: 0 4px; flex: none; }
+/* 模型名右边的「大众点评」信息标签 */
+.agg-cfg-item-wrap { margin-bottom: 2px; }
+.agg-cfg-info { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; flex: none; font-size: 10px; cursor: pointer; background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 999px; padding: 1px 7px; color: var(--app-text-soft); }
+.agg-cfg-info:hover { background: var(--app-surface-3); }
+.agg-cfg-info.on { color: var(--app-accent); border-color: var(--app-accent); background: rgba(124, 108, 255, 0.1); }
+.agg-cfg-info-stars { color: #ffb400; letter-spacing: -1px; }
+.agg-cfg-info-num { font-variant-numeric: tabular-nums; font-weight: 600; }
+/* 大众点评式评论卡片 */
+.agg-review-card { background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 8px; padding: 8px 10px; margin: 4px 2px 8px; }
+.agg-review-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.agg-review-model { font-size: 11.5px; font-weight: 600; color: var(--app-text); }
+.agg-review-avg { font-size: 13px; font-weight: 700; color: #ffb400; }
+.agg-review-stars { font-size: 11px; color: #ffb400; letter-spacing: -1px; }
+.agg-review-total { font-size: 10px; color: var(--app-text-faint); margin-left: auto; }
+.agg-review-item { padding: 5px 0; border-top: 1px dashed var(--app-border-soft); }
+.agg-review-item:first-child { border-top: none; }
+.agg-review-item-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.agg-review-user { font-size: 10.5px; font-weight: 600; color: var(--app-text-soft); }
+.agg-review-text { font-size: 11px; color: var(--app-text); line-height: 1.5; }
+.agg-review-empty { font-size: 10.5px; color: var(--app-text-faint); padding: 4px 0; }
 /* ===== 聚合池健康度 ===== */
 .agg-health-card { margin-top: 14px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 10px; padding: 12px; }
 .agg-health-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }

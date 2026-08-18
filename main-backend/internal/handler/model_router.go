@@ -179,6 +179,14 @@ var freeModelCatalog = []FreeModelDef{
 
 	// —— NVIDIA NIM 已整体移除（2026-08-13 用户清理：「纯纯垃圾，不要了」，实测慢/超时）——
 	// —— Step Plan 订阅已移除：无订阅用不了（2026-08-13 用户清理）——
+
+	// —— 硅基流动 SiliconFlow（api.siliconflow.cn/v1，OpenAI 兼容）——
+	// 2026-08-18 新增：硅基流动赠送免费 API 额度，注册即领 2000 万 tokens。
+	// 免费模型：DeepSeek V4 Flash / Qwen3.5-397B / Qwen3-235B 等。
+	{ID: "free_silicon_deepseek_v4_flash", Vendor: "硅基流动", Name: "DeepSeek V4 Flash（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "deepseek-v4-flash", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动·免费额度·2000万 tokens", ContextWindow: 1048576, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
+	{ID: "free_silicon_qwen3_5_397b", Vendor: "硅基流动", Name: "Qwen3.5-397B（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "qwen3.5-397b", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 397, Note: "硅基流动·免费额度", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
+	{ID: "free_silicon_qwen3_235b", Vendor: "硅基流动", Name: "Qwen3-235B（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "qwen3-235b", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 235, Note: "硅基流动·免费额度", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
+
 }
 
 func isFreeCatalogID(id string) bool {
@@ -637,6 +645,10 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 			// 限流 / 服务端故障：暂时性，计入熔断
 			circuitFail(b)
+			// 额度耗尽判定：429/5xx 响应体带 quota 特征 → 标记耗尽，自动降权
+			if markQuotaExhaustedIfError(b, string(raw)) {
+				fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
+			}
 		}
 		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 	}
@@ -722,6 +734,10 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 			// 限流 / 服务端故障：暂时性，计入熔断
 			circuitFail(b)
+			// 额度耗尽判定：429/5xx 响应体带 quota 特征 → 标记耗尽，自动降权
+			if markQuotaExhaustedIfError(b, string(raw)) {
+				fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
+			}
 		}
 		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 	}

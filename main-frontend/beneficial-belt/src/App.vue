@@ -22,6 +22,13 @@
               <span class="dhs-whale-shield"><Icon icon="mdi:shield-check" width="9" /></span>
             </button>
           </nav>
+          <!-- 左下角：聚合 API 快捷入口（2026-08-18，右移避让） -->
+          <nav class="app-tool-rail-left">
+            <button class="app-tool-btn agg-api-shortcut" type="button" title="聚合 API" aria-label="打开聚合 API" @click="showAggApi = true">
+              <Icon icon="mdi:api" width="16" />聚合 API
+            </button>
+          </nav>
+          <SettingsModal v-if="showAggApi" default-tab="aggapi" @close="showAggApi = false" />
           <router-view />
           <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
           <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
@@ -46,12 +53,15 @@ import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 import DHSCommunityModal from './components/shanxi/chat/DHSCommunityModal.vue'
+import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
 
 const auth = useAuth()
 const showUpdate = ref(false)
 const updateInfo = ref(null)
 // DHS 安全插件生态：鲸鱼入口从输入工具栏移到底部工具条右端（2026-08-18）
 const showDHSCommunity = ref(false)
+// 左下角聚合 API 快捷入口：点开直接跳到设置弹窗的「聚合 API」tab（2026-08-18）
+const showAggApi = ref(false)
 // 顶部轻量更新横幅：检测到新安装包已就绪时显示 15s，点击才弹全窗（2026-08-17 用户定稿）
 const showUpdateBanner = ref(false)
 let updateBannerTimer = null
@@ -275,6 +285,27 @@ onMounted(async () => {
 }
 .app-tool-btn:hover { background: var(--app-surface-3); color: var(--app-text-soft); }
 .app-tool-btn.active { background: var(--app-surface); color: var(--app-text); font-weight: 600; }
+/* 左下角聚合 API 快捷入口：与右下角工具条同款胶囊，镜像到左侧（2026-08-18 右移避让） */
+.app-tool-rail-left {
+  position: fixed;
+  left: 150px;
+  bottom: 18px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(15,23,42,.08);
+}
+.agg-api-shortcut {
+  color: var(--app-accent);
+  font-weight: 600;
+}
+.agg-api-shortcut:hover { background: var(--app-surface-3); color: var(--app-accent); }
 /* DHS 鲸鱼入口（自 chat-window.css 的 dhs-whale-shortcut，移入底部工具条右端后样式随附） */
 .dhs-whale-shortcut {
   position: relative;
@@ -323,5 +354,6 @@ html:has(.publish-view)::-webkit-scrollbar-thumb:hover { background: linear-grad
 @media (max-width: 620px) {
   .app-tool-rail { right: 22px; bottom: 10px; padding: 3px; gap: 1px; }
   .app-tool-btn { height: 24px; padding: 0 8px; }
+  .app-tool-rail-left { left: 130px; bottom: 10px; padding: 3px; }
 }
 </style>
