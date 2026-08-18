@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -204,9 +203,11 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	r.POST("/api/login", CloudLoginProxy)
 	r.POST("/api/auth/register", CloudRegisterProxy)
-	// 校验当前 token 真伪（复用 middleware.AuthRequired 本地验 JWT_SECRET）：
-	// 仅当 token 有效时返回 200，否则 401。前端用它区分“真登录”与“伪造/过期 token”。
-	r.GET("/api/auth/me", middleware.AuthRequired(), AuthMe)
+	// token 校验直接代理到 ResceneCloud 云端验签（透传 Authorization 头）。
+	// re0 开源侧不持有任何密钥，验签全由云端完成（与签发同源），
+	// 既修了「打包版无 .env → 本地默认密钥与云端不符 → auth/me 401」的登不上问题，
+	// 又避免了把密钥硬编码进开源代码导致可伪造任意 token 的漏洞。
+	r.GET("/api/auth/me", CloudMeProxy)
 	// UID 账号体系（薄代理）：由 ResceneCloud 验证并分发，前端不可伪造。
 	// 游客持设备指纹换 UID；登录后 bind 把游客号升级为正式账号（永久保留）。
 	r.POST("/api/auth/uid", CloudUidProxy)

@@ -882,7 +882,15 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 			reqBody["tools"] = tools
 		}
 		body, _ := json.Marshal(reqBody)
-		httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
+		// 单轮模型请求的整体超时：派生自请求 context（浏览器断开仍会取消），
+		// 但额外兜住「上游 200 头已回、body 流中途冻住不推数据」的场景——
+		// 这种半死连接 c.Request.Context() 不会取消（浏览器没断），
+		// drainChatStream 的 ReadString 会永久阻塞，表现为「工具跑完后 agent 卡死、
+		// 只有心跳在跳、要再戳一下才动」。180s 足够正常长任务，超时就当本轮上游失败，
+		// 走现有 err 分支发 flow_error + workflow_done(resumable)，不再冻死整个工作流。
+		roundCtx, roundCancel := context.WithTimeout(c.Request.Context(), 180*time.Second)
+		defer roundCancel()
+		httpReq, err := http.NewRequestWithContext(roundCtx, "POST", chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
 		if err != nil {
 			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
 			continue
@@ -934,8 +942,20 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		}
 		content, calls, inTok, outTok, err := drainChatStream(c, resp, msgs, staticSum)
 		resp.Body.Close()
+		if err != nil {
+			// 流式中途失败（上游推到一半冻住 / 我方 180s 读取超时 / 连接被掐）：
+			// 免费模型源本就不稳定，这种"进行中"的失败不该直接判死整个工作流——
+			// 跟首包前的 failover 同一思路，记进 tried 并切下一个源重试这一轮，
+			// 把不稳定的单源抽风吸收掉，agent 才能真正一口气跑完。
+			// 先发 flow_error 让前端清掉半截 intent/thinking（避免显示残缺回答），
+			// 再 continue 到下一个源。
+			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
+			fmt.Printf("🔀 [路由] %s 流式中途失败，秒切下一个: %s\n", b.Name, truncateChars(err.Error(), 120))
+			writeCodeSSE(c, "flow_error", map[string]any{"message": "上游响应中断，正在切换模型源重试…"})
+			continue
+		}
 		usedBackend := b
-		return content, calls, inTok, outTok, &usedBackend, err
+		return content, calls, inTok, outTok, &usedBackend, nil
 	}
 	return "", nil, 0, 0, nil, fmt.Errorf("所有模型源不可用：%s", strings.Join(tried, "；"))
 }

@@ -197,6 +197,38 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("X-Accel-Buffering", "no") // 反代（nginx/render）别缓冲 SSE
+
+	// SSE 心跳：长工具调用（构建/测试/生图）可能 30-60s 无事件，
+	// 中间代理/浏览器会把空闲连接当成死连接掐断，前端 EventSource.onerror 一触发
+	// 就误判工作流「失败/中断」，表现就是「agent 跑着跑着自动停下，要再戳一下才动」。
+	// 每 15s 推一条 SSE 注释（客户端不渲染），只刷新底层连接活性，不参与业务事件。
+	// 用独立 goroutine + 遇流关闭即退出；写之前先查 request context 是否已结束，避免对已关闭的 writer 写。
+	heartbeatDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		defer close(heartbeatDone)
+		for {
+			select {
+			case <-heartbeatDone:
+				return
+			case <-c.Request.Context().Done():
+				return
+			case <-ticker.C:
+				if c.Request.Context().Err() == nil {
+					codeSSEMu.Lock()
+					fmt.Fprintf(c.Writer, ": heartbeat\n\n")
+					c.Writer.Flush()
+					codeSSEMu.Unlock()
+				}
+			}
+		}
+	}()
+	// 注意：不要在此处再 close(heartbeatDone)——goroutine 内部已有 defer close，
+	// 函数返回时若 goroutine 已自然退出（context 取消/heartbeatDone 收到）会二次 close 触发
+	// panic: close of closed channel，直接把整个后端进程打崩（表现=agent 跑着跑着就停）。
+	// 流结束时 c.Request.Context() 会被取消，goroutine 借此自行退出并 close，无需外部再关。
 
 	// 续跑复用原 workflow_id：检查点文件跟着它走，反复中断也只有一份。
 	workflowID := agent.NewWorkflowID()

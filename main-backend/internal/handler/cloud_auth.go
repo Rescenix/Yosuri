@@ -97,6 +97,15 @@ func CloudUidProxy(c *gin.Context) {
 	proxyToCloud(c, "/api/auth/uid")
 }
 
+// CloudMeProxy 把 token 校验直接代理到 ResceneCloud 云端（透传 Authorization 头）。
+// 设计要点：re0 开源侧不持有任何鉴权密钥，验签完全由云端用它的 JWT_SECRET 完成
+// （与签发同源），避免「本地硬编码密钥 → 开源泄露 → 可被伪造任意 token」的漏洞。
+// 云端 /api/auth/me 回传的字段（authenticated/role/uid/is_vip…）原样转发给前端，
+// 行为与旧版本地验签一致，但密钥零落本地。
+func CloudMeProxy(c *gin.Context) {
+	proxyToCloudAuth(c, "/api/auth/me")
+}
+
 // CloudUidBindProxy 登录后 UID 绑定：把游客 UID 升级为正式账号（需透传用户 JWT）。
 func CloudUidBindProxy(c *gin.Context) {
 	proxyToCloudAuth(c, "/api/auth/uid/bind")
