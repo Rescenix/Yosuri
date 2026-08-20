@@ -4,9 +4,9 @@ package handler
 //
 // 鉴权逻辑已全部收口到独立私有服务 ResceneCloud（C:\Pro2026\ResceneCloud，对应私有仓
 // github.com/Rescenix/ResceneCloud）。本文件只做三件事，不持有任何密钥 / OAuth 逻辑：
-//   1. 把 /api/login 的流量反向代理到 RESCENE_CLOUD_URL
-//   2. /api/auth/me 用本地 middleware.AuthRequired() 验 JWT（与 ResceneCloud 共用
-//      JWT_SECRET），回传 is_vip 等——无需信任网络即可判定会员
+//   1. 把 /api/login、/api/auth/me 等流量代理到 RESCENE_CLOUD_URL（含 Authorization 透传）
+//   2. /api/auth/me 直接由云端验签回传 is_vip 等（2026-08-19 起不再走本地
+//      middleware.AuthRequired()，避免打包版无 .env 时本地默认密钥与云端不符登不上）
 //   3. 暴露 RESCENE_CLOUD_URL 给前端（/api/auth/cloud-config），供其直接发起 GitHub 登录
 //
 // 这样开源的 re0 不含任何付费/鉴权密钥，商业闭环留在私有 ResceneCloud。
@@ -14,14 +14,24 @@ package handler
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"backend/internal/memorydir"
 
 	"github.com/gin-gonic/gin"
 )
+
+// cloudHTTPClient 转发到 ResceneCloud 的专用客户端，带超时兜底。
+//
+// 修复：之前用 http.DefaultClient（零超时）转发登录/验签请求——ResceneCloud 部署在
+// Render 免费实例上，闲置后会休眠，冷启动常需 10~50s。零超时下前端 fetch 会一直
+// 卡在「处理中…」，用户体感就是「登录不了」（2026-08-20 用户反馈复现）。
+// 25s 足够覆盖绝大多数冷启动，超时后前端能拿到明确错误提示重试，而不是无限转圈。
+var cloudHTTPClient = &http.Client{Timeout: 25 * time.Second}
 
 // cloudAuthBase 返回 ResceneCloud 基址，未配置则回退默认云端，保证开箱即连。
 func cloudAuthBase() string {
@@ -30,6 +40,22 @@ func cloudAuthBase() string {
 		u = "https://rescenecloud.onrender.com"
 	}
 	return strings.TrimRight(u, "/")
+}
+
+// WarmCloudAuth 启动时后台预热 ResceneCloud（打一发 /healthz），不阻塞启动。
+// 目的：把 Render 免费实例的冷启动开销提前到「应用启动」而不是「用户点登录」，
+// 减少用户第一次登录/注册时撞上冷启动超时的概率。失败静默——不影响正常代理逻辑，
+// 真正的登录请求仍走 cloudHTTPClient 的 25s 超时兜底。
+func WarmCloudAuth() {
+	go func() {
+		client := &http.Client{Timeout: 60 * time.Second}
+		resp, err := client.Get(cloudAuthBase() + "/healthz")
+		if err != nil {
+			log.Printf("⚠️ ResceneCloud 预热失败（不影响启动，登录时会重试）: %v", err)
+			return
+		}
+		resp.Body.Close()
+	}()
 }
 
 // proxyToCloud 把当前请求（方法/查询/body/特定头）转发到 ResceneCloud 的 targetPath，
@@ -69,15 +95,25 @@ func proxyToCloudOpt(c *gin.Context, targetPath string, forwardAuth bool) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := cloudHTTPClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "连接 ResceneCloud 失败: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": cloudErrorMessage(err)})
 		return
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+}
+
+// cloudErrorMessage 把连接 ResceneCloud 失败的原因转成用户可读的提示。
+// 单独识别超时：Render 免费实例冷启动慢，超时比普通网络错误更常见，
+// 给出「稍后重试」而不是让用户误以为账号密码错了或网络彻底不通。
+func cloudErrorMessage(err error) string {
+	if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+		return "连接 ResceneCloud 超时（云端可能正在冷启动），请稍后重试"
+	}
+	return "连接 ResceneCloud 失败: " + err.Error()
 }
 
 // CloudLoginProxy 转发到 ResceneCloud 的账号登录（用户名+密码 → JWT）。
@@ -170,9 +206,9 @@ func proxyIntimacyToCloud(c *gin.Context, targetPath string) {
 		req.Header.Set("Content-Type", ct)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := cloudHTTPClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "连接 ResceneCloud 失败: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": cloudErrorMessage(err)})
 		return
 	}
 	defer resp.Body.Close()

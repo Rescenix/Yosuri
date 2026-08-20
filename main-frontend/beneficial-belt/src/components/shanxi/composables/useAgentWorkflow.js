@@ -518,6 +518,15 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
             settlePendingTools('error', d.message || '工作流已中断')
         })
 
+        // flow_notice：本轮最终成功了，但过程里发生了值得让用户知道的事（如联网搜到
+        // 的内容被某个模型源的内容审核拦了、已自动换源）。不是错误，不 settle 工具卡片，
+        // 只是插一条提示——避免用户把"换源后答案变敷衍"误判成 web_search 坏了，
+        // 之前这类换源是纯后端日志，前端完全看不到（2026-08-20 用户反馈）。
+        es.addEventListener('flow_notice', e => {
+            const d = JSON.parse(e.data)
+            appendText('intent', `\n\nℹ️ ${d.message}`)
+        })
+
         // 中途插话已被下一轮采纳：插一个轻量块，让用户看到"我刚才那句话生效了"，
         // 而不是发出去之后什么反馈都没有。
         es.addEventListener('steering_injected', e => {

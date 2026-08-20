@@ -238,6 +238,7 @@
             <button class="smc-profile-share" type="button" aria-label="分享角色卡" @click="shareCard"><Icon icon="mdi:share-variant-outline" width="18" /></button>
             <button class="smc-profile-close" type="button" aria-label="关闭角色卡" @click="showUserMenu = false"><Icon icon="mdi:close" width="18" /></button>
           </header>
+          <div v-if="auth.authError.value" class="smc-auth-warn"><Icon icon="mdi:cloud-alert-outline" width="15" />{{ auth.authError.value }}</div>
           <div v-if="evolve" class="smc-evolve">
             <div class="smc-evolve-summary">
               <div>
@@ -644,20 +645,30 @@ const rcLoading = ref(false)
 const rcError = ref('')
 const rcMode = ref('login') // 'login' | 'register'
 
+// 登录/注册成功后广播「欢迎回来」：App.vue 顶部轻量横幅监听这个事件来显示，
+// 和更新完成横幅同一套样式/时序（2026-08-20 用户定稿）。用输入框里的用户名即可——
+// Rescene Cloud 账号登录的 login/name 就是这个用户名（account.go signAndReturn），
+// 不用等 refresh() 异步拉回 /api/auth/me 才能拿到显示名。
+function announceWelcome(username) {
+  window.dispatchEvent(new CustomEvent('auth-welcome', { detail: { name: username } }))
+}
+
 async function loginResceneCloud() {
   rcError.value = ''
   if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = '请输入账号和密码'; return }
   rcLoading.value = true
   try {
+    const username = rcUser.value.trim()
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: rcUser.value.trim(), password: rcPwd.value })
+      body: JSON.stringify({ username, password: rcPwd.value })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.token) { rcError.value = data.error || '登录失败，请检查账号密码'; return }
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
+    announceWelcome(username)
     rcUser.value = ''; rcPwd.value = ''
     showUserMenu.value = false
   } catch (e) { rcError.value = '网络错误，请稍后再试' } finally { rcLoading.value = false }
@@ -668,15 +679,17 @@ async function registerResceneCloud() {
   if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = '请输入用户名和密码'; return }
   rcLoading.value = true
   try {
+    const username = rcUser.value.trim()
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: rcUser.value.trim(), password: rcPwd.value })
+      body: JSON.stringify({ username, password: rcPwd.value })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.token) { rcError.value = data.error || '注册失败，请稍后再试'; return }
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
+    announceWelcome(username)
     rcUser.value = ''; rcPwd.value = ''
     rcMode.value = 'login'
     showUserMenu.value = false
@@ -1488,4 +1501,5 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-rc-link:hover { color: #3a63e8; }
 .smc-rc-err { font-size: 11px; color: #e5484d; }
 .smc-rc-hint { font-size: 10.5px; color: #9aa3b2; text-align: center; }
+.smc-auth-warn { display: flex; align-items: center; gap: 6px; margin: 0 16px 10px; padding: 7px 10px; border-radius: 8px; background: rgba(245,158,11,.12); color: #b45309; font-size: 11.5px; line-height: 1.4; }
 </style>

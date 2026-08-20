@@ -46,6 +46,59 @@ type githubRelease struct {
 	DownloadURL string `json:"download_url"`     // 官网 JSON 提供，GitHub 无此字段
 	DownloadExe string `json:"download_url_exe"` // 热补丁通道：新版 rescene.exe 直链（官网 JSON 提供）
 	DownloadZip string `json:"download_url_zip"` // 热补丁通道的新字段名；兼容旧 download_url_exe
+	Changelog   []changelogEntry `json:"changelog"` // 官网 update.json 提供：按版本分列的更新日志
+}
+
+// changelogEntry 是官网 update.json 的 changelog 数组元素。
+// 用于根治「版本号与公告脱节」：发版时顶层 body 易漏改，
+// 改用 changelog 中与 latest 同版本的条目生成公告，保证一致（2026-08-19）。
+type changelogEntry struct {
+	Version string   `json:"version"`
+	Date    string   `json:"date"`
+	Title   string   `json:"title"`
+	Items   []string `json:"items"`
+}
+
+// changelogFor 在 changelog 中找与给定版本完全匹配的条目。
+func (r *githubRelease) changelogFor(version string) *changelogEntry {
+	for i := range r.Changelog {
+		if r.Changelog[i].Version == version {
+			return &r.Changelog[i]
+		}
+	}
+	return nil
+}
+
+// toMarkdown 把 changelog 条目渲染成与历史 body 风格一致的 Markdown 公告。
+func (e *changelogEntry) toMarkdown() string {
+	if e == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## " + e.Version + "\n\n")
+	if e.Title != "" {
+		b.WriteString(e.Title + "\n\n")
+	}
+	for _, it := range e.Items {
+		b.WriteString("- " + it + "\n")
+	}
+	return b.String()
+}
+
+// sanitizeReleaseNotes 去掉发布说明里面向「去官网手动下载」的引导语：
+// 应用内是自动下载安装包，这类提示会误导用户以为要自己去下载（2026-08-19）。
+// 只在回退到顶层 body（GitHub release 风格）时可能含此类行；changelog 生成的公告本就干净。
+func sanitizeReleaseNotes(s string) string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		trim := strings.TrimSpace(ln)
+		if strings.Contains(trim, "安装包统一放官网下载") || strings.Contains(trim, "rescene.shanca.me/download") {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return strings.Join(out, "\n")
 }
 
 // updateInfo 是 /api/update/check 的响应体。
@@ -125,6 +178,25 @@ func checkUpdate() (*updateInfo, error) {
 		}
 	}
 
+	// 根治「版本号与公告脱节」（2026-08-19）：发版时顶层 body/published_at 易漏改，
+	// 公告优先用 changelog 中与 latest 同版本的条目生成；没有再回退 body。
+	// 这样弹窗的公告永远和版本号、发布日期一致。
+	releaseNotes := rel.Body
+	published := rel.PublishedAt
+	if entry := rel.changelogFor(latest); entry != nil {
+		if md := entry.toMarkdown(); md != "" {
+			releaseNotes = md
+		}
+		// changelog 命中版本时，其 date 是精确的发布日期（YYYY-MM-DD），
+		// 始终优先于顶层 published_at（顶层是老版本残留，发版易漏改）。
+		// 无 date 字段才回退顶层 published_at。
+		if entry.Date != "" {
+			published = entry.Date + "T00:00:00Z"
+		}
+	}
+	// 剥离「去官网手动下载」误导语：应用内自动下载，此类提示多余且误导（2026-08-19）。
+	releaseNotes = sanitizeReleaseNotes(releaseNotes)
+
 	var downloadURL string
 	if rel.DownloadURL != "" {
 		downloadURL = rel.DownloadURL
@@ -151,12 +223,12 @@ func checkUpdate() (*updateInfo, error) {
 		CurrentVersion: cur,
 		LatestVersion:  latest,
 		ReleaseName:    rel.Name,
-		ReleaseNotes:   rel.Body,
+		ReleaseNotes:   releaseNotes,
 		ReleaseURL:     rel.HTMLURL,
 		DownloadURL:    downloadURL, // 官网安装器直链，不经 GitHub
 		DownloadExe:    hotPatchURL,
 		HotPatch:       hotPatch,
-		PublishedAt:    rel.PublishedAt,
+		PublishedAt:    published,
 	}
 
 	updateCache, updateCachedAt = info, time.Now()

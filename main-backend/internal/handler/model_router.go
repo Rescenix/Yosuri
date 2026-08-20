@@ -939,6 +939,13 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 
 		if len(tried) > 0 {
 			fmt.Printf("🔀 [路由] 流式请求由 %s 承接（此前 %d 个源失败）\n", b.Name, len(tried))
+			// 之前的源里如果有因内容审核（451/censorship）被拒的，failover 切下一个源
+			// 成功后这段就悄悄过去了——用户只看到答案，不知道联网搜到的内容被上游
+			// 审核拦过一次，容易把"换源后答案变差/变敷衍"误判成 web_search 本身坏了
+			// （2026-08-20 用户反馈）。这里补一条不阻断流程的提示，让用户知道发生了什么。
+			if note := censorshipNoteFromTried(tried); note != "" {
+				writeCodeSSE(c, "flow_notice", map[string]any{"message": note})
+			}
 		}
 		content, calls, inTok, outTok, err := drainChatStream(c, resp, msgs, staticSum)
 		resp.Body.Close()
@@ -958,6 +965,17 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		return content, calls, inTok, outTok, &usedBackend, nil
 	}
 	return "", nil, 0, 0, nil, fmt.Errorf("所有模型源不可用：%s", strings.Join(tried, "；"))
+}
+
+// censorshipNoteFromTried 检查本轮 failover 过程中是否有源因内容审核（451/censorship）
+// 被跳过；有则给前端一句人话提示，没有则返回空串（调用侧据此决定要不要发 SSE）。
+func censorshipNoteFromTried(tried []string) string {
+	for _, t := range tried {
+		if strings.Contains(t, "内容审核拦截") {
+			return "刚才联网搜到的内容被一个模型源的内容审核拦了，已自动换源重试——如果这条回答看起来比较敷衍，可以换个话题或稍后再试"
+		}
+	}
+	return ""
 }
 
 // drainChatStream 读一条已建立的 SSE 流，实时转发 thinking/intent 事件。

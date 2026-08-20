@@ -44,6 +44,12 @@
       <span>已更新到 <b>{{ updatedVersion }}</b></span>
       <button class="updated-banner-close" type="button" @click="closeUpdatedBanner" aria-label="关闭">×</button>
     </div>
+    <!-- 登录/注册成功提示：欢迎回来横幅，和升级完成横幅同款样式/15s 自动消失（2026-08-20 用户定稿） -->
+    <div v-if="showWelcomeBanner" class="updated-banner">
+      <span class="updated-banner-check">✓</span>
+      <span>欢迎回来，<b>{{ welcomeName }}</b>！</span>
+      <button class="updated-banner-close" type="button" @click="closeWelcomeBanner" aria-label="关闭">×</button>
+    </div>
   </template>
 
 <script setup>
@@ -70,6 +76,11 @@ const showUpdatedBanner = ref(false)
 const updatedVersion = ref('')
 let updatedBannerTimer = null
 let updateCheckTimer = null
+// 登录/注册欢迎横幅：SessionMenuContent 登录/注册成功后广播 auth-welcome，
+// 这里监听并显示 15s（2026-08-20 用户定稿：注册成功即直接登录，需要一个提示告诉用户成功了）
+const showWelcomeBanner = ref(false)
+const welcomeName = ref('')
+let welcomeBannerTimer = null
 
 function showBanner() {
   showUpdateBanner.value = true
@@ -83,6 +94,21 @@ function closeUpdatedBanner() {
   clearTimeout(updatedBannerTimer)
   updatedBannerTimer = null
   showUpdatedBanner.value = false
+}
+
+function closeWelcomeBanner() {
+  clearTimeout(welcomeBannerTimer)
+  welcomeBannerTimer = null
+  showWelcomeBanner.value = false
+}
+
+function onAuthWelcome(e) {
+  const name = e.detail && e.detail.name
+  if (!name) return
+  welcomeName.value = name
+  showWelcomeBanner.value = true
+  clearTimeout(welcomeBannerTimer)
+  welcomeBannerTimer = setTimeout(closeWelcomeBanner, 15000)
 }
 
 function openUpdateModal() {
@@ -138,7 +164,9 @@ async function checkAndDownload(silent) {
 onBeforeUnmount(() => {
   if (updateBannerTimer) clearTimeout(updateBannerTimer)
   if (updatedBannerTimer) clearTimeout(updatedBannerTimer)
+  if (welcomeBannerTimer) clearTimeout(welcomeBannerTimer)
   if (updateCheckTimer) clearInterval(updateCheckTimer)
+  window.removeEventListener('auth-welcome', onAuthWelcome)
 })
 
 onMounted(() => {
@@ -151,6 +179,7 @@ onMounted(() => {
     localStorage.setItem('token', token)
     window.dispatchEvent(new Event('auth-change'))
   }
+  window.addEventListener('auth-welcome', onAuthWelcome)
 })
 
 onMounted(async () => {

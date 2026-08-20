@@ -16,6 +16,10 @@ const avatar = ref('')  // 账号头像 URL
 const uid = ref(null)   // cloud 分发的账号 UID（游客/登录都有）
 const isVip = ref(false) // 会员标识：仅由服务端 JWT 的 is_vip 决定，绝不读 localStorage（堵住游客伪造）
 const intimacy = ref(0) // 亲密度：无上限互动值（云端权威，随 UID 账号存储、跨设备保留）
+// authError：/api/auth/me 请求本身失败（网络/云端 502 等，不是「token 无效」）时的提示。
+// 之前这类瞬时故障会被当成 token 无效直接清掉、悄悄退回未登录态，用户毫无提示——
+// 看起来就是「login过后过一会又要求登录」（2026-08-20 用户反馈：前端反馈不鲁棒）。
+const authError = ref('')
 let refreshing = false
 
 const DEVICE_KEY = 'aurora_device_id'
@@ -169,6 +173,7 @@ async function refresh() {
     if (!token) {
       isLoggedIn.value = false
       login.value = name.value = avatar.value = ''
+      authError.value = ''
       return
     }
     const res = await fetch('/api/auth/me', {
@@ -182,6 +187,7 @@ async function refresh() {
       avatar.value = data.avatar || ''
       // is_vip 以服务端 JWT 为准：GitHub 登录或管理员密码登录才会是 true，游客恒为 false
       isVip.value = data.is_vip === true
+      authError.value = ''
       if (data.uid) {
         // JWT 已带账号 UID：直接采用
         uid.value = data.uid
@@ -190,17 +196,23 @@ async function refresh() {
         // 首次登录（JWT 尚无 uid）：把游客 UID 升级为正式账号
         bindUid()
       }
-    } else {
-      // token 无效：清掉，避免伪造/过期 token 被当作已登录
+    } else if (res.status === 401) {
+      // 云端明确说 token 无效/过期：才是真的要清掉
       localStorage.removeItem('token')
       isLoggedIn.value = false
       login.value = name.value = avatar.value = ''
       isVip.value = false
+      authError.value = ''
+    } else {
+      // 501/502/503/504 等：ResceneCloud 暂时连不上，不代表 token 无效。
+      // 之前这里和 401 一样清 token+退回未登录态，用户会莫名其妙被"登出"且毫无提示；
+      // 现在保留本地已有登录态，只把错误暴露出来供 UI 提示"云端暂时连不上，稍后重试"。
+      const data = await res.json().catch(() => ({}))
+      authError.value = data.error || ('验证登录状态失败（HTTP ' + res.status + '），请稍后重试')
     }
-  } catch {
-    localStorage.removeItem('token')
-    isLoggedIn.value = false
-    login.value = name.value = avatar.value = ''
+  } catch (e) {
+    // fetch 级网络异常（本地后端都连不上）：同样不清 token，只报错
+    authError.value = '无法连接到本地服务，请稍后重试'
   } finally {
     refreshing = false
   }
@@ -243,6 +255,7 @@ export function useAuth() {
     intimacyLevel: readonly(intimacyLevel),
     displayName: readonly(displayName),
     displayAvatar: readonly(displayAvatar),
+    authError: readonly(authError),
     refresh,
     logout,
     fetchIntimacy,

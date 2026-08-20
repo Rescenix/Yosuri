@@ -159,6 +159,17 @@ func aggAutoChain() []RouterBackend {
 			ContextWindow: b.window,
 		})
 	}
+	// 0. 跟随前端分组设定：official 模式只走 DeepSeek 系（与 isOfficialAllowed 一致），
+	// 避免 auto 路由把非 DS 源（Step-3.7 / Qwen3-235B 等）混进 DS 分组。
+	if cfg := loadAggregateExposeConfig(); cfg.Mode == "official" {
+		filtered := out[:0]
+		for _, b := range out {
+			if isOfficialAllowed(b.Model, b.ID) || b.ID == "auto" {
+				filtered = append(filtered, b)
+			}
+		}
+		out = filtered
+	}
 	// 1. 额度优先：未耗尽排前，耗尽沉底（避免把请求发给已没额度的 Key）
 	sort.SliceStable(out, func(i, j int) bool {
 		return quotaExhausted(out[i]) != quotaExhausted(out[j]) && !quotaExhausted(out[i])
@@ -476,17 +487,28 @@ func HandleAggregateModels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"object": "list", "data": data})
 }
 
-// isOfficialAllowed DeepSeek 模式准入：只放 DeepSeek 系（含 deepseek-v4-flash 等）
-// 与腾讯混元 Hy3 系（tencent/hy3:free 等），其余厂商一律挡掉。
+// isOfficialAllowed DeepSeek 模式准入（2026-08-19 收窄）：
+//   - 腾讯混元 Hy3 系（tencent/hy3 / Tencent-Hunyuan/Hy3 / hy3-free）实测质量不达标 → 踢出
+//   - DeepSeek 老代模型（v3 / v3.1 / v3.2 / terminus / r1 / distill / deepseek-chat）→ 踢出
+//   - 只留 DeepSeek V4 系（v4-flash / v4-pro，含日期后缀与 discounted 变体）
+//
+// 被踢出的模型仍可在「用户自定义」模式手工勾选，只是不进默认暴露池。
 func isOfficialAllowed(model, vendor string) bool {
 	lower := strings.ToLower(model)
-	if strings.Contains(lower, "deepseek") {
-		return true
-	}
 	if strings.Contains(lower, "hy3") || strings.Contains(lower, "hunyuan") {
-		return true
+		return false
 	}
-	return false
+	if !strings.Contains(lower, "deepseek") {
+		return false
+	}
+	// 老代黑名单
+	for _, legacy := range []string{"r1", "distill", "terminus", "v3", "v3.1", "v3.2", "-chat"} {
+		if strings.Contains(lower, legacy) {
+			return false
+		}
+	}
+	// 只认 V4 系
+	return strings.Contains(lower, "v4")
 }
 
 // isUsableAggModel 等旧筛选函数已废弃（2026-08-18）：DeepSeek 模式改走 isOfficialAllowed，

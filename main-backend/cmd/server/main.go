@@ -21,6 +21,10 @@ func main() {
 	// （step 等厂商配过 key 就自动全量进下拉，2026-08-04）。
 	handler.WarmFreePoolDiscovery()
 
+	// ResceneCloud 预热：应用启动即后台打一发 /healthz，把 Render 免费实例的冷启动
+	// 开销提前到启动阶段，减少用户点「登录」时撞上冷启动超时（2026-08-20）。
+	handler.WarmCloudAuth()
+
 	r := handler.NewAPIRouter()
 
 	log.Println("🚀 Rescene 引擎已启动，监听端口 :8080")
