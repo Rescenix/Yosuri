@@ -2,7 +2,7 @@
   <div class="smc-root" :class="{ fill }">
     <!-- 顶部操作：新建会话 + 定时任务 -->
     <div class="smc-nav">
-      <button class="smc-nav-item primary" type="button" @click="$emit('new-session')">
+      <button class="smc-nav-item primary" type="button" @click="onClickNewSession">
         <Icon icon="mdi:plus" width="18" />
         <span>新建会话</span>
       </button>
@@ -312,7 +312,7 @@
       </div>
     </Teleport>
 
-    <!-- 创建项目 -->
+    <!-- 创建项目：项目名不可编辑，直接取自所选文件夹名，避免和已有项目撞名后互相顶替 -->
     <Teleport to="body">
       <Transition name="smc-modal">
         <div v-if="showCreateProject" class="smc-modal-backdrop" @click.self="closeCreateProject">
@@ -323,11 +323,7 @@
                 <Icon icon="mdi:close" width="20" />
               </button>
             </div>
-            <label class="smc-project-name-field">
-              <Icon icon="mdi:folder-outline" width="20" />
-              <input ref="projectNameInput" v-model="newProjectName" placeholder="项目名称" maxlength="80" />
-            </label>
-            <div class="smc-source-label">源文件夹</div>
+            <div class="smc-source-label">源文件夹（项目名称自动取文件夹名）</div>
             <button type="button" class="smc-source-picker" @click="pickSourceFolder">
               <Icon icon="mdi:folder-plus-outline" width="25" />
               <span v-if="selectedSourceFolder">{{ selectedSourceFolder.name }}</span>
@@ -335,9 +331,42 @@
             </button>
             <div class="smc-create-project-actions">
               <button type="button" class="smc-cancel-btn" @click="closeCreateProject">取消</button>
-              <button type="submit" class="smc-create-btn" :disabled="!newProjectName.trim() || !selectedSourceFolder">创建项目</button>
+              <button type="submit" class="smc-create-btn" :disabled="!selectedSourceFolder">创建项目</button>
             </div>
           </form>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 新建会话但当前没有选中项目：像 Claude Code 一样强制先选项目，选中已有项目后不再弹出 -->
+    <Teleport to="body">
+      <Transition name="smc-modal">
+        <div v-if="showSelectProject" class="smc-modal-backdrop" @click.self="closeSelectProject">
+          <div class="smc-create-project">
+            <div class="smc-create-project-head">
+              <h2>选择项目</h2>
+              <button type="button" class="smc-modal-close" title="关闭" @click="closeSelectProject">
+                <Icon icon="mdi:close" width="20" />
+              </button>
+            </div>
+            <div class="smc-source-label">新对话需要先归属到一个项目</div>
+            <div v-if="projects.length" class="smc-select-project-list">
+              <button
+                v-for="p in projects"
+                :key="p.path"
+                type="button"
+                class="smc-source-picker"
+                @click="pickExistingProject(p)"
+              >
+                <Icon icon="mdi:folder-outline" width="20" />
+                <span>{{ p.name }}</span>
+              </button>
+            </div>
+            <div class="smc-create-project-actions">
+              <button type="button" class="smc-cancel-btn" @click="closeSelectProject">取消</button>
+              <button type="button" class="smc-create-btn" @click="openCreateProjectForSession">新建项目</button>
+            </div>
+          </div>
         </div>
       </Transition>
     </Teleport>
@@ -378,22 +407,26 @@ function onSearchFocus() { emit('open-search') }
 function onSearchBlur() { searchInputRef.value?.blur() }
 
 // ========== 创建项目 ==========
+// 项目名不可编辑：只能来自所选文件夹的名字，避免用户手改后跟已有项目撞名、
+// 导致 rememberProject 按名字去重时把旧项目的会话"过继"给新项目。
 const showCreateProject = ref(false)
-const newProjectName = ref('')
 const selectedSourceFolder = ref(null)
-const projectNameInput = ref(null)
+// 从"选择项目"弹窗里点了"新建项目"进来的，创建完要接着建会话
+const pendingSessionAfterCreate = ref(false)
 
 function openCreateProject() {
   showCreateProject.value = true
-  // 默认预填当前选中项目名——多数场景是在当前项目基础上新建/改名，少打几个字
-  newProjectName.value = props.currentWorkdir || ''
   selectedSourceFolder.value = null
-  nextTick(() => {
-    projectNameInput.value?.focus()
-    projectNameInput.value?.select()
-  })
 }
-function closeCreateProject() { showCreateProject.value = false }
+function openCreateProjectForSession() {
+  pendingSessionAfterCreate.value = true
+  showSelectProject.value = false
+  openCreateProject()
+}
+function closeCreateProject() {
+  showCreateProject.value = false
+  pendingSessionAfterCreate.value = false
+}
 async function pickSourceFolder() {
   try {
     const res = await fetch('/api/workdir/pick', { method: 'POST' })
@@ -403,12 +436,25 @@ async function pickSourceFolder() {
   } catch {}
 }
 function createProject() {
-  const name = newProjectName.value.trim()
-  if (!name || !selectedSourceFolder.value) return
-  emit('create-project', { name, sourceFolder: selectedSourceFolder.value })
-  closeCreateProject()
+  const folder = selectedSourceFolder.value
+  if (!folder?.path) return
+  emit('create-project', { name: folder.name, sourceFolder: folder, thenNewSession: pendingSessionAfterCreate.value })
+  pendingSessionAfterCreate.value = false
+  showCreateProject.value = false
 }
 defineExpose({ openCreateProject })
+
+// ========== 新建会话：没有已选项目时强制先选项目 ==========
+const showSelectProject = ref(false)
+function onClickNewSession() {
+  if (props.currentWorkdir?.trim()) emit('new-session')
+  else showSelectProject.value = true
+}
+function closeSelectProject() { showSelectProject.value = false }
+function pickExistingProject(project) {
+  showSelectProject.value = false
+  emit('new-session', project)
+}
 
 // ========== 置顶项目 ==========
 const pinnedProjectNames = ref([])
@@ -1456,16 +1502,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   border: 0; border-radius: 8px; background: transparent; color: var(--app-text-soft); cursor: pointer;
 }
 .smc-modal-close:hover { background: var(--app-surface-3); color: var(--app-text); }
-.smc-project-name-field {
-  display: flex; align-items: center; gap: 12px; height: 48px; box-sizing: border-box;
-  padding: 0 14px; border: 1.5px solid var(--app-accent, #6366f1); border-radius: 14px;
-  color: var(--app-text-soft); background: var(--app-surface);
-}
-.smc-project-name-field input {
-  width: 100%; min-width: 0; border: 0; outline: 0; background: transparent;
-  color: var(--app-text); font: inherit; font-size: 15px;
-}
-.smc-project-name-field input::placeholder { color: var(--app-text-faint); }
 .smc-source-label { margin: 20px 0 10px; font-size: 14px; font-weight: 650; }
 .smc-source-picker {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
@@ -1475,6 +1511,12 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 }
 .smc-source-picker:hover { border-color: var(--app-accent); background: var(--app-surface-2); }
 .smc-source-picker .iconify { color: var(--app-text-soft); }
+.smc-select-project-list {
+  display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto;
+}
+.smc-select-project-list .smc-source-picker {
+  flex-direction: row; justify-content: flex-start; min-height: 44px; padding: 10px 14px;
+}
 .smc-create-project-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .smc-cancel-btn, .smc-create-btn {
   min-height: 40px; padding: 0 16px; border: 0; border-radius: 11px; font: inherit; font-weight: 600; cursor: pointer;

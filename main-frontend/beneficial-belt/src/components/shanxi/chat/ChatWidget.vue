@@ -86,7 +86,7 @@
                                 :completed-sessions="completedSessions"
                                 :question-session="questionSession"
                                 :notif-count="notifCount"
-                                :current-workdir="currentWorkDir.name"
+                                :current-workdir="currentProjectName"
                       @select-session="selectSession"
             @new-session="newSession"
             @rename-session="renameSession"
@@ -1221,9 +1221,11 @@ function rememberProject(project) {
   const path = project?.path
   if (!name || !path) return
   const normalized = normalizeProjectPath(path)
+  // 项目身份只认路径，不认名字：两个不同路径哪怕撞名也各自独立存在，
+  // 不然按名字去重会把旧项目的条目顶掉，导致它名下的历史会话被"过继"给新项目。
   projects.value = [
     { name, path },
-    ...projects.value.filter(p => p.name !== name && normalizeProjectPath(p.path) !== normalized)
+    ...projects.value.filter(p => normalizeProjectPath(p.path) !== normalized)
   ].slice(0, 30)
   saveProjects()
 }
@@ -1268,7 +1270,12 @@ function migrateLegacyWorkdirMapping() {
 }
 migrateLegacyWorkdirMapping()
 
-function newSession() {
+async function newSession(project) {
+  // 从"选择项目"弹窗里显式选中了一个项目：先把工作目录切过去，再建会话，
+  // 不依赖 currentWorkDir 是否已经指向它（未选中项目时才会走到这个分支）
+  if (project?.path && normalizeProjectPath(project.path) !== normalizeProjectPath(currentWorkDir.value?.path)) {
+    await selectWorkDir(project, { recordSession: false })
+  }
   const id = 'sess_' + Date.now().toString(36)
   // 只有显式创建过的项目才归组；后端启动目录等未选目录不自动挂名（避免凭空冒出 re0 之类），
   // 新建对话保持未分组（home 空态），用户显式选择目录后由 selectWorkDir 归入项目
@@ -1669,6 +1676,9 @@ watch(() => previewRequest.seq, () => {
 const WORKDIR_STORAGE_KEY = 'aether_workdir_state_v1'
 const WORKDIR_IGNORED = new Set(['node_modules', 'build', '__pycache__', 'dist', '.git'])
 const currentWorkDir = ref({ name: '', path: '' })
+// 后端启动目录/未选目录不算"已选中项目"——只有用户显式创建过的项目才数，
+// 用来给"新建会话"决定要不要强制弹项目选择
+const currentProjectName = computed(() => findProjectByPath(currentWorkDir.value?.path)?.name || '')
 const workDirRecents = ref([])
 const showWorkDirMenu = ref(false)
 const workDirMenuView = ref('recent') // 'recent' | 'browse'
@@ -2025,7 +2035,7 @@ async function selectWorkDir(dir, opts = {}) {
   }
 }
 
-async function createProject({ name, sourceFolder }) {
+async function createProject({ name, sourceFolder, thenNewSession }) {
   const projectName = name?.trim()
   if (!projectName || !sourceFolder?.path) {
     showGitToast('项目名称或源文件夹无效')
@@ -2034,6 +2044,8 @@ async function createProject({ name, sourceFolder }) {
   // 创建项目 = 新建实体 + 切 cwd，但不动当前会话归属（recordSession: false）：
   // 会话属于它原来所在的项目，等用户在新项目里新建对话才归入新项目
   await selectWorkDir({ name: projectName, path: sourceFolder.path }, { recordSession: false })
+  // 从"新建会话时没有项目可选"这条路径过来的创建，建完项目要接着把会话建上
+  if (thenNewSession) await newSession(currentWorkDir.value)
 }
 async function openFolderBrowser() {
   workDirMenuView.value = 'browse'

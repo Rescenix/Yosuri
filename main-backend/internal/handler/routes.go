@@ -265,6 +265,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 聚合 API 暴露模型配置（official 官方遴选 / custom 用户自定义，issue #5）
 	r.GET("/api/aggregate/config", HandleGetAggregateConfig)
 	r.PUT("/api/aggregate/config", HandlePutAggregateConfig)
+	// 一键同步/还原：导出外部工具配置片段 + 写回（带自动备份）
+	r.GET("/api/aggregate/export", HandleAggregateExport)
+	r.POST("/api/aggregate/sync", HandleAggregateSync)
+	r.POST("/api/aggregate/restore", HandleAggregateRestore)
 
 	// 共享池（公益免费）：代理到 ResceneCloud，云端限流 + 共享 Key 路由
 	r.GET("/api/models/shared-pool", HandleGetSharedPoolModels)

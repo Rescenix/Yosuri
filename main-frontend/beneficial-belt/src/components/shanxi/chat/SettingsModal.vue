@@ -341,6 +341,43 @@
               </div>
               <div class="agg-api-tip">已聚合 {{ freeModels.length + customModels.length }} 个模型（免费池 + 自定义）。model 填 <code class="agg-api-code">auto</code> 自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。</div>
 
+              <!-- ===== 一键同步 / 还原（codex / dsh）：两个工具都还没做好，整卡片先藏起来 ===== -->
+                            <div v-if="showCodex || showDsh" class="agg-sync-card">
+                              <div class="agg-sync-head">
+                                <span class="agg-sync-title">一键同步到本地工具</span>
+                                <div class="agg-sync-actions">
+                                  <button v-if="showCodex" class="agg-sync-btn" type="button" :disabled="aggSyncing === 'codex'" @click="aggSyncOne('codex')">
+                                    {{ aggSyncing === 'codex' ? '同步中…' : (isSynced('codex') ? '已同步 codex' : '未同步 codex') }}
+                                  </button>
+                                  <button v-if="showDsh" class="agg-sync-btn" type="button" :disabled="aggSyncing === 'dsh'" @click="aggSyncOne('dsh')">
+                                    {{ aggSyncing === 'dsh' ? '同步中…' : (isSynced('dsh') ? '已同步 dsh' : '未同步 dsh') }}
+                                  </button>
+                                  <button v-if="showCodex" class="agg-sync-btn ghost" type="button" :disabled="aggRestoring === 'codex'" @click="aggRestoreOne('codex')">
+                                    {{ aggRestoring === 'codex' ? '还原中…' : '还原 codex' }}
+                                  </button>
+                                  <button v-if="showDsh" class="agg-sync-btn ghost" type="button" :disabled="aggRestoring === 'dsh'" @click="aggRestoreOne('dsh')">
+                                    {{ aggRestoring === 'dsh' ? '还原中…' : '还原 dsh' }}
+                                  </button>
+                                </div>
+                              </div>
+                              <div class="agg-sync-tip">每个工具独立操作：点「同步 codex / dsh」只生成对应配置片段；点「还原 codex / dsh」只还原对应工具到原始配置（首次写回前自动备份一次）。片段旁「写入配置」才真正落盘（写前自动备份）。</div>
+                              <div v-if="aggSyncResult.length" class="agg-sync-result">
+                                <div v-for="r in aggSyncResult" :key="r.tool" class="agg-sync-item" v-show="r.tool !== 'codex'">
+                                  <div class="agg-sync-item-head">
+                                    <span class="agg-sync-tool">{{ r.tool }}</span>
+                                    <span class="agg-sync-badge" :class="{ ok: r.ok, err: !!r.error }">{{ r.error ? '失败' : (r.applied ? '已写入' : '已生成') }}</span>
+                                  </div>
+                                  <pre class="agg-sync-snippet">{{ aggSnippetOf(r.tool) }}</pre>
+                                  <div class="agg-sync-item-actions">
+                                    <button class="agg-sync-mini" type="button" @click="copyAggText(aggSnippetOf(r.tool))">复制片段</button>
+                                    <button v-if="!r.applied && !r.error" class="agg-sync-mini primary" type="button" :disabled="aggWriting" @click="aggApply(r.tool)">写入配置</button>
+                                    <button v-if="r.backed_up" class="agg-sync-mini" type="button" disabled>已备份: {{ basename(r.backed_up) }}</button>
+                                  </div>
+                                  <div v-if="r.error" class="agg-sync-err">{{ r.error }}</div>
+                                </div>
+                              </div>
+                            </div>
+
                             <!-- ===== 聚合模型选择（DeepSeek 精选 / 用户自定义命名标签）===== -->
                             <div class="agg-api-card" style="margin-top:10px">
                               <div class="agg-api-row">
@@ -966,6 +1003,110 @@ function copyAggText(text) {
   }
 }
 
+// ===== 一键同步 / 还原（codex / dsh）=====
+const aggSyncing = ref('')       // 当前正在同步的工具名；空串=无
+const aggRestoring = ref('')    // 当前还原的工具名；空串=无
+const aggWriting = ref(false)
+const aggSyncResult = ref([])    // [{tool, ok, applied, backed_up, error}]
+const aggExportCache = ref(null) // 后端 export 返回（含真实 key + 各片段）
+const showCodex = ref(false)     // codex 暂时隐藏（不稳定）
+const showDsh = ref(false)       // dsh 也还没做好，暂时隐藏
+
+async function aggSyncOne(tool) {
+  aggSyncing.value = tool
+  // 移除该工具旧结果，保留其他工具已展示的
+  aggSyncResult.value = aggSyncResult.value.filter(x => x.tool !== tool)
+  try {
+    // 先拉 export（拿真实 key）
+    if (!aggExportCache.value) {
+      const res = await fetch('/api/aggregate/export')
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      aggExportCache.value = await res.json()
+    }
+    // 只同步指定工具
+    const r = await fetch('/api/aggregate/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tools: [tool], apply: false }),
+    })
+    const out = await r.json()
+    const entry = (out.results || []).find(x => x.tool === tool)
+    if (entry) aggSyncResult.value.push({ ...entry, applied: false })
+    else aggSyncResult.value.push({ tool, ok: false, error: '后端未返回结果' })
+  } catch (e) {
+    aggSyncResult.value.push({ tool, ok: false, error: e.message })
+  } finally {
+    aggSyncing.value = ''
+    await aggRefreshStatus()
+  }
+}
+
+// 写入配置：对单个工具发起 apply=true 的同步（后端写盘前自动备份）
+async function aggApply(tool) {
+  if (!aggExportCache.value) return
+  aggWriting.value = true
+  try {
+    const r = await fetch('/api/aggregate/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tools: [tool], apply: true }),
+    })
+    const out = await r.json()
+    const hit = (out.results || []).find(x => x.tool === tool)
+    const idx = aggSyncResult.value.findIndex(x => x.tool === tool)
+    if (idx >= 0 && hit) aggSyncResult.value[idx] = { ...hit, applied: !hit.error }
+  } catch (e) {
+    const idx = aggSyncResult.value.findIndex(x => x.tool === tool)
+    if (idx >= 0) aggSyncResult.value[idx] = { ...aggSyncResult.value[idx], error: e.message }
+  } finally {
+    aggWriting.value = false
+    await aggRefreshStatus()
+  }
+}
+
+async function aggRestoreOne(tool) {
+  aggRestoring.value = tool
+  try {
+    const r = await fetch('/api/aggregate/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tools: [tool] }),
+    })
+    const out = await r.json()
+    const hit = (out.results || []).find(x => x.tool === tool)
+    if (hit) aggSyncResult.value.push({ ...hit, applied: !hit.error, restored: true })
+    else aggSyncResult.value.push({ tool, ok: false, error: '后端未返回结果' })
+  } catch (e) {
+    aggSyncResult.value.push({ tool, ok: false, error: e.message })
+  } finally {
+    aggRestoring.value = ''
+    await aggRefreshStatus()
+  }
+}
+
+function aggSnippetOf(tool) {
+  if (!aggExportCache.value || !aggExportCache.value.snippets) return ''
+  return aggExportCache.value.snippets[tool] || ''
+}
+function basename(p) {
+  if (!p) return ''
+  return p.split(/[\\/]/).pop()
+}
+// 是否已同步：后端 export.status[tool] == 'synced' 视为已同步
+function isSynced(tool) {
+  const s = (aggExportCache.value && aggExportCache.value.status && aggExportCache.value.status[tool]) || ''
+  return s === 'synced'
+}
+// 重新拉 export，刷新状态（同步/写入/还原后调用）
+async function aggRefreshStatus() {
+  try {
+    const res = await fetch('/api/aggregate/export')
+    if (!res.ok) return
+    const data = await res.json()
+    aggExportCache.value = data
+  } catch (e) { /* 忽略 */ }
+}
+
 // ===== 聚合池健康度（/api/aggregate/health）=====
 const aggAutoChain = ref([])
 const aggHealthModels = ref([])
@@ -1060,12 +1201,14 @@ watch(activeTab, (t) => {
   if (t === 'aggapi') {
     if (!aggHealthLoaded.value) loadAggHealth()
     loadAggConfig()
+    aggRefreshStatus()
   }
 })
 onMounted(() => {
   if (activeTab.value === 'aggapi') {
     if (!aggHealthLoaded.value) loadAggHealth()
     loadAggConfig()
+    aggRefreshStatus()
   }
 })
 
@@ -2227,6 +2370,28 @@ onUnmounted(() => {
 .agg-api-copy { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
 .agg-api-copy:hover { background: var(--app-surface-3); }
 .agg-api-tip { font-size: 10.5px; color: var(--app-text-faint); margin-top: 6px; line-height: 1.5; }
+/* ===== 一键同步 / 还原（codex / dsh）===== */
+.agg-sync-card { margin-top: 14px; padding: 12px; border: 1px solid var(--app-border-soft); border-radius: 10px; background: var(--app-surface-2); }
+.agg-sync-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.agg-sync-title { font-size: 12px; font-weight: 600; color: var(--app-text); }
+.agg-sync-actions { display: flex; gap: 6px; }
+.agg-sync-btn { font-size: 11px; color: #fff; background: var(--app-accent); border: 1px solid var(--app-accent); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+.agg-sync-btn:disabled { opacity: .5; cursor: default; }
+.agg-sync-btn.ghost { color: var(--app-text-soft); background: transparent; border-color: var(--app-border); }
+.agg-sync-tip { font-size: 10.5px; color: var(--app-text-faint); margin-top: 8px; line-height: 1.5; }
+.agg-sync-result { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.agg-sync-item { border: 1px solid var(--app-border-soft); border-radius: 8px; padding: 8px 10px; background: var(--app-surface); }
+.agg-sync-item-head { display: flex; align-items: center; justify-content: space-between; }
+.agg-sync-tool { font-size: 11.5px; font-weight: 600; color: var(--app-text); text-transform: uppercase; }
+.agg-sync-badge { font-size: 10px; padding: 1px 8px; border-radius: 999px; background: var(--app-surface-3); color: var(--app-text-faint); }
+.agg-sync-badge.ok { background: rgba(34,197,94,.15); color: #22c55e; }
+.agg-sync-badge.err { background: rgba(239,68,68,.15); color: #ef4444; }
+.agg-sync-snippet { font-size: 10px; color: var(--app-text-soft); background: var(--app-bg); border-radius: 6px; padding: 8px; margin: 8px 0 6px; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+.agg-sync-item-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.agg-sync-mini { font-size: 10px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border-soft); border-radius: 5px; padding: 3px 9px; cursor: pointer; }
+.agg-sync-mini.primary { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
+.agg-sync-mini:disabled { opacity: .6; cursor: default; }
+.agg-sync-err { font-size: 10px; color: #ef4444; margin-top: 4px; }
 /* ===== 聚合 API 暴露模型配置（官方遴选 / 用户自定义，issue #5）===== */
 .agg-mode-toggle { display: inline-flex; gap: 4px; flex: 1; }
 .agg-mode-toggle button { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
