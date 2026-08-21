@@ -37,11 +37,11 @@ var (
 	probeMu     sync.Mutex
 	probeStates = map[string]*probeState{}
 	// lastUsedAt 记录每个免费条目最近一次真实请求成功的时刻（LRU 新鲜度）。
-	lastUsedMu     sync.Mutex
-	lastUsedAt     = map[string]time.Time{}
+	lastUsedMu sync.Mutex
+	lastUsedAt = map[string]time.Time{}
 	// lastLatency 记录每个条目最近一次真实请求成功的延迟（用于 auto 排序，零额外探活）。
 	lastLatencyMu sync.Mutex
-	lastLatency    = map[string]time.Duration{}
+	lastLatency   = map[string]time.Duration{}
 	// autoDisabled 记录自动发现模型（auto_ 前缀）的确定性不可用标记：
 	// key = endpoint|model（与 probeStates 同键）。401/403/404 等确定性错误
 	// 时标记；探活成功（200）自动移除（拉起）。聚合 API /v1/models 输出时
@@ -54,7 +54,7 @@ var (
 	// ⚠️ 2026-08-13 废除探活梯队：商汤 5h/500 次探活烧额度。
 	// 改为完全靠真实请求延迟排序，零额外探测。
 	aggAutoTierMu sync.Mutex
-	aggAutoTier    = map[string]int{}
+	aggAutoTier   = map[string]int{}
 )
 
 // isProtectedModel 判断模型是否受保护（DeepSeek 系永不淘汰）。
@@ -84,8 +84,55 @@ func enableAutoModel(endpoint, model string) {
 	autoDisabledMu.Unlock()
 }
 
-// isAutoModelDisabled 查询自动发现模型是否被标记不可用。
+// manuallyDeadAutoModels 人工审计确认「确定下架或付费」的自动发现模型（endpoint|model）。
+// 2026-08-21 实测：用鲁棒长句探活全部免费池 + 自动发现（魔搭/商汤/StepFun 三个整账号
+// 免费额度制厂商），这批返回的是明确的「不存在/无 provider 支撑/无访问权限」错误，
+// 不是偶发的空回复抖动（那类疑罪从无，留给 30 分钟探活信号自然降权，不进这份名单）：
+//   - 魔搭 MiniMax/MiniMax-M3、Qwen/Qwen3-4B：400 "has no provider supported"
+//   - 商汤 sensenova-u1-fast：404 "model is not found"
+//   - StepFun 一批 TTS/ASR/搜索/订阅制端点：404 "does not exist or you do not have
+//     access to it"——订阅制体系，免费 key 没权限，且本来就是非聊天模型
+//
+// autoDisabled 是运行时内存态（进程重启/自动发现快照刷新会丢），这份是持久名单，
+// 与 isAutoModelDisabled 合并判定，保证这批不会再冒出来给用户选。
+var manuallyDeadAutoModels = map[string]bool{
+	"https://api-inference.modelscope.cn/v1|MiniMax/MiniMax-M3": true,
+	"https://api-inference.modelscope.cn/v1|Qwen/Qwen3-4B":      true,
+	"https://token.sensenova.cn/v1|sensenova-u1-fast":           true,
+	"https://api.stepfun.com/v1|dr-search-api":                  true,
+	"https://api.stepfun.com/v1|search-image":                   true,
+	"https://api.stepfun.com/v1|step-2x-large":                  true,
+	"https://api.stepfun.com/v1|step-asr":                       true,
+	"https://api.stepfun.com/v1|step-asr-1.1":                   true,
+	"https://api.stepfun.com/v1|step-asr-1.1-stream":            true,
+	"https://api.stepfun.com/v1|step-audio-2-think":             true,
+	"https://api.stepfun.com/v1|step-image-edit-2":              true,
+	"https://api.stepfun.com/v1|step-overture-preview":          true,
+	"https://api.stepfun.com/v1|step-tts-2":                     true,
+	"https://api.stepfun.com/v1|step-tts-mini":                  true,
+	"https://api.stepfun.com/v1|step-tts-vivid":                 true,
+	"https://api.stepfun.com/v1|stepaudio-2-asr-pro":            true,
+	"https://api.stepfun.com/v1|stepaudio-2.5-asr":              true,
+	"https://api.stepfun.com/v1|stepaudio-2.5-asr-stream":       true,
+	"https://api.stepfun.com/v1|stepaudio-2.5-realtime":         true,
+	"https://api.stepfun.com/v1|stepaudio-2.5-tts":              true,
+}
+
+// manuallyPinnedDeadCatalog 人工确认「上游仍挂在 /v1/models 列表里、但实际调用会挂」的
+// 目录条目（catalog ID）。2026-08-21：free_zen_deepseek_v4_flash 实测 HTTP 400
+// "Model is unavailable"——nim_refresh.go 的每日重探只做「存在性检查」（模型还在
+// /v1/models 列表里就判定「仍可用」），检测不出「listed 但调用挂」这种情况，会在下次
+// 启动/24h 重探时把手动 Disabled 悄悄拨回 false。这份名单让 providerListRefreshOnce
+// 的自动恢复逻辑跳过这些条目，人工禁用才真正是"永久"的（除非从这份名单里删掉）。
+var manuallyPinnedDeadCatalog = map[string]bool{
+	"free_zen_deepseek_v4_flash": true,
+}
+
+// isAutoModelDisabled 查询自动发现模型是否被标记不可用（运行时探活淘汰 ∪ 人工审计名单）。
 func isAutoModelDisabled(endpoint, model string) bool {
+	if manuallyDeadAutoModels[endpoint+"|"+model] {
+		return true
+	}
 	autoDisabledMu.Lock()
 	defer autoDisabledMu.Unlock()
 	return autoDisabled[endpoint+"|"+model]

@@ -67,106 +67,34 @@ func aggregateAuth(c *gin.Context) bool {
 
 // aggregateChatRequest OpenAI /v1/chat/completions 请求体（按需解析字段，未知字段忽略）。
 type aggregateChatRequest struct {
-	Model       string          `json:"model"`
+	Model       string           `json:"model"`
 	Messages    []map[string]any `json:"messages"`
-	Stream      bool            `json:"stream"`
+	Stream      bool             `json:"stream"`
 	Tools       []map[string]any `json:"tools"`
-	MaxTokens   int             `json:"max_tokens"`
-	Temperature float64         `json:"temperature"`
+	MaxTokens   int              `json:"max_tokens"`
+	Temperature float64          `json:"temperature"`
 }
 
-// aggAutoChain 聚合端口 auto 专用路由链（2026-08-14 重构：Zen 已死；
-// 2026-08-14 晚：智谱 GLM-4.7-Flash 踢出 auto 链——它在工具调用循环返回
-// HTTP200 + content='' + tool_calls（usage=0），Hermes 判空回复 → No reply 实锤）
-// 按速度+稳定性优先级：魔搭 Step-3.7 → 商汤 DS V4 Flash → 魔搭 Qwen3-235B → Zen 兜底
-// 每个源检查 key 有无（免 key 的直接进，要 key 的检查 user_configs/env），无 key 跳过。
+// aggAutoChain 聚合端口 auto 专用路由链（2026-08-21 重构：不再手写小名单——
+// DS 系经常被上游下架/改名，手写名单跟不上变化，导致 auto 链干瘪甚至打空。
+// 改成直接复用应用内统一的 resolveBackends("", "auto")：全部免费模型池
+// （探活信号降序 → LRU 新鲜度 → 手动排序）+ 用户自定义提供方，模型下架/
+// 不可用会被探活自然沉底或熔断跳过，不用再手工维护「实测可用」名单。
 func aggAutoChain() []RouterBackend {
-	entries, _ := loadModelConfigs("")
-	entryByID := map[string]ModelConfigEntry{}
-	for _, e := range entries {
-		entryByID[e.ID] = e
-	}
-	envKeys := userKeysByEnv("")
-
-	// 按优先级逐一构造
-	backends := []struct {
-		id    string
-		vendor string
-		model string
-		base  string
-		keyEnv string
-		keyless bool
-		reasoning bool
-		timeout time.Duration
-		vision bool
-		window int
-	}{}
-	// 1. 魔搭 Step-3.7-flash（200 OK 实测可用）
-	if hasKey("free_modelscope_deepseek_v4_flash", "MODELSCOPE_API_KEY", entryByID, envKeys) {
-		backends = append(backends, struct {
-			id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
-		}{
-			id: "auto_modelscope_stepfun-ai/Step-3.7-Flash", vendor: "ModelScope 魔搭", model: "stepfun-ai/Step-3.7-Flash",
-			base: "https://api-inference.modelscope.cn/v1", keyEnv: "MODELSCOPE_API_KEY", reasoning: true, timeout: 45,
-		})
-	}
-	// 3. 商汤 DS V4 Flash（200 OK 实测可用）
-	if hasKey("free_sensenova_deepseek_v4_flash", "SENSENOVA_API_KEY", entryByID, envKeys) {
-		backends = append(backends, struct {
-			id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
-		}{
-			id: "free_sensenova_deepseek_v4_flash", vendor: "SenseNova", model: "deepseek-v4-flash",
-			base: "https://token.sensenova.cn/v1", keyEnv: "SENSENOVA_API_KEY", reasoning: true, timeout: 45, window: 1048576,
-		})
-	}
-	// 4. 魔搭 Qwen3-235B（200 OK 实测可用）
-	if hasKey("free_modelscope_qwen3_235b", "MODELSCOPE_API_KEY", entryByID, envKeys) {
-		backends = append(backends, struct {
-			id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
-		}{
-			id: "free_modelscope_qwen3_235b", vendor: "ModelScope 魔搭", model: "Qwen/Qwen3-235B-A22B",
-			base: "https://api-inference.modelscope.cn/v1", keyEnv: "MODELSCOPE_API_KEY", reasoning: true, timeout: 45, window: 131072,
-		})
-	}
-	// 5. Zen 免 key DS（经常 502 限流，放最后兜底）
-	backends = append(backends, struct {
-		id    string; vendor string; model string; base string; keyEnv string; keyless bool; reasoning bool; timeout time.Duration; vision bool; window int
-	}{
-		id: "free_zen_deepseek_v4_flash", vendor: "OpenCode Zen", model: "deepseek-v4-flash-free",
-		base: "https://opencode.ai/zen/v1", keyless: true, reasoning: true, timeout: 15,
-	})
-
-	out := make([]RouterBackend, 0, len(backends))
-	for _, b := range backends {
-		key := ""
-		if e, ok := entryByID[b.id]; ok {
-			key = e.APIKey
-		}
-		if key == "" && !b.keyless && b.keyEnv != "" {
-			if envKeys[b.keyEnv] != "" {
-				key = envKeys[b.keyEnv]
-			} else {
-				key = os.Getenv(b.keyEnv)
-			}
-		}
-		if key == "" && !b.keyless {
-			continue // 无 key 跳过
-		}
-		out = append(out, RouterBackend{
-			ID: b.id, Name: b.model, BaseURL: b.base, Model: b.model,
-			APIKey: key, Timeout: b.timeout * time.Second, Source: "free",
-			Keyless: b.keyless, Reasoning: b.reasoning, Vision: b.vision,
-			ContextWindow: b.window,
-		})
-	}
-	// 0. 跟随前端分组设定：official 模式只走 DeepSeek 系（与 isOfficialAllowed 一致），
-	// 避免 auto 路由把非 DS 源（Step-3.7 / Qwen3-235B 等）混进 DS 分组。
+	out := resolveBackends("", "auto")
+	// 0. 跟随前端分组设定：official 模式默认收全部免费模型（freeModelCatalog +
+	// 自动发现），用户自定义提供方仅在免费厂商白名单内才放行（与 isOfficialAllowed /
+	// isKnownFreeVendor / exposeOfficial 保持一致，避免个人付费 key 被悄悄算进默认池）。
 	if cfg := loadAggregateExposeConfig(); cfg.Mode == "official" {
 		filtered := out[:0]
 		for _, b := range out {
-			if isOfficialAllowed(b.Model, b.ID) || b.ID == "auto" {
-				filtered = append(filtered, b)
+			if !isOfficialAllowed(b.Model, b.Name) {
+				continue
 			}
+			if b.Source == "user" && !isKnownFreeVendor(b.Name) {
+				continue
+			}
+			filtered = append(filtered, b)
 		}
 		out = filtered
 	}
@@ -235,8 +163,8 @@ func modelToAggregateBackends(model string) []RouterBackend {
 			}
 			b := RouterBackend{
 				ID: f.ID, Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
-				APIKey:           key,
-				ParamsB:          f.ParamsB, Timeout: 45 * time.Second, Source: "free",
+				APIKey:  key,
+				ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: "free",
 				Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
 				IsLocal: f.Local, Keyless: f.Keyless, WireResponses: f.Responses,
 			}
@@ -462,8 +390,9 @@ func aggregateForwardSSE(c *gin.Context, b RouterBackend, resp *http.Response) {
 
 // HandleAggregateModels GET /v1/models —— 列出可用模型（OpenAI 格式）。
 // 暴露范围由配置决定（~/rescene_data/aggregate_config.json）：
-//   - official（默认）：官方遴选 = DS V4 系 + auto + 「快又聪明」精选，干净聚焦
+//   - official（默认）：官方遴选 = 全部免费模型 + auto，小白用户开箱即用，不用挑模型
 //   - custom：用户自定义 = 只暴露用户勾选的模型 ID（目录 / auto_ 发现 / 自定义提供方）
+//
 // auto 智能路由入口永远在列表里。
 func HandleAggregateModels(c *gin.Context) {
 	if !aggregateAuth(c) {
@@ -487,28 +416,80 @@ func HandleAggregateModels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"object": "list", "data": data})
 }
 
-// isOfficialAllowed DeepSeek 模式准入（2026-08-19 收窄）：
+// isOfficialAllowed 官方默认免费池准入（2026-08-21 改策略）：
+// 此前"只留 DeepSeek V4 系"（2026-08-19 收窄）——DS 系频繁被上游下架/改名，
+// 官方池经常见底，小白用户误以为聚合端口不能用了。现在反过来：默认收全部免费
+// 模型（不分厂商），只留一份「实测有问题」黑名单，其余一律放行：
 //   - 腾讯混元 Hy3 系（tencent/hy3 / Tencent-Hunyuan/Hy3 / hy3-free）实测质量不达标 → 踢出
 //   - DeepSeek 老代模型（v3 / v3.1 / v3.2 / terminus / r1 / distill / deepseek-chat）→ 踢出
-//   - 只留 DeepSeek V4 系（v4-flash / v4-pro，含日期后缀与 discounted 变体）
+//     （V4 系及以后正常放行；黑名单只在模型名含 deepseek 时生效，不影响其他厂商）
 //
 // 被踢出的模型仍可在「用户自定义」模式手工勾选，只是不进默认暴露池。
+// 厂商侧的免费准入见 isKnownFreeVendor（限制「用户自定义提供方」分支，
+// freeModelCatalog / 自动发现的模型本身就是免费源，不需要这层校验）。
 func isOfficialAllowed(model, vendor string) bool {
 	lower := strings.ToLower(model)
 	if strings.Contains(lower, "hy3") || strings.Contains(lower, "hunyuan") {
 		return false
 	}
-	if !strings.Contains(lower, "deepseek") {
-		return false
-	}
-	// 老代黑名单
-	for _, legacy := range []string{"r1", "distill", "terminus", "v3", "v3.1", "v3.2", "-chat"} {
-		if strings.Contains(lower, legacy) {
-			return false
+	if strings.Contains(lower, "deepseek") {
+		for _, legacy := range []string{"r1", "distill", "terminus", "v3", "v3.1", "v3.2", "-chat"} {
+			if strings.Contains(lower, legacy) {
+				return false
+			}
 		}
 	}
-	// 只认 V4 系
-	return strings.Contains(lower, "v4")
+	return true
+}
+
+// officialFreeVendors 已知稳定给免费额度的厂商——「用户自定义提供方」（可能是
+// 用户自己填的付费 key，如 OpenAI/Anthropic 官方）要进官方默认池，厂商必须在
+// 这份白名单里（覆盖免费池目录已用到的全部厂商，含 ModelScope 魔搭全量模型，
+// 即使某个模型没在目录 Note 里手写"免费"字样——魔搭是访问令牌额度制，同账号下
+// 全部模型共享同一份免费额度，不按模型单独区分免费/付费）。
+var officialFreeVendors = []string{
+	"modelscope", "魔搭", "魔塔",
+	"智谱", "bigmodel", "zhipu",
+	"硅基流动", "siliconflow",
+	"sensenova", "商汤",
+	"stepfun", "阶跃星辰",
+	"kilo", "opencode zen",
+}
+
+// wholeAccountFreeVendors 「整账号免费额度制」厂商——同一个 key 下全部模型共享同一份
+// 免费额度，不区分模型单独付费，所以这几家厂商在 discoveredFreeModels（拉全量
+// /v1/models）里新出现的模型也能放心当免费模型收进官方默认池。
+//
+// 不含 Kilo Gateway / OpenCode Zen：这两个是通用网关，/v1/models 全量列表里绝大多数
+// 模型要付费 key（目录里的 :free 后缀条目已经是人工扫过全量列表、逐个筛出来的真免费
+// 子集），如果不做区分，discoveredFreeModels 的全量列表会把几百个付费模型也算进来
+// （2026-08-21 实测：Kilo 366 个模型只有 13 个真免费，混进去过一次官方池，已修复）。
+var wholeAccountFreeVendors = []string{
+	"modelscope", "魔搭", "魔塔",
+	"sensenova", "商汤",
+	"stepfun", "阶跃星辰",
+}
+
+// isWholeAccountFreeVendor 判断 vendor 是否整账号免费额度制厂商。
+func isWholeAccountFreeVendor(vendor string) bool {
+	v := strings.ToLower(vendor)
+	for _, f := range wholeAccountFreeVendors {
+		if strings.Contains(v, f) {
+			return true
+		}
+	}
+	return false
+}
+
+// isKnownFreeVendor 判断 vendor 是否已知的免费厂商。
+func isKnownFreeVendor(vendor string) bool {
+	v := strings.ToLower(vendor)
+	for _, f := range officialFreeVendors {
+		if strings.Contains(v, f) {
+			return true
+		}
+	}
+	return false
 }
 
 // isUsableAggModel 等旧筛选函数已废弃（2026-08-18）：DeepSeek 模式改走 isOfficialAllowed，
@@ -543,18 +524,18 @@ func isPaidWallVendor(vendor string) bool {
 
 // aggHealthModel 健康度单条视图。
 type aggHealthModel struct {
-	ID         string    `json:"id"`          // 与 /v1/models 一致的对外 ID（auto_ 可读 ID / custom::…）
-	Vendor     string    `json:"vendor"`      // 厂商分组
-	Name       string    `json:"name"`        // 展示名（目录 Name，无则用模型名）
-	Model      string    `json:"model"`       // 真实模型名（探活/真实请求用）
-	Signal     int       `json:"signal"`      // 0-4；-1 未探测
-	ProbeMs    int64     `json:"probe_ms"`    // 探活实测延迟 ms（0=未测）
-	RealMs     int64     `json:"real_ms"`     // 真实请求成功延迟 ms（0=暂无记录）
-	LastUsed   time.Time `json:"last_used"`   // 最近真实成功时刻（零值=从未）
-	Disabled   bool      `json:"disabled"`    // 不可用（淘汰/熔断/确认0格）
-	Keyless    bool      `json:"keyless"`     // 免 key 网关
-	InAuto     bool      `json:"in_auto"`     // 是不是 auto 链候选（聚合端口 model=auto 的梯队）
-	AutoOrder  int       `json:"auto_order"`  // auto 链中的优先级（1 最前）
+	ID        string    `json:"id"`         // 与 /v1/models 一致的对外 ID（auto_ 可读 ID / custom::…）
+	Vendor    string    `json:"vendor"`     // 厂商分组
+	Name      string    `json:"name"`       // 展示名（目录 Name，无则用模型名）
+	Model     string    `json:"model"`      // 真实模型名（探活/真实请求用）
+	Signal    int       `json:"signal"`     // 0-4；-1 未探测
+	ProbeMs   int64     `json:"probe_ms"`   // 探活实测延迟 ms（0=未测）
+	RealMs    int64     `json:"real_ms"`    // 真实请求成功延迟 ms（0=暂无记录）
+	LastUsed  time.Time `json:"last_used"`  // 最近真实成功时刻（零值=从未）
+	Disabled  bool      `json:"disabled"`   // 不可用（淘汰/熔断/确认0格）
+	Keyless   bool      `json:"keyless"`    // 免 key 网关
+	InAuto    bool      `json:"in_auto"`    // 是不是 auto 链候选（聚合端口 model=auto 的梯队）
+	AutoOrder int       `json:"auto_order"` // auto 链中的优先级（1 最前）
 }
 
 // aggModelHealth 读一个 backend 的健康度状态（零锁外开销）。
@@ -632,8 +613,9 @@ func HandleAggregateHealth(c *gin.Context) {
 // ========== 聚合 API 暴露模型配置（2026-08-17，issue #5）==========
 // 用户诉求：聚合 API 可以自行设置添加哪些模型。
 // 两个模式：
-//   - official（默认）：官方遴选 = isUsableAggModel 精选（DS V4 系 + 快又聪明），
-//     保证聚合端口跑 Agent 又快又稳，这是给普通用户的默认体验。
+//   - official（默认）：官方遴选 = 全部免费模型（免费池目录 + 自动发现 + 免费厂商的
+//     自定义提供方），覆盖面广不怕单一厂商下架，这是给普通用户的默认体验——
+//     只用 auto 就行，不用操心选哪个模型。
 //   - custom：用户自定义 = 只暴露用户在设置面板勾选的模型 ID，想加什么加什么
 //     （如 Kilo 免 key 的 kilo-auto/free），不受官方精选限制。
 //
@@ -704,8 +686,9 @@ func aggregateExposedModels() []aggExposedModel {
 	return exposeOfficial()
 }
 
-// exposeOfficial DeepSeek 模式（2026-08-18 用户定稿）：只暴露 DeepSeek 系 + 腾讯混元 Hy3 系，
-// 其他厂商（qwen/step/glm 等）一律不进官方遴选列表——用户「就这个还能看」。
+// exposeOfficial 官方免费模式（2026-08-21 改策略）：暴露全部免费模型（免费池目录 +
+// 自动发现 + 免费厂商的自定义提供方），不再收窄到单一厂商——DS 系经常被上游下架，
+// 收窄成「只剩 DeepSeek」会让官方池经常见底，小白用户以为聚合端口坏了。
 func exposeOfficial() []aggExposedModel {
 	out := []aggExposedModel{}
 	seen := map[string]bool{}
@@ -732,6 +715,9 @@ func exposeOfficial() []aggExposedModel {
 		if !isOfficialAllowed(dm.Model, dm.Vendor) {
 			continue
 		}
+		if !isWholeAccountFreeVendor(dm.Vendor) {
+			continue
+		}
 		id := autoReadableID(dm.ID)
 		if seen[id] {
 			continue
@@ -744,6 +730,9 @@ func exposeOfficial() []aggExposedModel {
 		for _, e := range entries {
 			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
 				continue
+			}
+			if !isKnownFreeVendor(e.Name) {
+				continue // 非免费厂商的自定义提供方（可能是用户自己的付费 key）不进官方默认池
 			}
 			for _, m := range configuredProviderModels(e) {
 				id := customModelSelectionID(e.ID, m.ID)
@@ -835,12 +824,12 @@ next:
 
 // aggCandidate 聚合端口可选模型（设置面板「用户自定义」勾选列表）。
 type aggCandidate struct {
-	ID     string `json:"id"`     // 对外暴露 ID
-	Name   string `json:"name"`   // 展示名
-	Vendor string `json:"vendor"` // 厂商分组
-	Model  string `json:"model"`  // 真实模型名
+	ID     string `json:"id"`      // 对外暴露 ID
+	Name   string `json:"name"`    // 展示名
+	Vendor string `json:"vendor"`  // 厂商分组
+	Model  string `json:"model"`   // 真实模型名
 	KeySet bool   `json:"key_set"` // 已配 key 或免 key（false = 勾了也路由不了，前端禁用）
-	Chat   bool   `json:"chat"`   // 是否聊天模型（false = TTS/ASR/生图/实时等非对话，勾了 chat/completions 必挂）
+	Chat   bool   `json:"chat"`    // 是否聊天模型（false = TTS/ASR/生图/实时等非对话，勾了 chat/completions 必挂）
 }
 
 // isChatModel 判断模型是不是聊天模型。排除明显非对话的：

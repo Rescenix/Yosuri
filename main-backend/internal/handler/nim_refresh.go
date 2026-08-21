@@ -146,7 +146,7 @@ func providerListRefreshOnce() {
 		disabled, enabled := 0, 0
 		for _, f := range g.models {
 			if alive[strings.TrimSpace(f.Model)] {
-				if f.Disabled {
+				if f.Disabled && !manuallyPinnedDeadCatalog[f.ID] {
 					f.Disabled = false
 					enabled++
 					fmt.Printf("✅ [提供方重探] 恢复可用: %s (%s)\n", f.ID, f.Model)

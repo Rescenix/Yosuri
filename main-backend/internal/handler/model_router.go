@@ -118,6 +118,19 @@ var freeModelCatalog = []FreeModelDef{
 	// 按本目录「未知者留 0，绝不伪造」的规矩不填。
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰 StepFun", Name: "step-1o-turbo-vision（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰（识图）", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
 	{ID: "free_step_3_7_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.7-flash（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.7-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰免费档·agent 可用（实测 2026-08-02）", KeyURL: "https://platform.stepfun.com/"},
+	// 2026-08-21「全家桶」补充：不只测「能不能吐出正常文本」，还带 tools 数组实测
+	// function calling（聚合端口的真实场景是给 Claude Code/Cursor 这类 agent 用，
+	// 光会聊天不够，得真能听懂工具定义并吐 tool_calls）。
+	// 跳过：step-audio-2（实测吐 <tts_pad> 编解码占位符，不是可读文本，走错管线）、
+	// step-router-v1（实测输出内部 advisor/function_calls 调度轨迹，是内部路由模型，
+	// 不是给终端用户对话用的）、step-audio-r1.1/r1.5（自我介绍成 "OpenAI ChatGPT"，
+	// 身份幻觉明显）、step-audio-2-mini/stepaudio-2.5-chat（**关键**：带 tools 实测
+	// 完全不调用工具——2-mini 直接编了个假时间敷衍回答，2.5-chat 停留在角色扮演人设
+	// 里回避，问「现在几点」两个都不会触发 tool_calls，语音人设模型明显没针对
+	// function calling 训练，不能进 agent 默认池）。
+	{ID: "free_step_3_5_flash", Vendor: "阶跃星辰 StepFun", Name: "step-3.5-flash（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-3.5-flash", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰免费档·agent 可用（实测 2026-08-21）", KeyURL: "https://platform.stepfun.com/"},
+	{ID: "free_step_gui", Vendor: "阶跃星辰 StepFun", Name: "step-gui（免费）", Endpoint: "https://api.stepfun.com/v1", Model: "step-gui", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰免费档·多模态 GUI 推理·agent 可用（实测 2026-08-21）", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
+	{ID: "free_step_1o_audio", Vendor: "阶跃星辰 StepFun", Name: "step-1o-audio（免费·语音）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-audio", KeyEnv: "STEP_API_KEY", ParamsB: 0, Note: "阶跃星辰免费档·语音对话·agent 可用（实测 2026-08-21，tools 实测能正确触发 tool_calls）", KeyURL: "https://platform.stepfun.com/"},
 
 	// —— Step Plan 订阅已移除（2026-08-13 用户清理）：无订阅用不了，纯占位 ——
 
@@ -129,7 +142,12 @@ var freeModelCatalog = []FreeModelDef{
 	// nemotron-3-ultra/tools 上游失败），仅保留 3 个能稳定返回 tool_calls 的。
 	// 能力元数据未知者一律留 0/false，绝不伪造（与目录「未知留空」规矩一致）。
 	// Keyless=true：免 key 远端网关，可直接进链、可被「提供方」直接勾选，无需填 Key。
-	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
+	// 2026-08-21 实测审计：HTTP 400 "Model is unavailable"（仍在 /v1/models 列表里，
+	// 只是调用直接挂，不是探活抖动）。手动标 Disabled——这条命中 isProtectedModel
+	// （名字含 deepseek），24h 存在性重探不会因它「消失」而下架，只有「重新出现在
+	// 列表里」才会把 Disabled 拨回 false，所以这次标记可能在它被列表重探判定
+	// "仍存在" 时被自动复位；如果之后发现又被派上场但还是 400，需要再手动查一次。
+	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true, Disabled: true},
 	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·最快）", Keyless: true, Reasoning: true},
 	// 2026-08-08 重新爬取 Zen /v1/models（61 模型，8 个 free 档）实测新增：
@@ -176,6 +194,26 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_modelscope_qwen3_235b", Vendor: "ModelScope 魔搭", Name: "Qwen3-235B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-235B-A22B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 235, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
 	{ID: "free_modelscope_glm_5_2", Vendor: "ModelScope 魔搭", Name: "GLM-5.2（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "ZhipuAI/GLM-5.2", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）", Reasoning: true, KeyURL: "https://modelscope.cn"},
 	{ID: "free_modelscope_deepseek_v4_flash", Vendor: "ModelScope 魔搭", Name: "DeepSeek V4 Flash（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "deepseek-ai/DeepSeek-V4-Flash-0731", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天·2026-08-13 ID 改 -0731（旧 ID 上游已下架 400）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	// 2026-08-21 补充：魔搭 /v1/models 实测还挂着 DeepSeek-V4-Pro（非 Flash 档），
+	// 上游没在名字里标"免费"，但魔搭是访问令牌额度制——同账号下全部模型共享同一份
+	// 2000次/天免费额度，不按模型单独收费，之前漏收了这档，导致官方默认池一直缺 Pro。
+	{ID: "free_modelscope_deepseek_v4_pro", Vendor: "ModelScope 魔搭", Name: "DeepSeek V4 Pro（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "deepseek-ai/DeepSeek-V4-Pro-0813", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天·与 Flash 共享同一份免费额度·agent 可用（实测 2026-08-21）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	// 2026-08-21「全家桶」策略：官方默认池不再挑单一厂商，把小白用户不会手动去
+	// 自定义模式勾选的、但实测能打通的魔搭其余模型也直接收进来——auto 全包，用户
+	// 不用操心选什么。以下是从魔搭 /v1/models 全量自动发现里逐个带完整鲁棒 prompt
+	// 实测确认输出正常内容、且额外带 tools 数组实测真能触发 tool_calls（不是只会
+	// 聊天不会用工具）的通用对话模型（跳过：纯 SQL/评测类窄场景模型、无公开身份的
+	// early-access 未命名模型，以及只在单轮测试命中过、另一轮空回复的存疑项）。
+	{ID: "free_modelscope_qwen3_235b_instruct", Vendor: "ModelScope 魔搭", Name: "Qwen3-235B-Instruct-2507（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-235B-A22B-Instruct-2507", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 235, Note: "魔搭免费·访问令牌调用·2000次/天·agent 可用（实测 2026-08-21）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_235b_thinking", Vendor: "ModelScope 魔搭", Name: "Qwen3-235B-Thinking-2507（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-235B-A22B-Thinking-2507", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 235, Note: "魔搭免费·访问令牌调用·2000次/天·深度思考档·agent 可用（实测 2026-08-21）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_30b_thinking", Vendor: "ModelScope 魔搭", Name: "Qwen3-30B-Thinking-2507（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-30B-A3B-Thinking-2507", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 30, Note: "魔搭免费·访问令牌调用·2000次/天·深度思考档·agent 可用（实测 2026-08-21）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_coder_30b", Vendor: "ModelScope 魔搭", Name: "Qwen3-Coder-30B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-Coder-30B-A3B-Instruct", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 30, Note: "魔搭免费·访问令牌调用·2000次/天·代码专精·agent 可用（实测 2026-08-21）", KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_next_80b", Vendor: "ModelScope 魔搭", Name: "Qwen3-Next-80B-Instruct（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-Next-80B-A3B-Instruct", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 80, Note: "魔搭免费·访问令牌调用·2000次/天·agent 可用（实测 2026-08-21）", KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_vl_8b", Vendor: "ModelScope 魔搭", Name: "Qwen3-VL-8B-Instruct（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3-VL-8B-Instruct", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 8, Note: "魔搭免费·访问令牌调用·2000次/天·多模态·agent 可用（实测 2026-08-21）", Vision: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_5_122b", Vendor: "ModelScope 魔搭", Name: "Qwen3.5-122B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3.5-122B-A10B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 122, Note: "魔搭免费·访问令牌调用·2000次/天·agent 可用（实测 2026-08-21）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_qwen3_5_35b", Vendor: "ModelScope 魔搭", Name: "Qwen3.5-35B（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "Qwen/Qwen3.5-35B-A3B", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 35, Note: "魔搭免费·访问令牌调用·2000次/天·agent 可用（实测 2026-08-21）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_minimax_m1", Vendor: "ModelScope 魔搭", Name: "MiniMax-M1-80k（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "MiniMax/MiniMax-M1-80k", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 0, Note: "魔搭免费·访问令牌调用·2000次/天·非 Qwen 系厂商多样性·agent 可用（实测 2026-08-21）", Reasoning: true, KeyURL: "https://modelscope.cn"},
+	{ID: "free_modelscope_mistral_large", Vendor: "ModelScope 魔搭", Name: "Mistral-Large-Instruct-2407（免费·每日2000次）", Endpoint: "https://api-inference.modelscope.cn/v1", Model: "mistralai/Mistral-Large-Instruct-2407", KeyEnv: "MODELSCOPE_API_KEY", ParamsB: 123, Note: "魔搭免费·访问令牌调用·2000次/天·欧美厂商多样性·agent 可用（实测 2026-08-21）", KeyURL: "https://modelscope.cn"},
 
 	// —— NVIDIA NIM 已整体移除（2026-08-13 用户清理：「纯纯垃圾，不要了」，实测慢/超时）——
 	// —— Step Plan 订阅已移除：无订阅用不了（2026-08-13 用户清理）——
@@ -186,7 +224,6 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_silicon_deepseek_v4_flash", Vendor: "硅基流动", Name: "DeepSeek V4 Flash（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "deepseek-v4-flash", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动·免费额度·2000万 tokens", ContextWindow: 1048576, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
 	{ID: "free_silicon_qwen3_5_397b", Vendor: "硅基流动", Name: "Qwen3.5-397B（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "qwen3.5-397b", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 397, Note: "硅基流动·免费额度", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
 	{ID: "free_silicon_qwen3_235b", Vendor: "硅基流动", Name: "Qwen3-235B（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "qwen3-235b", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 235, Note: "硅基流动·免费额度", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
-
 }
 
 func isFreeCatalogID(id string) bool {
