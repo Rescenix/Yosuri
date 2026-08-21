@@ -434,7 +434,7 @@ func resolveExact(userKey string, model string) *RouterBackend {
 		}
 		source := "free"
 		return &RouterBackend{
-			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
+			ID: f.ID, Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
 			APIKey: key, ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: source,
 			Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
 			IsLocal: f.Local, Keyless: f.Keyless, WireResponses: f.Responses,
@@ -462,7 +462,7 @@ func resolveExact(userKey string, model string) *RouterBackend {
 				return nil
 			}
 			return &RouterBackend{
-				Name: e.Name + " · " + selected.Name, BaseURL: e.Endpoint, Model: selected.ID,
+				ID: model, Name: e.Name + " · " + selected.Name, BaseURL: e.Endpoint, Model: selected.ID,
 				APIKey: e.APIKey, Timeout: 5 * time.Minute, Source: "user",
 				Vision:        selected.Vision || e.Vision,
 				ContextWindow: selected.ContextWindow,
@@ -481,7 +481,7 @@ func resolveExact(userKey string, model string) *RouterBackend {
 			return nil
 		}
 		return &RouterBackend{
-			Name: e.Name, BaseURL: e.Endpoint, Model: e.DefaultModel,
+			ID: e.ID, Name: e.Name, BaseURL: e.Endpoint, Model: e.DefaultModel,
 			APIKey: e.APIKey, Timeout: 5 * time.Minute, Source: "user",
 			Vision: e.Vision, ContextWindow: e.ContextWindow, Reasoning: e.Reasoning,
 			Keyless: e.Keyless,

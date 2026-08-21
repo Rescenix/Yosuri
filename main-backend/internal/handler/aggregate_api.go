@@ -80,12 +80,25 @@ type aggregateChatRequest struct {
 // 改成直接复用应用内统一的 resolveBackends("", "auto")：全部免费模型池
 // （探活信号降序 → LRU 新鲜度 → 手动排序）+ 用户自定义提供方，模型下架/
 // 不可用会被探活自然沉底或熔断跳过，不用再手工维护「实测可用」名单。
+//
+// 2026-08-21 修复实锤：auto 必须跟随当前聚合页选的模式——custom 模式下用户
+// 明确勾选了一份自己的模型清单，auto 却之前直接用全量 resolveBackends（等于
+// custom 模式设置形同虚设，选了 3 个模型，auto 照样在全部免费池里乱跳）。
+// 现在 custom 模式下 auto 只在用户勾选的 ID 范围内路由；official 模式行为不变。
 func aggAutoChain() []RouterBackend {
-	out := resolveBackends("", "auto")
-	// 0. 跟随前端分组设定：official 模式默认收全部免费模型（freeModelCatalog +
-	// 自动发现），用户自定义提供方仅在免费厂商白名单内才放行（与 isOfficialAllowed /
-	// isKnownFreeVendor / exposeOfficial 保持一致，避免个人付费 key 被悄悄算进默认池）。
-	if cfg := loadAggregateExposeConfig(); cfg.Mode == "official" {
+	cfg := loadAggregateExposeConfig()
+	var out []RouterBackend
+	if cfg.Mode == "custom" {
+		for _, id := range cfg.ModelIDs {
+			if b := resolveExact("", id); b != nil {
+				out = append(out, *b)
+			}
+		}
+	} else {
+		out = resolveBackends("", "auto")
+		// 跟随前端分组设定：official 模式默认收全部免费模型（freeModelCatalog +
+		// 自动发现），用户自定义提供方仅在免费厂商白名单内才放行（与 isOfficialAllowed /
+		// isKnownFreeVendor / exposeOfficial 保持一致，避免个人付费 key 被悄悄算进默认池）。
 		filtered := out[:0]
 		for _, b := range out {
 			if !isOfficialAllowed(b.Model, b.Name) {
@@ -692,11 +705,23 @@ func aggregateExposedModels() []aggExposedModel {
 func exposeOfficial() []aggExposedModel {
 	out := []aggExposedModel{}
 	seen := map[string]bool{}
+	entries, _ := loadModelConfigs("")
+	entryByID := map[string]ModelConfigEntry{}
+	for _, e := range entries {
+		entryByID[e.ID] = e
+	}
+	envKeys := userKeysByEnv("")
 	for _, f := range freeModelCatalog {
 		if f.Disabled {
 			continue
 		}
 		if !isOfficialAllowed(f.Model, f.Vendor) {
+			continue
+		}
+		// 2026-08-21 修复实锤：没配 key 的目录条目之前也照样暴露进 /v1/models，
+		// 外部工具（如 DeepSeek Harness）选中后一发请求就是「API key is invalid」，
+		// 小白用户一头雾水以为聚合端口坏了。暴露必须以「这台机器真的能路由」为准。
+		if !f.Keyless && !f.Local && !hasKey(f.ID, f.KeyEnv, entryByID, envKeys) {
 			continue
 		}
 		out = append(out, aggExposedModel{ID: f.ID, Vendor: f.Vendor, Name: f.Name, Model: f.Model, Endpoint: f.Endpoint, Keyless: f.Keyless})
@@ -726,7 +751,7 @@ func exposeOfficial() []aggExposedModel {
 		seen[dm.ID] = true
 		seen[id] = true
 	}
-	if entries, err := loadModelConfigs(""); err == nil {
+	{
 		for _, e := range entries {
 			if isFreeCatalogID(e.ID) || (e.APIKey == "" && !e.Keyless) {
 				continue

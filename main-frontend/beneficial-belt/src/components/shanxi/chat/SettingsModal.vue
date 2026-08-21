@@ -378,11 +378,11 @@
                               </div>
                             </div>
 
-                            <!-- ===== 聚合模型选择（DeepSeek 精选 / 用户自定义命名标签）===== -->
+                            <!-- ===== 聚合模型选择（官方全量免费模型 / 用户自定义命名标签）===== -->
                             <div class="agg-api-card" style="margin-top:10px">
                               <div class="agg-api-row">
                                 <div class="agg-mode-tabs">
-                                  <button type="button" :class="{ on: aggMode === 'official' }" @click="switchAggOfficial()">DeepSeek</button>
+                                  <button type="button" :class="{ on: aggMode === 'official' }" @click="switchAggOfficial()">官方</button>
                                   <template v-for="t in customTags" :key="t.id">
                                     <input v-if="aggMode === t.id" class="agg-tag-input" v-model="t.name" @blur="onTagRename(t)" @keyup.enter="onTagRename(t)" @click.stop="selectTag(t)" :title="'可改名'" />
                                     <button v-else type="button" :class="{ on: aggMode === t.id }" @click="selectTag(t)">{{ t.name }}</button>
@@ -391,7 +391,7 @@
                                   <button type="button" class="agg-tag-add" @click="addCustomTag">+</button>
                                 </div>
                               </div>
-                              <div class="agg-api-tip">DeepSeek = Rescene 精选能跑 Agent 的模型；用户自定义 = 自己勾选任意模型进聚合端口，标签名可改名、可 + 新增。修改实时保存，无需点保存。</div>
+                              <div class="agg-api-tip">官方 = 自动收录全部已配置 Key 的免费模型，auto 智能路由自动挑可用的，无需手动选择；用户自定义 = 自己勾选任意模型进聚合端口，标签名可改名、可 + 新增。修改实时保存，无需点保存。</div>
                               <template v-if="aggMode !== 'official'">
                                 <input v-model="aggCfgSearch" class="agg-cfg-search" placeholder="搜索模型名 / 厂商…" />
                                 <div class="agg-cfg-list">
@@ -1247,7 +1247,7 @@ function selectTag(t) {
   persistTags()
   saveAggConfig()
 }
-// 切回 DeepSeek（官方遴选）标签：同步把后端 mode 存成 official，否则 health 仍按 custom 空列表返回（2026-08-18）
+// 切回官方（全部免费模型）标签：同步把后端 mode 存成 official，否则 health 仍按 custom 空列表返回（2026-08-18）
 function switchAggOfficial() {
   aggMode.value = 'official'
   saveAggConfig()
