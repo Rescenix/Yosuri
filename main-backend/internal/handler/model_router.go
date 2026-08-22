@@ -101,10 +101,26 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "kilo_nemotron_safety_free", Vendor: "Kilo Gateway", Name: "Nemotron 3.5 Safety（免 key·4B）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "nvidia/nemotron-3.5-content-safety:free", KeyEnv: "", ParamsB: 4, Note: "Kilo 免 key·NVIDIA 内容安全护栏·识图·非对话", Keyless: true, Vision: true, ContextWindow: 128000},
 	{ID: "kilo_openrouter_free", Vendor: "Kilo Gateway", Name: "OpenRouter Free（免 key）", Endpoint: "https://api.kilo.ai/api/gateway/v1", Model: "openrouter/free", KeyEnv: "", ParamsB: 0, Note: "Kilo 免 key·OpenRouter 免费路由·200K", Keyless: true, Vision: true, Reasoning: true, ContextWindow: 200000},
 
-	// —— OpenRouter 已整体移除：免费档全部 slug 限流 429（连 llama-3.3-70b/405b 都 429），
-	// 无专属免费模型，作为网关接入价值为零，徒增链尾失败噪声。2026-07-15 实测确认。
+	// —— LLM7.io 免 key 网关（api.llm7.io/v1，OpenAI 兼容）——
+	// 2026-08-22 实测：/models 与 /chat/completions 均无需 Authorization；以下均为
+	// usage_based_only=false 的 Turbo 聊天模型，并声明支持 tools。除 DeepSeek 当时因
+	// 上游临时繁忙外，其余 5 个均用真实 tools 请求验证返回了 tool_calls。
+	{ID: "free_llm7_deepseek_v4_flash", Vendor: "LLM7.io", Name: "DeepSeek V4 Flash（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "DeepSeek-V4-Flash-0731", KeyEnv: "", ParamsB: 0, Note: "LLM7 免 key Turbo·工具调用·400K", Keyless: true, Reasoning: true, ContextWindow: 400000},
+	{ID: "free_llm7_codestral", Vendor: "LLM7.io", Name: "Codestral（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "codestral-latest", KeyEnv: "", ParamsB: 0, Note: "LLM7 免 key Turbo·工具调用·32K", Keyless: true, ContextWindow: 32000},
+	{ID: "free_llm7_gemini_flash_lite", Vendor: "LLM7.io", Name: "Gemini 3.1 Flash Lite（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "gemini-3.1-flash-lite", KeyEnv: "", ParamsB: 0, Note: "LLM7 免 key Turbo·工具调用·识图·256K", Keyless: true, Vision: true, ContextWindow: 256000},
+	{ID: "free_llm7_gpt_oss_20b", Vendor: "LLM7.io", Name: "GPT-OSS 20B（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "gpt-oss:20b", KeyEnv: "", ParamsB: 20, Note: "LLM7 免 key Turbo·工具调用·128K", Keyless: true, ContextWindow: 128000},
+	{ID: "free_llm7_llama_3_1_8b", Vendor: "LLM7.io", Name: "Llama 3.1 8B Turbo（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "meta-Llama-3.1-8B-Instruct-Turbo", KeyEnv: "", ParamsB: 8, Note: "LLM7 免 key Turbo·工具调用·128K", Keyless: true, ContextWindow: 128000},
+	{ID: "free_llm7_minimax_m2_7", Vendor: "LLM7.io", Name: "MiniMax M2.7（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "minimax-m2.7", KeyEnv: "", ParamsB: 0, Note: "LLM7 免 key Turbo·工具调用·180K", Keyless: true, Reasoning: true, ContextWindow: 180000},
 
-	// —— Google AI Studio 移除：2026-07-21 实测网络不可达（WinError 10060），大陆无法直连。 ——
+	// —— OpenRouter（openrouter.ai/api/v1，OpenAI 兼容）——
+	// 2026-08-22 公共 /models 实测：openrouter/free 为零价格自动路由，当前聚合 22 个
+	// 免费模型，支持 tools/reasoning 与图像输入；需要用户自己的免费 API Key。
+	{ID: "free_openrouter_router", Vendor: "OpenRouter", Name: "OpenRouter Free Router（免费）", Endpoint: "https://openrouter.ai/api/v1", Model: "openrouter/free", KeyEnv: "OPENROUTER_API_KEY", ParamsB: 0, Note: "OpenRouter 免费自动路由·当前聚合 20+ 免费模型·200K", KeyURL: "https://openrouter.ai/settings/keys", Vision: true, Reasoning: true, ContextWindow: 200000},
+
+	// —— Google AI Studio（Gemini API OpenAI 兼容端点）——
+	// 免费额度与可用地区由 Google 账号/网络环境决定；大陆直连可能超时，但保留在
+	// 「免费模型」Tab 供有可用网络的用户填写 Gemini API Key。
+	{ID: "free_google_gemini_2_5_flash", Vendor: "Google AI Studio", Name: "Gemini 2.5 Flash（Google·免费额度）", Endpoint: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-2.5-flash", KeyEnv: "GEMINI_API_KEY", ParamsB: 0, Note: "Google AI Studio 免费额度·多模态·1M 上下文", KeyURL: "https://aistudio.google.com/apikey", Vision: true, Reasoning: true, ContextWindow: 1048576},
 
 	// —— NVIDIA NIM 免费试用档已整体移除：2026-07-23 实测限流严重，跑 Agent 频繁 429，
 	// 体验不可用。保留 nim_refresh.go 作为运行时探测骨架，目录中不再硬编码 NIM 条目。 ——
@@ -171,7 +187,13 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_zhipu_glm_4_flash", Vendor: "智谱 BigModel", Name: "GLM-4-Flash（永久免费）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4-flash-250414", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱永久免费", ContextWindow: 128000, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
 	{ID: "free_zhipu_glm_4_6v_flash", Vendor: "智谱 BigModel", Name: "GLM-4.6V-Flash（免费·视觉）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.6v-flash", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱免费·识图", Vision: true, ContextWindow: 128000, Reasoning: true, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
 
-	// —— Groq 已整体移除（2026-08-13 用户清理）：大陆 IP 地域风控 403（无 key/真 key 全挂）——
+	// —— Groq Cloud（api.groq.com/openai/v1，OpenAI 兼容）——
+	// 免费开发者额度 + LPU 高速推理；大陆 IP 可能被地域风控 403，仍在「免费模型」
+	// Tab 提供配置入口，供网络可达地区的用户填写 Groq API Key。
+	{ID: "free_groq_llama_3_3_70b", Vendor: "Groq Cloud", Name: "Llama 3.3 70B Versatile（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "llama-3.3-70b-versatile", KeyEnv: "GROQ_API_KEY", ParamsB: 70, Note: "Groq 免费开发者额度·LPU 高速·128K", ContextWindow: 128000, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_qwen3_32b", Vendor: "Groq Cloud", Name: "Qwen3 32B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "qwen/qwen3-32b", KeyEnv: "GROQ_API_KEY", ParamsB: 32, Note: "Groq 免费开发者额度·LPU 高速·工具调用", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_gpt_oss_120b", Vendor: "Groq Cloud", Name: "GPT-OSS 120B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "openai/gpt-oss-120b", KeyEnv: "GROQ_API_KEY", ParamsB: 120, Note: "Groq 免费开发者额度·LPU 高速·工具调用", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_gpt_oss_20b", Vendor: "Groq Cloud", Name: "GPT-OSS 20B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "openai/gpt-oss-20b", KeyEnv: "GROQ_API_KEY", ParamsB: 20, Note: "Groq 免费开发者额度·LPU 高速·工具调用", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
 
 	// —— 本地 llama.cpp 已移除：维护 Vision 标签成本高于收益，识图模型由用户自行选择 ——
 

@@ -93,7 +93,7 @@ func TestResolveBackendsExactFreeModel(t *testing.T) {
 	// 给定免费池里一个有环境变量的模型 ID，应精确返回单 backend 且带能力元数据
 	b := resolveExact("nonexistent_user_for_test", "free_google_gemini_2_5_flash")
 	if b == nil {
-		t.Skip("无 GOOGLE_API_KEY 环境变量，跳过精确命中断言")
+		t.Skip("无 GEMINI_API_KEY 环境变量，跳过精确命中断言")
 	}
 	if b.Source != "free" || b.Model != "gemini-2.5-flash" {
 		t.Fatalf("精确命中应返回对应免费 backend, got %+v", b)
@@ -105,5 +105,63 @@ func TestResolveBackendsExactFreeModel(t *testing.T) {
 	fallback := resolveBackends("nonexistent_user_for_test", "nonexistent_id")
 	if len(fallback) == 0 {
 		t.Fatal("未知 model 应回退全链, 实得空链")
+	}
+}
+
+func TestKeyedFreeProviderCatalog(t *testing.T) {
+	want := map[string]struct {
+		vendor   string
+		model    string
+		keyEnv   string
+		endpoint string
+	}{
+		"free_google_gemini_2_5_flash": {"Google AI Studio", "gemini-2.5-flash", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai"},
+		"free_groq_llama_3_3_70b":      {"Groq Cloud", "llama-3.3-70b-versatile", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
+		"free_groq_qwen3_32b":          {"Groq Cloud", "qwen/qwen3-32b", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
+		"free_openrouter_router":       {"OpenRouter", "openrouter/free", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
+	}
+
+	found := map[string]bool{}
+	for _, model := range freeModelCatalog {
+		expect, ok := want[model.ID]
+		if !ok {
+			continue
+		}
+		found[model.ID] = true
+		if model.Vendor != expect.vendor || model.Model != expect.model || model.KeyEnv != expect.keyEnv || model.Endpoint != expect.endpoint {
+			t.Errorf("%s 提供方配置错误: %+v", model.ID, model)
+		}
+		if model.Keyless || model.KeyURL == "" {
+			t.Errorf("%s 应为需要免费 Key 的提供方，并提供领 Key 地址: %+v", model.ID, model)
+		}
+	}
+	for id := range want {
+		if !found[id] {
+			t.Errorf("免费模型 Tab 缺少提供方条目: %s", id)
+		}
+	}
+}
+
+func TestLLM7CatalogIsKeylessAndResolvable(t *testing.T) {
+	want := map[string]string{
+		"free_llm7_deepseek_v4_flash": "DeepSeek-V4-Flash-0731",
+		"free_llm7_codestral":         "codestral-latest",
+		"free_llm7_gemini_flash_lite": "gemini-3.1-flash-lite",
+		"free_llm7_gpt_oss_20b":       "gpt-oss:20b",
+		"free_llm7_llama_3_1_8b":      "meta-Llama-3.1-8B-Instruct-Turbo",
+		"free_llm7_minimax_m2_7":      "minimax-m2.7",
+	}
+
+	for id, model := range want {
+		b := resolveExact("nonexistent_user_for_test", id)
+		if b == nil {
+			t.Fatalf("免 key 模型 %s 不应依赖环境变量", id)
+		}
+		if b.Model != model || b.BaseURL != "https://api.llm7.io/v1" {
+			t.Errorf("%s 路由错误: %+v", id, b)
+		}
+		if !b.Keyless || b.APIKey != "" || b.Source != "free" {
+			t.Errorf("%s 必须以免 key 免费源入池: %+v", id, b)
+		}
 	}
 }

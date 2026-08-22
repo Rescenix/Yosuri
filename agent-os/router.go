@@ -49,6 +49,22 @@ var freeModels = []FreeModel{
 	{ID: "free_zen_longcat_2_0", Vendor: "OpenCode Zen", Name: "Longcat 2.0（免费·新增）", Endpoint: "https://opencode.ai/zen/v1", Model: "longcat-2.0-free", Keyless: true, Reasoning: true},
 	{ID: "free_zen_laguna_s_2_1", Vendor: "OpenCode Zen", Name: "Laguna S 2.1（免费·恢复）", Endpoint: "https://opencode.ai/zen/v1", Model: "laguna-s-2.1-free", Keyless: true, Reasoning: true},
 
+	// —— LLM7.io 免 key 网关 ——
+	// 2026-08-22 实测无 Authorization 可调用；6 个 Turbo 聊天模型均声明支持 tools，
+	// 其中 5 个已真实返回 tool_calls，DeepSeek 当时为上游临时繁忙。
+	{ID: "free_llm7_deepseek_v4_flash", Vendor: "LLM7.io", Name: "DeepSeek V4 Flash（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "DeepSeek-V4-Flash-0731", Keyless: true, Reasoning: true, CtxWindow: 400000},
+	{ID: "free_llm7_codestral", Vendor: "LLM7.io", Name: "Codestral（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "codestral-latest", Keyless: true, CtxWindow: 32000},
+	{ID: "free_llm7_gemini_flash_lite", Vendor: "LLM7.io", Name: "Gemini 3.1 Flash Lite（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "gemini-3.1-flash-lite", Keyless: true, Vision: true, CtxWindow: 256000},
+	{ID: "free_llm7_gpt_oss_20b", Vendor: "LLM7.io", Name: "GPT-OSS 20B（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "gpt-oss:20b", Keyless: true, ParamsB: 20, CtxWindow: 128000},
+	{ID: "free_llm7_llama_3_1_8b", Vendor: "LLM7.io", Name: "Llama 3.1 8B Turbo（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "meta-Llama-3.1-8B-Instruct-Turbo", Keyless: true, ParamsB: 8, CtxWindow: 128000},
+	{ID: "free_llm7_minimax_m2_7", Vendor: "LLM7.io", Name: "MiniMax M2.7（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "minimax-m2.7", Keyless: true, Reasoning: true, CtxWindow: 180000},
+
+	// —— Google AI Studio（需免费 API Key；大陆直连可能超时）——
+	{ID: "free_google_gemini_2_5_flash", Vendor: "Google AI Studio", Name: "Gemini 2.5 Flash（Google·免费额度）", Endpoint: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-2.5-flash", KeyEnv: "GEMINI_API_KEY", Vision: true, Reasoning: true, CtxWindow: 1048576, KeyURL: "https://aistudio.google.com/apikey"},
+
+	// —— OpenRouter（需免费 API Key；openrouter/free 自动路由 20+ 免费模型）——
+	{ID: "free_openrouter_router", Vendor: "OpenRouter", Name: "OpenRouter Free Router（免费）", Endpoint: "https://openrouter.ai/api/v1", Model: "openrouter/free", KeyEnv: "OPENROUTER_API_KEY", Vision: true, Reasoning: true, CtxWindow: 200000, KeyURL: "https://openrouter.ai/settings/keys"},
+
 	// —— Kilo Gateway（api.kilo.ai/api/gateway）——
 	// 2026-08-08 发现：完全免 key 的 OpenAI 兼容网关，349 个模型，200 RPH 免费额度！
 	// 实测 6 个 :free 模型稳定可用（含腾讯混元 hy3 / 阶跃 step-3.7 / NVIDIA Nemotron 系列），
@@ -83,9 +99,10 @@ var freeModels = []FreeModel{
 	// 2026-08-08 接入：免费档 30 RPM / 1000 RPD（gpt-oss-120b 等）。
 	// ⚠️ 地域风控：大陆 IP 直连 403 Forbidden（无 key/假 key/真 key 同码，实测），
 	// 需海外出口（ResceneCloud Render 云端代理）；key 已存 default.json。
-	{ID: "free_groq_gpt_oss_120b", Vendor: "Groq", Name: "GPT-OSS 120B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "gpt-oss-120b", KeyEnv: "GROQ_API_KEY", CtxWindow: 131072, Reasoning: true, ParamsB: 120, KeyURL: "https://console.groq.com/keys"},
-	{ID: "free_groq_gpt_oss_20b", Vendor: "Groq", Name: "GPT-OSS 20B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "gpt-oss-20b", KeyEnv: "GROQ_API_KEY", CtxWindow: 131072, Reasoning: true, ParamsB: 20, KeyURL: "https://console.groq.com/keys"},
-	{ID: "free_groq_qwen3_32b", Vendor: "Groq", Name: "Qwen3-32B（Groq·免费）", Endpoint: "https://api.groq.com/openai/v1", Model: "qwen3-32b", KeyEnv: "GROQ_API_KEY", CtxWindow: 131072, Reasoning: true, ParamsB: 32, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_llama_3_3_70b", Vendor: "Groq Cloud", Name: "Llama 3.3 70B Versatile（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "llama-3.3-70b-versatile", KeyEnv: "GROQ_API_KEY", CtxWindow: 128000, ParamsB: 70, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_gpt_oss_120b", Vendor: "Groq Cloud", Name: "GPT-OSS 120B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "openai/gpt-oss-120b", KeyEnv: "GROQ_API_KEY", CtxWindow: 131072, Reasoning: true, ParamsB: 120, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_gpt_oss_20b", Vendor: "Groq Cloud", Name: "GPT-OSS 20B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "openai/gpt-oss-20b", KeyEnv: "GROQ_API_KEY", CtxWindow: 131072, Reasoning: true, ParamsB: 20, KeyURL: "https://console.groq.com/keys"},
+	{ID: "free_groq_qwen3_32b", Vendor: "Groq Cloud", Name: "Qwen3 32B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "qwen/qwen3-32b", KeyEnv: "GROQ_API_KEY", CtxWindow: 131072, Reasoning: true, ParamsB: 32, KeyURL: "https://console.groq.com/keys"},
 
 	// —— 阶跃星辰 StepFun ——
 	{ID: "free_step_1o_turbo_vision", Vendor: "阶跃星辰", Name: "step-1o-turbo-vision（识图）", Endpoint: "https://api.stepfun.com/v1", Model: "step-1o-turbo-vision", KeyEnv: "STEP_API_KEY", Vision: true, Reasoning: true, KeyURL: "https://platform.stepfun.com/"},
