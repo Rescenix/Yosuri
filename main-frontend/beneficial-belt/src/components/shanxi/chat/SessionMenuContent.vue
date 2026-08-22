@@ -39,6 +39,16 @@
             <span class="smc-folder-chevron" :class="{ open: expandedPinned[f.name] }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
             <span class="smc-folder-name">{{ f.name }}</span>
+            <button
+              v-if="projectForName(f.name)"
+              class="smc-project-new-chat"
+              type="button"
+              title="在此项目中新建对话"
+              aria-label="在此项目中新建对话"
+              @click.stop="newSessionForProject(f.name)"
+            >
+              <Icon icon="mdi:message-plus-outline" width="17" />
+            </button>
           </div>
           <div v-if="expandedPinned[f.name]" class="smc-folder-children">
             <div
@@ -98,6 +108,16 @@
             <span class="smc-folder-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
             <span class="smc-folder-name">{{ grp.name }}</span>
+            <button
+              v-if="projectForName(grp.name) && !bulkMode"
+              class="smc-project-new-chat"
+              type="button"
+              title="在此项目中新建对话"
+              aria-label="在此项目中新建对话"
+              @click.stop="newSessionForProject(grp.name)"
+            >
+              <Icon icon="mdi:message-plus-outline" width="17" />
+            </button>
             <button v-if="bulkMode" class="smc-group-delete" type="button" title="删除项目（含其下所有会话）" @click.stop="onDeleteProject(grp.name)">
               <Icon icon="mdi:trash-can-outline" width="15" />
             </button>
@@ -454,6 +474,13 @@ function closeSelectProject() { showSelectProject.value = false }
 function pickExistingProject(project) {
   showSelectProject.value = false
   emit('new-session', project)
+}
+function projectForName(name) {
+  return props.projects.find(project => project?.name === name && project?.path) || null
+}
+function newSessionForProject(name) {
+  const project = projectForName(name)
+  if (project) emit('new-session', project)
 }
 
 // ========== 置顶项目 ==========
@@ -1112,9 +1139,36 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.smc-project-new-chat {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  margin: 0 -4px 0 2px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--app-text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+}
+.smc-project-new-chat:hover {
+  border-color: color-mix(in srgb, var(--app-border, #d7dce5), transparent 15%);
+  color: var(--app-accent);
+  background: var(--app-surface, #fff);
+  transform: translateY(-1px);
+}
+.smc-project-new-chat:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--app-accent), transparent 35%);
+  outline-offset: 2px;
+}
 .smc-folder-children {
-  /* 不要缩进 —— 会话与文件夹平级 */
-  margin-top: 1px;
+  /* 不要缩进 —— 会话与文件夹平级。整栏右边界的描边+阴影统一挪到 .gem-sidebar（chat-window.css），
+     不在这里单独做，避免只有展开的文件夹局部带框、和其余会话列表割裂。 */
+  margin: 1px 2px 7px 0;
+  padding: 1px 3px 4px 0;
 }
 
 /* ===== Session list area ===== */

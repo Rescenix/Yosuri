@@ -2733,10 +2733,12 @@ min-height: 90px !important;
   overflow: hidden;
   background: var(--app-surface);   /* 白色面（暗色自动跟随主题） */
   /* 展开/折叠统一「无圆角、无悬浮」竖条（图2 Gemini 风）：
-     去圆角/边框/阴影；负 margin 抵消 .chat-body-row 的 padding(8px)，顶部左侧无缝贴边 */
+     去圆角/悬浮阴影；负 margin 抵消 .chat-body-row 的 padding(8px)，顶部左侧无缝贴边。
+     整栏右边界统一加细描边+投影，与右侧主内容区做区分（替代原来仅会话列表局部描边导致的割裂感）。 */
   border-radius: 0;
   border: none;
-  box-shadow: none;
+  border-right: 1px solid color-mix(in srgb, var(--app-border, #d7dce5), transparent 28%);
+  box-shadow: 6px 0 14px -10px color-mix(in srgb, var(--app-text, #202124), transparent 55%);
   margin-top: -8px;
   margin-left: -8px;
   margin-bottom: -8px;

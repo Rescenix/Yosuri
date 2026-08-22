@@ -189,7 +189,7 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 	} else {
 		cmd = exec.Command("/bin/sh", "-lc", command)
 	}

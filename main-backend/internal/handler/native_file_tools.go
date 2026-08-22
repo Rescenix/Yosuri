@@ -182,7 +182,7 @@ func nativeGrep(args map[string]any) (nativeToolResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "rg", "-n", "--no-heading", "--smart-case", pattern)
+	cmd := hiddenCommandContext(ctx, "rg", "-n", "--no-heading", "--smart-case", pattern)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "RG_CONFIG_PATH=/dev/null")
 

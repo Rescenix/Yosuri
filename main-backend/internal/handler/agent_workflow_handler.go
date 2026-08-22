@@ -111,8 +111,13 @@ func writeCodeSSE(c *gin.Context, event string, data map[string]any) {
 	defer codeSSEMu.Unlock()
 	data["type"] = event
 	b, _ := json.Marshal(data)
-	fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, b)
+	frame := fmt.Sprintf("event: %s\ndata: %s\n\n", event, b)
+	fmt.Fprint(c.Writer, frame)
 	c.Writer.Flush()
+	// 悬浮球演示面板旁听同一份事件；没人订阅时 hasSubscribers() 短路，不构成开销。
+	if globalWatchHub.hasSubscribers() {
+		globalWatchHub.publish([]byte(frame))
+	}
 }
 
 func truncateChars(s string, max int) string {

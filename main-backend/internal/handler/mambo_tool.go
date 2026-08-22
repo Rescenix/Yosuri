@@ -153,7 +153,7 @@ func callMamboVideo(ctx context.Context, argsJSON string) (nativeToolResult, err
 		cmdArgs = append(cmdArgs, "--pexels-key", args.PexelsKey)
 	}
 
-	cmd := exec.CommandContext(ctx, py, cmdArgs...)
+	cmd := hiddenCommandContext(ctx, py, cmdArgs...)
 	cmd.Dir = root // 引擎内部相对路径以 main-backend 为基准
 	// stdout 必须是纯 JSON（引擎日志走 stderr），失败时取 stderr 尾部报错
 	out, err := cmd.Output()

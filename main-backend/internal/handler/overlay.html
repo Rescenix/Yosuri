@@ -1,0 +1,342 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; }
+
+  /* ---------------- 球体(收起态): 应用图标 + 呼吸光环 ---------------- */
+  #ball {
+    position: relative;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    cursor: grab;
+    display: flex; align-items: center; justify-content: center;
+    filter: drop-shadow(0 3px 10px rgba(0,0,0,0.45));
+  }
+  #ball:active { cursor: grabbing; }
+  #ball .ring {
+    position: absolute; inset: -3px; border-radius: 50%;
+    background: conic-gradient(from 0deg, #6a8bff, #7c5cff 35%, #3ecbe0 70%, #6a8bff);
+    animation: ringspin 5s linear infinite;
+    opacity: 0.9;
+  }
+  @keyframes ringspin { to { transform: rotate(360deg); } }
+  #ball .icon {
+    position: absolute; inset: 3px; border-radius: 50%;
+    background-image: url('/overlay/icon.png');
+    background-size: cover; background-position: center;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+  }
+  #ball .live {
+    position: absolute; width: 11px; height: 11px; border-radius: 50%;
+    background: #3ee08a; top: 1px; right: 1px; z-index: 2;
+    box-shadow: 0 0 6px #3ee08a, 0 0 0 2px rgba(10,12,24,0.75);
+    display: none;
+  }
+  #ball.live .live { display: block; animation: dotpulse 1.6s ease-in-out infinite; }
+  @keyframes dotpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  /* ---------------- 面板(展开态): 方形毛玻璃 HUD，露出后面的画面 ---------------- */
+  #panel {
+    display: none;
+    position: relative;
+    width: 100%; height: 100%;
+    background: rgba(12,14,26,0.42);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid rgba(255,255,255,0.14);
+    color: #f0f2ff;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #panel .head {
+    flex: none;
+    padding: 11px 12px 9px 11px;
+    display: flex; align-items: center; gap: 8px;
+    cursor: grab;
+    background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent);
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+  #panel .head:active { cursor: grabbing; }
+  #panel .head .badge {
+    width: 20px; height: 20px; border-radius: 50%; flex: none;
+    background-image: url('/overlay/icon.png');
+    background-size: cover; background-position: center;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.3);
+  }
+  #panel .head .titlewrap { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  #panel .head .title { font-size: 12px; font-weight: 700; letter-spacing: 0.4px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4); white-space: nowrap; }
+  #panel .head .status { font-size: 10px; color: #c3c9f2; display: flex; align-items: center; gap: 4px; }
+  #panel .head .status .dot { width: 6px; height: 6px; border-radius: 50%; background: #7d84ad; flex: none; }
+  #panel .head .status.live .dot { background: #3ee08a; box-shadow: 0 0 5px #3ee08a; animation: dotpulse 1.6s ease-in-out infinite; }
+  #panel .head .spacer { flex: 1; }
+  #panel .head .collapse-btn {
+    flex: none; width: 20px; height: 20px; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    color: #d5d9f7; font-size: 13px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  #panel .head .collapse-btn:hover { background: rgba(255,255,255,0.18); }
+
+  #panel .log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 9px 12px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+  }
+  #panel .log::-webkit-scrollbar { width: 5px; }
+  #panel .log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 3px; }
+  #panel .log .empty { color: #cfd3ee; font-size: 12px; padding: 28px 4px; text-align: center; line-height: 1.7; opacity: 0.85; }
+
+  .entry { position: relative; padding: 5px 0 5px 14px; margin-bottom: 2px; animation: entryin 0.16s ease-out; }
+  @keyframes entryin { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+  .entry::before {
+    content: ""; position: absolute; left: 0; top: 11px; width: 6px; height: 6px; border-radius: 50%;
+  }
+  .entry.intent { color: #e2e6ff; }
+  .entry.intent::before { background: #8fa2ff; box-shadow: 0 0 5px rgba(143,162,255,0.8); }
+  .entry.intent b { color: #aebcff; font-weight: 700; margin-right: 3px; }
+  .entry.action { color: #ffe0ad; }
+  .entry.action::before { background: #ffb454; box-shadow: 0 0 5px rgba(255,180,84,0.8); }
+  .entry.action b { color: #ffc978; font-weight: 700; margin-right: 3px; }
+  .entry.action code { background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  .entry.result-ok { color: #bdf5d4; }
+  .entry.result-ok::before { background: #3ee08a; box-shadow: 0 0 5px rgba(62,224,138,0.8); }
+  .entry.result-fail { color: #ffc2c2; }
+  .entry.result-fail::before { background: #ff6767; box-shadow: 0 0 5px rgba(255,103,103,0.8); }
+  .entry.sep { color: #cfd3ee; text-align: center; font-size: 10.5px; margin: 10px 0 8px; padding-left: 0; letter-spacing: 0.5px; opacity: 0.75; }
+  .entry.sep::before { display: none; }
+
+  /* 缩放热区(展开态才存在) */
+  .rz { position: absolute; z-index: 5; }
+  .rz-n  { top: 0; left: 8px; right: 8px; height: 5px; cursor: ns-resize; }
+  .rz-s  { bottom: 0; left: 8px; right: 8px; height: 5px; cursor: ns-resize; }
+  .rz-e  { top: 8px; right: 0; bottom: 8px; width: 5px; cursor: ew-resize; }
+  .rz-w  { top: 8px; left: 0; bottom: 8px; width: 5px; cursor: ew-resize; }
+  .rz-ne { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+  .rz-nw { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+  .rz-se { bottom: 0; right: 0; width: 16px; height: 16px; cursor: nwse-resize; }
+  .rz-sw { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+  .grip {
+    position: absolute; right: 4px; bottom: 4px; width: 10px; height: 10px; pointer-events: none;
+    background:
+      linear-gradient(135deg, transparent 0 40%, rgba(255,255,255,0.5) 40% 46%, transparent 46% 60%, rgba(255,255,255,0.5) 60% 66%, transparent 66%);
+  }
+
+  body.expanded #ball { display: none; }
+  body.expanded #panel { display: flex; }
+  body:not(.expanded) #panel { display: none; }
+</style>
+</head>
+<body>
+  <div id="ball" title="拖动移动位置 · 点击展开 · 右键关闭">
+    <div class="live"></div>
+    <div class="ring"></div>
+    <div class="icon"></div>
+  </div>
+  <div id="panel">
+    <div class="rz rz-n"  data-edge="n"></div>
+    <div class="rz rz-s"  data-edge="s"></div>
+    <div class="rz rz-e"  data-edge="e"></div>
+    <div class="rz rz-w"  data-edge="w"></div>
+    <div class="rz rz-ne" data-edge="ne"></div>
+    <div class="rz rz-nw" data-edge="nw"></div>
+    <div class="rz rz-se" data-edge="se"></div>
+    <div class="rz rz-sw" data-edge="sw"></div>
+    <div class="grip"></div>
+    <div class="head" id="head">
+      <div class="badge"></div>
+      <div class="titlewrap">
+        <div class="title">RESCENE AGENT 实时意图</div>
+        <div class="status" id="status"><span class="dot"></span><span id="statusText">等待任务…</span></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="collapse-btn" id="collapseBtn" title="收起">&#8211;</div>
+    </div>
+    <div class="log" id="log"><div class="empty">还没有任务在跑。<br>让 Agent 干点什么，这里会实时显示它的意图和操作。</div></div>
+  </div>
+
+<script>
+  var body = document.body;
+  var ball = document.getElementById('ball');
+  var head = document.getElementById('head');
+  var collapseBtn = document.getElementById('collapseBtn');
+  var log = document.getElementById('log');
+  var statusEl = document.getElementById('status');
+  var statusText = document.getElementById('statusText');
+
+  function post(obj) {
+    try { window.chrome.webview.postMessage(JSON.stringify(obj)); } catch (e) {}
+  }
+
+  function toggle() {
+    body.classList.toggle('expanded');
+    post({ action: 'toggle' });
+  }
+
+  // 按下但没怎么移动 = 点击(展开/收起)；按下且移动超过阈值 = 拖动，交给系统原生拖动接管。
+  function makeDraggable(el, onClick) {
+    var downX = 0, downY = 0, tracking = false, dragStarted = false;
+    el.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      downX = e.clientX; downY = e.clientY;
+      tracking = true; dragStarted = false;
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!tracking || dragStarted) return;
+      if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) {
+        dragStarted = true;
+        post({ action: 'drag' });
+      }
+    });
+    window.addEventListener('mouseup', function () {
+      if (tracking && !dragStarted) onClick();
+      tracking = false;
+    });
+  }
+
+  makeDraggable(ball, toggle);
+  makeDraggable(head, toggle);
+  collapseBtn.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
+
+  document.querySelectorAll('.rz').forEach(function (el) {
+    el.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      post({ action: 'resize', edge: el.getAttribute('data-edge') });
+    });
+  });
+
+  // 右键球/面板标题栏 = 快捷关闭悬浮球演示模式（测试功能，用户要求"不用绕去设置面板"）。
+  // 不弹确认框：右键关闭本来就该是一步到位的动作，要重新打开去设置面板里开就行。
+  function quickDisable(e) {
+    e.preventDefault();
+    post({ action: 'disable' });
+  }
+  ball.addEventListener('contextmenu', quickDisable);
+  head.addEventListener('contextmenu', quickDisable);
+
+  function appendLine(cls, html) {
+    var empty = log.querySelector('.empty');
+    if (empty) empty.remove();
+    var div = document.createElement('div');
+    div.className = 'entry ' + cls;
+    div.innerHTML = html;
+    log.appendChild(div);
+    while (log.children.length > 200) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
+      return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;';
+    });
+  }
+  function truncate(s, n) {
+    s = String(s == null ? '' : s);
+    return s.length > n ? s.slice(0, n) + '…' : s;
+  }
+
+  // 模型的 intent 文本常带 **粗体**/`code` 这类轻量 Markdown；先转义防注入，
+  // 再把这两种最常见的记号转成真实标签，不然面板里会直接刷一屏星号。
+  function mdLite(s) {
+    return esc(s)
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+
+  var intentBuf = '';
+  function flushIntent() {
+    if (intentBuf.trim()) appendLine('intent', '<b>意图</b>' + mdLite(intentBuf.trim()));
+    intentBuf = '';
+  }
+
+  // 演示模式: 面板里不出现原始命令/文件路径/内存地址这类观众看不懂的细节，
+  // 只把 run_command 里认得出的几个宝可梦操作原语翻译成大白话；认不出的和其它
+  // 工具一律给个通用友好名，绝不把 args 原文吐到面板上。
+  var TOOL_LABELS = {
+    run_command: '执行操作', load_tools: '加载工具', read_file: '查看文件',
+    grep: '搜索代码', write_file: '写入文件', edit_file: '修改文件',
+    web_search: '联网搜索', web_fetch: '抓取网页', view_image: '查看图片'
+  };
+  var DIR_CN = { UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右' };
+  function friendlyCommand(cmd) {
+    cmd = String(cmd || '');
+    var m;
+    if ((m = cmd.match(/\bwalk\(\s*['"](UP|DOWN|LEFT|RIGHT)['"]\s*,\s*(\d+)/i)))
+      return '向' + (DIR_CN[m[1].toUpperCase()] || m[1]) + '走 ' + m[2] + ' 格';
+    if ((m = cmd.match(/\bstep\(\s*['"](UP|DOWN|LEFT|RIGHT)['"]/i)))
+      return '向' + (DIR_CN[m[1].toUpperCase()] || m[1]) + '走一步';
+    if ((m = cmd.match(/\b(?:goto_pos|navigate_fast|navigate_to)\(\s*(\d+)\s*,\s*(\d+)/i)))
+      return '自动寻路到 (' + m[1] + ',' + m[2] + ')';
+    if (/\badvance_script\(|\badvance_through\(|\badvance\(/.test(cmd)) return '推进剧情对话';
+    if (/\bfight\(/.test(cmd)) return '进行战斗';
+    if (/\bobject_events\(/.test(cmd)) return '扫描周围人物 / 宝可梦位置';
+    if (/\.state\(\)|\bstate\(\)/.test(cmd)) return '读取当前游戏状态';
+    if ((m = cmd.match(/\bload_slot\((\d+)\)/i))) return '读取存档槽 ' + m[1];
+    if ((m = cmd.match(/\bsave_slot\((\d+)\)/i))) return '保存进度到存档槽 ' + m[1];
+    if ((m = cmd.match(/\bkeys\.tap\(\s*['"](\w+)['"]/i))) return '按下按键 ' + m[1];
+    return null;
+  }
+  var actionLabels = {}; // id -> 展示过的友好文案，给对应的 result 复用
+
+  var es = new EventSource('/api/agent/watch');
+  es.onopen = function () {
+    ball.classList.add('live');
+    statusEl.classList.add('live');
+    statusText.textContent = '已连接';
+  };
+  es.onerror = function () {
+    ball.classList.remove('live');
+    statusEl.classList.remove('live');
+    statusText.textContent = '连接中断，重连中…';
+  };
+
+  function handle(type, data) {
+    switch (type) {
+      case 'workflow_start':
+        flushIntent();
+        appendLine('sep', '── 任务开始 · ' + esc(truncate(data.task, 36)) + ' ──');
+        statusText.textContent = '进行中';
+        break;
+      case 'intent':
+        intentBuf += data.content || '';
+        break;
+      case 'action':
+        flushIntent();
+        var label = (data.name === 'run_command' ? friendlyCommand(data.args) : null)
+          || TOOL_LABELS[data.name] || data.name || '操作';
+        if (data.id) actionLabels[data.id] = label;
+        appendLine('action', '<b>操作</b>' + esc(label));
+        break;
+      case 'result':
+        var ok = data.ok !== false;
+        var rlabel = (data.id && actionLabels[data.id]) || TOOL_LABELS[data.name] || data.name || '操作';
+        appendLine(ok ? 'result-ok' : 'result-fail', (ok ? '✓ ' : '✗ ') + esc(rlabel) + (ok ? ' 完成' : ' 失败'));
+        break;
+      case 'workflow_done':
+        flushIntent();
+        appendLine('sep', '── 完成 ──');
+        statusText.textContent = '空闲';
+        break;
+      case 'flow_error':
+        flushIntent();
+        appendLine('result-fail', '✗ ' + esc(data.message || data.error || '出错'));
+        break;
+      default:
+        break; // thinking / action_delta 等高频事件不进面板，避免刷屏
+    }
+  }
+
+  ['workflow_start', 'intent', 'action', 'result', 'workflow_done', 'flow_error'].forEach(function (t) {
+    es.addEventListener(t, function (ev) {
+      try { handle(t, JSON.parse(ev.data)); } catch (e) {}
+    });
+  });
+</script>
+</body>
+</html>

@@ -30,6 +30,7 @@ func main() {
 		log.Fatal(err)
 	}
 	app.startTray()
+	app.startOverlay()
 	err := wails.Run(&options.App{
 		Title:             "Rescene Agent",
 		Width:             1200,

@@ -58,6 +58,13 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	workflowRunner := NewWorkflowRunner(chatHandler)
 	// 四态机 Code 工作流（思考/意图/操作/结果，EventSource 直连）
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
+	// 悬浮球演示面板：只读旁听同一份四态机事件 + 承载页面本身
+	r.GET("/api/agent/watch", HandleAgentWatch)
+	r.GET("/overlay", HandleOverlayPage)
+	r.GET("/overlay/icon.png", HandleOverlayIcon)
+	// 悬浮球演示功能开关（测试功能，默认关闭，见 overlay_config.go）
+	r.GET("/api/overlay/config", HandleGetOverlayConfig)
+	r.PUT("/api/overlay/config", HandlePutOverlayConfig)
 	// 主动停止：先通知后端取消并落盘部分上下文，再由前端关闭 EventSource。
 	r.POST("/api/code/workflow/stop", workflowRunner.HandleCodeWorkflowStop)
 	// 工具审批回调：Ask 模式下前端批准条「允许/拒绝」写回，恢复四态机执行

@@ -65,13 +65,18 @@
                 </button>
               </div>
             </div>
-            <div class="settings-tab-group">
+            <!-- Skills tab 暂时隐藏(2026-08-22 用户反馈"绝对有 bug", 先下线避免用户碰到,
+                 代码原样保留在下面 settings-panel 里没删, 只是没有入口可以点进去了) -->
+            <div class="settings-tab-group" v-if="false">
               <button class="settings-tab" :class="{ on: activeTab === 'skills' }" @click="activeTab = 'skills'; loadSkills()">
                 <Icon icon="mdi:school-outline" width="16" />Skills
               </button>
               <div v-show="activeTab === 'skills'" class="settings-subtabs">
                 <button class="settings-subtab" :class="{ on: skillsSubTab === 'local' }" type="button" @click="skillsSubTab = 'local'; loadSkills()">
                   <Icon icon="mdi:laptop" width="15" />本地
+                </button>
+                <button class="settings-subtab" :class="{ on: skillsSubTab === 'aggregate' }" type="button" @click="skillsSubTab = 'aggregate'; loadAggregateSkills()">
+                  <Icon icon="mdi:swap-horizontal-bold" width="15" />聚合
                 </button>
                 <button class="settings-subtab" :class="{ on: skillsSubTab === 'external' }" type="button" @click="skillsSubTab = 'external'; loadSkillRegistry()">
                   <Icon icon="mdi:cloud-outline" width="15" />外部
@@ -331,14 +336,20 @@
                 <div class="agg-api-row">
                   <span class="agg-api-label">Base URL</span>
                   <code class="agg-api-code">http://localhost:8080/v1</code>
-                  <button class="agg-api-copy" type="button" @click="copyAggText('http://localhost:8080/v1')">复制</button>
+                  <button class="agg-api-copy" type="button" @click="copyAggText('http://localhost:8080/v1', 'Base URL')">复制</button>
                 </div>
                 <div class="agg-api-row">
                   <span class="agg-api-label">API Key</span>
                   <code class="agg-api-code">sk-rescene-local</code>
-                  <button class="agg-api-copy" type="button" @click="copyAggText('sk-rescene-local')">复制</button>
+                  <button class="agg-api-copy" type="button" @click="copyAggText('sk-rescene-local', 'API Key')">复制</button>
                 </div>
               </div>
+              <Transition name="agg-copy-toast">
+                <div v-if="aggCopyFeedback" class="agg-copy-feedback" :class="{ error: !aggCopyFeedback.ok }" role="status" aria-live="polite">
+                  <Icon :icon="aggCopyFeedback.ok ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'" width="16" />
+                  <span>{{ aggCopyFeedback.message }}</span>
+                </div>
+              </Transition>
               <div class="agg-api-tip">已聚合 {{ freeModels.length + customModels.length }} 个模型（免费池 + 自定义）。model 填 <code class="agg-api-code">auto</code> 自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。</div>
 
               <!-- ===== 一键同步 / 还原（codex / dsh）：两个工具都还没做好，整卡片先藏起来 ===== -->
@@ -517,6 +528,37 @@
                 </div>
               </div>
 
+              <div class="settings-section-title appearance-mode-title">皮肤</div>
+              <div class="settings-section-desc">完整氛围皮肤会接管界面配色与字体，点击即时生效并自动保存。</div>
+              <div class="param-row" style="align-items: flex-start;">
+                <span class="param-label">动漫皮肤</span>
+                <div class="skin-groups">
+                  <div v-for="[series, items] in skinThemes" :key="series" class="skin-group">
+                    <div class="skin-group-title">{{ series }}</div>
+                    <div class="skin-cards">
+                      <button
+                        v-for="[key, p] in items"
+                        :key="key"
+                        class="skin-card"
+                        :class="{ on: theme === key }"
+                        type="button"
+                        :title="`切换到${p.label}皮肤`"
+                        @click="selectTheme(key)"
+                      >
+                        <span class="skin-card-preview" :class="`skin-preview-${key}`" :style="{ '--skin-accent': p.accent, '--skin-surface': p.skin.light.surface }">
+                          <Icon :icon="key === 'witchtrial' ? 'mdi:book-open-page-variant-outline' : 'mdi:view-grid-outline'" width="22" />
+                        </span>
+                        <span class="skin-card-info">
+                          <strong>{{ p.label }}</strong>
+                          <small>{{ key === 'witchtrial' ? '暖白稿纸 · 灰粉书封' : '象牙画纸 · 青灰墨线' }}</small>
+                        </span>
+                        <Icon v-if="theme === key" class="skin-card-check" icon="mdi:check-circle" width="16" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="settings-section-title appearance-mode-title">显示模式</div>
               <div class="settings-section-desc">选择亮色、暗色，或自动跟随系统设置。</div>
               <div class="param-row">
@@ -555,6 +597,31 @@
                     <div class="theme-live-message">界面预览已与当前设置同步。</div>
                     <div class="theme-live-composer"><span>输入消息...</span><b><Icon icon="lucide:arrow-up" width="13" /></b></div>
                   </div>
+                </div>
+              </div>
+
+              <div class="settings-section-title appearance-mode-title">悬浮球演示模式</div>
+              <div class="settings-section-desc">
+                测试功能，默认关闭：打开后主窗口最小化到托盘时会出现一个可拖拽的悬浮球，
+                点击展开面板实时显示 Agent 当前意图和操作，适合录屏演示。改动需要重启应用才生效。
+              </div>
+              <div class="param-row">
+                <span class="param-label">悬浮球</span>
+                <div class="seg-control">
+                  <button
+                    class="seg-btn"
+                    :class="{ on: !overlayEnabled }"
+                    type="button"
+                    :disabled="overlaySaving"
+                    @click="setOverlayEnabled(false)"
+                  >关闭</button>
+                  <button
+                    class="seg-btn"
+                    :class="{ on: overlayEnabled }"
+                    type="button"
+                    :disabled="overlaySaving"
+                    @click="setOverlayEnabled(true)"
+                  >开启</button>
                 </div>
               </div>
             </div>
@@ -661,6 +728,65 @@
                       <button v-if="isSkillActive(sk)" type="button" @click.stop="setSkillStatus(sk, 'archived')">关闭</button>
                       <button v-else type="button" @click.stop="setSkillStatus(sk, 'active')">恢复启用</button>
                       <button class="danger" type="button" @click.stop="removeSkill(sk)">删除</button>
+                    </div>
+                  </div>
+                </template>
+              </template>
+              <template v-else-if="skillsSubTab === 'aggregate'">
+                <div class="settings-section-title">
+                  Skills 聚合管理
+                  <button class="inline-refresh" type="button" @click="loadAggregateSkills(true)" title="重新扫描"><Icon icon="mdi:refresh" width="14" :class="{ spin: aggregateSkillsLoading }" /></button>
+                </div>
+                <div class="settings-section-desc">
+                  像 CC Switch 一样统一管理 Hermes、Claude 与 Codex 的本地技能。选择任一版本作为来源，可把整个技能包同步到其他端；覆盖前自动备份。
+                </div>
+                <div class="skill-platform-grid">
+                  <button
+                    v-for="platform in aggregatePlatforms"
+                    :key="platform.id"
+                    class="skill-platform-card"
+                    :class="{ on: aggregatePlatformFilter === platform.id, unavailable: !platform.available }"
+                    type="button"
+                    @click="aggregatePlatformFilter = aggregatePlatformFilter === platform.id ? 'all' : platform.id"
+                  >
+                    <span class="skill-platform-icon"><Icon :icon="aggregatePlatformIcon(platform.id)" width="18" /></span>
+                    <span><strong>{{ platform.label }}</strong><small>{{ platform.count }} 个技能</small></span>
+                    <i :class="{ live: platform.available }"></i>
+                  </button>
+                </div>
+                <label class="catalog-search aggregate-search">
+                  <Icon icon="mdi:magnify" width="16" />
+                  <input v-model="aggregateSkillQuery" type="search" placeholder="搜索三端技能" />
+                  <span>{{ filteredAggregateSkills.length }} / {{ aggregateSkills.length }}</span>
+                </label>
+                <div v-if="aggregateSkillsLoading" class="settings-loading">正在扫描三端技能目录…</div>
+                <template v-else>
+                  <div v-if="!filteredAggregateSkills.length" class="settings-empty">没有找到匹配的技能。</div>
+                  <div v-for="skill in filteredAggregateSkills" :key="skill.name" class="aggregate-skill-card" :class="{ conflict: skill.conflict }">
+                    <div class="aggregate-skill-head">
+                      <div class="aggregate-skill-title">
+                        <Icon icon="mdi:school-outline" width="16" />
+                        <strong>{{ skill.name }}</strong>
+                        <span v-if="skill.conflict" class="aggregate-conflict"><Icon icon="mdi:alert-outline" width="12" />版本不同</span>
+                      </div>
+                      <span class="aggregate-coverage">{{ aggregateCoverage(skill) }}/3</span>
+                    </div>
+                    <p v-if="skill.description" class="aggregate-skill-desc">{{ skill.description }}</p>
+                    <div class="aggregate-location-list">
+                      <div v-for="location in skill.locations" :key="location.platform + ':' + location.path" class="aggregate-location">
+                        <span class="aggregate-source-pill" :class="'is-' + location.platform">
+                          <Icon :icon="aggregatePlatformIcon(location.platform)" width="13" />{{ location.platform_name }}
+                        </span>
+                        <code :title="location.path">{{ location.relative_path }}</code>
+                        <span class="aggregate-checksum">{{ location.checksum.slice(0, 7) }}</span>
+                        <button
+                          v-if="missingAggregateTargets(skill, location.platform).length"
+                          type="button"
+                          :disabled="aggregateSyncing === skill.name + ':' + location.platform"
+                          @click="syncAggregateSkill(skill, location)"
+                        >{{ aggregateSyncing === skill.name + ':' + location.platform ? '同步中…' : syncAggregateLabel(skill, location.platform) }}</button>
+                        <span v-else class="aggregate-complete"><Icon icon="mdi:check" width="13" />三端已有</span>
+                      </div>
                     </div>
                   </div>
                 </template>
@@ -947,12 +1073,24 @@ const intimacyProgressPct = computed(() => {
 })
 
 // ============ 界面配色切换 ============
-const colorThemes = computed(() => Object.entries(THEME_PRESETS))
+const colorThemes = computed(() => Object.entries(THEME_PRESETS).filter(([, preset]) => !preset.fullSkin))
+const skinThemes = computed(() => {
+  const groups = {}
+  Object.entries(THEME_PRESETS)
+    .filter(([, preset]) => preset.fullSkin)
+    .forEach(([key, preset]) => {
+      const series = preset.series || '动漫皮肤'
+      if (!groups[series]) groups[series] = []
+      groups[series].push([key, preset])
+    })
+  return Object.entries(groups)
+})
 const selectedTheme = computed(() => THEME_PRESETS[theme.value] || THEME_PRESETS.orange)
 const currentModeLabel = computed(() => MODE_OPTIONS.find(option => option.value === mode.value)?.label || '亮色')
 
 function selectTheme(key) {
   theme.value = key
+  if (THEME_PRESETS[key]?.fullSkin) mode.value = 'light'
 }
 
 const PRESETS = [
@@ -996,12 +1134,42 @@ function fmtCtx(n) {
   return String(n)
 }
 
-// 聚合 API 卡片：复制 base_url / key 到剪贴板
-function copyAggText(text) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).catch(() => {})
+// 聚合 API 卡片：复制 base_url / key 到剪贴板，并给出明确的成功/失败反馈。
+const aggCopyFeedback = ref(null)
+let aggCopyFeedbackTimer = null
+function showAggCopyFeedback(message, ok) {
+  aggCopyFeedback.value = { message, ok }
+  clearTimeout(aggCopyFeedbackTimer)
+  aggCopyFeedbackTimer = setTimeout(() => { aggCopyFeedback.value = null }, 1800)
+}
+function fallbackCopyText(text) {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  textarea.style.pointerEvents = 'none'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  textarea.remove()
+  if (!copied) throw new Error('copy command rejected')
+}
+async function copyAggText(text, label = '配置片段') {
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text)
+    else fallbackCopyText(text)
+    showAggCopyFeedback(`${label} 已复制`, true)
+  } catch {
+    try {
+      fallbackCopyText(text)
+      showAggCopyFeedback(`${label} 已复制`, true)
+    } catch {
+      showAggCopyFeedback('复制失败，请手动复制', false)
+    }
   }
 }
+onUnmounted(() => clearTimeout(aggCopyFeedbackTimer))
 
 // ===== 一键同步 / 还原（codex / dsh）=====
 const aggSyncing = ref('')       // 当前正在同步的工具名；空串=无
@@ -1203,6 +1371,7 @@ watch(activeTab, (t) => {
     loadAggConfig()
     aggRefreshStatus()
   }
+  if (t === 'appearance') loadOverlayConfig()
 })
 onMounted(() => {
   if (activeTab.value === 'aggapi') {
@@ -1210,6 +1379,7 @@ onMounted(() => {
     loadAggConfig()
     aggRefreshStatus()
   }
+  if (activeTab.value === 'appearance') loadOverlayConfig()
 })
 
 // ===== 聚合 API 暴露模型配置（官方遴选 / 用户自定义，issue #5）=====
@@ -1641,6 +1811,29 @@ function setImageProvider(provider) {
   localStorage.setItem(IMAGE_PROVIDER_KEY, provider || 'pollinations')
 }
 
+// ============ 悬浮球演示模式（测试功能，默认关闭，改动需要重启应用才生效） ============
+const overlayEnabled = ref(false)
+const overlaySaving = ref(false)
+async function loadOverlayConfig() {
+  try {
+    const res = await fetch('/api/overlay/config')
+    if (!res.ok) return
+    const data = await res.json()
+    overlayEnabled.value = !!data.enabled
+  } catch (e) { /* 旧后端无此接口时静默保持默认关闭 */ }
+}
+async function setOverlayEnabled(next) {
+  overlaySaving.value = true
+  try {
+    await fetch('/api/overlay/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: next }),
+    })
+    overlayEnabled.value = next
+  } finally { overlaySaving.value = false }
+}
+
 // ============ Firecrawl 联网搜索（web_search 常驻工具，模型自主触发） ============
 const FIRECRAWL_KEY_ID = 'firecrawl'
 // 后端 /api/models/config 的 firecrawl_key_set 字段返回是否已配 Key
@@ -1768,6 +1961,12 @@ const skillsLoading = ref(false)
 const skillsDir = ref('')
 const skillsExtDir = ref('')
 const expandedSkill = ref(null)
+const aggregateSkills = ref([])
+const aggregatePlatforms = ref([])
+const aggregateSkillsLoading = ref(false)
+const aggregateSkillQuery = ref('')
+const aggregatePlatformFilter = ref('all')
+const aggregateSyncing = ref('')
 const skillRegistryItems = ref([])
 const skillRegistryLoading = ref(false)
 const skillRegistryQuery = ref('')
@@ -1778,6 +1977,7 @@ const skillRegistrySources = ref([
   { id: 'vercel-labs/skills', label: 'Vercel Labs Skills' }
 ])
 let skillsLoaded = false
+let aggregateSkillsLoaded = false
 function toggleSkill(name) { expandedSkill.value = expandedSkill.value === name ? null : name }
 function normalizedSkillStatus(skill) { return skill.status === 'archived' ? 'archived' : 'active' }
 function skillStatusLabel(skill) { return normalizedSkillStatus(skill) === 'active' ? '已启用' : '已关闭' }
@@ -1796,6 +1996,73 @@ async function loadSkills(force = false) {
     skills.value = []
   } finally {
     skillsLoading.value = false
+  }
+}
+
+const filteredAggregateSkills = computed(() => {
+  const query = aggregateSkillQuery.value.trim().toLowerCase()
+  return aggregateSkills.value.filter(skill => {
+    const matchesPlatform = aggregatePlatformFilter.value === 'all' || skill.locations?.some(location => location.platform === aggregatePlatformFilter.value)
+    const matchesQuery = !query || skill.name?.toLowerCase().includes(query) || skill.description?.toLowerCase().includes(query)
+    return matchesPlatform && matchesQuery
+  })
+})
+
+function aggregatePlatformIcon(platform) {
+  if (platform === 'hermes') return 'mdi:lightning-bolt-outline'
+  if (platform === 'claude') return 'simple-icons:anthropic'
+  return 'simple-icons:openai'
+}
+function aggregateCoverage(skill) {
+  return new Set((skill.locations || []).map(location => location.platform)).size
+}
+function missingAggregateTargets(skill, source) {
+  const installed = new Set((skill.locations || []).map(location => location.platform))
+  return aggregatePlatforms.value.map(platform => platform.id).filter(id => id !== source && (skill.conflict || !installed.has(id)))
+}
+function syncAggregateLabel(skill, source) {
+  const targets = missingAggregateTargets(skill, source)
+  if (targets.length === 2) return skill.conflict ? '以此覆盖其余两端' : '同步到其余两端'
+  const platform = aggregatePlatforms.value.find(item => item.id === targets[0])
+  return platform ? `${skill.conflict ? '覆盖' : '同步到'} ${platform.label}` : '同步'
+}
+async function loadAggregateSkills(force = false) {
+  if (aggregateSkillsLoaded && !force) return
+  aggregateSkillsLoaded = true
+  aggregateSkillsLoading.value = true
+  errorMsg.value = ''
+  try {
+    const res = await fetch('/api/skills/aggregate')
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || '三端技能扫描失败')
+    aggregateSkills.value = data.skills || []
+    aggregatePlatforms.value = data.platforms || []
+  } catch (e) {
+    aggregateSkills.value = []
+    aggregatePlatforms.value = []
+    errorMsg.value = e.message
+  } finally {
+    aggregateSkillsLoading.value = false
+  }
+}
+async function syncAggregateSkill(skill, location) {
+  const targets = missingAggregateTargets(skill, location.platform)
+  if (!targets.length) return
+  aggregateSyncing.value = skill.name + ':' + location.platform
+  errorMsg.value = ''
+  try {
+    const res = await fetch('/api/skills/aggregate/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: skill.name, source: location.platform, source_path: location.path, targets }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || '技能同步失败')
+    await loadAggregateSkills(true)
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    aggregateSyncing.value = ''
   }
 }
 
@@ -2369,6 +2636,19 @@ onUnmounted(() => {
 .agg-api-code { font-size: 11.5px; font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace); color: var(--app-accent); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; }
 .agg-api-copy { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
 .agg-api-copy:hover { background: var(--app-surface-3); }
+.agg-copy-feedback {
+  position: fixed; left: 50%; bottom: 34px; z-index: 10020;
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 36px; padding: 0 14px;
+  border: 1px solid color-mix(in srgb, #16a06a, transparent 70%); border-radius: 999px;
+  color: #0f6b49; background: color-mix(in srgb, #ecfdf5 94%, transparent);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .16);
+  font-size: 12px; font-weight: 650;
+  transform: translateX(-50%); pointer-events: none;
+}
+.agg-copy-feedback.error { border-color: color-mix(in srgb, #dc4c4c, transparent 70%); color: #b42323; background: color-mix(in srgb, #fff1f1 94%, transparent); }
+.agg-copy-toast-enter-active, .agg-copy-toast-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.agg-copy-toast-enter-from, .agg-copy-toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(6px); }
 .agg-api-tip { font-size: 10.5px; color: var(--app-text-faint); margin-top: 6px; line-height: 1.5; }
 /* ===== 一键同步 / 还原（codex / dsh）===== */
 .agg-sync-card { margin-top: 14px; padding: 12px; border: 1px solid var(--app-border-soft); border-radius: 10px; background: var(--app-surface-2); }
@@ -2563,6 +2843,35 @@ onUnmounted(() => {
 .theme-swatch-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
 .theme-swatch-label { line-height: 1; }
 
+/* 完整动漫皮肤：独立于轻量主题色，卡片只展示氛围，不引入图片资源。 */
+.skin-groups { width: 100%; max-width: 460px; margin-left: auto; }
+.skin-group-title { margin-bottom: 7px; color: var(--app-text-faint); font-size: 11px; letter-spacing: .08em; }
+.skin-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.skin-card {
+  position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 58px;
+  padding: 8px 10px; color: var(--app-text-soft); background: var(--app-surface-2);
+  border: 1.5px solid var(--app-border); border-radius: 12px; text-align: left; cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.skin-card:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--skin-accent, var(--app-accent)) 45%, var(--app-border)); }
+.skin-card.on { color: var(--app-text); border-color: var(--app-accent); background: var(--app-accent-soft); box-shadow: 0 6px 18px color-mix(in srgb, var(--app-accent) 12%, transparent); }
+.skin-card-preview {
+  --skin-accent: #a04f74; --skin-surface: #fffaf8;
+  position: relative; width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 42px; overflow: hidden;
+  color: var(--skin-accent); border: 1px solid color-mix(in srgb, var(--skin-accent) 34%, #fff); border-radius: 10px;
+  background: var(--skin-surface); box-shadow: 0 5px 12px color-mix(in srgb, var(--skin-accent) 11%, transparent);
+}
+.skin-card-preview::before { content: ''; position: absolute; inset: 0; pointer-events: none; }
+.skin-preview-witchtrial { background: linear-gradient(145deg,#fffdf9,#f6e9ee); }
+.skin-preview-witchtrial::before { background: radial-gradient(circle at 8px 8px,rgba(160,79,116,.13) 0 1px,transparent 1.5px); background-size: 9px 9px; }
+.skin-preview-witchtrial_hiiro { color: #4f707c; border-color: #b9c9ce; background: #fffef8; border-radius: 7px; }
+.skin-preview-witchtrial_hiiro::before { background: radial-gradient(circle,#77939d 0 1px,transparent 1.3px); background-size: 5px 5px; opacity: .32; }
+.skin-card-preview :deep(svg) { position: relative; z-index: 1; filter: drop-shadow(0 1px 0 rgba(255,255,255,.8)); }
+.skin-card-info { display: grid; gap: 4px; min-width: 0; }
+.skin-card-info strong { overflow: hidden; color: inherit; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.skin-card-info small { overflow: hidden; color: var(--app-text-faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.skin-card-check { margin-left: auto; flex: none; color: var(--app-accent); }
+
 /* DHS / Skills 实体卡片 */
 .entity-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; background: var(--app-surface-2); }
 .entity-head { display: flex; align-items: center; gap: 8px; color: var(--app-text); }
@@ -2612,6 +2921,41 @@ onUnmounted(() => {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap;
 }
 .catalog-desc { margin-top: 7px; color: var(--app-text-soft); font-size: 11.5px; line-height: 1.55; }
+.skill-platform-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.skill-platform-card {
+  display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 58px; padding: 9px 11px;
+  color: var(--app-text); background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 11px;
+  text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+.skill-platform-card:hover { border-color: var(--app-accent-soft); transform: translateY(-1px); }
+.skill-platform-card.on { border-color: var(--app-accent); background: var(--app-accent-soft); }
+.skill-platform-card.unavailable { opacity: .64; }
+.skill-platform-card > span:nth-child(2) { display: grid; gap: 2px; min-width: 0; }
+.skill-platform-card strong { font-size: 12.5px; }
+.skill-platform-card small { color: var(--app-text-faint); font-size: 10.5px; }
+.skill-platform-card i { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--app-border); }
+.skill-platform-card i.live { background: var(--app-success, var(--app-accent)); box-shadow: 0 0 0 3px var(--app-accent-soft); }
+.skill-platform-icon { display: grid; place-items: center; width: 31px; height: 31px; flex: none; border-radius: 9px; color: var(--app-accent); background: var(--app-accent-soft); }
+.aggregate-search { width: 100%; margin-bottom: 12px; }
+.aggregate-search span { flex: none; color: var(--app-text-faint); font-size: 10.5px; }
+.aggregate-skill-card { padding: 12px 13px; margin-bottom: 8px; border: 1px solid var(--app-border); border-radius: 11px; background: var(--app-surface-2); }
+.aggregate-skill-card.conflict { border-color: color-mix(in srgb, var(--app-error, var(--app-accent)) 35%, var(--app-border)); }
+.aggregate-skill-head, .aggregate-skill-title, .aggregate-location { display: flex; align-items: center; }
+.aggregate-skill-head { justify-content: space-between; gap: 10px; }
+.aggregate-skill-title { min-width: 0; gap: 7px; color: var(--app-text); }
+.aggregate-skill-title strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.aggregate-conflict { display: inline-flex; align-items: center; gap: 3px; flex: none; padding: 2px 7px; border-radius: 999px; color: var(--app-error, var(--app-accent)); background: color-mix(in srgb, var(--app-error, var(--app-accent)) 10%, transparent); font-size: 10px; font-weight: 650; }
+.aggregate-coverage { flex: none; color: var(--app-text-faint); font-family: var(--app-mono-font, ui-monospace, monospace); font-size: 10.5px; }
+.aggregate-skill-desc { margin: 6px 0 9px; color: var(--app-text-soft); font-size: 11.5px; line-height: 1.55; }
+.aggregate-location-list { display: grid; gap: 6px; }
+.aggregate-location { gap: 7px; min-height: 31px; padding: 4px 5px 4px 7px; border-radius: 8px; background: var(--app-surface-3); }
+.aggregate-source-pill { display: inline-flex; align-items: center; gap: 4px; width: 72px; flex: none; color: var(--app-text-soft); font-size: 10.5px; font-weight: 650; }
+.aggregate-source-pill.is-hermes { color: var(--app-accent); }
+.aggregate-location code { min-width: 0; overflow: hidden; color: var(--app-text-soft); font-family: var(--app-mono-font, ui-monospace, monospace); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.aggregate-checksum { margin-left: auto; color: var(--app-text-faint); font-family: var(--app-mono-font, ui-monospace, monospace); font-size: 9.5px; }
+.aggregate-location button { min-height: 27px; padding: 0 9px; flex: none; border: 1px solid var(--app-accent); border-radius: 7px; color: var(--app-surface); background: var(--app-accent); font: inherit; font-size: 10.5px; font-weight: 650; cursor: pointer; }
+.aggregate-location button:disabled { opacity: .6; cursor: default; }
+.aggregate-complete { display: inline-flex; align-items: center; gap: 3px; flex: none; color: var(--app-success, var(--app-accent)); font-size: 10.5px; }
 .skill-steps { margin: 8px 0 2px; padding-left: 20px; font-size: 12px; color: var(--app-text-soft); line-height: 1.7; }
 /* 技能来源角标：自研走中性色，外部走强调色，一眼区分 */
 .entity-badge.src-learned { color: var(--app-text-soft); background: var(--app-surface-3); }
@@ -2631,6 +2975,11 @@ onUnmounted(() => {
   .catalog-source { max-width: none; flex: 1 1 100%; }
   .catalog-card { align-items: flex-start; flex-direction: column; }
   .catalog-install-btn { width: 100%; }
+  .skill-platform-grid { grid-template-columns: 1fr; }
+  .aggregate-location { align-items: flex-start; flex-wrap: wrap; }
+  .aggregate-location code { width: calc(100% - 90px); }
+  .aggregate-checksum { display: none; }
+  .aggregate-location button { width: 100%; }
 }
 
 /* Profile（仿图2） */
@@ -2864,8 +3213,9 @@ onUnmounted(() => {
   .settings-content { padding-inline: 16px; }
   .param-row { align-items: flex-start; flex-direction: column; gap: 7px; padding: 10px 0; }
   .param-label { width: auto; }
-  .model-select, .seg-control, .theme-swatches { width: 100%; max-width: none; margin-left: 0; }
+  .model-select, .seg-control, .theme-swatches, .skin-groups { width: 100%; max-width: none; margin-left: 0; }
   .seg-btn { flex: 1; }
+  .skin-cards { grid-template-columns: 1fr; }
   .theme-live-body { grid-template-columns: 84px 1fr; }
   .theme-live-sidebar { padding-inline: 6px; }
   .theme-live-sidebar span { padding-inline: 7px; }

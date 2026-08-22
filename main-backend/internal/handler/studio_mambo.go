@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -146,7 +145,7 @@ func HandleStudioMambo(c *gin.Context) {
 		cmdArgs = append(cmdArgs, "--pexels-key", req.PexelsKey)
 	}
 
-	cmd := exec.CommandContext(ctx, py, cmdArgs...)
+	cmd := hiddenCommandContext(ctx, py, cmdArgs...)
 	cmd.Dir = root
 
 	// SSE 流式进度

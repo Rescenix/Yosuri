@@ -694,3 +694,121 @@ body {
 [data-skin="witchtrial"] ::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.22);
 }
+
+/* ========================================
+   创作主题 v2 · 对齐小说 / 漫画工作台
+   保留原 data-skin key 兼容已保存配置，以下规则覆盖旧版黑红主题。
+   ======================================== */
+
+/* 花笺物语：暖白稿纸、灰粉书封、极淡花点。 */
+[data-skin="witchtrial"] body,
+[data-skin="witchtrial"] .app-container {
+  background-color: var(--app-bg);
+  background-image:
+    radial-gradient(ellipse 72% 42% at 84% -8%, rgba(160,79,116,.10), transparent 62%),
+    radial-gradient(circle at 18px 18px, rgba(160,79,116,.055) 0 1px, transparent 1.4px);
+  background-size: 100% 100%, 18px 18px;
+}
+[data-skin="witchtrial"] .chat-window,
+[data-skin="witchtrial"] .settings-modal,
+[data-skin="witchtrial"] .settings-modal-content,
+[data-skin="witchtrial"] .home-card,
+[data-skin="witchtrial"] .stat-card {
+  border: 1px solid color-mix(in srgb, var(--app-accent) 22%, var(--app-border));
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(86,58,72,.11), inset 0 1px 0 rgba(255,255,255,.72);
+}
+[data-skin="witchtrial"] .gem-sidebar,
+[data-skin="witchtrial"] .fm-sidebar,
+[data-skin="witchtrial"] aside.complementary {
+  background-color: var(--app-surface-2);
+  background-image: linear-gradient(180deg,rgba(255,255,255,.35),rgba(160,79,116,.035));
+}
+[data-skin="witchtrial"] .chat-input,
+[data-skin="witchtrial"] .chat-input-area .input-card,
+[data-skin="witchtrial"] textarea.chat-input {
+  border-color: color-mix(in srgb, var(--app-accent) 25%, var(--app-border));
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.45), 0 7px 20px rgba(112,80,96,.06);
+}
+[data-skin="witchtrial"] .chat-input:focus-within,
+[data-skin="witchtrial"] .chat-input-area .input-card:focus-within {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px var(--app-accent-soft), 0 10px 26px rgba(112,80,96,.08);
+}
+[data-skin="witchtrial"] button.primary,
+[data-skin="witchtrial"] .yolo-btn,
+[data-skin="witchtrial"] .send-btn,
+[data-skin="witchtrial"] .header-icon-btn.active,
+[data-skin="witchtrial"] .settings-tab.active {
+  text-shadow: none;
+  box-shadow: 0 5px 14px rgba(160,79,116,.14);
+}
+[data-skin="witchtrial"] ::-webkit-scrollbar-thumb { background: rgba(160,79,116,.28); }
+[data-skin="witchtrial"] ::-webkit-scrollbar-track { background: transparent; }
+
+/* 漫画工房：象牙画纸、青灰墨线、轻网点与方形分镜。 */
+[data-skin="witchtrial_hiiro"] body,
+[data-skin="witchtrial_hiiro"] .app-container {
+  background-color: var(--app-bg);
+  background-image:
+    linear-gradient(135deg,rgba(88,121,133,.045) 25%,transparent 25%,transparent 75%,rgba(88,121,133,.045) 75%),
+    radial-gradient(circle at 3px 3px,rgba(62,88,98,.10) 0 .8px,transparent 1.1px);
+  background-size: 24px 24px, 6px 6px;
+}
+[data-skin="witchtrial_hiiro"] h1,
+[data-skin="witchtrial_hiiro"] h2,
+[data-skin="witchtrial_hiiro"] h3,
+[data-skin="witchtrial_hiiro"] .settings-section-title,
+[data-skin="witchtrial_hiiro"] .settings-tab,
+[data-skin="witchtrial_hiiro"] .markdown-body,
+[data-skin="witchtrial_hiiro"] .gem-sidebar,
+[data-skin="witchtrial_hiiro"] .message-bubble.user,
+[data-skin="witchtrial_hiiro"] .assistant-message {
+  font-family: var(--app-font);
+  letter-spacing: normal;
+  font-weight: inherit;
+}
+[data-skin="witchtrial_hiiro"] .chat-window,
+[data-skin="witchtrial_hiiro"] .settings-modal,
+[data-skin="witchtrial_hiiro"] .settings-modal-content,
+[data-skin="witchtrial_hiiro"] .home-card,
+[data-skin="witchtrial_hiiro"] .stat-card {
+  border: 1px solid color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
+  border-radius: 10px;
+  box-shadow: 8px 8px 0 rgba(77,103,112,.055), 0 16px 40px rgba(41,61,70,.09);
+}
+[data-skin="witchtrial_hiiro"] .chat-window::before,
+[data-skin="witchtrial_hiiro"] .settings-modal::before {
+  left: 0; right: auto; width: 76px; height: 4px; border-radius: 0;
+  background: var(--app-accent); opacity: .82;
+}
+[data-skin="witchtrial_hiiro"] .gem-sidebar,
+[data-skin="witchtrial_hiiro"] .fm-sidebar,
+[data-skin="witchtrial_hiiro"] aside.complementary {
+  background-color: var(--app-surface-2);
+  background-image: radial-gradient(circle,rgba(88,121,133,.14) 0 1px,transparent 1.25px);
+  background-size: 7px 7px;
+}
+[data-skin="witchtrial_hiiro"] .chat-input,
+[data-skin="witchtrial_hiiro"] .chat-input-area .input-card,
+[data-skin="witchtrial_hiiro"] textarea.chat-input {
+  border-color: color-mix(in srgb, var(--app-accent) 34%, var(--app-border));
+  border-radius: 8px;
+  box-shadow: 4px 4px 0 rgba(77,103,112,.055);
+}
+[data-skin="witchtrial_hiiro"] .chat-input:focus-within,
+[data-skin="witchtrial_hiiro"] .chat-input-area .input-card:focus-within {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px var(--app-accent-soft), 4px 4px 0 rgba(77,103,112,.07);
+}
+[data-skin="witchtrial_hiiro"] button.primary,
+[data-skin="witchtrial_hiiro"] .yolo-btn,
+[data-skin="witchtrial_hiiro"] .send-btn,
+[data-skin="witchtrial_hiiro"] .header-icon-btn.active,
+[data-skin="witchtrial_hiiro"] .settings-tab.active {
+  text-shadow: none;
+  box-shadow: 3px 3px 0 rgba(69,91,99,.14);
+}
+[data-skin="witchtrial_hiiro"] ::-webkit-scrollbar-thumb { background: rgba(88,121,133,.34); }
+[data-skin="witchtrial_hiiro"] ::-webkit-scrollbar-track { background: transparent; }

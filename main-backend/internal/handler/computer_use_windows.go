@@ -418,7 +418,7 @@ func winSetClipboard(text string) {
 	// 使用 PowerShell 设置剪贴板
 	escaped := stringsReplaceAll(text, "'", "''")
 	execCmd := exec.Command("powershell", "-NoLogo", "-NoProfile", "-Command", fmt.Sprintf("Set-Clipboard -Value '%s'", escaped))
-	execCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	execCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 	_ = execCmd.Run()
 }
 
