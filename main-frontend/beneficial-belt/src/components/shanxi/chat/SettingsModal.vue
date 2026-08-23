@@ -213,57 +213,68 @@
                 <div v-if="loading" class="settings-loading">加载中...</div>
                 <template v-else>
                   <div v-for="grp in vendorGroups" :key="grp.vendor" class="vendor-group">
-                    <div class="vendor-head">
+                    <div
+                      class="vendor-head"
+                      role="button"
+                      tabindex="0"
+                      :aria-expanded="isVendorOpen(grp.vendor)"
+                      @click="toggleVendor(grp.vendor)"
+                      @keydown.enter.prevent="toggleVendor(grp.vendor)"
+                      @keydown.space.prevent="toggleVendor(grp.vendor)"
+                    >
+                      <Icon class="vendor-chevron" :class="{ open: isVendorOpen(grp.vendor) }" icon="mdi:chevron-right" width="17" />
                       <span class="vendor-logo" :style="{ '--vendor-color': vendorColor(grp.vendor) }">
                         <Icon :icon="vendorIcon(grp.vendor)" width="16" />
                       </span>
                       <span class="vendor-name">{{ grp.vendor }}</span>
                       <span class="vendor-count">{{ grp.items.length }} 个模型</span>
                       <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? '免 Key' : (grp.hasKey ? '已配 Key' : '未配 Key') }}</span>
-                      <a v-if="grp.keyUrl && !grp.keyless" class="vendor-key-btn vendor-key-link" :href="grp.keyUrl" target="_blank" rel="noopener" title="打开官网登录即可免费获取 API Key">官网获取 Key ↗</a>
+                      <a v-if="grp.keyUrl && !grp.keyless" class="vendor-key-btn vendor-key-link" :href="grp.keyUrl" target="_blank" rel="noopener" title="打开官网登录即可免费获取 API Key" @click.stop>官网获取 Key ↗</a>
                       <button v-if="!grp.keyless && editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
                       <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
                     </div>
-                    <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
-                                          <template v-if="grp.dualKey">
-                                            <input
-                                              v-model="vendorKeyDraft"
-                                              type="password"
-                                              class="vendor-key-input"
-                                              placeholder="Token ID"
-                                              @keyup.enter="saveVendorKey(grp)"
-                                            />
-                                            <input
-                                              v-model="vendorKeySecretDraft"
-                                              type="password"
-                                              class="vendor-key-input"
-                                              placeholder="Token Secret"
-                                              @keyup.enter="saveVendorKey(grp)"
-                                            />
-                                          </template>
-                                          <template v-else>
-                                            <input
-                                              v-model="vendorKeyDraft"
-                                              type="password"
-                                              class="vendor-key-input"
-                                              :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
-                                              @keyup.enter="saveVendorKey(grp)"
-                                            />
-                                          </template>
-                                          <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
-                                          <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
-                                        </div>
-                    <div class="vendor-model-cards">
-                      <div v-for="m in grp.items" :key="m.id" class="fm-card" :title="m.note || m.name">
-                        <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
-                          <i v-for="n in 4" :key="n" :class="{ on: (m.signal == null ? -1 : m.signal) >= n || n === 1 }"></i>
-                        </span>
-                        <span class="fm-name">{{ m.name }}</span>
-                        <span v-if="m.context_window" class="fm-tag">{{ fmtCtx(m.context_window) }}</span>
+                    <div v-show="isVendorOpen(grp.vendor)" class="vendor-body">
+                      <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
+                        <template v-if="grp.dualKey">
+                          <input
+                            v-model="vendorKeyDraft"
+                            type="password"
+                            class="vendor-key-input"
+                            placeholder="Token ID"
+                            @keyup.enter="saveVendorKey(grp)"
+                          />
+                          <input
+                            v-model="vendorKeySecretDraft"
+                            type="password"
+                            class="vendor-key-input"
+                            placeholder="Token Secret"
+                            @keyup.enter="saveVendorKey(grp)"
+                          />
+                        </template>
+                        <template v-else>
+                          <input
+                            v-model="vendorKeyDraft"
+                            type="password"
+                            class="vendor-key-input"
+                            :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
+                            @keyup.enter="saveVendorKey(grp)"
+                          />
+                        </template>
+                        <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
+                        <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
+                      </div>
+                      <div class="vendor-model-cards">
+                        <div v-for="m in grp.items" :key="m.id" class="fm-card" :title="m.note || m.name">
+                          <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
+                            <i v-for="n in 4" :key="n" :class="{ on: (m.signal == null ? -1 : m.signal) >= n || n === 1 }"></i>
+                          </span>
+                          <span class="fm-name">{{ m.name }}</span>
+                          <span v-if="m.context_window" class="fm-tag">{{ fmtCtx(m.context_window) }}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                                  </template>
+                </template>
               </template>
 
               <template v-else>
@@ -1105,6 +1116,7 @@ const loading = ref(true)
 const errorMsg = ref('')
 const editingConfig = ref(null)
 const editingVendor = ref(null)
+const vendorOpen = reactive({})
 const vendorKeyDraft = ref('')
 const vendorKeySecretDraft = ref('')
 const isNew = ref(false)
@@ -1125,6 +1137,14 @@ const vendorGroups = computed(() => {
   }
   return Array.from(map.values())
 })
+
+function isVendorOpen(vendor) {
+  return vendorOpen[vendor] === true
+}
+
+function toggleVendor(vendor) {
+  vendorOpen[vendor] = !isVendorOpen(vendor)
+}
 
 // 上下文窗口展示：262144 → 256K，1048576 → 1M
 function fmtCtx(n) {
@@ -1609,9 +1629,10 @@ function startEdit(cfg) {
   editingConfig.value = { ...cfg, api_key: '' }
 }
 function startEditVendor(grp) {
+  vendorOpen[grp.vendor] = true
   editingVendor.value = grp.vendor
-    vendorKeyDraft.value = ''
-    vendorKeySecretDraft.value = ''
+  vendorKeyDraft.value = ''
+  vendorKeySecretDraft.value = ''
 }
 function cancelVendorEdit() {
   editingVendor.value = null
@@ -2598,13 +2619,17 @@ onUnmounted(() => {
 .vendor-head {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   min-height: 54px; box-sizing: border-box; padding: 9px 11px; background: var(--app-surface-2);
-  border: 1px solid var(--app-border); border-radius: 12px; user-select: none;
+  border: 1px solid var(--app-border); border-radius: 12px; user-select: none; cursor: pointer;
   transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease;
 }
 .vendor-head:hover {
   background: var(--app-surface); border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
   transform: translateY(-1px); box-shadow: 0 7px 20px rgba(0,0,0,.045);
 }
+.vendor-head:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.vendor-chevron { flex: none; color: var(--app-text-soft); transition: transform .18s ease; }
+.vendor-chevron.open { transform: rotate(90deg); }
+.vendor-body { padding-top: 8px; }
 .vendor-logo {
   width: 32px; height: 32px; display: grid; place-items: center; flex: none;
   color: var(--vendor-color); background: color-mix(in srgb, var(--vendor-color) 11%, var(--app-surface));

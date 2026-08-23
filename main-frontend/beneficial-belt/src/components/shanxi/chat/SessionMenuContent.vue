@@ -10,6 +10,10 @@
         <Icon icon="mdi:clock-outline" width="18" />
         <span>定时任务</span>
       </button>
+      <router-link class="smc-nav-item" to="/sites" title="发布并分享 Agent 写好的网页">
+        <Icon icon="mdi:web" width="18" />
+        <span>站点</span>
+      </router-link>
     </div>
 
     <!-- 搜索框 -->
@@ -349,6 +353,16 @@
               <span v-if="selectedSourceFolder">{{ selectedSourceFolder.name }}</span>
               <span v-else>添加可读取和编辑的文件夹</span>
             </button>
+            <p v-if="sourcePickerError" class="smc-source-picker-error" role="alert">{{ sourcePickerError }}</p>
+            <label v-if="recentProjectOptions.length" class="smc-recent-project-picker">
+              <span>最近选择项目</span>
+              <select v-model="recentProjectPath" @change="pickRecentProject">
+                <option value="" disabled>选择一个最近项目</option>
+                <option v-for="project in recentProjectOptions" :key="project.path" :value="project.path">
+                  {{ project.name }}
+                </option>
+              </select>
+            </label>
             <div class="smc-create-project-actions">
               <button type="button" class="smc-cancel-btn" @click="closeCreateProject">取消</button>
               <button type="submit" class="smc-create-btn" :disabled="!selectedSourceFolder">创建项目</button>
@@ -410,6 +424,7 @@ const PIN_KEY = 'shanxi_pinned_projects'
 const props = defineProps({
   sessions: { type: Array, default: () => [] },
   projects: { type: Array, default: () => [] },
+  recentProjects: { type: Array, default: () => [] },
   activeSession: { type: String, default: '' },
   runningSession: { type: String, default: '' },
   completedSessions: { type: Set, default: () => new Set() },
@@ -431,12 +446,25 @@ function onSearchBlur() { searchInputRef.value?.blur() }
 // 导致 rememberProject 按名字去重时把旧项目的会话"过继"给新项目。
 const showCreateProject = ref(false)
 const selectedSourceFolder = ref(null)
+const sourcePickerError = ref('')
+const recentProjectPath = ref('')
+const recentProjectOptions = computed(() => {
+  const seen = new Set()
+  return props.recentProjects.filter(project => {
+    const path = project?.path
+    if (!project?.name || !path || seen.has(path)) return false
+    seen.add(path)
+    return true
+  })
+})
 // 从"选择项目"弹窗里点了"新建项目"进来的，创建完要接着建会话
 const pendingSessionAfterCreate = ref(false)
 
 function openCreateProject() {
   showCreateProject.value = true
   selectedSourceFolder.value = null
+  sourcePickerError.value = ''
+  recentProjectPath.value = ''
 }
 function openCreateProjectForSession() {
   pendingSessionAfterCreate.value = true
@@ -448,12 +476,22 @@ function closeCreateProject() {
   pendingSessionAfterCreate.value = false
 }
 async function pickSourceFolder() {
+  sourcePickerError.value = ''
   try {
     const res = await fetch('/api/workdir/pick', { method: 'POST' })
-    if (!res.ok) throw new Error('无法打开文件夹选择器')
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || '无法打开文件夹选择器')
     if (!data.cancelled && data.path) selectedSourceFolder.value = { name: data.name || data.path, path: data.path }
-  } catch {}
+    else if (!data.cancelled) throw new Error('未收到所选文件夹路径')
+  } catch (error) {
+    sourcePickerError.value = error?.message || '无法打开文件夹选择器'
+  }
+}
+function pickRecentProject() {
+  const project = recentProjectOptions.value.find(item => item.path === recentProjectPath.value)
+  if (!project) return
+  selectedSourceFolder.value = { name: project.name, path: project.path }
+  sourcePickerError.value = ''
 }
 function createProject() {
   const folder = selectedSourceFolder.value
@@ -1565,6 +1603,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 }
 .smc-source-picker:hover { border-color: var(--app-accent); background: var(--app-surface-2); }
 .smc-source-picker .iconify { color: var(--app-text-soft); }
+.smc-source-picker-error { margin: 8px 2px 0; color: #c62828; font-size: 13px; line-height: 1.45; }
+.smc-recent-project-picker { display: grid; gap: 6px; margin-top: 16px; color: var(--app-text-soft); font-size: 13px; font-weight: 600; }
+.smc-recent-project-picker select { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-surface); color: var(--app-text); font: inherit; font-weight: 500; cursor: pointer; }
+.smc-recent-project-picker select:focus-visible { outline: 2px solid color-mix(in srgb, var(--app-accent), transparent 45%); outline-offset: 2px; border-color: var(--app-accent); }
 .smc-select-project-list {
   display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto;
 }

@@ -313,7 +313,7 @@ func aggregateStreamOnce(ctx context.Context, b RouterBackend, reqBody map[strin
 	if b.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
-	client := &http.Client{Timeout: b.Timeout}
+	client := backendHTTPClient(b, b.Timeout, false)
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, err

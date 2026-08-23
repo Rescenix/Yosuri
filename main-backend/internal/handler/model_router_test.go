@@ -115,10 +115,14 @@ func TestKeyedFreeProviderCatalog(t *testing.T) {
 		keyEnv   string
 		endpoint string
 	}{
-		"free_google_gemini_2_5_flash": {"Google AI Studio", "gemini-2.5-flash", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai"},
-		"free_groq_llama_3_3_70b":      {"Groq Cloud", "llama-3.3-70b-versatile", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
-		"free_groq_qwen3_32b":          {"Groq Cloud", "qwen/qwen3-32b", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
-		"free_openrouter_router":       {"OpenRouter", "openrouter/free", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
+		"free_google_gemini_2_5_flash":      {"Google AI Studio", "gemini-2.5-flash", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai"},
+		"free_groq_llama_3_3_70b":           {"Groq Cloud", "llama-3.3-70b-versatile", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
+		"free_groq_qwen3_32b":               {"Groq Cloud", "qwen/qwen3-32b", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
+		"free_openrouter_router":            {"OpenRouter", "openrouter/free", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
+		"free_openrouter_ox_alpha":          {"OpenRouter", "stealth/ox-alpha", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
+		"free_bai_deepseek_v4_flash":        {"B.AI", "deepseek-v4-flash", "BAI_API_KEY", "https://api.b.ai/v1"},
+		"free_bai_deepseek_v4_flash_vision": {"B.AI", "deepseek-v4-flash-vision-exp", "BAI_API_KEY", "https://api.b.ai/v1"},
+		"free_bai_hy3":                      {"B.AI", "hy3", "BAI_API_KEY", "https://api.b.ai/v1"},
 	}
 
 	found := map[string]bool{}
@@ -139,6 +143,58 @@ func TestKeyedFreeProviderCatalog(t *testing.T) {
 		if !found[id] {
 			t.Errorf("免费模型 Tab 缺少提供方条目: %s", id)
 		}
+	}
+}
+
+func TestBAIDeepSeekFlashIsResolvableWithKey(t *testing.T) {
+	t.Setenv("BAI_API_KEY", "test-bai-key")
+	b := resolveExact("nonexistent_user_for_test", "free_bai_deepseek_v4_flash")
+	if b == nil {
+		t.Fatal("配置 BAI_API_KEY 后应能精确解析 B.AI DeepSeek V4 Flash")
+	}
+	if b.BaseURL != "https://api.b.ai/v1" || b.Model != "deepseek-v4-flash" || b.APIKey != "test-bai-key" {
+		t.Fatalf("B.AI 精确路由错误: %+v", b)
+	}
+	if b.Keyless || b.Source != "free" || !b.Reasoning || b.ContextWindow != 1048576 {
+		t.Fatalf("B.AI 能力或鉴权元数据错误: %+v", b)
+	}
+}
+
+func TestBAIAdditionalFreeModelsAreResolvableWithKey(t *testing.T) {
+	t.Setenv("BAI_API_KEY", "test-bai-key")
+	want := map[string]struct {
+		model         string
+		vision        bool
+		contextWindow int
+	}{
+		"free_bai_deepseek_v4_flash_vision": {"deepseek-v4-flash-vision-exp", true, 1048576},
+		"free_bai_hy3":                      {"hy3", false, 262144},
+	}
+	for id, expect := range want {
+		b := resolveExact("nonexistent_user_for_test", id)
+		if b == nil {
+			t.Fatalf("配置 BAI_API_KEY 后应能精确解析 %s", id)
+		}
+		if b.BaseURL != "https://api.b.ai/v1" || b.Model != expect.model || b.APIKey != "test-bai-key" {
+			t.Errorf("%s 精确路由错误: %+v", id, b)
+		}
+		if b.Keyless || b.Source != "free" || b.Vision != expect.vision || !b.Reasoning || b.ContextWindow != expect.contextWindow {
+			t.Errorf("%s 能力或鉴权元数据错误: %+v", id, b)
+		}
+	}
+}
+
+func TestOpenRouterOxAlphaIsResolvableWithKey(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+	b := resolveExact("nonexistent_user_for_test", "free_openrouter_ox_alpha")
+	if b == nil {
+		t.Fatal("配置 OPENROUTER_API_KEY 后应能精确解析 OpenRouter Ox Alpha")
+	}
+	if b.BaseURL != "https://openrouter.ai/api/v1" || b.Model != "stealth/ox-alpha" || b.APIKey != "test-openrouter-key" {
+		t.Fatalf("OpenRouter Ox Alpha 精确路由错误: %+v", b)
+	}
+	if b.Keyless || b.Source != "free" || !b.Vision || !b.Reasoning || b.ContextWindow != 1048576 {
+		t.Fatalf("OpenRouter Ox Alpha 能力或鉴权元数据错误: %+v", b)
 	}
 }
 

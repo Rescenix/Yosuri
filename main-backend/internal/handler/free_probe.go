@@ -252,7 +252,7 @@ func probeChatOnce(b RouterBackend) (bool, int) {
 	if b.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
-	client := &http.Client{Timeout: probeTimeout}
+	client := backendHTTPClient(b, probeTimeout, false)
 	resp, err := client.Do(req)
 	if err != nil {
 		return false, 0

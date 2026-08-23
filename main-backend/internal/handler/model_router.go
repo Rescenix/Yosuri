@@ -112,10 +112,18 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_llm7_llama_3_1_8b", Vendor: "LLM7.io", Name: "Llama 3.1 8B Turbo（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "meta-Llama-3.1-8B-Instruct-Turbo", KeyEnv: "", ParamsB: 8, Note: "LLM7 免 key Turbo·工具调用·128K", Keyless: true, ContextWindow: 128000},
 	{ID: "free_llm7_minimax_m2_7", Vendor: "LLM7.io", Name: "MiniMax M2.7（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "minimax-m2.7", KeyEnv: "", ParamsB: 0, Note: "LLM7 免 key Turbo·工具调用·180K", Keyless: true, Reasoning: true, ContextWindow: 180000},
 
+	// —— B.AI（api.b.ai/v1，OpenAI 兼容）——
+	// 2026-08-23 官方文档确认：DeepSeek V4 Flash、Vision Exp 与 Hy3 均处于
+	// 0 Credits 限时活动；活动结束时间与最终计费以平台展示为准。需要用户自己的 B.AI API Key。
+	{ID: "free_bai_deepseek_v4_flash", Vendor: "B.AI", Name: "DeepSeek V4 Flash（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "deepseek-v4-flash", KeyEnv: "BAI_API_KEY", ParamsB: 284, Note: "B.AI 限时 0 Credits·工具调用·文本模型·1M 上下文", KeyURL: "https://b.ai", Reasoning: true, ContextWindow: 1048576},
+	{ID: "free_bai_deepseek_v4_flash_vision", Vendor: "B.AI", Name: "DeepSeek V4 Flash Vision Exp（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "deepseek-v4-flash-vision-exp", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI API 限时 0 Credits·实验视觉模型·1M 上下文", KeyURL: "https://b.ai", Vision: true, Reasoning: true, ContextWindow: 1048576},
+	{ID: "free_bai_hy3", Vendor: "B.AI", Name: "Tencent Hy3（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "hy3", KeyEnv: "BAI_API_KEY", ParamsB: 295, Note: "B.AI 限时 0 Credits·295B MoE·工具调用·256K", KeyURL: "https://b.ai", Reasoning: true, ContextWindow: 262144},
+
 	// —— OpenRouter（openrouter.ai/api/v1，OpenAI 兼容）——
-	// 2026-08-22 公共 /models 实测：openrouter/free 为零价格自动路由，当前聚合 22 个
-	// 免费模型，支持 tools/reasoning 与图像输入；需要用户自己的免费 API Key。
+	// 2026-08-23 公共 /models 实测：openrouter/free 为零价格自动路由；Ox Alpha
+	// 也是当前 prompt/completion 均为 0 的限时免费模型。需要用户自己的免费 API Key。
 	{ID: "free_openrouter_router", Vendor: "OpenRouter", Name: "OpenRouter Free Router（免费）", Endpoint: "https://openrouter.ai/api/v1", Model: "openrouter/free", KeyEnv: "OPENROUTER_API_KEY", ParamsB: 0, Note: "OpenRouter 免费自动路由·当前聚合 20+ 免费模型·200K", KeyURL: "https://openrouter.ai/settings/keys", Vision: true, Reasoning: true, ContextWindow: 200000},
+	{ID: "free_openrouter_ox_alpha", Vendor: "OpenRouter", Name: "Ox Alpha（OpenRouter·限时免费）", Endpoint: "https://openrouter.ai/api/v1", Model: "stealth/ox-alpha", KeyEnv: "OPENROUTER_API_KEY", ParamsB: 0, Note: "OpenRouter 限时免费·代码 Agent·工具调用·图像/视频·1M", KeyURL: "https://openrouter.ai/settings/keys", Vision: true, Reasoning: true, ContextWindow: 1048576},
 
 	// —— Google AI Studio（Gemini API OpenAI 兼容端点）——
 	// 免费额度与可用地区由 Google 账号/网络环境决定；大陆直连可能超时，但保留在
@@ -682,7 +690,7 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
 
-	client := &http.Client{Timeout: b.Timeout}
+	client := backendHTTPClient(b, b.Timeout, false)
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		// 连接失败/超时：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
@@ -772,7 +780,7 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
 
-	client := &http.Client{Timeout: b.Timeout}
+	client := backendHTTPClient(b, b.Timeout, false)
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		// 连接失败/超时：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
@@ -959,7 +967,7 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 			httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 		}
 
-		client := streamHTTPClient()
+		client := backendHTTPClient(b, 0, true)
 		resp, err := client.Do(httpReq)
 		if err != nil {
 			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
@@ -1218,7 +1226,7 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
 	}
 
-	client := streamHTTPClient()
+	client := backendHTTPClient(b, 0, true)
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		// 连接失败/超时：暂时性故障，计入熔断

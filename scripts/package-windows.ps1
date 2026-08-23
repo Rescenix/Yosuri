@@ -50,9 +50,15 @@ Push-Location $backendDir
 try {
     # NSIS 的 Windows 文件版本只接受纯数字；AppVersion 仍保留完整的预发布版本。
     $wailsConfigRaw = [System.IO.File]::ReadAllText($wailsConfigPath)
+    # 先从原始 JSON 固化完整 SemVer。不要从随后会改写 productVersion 的
+    # PSCustomObject 取值：并发/嵌套构建时会把 -alpha.N 后缀带丢，导致热更新
+    # 把测试包误识别成稳定包。
+    $appVersionMatch = [regex]::Match($wailsConfigRaw, '"productVersion"\s*:\s*"(?<version>[^"]+)"')
+    if (-not $appVersionMatch.Success) {
+        throw 'wails.json 缺少 info.productVersion'
+    }
+    [string]$appVersion = $appVersionMatch.Groups['version'].Value
     $wailsConfig = $wailsConfigRaw | ConvertFrom-Json
-    # 强制复制为独立字符串，避免后续修改 PSCustomObject 时预发布后缀丢失。
-    [string]$appVersion = "$($wailsConfig.info.productVersion)"
     $numericVersionMatch = [regex]::Match($appVersion, '^\d+\.\d+\.\d+')
     if (-not $numericVersionMatch.Success) {
         throw "wails.json 的 info.productVersion 不是有效版本号：$appVersion"

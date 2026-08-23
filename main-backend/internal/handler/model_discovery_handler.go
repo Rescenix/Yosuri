@@ -36,7 +36,7 @@ func fetchProviderModels(ctx context.Context, endpoint, apiKey string) ([]ModelC
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(apiKey))
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := backendHTTPClient(RouterBackend{BaseURL: endpoint}, 30*time.Second, false)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("连接模型目录失败: %w", err)

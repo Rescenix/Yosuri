@@ -7,6 +7,9 @@
     <router-link to="/company" class="app-tool-btn" title="Agent 公司" active-class="active">
       <Icon icon="mdi:domain" width="16" />
     </router-link>
+    <router-link to="/sites" class="app-tool-btn" title="站点：发布并分享 Agent 作品" active-class="active">
+      <Icon icon="mdi:web" width="16" />
+    </router-link>
     <router-link to="/publish" class="app-tool-btn" title="网文创作与发布" active-class="active">
           <Icon icon="mdi:book-open-page-variant-outline" width="16" />
         </router-link>

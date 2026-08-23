@@ -81,6 +81,7 @@
                                 fill
                                 :sessions="sessionList"
                                 :projects="projects"
+                                :recent-projects="workDirRecents"
                                 :active-session="activeSession"
                                 :running-session="runningSession"
                                 :completed-sessions="completedSessions"
@@ -566,7 +567,7 @@
                         <Icon v-if="dir.path === currentWorkDir.path" icon="mdi:check" width="14" color="#1a1a1a" />
                       </div>
                       <div class="workdir-menu-divider"></div>
-                      <div class="workdir-menu-item" @click="openFolderBrowser">
+                      <div class="workdir-menu-item" @click="openSystemWorkDirPicker">
                         <span>Open folder...</span>
                       </div>
                     </template>
