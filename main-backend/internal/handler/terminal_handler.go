@@ -18,9 +18,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
-	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"backend/internal/ai/core"
@@ -114,10 +112,7 @@ func getOrCreateTermSession(id string) (*termSession, error) {
 		return s, nil
 	}
 
-	cmd := exec.Command("powershell.exe", "-NoLogo", "-NoProfile")
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	}
+	cmd := hiddenCommand("powershell.exe", "-NoLogo", "-NoProfile")
 	cmd.Dir = core.GetProjectRoot()
 
 	s := &termSession{id: id, cmd: cmd, subs: map[chan []byte]bool{}}
