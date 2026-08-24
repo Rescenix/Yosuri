@@ -106,6 +106,13 @@ agent-os/outputs/
 agent-os/workdir/
 agent-os/*.log
 
+# —— 一次性报告、探测清单与联网媒体缓存（不随源码仓库发布）——
+/RELEASE-v*.md
+/docs/free-compute-report-*.md
+/zen_models*.json
+/ai-ticket-*.mp4
+/main-backend/assets/online_cache/
+
 # —— CDP 调试脚本（临时，不入库）——
 _cdp_*.py
 
