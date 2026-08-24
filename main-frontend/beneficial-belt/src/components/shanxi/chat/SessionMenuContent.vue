@@ -1,32 +1,15 @@
 <template>
   <div class="smc-root" :class="{ fill }">
-    <!-- 顶部操作：新建会话 + 定时任务 -->
+    <!-- 顶部操作：搜索和定时任务已收进侧栏右上角 -->
     <div class="smc-nav">
       <button class="smc-nav-item primary" type="button" @click="onClickNewSession">
         <Icon icon="mdi:plus" width="18" />
         <span>新建会话</span>
       </button>
-      <button class="smc-nav-item" type="button" @click="$emit('open-scheduled-tasks')">
-        <Icon icon="mdi:clock-outline" width="18" />
-        <span>定时任务</span>
-      </button>
       <router-link class="smc-nav-item" to="/sites" title="发布并分享 Agent 写好的网页">
         <Icon icon="mdi:web" width="18" />
         <span>站点</span>
       </router-link>
-    </div>
-
-    <!-- 搜索框 -->
-    <div class="smc-search-bar" @click="focusSearch">
-      <Icon icon="mdi:magnify" width="16" class="smc-search-icon" />
-      <input
-        ref="searchInputRef"
-        class="smc-search-input"
-        type="text"
-        placeholder="搜索会话..."
-        @focus="onSearchFocus"
-        @keydown.esc="onSearchBlur"
-      />
     </div>
 
     <!-- 会话列表区 -->
@@ -434,12 +417,6 @@ const props = defineProps({
     currentWorkdir: { type: String, default: '' }
   })
 const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'delete-project', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks', 'open-mail'])
-
-// ========== 搜索框 ==========
-const searchInputRef = ref(null)
-function focusSearch() { searchInputRef.value?.focus() }
-function onSearchFocus() { emit('open-search') }
-function onSearchBlur() { searchInputRef.value?.blur() }
 
 // ========== 创建项目 ==========
 // 项目名不可编辑：只能来自所选文件夹的名字，避免用户手改后跟已有项目撞名、
@@ -983,41 +960,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 }
 .smc-nav-item.primary .iconify { color: var(--app-accent); }
 
-/* ===== Search ===== */
-.smc-search-bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 10px 6px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
-  cursor: text;
-  transition: background .16s ease;
-}
-.smc-search-bar:focus-within {
-  background: color-mix(in srgb, var(--app-text, #202124), transparent 90%);
-}
-.smc-search-icon {
-  flex: 0 0 auto;
-  color: var(--app-text-faint);
-}
-.smc-search-input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--app-text);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1;
-}
-.smc-search-input::placeholder {
-  color: var(--app-text-faint);
-}
-
 /* ===== Section labels ===== */
 .smc-section { flex-shrink: 0; }
 .smc-section-label {
@@ -1216,11 +1158,24 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   overflow-x: hidden;
   min-height: 0;
   padding: 2px 6px 10px;
-  /* 隐藏滚动条 */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  /* 紧贴右缘的半透明细滚轴：内容较多时才出现，滚动中更容易抓取。 */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent, #c96442), transparent 48%) transparent;
+  scrollbar-gutter: stable;
 }
-.smc-session-area::-webkit-scrollbar { display: none; }
+.smc-session-area::-webkit-scrollbar { width: 8px; }
+.smc-session-area::-webkit-scrollbar-track { margin: 8px 0; background: transparent; }
+.smc-session-area::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-accent, #c96442), transparent 55%);
+  background-clip: padding-box;
+}
+.smc-session-area::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent, #c96442), transparent 26%);
+  background-clip: padding-box;
+}
 
 /* ===== Session row ===== */
 .smc-session-row {

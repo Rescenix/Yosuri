@@ -2893,8 +2893,14 @@ min-height: 90px !important;
   width: 100%;
   box-sizing: border-box;
 }
+.gem-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
 .gem-sidebar.collapsed .gem-top { justify-content: center; padding: 10px 0 4px; }
-/* 品牌容器：图标 + 文字横向排列 */
+/* 品牌容器：文字横向排列 */
 .gem-brand-wrap {
   display: flex;
   align-items: center;
@@ -2911,41 +2917,17 @@ min-height: 90px !important;
   white-space: nowrap;
   line-height: 1;
 }
-/* 折叠态：顶部默认只露出主题色 logo，hover 才原地换成折叠/展开按钮（仿 Gemini）。
-   两个按钮叠在同一位置做交叉淡入淡出，所以 gem-top 需要定位上下文 + 固定高度。 */
+/* 折叠态：星星入口已移除，保留稳定可见的展开按钮。 */
 .gem-sidebar.collapsed .gem-top {
   position: relative;
   height: 40px;
 }
-.gem-sidebar.collapsed .gem-home,
 .gem-sidebar.collapsed .gem-collapse {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  transition: opacity 0.15s ease, background 0.12s ease, color 0.12s ease;
-}
-.gem-sidebar.collapsed .gem-home {
-  color: var(--app-accent);
-}
-/* 展开态：首页 icon 也显示主题色 */
-.gem-sidebar:not(.collapsed) .gem-home {
-  color: var(--app-accent);
-}
-.gem-sidebar.collapsed .gem-home:hover {
-  background: transparent;
-}
-.gem-sidebar.collapsed .gem-top:hover .gem-home {
-  opacity: 0;
-  pointer-events: none;
-}
-.gem-sidebar.collapsed .gem-collapse {
-  opacity: 0;
-  pointer-events: none;
-}
-.gem-sidebar.collapsed .gem-top:hover .gem-collapse {
-  opacity: 1;
-  pointer-events: auto;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .gem-icon-btn {
   display: inline-flex;

@@ -513,6 +513,11 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
         es.addEventListener('flow_error', e => {
             const d = JSON.parse(e.data)
             appendText('intent', `\n\n⚠️ ${d.message}`)
+            // 401/403/404 的自动发现模型已在后端淘汰。立刻刷新下拉，避免用户
+            // 继续看到并再次选中“列得出、但实际不能用”的模型。
+            if (/无权访问|已下架|已从可用列表移除|HTTP (401|403|404)/.test(d.message || '')) {
+                window.dispatchEvent(new Event('model-config-changed'))
+            }
             // 后端通常紧随其后发送 workflow_done；这里先收尾，避免网络在两事件之间
             // 断开时把“生成预览”永远留在界面上。
             settlePendingTools('error', d.message || '工作流已中断')

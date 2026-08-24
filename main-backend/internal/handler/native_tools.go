@@ -99,6 +99,13 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"image_base64": {Type: "string", Description: "可选，图片 base64"},
 			"question":     {Type: "string", Description: "希望视觉模型回答的问题"},
 		}, nil),
+		nativeTool("image_generate", "生成一张图片（免费、无需 API key，Go 侧直连，不依赖 MCP）。prompt 用英文描述画面：主体、动作、场景、光线、画风。出图后直接显示在对话里，同时落盘本地。", map[string]core.ToolProperty{
+			"prompt":   {Type: "string", Description: "英文画面描述，越具体越好；不要要求画面里出现文字"},
+			"negative": {Type: "string", Description: "可选，不希望出现的元素"},
+			"width":    {Type: "integer", Description: "宽度，默认 1024，范围 256-1536"},
+			"height":   {Type: "integer", Description: "高度，默认 1024，范围 256-1536"},
+			"seed":     {Type: "integer", Description: "可选随机种子；同 seed + 同 prompt 出图稳定，用于保持角色一致"},
+		}, []string{"prompt"}),
 		nativeTool("memory_search", "搜索本地长期记忆中的相关事实。", map[string]core.ToolProperty{
 			"query": {Type: "string", Description: "检索问题或关键词"},
 		}, []string{"query"}),
@@ -192,6 +199,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callFirecrawlSearch(ctx, argsJSON)
 	case "view_image":
 		return callNativeViewImage(ctx, argsJSON)
+	case "image_generate":
+		return callNativeImageGenerate(ctx, argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
 		"workdir_read", "workdir_write", "workdir_append":
 		return callNativeMemoryTool(name, argsJSON)

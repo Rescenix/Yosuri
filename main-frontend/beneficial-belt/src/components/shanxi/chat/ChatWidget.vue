@@ -62,15 +62,23 @@
             </div>
           </Transition>
 
-          <!-- 顶部：品牌标识 + 折叠toggle -->
+          <!-- 顶部：品牌标识；搜索与定时任务收进右上角，和 Codex 侧栏保持一致 -->
                     <div class="gem-top">
                                 <div class="gem-brand-wrap">
-                                  <a href="/" class="gem-icon-btn gem-home" title="首页">
-                                    <Icon icon="majesticons:shooting-star-line" width="20" />
-                                  </a>
                                   <span v-if="sidebarOpen" class="gem-brand-text">Rescene</span>
                                 </div>
-                                <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'">
+                                <div v-if="sidebarOpen" class="gem-top-actions">
+                                  <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话" aria-label="搜索对话">
+                                    <Icon icon="mdi:magnify" width="18" />
+                                  </button>
+                                  <button class="gem-icon-btn" @click="showScheduledTaskManager = true" title="定时任务" aria-label="定时任务">
+                                    <Icon icon="mdi:clock-outline" width="18" />
+                                  </button>
+                                  <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'" aria-label="折叠边栏">
+                                    <Icon icon="lucide:sidebar" width="18" />
+                                  </button>
+                                </div>
+                                <button v-else class="gem-icon-btn gem-collapse" @click="toggleSidebar" title="打开边栏" aria-label="打开边栏">
                                   <Icon icon="lucide:sidebar" width="18" />
                                 </button>
                               </div>

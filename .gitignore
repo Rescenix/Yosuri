@@ -4,6 +4,8 @@
 !runtime/chromium/README.md
 !runtime/chromium/RELEASE.json
 # agent / AI 工具配置（不进仓库）
+# CLAUDE.md 含发布凭证路径/内部部署拓扑，只本地生效，不进仓库（不管仓库公开与否）
+/CLAUDE.md
 # Go 构建缓存
 # IDE
 # Python 缓存

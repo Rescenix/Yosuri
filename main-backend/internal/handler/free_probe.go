@@ -356,6 +356,9 @@ func probeAutoDiscovered(wg *sync.WaitGroup) {
 			if catalogHasModel(m.ID, p.Endpoint) {
 				continue
 			}
+			if !isFreePoolDiscoveryEligible(p.Endpoint, m.ID) {
+				continue
+			}
 			snap = append(snap, freeModelView{
 				FreeModelDef: FreeModelDef{
 					ID:       "auto_" + sanitizeID(p.Vendor) + "_" + hexEncode(m.ID),

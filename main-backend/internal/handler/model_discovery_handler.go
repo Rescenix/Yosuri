@@ -242,6 +242,17 @@ func catalogHasModel(upstreamID, endpoint string) bool {
 	return false
 }
 
+// isFreePoolDiscoveryEligible 判定“列出来的模型”是否有资格作为公益免费池候选。
+// 发现接口不是价格/权限接口；特别是免 key 网关可能把商业订阅模型一起返回。
+// 对这类有公开免费档命名契约的网关，只接受明确的免费后缀，避免把顶级付费模型
+// 包装成免费可选项。其他提供方仍保留自动发现，随后由真实调用和探活自愈。
+func isFreePoolDiscoveryEligible(endpoint, model string) bool {
+	if endpoint == "https://opencode.ai/zen/v1" {
+		return strings.HasSuffix(strings.ToLower(strings.TrimSpace(model)), "-free")
+	}
+	return true
+}
+
 // discoveredFreeModels 把自动发现结果转成 free_models 视图条目（auto_ 前缀 ID，
 // 前端直接分组显示，api_key_set=true 保证进下拉）。
 func discoveredFreeModels(userKey string) []freeModelView {
@@ -252,6 +263,15 @@ func discoveredFreeModels(userKey string) []freeModelView {
 	for _, p := range discCache {
 		for _, m := range p.Models {
 			if catalogHasModel(m.ID, p.Endpoint) {
+				continue
+			}
+			if !isFreePoolDiscoveryEligible(p.Endpoint, m.ID) {
+				continue
+			}
+			// /v1/models 只能证明模型名存在，不能证明当前这把 key 有调用权限。
+			// 已由真实请求/探活确认无权访问的自动发现项必须从下拉中消失，
+			// 不能让用户反复选到同一个必挂模型。
+			if isAutoModelDisabled(p.Endpoint, m.ID) {
 				continue
 			}
 			id := "auto_" + sanitizeID(p.Vendor) + "_" + hexEncode(m.ID)

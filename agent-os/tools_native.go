@@ -195,6 +195,8 @@ func callNativeFileTool(name, argsJSON string) (ToolResult, error) {
 			path = filepath.Join(cwd, path)
 		}
 		content := m["content"]
+		// Agent 的 [TOOL:...] 协议中 \n 是字面量，需还原为真实换行
+		content = strings.ReplaceAll(content, "\\n", "\n")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return ToolResult{}, err
 		}
@@ -263,6 +265,7 @@ func callNativeFileTool(name, argsJSON string) (ToolResult, error) {
 }
 
 // callNativeCommand 执行系统命令
+// Windows: 写临时 .bat 执行，避免 cmd /c 的引号嵌套问题
 func callNativeCommand(ctx context.Context, argsJSON string) (ToolResult, error) {
 	m, err := argsMap(argsJSON)
 	if err != nil {
@@ -283,15 +286,21 @@ func callNativeCommand(ctx context.Context, argsJSON string) (ToolResult, error)
 	cctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	var shell, flag string
+	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		shell = "cmd"
-		flag = "/c"
+		// cmd /c 对 Python -c 等复杂引号嵌套支持很差，写临时 .bat 执行
+		tmpDir := os.TempDir()
+		batFile := filepath.Join(tmpDir, fmt.Sprintf("rescene_cmd_%d.bat", time.Now().UnixNano()))
+		batContent := "@echo off\r\n" + cmdStr + "\r\n"
+		if err := os.WriteFile(batFile, []byte(batContent), 0o644); err != nil {
+			cmd = exec.CommandContext(cctx, "cmd", "/c", cmdStr)
+		} else {
+			defer os.Remove(batFile)
+			cmd = exec.CommandContext(cctx, batFile)
+		}
 	} else {
-		shell = "/bin/sh"
-		flag = "-c"
+		cmd = exec.CommandContext(cctx, "/bin/sh", "-c", cmdStr)
 	}
-	cmd := exec.CommandContext(cctx, shell, flag, cmdStr)
 	out, err := cmd.CombinedOutput()
 	elapsed := time.Since(time.Now().Add(-time.Since(time.Now())))
 

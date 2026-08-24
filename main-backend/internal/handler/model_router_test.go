@@ -89,6 +89,51 @@ func TestStreamRouterRoundEmptyChainMessage(t *testing.T) {
 	}
 }
 
+func TestStreamRouterRoundExactModelRateLimitIsNotGlobalFailure(t *testing.T) {
+	limited := fakeBackend(t, http.StatusTooManyRequests, `{"error":{"message":"rate limited"}}`)
+	defer limited.Close()
+
+	r := &WorkflowRunner{}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/code/workflow", nil)
+	_, _, _, _, _, err := r.streamRouterRound(c, []RouterBackend{{
+		ID: "deepseek_v4_pro", Name: "DeepSeek V4 Pro", BaseURL: limited.URL, Model: "deepseek-v4-pro", Keyless: true,
+	}}, []map[string]any{{"role": "user", "content": "hi"}}, nil, "", 0, nil)
+	if err == nil {
+		t.Fatal("限流应返回错误")
+	}
+	if !strings.Contains(err.Error(), "DeepSeek V4 Pro") || !strings.Contains(err.Error(), "限流") {
+		t.Fatalf("手选模型限流应点名模型并说明限流，实得: %v", err)
+	}
+	if strings.Contains(err.Error(), "所有模型源") {
+		t.Fatalf("单模型限流不能误报所有模型不可用: %v", err)
+	}
+	if !strings.Contains(w.Body.String(), "正在限流") {
+		t.Fatalf("限流期间应先推送可见状态，SSE 实得: %s", w.Body.String())
+	}
+}
+
+func TestExactModelUnavailableErrorExplainsAccessFailure(t *testing.T) {
+	err := exactModelUnavailableError(RouterBackend{Name: "Claude Fable 5（自动发现）"}, []string{"Claude Fable 5（自动发现）: HTTP 401"})
+	if strings.Contains(err.Error(), "所有模型源") || !strings.Contains(err.Error(), "已从可用列表移除") {
+		t.Fatalf("401 应说明该模型不可用并移除，实得: %v", err)
+	}
+}
+
+func TestFreePoolDiscoveryEligibilityDoesNotExposeZenCommercialModels(t *testing.T) {
+	const zen = "https://opencode.ai/zen/v1"
+	if isFreePoolDiscoveryEligible(zen, "claude-fable-5") {
+		t.Fatal("Zen 的商业模型不能因出现在 /models 就进入免费池")
+	}
+	if !isFreePoolDiscoveryEligible(zen, "mimo-v2.5-free") {
+		t.Fatal("Zen 明确免费档应保留自动发现资格")
+	}
+	if !isFreePoolDiscoveryEligible("https://example.com/v1", "claude-fable-5") {
+		t.Fatal("其他提供方应继续走通用自动发现和实际探活")
+	}
+}
+
 func TestResolveBackendsExactFreeModel(t *testing.T) {
 	// 给定免费池里一个有环境变量的模型 ID，应精确返回单 backend 且带能力元数据
 	b := resolveExact("nonexistent_user_for_test", "free_google_gemini_2_5_flash")

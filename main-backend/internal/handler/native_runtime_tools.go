@@ -41,7 +41,18 @@ func callNativeCommand(parent context.Context, argsJSON string) (nativeToolResul
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = hiddenCommandContext(ctx, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", args.Command)
+		// PowerShell -Command 对复杂引号嵌套支持差（&&、内层引号直接炸），
+		// 写临时 .bat 执行（与 agent-os/tools_native.go 同款修复），
+		// 仍走 hiddenCommandContext 保留 CREATE_NO_WINDOW，防黑窗闪现复发。
+		tmpDir := os.TempDir()
+		batFile := filepath.Join(tmpDir, fmt.Sprintf("rescene_cmd_%d.bat", time.Now().UnixNano()))
+		batContent := "@echo off\r\n" + args.Command + "\r\n"
+		if err := os.WriteFile(batFile, []byte(batContent), 0o644); err != nil {
+			cmd = hiddenCommandContext(ctx, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", args.Command)
+		} else {
+			defer os.Remove(batFile)
+			cmd = hiddenCommandContext(ctx, batFile)
+		}
 	} else {
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-lc", args.Command)
 	}

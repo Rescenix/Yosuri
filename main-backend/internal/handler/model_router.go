@@ -910,6 +910,9 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		return "", nil, 0, 0, nil, fmt.Errorf("没有可用的模型源：请在设置面板填入至少一个 API Key，或配置环境变量")
 	}
 	var tried []string
+	// 精确选中的模型只有一个候选。它失败时绝不能套用“所有模型源不可用”，
+	// 那会让用户误以为整套配置坏了，也掩盖 429 限流和 401 无权限的真正原因。
+	exactModel := len(backends) == 1
 	for _, b := range backends {
 		if c.Request.Context().Err() != nil {
 			return "", nil, 0, 0, nil, c.Request.Context().Err()
@@ -999,6 +1002,11 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 				reason = "内容审核拦截(HTTP 451)：模型服务商封了这段内容——联网搜到的新闻敏感时常见。换不审的源（如 Zen 免 key）或换个话题再试"
 			}
 			tried = append(tried, fmt.Sprintf("%s: %s", b.Name, reason))
+			if resp.StatusCode == http.StatusTooManyRequests {
+				writeCodeSSE(c, "flow_notice", map[string]any{
+					"message": fmt.Sprintf("%s 正在限流，%s", b.Name, map[bool]string{true: "请稍候重试或切换其他模型", false: "正在切换其他模型源"}[exactModel]),
+				})
+			}
 			fmt.Printf("🔀 [路由] %s HTTP %d，秒切下一个: %s\n", b.Name, resp.StatusCode, truncateChars(string(raw), 120))
 			continue
 		}
@@ -1031,7 +1039,23 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		usedBackend := b
 		return content, calls, inTok, outTok, &usedBackend, nil
 	}
+	if exactModel {
+		return "", nil, 0, 0, nil, exactModelUnavailableError(backends[0], tried)
+	}
 	return "", nil, 0, 0, nil, fmt.Errorf("所有模型源不可用：%s", strings.Join(tried, "；"))
+}
+
+// exactModelUnavailableError 将“手选模型失败”变成可行动的提示，而不是误报全局故障。
+// 401/403/404 在请求时已被淘汰；前端收到此消息后会刷新下拉，用户可直接换模型。
+func exactModelUnavailableError(b RouterBackend, tried []string) error {
+	reason := strings.Join(tried, "；")
+	if strings.Contains(reason, "HTTP 429") {
+		return fmt.Errorf("模型 %s 正在限流（HTTP 429）：请稍候重试，或在模型菜单切换其他模型", b.Name)
+	}
+	if strings.Contains(reason, "HTTP 401") || strings.Contains(reason, "HTTP 403") || strings.Contains(reason, "HTTP 404") {
+		return fmt.Errorf("模型 %s 当前无权访问或已下架（%s）：已从可用列表移除，请切换其他模型", b.Name, reason)
+	}
+	return fmt.Errorf("模型 %s 本次不可用（%s）：请稍后重试或切换其他模型", b.Name, reason)
 }
 
 // censorshipNoteFromTried 检查本轮 failover 过程中是否有源因内容审核（451/censorship）

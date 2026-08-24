@@ -1,37 +1,67 @@
 <template>
-  <!-- 底部竖排圆胶囊工具条（纯图标，样式对齐聊天界面工具条 icon-pill） -->
-  <nav class="app-tool-rail">
-    <router-link to="/chat" class="app-tool-btn" title="编码" active-class="active">
-      <Icon icon="mdi:code-tags" width="16" />
-    </router-link>
-    <router-link to="/company" class="app-tool-btn" title="Agent 公司" active-class="active">
-      <Icon icon="mdi:domain" width="16" />
-    </router-link>
-    <router-link to="/sites" class="app-tool-btn" title="站点：发布并分享 Agent 作品" active-class="active">
-      <Icon icon="mdi:web" width="16" />
-    </router-link>
-    <router-link to="/publish" class="app-tool-btn" title="网文创作与发布" active-class="active">
-          <Icon icon="mdi:book-open-page-variant-outline" width="16" />
-        </router-link>
-        <router-link to="/comic" class="app-tool-btn" title="漫画创作" active-class="active">
-                  <Icon icon="mdi:brush" width="16" />
-                </router-link>
-        <router-link to="/studio" class="app-tool-btn" title="视频剪辑" active-class="active">
-              <Icon icon="mdi:movie-edit-outline" width="16" />
-            </router-link>
-            <!-- DHS 安全插件生态：鲸鱼入口挂在底部工具条右端（2026-08-18 自输入工具栏移入） -->
-            <button class="dhs-whale-shortcut" type="button" title="DHS 安全插件生态" aria-label="打开 DHS 安全插件生态" @click="showDHSCommunity = true">
-              <Icon icon="simple-icons:deepseek" width="16" />
-              <span class="dhs-whale-shield"><Icon icon="mdi:shield-check" width="9" /></span>
-            </button>
-          </nav>
-          <!-- 左下角：聚合 API 快捷入口（2026-08-18，右移避让） -->
-          <nav class="app-tool-rail-left">
-            <button class="app-tool-btn agg-api-shortcut" type="button" title="聚合 API" aria-label="打开聚合 API" @click="showAggApi = true">
-              <Icon icon="mdi:api" width="16" />聚合 API
-            </button>
-          </nav>
-          <SettingsModal v-if="showAggApi" default-tab="aggapi" @close="showAggApi = false" />
+  <!-- 可拖动的折角导航：默认 ┐ 形，避开输入区并压缩右下角占位。 -->
+  <nav
+    class="app-tool-rail"
+    :class="[`is-${railLayout}`, { dragging: railDragging, compact: railItems.length <= 4 }]"
+    :style="railPositionStyle"
+  >
+    <button
+      v-for="item in railItems"
+      :key="item.id"
+      class="app-tool-btn"
+      :class="[{ active: item.to === route.path, 'dhs-whale-shortcut': item.id === 'dhs', 'agg-api-shortcut': item.id === 'agg' }, { 'is-dragging-item': railItemDragging === item.id }]"
+      type="button"
+      :title="item.label"
+      :aria-label="item.label"
+      draggable="true"
+      @click="activateRailItem(item)"
+      @dragstart="onRailItemDragStart($event, item.id)"
+      @dragover.prevent
+      @drop.prevent="onRailItemDrop(item.id)"
+      @dragend="onRailItemDragEnd"
+    >
+      <Icon :icon="item.icon" width="16" />
+      <span v-if="item.id === 'dhs'" class="dhs-whale-shield"><Icon icon="mdi:shield-check" width="9" /></span>
+    </button>
+    <button class="app-tool-rail-edit" type="button" title="编辑导航" aria-label="编辑导航" @click="railEditorOpen = !railEditorOpen">
+      <Icon icon="mdi:pencil-outline" width="15" />
+    </button>
+    <button
+      class="app-tool-rail-grip"
+      type="button"
+      title="拖动导航"
+      aria-label="拖动导航"
+      @pointerdown.stop.prevent="onRailGripPointerDown"
+    >
+      <Icon icon="mdi:drag-vertical" width="15" />
+    </button>
+  </nav>
+  <div v-if="railEditorOpen" class="rail-editor" @click.stop>
+    <div class="rail-editor-head"><strong>编辑导航</strong><button type="button" title="关闭" @click="railEditorOpen = false"><Icon icon="mdi:close" width="15" /></button></div>
+    <p>直接拖动图标可调整顺序。</p>
+    <div class="rail-editor-list">
+      <div v-for="item in railItems" :key="item.id" class="rail-editor-item">
+        <span><Icon :icon="item.icon" width="15" />{{ item.label }}</span>
+        <button type="button" title="移除" @click="removeRailItem(item.id)"><Icon icon="mdi:close" width="15" /></button>
+      </div>
+    </div>
+    <div v-if="availableRailItems.length" class="rail-editor-add">
+      <span>添加入口</span>
+      <button v-for="item in availableRailItems" :key="item.id" type="button" :title="`添加${item.label}`" @click="addRailItem(item.id)"><Icon :icon="item.icon" width="15" />{{ item.label }}</button>
+    </div>
+  </div>
+  <SettingsModal v-if="showAggApi" default-tab="aggapi" @close="showAggApi = false" />
+  <!-- Tab 页面右上角的明确出口；不依赖用户注意到右下导航。 -->
+  <button
+    v-if="route.path !== '/chat'"
+    class="app-page-back"
+    type="button"
+    title="返回聊天"
+    @click="returnToChat"
+  >
+    <Icon icon="mdi:arrow-left" width="17" />
+    <span>返回聊天</span>
+  </button>
           <router-view />
           <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
           <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
@@ -56,7 +86,8 @@
   </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
@@ -65,12 +96,107 @@ import DHSCommunityModal from './components/shanxi/chat/DHSCommunityModal.vue'
 import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
 
 const auth = useAuth()
+const route = useRoute()
+const router = useRouter()
 const showUpdate = ref(false)
 const updateInfo = ref(null)
 // DHS 安全插件生态：鲸鱼入口从输入工具栏移到底部工具条右端（2026-08-18）
 const showDHSCommunity = ref(false)
-// 左下角聚合 API 快捷入口：点开直接跳到设置弹窗的「聚合 API」tab（2026-08-18）
+// 聚合 API 快捷入口：点开直接跳到设置弹窗的「聚合 API」tab。
 const showAggApi = ref(false)
+const RAIL_POSITION_KEY = 'app_tool_rail_position_v1'
+const RAIL_ITEMS_KEY = 'app_tool_rail_items_v1'
+const railItemDefinitions = [
+  { id: 'chat', label: '编码', icon: 'mdi:code-tags', to: '/chat' },
+  { id: 'company', label: 'Agent 公司', icon: 'mdi:domain', to: '/company' },
+  { id: 'sites', label: '站点', icon: 'mdi:web', to: '/sites' },
+  { id: 'publish', label: '网文创作', icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
+  { id: 'comic', label: '漫画创作', icon: 'mdi:brush', to: '/comic' },
+  { id: 'studio', label: '视频剪辑', icon: 'mdi:movie-edit-outline', to: '/studio' },
+  { id: 'dhs', label: 'DHS 安全插件生态', icon: 'simple-icons:deepseek' },
+  { id: 'agg', label: '聚合 API', icon: 'mdi:api' }
+]
+const railItems = ref([...railItemDefinitions])
+const railEditorOpen = ref(false)
+const railItemDragging = ref('')
+const availableRailItems = computed(() => railItemDefinitions.filter(option => !railItems.value.some(item => item.id === option.id)))
+const railLayout = ref('elbow')
+const railPosition = ref(null)
+const railDragging = ref(false)
+let railDrag = null
+const railPositionStyle = computed(() => railPosition.value
+  ? { left: `${railPosition.value.x}px`, top: `${railPosition.value.y}px`, right: 'auto', bottom: 'auto' }
+  : {})
+function returnToChat() {
+  router.push('/chat')
+}
+function saveRailItems() {
+  localStorage.setItem(RAIL_ITEMS_KEY, JSON.stringify(railItems.value.map(item => item.id)))
+}
+function activateRailItem(item) {
+  if (item.to) router.push(item.to)
+  else if (item.id === 'dhs') showDHSCommunity.value = true
+  else if (item.id === 'agg') showAggApi.value = true
+}
+function onRailItemDragStart(event, id) {
+  railItemDragging.value = id
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', id)
+}
+function onRailItemDrop(targetId) {
+  const sourceId = railItemDragging.value
+  if (!sourceId || sourceId === targetId) return
+  const sourceIndex = railItems.value.findIndex(item => item.id === sourceId)
+  const targetIndex = railItems.value.findIndex(item => item.id === targetId)
+  if (sourceIndex < 0 || targetIndex < 0) return
+  const next = [...railItems.value]
+  const [moved] = next.splice(sourceIndex, 1)
+  next.splice(targetIndex, 0, moved)
+  railItems.value = next
+  saveRailItems()
+}
+function onRailItemDragEnd() { railItemDragging.value = '' }
+function removeRailItem(id) {
+  railItems.value = railItems.value.filter(item => item.id !== id)
+  saveRailItems()
+}
+function addRailItem(id) {
+  const item = railItemDefinitions.find(option => option.id === id)
+  if (!item || railItems.value.some(current => current.id === id)) return
+  railItems.value = [...railItems.value, item]
+  saveRailItems()
+}
+function onRailGripPointerDown(event) {
+  const rail = event.currentTarget.closest('.app-tool-rail')
+  if (!rail) return
+  const rect = rail.getBoundingClientRect()
+  railDrag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: rect.left, y: rect.top, moved: false }
+  railDragging.value = true
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+  window.addEventListener('pointermove', onRailPointerMove)
+  window.addEventListener('pointerup', onRailPointerUp, { once: true })
+}
+function onRailPointerMove(event) {
+  if (!railDrag || event.pointerId !== railDrag.pointerId) return
+  const dx = event.clientX - railDrag.startX
+  const dy = event.clientY - railDrag.startY
+  if (Math.abs(dx) + Math.abs(dy) > 4) railDrag.moved = true
+  const rail = document.querySelector('.app-tool-rail')
+  const width = rail?.offsetWidth || 48
+  const height = rail?.offsetHeight || 48
+  railPosition.value = {
+    x: Math.max(8, Math.min(window.innerWidth - width - 8, railDrag.x + dx)),
+    y: Math.max(8, Math.min(window.innerHeight - height - 8, railDrag.y + dy))
+  }
+}
+function onRailPointerUp(event) {
+  if (!railDrag || event.pointerId !== railDrag.pointerId) return
+  window.removeEventListener('pointermove', onRailPointerMove)
+  railDragging.value = false
+  const moved = railDrag.moved
+  railDrag = null
+  if (moved && railPosition.value) localStorage.setItem(RAIL_POSITION_KEY, JSON.stringify(railPosition.value))
+}
 // 顶部轻量更新横幅：检测到新安装包已就绪时显示 15s，点击才弹全窗（2026-08-17 用户定稿）
 const showUpdateBanner = ref(false)
 let updateBannerTimer = null
@@ -169,10 +295,25 @@ onBeforeUnmount(() => {
   if (updatedBannerTimer) clearTimeout(updatedBannerTimer)
   if (welcomeBannerTimer) clearTimeout(welcomeBannerTimer)
   if (updateCheckTimer) clearInterval(updateCheckTimer)
+  window.removeEventListener('pointermove', onRailPointerMove)
   window.removeEventListener('auth-welcome', onAuthWelcome)
 })
 
 onMounted(() => {
+  try {
+    // 旧版本会把一次轻点拖拽柄误存为竖排；统一迁回稳定的默认折角布局。
+    railLayout.value = 'elbow'
+    const savedPosition = JSON.parse(localStorage.getItem(RAIL_POSITION_KEY) || 'null')
+    if (savedPosition && Number.isFinite(savedPosition.x) && Number.isFinite(savedPosition.y)) railPosition.value = savedPosition
+    const savedItemIDs = JSON.parse(localStorage.getItem(RAIL_ITEMS_KEY) || 'null')
+    if (Array.isArray(savedItemIDs)) {
+      const seen = new Set()
+      railItems.value = savedItemIDs
+        .filter(id => typeof id === 'string' && !seen.has(id) && seen.add(id))
+        .map(id => railItemDefinitions.find(item => item.id === id))
+        .filter(Boolean)
+    }
+  } catch { /* 本地偏好不可用时使用默认折角布局 */ }
   const params = new URLSearchParams(window.location.search)
   const token = params.get('token')
   if (token) {
@@ -282,31 +423,47 @@ onMounted(async () => {
   padding: 0 0 0 4px;
 }
 .updated-banner-close:hover { color: var(--app-text); }
-/* 底部横排圆胶囊工具条（纯图标，2026-08-13 用户定稿：
-   照搬聊天界面终端预览工具条 .terminal-tabs-bar 样式：容器 surface-2 底 + 边框，
-   按钮无边框透明，hover/active 背景变化；横排，右下角） */
+/* 默认 ┐ 折角导航：底边横排 + 右侧上折，既避开聊天输入区，也保留足够命中面积。 */
 .app-tool-rail {
   position: fixed;
   right: 30px;
   bottom: 18px;
   z-index: 9999;
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: repeat(6, 30px);
+  grid-template-rows: repeat(2, 30px);
   align-items: center;
   gap: 2px;
   padding: 4px;
   background: var(--app-surface-2);
   border: 1px solid var(--app-border);
-  border-radius: 999px;
+  border-radius: 16px 16px 5px 16px;
   box-shadow: 0 4px 16px rgba(15,23,42,.08);
+  touch-action: none;
+  transition: border-radius .2s ease, box-shadow .2s ease;
+}
+.app-tool-rail.dragging { cursor: grabbing; box-shadow: 0 12px 28px rgba(15,23,42,.18); }
+.app-tool-rail.is-elbow > .app-tool-btn:nth-child(-n+6) { grid-row: 2; }
+.app-tool-rail.is-elbow > .app-tool-btn:nth-child(7) { grid-column: 6; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-btn:nth-child(8) { grid-column: 5; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-rail-edit { grid-column: 4; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-rail-grip { grid-column: 3; grid-row: 1; }
+.app-tool-rail.is-elbow.compact {
+  display: flex;
+  width: max-content;
+  grid-template-columns: none;
+  grid-template-rows: none;
+  border-radius: 999px;
 }
 .app-tool-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  height: 26px;
-  padding: 0 10px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 9px;
   border: none;
   background: transparent;
   color: var(--app-text-faint);
@@ -317,27 +474,72 @@ onMounted(async () => {
 }
 .app-tool-btn:hover { background: var(--app-surface-3); color: var(--app-text-soft); }
 .app-tool-btn.active { background: var(--app-surface); color: var(--app-text); font-weight: 600; }
-/* 左下角聚合 API 快捷入口：与右下角工具条同款胶囊，镜像到左侧（2026-08-18 右移避让） */
-.app-tool-rail-left {
-  position: fixed;
-  left: 150px;
-  bottom: 18px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 2px;
-  padding: 4px;
-  background: var(--app-surface-2);
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(15,23,42,.08);
-}
+.app-tool-btn.is-dragging-item { opacity: .42; transform: scale(.92); }
 .agg-api-shortcut {
   color: var(--app-accent);
   font-weight: 600;
 }
 .agg-api-shortcut:hover { background: var(--app-surface-3); color: var(--app-accent); }
+.app-tool-rail-grip {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  color: var(--app-text-faint);
+  background: transparent;
+  cursor: grab;
+}
+.app-tool-rail-grip:hover { color: var(--app-accent); background: var(--app-surface-3); }
+.app-tool-rail.dragging .app-tool-rail-grip { cursor: grabbing; }
+.app-tool-rail-edit {
+  display: grid; width: 30px; height: 30px; place-items: center; padding: 0;
+  border: 0; border-radius: 9px; color: var(--app-text-faint); background: transparent; cursor: pointer;
+}
+.app-tool-rail-edit:hover { color: var(--app-accent); background: var(--app-surface-3); }
+.rail-editor {
+  position: fixed; right: 30px; bottom: 96px; z-index: 10000; width: 238px; padding: 12px;
+  border: 1px solid var(--app-border); border-radius: 14px; color: var(--app-text); background: var(--app-surface);
+  box-shadow: 0 18px 42px rgba(15,23,42,.18);
+}
+.rail-editor-head { display: flex; align-items: center; justify-content: space-between; }
+.rail-editor-head strong { font-size: 13px; }
+.rail-editor-head button,.rail-editor-item button { display: grid; width: 26px; height: 26px; place-items: center; padding: 0; border: 0; border-radius: 7px; color: var(--app-text-faint); background: transparent; cursor: pointer; }
+.rail-editor-head button:hover,.rail-editor-item button:hover { color: #dc2626; background: rgba(220,38,38,.08); }
+.rail-editor > p { margin: 6px 0 10px; color: var(--app-text-faint); font-size: 11px; }
+.rail-editor-list { display: grid; gap: 3px; max-height: 190px; overflow: auto; }
+.rail-editor-item { display: flex; align-items: center; justify-content: space-between; min-height: 32px; padding-left: 8px; border-radius: 8px; background: var(--app-surface-2); font-size: 12px; }
+.rail-editor-item span { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.rail-editor-add { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--app-border); }
+.rail-editor-add > span { width: 100%; color: var(--app-text-faint); font-size: 11px; }
+.rail-editor-add button { display: inline-flex; align-items: center; gap: 4px; min-height: 27px; padding: 0 7px; border: 1px solid var(--app-border); border-radius: 7px; color: var(--app-text-soft); background: var(--app-surface); font: inherit; font-size: 11px; cursor: pointer; }
+.rail-editor-add button:hover { color: var(--app-accent); border-color: var(--app-accent); }
+.app-page-back {
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 9998;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--app-accent), transparent 62%);
+  border-radius: 10px;
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-surface, #fff), transparent 6%);
+  box-shadow: 0 6px 20px rgba(15,23,42,.10);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.app-page-back:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--app-accent), transparent 90%); box-shadow: 0 9px 24px rgba(15,23,42,.15); }
+.app-page-back:focus-visible { outline: 2px solid color-mix(in srgb, var(--app-accent), transparent 35%); outline-offset: 2px; }
 /* DHS 鲸鱼入口（自 chat-window.css 的 dhs-whale-shortcut，移入底部工具条右端后样式随附） */
 .dhs-whale-shortcut {
   position: relative;
@@ -385,7 +587,9 @@ html:has(.company-view)::-webkit-scrollbar-thumb:hover { background: linear-grad
 html:has(.publish-view)::-webkit-scrollbar-thumb:hover { background: linear-gradient(#c77f9d,#8883bf); }
 @media (max-width: 620px) {
   .app-tool-rail { right: 22px; bottom: 10px; padding: 3px; gap: 1px; }
-  .app-tool-btn { height: 24px; padding: 0 8px; }
-  .app-tool-rail-left { left: 130px; bottom: 10px; padding: 3px; }
+  .app-tool-rail.is-elbow { grid-template-columns: repeat(6, 26px); grid-template-rows: repeat(2, 26px); }
+  .app-tool-btn,.app-tool-rail-grip,.app-tool-rail-edit,.dhs-whale-shortcut { width: 26px; height: 26px; flex-basis: 26px; }
+  .app-page-back { top: 10px; right: 10px; min-height: 34px; padding: 0 10px; font-size: 12px; }
+  .rail-editor { right: 10px; bottom: 76px; width: min(238px, calc(100vw - 20px)); }
 }
 </style>
