@@ -724,32 +724,14 @@ func exposeOfficial() []aggExposedModel {
 		if !f.Keyless && !f.Local && !hasKey(f.ID, f.KeyEnv, entryByID, envKeys) {
 			continue
 		}
+		// 2026-08-26：免 key 提供方由官方探测基准 + 本地日级探活驱动。真死
+		// （确定性错误→signal 0）从列表隐藏；429/503 限流抖动降权保留（signal 1）。
+		// 需 key 条目未探活（signal=-1），不在此过滤内。
+		if f.Keyless && probeSignalByDef(f) == 0 {
+			continue
+		}
 		out = append(out, aggExposedModel{ID: f.ID, Vendor: f.Vendor, Name: f.Name, Model: f.Model, Endpoint: f.Endpoint, Keyless: f.Keyless})
 		seen[f.ID] = true
-	}
-	for _, dm := range discoveredFreeModels("") {
-		if seen[dm.ID] {
-			continue
-		}
-		if catalogHasModel(dm.Model, dm.Endpoint) {
-			continue // 目录已有同 endpoint 同模型，不重复暴露
-		}
-		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
-			continue
-		}
-		if !isOfficialAllowed(dm.Model, dm.Vendor) {
-			continue
-		}
-		if !isWholeAccountFreeVendor(dm.Vendor) {
-			continue
-		}
-		id := autoReadableID(dm.ID)
-		if seen[id] {
-			continue
-		}
-		out = append(out, aggExposedModel{ID: id, Vendor: dm.Vendor, Name: dm.Model, Model: dm.Model, Endpoint: dm.Endpoint, Keyless: dm.Keyless})
-		seen[dm.ID] = true
-		seen[id] = true
 	}
 	{
 		for _, e := range entries {

@@ -16,7 +16,8 @@ function runDrag(onMove, onUp) {
 }
 
 export function useResizableWidth(widthRef, { min = 300, max = 720, edge = 'right', persistKey } = {}) {
-  const clamp = (n) => Math.min(max, Math.max(min, n))
+  const currentMax = () => typeof max === 'function' ? max() : max
+  const clamp = (n) => Math.min(currentMax(), Math.max(min, n))
 
   if (persistKey) {
     const saved = parseFloat(localStorage.getItem(persistKey))
@@ -39,6 +40,37 @@ export function useResizableWidth(widthRef, { min = 300, max = 720, edge = 'righ
       },
       () => {
         if (persistKey) localStorage.setItem(persistKey, String(widthRef.value))
+      }
+    )
+  }
+
+  return { startDrag }
+}
+
+export function useResizableHeight(heightRef, { min = 180, max = 560, edge = 'bottom', persistKey } = {}) {
+  const currentMax = () => typeof max === 'function' ? max() : max
+  const clamp = (n) => Math.min(currentMax(), Math.max(min, n))
+
+  if (persistKey) {
+    const saved = parseFloat(localStorage.getItem(persistKey))
+    if (!Number.isNaN(saved)) heightRef.value = clamp(saved)
+  } else {
+    heightRef.value = clamp(heightRef.value)
+  }
+
+  function startDrag(e) {
+    e.preventDefault()
+    const startY = e.clientY
+    const startHeight = heightRef.value
+    // edge:'top' 表示面板贴底、手柄在上边界：向上拖动时面板变高。
+    const dir = edge === 'bottom' ? 1 : -1
+
+    runDrag(
+      (moveEvent) => {
+        heightRef.value = clamp(startHeight + dir * (moveEvent.clientY - startY))
+      },
+      () => {
+        if (persistKey) localStorage.setItem(persistKey, String(heightRef.value))
       }
     )
   }

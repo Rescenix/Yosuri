@@ -26,7 +26,7 @@
           <span v-else class="flow-spacer"></span>
           <span class="flow-chevron" :class="{ open: thinkOpen[`single-${gIdx}`] ?? true }">›</span>
         </div>
-        <div v-if="thinkOpen[`single-${gIdx}`] ?? true" class="flow-detail">
+        <div v-if="thinkOpen[`single-${gIdx}`] ?? true" class="flow-detail flow-thinking-detail">
           <div class="flow-thinking-text">{{ group.block.text }}</div>
         </div>
       </div>
@@ -90,6 +90,25 @@
         <img :src="group.block.image" :alt="group.block.content || 'Agent 截图'" />
       </button>
 
+      <!-- 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式，默认展开可播） -->
+      <div v-else-if="group.type === 'video'" class="flow-video">
+        <div class="flow-video-head">
+          <Icon icon="mdi:video-outline" width="14" />
+          <span>生成视频</span>
+          <span v-if="group.block.size || group.block.seconds" class="flow-video-meta">
+            {{ group.block.size || '' }}<template v-if="group.block.size && group.block.seconds"> · </template>{{ group.block.seconds ? group.block.seconds + 's' : '' }}
+          </span>
+        </div>
+        <video
+          :src="group.block.url"
+          controls
+          playsinline
+          preload="metadata"
+          class="flow-video-player"
+        ></video>
+        <div v-if="group.block.caption" class="flow-video-caption">{{ group.block.caption }}</div>
+      </div>
+
       <!-- 记忆写入：单行彩虹反馈（不占卡片，直接铺在聊天流里） -->
       <div v-else-if="group.type === 'memory-saved'" class="flow-memory-saved">
         <span class="fms-scanline"></span>
@@ -133,7 +152,7 @@
                   <span v-else class="flow-spacer"></span>
                   <span class="flow-chevron" :class="{ open: thinkOpen[`${gIdx}-${i}`] ?? true }">›</span>
                 </div>
-                <div v-if="thinkOpen[`${gIdx}-${i}`] ?? true" class="flow-detail">
+                <div v-if="thinkOpen[`${gIdx}-${i}`] ?? true" class="flow-detail flow-thinking-detail">
                   <div class="flow-thinking-text">{{ b.text }}</div>
                 </div>
               </div>
@@ -268,6 +287,8 @@ const blockGroups = computed(() => {
         groups.push({ type: 'question', block: b })
       } else if (b.type === 'image') {
         groups.push({ type: 'image', block: b })
+      } else if (b.type === 'video') {
+        groups.push({ type: 'video', block: b })
       } else if (b.type === 'tool' && b.name === 'web_search') {
               // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
               groups.push({ type: 'search-tool', block: b })
@@ -925,6 +946,22 @@ function toolBodyText(b) {
   border-left: 2px solid var(--app-border);
   min-width: 0;
 }
+.flow-thinking-detail {
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-text-faint) 45%, transparent) transparent;
+}
+.flow-thinking-detail::-webkit-scrollbar { width: 6px; }
+.flow-thinking-detail::-webkit-scrollbar-track { background: transparent; }
+.flow-thinking-detail::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--app-text-faint) 45%, transparent);
+}
+.flow-thinking-detail::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-text-soft) 58%, transparent);
+}
 .flow-tool-detail { margin-top: 6px; }
 
 /* ---------- 首条回复前的「正在思考」扫描线（不可折叠，首字到即隐藏） ---------- */
@@ -1407,6 +1444,35 @@ function toolBodyText(b) {
   color: var(--app-text);
   word-break: break-word;
 }
+
+/* 生成视频内嵌块：带进度条播放器，同图片内嵌块模式 */
+.flow-video {
+  width: min(100%, 460px);
+  margin: 10px 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 16%, var(--app-border));
+  border-radius: 10px;
+  background: var(--app-surface-2);
+}
+.flow-video-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--app-text-soft);
+}
+.flow-video-head svg { color: var(--app-accent); }
+.flow-video-meta { margin-left: auto; font-size: 10.5px; font-weight: 400; color: var(--app-text-faint); }
+.flow-video-player {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  background: #000;
+}
+.flow-video-caption { padding: 6px 10px 8px; font-size: 11px; color: var(--app-text-soft); }
 
 /* 截图默认只占一行半的紧凑预览，不抢走聊天阅读节奏；点击后才展开全图。 */
 .flow-screenshot {

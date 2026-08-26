@@ -52,6 +52,8 @@
             <div class="settings-nav-label">体验与能力</div>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'safety' }" @click="activeTab = 'safety'; loadProtectedWorkspace()">
+              <Icon icon="mdi:shield-lock-outline" width="16" />安全</button>
             <div class="settings-tab-group">
               <button class="settings-tab" :class="{ on: activeTab === 'dhs' }" @click="activeTab = 'dhs'; loadDHS()">
                 <Icon icon="simple-icons:deepseek" width="16" />DHS
@@ -477,6 +479,10 @@
                                 </button>
                               </div>
                               <div v-if="aggHealthLoading" class="settings-loading">加载健康度...</div>
+                              <div v-else-if="aggHealthError" class="agg-health-error">
+                                ⚠️ Rescene 桌面应用未启动或当前 Agent 连接配置错误
+                                <div class="agg-health-error-sub">请确认 Rescene 桌面应用已运行、本地聚合端口未被占用；如刚改过配置，点右上角「刷新」重试。</div>
+                              </div>
                               <template v-else>
                                 <div v-if="!aggHealthModels.length" class="settings-empty">没有可展示的模型（聚合端口不暴露任何模型时为空）。</div>
                                 <template v-else>
@@ -511,7 +517,7 @@
                                       </span>
                                     </div>
                                   </div>
-                                  <div class="agg-health-foot">探活每 30 分钟一轮（免 key / 已配 key 模型），信号格 0-4：绿=快(≤3s) 黄=中(≤8s) 红=慢(>8s) 灰=未探测。</div>
+                                  <div class="agg-health-foot">探活每日一轮（免 key 网关，零成本），信号格 0-4：绿=快(≤3s) 黄=中(≤8s) 红=慢(>8s) 灰=未探测。</div>
                                 </template>
                               </template>
                             </div>
@@ -540,9 +546,9 @@
               </div>
 
               <div class="settings-section-title appearance-mode-title">皮肤</div>
-              <div class="settings-section-desc">完整氛围皮肤会接管界面配色与字体，点击即时生效并自动保存。</div>
+              <div class="settings-section-desc">动画工作台皮肤保留专业 IDE 布局，只切换成套色板与状态标记。</div>
               <div class="param-row" style="align-items: flex-start;">
-                <span class="param-label">动漫皮肤</span>
+                <span class="param-label">工作台皮肤</span>
                 <div class="skin-groups">
                   <div v-for="[series, items] in skinThemes" :key="series" class="skin-group">
                     <div class="skin-group-title">{{ series }}</div>
@@ -556,14 +562,19 @@
                         :title="`切换到${p.label}皮肤`"
                         @click="selectTheme(key)"
                       >
-                        <span class="skin-card-preview" :class="`skin-preview-${key}`" :style="{ '--skin-accent': p.accent, '--skin-surface': p.skin.light.surface }">
-                          <Icon :icon="key === 'witchtrial' ? 'mdi:book-open-page-variant-outline' : 'mdi:view-grid-outline'" width="22" />
+                        <span
+                          class="skin-card-preview"
+                          :class="`skin-preview-${key}`"
+                          :style="{ '--skin-accent': p.accent, '--skin-secondary': p.accent2, '--skin-surface': p.skin.light.surface }"
+                        >
+                          <span class="skin-preview-sidebar"><i></i><i></i><i></i></span>
+                          <span class="skin-preview-editor"><i></i><i></i><i></i><b></b></span>
                         </span>
                         <span class="skin-card-info">
                           <strong>{{ p.label }}</strong>
-                          <small>{{ key === 'witchtrial' ? '暖白稿纸 · 灰粉书封' : '象牙画纸 · 青灰墨线' }}</small>
+                          <small>{{ key === 'witchtrial' ? '珊瑚红 × 靛青 · 原画工作流' : '青碧 × 夜紫 · 夜场工作流' }}</small>
                         </span>
-                        <Icon v-if="theme === key" class="skin-card-check" icon="mdi:check-circle" width="16" />
+                        <Icon v-if="theme === key" class="skin-card-check" icon="mdi:check" width="17" />
                       </button>
                     </div>
                   </div>
@@ -635,6 +646,22 @@
                   >开启</button>
                 </div>
               </div>
+            </div>
+
+            <!-- ========== 受保护工作区 ========== -->
+            <div v-show="activeTab === 'safety'" class="settings-panel">
+              <div class="settings-section-title">受保护工作区</div>
+              <div class="settings-section-desc">
+                默认关闭。开启后，Agent 的文件工具和 filesystem MCP 只能访问当前项目目录；越界文件访问会被直接拒绝，即使在 Yolo 模式下也是如此。写盘和命令仍会要求本次明确批准。它是应用层保护，不是操作系统沙盒。
+              </div>
+              <div class="param-row">
+                <span class="param-label">保护模式</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: !protectedWorkspaceEnabled }" type="button" :disabled="protectedWorkspaceSaving" @click="setProtectedWorkspace(false)">关闭</button>
+                  <button class="seg-btn" :class="{ on: protectedWorkspaceEnabled }" type="button" :disabled="protectedWorkspaceSaving" @click="setProtectedWorkspace(true)">开启</button>
+                </div>
+              </div>
+              <div v-if="protectedWorkspaceError" class="settings-error">{{ protectedWorkspaceError }}</div>
             </div>
 
             <!-- ========== DeepSeek Harness ecosystem ========== -->
@@ -860,6 +887,17 @@
                   <template v-if="memorySyncEnvOverride">（当前被部署环境变量 RESCENE_MEMORY_SYNC=off 强制关闭）</template>
                 </span>
               </div>
+              <div class="param-row" style="align-items: center;">
+                <span class="param-label">自动提取事实</span>
+                <label class="param-switch">
+                  <input type="checkbox" v-model="automaticMemoryEnabled" :disabled="automaticMemoryEnvOverride" @change="saveAutomaticMemorySetting" />
+                  <span class="param-switch-track"></span>
+                </label>
+                <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
+                  完成任务后，后台会把用户原话发送给轻量模型，提取偏好、项目和修正，并保留本地纠错账本。默认关闭。
+                  <template v-if="automaticMemoryEnvOverride">（当前被部署环境变量 RESCENE_AUTO_MEMORY=off 强制关闭）</template>
+                </span>
+              </div>
               <div v-if="memoryLoading" class="settings-loading">加载中…</div>
               <template v-else-if="humanReadableMemoryMarkdown">
                 <div class="memory-md markdown-body" v-html="renderMarkdown(humanReadableMemoryMarkdown)"></div>
@@ -872,7 +910,27 @@
               <div class="settings-section-title">个人资料</div>
               <div class="profile-row">
                 <span class="profile-label">头像</span>
-                <div class="profile-avatar">{{ (profile.full_name || 'A').trim().charAt(0).toUpperCase() }}</div>
+                <div class="profile-avatar-editor">
+                  <button class="profile-avatar-button" type="button" title="选择自定义头像" @click="chooseAvatar">
+                    <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="profile-avatar" alt="当前头像" />
+                    <span v-else class="profile-avatar">{{ avatarFallback }}</span>
+                  </button>
+                  <div class="profile-avatar-controls">
+                    <div class="profile-avatar-actions">
+                      <button class="profile-avatar-action" type="button" @click="chooseAvatar">选择图片</button>
+                      <button v-if="auth.hasCustomAvatar.value" class="profile-avatar-action muted" type="button" @click="restoreAvatar">恢复默认</button>
+                    </div>
+                    <span class="profile-avatar-hint">PNG、JPG、WebP 或 GIF，最大 2 MB</span>
+                    <span v-if="avatarError" class="profile-avatar-error" role="alert">{{ avatarError }}</span>
+                  </div>
+                  <input
+                    ref="avatarInputRef"
+                    class="profile-avatar-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    @change="onAvatarFileSelected"
+                  />
+                </div>
               </div>
               <div class="profile-row">
                 <span class="profile-label">昵称</span>
@@ -950,8 +1008,9 @@
                   class="api-form-btn save"
                   type="button"
                   v-else
-                  disabled
-                >安装包未就绪</button>
+                  @click="startAutoDownload"
+                  :disabled="dlWorking"
+                >{{ dlWorking ? '正在下载…' : '下载安装包' }}</button>
                 <span v-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
               </div>
 
@@ -1067,6 +1126,54 @@ function vendorColor(name = '') {
 
 // ============ 亲密等级（我的 tab，爱心表示） ============
 const auth = useAuth()
+const avatarInputRef = ref(null)
+const avatarError = ref('')
+const avatarFallback = computed(() => {
+  const label = String(auth.displayName.value || 'Rescene').trim()
+  return (label.charAt(0) || 'R').toUpperCase()
+})
+
+function chooseAvatar() {
+  avatarError.value = ''
+  avatarInputRef.value?.click()
+}
+
+function readAvatarFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('无法读取这张图片'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function onAvatarFileSelected(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+  if (!allowedTypes.has(file.type)) {
+    avatarError.value = '请选择 PNG、JPG、WebP 或 GIF 图片'
+    return
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    avatarError.value = '图片超过 2 MB，请选择更小的图片'
+    return
+  }
+  try {
+    const dataUrl = await readAvatarFile(file)
+    auth.setCustomAvatar(dataUrl)
+    avatarError.value = ''
+  } catch (error) {
+    avatarError.value = error?.message || '头像保存失败'
+  }
+}
+
+function restoreAvatar() {
+  auth.clearCustomAvatar()
+  avatarError.value = ''
+}
 // 亲密等级：外显 Lv.N（无上限）。无缓存时显示 Lv.1。
 const intimacyLevel = computed(() => auth.intimacyLevel.value || 1)
 // 爱心表示：每个等级一颗爱心（Lv.3 = ♥♥♥）
@@ -1300,6 +1407,7 @@ const aggAutoChain = ref([])
 const aggHealthModels = ref([])
 const aggHealthLoading = ref(false)
 const aggHealthLoaded = ref(false)
+const aggHealthError = ref(false)
 const aggHealthOK = computed(() => aggHealthModels.value.filter(m => !m.disabled).length)
 const aggHealthDown = computed(() => aggHealthModels.value.filter(m => m.disabled).length)
 
@@ -1312,10 +1420,12 @@ async function loadAggHealth() {
     aggAutoChain.value = data.auto_chain || []
     aggHealthModels.value = data.models || []
     aggHealthLoaded.value = true
+    aggHealthError.value = false
   } catch (e) {
     aggAutoChain.value = []
     aggHealthModels.value = []
     aggHealthLoaded.value = false
+    aggHealthError.value = true
   } finally {
     aggHealthLoading.value = false
   }
@@ -1392,6 +1502,7 @@ watch(activeTab, (t) => {
     aggRefreshStatus()
   }
   if (t === 'appearance') loadOverlayConfig()
+  if (t === 'safety') loadProtectedWorkspace()
 })
 onMounted(() => {
   if (activeTab.value === 'aggapi') {
@@ -1400,6 +1511,7 @@ onMounted(() => {
     aggRefreshStatus()
   }
   if (activeTab.value === 'appearance') loadOverlayConfig()
+  if (activeTab.value === 'safety') loadProtectedWorkspace()
 })
 
 // ===== 聚合 API 暴露模型配置（官方遴选 / 用户自定义，issue #5）=====
@@ -1855,6 +1967,35 @@ async function setOverlayEnabled(next) {
   } finally { overlaySaving.value = false }
 }
 
+// ============ 受保护工作区（默认关闭；后端才是实际的执行边界） ============
+const protectedWorkspaceEnabled = ref(false)
+const protectedWorkspaceSaving = ref(false)
+const protectedWorkspaceError = ref('')
+async function loadProtectedWorkspace() {
+  try {
+    const res = await fetch('/api/protected-workspace/config')
+    if (!res.ok) throw new Error('读取保护模式失败')
+    const data = await res.json()
+    protectedWorkspaceEnabled.value = !!data.enabled
+  } catch (e) {
+    protectedWorkspaceError.value = e.message || '读取保护模式失败'
+  }
+}
+async function setProtectedWorkspace(next) {
+  protectedWorkspaceSaving.value = true
+  protectedWorkspaceError.value = ''
+  try {
+    const res = await fetch('/api/protected-workspace/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: next }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '更新保护模式失败')
+    protectedWorkspaceEnabled.value = !!data.enabled
+  } catch (e) {
+    protectedWorkspaceError.value = e.message || '更新保护模式失败'
+  } finally { protectedWorkspaceSaving.value = false }
+}
+
 // ============ Firecrawl 联网搜索（web_search 常驻工具，模型自主触发） ============
 const FIRECRAWL_KEY_ID = 'firecrawl'
 // 后端 /api/models/config 的 firecrawl_key_set 字段返回是否已配 Key
@@ -2169,6 +2310,8 @@ const memoryLoading = ref(false)
 // 云端记忆同步开关（记忆 tab）：默认开；env_override 时禁用（部署级强制关闭）
 const memorySyncEnabled = ref(true)
 const memorySyncEnvOverride = ref(false)
+const automaticMemoryEnabled = ref(false)
+const automaticMemoryEnvOverride = ref(false)
 const humanReadableMemoryMarkdown = computed(() => {
   const parts = []
   for (const seg of memorySegments.value) {
@@ -2181,6 +2324,7 @@ const humanReadableMemoryMarkdown = computed(() => {
 async function loadMemoryInject() {
   memoryLoading.value = true
   loadMemorySyncSetting()
+  loadAutomaticMemorySetting()
   try {
     const res = await fetch('/api/memory/inject')
     if (res.ok) {
@@ -2215,6 +2359,25 @@ async function saveMemorySyncSetting() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: memorySyncEnabled.value })
+    })
+  } catch (e) {}
+}
+async function loadAutomaticMemorySetting() {
+  try {
+    const res = await fetch('/api/memory/automatic/settings')
+    if (res.ok) {
+      const data = await res.json()
+      automaticMemoryEnabled.value = data.enabled === true
+      automaticMemoryEnvOverride.value = !!data.env_override
+    }
+  } catch (e) {}
+}
+async function saveAutomaticMemorySetting() {
+  try {
+    await fetch('/api/memory/automatic/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: automaticMemoryEnabled.value })
     })
   } catch (e) {}
 }
@@ -2301,7 +2464,11 @@ async function refreshDlStatus() {
       dlState.value = 'error'
       dlError.value = d.error || '下载失败'
     } else {
+      // idle：静默下载可能正在后台进行（App.vue 启动时已触发），
+      // 轮询等它完成自动变「一键安装」，不再卡死「下载安装包」
+      // （2026-08-25 修复：静默下载极快但按钮不实时更新的 bug）
       dlState.value = 'idle'
+      pollDownloadStatus()
     }
   } catch { /* 轮询失败忽略 */ }
 }
@@ -2622,6 +2789,7 @@ onUnmounted(() => {
   border: 1px solid var(--app-border); border-radius: 12px; user-select: none; cursor: pointer;
   transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease;
 }
+
 .vendor-head:hover {
   background: var(--app-surface); border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
   transform: translateY(-1px); box-shadow: 0 7px 20px rgba(0,0,0,.045);
@@ -2757,6 +2925,8 @@ onUnmounted(() => {
 .agg-health-title { font-size: 12.5px; font-weight: 600; color: var(--app-text); }
 .agg-health-summary { font-size: 10.5px; color: var(--app-text-soft); display: inline-flex; align-items: center; gap: 4px; }
 .agg-health-dot { display: inline-block; min-width: 16px; text-align: center; padding: 1px 5px; border-radius: 8px; font-size: 10px; background: var(--app-surface-2); color: var(--app-text-faint); }
+.agg-health-error { font-size: 12px; color: var(--app-danger, #e5484d); background: var(--app-surface-2); border: 1px solid var(--app-danger, #e5484d); border-radius: 8px; padding: 10px 12px; line-height: 1.5; }
+.agg-health-error-sub { font-size: 11px; color: var(--app-text-soft); margin-top: 4px; }
 .agg-health-dot.ok { background: rgba(52, 199, 89, 0.15); color: #34c759; }
 .agg-health-dot.warn.on { background: rgba(255, 69, 58, 0.15); color: #ff453a; }
 .agg-health-block { margin-bottom: 12px; }
@@ -2868,33 +3038,40 @@ onUnmounted(() => {
 .theme-swatch-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
 .theme-swatch-label { line-height: 1; }
 
-/* 完整动漫皮肤：独立于轻量主题色，卡片只展示氛围，不引入图片资源。 */
-.skin-groups { width: 100%; max-width: 460px; margin-left: auto; }
-.skin-group-title { margin-bottom: 7px; color: var(--app-text-faint); font-size: 11px; letter-spacing: .08em; }
-.skin-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+/* 完整动漫皮肤：像 IDE 配置列表，不再做悬浮圆角卡片。 */
+.skin-groups { width: 100%; max-width: 480px; margin-left: auto; }
+.skin-group-title { margin-bottom: 7px; color: var(--app-text-faint); font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+.skin-cards { display: grid; grid-template-columns: 1fr; gap: 0; }
 .skin-card {
-  position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 58px;
-  padding: 8px 10px; color: var(--app-text-soft); background: var(--app-surface-2);
-  border: 1.5px solid var(--app-border); border-radius: 12px; text-align: left; cursor: pointer;
-  transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  position: relative; z-index: 0; display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 66px;
+  margin-top: -1px; padding: 9px 11px; color: var(--app-text-soft); background: var(--app-surface);
+  border: 1px solid var(--app-border); border-radius: 0; text-align: left; cursor: pointer;
+  transition: border-color .14s ease, background .14s ease, color .14s ease;
 }
-.skin-card:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--skin-accent, var(--app-accent)) 45%, var(--app-border)); }
-.skin-card.on { color: var(--app-text); border-color: var(--app-accent); background: var(--app-accent-soft); box-shadow: 0 6px 18px color-mix(in srgb, var(--app-accent) 12%, transparent); }
+.skin-card:first-child { margin-top: 0; }
+.skin-card:focus { outline: none; }
+.skin-card:focus-visible { outline: 2px solid var(--skin-accent, var(--app-accent)); outline-offset: -2px; }
+.skin-card:hover { z-index: 1; color: var(--app-text); border-color: var(--skin-accent, var(--app-accent)); background: var(--app-surface-2); }
+.skin-card.on { z-index: 2; color: var(--app-text); border-color: var(--app-accent); background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface)); box-shadow: inset 3px 0 0 var(--app-accent); }
 .skin-card-preview {
-  --skin-accent: #a04f74; --skin-surface: #fffaf8;
-  position: relative; width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 42px; overflow: hidden;
-  color: var(--skin-accent); border: 1px solid color-mix(in srgb, var(--skin-accent) 34%, #fff); border-radius: 10px;
-  background: var(--skin-surface); box-shadow: 0 5px 12px color-mix(in srgb, var(--skin-accent) 11%, transparent);
+  --skin-accent: #df5656; --skin-secondary: #4056a1; --skin-surface: #fbfaf7;
+  position: relative; width: 78px; height: 44px; display: block; flex: 0 0 78px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--skin-accent) 34%, var(--app-border)); border-radius: 0;
+  background: var(--skin-surface); box-shadow: none;
 }
-.skin-card-preview::before { content: ''; position: absolute; inset: 0; pointer-events: none; }
-.skin-preview-witchtrial { background: linear-gradient(145deg,#fffdf9,#f6e9ee); }
-.skin-preview-witchtrial::before { background: radial-gradient(circle at 8px 8px,rgba(160,79,116,.13) 0 1px,transparent 1.5px); background-size: 9px 9px; }
-.skin-preview-witchtrial_hiiro { color: #4f707c; border-color: #b9c9ce; background: #fffef8; border-radius: 7px; }
-.skin-preview-witchtrial_hiiro::before { background: radial-gradient(circle,#77939d 0 1px,transparent 1.3px); background-size: 5px 5px; opacity: .32; }
-.skin-card-preview :deep(svg) { position: relative; z-index: 1; filter: drop-shadow(0 1px 0 rgba(255,255,255,.8)); }
+.skin-card-preview::before { content: ''; position: absolute; inset: 0 0 auto; height: 5px; background: linear-gradient(90deg, var(--skin-accent) 0 68%, var(--skin-secondary) 68% 100%); }
+.skin-card-preview::after { content: ''; position: absolute; left: 21px; top: 5px; bottom: 0; width: 1px; background: color-mix(in srgb, var(--skin-accent) 22%, var(--app-border)); }
+.skin-preview-sidebar { position: absolute; left: 0; top: 5px; bottom: 0; width: 21px; padding-top: 7px; background: color-mix(in srgb, var(--skin-accent) 7%, var(--skin-surface)); }
+.skin-preview-sidebar i { display: block; width: 11px; height: 2px; margin: 0 0 4px 5px; background: color-mix(in srgb, var(--skin-secondary) 48%, #fff); }
+.skin-preview-editor { position: absolute; left: 28px; right: 6px; top: 12px; bottom: 5px; }
+.skin-preview-editor i { display: block; height: 2px; margin-bottom: 4px; background: color-mix(in srgb, var(--skin-secondary) 34%, #fff); }
+.skin-preview-editor i:nth-child(1) { width: 72%; background: color-mix(in srgb, var(--skin-accent) 52%, #fff); }
+.skin-preview-editor i:nth-child(2) { width: 94%; }
+.skin-preview-editor i:nth-child(3) { width: 58%; }
+.skin-preview-editor b { position: absolute; right: 0; bottom: 0; width: 13px; height: 9px; background: color-mix(in srgb, var(--skin-secondary) 16%, var(--skin-surface)); border-left: 2px solid var(--skin-secondary); }
 .skin-card-info { display: grid; gap: 4px; min-width: 0; }
-.skin-card-info strong { overflow: hidden; color: inherit; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
-.skin-card-info small { overflow: hidden; color: var(--app-text-faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.skin-card-info strong { overflow: hidden; color: inherit; font-size: 12.5px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.skin-card-info small { overflow: hidden; color: var(--app-text-faint); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
 .skin-card-check { margin-left: auto; flex: none; color: var(--app-accent); }
 
 /* DHS / Skills 实体卡片 */
@@ -3010,7 +3187,17 @@ onUnmounted(() => {
 /* Profile（仿图2） */
 .profile-row { display: flex; align-items: center; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--app-border-soft); }
 .profile-label { flex-shrink: 0; width: 180px; font-size: 13px; color: var(--app-text); }
-.profile-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--app-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; }
+.profile-avatar-editor { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.profile-avatar-button { width: 40px; height: 40px; flex: 0 0 auto; overflow: hidden; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+.profile-avatar { width: 40px; height: 40px; box-sizing: border-box; border-radius: 50%; background: var(--app-accent); color: #fff; display: flex; align-items: center; justify-content: center; object-fit: cover; font-size: 16px; font-weight: 700; }
+.profile-avatar-controls { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 4px; }
+.profile-avatar-actions { display: flex; align-items: center; gap: 10px; }
+.profile-avatar-action { padding: 0; border: 0; background: transparent; color: var(--app-text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.profile-avatar-action:hover { text-decoration: underline; }
+.profile-avatar-action.muted { color: var(--app-text-soft); font-weight: 500; }
+.profile-avatar-hint { color: var(--app-text-faint); font-size: 11px; }
+.profile-avatar-error { color: #d14343; font-size: 11px; }
+.profile-avatar-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 .profile-input { flex: 1; min-width: 0; font-size: 13px; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 12px; }
 .profile-input:focus { outline: none; border-color: var(--app-accent); }
 /* 账号 UID：灰色小字 */

@@ -1,10 +1,12 @@
-package handler
+﻿package handler
 
 import (
 	"net/http"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"backend/internal/ai/core"
 
@@ -78,8 +80,9 @@ Add-Type -TypeDefinition $source -ErrorAction Stop
 $selected = [PrismNativeDialog.FolderPicker]::Pick()
 if ($selected) { [Console]::Out.Write($selected) }
 `
-	pwsh := hiddenCommand("powershell.exe", "-NoProfile", "-STA", "-Command", script)
-	out, err := pwsh.Output()
+	pwsh := exec.Command("powershell.exe", "-NoProfile", "-STA", "-Command", script)
+		pwsh.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		out, err := pwsh.Output()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法打开系统文件夹选择器"})
 		return

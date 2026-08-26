@@ -444,15 +444,28 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
         // 整段工作流之后，否则视觉上会“永远卡在聊天底部”，打乱后续回复顺序。
         es.addEventListener('artifact', e => {
             const d = JSON.parse(e.data)
-            if (d.kind !== 'image' || !d.image) return
-            flow.blocks.push({
-                type: 'image',
-                id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
-                image: d.image,
-                sourceUrl: d.source_url || '',
-                content: d.caption || 'Agent 已发布截图交付。',
-                expanded: false
-            })
+            if (d.kind === 'image' && d.image) {
+                flow.blocks.push({
+                    type: 'image',
+                    id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                    image: d.image,
+                    sourceUrl: d.source_url || '',
+                    content: d.caption || 'Agent 已发布截图交付。',
+                    expanded: false
+                })
+            } else if (d.kind === 'video' && d.url) {
+                // 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式）
+                flow.blocks.push({
+                    type: 'video',
+                    id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                    url: d.url,
+                    file: d.file || '',
+                    mime: d.mime || 'video/mp4',
+                    size: d.size || '',
+                    seconds: d.seconds || '',
+                    caption: d.caption || 'Agent 已生成视频，可拖动进度条播放。'
+                })
+            }
             onStreamUpdate?.()
         })
 

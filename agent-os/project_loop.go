@@ -92,16 +92,9 @@ func runDaughterProject(d *Daughter, home string) string {
 	}
 	toolEventByName("agent.project.delivery_gate", "done", fmt.Sprintf("%d/%d 阶段通过", len(manifest.Evidence), len(mandatoryDeliveryStages)))
 
-	// 发行反馈：产品发布（delivery.manifest.json verified）后，用户 Agent 打分评论。
-	// 异步执行不阻塞主流程；失败静默（免费模型不可用不影响项目交付）。
-	if strings.Contains(home, "company") {
-		safeGo("user-reviews-"+name, func() {
-			if rb, err := releaseUserReviews(projDir, name, brief); err == nil {
-				logLive(filepath.Join(home, "live.log"),
-					fmt.Sprintf("[%s] 📊《%s》发行评测：平均 %.1f 分 · %d 位用户", time.Now().Format("15:04"), name, rb.AvgScore, len(rb.Reviews)))
-			}
-		})
-	}
+	// 发行反馈：产品发布（delivery.manifest.json verified）后不再自动评测——
+	// 评分评奖全部来自真实用户（见 main-backend HandleCompanyReviewSubmit）。
+	// 模拟用户评测已删除（2026-08-26 重构：每一个评分都是真实用户）。
 
 	// 项目成果技能化：方法沉淀进技能库（做过的事变成可复用能力——自循环自迭代）
 	safeGo("project-skill", func() { skillFromContext(name, brief) })

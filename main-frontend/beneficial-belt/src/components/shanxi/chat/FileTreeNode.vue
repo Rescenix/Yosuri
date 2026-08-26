@@ -31,6 +31,14 @@
         <button @click.stop="handleCopyPath">复制路径</button>
         <button @click.stop="handleCopyName">复制文件名</button>
         <button v-if="node.type === 'file'" @click.stop="handleOpenFile">在编辑器中打开</button>
+        <template v-if="node.type === 'folder'">
+          <div class="menu-separator"></div>
+          <button @click.stop="emitAction('create-file')">新建文件</button>
+          <button @click.stop="emitAction('create-folder')">新建文件夹</button>
+        </template>
+        <div class="menu-separator"></div>
+        <button @click.stop="emitAction('rename')">重命名</button>
+        <button class="danger" @click.stop="emitAction('delete')">删除</button>
       </div>
     </Teleport>
 
@@ -42,6 +50,10 @@
         :selected="selected"
         @select="$emit('select', $event)"
         @toggle="$emit('toggle', $event)"
+        @create-file="$emit('create-file', $event)"
+        @create-folder="$emit('create-folder', $event)"
+        @rename="$emit('rename', $event)"
+        @delete="$emit('delete', $event)"
       />
     </template>
   </div>
@@ -57,7 +69,7 @@ const props = defineProps({
   selected: { type: Object, default: null }
 })
 
-const emit = defineEmits(['select', 'toggle'])
+const emit = defineEmits(['select', 'toggle', 'create-file', 'create-folder', 'rename', 'delete'])
 
 const showMenu = ref(false)
 const menuX = ref(0)
@@ -163,6 +175,11 @@ function handleOpenFile() {
   showMenu.value = false
 }
 
+function emitAction(action) {
+  emit(action, props.node)
+  showMenu.value = false
+}
+
 onMounted(() => {
   // 不需要全局监听，改用单次监听方式
 })
@@ -219,4 +236,7 @@ onUnmounted(() => {
 .file-context-menu button:hover {
   background: var(--app-surface-3);
 }
+.file-context-menu .danger { color: #d94834; }
+.file-context-menu .danger:hover { background: rgba(217, 72, 52, .1); }
+.menu-separator { height: 1px; margin: 4px 0; background: var(--app-border); }
 </style>

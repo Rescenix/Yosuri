@@ -207,7 +207,7 @@ func Remember(file, summary, content string) error {
 
 // ── 常驻 / 交接 / 搜索（SwiftNet 记忆工具的 memorydir 落点） ──
 
-func pinnedPath() string { return filepath.Join(path(), "pinned.md") }
+func pinnedPath() string  { return filepath.Join(path(), "pinned.md") }
 func handoffPath() string { return filepath.Join(path(), "handoff.md") }
 
 // ReadPinned 读取常驻记忆 pinned.md 全文，供每轮无条件注入。
@@ -377,7 +377,7 @@ func ReadRaw(file string) string {
 // SyncableFiles 参与云端记忆同步的文件白名单（不含 handoff 工作态 / intimacy 缓存）。
 var SyncableFiles = map[string]bool{
 	"index": true, "pinned": true, "preferences": true,
-	"project": true, "decisions": true, "memories": true,
+	"project": true, "projects": true, "decisions": true, "memories": true, "facts": true,
 }
 
 // WriteRaw 覆盖写 memory/<file>.md（仅限 SyncableFiles 白名单，防云端记忆包路径穿越）。

@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"backend/internal/ai/core"
@@ -187,7 +188,8 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = hiddenCommand("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+		cmd = exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 	} else {
 		cmd = exec.Command("/bin/sh", "-lc", command)
 	}

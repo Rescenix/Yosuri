@@ -49,6 +49,16 @@
           <span>实时运行</span>
           <span class="st-badge">{{ osStats.totalAgents || 0 }}</span>
         </button>
+        <button class="section-tab" :class="{ active: activeSection === 'office' }" @click="activeSection = 'office'">
+          <Icon icon="mdi:office-building" width="18" />
+          <span>办公室</span>
+          <span class="st-badge">{{ officePeople.length || agents.length }}</span>
+        </button>
+        <button class="section-tab" :class="{ active: activeSection === 'market' }" @click="activeSection = 'market'; loadMarket()">
+          <Icon icon="mdi:storefront-outline" width="18" />
+          <span>应用大厅</span>
+          <span class="st-badge">{{ marketGames.length }}</span>
+        </button>
         <button class="section-tab" :class="{ active: activeSection === 'approval' }" @click="activeSection = 'approval'">
           <Icon icon="mdi:clipboard-check-outline" width="18" />
           <span>审批台</span>
@@ -315,10 +325,11 @@
           </div>
         </div>
         <div class="agent-rows">
-          <article v-for="agent in selectedDepartment.agents" :key="agent.name" class="agent-row" :class="{ busy: isBusy(agent) }">
+          <article v-for="agent in selectedDepartment.agents" :key="agent.name" class="agent-row" :class="{ busy: isBusy(agent), dead: isDead(agent) }">
             <span class="agent-avatar"><Icon :icon="roleIcon(agent.role)" width="19" /></span>
-            <div class="agent-id"><strong>{{ agent.name }}</strong><small>{{ isBusy(agent) ? 'EXECUTING' : 'STANDBY' }}</small></div>
-            <p class="agent-doing">{{ doingText(agent) }}</p>
+            <div class="agent-id"><strong>{{ agent.name }}</strong><small :class="statusClass(agent)">{{ statusText(agent) }}</small></div>
+            <p class="agent-doing">{{ agent.task || doingText(agent) }}</p>
+            <span v-if="agent.lastActive" class="agent-last" :title="'最后活动：' + agent.lastActive">{{ agent.lastActive }}</span>
             <div class="agent-handoff"><Icon icon="mdi:source-branch" width="15" /><span>{{ (agent.collabRefs || []).length }} handoffs</span></div>
             <div class="agent-artifacts">
               <button v-for="f in (agent.files || []).slice(0, 2)" :key="f" @click="previewFile(agent, f)">{{ fileType(f) }}</button>
@@ -329,6 +340,78 @@
         </div>
       </section>
     </div>
+
+      <!-- 开罗式办公室场景：俯视公司，每个员工走动 + 头顶飘字（游戏发展国风格） -->
+      <section v-show="activeSection === 'office'" class="office-scene">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">GAME DEV STORY · 公司总部</p>
+            <h2>开发公司办公室</h2>
+          </div>
+          <span class="office-money"><b>💰 ¥{{ financeBalance.toLocaleString() }}</b><small>{{ financeTotalIn.toLocaleString() }} 累计销量收入</small></span>
+        </div>
+        <div class="office-map">
+          <!-- 摆件 -->
+          <span class="office-prop prop-water">🪴</span>
+          <span class="office-prop prop-desk1">🖥️</span>
+          <span class="office-prop prop-desk2">☕</span>
+          <span class="office-prop prop-desk3">📦</span>
+          <!-- CEO 办公室 -->
+          <div class="office-dept dept-ceo" :style="deptStyle('ceo')">
+            <div class="dept-sign">👑 CEO 办公室 <b>{{ deptPeople('ceo').length }}</b></div>
+            <div v-for="p in deptPeople('ceo')" :key="p.name" class="office-person" :class="p.cls" :style="personStyle(p)">
+              <span class="op-bubble"><i :class="p.dot"></i>{{ p.task }}</span>
+              <span class="op-face">{{ p.emoji }}</span>
+              <small class="op-name">{{ p.short }}</small>
+            </div>
+          </div>
+          <!-- 6 个部门 -->
+          <div v-for="d in officeDepts" :key="d.key" class="office-dept" :style="deptStyle(d.key)">
+            <div class="dept-sign">{{ d.icon }} {{ d.name }} <b>{{ deptPeople(d.key).length }}</b></div>
+            <div v-for="p in deptPeople(d.key)" :key="p.name" class="office-person" :class="p.cls" :style="personStyle(p)">
+              <span class="op-bubble"><i :class="p.dot"></i>{{ p.task }}</span>
+              <span class="op-face">{{ p.emoji }}</span>
+              <small class="op-name">{{ p.short }}</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 应用大厅：B站式信息流，真实评分排序 + 花钱推广置顶 -->
+      <section v-show="activeSection === 'market'" class="market-room">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">APP STORE · 算法推流</p>
+            <h2>应用大厅</h2>
+          </div>
+          <span class="reviews-total">{{ marketGames.length }} 款应用 · 推荐分 = 真实评分×人数 + 推广加权</span>
+        </div>
+        <div class="market-grid">
+          <article v-for="g in marketGames" :key="g.agent + g.project" class="market-card" :class="{ promoted: g.promoted, unreviewed: !g.has_review }">
+            <div class="mc-cover">
+              <span class="mc-icon">{{ g.promoted ? '⭐' : (g.award ? awardEmoji(g.award.title) : '📦') }}</span>
+              <span v-if="g.promoted" class="mc-promo">推广</span>
+              <span v-if="g.award" class="mc-award" :class="awardClass(g.award.title)">{{ g.award.title }}</span>
+            </div>
+            <div class="mc-body">
+              <h3>{{ g.project }}</h3>
+              <p class="mc-agent">{{ g.agent }} 出品</p>
+              <div class="mc-meta">
+                <template v-if="g.has_review">
+                  <span class="mc-score" :class="{ good: g.avg_score >= 7, mid: g.avg_score >= 5 && g.avg_score < 7 }"><b>{{ g.avg_score.toFixed(1) }}</b>/10</span>
+                  <span class="mc-count">{{ g.count }} 位真实用户评分</span>
+                </template>
+                <span v-else class="mc-wait">⏳ 等待真实用户评测</span>
+              </div>
+              <p v-if="g.promo_desc" class="mc-promo-desc">{{ g.promo_desc }}</p>
+            </div>
+          </article>
+        </div>
+        <div v-if="!marketGames.length" class="reviews-empty">
+          <Icon icon="mdi:storefront-outline" width="30" />
+          <p>还没有应用上架。等 coder 完成交付后，应用大厅自动展示。</p>
+        </div>
+      </section>
 
       <section v-show="activeSection === 'tags'" class="tags-room">
       <div class="section-heading">
@@ -424,14 +507,14 @@
       </div>
     </section>
 
-      <!-- 发行评测：产品发布后 Agent 打分评论（已隐藏，待实装） -->
-            <section v-if="false" class="reviews-room">
+      <!-- 真实评分评奖：每一个评分都来自真实用户 -->
+      <section class="reviews-room">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">LIVE · 发行评测</p>
-            <h2>用户 Agent 打分评论</h2>
+            <p class="section-kicker">LIVE · 真实评分评奖</p>
+            <h2>真实用户打分 · 评奖</h2>
           </div>
-          <span v-if="reviewsList.length" class="reviews-total">{{ reviewsList.length }} 个产品已发行</span>
+          <span v-if="reviewsList.length" class="reviews-total">{{ reviewsList.length }} 个产品已获真实评分</span>
         </div>
         <div v-if="reviewsList.length" class="reviews-list">
           <article v-for="rv in reviewsList" :key="rv.agent + rv.project" class="review-card">
@@ -439,31 +522,40 @@
               <div class="review-title">
                 <strong>《{{ rv.project }}》</strong>
                 <span class="review-agent">{{ rv.agent }}</span>
-                <small>{{ rv.generated_at }}</small>
+                <span v-if="rv.award" class="review-award" :class="awardClass(rv.award.title)">{{ rv.award.title }}</span>
               </div>
               <div class="review-score" :class="{ good: rv.avg_score >= 7, mid: rv.avg_score >= 5 && rv.avg_score < 7 }">
-                <strong>{{ rv.avg_score.toFixed(1) }}</strong><small>/10</small>
+                <strong>{{ rv.avg_score.toFixed(1) }}</strong><small>/10 · {{ rv.count }} 位真实用户</small>
               </div>
             </header>
-            <p class="review-summary">{{ rv.summary }}</p>
             <div class="review-users">
-              <div v-for="u in rv.users" :key="u.name" class="review-user">
-                <span class="ru-avatar">{{ u.emoji }}</span>
+              <div v-for="u in rv.users" :key="u.nickname + u.created_at" class="review-user">
+                <span class="ru-avatar">👤</span>
                 <div class="ru-body">
                   <header>
-                    <strong>{{ u.name }}</strong>
+                    <strong>{{ u.nickname }}</strong>
                     <span class="ru-stars">{{ '★'.repeat(Math.max(1, Math.round(u.score / 2))) }}<i>{{ u.score }}</i></span>
-                    <em v-if="u.model_tag" class="ru-model">{{ u.model_tag }}</em>
+                    <em v-if="u.created_at" class="ru-model">{{ u.created_at }}</em>
                   </header>
                   <p>{{ u.comment }}</p>
                 </div>
               </div>
             </div>
+            <form class="review-form" @submit.prevent="submitReview(rv)">
+              <input v-model="rv._nick" :placeholder="reviewNickname || '你的昵称'" class="rf-nick" maxlength="12" />
+              <div class="rf-stars">
+                <button v-for="s in 5" :key="s" type="button" class="rf-star" :class="{ on: rv._stars >= s }" @click="rv._stars = s">★</button>
+                <span v-if="rv._stars" class="rf-score-num">{{ rv._stars * 2 }} 分</span>
+              </div>
+              <input v-model="rv._comment" placeholder="说说你的真实体验（≤120字）" class="rf-comment" maxlength="120" />
+              <button type="submit" class="rf-submit" :disabled="rv._submitting">{{ rv._submitting ? '提交中…' : '提交评分' }}</button>
+              <span v-if="rv._msg" class="rf-msg">{{ rv._msg }}</span>
+            </form>
           </article>
         </div>
         <div v-else class="reviews-empty">
           <Icon icon="mdi:star-outline" width="30" />
-          <p>还没有产品发行。等 coder 完成交付（delivery 门禁通过）后，用户 Agent 会自动打分评论。</p>
+          <p>还没有产品获得真实评分。等 coder 完成交付后，你——真实用户，来给第一个产品打分。</p>
         </div>
       </section>
 
@@ -574,8 +666,40 @@ async function loadIterate() {
 async function loadReviews() {
   try {
     const d = await api('/api/company/reviews')
-    if (d && Array.isArray(d.reviews)) reviewsList.value = d.reviews
+    if (d && Array.isArray(d.reviews)) {
+      reviewsList.value = d.reviews.map(r => ({ ...r, _stars: 0, _comment: '', _nick: '', _submitting: false, _msg: '' }))
+    }
   } catch (e) { /* 后端没起静默 */ }
+}
+// 真实用户提交评分（昵称记忆在 localStorage，同昵称同项目覆盖旧评分）
+const reviewNickname = ref(localStorage.getItem('rescene_reviewer') || '')
+async function submitReview(rv) {
+  const nick = (rv._nick || reviewNickname.value || '').trim()
+  if (!nick) { rv._msg = '先填个昵称吧～'; return }
+  const score = (rv._stars || 0) * 2
+  if (score < 2) { rv._msg = '先点星星打分'; return }
+  if (!(rv._comment || '').trim()) { rv._msg = '写一句真实感受再提交'; return }
+  rv._submitting = true
+  rv._msg = ''
+  try {
+    localStorage.setItem('rescene_reviewer', nick)
+    const d = await api('/api/company/reviews', {
+      method: 'POST',
+      body: JSON.stringify({ project: rv.project, nickname: nick, score, comment: rv._comment.trim() }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    rv._msg = d.award ? `提交成功！获得【${d.award.title}】` : '提交成功！'
+    await loadReviews()
+  } catch (e) {
+    rv._msg = '提交失败：' + e.message
+  } finally {
+    rv._submitting = false
+  }
+}
+function awardClass(title) {
+  if (title.includes('神作')) return 'award-god'
+  if (title.includes('好评')) return 'award-good'
+  return 'award-new'
 }
 async function startIterate(cd) {
   iterateStarting.value = true
@@ -1216,8 +1340,27 @@ function roleIcon(role) {
 }
 
 function isBusy(agent) {
+  if (agent.status === '工作中') return true
   const log = agent.recentLog || ''
   return /🧠|✍️|🔬|💻|🎨|📡|📣|⚙️|调研|学习|写|精读|项目|任务|宣传/.test(log) && !/失败|未完成|未成功|熔断|429/.test(log)
+}
+
+function isDead(agent) {
+  return (agent.status || '').startsWith('停摆')
+}
+
+function statusClass(agent) {
+  if (agent.status === '工作中') return 'st-working'
+  if (agent.status === '空闲中') return 'st-idle'
+  if (isDead(agent)) return 'st-dead'
+  return 'st-unknown'
+}
+
+function statusText(agent) {
+  if (agent.status === '工作中') return '🟢 工作中'
+  if (agent.status === '空闲中') return '🟡 空闲中'
+  if (isDead(agent)) return '🔴 ' + agent.status
+  return '⚪ 未知'
 }
 
 function doingText(agent) {
@@ -1579,6 +1722,96 @@ async function openArtifact(artifactId) {
 
 let timer
 let polling = false
+
+// ===== 开罗式办公室场景（游戏发展国风格：俯视公司，员工走动+头顶飘字）=====
+const officeDepts = [
+  { key: 'writer', name: '作者部', icon: '✍️' },
+  { key: 'researcher', name: '研究部', icon: '🔬' },
+  { key: 'coder', name: '程序部', icon: '💻' },
+  { key: 'designer', name: '设计部', icon: '🎨' },
+  { key: 'promoter', name: '宣传部', icon: '📣' },
+  { key: 'publisher', name: '发布部', icon: '📢' },
+]
+const officeArea = {
+  ceo:        { left: '36%', top: '1.5%', width: '28%', height: '24%' },
+  writer:     { left: '1.5%', top: '29%', width: '31%', height: '31%' },
+  researcher: { left: '34.5%', top: '29%', width: '31%', height: '31%' },
+  coder:      { left: '67.5%', top: '29%', width: '31%', height: '31%' },
+  designer:   { left: '1.5%', top: '64%', width: '31%', height: '32%' },
+  promoter:   { left: '34.5%', top: '64%', width: '31%', height: '32%' },
+  publisher:  { left: '67.5%', top: '64%', width: '31%', height: '32%' },
+}
+const officeEmoji = { writer: '✍️', researcher: '🔬', coder: '💻', designer: '🎨', promoter: '📣', publisher: '📢', ceo: '👑' }
+const officePeople = ref([])
+let officeWalkTimer = null
+
+// 公司资金（开罗经济：评分→销量→入账）
+const financeBalance = ref(0)
+const financeTotalIn = ref(0)
+async function loadFinance() {
+  try {
+    const d = await api('/api/company/finance')
+    financeBalance.value = d.balance || 0
+    financeTotalIn.value = d.total_in || 0
+  } catch (e) { /* 后端没起静默 */ }
+}
+
+// 应用大厅（B站式信息流：真实评分排序 + 推广置顶）
+const marketGames = ref([])
+async function loadMarket() {
+  try {
+    const d = await api('/api/company/market')
+    if (d && Array.isArray(d.games)) marketGames.value = d.games
+  } catch (e) { /* 后端没起静默 */ }
+}
+function awardEmoji(title) {
+  if (title.includes('神作')) return '🏆'
+  if (title.includes('好评')) return '⭐'
+  return '🌱'
+}
+
+function rebuildOfficePeople() {
+  officePeople.value = agents.value.map(a => {
+    const role = a.role === 'ceo' ? 'ceo' : a.role
+    const dept = role === 'ceo' ? 'ceo' : (officeDepts.some(d => d.key === role) ? role : 'writer')
+    const isDead = (a.status || '').startsWith('停摆')
+    return {
+      name: a.name,
+      dept,
+      emoji: officeEmoji[dept] || '🤖',
+      short: String(a.name).split('-')[1] || a.name,
+      task: (a.task || '待命中').slice(0, 12),
+      dot: a.status === '工作中' ? 'dot-green' : (isDead ? 'dot-red' : 'dot-yellow'),
+      cls: isDead ? 'op-dead' : (a.status === '工作中' ? 'op-work' : 'op-idle'),
+      x: 8 + Math.random() * 78,
+      y: 14 + Math.random() * 62,
+    }
+  })
+}
+// 走动：工作中/空闲中的员工每 3 秒换一个目标位置（CSS transition 平滑走过去）
+function startOfficeWalk() {
+  stopOfficeWalk()
+  officeWalkTimer = setInterval(() => {
+    for (const p of officePeople.value) {
+      const a = agents.value.find(x => x.name === p.name)
+      if (a && (a.status === '工作中' || a.status === '空闲中')) {
+        p.x = 8 + Math.random() * 78
+        p.y = 14 + Math.random() * 62
+      }
+    }
+  }, 3000)
+}
+function stopOfficeWalk() {
+  if (officeWalkTimer) { clearInterval(officeWalkTimer); officeWalkTimer = null }
+}
+function deptPeople(key) { return officePeople.value.filter(p => p.dept === key) }
+function deptStyle(key) { return officeArea[key] || {} }
+function personStyle(p) {
+  return { left: p.x + '%', top: p.y + '%', transition: 'left 2.7s ease-in-out, top 2.7s ease-in-out' }
+}
+
+watch(agents, () => { rebuildOfficePeople() }, { deep: true })
+
 onMounted(() => {
   document.title = '杉汐 | 公司目标'
   loadData()
@@ -1589,14 +1822,18 @@ onMounted(() => {
   loadIterate()
   loadDirective()
   loadReviews()
+  loadFinance()
+  loadMarket()
+  rebuildOfficePeople()
+  startOfficeWalk()
   // 2026-08-09 修复：防重入——后端重启间隙请求会挂 8s（api 超时），3s 轮询若叠加上一轮挂起请求会耗尽连接
   timer = setInterval(() => {
     if (polling) return
     polling = true
-    Promise.allSettled([loadData({ quiet: true }), loadApprovals(), loadMeetings(), loadIterate(), loadDirective(), loadReviews()]).finally(() => { polling = false })
+    Promise.allSettled([loadData({ quiet: true }), loadApprovals(), loadMeetings(), loadIterate(), loadDirective(), loadReviews(), loadFinance(), loadMarket()]).finally(() => { polling = false })
   }, 3000)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => { clearInterval(timer); stopOfficeWalk() })
 </script>
 
 <style scoped>
@@ -2190,14 +2427,20 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .dept-switcher button.active { border-color: #1e3327; color: #fff; background: #17291f; }
 .dept-switcher b { margin-left: 3px; font-size: 9px; opacity: .6; }
 .agent-rows { border-top: 1px solid #e7ebe8; }
-.agent-row { display: grid; grid-template-columns: 34px 110px minmax(180px,1fr) 95px 150px 32px; align-items: center; gap: 10px; min-height: 58px; border-bottom: 1px solid #edf0ed; }
+.agent-row { display: grid; grid-template-columns: 34px 110px minmax(180px,1fr) 88px 95px 150px 32px; align-items: center; gap: 10px; min-height: 58px; border-bottom: 1px solid #edf0ed; }
 .agent-row:hover { background: #fafcfb; }
 .agent-avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #66716a; background: #eef1ef; }
 .agent-row.busy .agent-avatar { color: #102017; background: #4ade80; box-shadow: 0 0 0 4px rgba(74,222,128,.12); }
 .agent-id strong, .agent-id small { display: block; }
 .agent-id strong { color: #18221d; font-size: 11px; }
 .agent-id small { margin-top: 3px; color: #94a3b8; font: 800 7px ui-monospace,monospace; letter-spacing: .1em; }
+.agent-id small.st-working { color: #16a34a; }
+.agent-id small.st-idle { color: #b45309; }
+.agent-id small.st-dead { color: #b42318; }
+.agent-id small.st-unknown { color: #94a3b8; }
 .agent-row.busy .agent-id small { color: #16a34a; }
+.agent-row.dead { opacity: .6; }
+.agent-last { font-size: 10px; color: #8a938c; white-space: nowrap; background: #f1f5f2; padding: 2px 7px; border-radius: 999px; font-weight: 700; }
 .agent-doing { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #647069; font-size: 10px; }
 .agent-handoff { display: flex; align-items: center; gap: 5px; color: #64748b; font-size: 9px; }
 .agent-artifacts { display: flex; gap: 4px; overflow: hidden; }
@@ -2416,13 +2659,15 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .review-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .review-title strong { font-size: 16px; color: #17291f; }
   .review-agent { font-size: 12px; color: #657169; background: #eef3f0; padding: 2px 8px; border-radius: 999px; }
-  .review-title small { font-size: 11px; color: #97a19b; }
+  .review-award { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+  .review-award.award-god { color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; }
+  .review-award.award-good { color: #1d6b45; background: #e6f4ec; border: 1px solid #34d399; }
+  .review-award.award-new { color: #1e40af; background: #e0e7ff; border: 1px solid #818cf8; }
   .review-score { display: flex; align-items: baseline; gap: 3px; }
   .review-score strong { font-size: 24px; }
   .review-score.good strong { color: #1d6b45; }
   .review-score.mid strong { color: #b45309; }
   .review-score small { font-size: 12px; color: #97a19b; }
-  .review-summary { margin: 10px 0 12px; font-size: 13px; color: #4b5563; }
   .review-users { display: flex; flex-direction: column; gap: 10px; }
   .review-user { display: flex; gap: 10px; padding: 10px 12px; background: #f7faf8; border-radius: 10px; }
   .ru-avatar { font-size: 22px; line-height: 1; }
@@ -2433,6 +2678,16 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .ru-stars i { font-style: normal; color: #657169; margin-left: 4px; }
   .ru-model { font-style: normal; font-size: 11px; color: #1d6b45; background: #e6f4ec; padding: 1px 8px; border-radius: 999px; }
   .ru-body p { margin: 4px 0 0; font-size: 13px; color: #374151; line-height: 1.55; }
+  .review-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(23, 41, 31, .15); }
+  .rf-nick { width: 96px; padding: 6px 10px; border: 1px solid rgba(23, 41, 31, .2); border-radius: 8px; font-size: 12px; background: #fff; }
+  .rf-comment { flex: 1; min-width: 160px; padding: 6px 10px; border: 1px solid rgba(23, 41, 31, .2); border-radius: 8px; font-size: 12px; background: #fff; }
+  .rf-stars { display: flex; align-items: center; gap: 2px; }
+  .rf-star { border: none; background: none; font-size: 18px; color: #d8dfda; cursor: pointer; padding: 0 1px; line-height: 1; }
+  .rf-star.on { color: #f0b429; }
+  .rf-score-num { font-size: 12px; color: #b45309; font-weight: 700; margin-left: 4px; }
+  .rf-submit { padding: 6px 14px; border: none; border-radius: 8px; background: #1d6b45; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .rf-submit:disabled { opacity: .5; cursor: wait; }
+  .rf-msg { font-size: 12px; color: #1d6b45; font-weight: 700; }
   .reviews-empty {
     border: 1px dashed rgba(23, 41, 31, .2);
     border-radius: 12px;
@@ -2441,4 +2696,144 @@ button:disabled { cursor: not-allowed; opacity: .48; }
     color: #97a19b;
     display: flex; flex-direction: column; align-items: center; gap: 8px;
   }
+
+  /* ===== 应用大厅（B站式信息流） ===== */
+  .market-room { margin-top: 28px; }
+  .market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .market-card {
+    border: 1px solid rgba(23, 41, 31, .12);
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(15, 70, 49, .05);
+    transition: transform .15s ease;
+  }
+  .market-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(15, 70, 49, .1); }
+  .market-card.promoted { border-color: #eab308; box-shadow: 0 0 0 1px #eab308, 0 4px 14px rgba(234, 179, 8, .15); }
+  .market-card.unreviewed { opacity: .85; }
+  .mc-cover {
+    position: relative;
+    height: 84px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, #eef3f0, #dce8e1);
+    font-size: 40px;
+  }
+  .market-card.promoted .mc-cover { background: linear-gradient(135deg, #fef9c3, #fde68a); }
+  .mc-promo {
+    position: absolute; top: 8px; right: 8px;
+    background: #eab308; color: #fff;
+    font-size: 10px; font-weight: 800;
+    padding: 2px 8px; border-radius: 999px;
+    letter-spacing: .08em;
+  }
+  .mc-award {
+    position: absolute; bottom: 8px; left: 8px;
+    font-size: 11px; font-weight: 700;
+    padding: 2px 9px; border-radius: 999px;
+    background: #fff;
+  }
+  .mc-award.award-god { color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; }
+  .mc-award.award-good { color: #1d6b45; background: #e6f4ec; border: 1px solid #34d399; }
+  .mc-award.award-new { color: #1e40af; background: #e0e7ff; border: 1px solid #818cf8; }
+  .mc-body { padding: 12px 14px 14px; }
+  .mc-body h3 { margin: 0; font-size: 14px; color: #17291f; }
+  .mc-agent { margin: 3px 0 8px; font-size: 11px; color: #8a938c; }
+  .mc-meta { display: flex; align-items: baseline; gap: 8px; }
+  .mc-score { display: flex; align-items: baseline; gap: 2px; }
+  .mc-score b { font-size: 22px; }
+  .mc-score.good b { color: #1d6b45; }
+  .mc-score.mid b { color: #b45309; }
+  .mc-score small { font-size: 11px; color: #97a19b; }
+  .mc-count { font-size: 11px; color: #8a938c; }
+  .mc-wait { font-size: 12px; color: #97a19b; font-weight: 700; }
+  .mc-promo-desc { margin: 8px 0 0; font-size: 11px; color: #a16207; background: #fef9c3; padding: 4px 8px; border-radius: 8px; }
+
+  /* ===== 开罗式办公室场景（游戏发展国：俯视公司 + 员工走动 + 头顶飘字）===== */
+  .office-scene { margin-top: 28px; }
+  .office-money {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+    background: linear-gradient(135deg, #fef9c3, #fde68a);
+    border: 1px solid #eab308;
+    border-radius: 12px;
+    padding: 6px 14px;
+  }
+  .office-money b { font-size: 18px; color: #854d0e; }
+  .office-money small { font-size: 11px; color: #a16207; }
+  .office-map {
+    position: relative;
+    height: 640px;
+    border-radius: 16px;
+    border: 1px solid rgba(120, 90, 50, .25);
+    background:
+      linear-gradient(rgba(120, 90, 50, .07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120, 90, 50, .07) 1px, transparent 1px),
+      #f6efdd;
+    background-size: 30px 30px;
+    overflow: hidden;
+    box-shadow: inset 0 0 60px rgba(120, 90, 50, .12);
+  }
+  .office-dept {
+    position: absolute;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .78);
+    border: 1px solid rgba(120, 90, 50, .22);
+    box-shadow: 0 2px 8px rgba(120, 90, 50, .12);
+  }
+  .dept-ceo { background: rgba(255, 250, 235, .9); border-color: rgba(200, 160, 40, .5); }
+  .dept-sign {
+    position: absolute;
+    top: 5px; left: 8px; right: 8px;
+    font-size: 11px; font-weight: 800; color: #7a5c2e;
+    letter-spacing: .04em;
+    z-index: 2;
+  }
+  .dept-sign b { color: #b08a3e; font-size: 10px; margin-left: 3px; }
+  .office-person {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .op-face {
+    font-size: 22px; line-height: 1;
+    background: #fff;
+    border: 1.5px solid #d8c9a8;
+    border-radius: 50%;
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    box-shadow: 0 2px 5px rgba(90, 70, 40, .25);
+  }
+  .op-work .op-face { border-color: #34d399; box-shadow: 0 0 0 3px rgba(52, 211, 153, .2), 0 2px 5px rgba(90, 70, 40, .25); }
+  .op-idle .op-face { border-color: #f0b429; }
+  .op-dead .op-face { filter: grayscale(.85); opacity: .55; }
+  .op-dead { opacity: .6; }
+  .op-bubble {
+    position: absolute;
+    bottom: 30px;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, .96);
+    border: 1px solid rgba(120, 90, 50, .25);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 10px; color: #4a5a4e; font-weight: 700;
+    box-shadow: 0 2px 6px rgba(90, 70, 40, .15);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .op-bubble i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot-green { background: #22c55e; }
+  .dot-yellow { background: #f0b429; }
+  .dot-red { background: #ef4444; }
+  .op-name {
+    margin-top: 2px;
+    font-size: 9px; color: #7a5c2e; font-weight: 800;
+    background: rgba(255, 255, 255, .85);
+    border-radius: 6px;
+    padding: 0 5px;
+  }
+  .office-prop { position: absolute; font-size: 22px; opacity: .8; z-index: 1; }
+  .prop-water { left: 4.5%; top: 4%; }
+  .prop-desk1 { right: 4%; top: 6%; font-size: 26px; }
+  .prop-desk2 { left: 49.5%; top: 6%; }
+  .prop-desk3 { right: 12%; top: 96%; }
   </style>

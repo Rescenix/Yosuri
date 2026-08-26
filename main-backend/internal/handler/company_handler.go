@@ -7,6 +7,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"mime"
 	"net/http"
 	"os"
@@ -36,6 +37,80 @@ type companyAgentInfo struct {
 	Childhood string `json:"childhood"` // 童年故事
 	// 协作引用（2026-08-09：真实接力证据，非剧本）
 	CollabRefs []CollabRef `json:"collabRefs,omitempty"`
+	// 实时状态（2026-08-26：开罗式"每个 agent 正在干什么"）
+	Status     string `json:"status"`      // 工作中 / 空闲中 / 停摆 N 天 / 未知
+	Task       string `json:"task"`        // 正在做什么（从 live.log 尾部解析）
+	LastActive string `json:"lastActive"`  // 最后活动时间（MM-DD HH:mm）
+}
+
+// liveLogTimeRe 匹配 live.log 行首时间戳：完整 [2026-08-13 14:10] 或当天 [14:05]
+var liveLogTimeRe = regexp.MustCompile(`\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}|\d{2}:\d{2})\]`)
+
+// parseAgentLiveStatus 从 live.log 尾部解析 agent 当前状态/任务/最后活动
+// live.log 时间戳两种：完整 [2026-08-09 22:58] 和当天短格式 [22:59]
+// 短格式继承最近一条完整时间戳行的日期（08-26 实测修复：不能当今天）
+func parseAgentLiveStatus(logPath string) (status, task, lastActive string) {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return "未知", "无活动记录", ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	now := time.Now()
+	lastTS := time.Time{}
+	lastTask := ""
+	// 从尾部往前找最后一条带时间戳的行动行
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		m := liveLogTimeRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		var ts time.Time
+		if len(m[1]) > 12 { // 完整日期（含 4 位年）
+			ts, _ = time.ParseInLocation("2006-01-02 15:04", m[1], time.Local)
+		} else { // 短时间 [22:59]：继承最近一条完整日期行
+			hm, _ := time.ParseInLocation("15:04", m[1], time.Local)
+			for j := i - 1; j >= 0; j-- {
+				m2 := liveLogTimeRe.FindStringSubmatch(strings.TrimSpace(lines[j]))
+				if m2 != nil && len(m2[1]) > 12 {
+					if d, err := time.ParseInLocation("2006-01-02 15:04", m2[1], time.Local); err == nil && !d.IsZero() {
+						ts = time.Date(d.Year(), d.Month(), d.Day(), hm.Hour(), hm.Minute(), 0, 0, time.Local)
+						break
+					}
+				}
+			}
+		}
+		if ts.IsZero() {
+			continue
+		}
+		lastTS = ts
+		// 行动内容：去掉时间戳前缀
+		task = strings.TrimSpace(liveLogTimeRe.ReplaceAllString(line, ""))
+		// 跳过纯状态行（💭 想法 / 👭 无新消息），继续找真正的行动
+		if task != "" && !strings.HasPrefix(task, "💭") && !strings.HasPrefix(task, "👭") && !strings.HasPrefix(task, "在这里待着") {
+			lastTask = task
+		}
+		if lastTask != "" {
+			break
+		}
+	}
+	if lastTS.IsZero() {
+		return "未知", "无活动记录", ""
+	}
+	days := int(now.Sub(lastTS).Hours() / 24)
+	switch {
+	case days <= 0:
+		status = "工作中"
+	case days <= 7:
+		status = "空闲中"
+	default:
+		status = fmt.Sprintf("停摆 %d 天", days)
+	}
+	if lastTask == "" {
+		lastTask = "最近无行动"
+	}
+	lastActive = lastTS.Format("01-02 15:04")
+	return status, lastTask, lastActive
 }
 
 // CollabRef 协作引用（真实证据：这个 agent 引用了哪个同事的什么产出）
@@ -278,6 +353,8 @@ func HandleCompanyAgents(c *gin.Context) {
 				info.RecentLog = string(data)
 			}
 		}
+		// 开罗式实时状态：正在干什么 + 最后活动时间
+		info.Status, info.Task, info.LastActive = parseAgentLiveStatus(logPath)
 		// 产出数 + 文件名列表
 		outputDir := filepath.Join(dir, e.Name(), "outputs")
 		if outEntries, err := os.ReadDir(outputDir); err == nil {
@@ -898,43 +975,185 @@ func loadCompanyDirective() (directive, task, model string) {
 	return strings.TrimSpace(d.Directive), strings.TrimSpace(d.Task), strings.TrimSpace(d.Model)
 }
 
-// 用户评测 JSON 结构（与 agent-os user_reviews.go 的 08-用户评测.json 对齐）
-type userReviewsFile struct {
-	Project     string           `json:"project"`
-	GeneratedAt string           `json:"generated_at"`
-	AvgScore    float64          `json:"avg_score"`
-	Reviews     []userReviewFile `json:"reviews"`
-	Summary     string           `json:"summary"`
-}
-type userReviewFile struct {
-	Name     string `json:"name"`
-	Emoji    string `json:"emoji"`
-	Profile  string `json:"profile"`
-	ModelID  string `json:"model_id"`
-	ModelTag string `json:"model_tag"`
-	Score    int    `json:"score"`
-	Comment  string `json:"comment"`
+// ===== 真实世界评分评奖（2026-08-26 重构：每一个评分/评奖都来自真实用户）=====
+
+// realReviewFile 一条真实用户评分
+type realReviewFile struct {
+	Nickname  string `json:"nickname"`   // 真实用户昵称
+	Score     int    `json:"score"`      // 1-10
+	Comment   string `json:"comment"`    // 玩家向评论（≤120字）
+	CreatedAt string `json:"created_at"` // 提交时间
 }
 
-// HandleCompanyReviews GET /api/company/reviews — 用户评测列表
-// 扫描公司各 coder 项目目录的 08-用户评测.json，返回发行反馈（评分/评论/模型名）
+// realReviewsFile 项目真实评分存储（落盘 reviews-real.json，追加式）
+type realReviewsFile struct {
+	Project string           `json:"project"`
+	Reviews []realReviewFile `json:"reviews"`
+}
+
+// reviewAward 评奖结果（真实用户评分驱动）
+type reviewAward struct {
+	Title string `json:"title"` // 🏆 神作 / ⭐ 好评 / 🌱 新秀
+	Label string `json:"label"` // 得奖理由（真实用户数 + 均分）
+}
+
+// reviewAwardFor 根据真实评分算奖项：分数全部来自真实用户
+func reviewAwardFor(avg float64, count int) *reviewAward {
+	if count == 0 {
+		return nil
+	}
+	switch {
+	case count >= 2 && avg >= 8.5:
+		return &reviewAward{Title: "🏆 神作", Label: fmt.Sprintf("%d 位真实用户 · 平均 %.1f 分", count, avg)}
+	case count >= 1 && avg >= 7:
+		return &reviewAward{Title: "⭐ 好评", Label: fmt.Sprintf("%d 位真实用户 · 平均 %.1f 分", count, avg)}
+	default:
+		return &reviewAward{Title: "🌱 新秀", Label: fmt.Sprintf("%d 位真实用户 · 平均 %.1f 分", count, avg)}
+	}
+}
+
+// reviewsRealPath 项目目录 → 真实评分文件
+func reviewsRealPath(projDir string) string {
+	return filepath.Join(projDir, "reviews-real.json")
+}
+
+// loadRealReviews 读项目真实评分（文件不存在返回空）
+func loadRealReviews(projDir, project string) realReviewsFile {
+	rb := realReviewsFile{Project: project}
+	data, err := os.ReadFile(reviewsRealPath(projDir))
+	if err != nil {
+		return rb
+	}
+	json.Unmarshal(data, &rb)
+	if rb.Project == "" {
+		rb.Project = project
+	}
+	return rb
+}
+
+// findProjectDir 按项目名（目录名）定位真实项目目录，防路径穿越
+func findProjectDir(project string) (string, bool) {
+	if project == "" || strings.ContainsAny(project, `/\`) {
+		return "", false
+	}
+	companyRoot := companyDir()
+	entries, err := os.ReadDir(companyRoot)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "coder-") {
+			continue
+		}
+		projDir := filepath.Join(companyRoot, e.Name(), "projects", project)
+		if st, err := os.Stat(projDir); err == nil && st.IsDir() {
+			return projDir, true
+		}
+	}
+	return "", false
+}
+
+// reviewSubmitReq POST /api/company/reviews 请求体
+type reviewSubmitReq struct {
+	Project  string `json:"project"`  // 项目名（目录名）
+	Nickname string `json:"nickname"` // 真实用户昵称
+	Score    int    `json:"score"`    // 1-10
+	Comment  string `json:"comment"`  // ≤120字
+}
+
+// HandleCompanyReviewSubmit POST /api/company/reviews — 真实用户提交评分
+// 校验 → 写入 reviews-real.json（同昵称同项目覆盖旧评分）→ 返回聚合+评奖
+func HandleCompanyReviewSubmit(c *gin.Context) {
+	var req reviewSubmitReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
+		return
+	}
+	req.Project = strings.TrimSpace(req.Project)
+	req.Nickname = strings.TrimSpace(req.Nickname)
+	req.Comment = strings.TrimSpace(req.Comment)
+	if req.Project == "" || req.Nickname == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "项目名和用户昵称不能为空"})
+		return
+	}
+	if req.Score < 1 || req.Score > 10 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "评分需在 1-10 之间"})
+		return
+	}
+	if len([]rune(req.Comment)) > 120 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "评论最多 120 字"})
+		return
+	}
+	projDir, ok := findProjectDir(req.Project)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "项目不存在"})
+		return
+	}
+
+	rb := loadRealReviews(projDir, req.Project)
+	now := time.Now().Format("2006-01-02 15:04")
+	replaced := false
+	for i := range rb.Reviews {
+		if rb.Reviews[i].Nickname == req.Nickname {
+			rb.Reviews[i].Score = req.Score
+			rb.Reviews[i].Comment = req.Comment
+			rb.Reviews[i].CreatedAt = now
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		rb.Reviews = append(rb.Reviews, realReviewFile{
+			Nickname: req.Nickname, Score: req.Score, Comment: req.Comment, CreatedAt: now,
+		})
+	}
+	data, _ := json.MarshalIndent(rb, "", "  ")
+	if err := os.WriteFile(reviewsRealPath(projDir), data, 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "评分落盘失败: " + err.Error()})
+		return
+	}
+
+	// 资金闭环：真实评分上涨 → 销量入账（开罗经济）
+	_ = syncProductRevenue(projDir, req.Project)
+
+	// 返回该项目的聚合 + 评奖（真实用户驱动）
+	avg := 0.0
+	for _, r := range rb.Reviews {
+		avg += float64(r.Score)
+	}
+	avg /= float64(len(rb.Reviews))
+	award := reviewAwardFor(avg, len(rb.Reviews))
+	c.JSON(http.StatusOK, gin.H{
+		"project":   req.Project,
+		"avg_score": round1(avg),
+		"count":     len(rb.Reviews),
+		"award":     award,
+		"users":     rb.Reviews,
+	})
+}
+
+// round1 保留一位小数
+func round1(v float64) float64 {
+	return math.Round(v*10) / 10
+}
+
+// HandleCompanyReviews GET /api/company/reviews — 真实用户评分/评奖列表
+// 扫描公司各 coder 项目目录的 reviews-real.json，只返回有真实评分的产品
 func HandleCompanyReviews(c *gin.Context) {
 	companyRoot := companyDir()
 	type userReviewView struct {
-		Name     string `json:"name"`
-		Emoji    string `json:"emoji"`
-		Profile  string `json:"profile"`
-		ModelTag string `json:"model_tag"`
-		Score    int    `json:"score"`
-		Comment  string `json:"comment"`
+		Nickname  string `json:"nickname"`
+		Score     int    `json:"score"`
+		Comment   string `json:"comment"`
+		CreatedAt string `json:"created_at"`
 	}
 	type reviewsPayload struct {
-		Project     string           `json:"project"`
-		Agent       string           `json:"agent"`
-		AvgScore    float64          `json:"avg_score"`
-		Summary     string           `json:"summary"`
-		GeneratedAt string           `json:"generated_at"`
-		Users       []userReviewView `json:"users"`
+		Project  string           `json:"project"`
+		Agent    string           `json:"agent"`
+		AvgScore float64          `json:"avg_score"`
+		Count    int              `json:"count"`
+		Award    *reviewAward     `json:"award"`
+		Users    []userReviewView `json:"users"`
 	}
 	var all []reviewsPayload
 	entries, err := os.ReadDir(companyRoot)
@@ -955,25 +1174,25 @@ func HandleCompanyReviews(c *gin.Context) {
 			if !p.IsDir() {
 				continue
 			}
-			reviewFile := filepath.Join(projDir, p.Name(), "08-用户评测.json")
-			data, err := os.ReadFile(reviewFile)
-			if err != nil {
-				continue
+			rb := loadRealReviews(filepath.Join(projDir, p.Name()), p.Name())
+			if len(rb.Reviews) == 0 {
+				continue // 只展示有真实用户评分的产品
 			}
-			var rb userReviewsFile
-			if json.Unmarshal(data, &rb) != nil {
-				continue
+			avg := 0.0
+			for _, r := range rb.Reviews {
+				avg += float64(r.Score)
 			}
+			avg /= float64(len(rb.Reviews))
 			users := make([]userReviewView, 0, len(rb.Reviews))
 			for _, r := range rb.Reviews {
 				users = append(users, userReviewView{
-					Name: r.Name, Emoji: r.Emoji, Profile: r.Profile,
-					ModelTag: r.ModelTag, Score: r.Score, Comment: r.Comment,
+					Nickname: r.Nickname, Score: r.Score, Comment: r.Comment, CreatedAt: r.CreatedAt,
 				})
 			}
 			all = append(all, reviewsPayload{
-				Project: rb.Project, Agent: e.Name(), AvgScore: rb.AvgScore,
-				Summary: rb.Summary, GeneratedAt: rb.GeneratedAt, Users: users,
+				Project: p.Name(), Agent: e.Name(),
+				AvgScore: round1(avg), Count: len(rb.Reviews),
+				Award: reviewAwardFor(avg, len(rb.Reviews)), Users: users,
 			})
 		}
 	}

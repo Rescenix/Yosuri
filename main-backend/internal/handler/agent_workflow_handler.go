@@ -203,6 +203,18 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("X-Accel-Buffering", "no") // 反代（nginx/render）别缓冲 SSE
+	// 用户选了具体模型，但 ID 已过期、被探活淘汰或没有可用 Key。
+	// 这时必须原地失败：若继续组装 Auto 链，就会出现“选了 B 却仍在跑 A”。
+	if model != "" && model != "auto" && len(backends) == 0 {
+		message := fmt.Sprintf("模型 %q 未找到或未配置可用 Key（精确模型禁止自动回退；请重新选择模型或改用 Auto）", model)
+		writeCodeSSE(c, "flow_error", map[string]any{"message": message})
+		writeCodeSSE(c, "workflow_done", map[string]any{
+			"status": "failed", "final_output": message,
+			"input_tokens": 0, "output_tokens": 0, "conversation_tokens": 0,
+			"resumable": false,
+		})
+		return
+	}
 
 	// SSE 心跳：长工具调用（构建/测试/生图）可能 30-60s 无事件，
 	// 中间代理/浏览器会把空闲连接当成死连接掐断，前端 EventSource.onerror 一触发
@@ -831,14 +843,28 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 					mime = "image/png"
 				}
 				writeCodeSSE(c, "artifact", map[string]any{
-					"id":         fmt.Sprintf("%s_image_%d", tc.ID, imageIndex),
-					"kind":       "image",
-					"tool":       tc.Function.Name,
-					"image":      "data:" + mime + ";base64," + image.Data,
-					"source_url": artifactSourceURL(tc.Function.Arguments),
-					"caption":    "Agent 已截取当前页面，作为本次交付凭证。",
-				})
-			}
+									"id":         fmt.Sprintf("%s_image_%d", tc.ID, imageIndex),
+									"kind":       "image",
+									"tool":       tc.Function.Name,
+									"image":      "data:" + mime + ";base64," + image.Data,
+									"source_url": artifactSourceURL(tc.Function.Arguments),
+									"caption":    "Agent 已截取当前页面，作为本次交付凭证。",
+								})
+							}
+							// 视频工件：同图片模式，内嵌可拖动进度条播放块
+							for videoIndex, video := range results[i].videos {
+								writeCodeSSE(c, "artifact", map[string]any{
+									"id":      fmt.Sprintf("%s_video_%d", tc.ID, videoIndex),
+									"kind":    "video",
+									"tool":    tc.Function.Name,
+									"url":     video.URL,
+									"file":    video.File,
+									"mime":    video.Mime,
+									"size":    video.Size,
+									"seconds": video.Seconds,
+									"caption": "Agent 已生成视频，可拖动进度条播放。",
+								})
+							}
 			status := "ok"
 			if results[i].failed {
 				status = "error"
@@ -930,6 +956,7 @@ type codeExecResult struct {
 	output string
 	failed bool
 	images []mcpImageArtifact
+	videos []mcpVideoArtifact
 	// urls 是 web_search（Firecrawl 联网搜索）的引用来源，透出给前端来源卡片
 	urls []string
 }
@@ -1023,7 +1050,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 	// yolo 模式 / 非危险且未越界 / 已设 don't-ask-again → 直接放行。
 	maybeRequestApproval := func(tc core.ToolCall) bool {
 		name := tc.Function.Name
-		if mode == "yolo" {
+		if mode == "yolo" && !ProtectedWorkspaceEnabled() {
 			// Yolo 畅通无阻：危险工具与越界访问一律不拦——但三类操作除外，
 			// 必须进下方审批，避免 agent 全自动毁掉不可挽回的东西：
 			//  1. 不可逆文件操作（删除/移动/重命名）
@@ -1051,7 +1078,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 		if outside {
 			key = outsideRememberKey(outPath)
 		}
-		if r.shouldAutoApproveKey(sessionID, key) {
+		if !ProtectedWorkspaceEnabled() && r.shouldAutoApproveKey(sessionID, key) {
 			return true
 		}
 		// 登记 + 推 SSE 事件 + 阻塞等批准。approval id 编码 workflowID::callID，
@@ -1084,6 +1111,14 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 	// 保证两类执行路径的行为完全一致。
 	runOne := func(i int, tc core.ToolCall) {
 		name := tc.Function.Name
+		// 受保护工作区不是“审批后越界放行”：路径越出当前项目即硬拒绝。
+		// shell 命令无法在应用层可靠静态解析其所有路径，仍会进入下方的强制审批。
+		if ProtectedWorkspaceEnabled() {
+			if outside, path := toolOutsideRoot(tc.Function.Arguments); outside {
+				results[i] = codeExecResult{output: "受保护工作区已拒绝工作目录外的访问: " + path, failed: true}
+				return
+			}
+		}
 		if !maybeRequestApproval(tc) {
 			results[i] = codeExecResult{output: "用户未批准执行 " + name + "，已跳过", failed: true}
 			return
@@ -1123,7 +1158,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
 				out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
 			}
-			results[i] = codeExecResult{output: out, images: nativeResult.Images, urls: nativeResult.URLs}
+			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, urls: nativeResult.URLs}
 			return
 		}
 		if strings.HasPrefix(name, "mcp__") {

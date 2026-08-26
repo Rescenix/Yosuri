@@ -51,17 +51,6 @@
     </div>
   </div>
   <SettingsModal v-if="showAggApi" default-tab="aggapi" @close="showAggApi = false" />
-  <!-- Tab 页面右上角的明确出口；不依赖用户注意到右下导航。 -->
-  <button
-    v-if="route.path !== '/chat'"
-    class="app-page-back"
-    type="button"
-    title="返回聊天"
-    @click="returnToChat"
-  >
-    <Icon icon="mdi:arrow-left" width="17" />
-    <span>返回聊天</span>
-  </button>
           <router-view />
           <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
           <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
@@ -108,6 +97,7 @@ const RAIL_POSITION_KEY = 'app_tool_rail_position_v1'
 const RAIL_ITEMS_KEY = 'app_tool_rail_items_v1'
 const railItemDefinitions = [
   { id: 'chat', label: '编码', icon: 'mdi:code-tags', to: '/chat' },
+  { id: 'bio', label: '生命建模', icon: 'mdi:dna', to: '/bio' },
   { id: 'company', label: 'Agent 公司', icon: 'mdi:domain', to: '/company' },
   { id: 'sites', label: '站点', icon: 'mdi:web', to: '/sites' },
   { id: 'publish', label: '网文创作', icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
@@ -127,9 +117,6 @@ let railDrag = null
 const railPositionStyle = computed(() => railPosition.value
   ? { left: `${railPosition.value.x}px`, top: `${railPosition.value.y}px`, right: 'auto', bottom: 'auto' }
   : {})
-function returnToChat() {
-  router.push('/chat')
-}
 function saveRailItems() {
   localStorage.setItem(RAIL_ITEMS_KEY, JSON.stringify(railItems.value.map(item => item.id)))
 }
@@ -248,8 +235,8 @@ function openUpdateModal() {
 }
 
 // 更新检查 + 触发后台下载。
-// silent=true（30 分钟周期）：下完静默不打扰，等下次进应用提示；
-// silent=false（启动）：安装包已就绪 → 弹轻量横幅（同版本 3 天节流）。
+// 2026-08-25 秒弹定稿：检测到新版本 → 立刻弹轻量横幅（同一版本 3 天节流），
+// 同时后台静默下载；安装包就绪后下次启动再确认弹窗。不再等下载完才提示。
 async function checkAndDownload(silent) {
   if (isUpdateNotifyDisabled()) return
   let res
@@ -262,31 +249,30 @@ async function checkAndDownload(silent) {
   if (getSkippedVersion() === data.update.latest_version) return
   if (!isTestUpdatesEnabled() && isPrereleaseVersionString(data.update.latest_version)) return
   updateInfo.value = data.update
+  // 秒弹：新版本一被检测到就提示（3 天节流，同版本不重复），不等下载完成
+  if (shouldShowUpdateBanner(data.update.latest_version)) {
+    markUpdateBannerShown(data.update.latest_version)
+    showBanner()
+  }
   try {
     const dl = await fetch('/api/update/download', { method: 'POST' })
     const dlData = await dl.json()
     if (dlData.state === 'done') {
-      // 安装包已就绪（本次启动前已下好）→ 弹轻量横幅；
-      // 同一版本 3 天内只提醒一次，3 天后没装再提醒（用户 2026-08-18 定稿）
-      if (silent) return
-      if (!shouldShowUpdateBanner(data.update.latest_version)) return
-      markUpdateBannerShown(data.update.latest_version)
-      showBanner()
+      // 安装包已就绪（本次启动前已下好）：横幅已弹过，无需额外动作
       return
     }
-    // 下载中：轮询等待完成，完成后静默（下次进应用再提示）
+    // 下载中：轮询等待完成，完成后静默（下次启动磁盘判断 done → 版本 tab 可装）
     const timer = setInterval(async () => {
       try {
         const r = await fetch('/api/update/download/status')
         const d = await r.json()
         if (d.state === 'done' || d.state === 'error') {
           clearInterval(timer)
-          // 静默：安装包已就绪，下次启动磁盘判断 done → 弹横幅
         }
       } catch { /* 忽略轮询错误 */ }
     }, 2000)
   } catch {
-    // 下载接口不可达：本次不弹窗，下次启动再试
+    // 下载接口不可达：本次不下载，下次再试
   }
 }
 
@@ -430,7 +416,7 @@ onMounted(async () => {
   bottom: 18px;
   z-index: 9999;
   display: grid;
-  grid-template-columns: repeat(6, 30px);
+  grid-template-columns: repeat(7, 30px);
   grid-template-rows: repeat(2, 30px);
   align-items: center;
   gap: 2px;
@@ -443,11 +429,11 @@ onMounted(async () => {
   transition: border-radius .2s ease, box-shadow .2s ease;
 }
 .app-tool-rail.dragging { cursor: grabbing; box-shadow: 0 12px 28px rgba(15,23,42,.18); }
-.app-tool-rail.is-elbow > .app-tool-btn:nth-child(-n+6) { grid-row: 2; }
-.app-tool-rail.is-elbow > .app-tool-btn:nth-child(7) { grid-column: 6; grid-row: 1; }
-.app-tool-rail.is-elbow > .app-tool-btn:nth-child(8) { grid-column: 5; grid-row: 1; }
-.app-tool-rail.is-elbow > .app-tool-rail-edit { grid-column: 4; grid-row: 1; }
-.app-tool-rail.is-elbow > .app-tool-rail-grip { grid-column: 3; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-btn:nth-child(-n+7) { grid-row: 2; }
+.app-tool-rail.is-elbow > .app-tool-btn:nth-child(8) { grid-column: 7; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-btn:nth-child(9) { grid-column: 6; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-rail-edit { grid-column: 5; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-rail-grip { grid-column: 4; grid-row: 1; }
 .app-tool-rail.is-elbow.compact {
   display: flex;
   width: max-content;
@@ -516,30 +502,6 @@ onMounted(async () => {
 .rail-editor-add > span { width: 100%; color: var(--app-text-faint); font-size: 11px; }
 .rail-editor-add button { display: inline-flex; align-items: center; gap: 4px; min-height: 27px; padding: 0 7px; border: 1px solid var(--app-border); border-radius: 7px; color: var(--app-text-soft); background: var(--app-surface); font: inherit; font-size: 11px; cursor: pointer; }
 .rail-editor-add button:hover { color: var(--app-accent); border-color: var(--app-accent); }
-.app-page-back {
-  position: fixed;
-  top: 16px;
-  right: 18px;
-  z-index: 9998;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--app-accent), transparent 62%);
-  border-radius: 10px;
-  color: var(--app-accent);
-  background: color-mix(in srgb, var(--app-surface, #fff), transparent 6%);
-  box-shadow: 0 6px 20px rgba(15,23,42,.10);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  backdrop-filter: blur(10px);
-  transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
-}
-.app-page-back:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--app-accent), transparent 90%); box-shadow: 0 9px 24px rgba(15,23,42,.15); }
-.app-page-back:focus-visible { outline: 2px solid color-mix(in srgb, var(--app-accent), transparent 35%); outline-offset: 2px; }
 /* DHS 鲸鱼入口（自 chat-window.css 的 dhs-whale-shortcut，移入底部工具条右端后样式随附） */
 .dhs-whale-shortcut {
   position: relative;
@@ -587,9 +549,8 @@ html:has(.company-view)::-webkit-scrollbar-thumb:hover { background: linear-grad
 html:has(.publish-view)::-webkit-scrollbar-thumb:hover { background: linear-gradient(#c77f9d,#8883bf); }
 @media (max-width: 620px) {
   .app-tool-rail { right: 22px; bottom: 10px; padding: 3px; gap: 1px; }
-  .app-tool-rail.is-elbow { grid-template-columns: repeat(6, 26px); grid-template-rows: repeat(2, 26px); }
+  .app-tool-rail.is-elbow { grid-template-columns: repeat(7, 26px); grid-template-rows: repeat(2, 26px); }
   .app-tool-btn,.app-tool-rail-grip,.app-tool-rail-edit,.dhs-whale-shortcut { width: 26px; height: 26px; flex-basis: 26px; }
-  .app-page-back { top: 10px; right: 10px; min-height: 34px; padding: 0 10px; font-size: 12px; }
   .rail-editor { right: 10px; bottom: 76px; width: min(238px, calc(100vw - 20px)); }
 }
 </style>

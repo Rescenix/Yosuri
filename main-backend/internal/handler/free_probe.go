@@ -139,8 +139,10 @@ func isAutoModelDisabled(endpoint, model string) bool {
 }
 
 const (
-	// probeInterval 探活周期：30 分钟一轮（免费档 429 常见，太频繁等于自打限流）。
-	probeInterval = 30 * time.Minute
+	// probeInterval 探活周期：24 小时一轮（日级，2026-08-26 定稿）。只探免 key 网关
+	// 目录条目（零成本，不烧用户填的 key 额度），用于刷新「列表里显示什么」。
+	// 分钟级的临时故障由真实请求故障转移兜底，无需高频探活。
+	probeInterval = 24 * time.Hour
 	// probeTimeout 单次探活超时：比正常对话超时(45s)短，探活要快。
 	probeTimeout = 12 * time.Second
 	// probeLatencyFast / probeLatencyMid：信号分档阈值（成功时）。
@@ -315,8 +317,12 @@ func recordProbeResult(f *FreeModelDef, lat time.Duration, status int, ok bool) 
 	}
 }
 
-// probeOnce 探一轮：并行对免费池所有可探条目发最小请求。
-// 启动时立即跑一次，之后由 ticker 周期触发。
+// probeOnce 探一轮：并行对免费池所有「免 key 目录条目」发最小请求。
+// 启动时立即跑一次，之后由 ticker 日级触发（2026-08-26 定稿）。
+// ⚠️ 只探 Keyless 条目：免 key 网关（Kilo/LLM7/Zen）探活零成本。
+// 需 key 厂商不探——08-15 实锤并发探 freeModelCatalog 全部条目 + 自动发现快照
+// （魔搭 43 个 / Zen 54 个 / NVIDIA 100+）一天烧穿全部免费额度。
+// 自动发现也不再探（官方展示池已不收自动发现，见 exposeOfficial）。
 func probeOnce() {
 	freeCatalogMu.Lock()
 	snapshot := make([]FreeModelDef, len(freeModelCatalog))
@@ -326,8 +332,8 @@ func probeOnce() {
 	var wg sync.WaitGroup
 	for i := range snapshot {
 		f := &snapshot[i]
-		if f.Local {
-			continue // 本地模型不探（目录已无 Local 条目，防御性跳过）
+		if f.Local || !f.Keyless {
+			continue // 只探免 key 目录条目
 		}
 		wg.Add(1)
 		go func(ff *FreeModelDef) {
@@ -335,12 +341,8 @@ func probeOnce() {
 			probeCatalogEntry(ff)
 		}(f)
 	}
-	// 自动发现模型（auto_ 前缀）同样探活：不可用的信号打 0 且标记确定性
-	// 淘汰（401/403/404），恢复的移除标记重新进池。聚合 API /v1/models 输出
-	// 时按信号 0 + autoDisabled 过滤，外部工具就看不到不可用模型了。
-	probeAutoDiscovered(&wg)
 	wg.Wait()
-	fmt.Printf("🛰️ [免费池探活] 完成一轮：%d 个目录条目 + 自动发现模型（并发探测）\n", len(snapshot))
+	fmt.Printf("🛰️ [免费池探活] 完成一轮：%d 个免 key 目录条目（并发探测，日级）\n", len(snapshot))
 }
 
 // probeAutoDiscovered 对自动发现快照里的每个模型做一次最小探活。

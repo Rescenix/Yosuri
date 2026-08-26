@@ -1,13 +1,13 @@
 <template>
   <!-- 用户消息导航轴：一个节点 = 一条用户消息，点它跳过去。
-       长对话里靠滚滚动条找"我当时问的那句话"很痛苦，这条轴把提问节奏压成一行。 -->
+       固定在聊天正文左侧居中，用短横线表达整段对话的位置。 -->
   <div v-if="items.length" class="umr" @mouseleave="hoverIdx = -1">
     <div ref="trackRef" class="umr-track" @wheel.prevent="onWheel">
       <div
         v-for="(m, i) in items"
         :key="m.id"
         class="umr-node-wrap"
-        :class="{ active: activeIdx === i }"
+        :class="[{ active: activeIdx === i }, waveClass(i)]"
       >
         <button
           class="umr-node"
@@ -21,8 +21,8 @@
       </div>
     </div>
 
-    <!-- 悬浮预览：跟着节点走，超出轴宽时贴边，不让它飘到工具栏外面 -->
-    <div v-if="hovered" class="umr-tip" :style="{ left: tipLeft + 'px' }">
+    <!-- 悬浮预览从轴的右侧展开，跟随当前节点。 -->
+    <div v-if="hovered" class="umr-tip" :style="{ top: tipTop + 'px' }">
       <span class="umr-tip-idx">#{{ hoverIdx + 1 }}</span>
       <span class="umr-tip-text">{{ preview(hovered) }}</span>
     </div>
@@ -42,7 +42,7 @@ defineEmits(['jump'])
 
 const trackRef = ref(null)
 const hoverIdx = ref(-1)
-const tipLeft = ref(0)
+const tipTop = ref(0)
 
 // 只要用户真正说过的话：附件占位、空内容的气泡不该占一个点位
 const items = computed(() =>
@@ -58,19 +58,27 @@ const activeIdx = computed(() => {
 
 const hovered = computed(() => (hoverIdx.value >= 0 ? items.value[hoverIdx.value] : null))
 
+// 静止时全是短线；只有鼠标悬浮时，当前刻度与上下三根组成临时波峰。
+function waveClass(i) {
+  if (hoverIdx.value < 0) return ''
+  const distance = Math.abs(i - hoverIdx.value)
+  if (distance === 0) return 'wave-peak'
+  return distance <= 3 ? `wave-${distance}` : ''
+}
+
 function preview(m) {
   const t = (m.content || '').replace(/\s+/g, ' ').trim()
   return t.length > 90 ? t.slice(0, 90) + '…' : t
 }
 
-// 轴很窄，鼠标滚轮走横向更顺手（deltaY 直接喂 scrollLeft，不用按住 shift）
+// 节点较多时导航轴独立纵向滚动，不带动聊天正文。
 function onWheel(e) {
   const el = trackRef.value
   if (!el) return
-  el.scrollLeft += (e.deltaY || e.deltaX)
+  el.scrollTop += (e.deltaY || e.deltaX)
 }
 
-// 气泡跟着当前悬浮的节点定位；节点可能被滚出可视区，所以要减掉 scrollLeft
+// 气泡跟着当前悬浮的节点定位；节点可能被滚出可视区，所以要减掉 scrollTop。
 watch(hoverIdx, async (i) => {
   if (i < 0) return
   await nextTick()
@@ -78,33 +86,37 @@ watch(hoverIdx, async (i) => {
   const wrap = el?.children?.[i]
   const dot = wrap?.querySelector('.umr-node')
   if (!el || !dot) return
-  const raw = dot.offsetLeft - el.scrollLeft + dot.offsetWidth / 2
-  tipLeft.value = Math.max(0, Math.min(raw, el.clientWidth))
+  const raw = dot.offsetTop - el.scrollTop + dot.offsetHeight / 2
+  tipTop.value = Math.max(0, Math.min(raw, el.clientHeight))
 })
 
-// 新消息进来时自动滚到最右，保持"最近的提问"可见
+// 新消息进来时自动滚到底，保持最近的提问可见。
 watch(() => items.value.length, async () => {
   await nextTick()
-  if (trackRef.value) trackRef.value.scrollLeft = trackRef.value.scrollWidth
+  if (trackRef.value) trackRef.value.scrollTop = trackRef.value.scrollHeight
 })
 </script>
 
 <style scoped>
 .umr {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
+  position: absolute;
+  z-index: 45;
+  top: 24px;
+  /* chat-content 紧邻会话列表；留 12px gutter 后开始画刻度。 */
+  left: 12px;
   display: flex;
   align-items: center;
-  padding: 0 10px;
 }
 .umr-track {
   display: flex;
-  align-items: center;
-  overflow-x: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 48px;
+  box-sizing: border-box;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
   scrollbar-width: none;      /* 轴本身就很细，再挂一条滚动条太吵 */
-  padding: 8px 4px;
-  width: 100%;
+  padding: 6px 4px;
 }
 .umr-track::-webkit-scrollbar { display: none; }
 
@@ -112,81 +124,70 @@ watch(() => items.value.length, async () => {
   position: relative;
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-direction: column;
 }
 
-/* 节点之间的水平连线 */
+/* Codex 式刻度：默认短线，当前消息拉长并加深。 */
 .umr-node-wrap:not(:last-child)::after {
   content: '';
-  width: 18px;
-  height: 2px;
-  margin: 0 4px;
-  border-radius: 1px;
-  background: var(--app-border, #e4e4e7);
-  transition: background 0.2s ease;
-}
-/* 已走过路径：从起点到当前激活节点之间的连线和节点都高亮 */
-.umr-node-wrap:has(~ .active):not(:last-child)::after,
-.umr-node-wrap.active:not(:last-child)::after {
-  background: var(--app-accent, #6366f1);
-}
-.umr-node-wrap:has(~ .active) .umr-node {
-  border-color: color-mix(in srgb, var(--app-accent, #6366f1) 55%, transparent);
-}
-.umr-node-wrap:has(~ .active) .umr-node-num {
-  color: color-mix(in srgb, var(--app-accent, #6366f1) 75%, transparent);
+  width: 0;
+  height: 5px;
 }
 
 .umr-node {
   position: relative;
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 2px solid var(--app-border, #e4e4e7);
-  border-radius: 0;
-  background: var(--app-surface, #fff);
+  /* 全局 button 使用 border-box；这里的 width 必须只描述可见细线，
+     左右 padding 仅负责扩大点击热区，否则短线会被 padding 完全吃掉。 */
+  box-sizing: content-box;
+  width: 7px;
+  height: 1px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-faint, #a1a1aa) 54%, transparent);
+  background-clip: content-box;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transform: rotate(45deg);
+  transition: width 0.18s ease, height 0.18s ease, background 0.18s ease;
 }
 .umr-node-num {
-  font-size: 8px;
-  font-weight: 600;
-  color: var(--app-text-soft, #71717a);
-  line-height: 1;
-  user-select: none;
-  transform: rotate(-45deg);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .umr-node:hover,
 .umr-node.hovered {
-  border-color: var(--app-accent, #6366f1);
-  transform: rotate(45deg) scale(1.15);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
-}
-.umr-node:hover .umr-node-num,
-.umr-node.hovered .umr-node-num {
-  color: var(--app-accent, #6366f1);
+  width: 7px;
+  height: 1px;
+  background-color: var(--app-text-soft, #71717a);
 }
 
 .umr-node.active {
-  border-color: var(--app-accent, #6366f1);
-  background: var(--app-accent, #6366f1);
-  transform: rotate(45deg) scale(1.15);
+  width: 7px;
+  height: 1px;
+  background-color: var(--app-text, #27272a);
 }
-.umr-node.active .umr-node-num {
-  color: #fff;
+.umr-node-wrap.wave-3 .umr-node { width: 11px; }
+.umr-node-wrap.wave-2 .umr-node { width: 16px; }
+.umr-node-wrap.wave-1 .umr-node { width: 23px; }
+.umr-node-wrap.wave-peak .umr-node {
+  width: 32px;
+  height: 2px;
+  background-color: var(--app-text, #27272a);
 }
 
 .umr-tip {
   position: absolute;
-  bottom: calc(100% + 6px);
-  transform: translateX(-50%);
-  max-width: 320px;
+  left: calc(100% + 24px);
+  transform: translateY(-50%);
+  width: min(360px, 42vw);
   display: flex;
   gap: 6px;
   align-items: baseline;
@@ -201,11 +202,18 @@ watch(() => items.value.length, async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: none;   /* 别挡住下面的节点，否则鼠标一移上来就闪 */
+  pointer-events: none;
   z-index: 60;
 }
 .umr-tip-idx { color: var(--app-text-faint); flex: 0 0 auto; font-weight: 600; }
 .umr-tip-text { overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 720px) {
+  .umr { left: 0; }
+  .umr-track { padding-inline: 3px; }
+  .umr-node-wrap.wave-peak .umr-node { width: 28px; }
+  .umr-tip { width: min(300px, 76vw); }
+}
 </style>
 
 <style>
@@ -375,5 +383,77 @@ watch(() => items.value.length, async () => {
 }
 [data-skin="witchtrial"] .umr-tip-idx {
   color: #e08a78;
+}
+
+/* 主题只改变颜色，不改变 Codex 式竖向刻度的尺寸与形态。 */
+[data-skin="witchtrial_hiiro"] .umr,
+[data-skin="witchtrial"] .umr {
+  border: 0;
+  background: transparent;
+}
+[data-skin="witchtrial_hiiro"] .umr-node,
+[data-skin="witchtrial"] .umr-node {
+  width: 7px;
+  height: 1px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text-faint) 54%, transparent);
+  background-clip: content-box;
+  box-shadow: none;
+  transform: none;
+  animation: none;
+}
+[data-skin="witchtrial_hiiro"] .umr-node:hover,
+[data-skin="witchtrial_hiiro"] .umr-node.hovered,
+[data-skin="witchtrial"] .umr-node:hover,
+[data-skin="witchtrial"] .umr-node.hovered {
+  width: 7px;
+  height: 1px;
+  background: var(--app-text-soft);
+  background-clip: content-box;
+  box-shadow: none;
+  transform: none;
+}
+[data-skin="witchtrial_hiiro"] .umr-node.active,
+[data-skin="witchtrial_hiiro"] .umr-node-wrap.active .umr-node,
+[data-skin="witchtrial"] .umr-node.active {
+  width: 7px !important;
+  height: 1px !important;
+  border: 0 !important;
+  border-radius: 999px;
+  background: var(--app-text) !important;
+  background-clip: content-box !important;
+  box-shadow: none;
+  transform: none;
+  animation: none;
+}
+[data-skin="witchtrial_hiiro"] .umr-node-wrap:not(:last-child)::after,
+[data-skin="witchtrial"] .umr-node-wrap:not(:last-child)::after {
+  width: 0;
+  height: 5px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-skin="witchtrial_hiiro"] .umr-node-wrap.wave-3 .umr-node,
+[data-skin="witchtrial"] .umr-node-wrap.wave-3 .umr-node { width: 11px !important; }
+[data-skin="witchtrial_hiiro"] .umr-node-wrap.wave-2 .umr-node,
+[data-skin="witchtrial"] .umr-node-wrap.wave-2 .umr-node { width: 16px !important; }
+[data-skin="witchtrial_hiiro"] .umr-node-wrap.wave-1 .umr-node,
+[data-skin="witchtrial"] .umr-node-wrap.wave-1 .umr-node { width: 23px !important; }
+[data-skin="witchtrial_hiiro"] .umr-node-wrap.wave-peak .umr-node,
+[data-skin="witchtrial"] .umr-node-wrap.wave-peak .umr-node {
+  width: 32px !important;
+  height: 2px !important;
+  background: var(--app-text) !important;
+  background-clip: content-box !important;
+}
+
+@media (max-width: 720px) {
+  [data-skin="witchtrial_hiiro"] .umr-node-wrap.wave-peak .umr-node,
+  [data-skin="witchtrial"] .umr-node-wrap.wave-peak .umr-node {
+    width: 28px !important;
+  }
 }
 </style>

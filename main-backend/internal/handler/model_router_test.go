@@ -146,10 +146,27 @@ func TestResolveBackendsExactFreeModel(t *testing.T) {
 	if !b.Vision || b.ContextWindow != 1048576 || !b.Reasoning {
 		t.Fatalf("能力元数据应随 backend 透出, got %+v", b)
 	}
-	// 回退路径：未知 model 不该返回空，应回退到全链（本地兜底已移除，故不再断言链尾 IsLocal）
-	fallback := resolveBackends("nonexistent_user_for_test", "nonexistent_id")
-	if len(fallback) == 0 {
-		t.Fatal("未知 model 应回退全链, 实得空链")
+	// 禁止隐形 failover：未知精确 ID 必须返回空链，不能偷偷转 Auto。
+	exactMiss := resolveBackends("nonexistent_user_for_test", "nonexistent_id")
+	if len(exactMiss) != 0 {
+		t.Fatalf("未知精确模型禁止回退 Auto, 实得 %d 个 backend: %+v", len(exactMiss), exactMiss)
+	}
+}
+
+func TestCodeWorkflowExactModelMissReturnsVisibleErrorWithoutAutoFallback(t *testing.T) {
+	r := &WorkflowRunner{}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/code/workflow?task=hi&model=nonexistent_id", nil)
+
+	r.HandleCodeWorkflow(c)
+
+	body := w.Body.String()
+	if !strings.Contains(body, "flow_error") || !strings.Contains(body, "nonexistent_id") {
+		t.Fatalf("精确模型解析失败应返回可见错误, SSE 实得: %s", body)
+	}
+	if !strings.Contains(body, "精确模型禁止自动回退") || !strings.Contains(body, `"resumable":false`) {
+		t.Fatalf("错误应说明禁止 Auto 回退且不允许续跑, SSE 实得: %s", body)
 	}
 }
 

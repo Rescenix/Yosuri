@@ -297,13 +297,15 @@ func userKeysByEnv(userKey string) map[string]string {
 
 // resolveBackends 组装本次请求可用的路由链。
 // 若 model 命中免费池 ID 或用户自定义配置 ID，则只返回那一个 backend（精确路由，
-// 能力元数据随 backend 透出）；否则回退到"默认+参数降序"的全链（兼容旧行为）。
+// 能力元数据随 backend 透出）；精确 ID 解析失败则返回空链，绝不静默回退 Auto。
+// 只有 model 为空或 "auto" 时才组装"用户配置 + 免费池"的多源 failover 链。
 func resolveBackends(userKey string, model string) []RouterBackend {
 	// —— 精确路由：前端明确选了某个模型 ——
 	if model != "" && model != "auto" {
 		if b := resolveExact(userKey, model); b != nil {
 			return []RouterBackend{*b}
 		}
+		return nil
 	}
 
 	var userChain, freeChain []RouterBackend
@@ -425,7 +427,7 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 }
 
 // resolveExact 按模型 ID 精确解析出单个 backend（免费池或用户自定义配置）。
-// 拿不到 Key 的源返回 nil（交给调用方回退全链）。
+// 拿不到 Key 或 ID 不存在时返回 nil；调用方必须明确报错，不得回退 Auto。
 func resolveExact(userKey string, model string) *RouterBackend {
 	entries, _ := loadModelConfigs(userKey)
 	entryByID := map[string]ModelConfigEntry{}

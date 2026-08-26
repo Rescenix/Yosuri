@@ -64,6 +64,11 @@ func (r *WorkflowRunner) persistWorkflowHistory(
 			Role: "assistant", Content: content, Model: model, Blocks: blocks, WorkflowID: workflowID,
 		},
 	)
+	// Extraction is deliberately asynchronous and only sees the user's completed
+	// task text; assistant prose is not treated as a source of user facts.
+	if status == taskStatusCompleted {
+		enqueueAutomaticMemory(workflowID, task)
+	}
 }
 
 func workflowFailureText(reason string) string {

@@ -284,40 +284,23 @@
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
 
-            <!-- 右上角工具组：顶部横条删除后浮在聊天区右上（Code 模式才有意义）。
-                 工具窗口（终端/Diff/预览）打开后丝滑变成竖条贴靠面板边缘，DOM 顺序不变，
-                 更多(三点)本来就排最后，变竖条后自然落在底部。 -->
-            <div
-              v-if="inputTopBarMode === 'git'"
-              class="floating-tools"
-              :class="{ vertical: dockPanels.length > 0 && !dockHidden, 'collapsed-dock': dockPanels.length > 0 && dockHidden }"
-            >
-              <button
-                v-if="dockPanels.length > 0 && dockHidden"
-                class="header-icon-btn dock-restore-btn"
-                type="button"
-                title="展开工具坞"
-                @click.stop="toggleDockHidden"
-              >
-                <Icon icon="mdi:chevron-left" width="19" color="#6b6b6b" />
+            <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。 -->
+            <div v-if="inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
+                <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
               </button>
-              <template v-else>
-                <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
-                  <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
-                </button>
-                <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
-                  <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
-                </button>
-                <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" title="预览">
-                  <Icon icon="mage:preview" width="17" color="#6b6b6b" />
-                </button>
-                <button class="header-icon-btn" :class="{ active: dockPanels.includes('tasks') }" @click.stop="toggleDockPanel('tasks')" title="后台任务">
-                  <Icon icon="mdi:task-minus" width="17" color="#6b6b6b" />
-                </button>
-                <button class="header-icon-btn" :class="{ active: dockPanels.includes('file') }" @click.stop="toggleDockPanel('file')" title="文件">
-                  <Icon icon="mdi:file-code-outline" width="17" color="#6b6b6b" />
-                </button>
-              </template>
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
+                <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
+              </button>
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" title="预览">
+                <Icon icon="mage:preview" width="17" color="#6b6b6b" />
+              </button>
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('tasks') }" @click.stop="toggleDockPanel('tasks')" title="后台任务">
+                <Icon icon="mdi:task-minus" width="17" color="#6b6b6b" />
+              </button>
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('file') }" @click.stop="toggleDockPanel('file')" title="文件">
+                <Icon icon="mdi:file-code-outline" width="17" color="#6b6b6b" />
+              </button>
             </div>
 
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
@@ -425,6 +408,9 @@
               <!-- 底部边缘 blur：sticky 吸在滚动视口底边，正好压在输入区上沿 -->
               <div class="msg-edge-blur bottom"></div>
             </div>
+
+            <!-- 用户消息导航：以完整聊天内容列为定位基准，避免随消息滚动区高度塌缩到底部。 -->
+            <UserMessageRail :messages="messages" :active-id="activeUserMessageId" @jump="jumpToMessage" />
 
             <div v-if="copiedVisible" class="copy-toast">✓ 已复制</div>
 
@@ -775,9 +761,6 @@
                   </div>
                 </div>
 
-                <!-- 用户消息导航轴：占据工具栏中间的弹性空间 -->
-                <UserMessageRail :messages="messages" :active-id="activeUserMessageId" @jump="jumpToMessage" />
-
                                 <div class="input-toolbar-right">
                                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
                   <div v-if="messages.length > 0 && ctxTotalUsed > 0" class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
@@ -826,30 +809,32 @@
                         <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
                         <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
                       </div>
-                      <div class="model-menu-footer" @click.stop="showModelManager = true; showModelMenu = false">
-                        <Icon icon="mdi:cog-outline" width="14" /> 编辑模型...
-                      </div>
                       <div v-if="!hasModels" class="model-menu-empty">没有可用模型（去设置填 Key 或选免 Key 模型）</div>
-                      <!-- Auto 智能路由：固定置顶，选中后按免费模型池排序逐个尝试 + 熔断 -->
-                      <div
-                        class="model-menu-item model-menu-auto"
-                        :class="{ active: selectedModel === 'auto' }"
-                        @click="selectModel('auto')"
-                      >
-                        <span class="model-menu-check" v-if="selectedModel === 'auto'">✓</span>
-                        <span>Auto 智能路由</span>
-                      </div>
-                      <div class="model-menu-divider"></div>
-                      <template v-for="grp in filteredGroupedOptions" :key="grp.vendor">
-                        <div class="model-menu-group-title">{{ grp.vendor }}</div>
+                      <div v-if="hasModels" class="model-menu-list">
+                        <!-- Auto 智能路由：固定置顶，选中后按免费模型池排序逐个尝试 + 熔断 -->
                         <div
-                          v-for="m in grp.items"
-                          :key="m.value"
-                          class="model-menu-item"
-                          :class="{ active: selectedModel === m.value }"
-                          @click="selectModel(m.value)"
-                        ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">公益免费</span></div>
-                      </template>
+                          class="model-menu-item model-menu-auto"
+                          :class="{ active: selectedModel === 'auto' }"
+                          @click="selectModel('auto')"
+                        >
+                          <span class="model-menu-check" v-if="selectedModel === 'auto'">✓</span>
+                          <span>Auto 智能路由</span>
+                        </div>
+                        <div class="model-menu-divider"></div>
+                        <template v-for="grp in filteredGroupedOptions" :key="grp.vendor">
+                          <div class="model-menu-group-title">{{ grp.vendor }}</div>
+                          <div
+                            v-for="m in grp.items"
+                            :key="m.value"
+                            class="model-menu-item"
+                            :class="{ active: selectedModel === m.value }"
+                            @click="selectModel(m.value)"
+                          ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">公益免费</span></div>
+                        </template>
+                      </div>
+                      <div class="model-menu-footer" @click.stop="showModelManager = true; showModelMenu = false">
+                        <Icon icon="mdi:cog-outline" width="14" /> 管理模型
+                      </div>
                     </div>
                   </div>
 
@@ -878,23 +863,50 @@
             </div>
           </div>
 
-                    <!-- ★ AIStudio 右：多面板停靠 -->
+          <!-- ★ Windows / VS Code 风格双停靠工作区：标签可在右侧与底部之间拖放。 -->
           <aside
+            v-for="dockLocation in visibleDockLocations"
+            :key="dockLocation"
             class="tool-panel tool-panel-tabbed"
-            v-if="isExpanded && dockPanels.length"
-            :class="{ hidden: dockHidden, expanded: dockExpanded }"
-            :style="dockExpanded || dockHidden ? {} : { width: dockWidth + 'px' }"
+            :class="[
+              `dock-${dockLocation}`,
+              {
+                hidden: dockIsHidden(dockLocation),
+                expanded: dockIsExpanded(dockLocation),
+                'drop-active': dockDropTarget === dockLocation
+              }
+            ]"
+            :style="dockPanelStyle(dockLocation)"
+            @dragover.prevent.stop="onDockRegionDragOver(dockLocation)"
+            @drop.prevent.stop="onDockPanelDrop(dockLocation)"
           >
-            <div class="tool-dock-resize-handle" @mousedown="startDockWidthDrag"></div>
+            <div
+              class="tool-dock-resize-handle"
+              :class="`is-${dockLocation}`"
+              @mousedown="dockLocation === 'right' ? startDockWidthDrag($event) : startDockHeightDrag($event)"
+            ></div>
             <div class="tool-dock-tabs">
+              <div class="tool-dock-location-mark" :title="dockLocation === 'right' ? '右侧工具区' : '底部工具区'">
+                <Icon :icon="dockLocation === 'right' ? 'mdi:dock-right' : 'mdi:dock-bottom'" width="14" />
+              </div>
               <button
-                v-for="panelKey in dockPanels"
+                v-for="panelKey in dockPanelsFor(dockLocation)"
                 :key="panelKey"
                 class="tool-dock-tab"
-                :class="{ active: activeDockPanel === panelKey }"
-                @click="setActiveDockPanel(panelKey)"
-                :title="dockPanelLabel(panelKey)"
+                :class="{
+                  active: activeDockPanelFor(dockLocation) === panelKey,
+                  dragging: draggedDockPanel === panelKey
+                }"
+                draggable="true"
+                @click="setActiveDockPanel(panelKey, dockLocation)"
+                @dblclick="moveDockPanel(panelKey, dockLocation === 'right' ? 'bottom' : 'right')"
+                @dragstart="onDockTabDragStart($event, panelKey, dockLocation)"
+                @dragend="onDockTabDragEnd"
+                @dragover.prevent.stop="onDockTabDragOver(dockLocation)"
+                @drop.prevent.stop="onDockPanelDrop(dockLocation, panelKey)"
+                :title="`${dockPanelLabel(panelKey)} · 拖动可停靠，双击快速切换位置`"
               >
+                <Icon icon="mdi:dots-grid" width="12" class="tool-dock-tab-grip" />
                 <Icon :icon="dockPanelIcon(panelKey)" width="14" class="tool-dock-tab-icon" />
                 <span class="tool-dock-tab-label">{{ dockPanelLabel(panelKey) }}</span>
                 <span class="tool-dock-tab-close" @click.stop="closeDockPanel(panelKey)">
@@ -902,48 +914,24 @@
                 </span>
               </button>
               <div class="tool-dock-tab-actions">
-                <button ref="dockAddBtnRef" class="tool-dock-tab-add" @click.stop="toggleDockAddMenu" title="新建工具标签页">
+                <button class="tool-dock-tab-add" @click.stop="toggleDockAddMenu($event, dockLocation)" title="添加工具标签页">
                   <Icon icon="mdi:plus" width="16" />
                 </button>
               </div>
-              <!-- Teleport 到 body：.tool-dock-tabs 设了 overflow-x:auto，按 CSS 规范
-                   overflow-x/overflow-y 只要有一个不是 visible，另一个会被隐式当 auto——
-                   等于整条标签栏纵向也裁切。之前挂在标签栏内部 position:absolute 的菜单，
-                   状态确实翻转了，但会被这层隐式裁切吃掉，看起来就是"点了没反应"。
-                   CodeEditor.vue 的右键菜单也是因为同样的坑才 Teleport 到 body 的。 -->
-              <Teleport to="body">
-                <div v-if="showDockAddMenu" class="tool-dock-add-menu" :style="dockAddMenuStyle" @click.stop>
-                  <button
-                    v-for="option in dockPanelOptions"
-                    :key="option.key"
-                    class="tool-dock-add-item"
-                    @click="openDockPanel(option.key)"
-                  >
-                    <span class="tool-dock-add-item-left">
-                      <Icon :icon="option.icon" width="15" />
-                      <span>{{ option.label }}</span>
-                    </span>
-                    <span v-if="dockPanels.includes(option.key)" class="tool-dock-add-badge">已打开</span>
-                    <span v-else-if="option.shortcut" class="tool-dock-add-shortcut">{{ option.shortcut }}</span>
-                  </button>
-                </div>
-              </Teleport>
-              <!-- 标签组最右侧：放大(占满工作区宽度) / 收起整块工具坞(不清空已开的标签，
-                   随便点一个 终端/预览/… 就能叫回来) —— 独立于标签组本身，跟 Cursor
-                   顶栏最右那两个图标一个位置。 -->
               <div class="tool-dock-global-actions">
-                <button class="tool-dock-tab-add" @click.stop="toggleDockExpanded" :title="dockExpanded ? '还原宽度' : '放大'">
-                  <Icon :icon="dockExpanded ? 'mdi:arrow-collapse' : 'mdi:arrow-expand'" width="15" />
+                <span class="tool-dock-drag-tip">拖动标签可重新布局</span>
+                <button class="tool-dock-tab-add" @click.stop="toggleDockExpanded(dockLocation)" :title="dockIsExpanded(dockLocation) ? '还原' : '最大化工具区'">
+                  <Icon :icon="dockIsExpanded(dockLocation) ? 'mdi:arrow-collapse' : 'mdi:arrow-expand'" width="15" />
                 </button>
-                <button class="tool-dock-tab-add" @click.stop="toggleDockHidden" title="隐藏工具坞">
-                  <Icon icon="mdi:dock-right" width="15" />
+                <button class="tool-dock-tab-add" @click.stop="toggleDockHidden(dockLocation)" :title="dockLocation === 'right' ? '隐藏右侧工具区' : '隐藏底部工具区'">
+                  <Icon :icon="dockLocation === 'right' ? 'mdi:dock-right' : 'mdi:dock-bottom'" width="15" />
                 </button>
               </div>
             </div>
             <div class="tool-dock-pane tool-dock-pane-single">
               <div class="tool-dock-pane-body">
-                <DiffPanel v-if="activeDockPanel === 'diff'" />
-                <div v-else-if="activeDockPanel === 'terminal'" class="terminal-group">
+                <DiffPanel v-if="activeDockPanelFor(dockLocation) === 'diff'" />
+                <div v-else-if="activeDockPanelFor(dockLocation) === 'terminal'" class="terminal-group">
                   <div class="terminal-tabs-bar">
                     <button
                       v-for="tab in terminalTabs"
@@ -982,12 +970,56 @@
                     <SnippetPanel v-if="showSnippet" @insert="onSnippetInsert" />
                   </div>
                 </div>
-                <PreviewBrowser v-else-if="activeDockPanel === 'preview'" />
-                <FileToolPanel v-else-if="activeDockPanel === 'file'" :embedded="true" />
-                <BackgroundTasksPanel v-else-if="activeDockPanel === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" />
+                <PreviewBrowser v-else-if="activeDockPanelFor(dockLocation) === 'preview'" />
+                <FileToolPanel v-else-if="activeDockPanelFor(dockLocation) === 'file'" :embedded="true" :workdir-path="currentWorkDir.path" :workdir-name="currentWorkDir.name" @run-command="runEditorCommand" />
+                <BackgroundTasksPanel v-else-if="activeDockPanelFor(dockLocation) === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" />
               </div>
             </div>
           </aside>
+
+          <!-- 菜单 Teleport 到 body，避免被可横向滚动的标签栏裁掉。 -->
+          <Teleport to="body">
+            <div ref="dockAddMenuRef" v-if="showDockAddMenu" class="tool-dock-add-menu" :style="dockAddMenuStyle" @click.stop>
+              <div class="tool-dock-add-heading">打开工具 · 自动停靠</div>
+              <button
+                v-for="option in dockPanelOptions"
+                :key="option.key"
+                class="tool-dock-add-item"
+                @click="openDockPanelFromAddMenu(option.key)"
+              >
+                <span class="tool-dock-add-item-left">
+                  <Icon :icon="option.icon" width="15" />
+                  <span>{{ option.label }}</span>
+                </span>
+                <span class="tool-dock-add-meta">
+                  <span class="tool-dock-add-badge">{{ dockPanelAddTargetLabel(option.key) }}</span>
+                  <span v-if="option.shortcut" class="tool-dock-add-shortcut">{{ option.shortcut }}</span>
+                </span>
+              </button>
+            </div>
+          </Teleport>
+
+          <!-- 拖动时才出现的 Windows 式停靠预览；目的地始终可见，即使该区域尚未创建。 -->
+          <div v-if="draggedDockPanel" class="tool-dock-drop-overlay" aria-hidden="true">
+            <div
+              class="tool-dock-drop-target is-right"
+              :class="{ active: dockDropTarget === 'right' }"
+              @dragover.prevent.stop="onDockRegionDragOver('right')"
+              @drop.prevent.stop="onDockPanelDrop('right')"
+            >
+              <Icon icon="mdi:dock-right" width="24" />
+              <span>停靠到右侧</span>
+            </div>
+            <div
+              class="tool-dock-drop-target is-bottom"
+              :class="{ active: dockDropTarget === 'bottom' }"
+              @dragover.prevent.stop="onDockRegionDragOver('bottom')"
+              @drop.prevent.stop="onDockPanelDrop('bottom')"
+            >
+              <Icon icon="mdi:dock-bottom" width="24" />
+              <span>停靠到底部</span>
+            </div>
+          </div>
         </div>
       </div>
       </div>
@@ -1091,7 +1123,7 @@ import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
 import UserMessageRail from './UserMessageRail.vue'
 import { useChatWidget } from './useChatWidget.js'
-import { useResizableWidth } from './useResizable.js'
+import { useResizableHeight, useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
 import RainbowToast from './RainbowToast.vue'
@@ -1545,14 +1577,100 @@ const currentCapability = computed(() => {
 // 跟面板的分类之和是两套对不上的口径。现已统一到 ctxTotalUsed / ctxWindow / ctxPct，
 // 该 computed 随之删除。
 
-// ==================== 右侧工具面板（多面板停靠） ====================
+// ==================== 工具工作区：右侧 + 底部双停靠 ====================
+// 只开放两个稳定的停靠方向：文件/预览适合右侧，终端/任务适合底部。
+// 这是 VS Code/Windows 工作台里最适合教学录屏的一组布局，不做会遮挡代码的任意浮窗。
+// v4 修正底部 Dock 的“＋”把所有工具都污染成底部位置的问题；升级一次存储键，
+// 让被旧逻辑挤到底部的文件/预览/Diff 回到适合编码的课堂默认值。
+const DOCK_LAYOUT_STORAGE_KEY = 'rescene_tool_dock_layout_v4'
+const DEFAULT_DOCK_PLACEMENT = {
+  diff: 'right',
+  terminal: 'bottom',
+  preview: 'right',
+  file: 'right',
+  tasks: 'bottom'
+}
+function loadDockPlacement() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DOCK_LAYOUT_STORAGE_KEY) || '{}')
+    const placement = parsed?.placement || {}
+    return Object.fromEntries(
+      Object.keys(DEFAULT_DOCK_PLACEMENT).map(key => [
+        key,
+        placement[key] === 'bottom' ? 'bottom' : (placement[key] === 'right' ? 'right' : DEFAULT_DOCK_PLACEMENT[key])
+      ])
+    )
+  } catch {
+    return { ...DEFAULT_DOCK_PLACEMENT }
+  }
+}
 const dockPanels = ref([])
-const activeDockPanel = ref('')
-const dockWidth = ref(380)
-const { startDrag: startDockWidthDrag } = useResizableWidth(dockWidth, { min: 300, max: 720, edge: 'left', persistKey: 'dockWidth' })
+const dockPlacement = reactive(loadDockPlacement())
+const activeDockPanels = reactive({ right: '', bottom: '' })
+const dockWidth = ref(420)
+const dockHeight = ref(240)
+// 右侧尽量可拉宽，但仍给侧栏和聊天区留出可操作空间。
+const dockMaxWidth = () => Math.max(720, window.innerWidth - 420)
+const dockMaxHeight = () => Math.max(220, Math.min(620, window.innerHeight - 260))
+const { startDrag: startDockWidthDrag } = useResizableWidth(dockWidth, {
+  min: 320,
+  max: dockMaxWidth,
+  edge: 'left',
+  persistKey: 'dockWidth'
+})
+const { startDrag: startDockHeightDrag } = useResizableHeight(dockHeight, {
+  min: 160,
+  max: dockMaxHeight,
+  edge: 'top',
+  persistKey: 'dockHeightV2'
+})
+const rightDockPanels = computed(() => dockPanels.value.filter(key => dockPlacement[key] !== 'bottom'))
+const bottomDockPanels = computed(() => dockPanels.value.filter(key => dockPlacement[key] === 'bottom'))
+const visibleDockLocations = computed(() => {
+  if (!isExpanded.value) return []
+  const locations = []
+  if (rightDockPanels.value.length) locations.push('right')
+  if (bottomDockPanels.value.length) locations.push('bottom')
+  return locations
+})
+const dockHidden = reactive({ right: false, bottom: false })
+const dockExpandedLocation = ref('')
+const dockExpanded = computed(() => Boolean(dockExpandedLocation.value))
+const hasVisibleDockPanels = computed(() => (
+  (rightDockPanels.value.length > 0 && !dockHidden.right)
+  || (bottomDockPanels.value.length > 0 && !dockHidden.bottom)
+))
+const draggedDockPanel = ref('')
+const draggedDockSource = ref('')
+const dockDropTarget = ref('')
 const showDockAddMenu = ref(false)
-const dockAddBtnRef = ref(null)
+const dockAddLocation = ref('right')
+const dockAddMenuRef = ref(null)
 const dockAddMenuStyle = ref({})
+
+function dockPanelsFor(location) {
+  return location === 'bottom' ? bottomDockPanels.value : rightDockPanels.value
+}
+function activeDockPanelFor(location) {
+  return activeDockPanels[location] || ''
+}
+function dockIsHidden(location) {
+  return Boolean(dockHidden[location])
+}
+function dockIsExpanded(location) {
+  return dockExpandedLocation.value === location
+}
+function dockPanelStyle(location) {
+  if (dockIsHidden(location) || dockIsExpanded(location)) return {}
+  return location === 'bottom'
+    ? { height: dockHeight.value + 'px' }
+    : { width: dockWidth.value + 'px' }
+}
+function persistDockPlacement() {
+  try {
+    localStorage.setItem(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify({ placement: { ...dockPlacement } }))
+  } catch {}
+}
 
 // ==================== 终端标签组 ====================
 let terminalSeq = 0
@@ -1597,72 +1715,175 @@ function onGlobalDockShortcut(e) {
   else if (key === 'j' && !e.shiftKey) { e.preventDefault(); openDockPanel('terminal') }
   else if (key === 'b' && e.shiftKey) { e.preventDefault(); openDockPanel('preview') }
 }
-function ensureActiveDockPanel() {
-  if (!dockPanels.value.length) {
-    activeDockPanel.value = ''
-    showDockAddMenu.value = false
-    return
+function ensureActiveDockPanels() {
+  for (const location of ['right', 'bottom']) {
+    const panels = dockPanelsFor(location)
+    if (!panels.includes(activeDockPanels[location])) {
+      activeDockPanels[location] = panels[panels.length - 1] || ''
+    }
+    if (!panels.length) dockHidden[location] = false
   }
-  if (!dockPanels.value.includes(activeDockPanel.value)) {
-    activeDockPanel.value = dockPanels.value[dockPanels.value.length - 1]
-  }
+  if (!dockPanels.value.length) showDockAddMenu.value = false
 }
-function setActiveDockPanel(key) {
-  activeDockPanel.value = key
+function setActiveDockPanel(key, location = dockPlacement[key] || DEFAULT_DOCK_PLACEMENT[key] || 'right') {
+  activeDockPanels[location] = key
+  dockHidden[location] = false
 }
-// 放大：工具坞宽度撑到接近整个工作区（放弃 dockWidth 那个手动拖出来的值，
-// 再点一次收回去）。隐藏：整块坞收进 0 宽，但 dockPanels/activeDockPanel 不清空——
-// terminal 的会话、预览的页面导航状态都还在，随手点开任意一个面板按钮就原样回来。
-const dockExpanded = ref(false)
-const dockHidden = ref(false)
 const showSnippet = ref(false)
 const snippetInsertCmd = ref('')
-function toggleDockExpanded() {
-  dockExpanded.value = !dockExpanded.value
+function toggleDockExpanded(location) {
+  dockExpandedLocation.value = dockExpandedLocation.value === location ? '' : location
 }
-function toggleDockHidden() {
-  const willHide = !dockHidden.value
-  dockHidden.value = willHide
-  if (willHide) dockExpanded.value = false
+function toggleDockHidden(location) {
+  dockHidden[location] = !dockHidden[location]
+  if (dockHidden[location] && dockExpandedLocation.value === location) dockExpandedLocation.value = ''
 }
 function onSnippetInsert(cmd) {
   // 先清空再设值，确保 watcher 即使值相同也会触发
   snippetInsertCmd.value = ''
   nextTick(() => { snippetInsertCmd.value = cmd })
 }
-function openDockPanel(key) {
-  if (!dockPanels.value.includes(key)) dockPanels.value = [...dockPanels.value, key]
-  activeDockPanel.value = key
+function runEditorCommand(cmd) {
+  // 文件面板的一键运行复用真实常驻终端，而不是再造一个只显示假日志的“运行窗口”。
+  openDockPanel('terminal')
+  onSnippetInsert(cmd)
+}
+function moveDockPanel(key, location, beforeKey = '') {
+  const previousLocation = dockPlacement[key] || DEFAULT_DOCK_PLACEMENT[key] || 'right'
+  let ordered = dockPanels.value.filter(panelKey => panelKey !== key)
+  const beforeIndex = beforeKey && beforeKey !== key ? ordered.indexOf(beforeKey) : -1
+  if (beforeIndex >= 0) ordered.splice(beforeIndex, 0, key)
+  else ordered.push(key)
+  dockPanels.value = ordered
+  dockPlacement[key] = location
+  activeDockPanels[location] = key
+  dockHidden[location] = false
+  if (previousLocation !== location) ensureActiveDockPanels()
+  persistDockPlacement()
+}
+function openDockPanel(key, location = dockPlacement[key] || DEFAULT_DOCK_PLACEMENT[key] || 'right') {
+  moveDockPanel(key, location)
   showDockAddMenu.value = false
-  dockHidden.value = false // 打开面板这个动作本身就该让它可见，不然像是没反应
+}
+// Dock 内的“＋”是全局工具入口，不是“添加到当前 Dock”。无论从底部还是右侧打开，
+// 都按工具类型进入推荐位置，避免终端打开后文件/预览/Diff 被迫挤在底部。
+function openDockPanelFromAddMenu(key) {
+  openDockPanel(key, DEFAULT_DOCK_PLACEMENT[key] || 'right')
 }
 function toggleDockPanel(key) {
-  if (activeDockPanel.value === key && dockPanels.value.includes(key)) {
+  const location = dockPlacement[key] || DEFAULT_DOCK_PLACEMENT[key] || 'right'
+  if (dockHidden[location] && dockPanels.value.includes(key)) {
+    setActiveDockPanel(key, location)
+    return
+  }
+  if (activeDockPanels[location] === key && dockPanels.value.includes(key)) {
     closeDockPanel(key)
     return
   }
-  openDockPanel(key)
+  openDockPanel(key, location)
 }
 function closeDockPanel(key) {
+  const location = dockPlacement[key] || DEFAULT_DOCK_PLACEMENT[key] || 'right'
   dockPanels.value = dockPanels.value.filter(k => k !== key)
-  ensureActiveDockPanel()
+  ensureActiveDockPanels()
   if (!dockPanels.value.length) {
-    dockExpanded.value = false
-    dockHidden.value = false
+    dockExpandedLocation.value = ''
+    dockHidden.right = false
+    dockHidden.bottom = false
+  } else if (!dockPanelsFor(location).length && dockExpandedLocation.value === location) {
+    dockExpandedLocation.value = ''
   }
 }
-// 菜单现在 Teleport 到 body 了，没法再靠 CSS position:absolute 相对按钮定位，
-// 开菜单那一刻手动量一次按钮的屏幕坐标，换算成 fixed 定位（跟 CodeEditor.vue
-// 右键菜单捕获 event.clientX/Y 是同一个思路，只是这里定位基准是按钮不是点击点）。
-function toggleDockAddMenu() {
-  showDockAddMenu.value = !showDockAddMenu.value
-  if (showDockAddMenu.value && dockAddBtnRef.value) {
-    const r = dockAddBtnRef.value.getBoundingClientRect()
-    const menuW = 200
-    let left = r.right - menuW
-    if (left < 8) left = 8
-    if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8
-    dockAddMenuStyle.value = { top: `${r.bottom + 6}px`, left: `${left}px` }
+function dockPanelPlacementLabel(key) {
+  return dockPlacement[key] === 'bottom' ? '底部' : '右侧'
+}
+function dockPanelAddTargetLabel(key) {
+  const target = DEFAULT_DOCK_PLACEMENT[key] || 'right'
+  const targetLabel = target === 'bottom' ? '底部' : '右侧'
+  if (!dockPanels.value.includes(key)) return targetLabel
+  const current = dockPlacement[key] || target
+  return current === target ? `已在${targetLabel}` : `移到${targetLabel}`
+}
+function onDockTabDragStart(event, key, location) {
+  draggedDockPanel.value = key
+  draggedDockSource.value = location
+  dockDropTarget.value = location
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', key)
+  }
+}
+function onDockTabDragOver(location) {
+  dockDropTarget.value = location
+}
+function onDockRegionDragOver(location) {
+  if (draggedDockPanel.value) dockDropTarget.value = location
+}
+function clearDockDragState() {
+  draggedDockPanel.value = ''
+  draggedDockSource.value = ''
+  dockDropTarget.value = ''
+}
+function onDockPanelDrop(location, beforeKey = '') {
+  const key = draggedDockPanel.value
+  if (!key) return
+  if (key === beforeKey && draggedDockSource.value === location) {
+    setActiveDockPanel(key, location)
+  } else {
+    moveDockPanel(key, location, beforeKey)
+  }
+  clearDockDragState()
+}
+function onDockTabDragEnd() {
+  clearDockDragState()
+}
+// 菜单 Teleport 到 body 后使用视口 fixed 坐标。必须等它真正渲染出来再读取高度：
+// 优先放在按钮下方，放不下就翻到上方；两边都不够时选空间更大的一侧，并把菜单
+// 限制在剩余空间内滚动，避免低窗口/底部 Dock 场景越过屏幕边缘。
+function toggleDockAddMenu(event, location) {
+  const shouldOpen = !showDockAddMenu.value || dockAddLocation.value !== location
+  showDockAddMenu.value = shouldOpen
+  dockAddLocation.value = location
+  const button = event?.currentTarget
+  if (shouldOpen && button) {
+    const anchor = button.getBoundingClientRect()
+    const safe = 8
+    const gap = 6
+    const viewportW = window.innerWidth
+    const viewportH = window.innerHeight
+    const menuW = Math.min(200, Math.max(1, viewportW - safe * 2))
+
+    // 先隐身测量，避免菜单用默认坐标闪到屏幕外一帧。
+    dockAddMenuStyle.value = {
+      top: `${safe}px`,
+      left: `${safe}px`,
+      width: `${menuW}px`,
+      maxHeight: `${Math.max(1, viewportH - safe * 2)}px`,
+      visibility: 'hidden'
+    }
+    nextTick(() => {
+      if (!showDockAddMenu.value || !dockAddMenuRef.value) return
+      const naturalHeight = dockAddMenuRef.value.getBoundingClientRect().height
+      const belowTop = anchor.bottom + gap
+      const aboveBottom = anchor.top - gap
+      const belowSpace = Math.max(0, viewportH - safe - belowTop)
+      const aboveSpace = Math.max(0, aboveBottom - safe)
+      const placeBelow = naturalHeight <= belowSpace || (naturalHeight > aboveSpace && belowSpace >= aboveSpace)
+      const availableHeight = placeBelow ? belowSpace : aboveSpace
+      const menuH = Math.min(naturalHeight, Math.max(1, availableHeight))
+      const top = placeBelow ? belowTop : Math.max(safe, aboveBottom - menuH)
+      const unclampedLeft = anchor.right - menuW
+      const maxLeft = Math.max(safe, viewportW - safe - menuW)
+      const left = Math.min(Math.max(safe, unclampedLeft), maxLeft)
+
+      dockAddMenuStyle.value = {
+        top: `${top}px`,
+        left: `${left}px`,
+        width: `${menuW}px`,
+        maxHeight: `${menuH}px`,
+        visibility: 'visible'
+      }
+    })
   }
 }
 
@@ -3073,14 +3294,26 @@ watch(() => sessionId.value, (nid, oid) => {
   if (oid) {
     dockPanelsBySession[oid] = {
       panels: [...dockPanels.value],
-      active: activeDockPanel.value
+      active: { ...activeDockPanels },
+      hidden: { ...dockHidden },
+      expanded: dockExpandedLocation.value
     }
   }
-  const saved = dockPanelsBySession[nid] || { panels: [], active: '' }
+  const saved = dockPanelsBySession[nid] || {
+    panels: [],
+    active: { right: '', bottom: '' },
+    hidden: { right: false, bottom: false },
+    expanded: ''
+  }
   dockPanels.value = [...saved.panels]
-  activeDockPanel.value = saved.active
-  ensureActiveDockPanel()
+  activeDockPanels.right = saved.active?.right || ''
+  activeDockPanels.bottom = saved.active?.bottom || ''
+  dockHidden.right = Boolean(saved.hidden?.right)
+  dockHidden.bottom = Boolean(saved.hidden?.bottom)
+  dockExpandedLocation.value = saved.expanded || ''
+  ensureActiveDockPanels()
   showDockAddMenu.value = false
+  clearDockDragState()
   // 切会话时重载上下文数据，否则继续显示上个会话的数值
   loadContextBreakdown(nid || '')
   sessionTokenStats.value = loadSessionTokenStats(nid || '')

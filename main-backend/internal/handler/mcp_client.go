@@ -143,13 +143,18 @@ func resolveAllowedDir(raw string) string {
 	return raw
 }
 
-// fsAllowedDirs 给 MCP filesystem server 的 allowed directories：整机可见的根。
+// fsAllowedDirs 给 MCP filesystem server 的 allowed directories。
 //
 // 以前这里只给工作目录，导致 agent 碰工作目录以外的文件一律报
 // "path outside allowed directories"，只能把文件都往工作目录里写。现在越界与否
 // 交给 Go 侧审批闸门判断（approval.go toolOutsideRoot）——Ask 模式弹确认、Yolo 模式
 // 放行；底层若还锁着目录，批准了也执行不了，所以这里必须放开。
 func fsAllowedDirs() []string {
+	// 受保护工作区的边界必须由 filesystem server 自己执行，不能只依赖工作流
+	// 审批，否则第三方 MCP 一旦被调用就仍能越界访问。
+	if ProtectedWorkspaceEnabled() {
+		return []string{filepath.Clean(core.GetProjectRoot())}
+	}
 	if runtime.GOOS != "windows" {
 		return []string{"/"}
 	}
@@ -617,6 +622,15 @@ func (c *mcpConn) notify(method string, params any) {
 type mcpImageArtifact struct {
 	Data     string
 	MimeType string
+}
+
+// mcpVideoArtifact 是视频生成工具携带的视频工件（视频体积大，不走 base64，存 URL）。
+type mcpVideoArtifact struct {
+	URL     string `json:"url"`     // 前端可播放路径（如 /api/video/file/...）
+	File    string `json:"file"`    // 本地落盘路径
+	Mime    string `json:"mime"`    // video/mp4
+	Size    string `json:"size"`    // 分辨率
+	Seconds string `json:"seconds"` // 时长
 }
 
 type mcpToolCallResult struct {

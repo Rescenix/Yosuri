@@ -33,3 +33,19 @@ echo "$RESP" | python -c "import json,sys; d=json.load(sys.stdin); print('✅ �
 echo "🧪 验证下载链接（应为 200 + 新大小）:"
 curl -s -o /dev/null -w "  zip: %{http_code} %{size_download}B\n" \
   "https://download.shanca.me/Rescene-windows-amd64-portable.zip" --max-time 120 || true
+
+echo "🧪 验证 update.json 缓存已刷新（⚠️ 必须看版本号，不是只看 zip）:"
+curl -s "https://rescene.shanca.me/update.json?t=$(date +%s)" --max-time 30 \
+  | python -c "import json,sys; d=json.load(sys.stdin); print('  update.json name:', d.get('name'))" 2>/dev/null \
+  || echo "  ⚠️ update.json 读取失败（可能网络/JSON 异常，请手动 curl 检查）"
+
+# 期望版本可选参数：bash purge-cache.sh [zone] [期望版本号]，给出版本号时自动比对
+if [ -n "${2:-}" ]; then
+  GOT=$(curl -s "https://rescene.shanca.me/update.json?t=$(date +%s)" --max-time 30 \
+    | python -c "import json,sys; d=json.load(sys.stdin); print(d.get('name',''))" 2>/dev/null || true)
+  if [ "$GOT" = "$2" ]; then
+    echo "  ✅ update.json 已是 $2（缓存刷新成功）"
+  else
+    echo "  ❌ update.json 是 [$GOT]，期望 [$2] —— 缓存未刷新！重跑 purge 或手动 Cloudflare 面板清"
+  fi
+fi

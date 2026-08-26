@@ -163,8 +163,23 @@
 
 .reasoning-text {
   margin-top: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-text-faint) 45%, transparent) transparent;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.reasoning-text::-webkit-scrollbar { width: 6px; }
+.reasoning-text::-webkit-scrollbar-track { background: transparent; }
+.reasoning-text::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--app-text-faint) 45%, transparent);
+}
+.reasoning-text::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-text-soft) 58%, transparent);
 }
 
 .reasoning-stream {

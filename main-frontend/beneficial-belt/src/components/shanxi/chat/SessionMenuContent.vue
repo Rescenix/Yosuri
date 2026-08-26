@@ -208,7 +208,7 @@
     <div class="fm-footer" ref="footerRef">
       <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" title="点击查看账户">
         <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
-        <Icon v-else icon="mdi:account-circle" width="20" color="#6b6b6b" />
+        <span v-else class="fm-user-avatar fm-user-avatar-fallback">{{ avatarFallback }}</span>
         <span class="fm-user-id">
           <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : '未登录' }}</span>
         </span>
@@ -230,8 +230,8 @@
           <header class="smc-profile-hero">
             <div class="smc-profile-aura" aria-hidden="true"></div>
             <div class="smc-avatar-shell">
-              <img v-if="auth.avatar.value" :src="auth.avatar.value" class="smc-user-avatar" alt="avatar" />
-              <Icon v-else icon="mdi:account-circle" width="48" color="#fff" />
+              <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="smc-user-avatar" alt="avatar" />
+              <span v-else class="smc-user-avatar-fallback">{{ avatarFallback }}</span>
               <i class="smc-online-dot" title="在线"></i>
             </div>
             <div class="smc-user-card-name">
@@ -397,6 +397,10 @@ import RunningRing from './RunningRing.vue'
 import { useAuth } from '../../../composables/useAuth.js'
 
 const auth = useAuth()
+const avatarFallback = computed(() => {
+  const label = String(auth.displayName.value || 'Rescene').trim()
+  return (label.charAt(0) || 'R').toUpperCase()
+})
 
 // Rescene Cloud 账号登录在下方 rc-login 面板（用户名+密码），登录态经 useAuth 统一管理。
 
@@ -922,8 +926,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px 4px;
+  gap: 0;
+  padding: 6px 8px 3px;
 }
 .smc-nav-item {
   width: 100%;
@@ -933,7 +937,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   gap: 10px;
   padding: 0 12px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 0;
   background: transparent;
   color: var(--app-text);
   font: inherit;
@@ -942,17 +946,20 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   line-height: 1.2;
   cursor: pointer;
   text-align: left;
+  text-decoration: none;
   transition: background .16s ease, color .16s ease;
 }
 .smc-nav-item:hover {
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
 }
 .smc-nav-item.primary {
-  background: color-mix(in srgb, var(--app-accent), transparent 90%);
+  background: #fff;
+  color: #202124;
   font-weight: 620;
+  box-shadow: none;
 }
 .smc-nav-item.primary:hover {
-  background: color-mix(in srgb, var(--app-accent), transparent 80%);
+  background: #f5f5f5;
 }
 .smc-nav-item .iconify {
   flex: 0 0 auto;
@@ -1085,15 +1092,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   color: #d94834;
 }
 
-/* ===== Folder ===== */
-.smc-folder { margin-bottom: 4px; }
+/* ===== Folder：IDE 列表式分组，不再做圆角卡片 ===== */
+.smc-folder { margin-bottom: 0; }
 .smc-folder-head {
   min-height: 36px;
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 0 9px;
-  border-radius: 10px;
+  border-radius: 0;
   cursor: pointer;
   transition: background .15s ease;
 }
@@ -1184,23 +1191,21 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   align-items: center;
   gap: 8px;
   padding: 9px 10px;
-  border-radius: 9px;
-  margin: 1px 2px;
+  border-radius: 0;
+  margin: 0;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .smc-session-row:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 95%); }
-/* 运行中/选中态会话行：统一白框。选中即白底细描边;运行中白底 + 主题色电流弧沿边框转。
-   用 box-shadow 内描边做框（不撑布局）;电流弧 conic + mask 镂空只留 2px 外环,
-   弧绕过时中央全透明,背景始终是白。 */
+/* 恢复原来的会话层级：列表保留皮肤纸色，当前会话回到主表面色和细描边。 */
 .smc-session-row.active {
-  background: #fff;
+  background: var(--app-surface);
   font-weight: 600;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-text), transparent 88%);
 }
 /* 运行中会话行：直角白框（去圆角，避免 SVG 电流在转角描边扭曲）。电流由 RunningRing(SVG 描边) 叠加。 */
 .smc-session-row.running {
-  background: #fff;
+  background: var(--app-surface);
   border-radius: 0;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 70%);
 }
@@ -1399,6 +1404,16 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   border-radius: 50%;
   object-fit: cover;
 }
+.fm-user-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: var(--app-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
 
 /* ===== User card ===== */
 .smc-card-backdrop {
@@ -1436,6 +1451,11 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   width: 100%; height: 100%; border-radius: 18px;
   object-fit: cover; flex-shrink: 0;
   border: 0;
+}
+.smc-user-avatar-fallback {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 750;
 }
 .smc-online-dot { position: absolute; right: -4px; bottom: -4px; width: 11px; height: 11px; border: 3px solid #172033; border-radius: 50%; background: #34d399; box-shadow: 0 0 12px #34d399; }
 .smc-user-card-name { position: relative; z-index: 1; min-width: 0; color: #fff; }

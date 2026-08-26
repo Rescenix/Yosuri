@@ -31,8 +31,8 @@ func visionBackends() []RouterBackend {
 		id = defaultVisionModelID
 	}
 	bs := resolveBackends("", id)
-	// resolveBackends 在精确路由失败时会退化成整条免费池链，那里大多数模型不支持图像，
-	// 把图喂进去只会拿到驴唇不对马嘴的回答。只认第一个真正标了 Vision 的。
+	// 精确识图模型解析失败时 resolveBackends 返回空链，不再偷偷改用 Auto。
+	// 仍校验 Vision 标记，避免把图像发给明确不支持图像的模型。
 	for _, b := range bs {
 		if b.Vision {
 			return []RouterBackend{b}

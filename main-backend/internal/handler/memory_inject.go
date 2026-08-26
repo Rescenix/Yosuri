@@ -10,8 +10,8 @@ import (
 )
 
 // HandleMemoryInject GET /api/memory/inject
-// 返回「当前真正无条件注入每次对话系统提示词」的两段原文，供前端记忆面板
-// 如实展示（展示 = 实际注入，零漂移）。两段与 context_provider.go 的装配严格一致：
+// 返回当前记忆状态，供前端如实展示。前两段是每次对话无条件注入的原文；
+// 自动事实是索引命中后的按需检索内容，不能伪称为每轮都注入。
 //   1) 用户自定义指令段（userInstructionsPrompt，归 system 桶）
 //   2) 长期记忆段（memorydir：常驻 pinned.md + 记忆索引 index.md，归 memory 桶）
 // 任一段为空则不下发，前端只渲染收到的段。
@@ -30,9 +30,11 @@ func HandleMemoryInject(c *gin.Context) {
 		memoryRaw += "\n# 长期记忆索引\n" + idx
 	}
 	memoryRaw = strings.TrimSpace(memoryRaw)
+	autoFacts := memorydir.ReadRaw("facts")
 	out := []injectSeg{
 		{Key: "system", Title: "自定义指令（昵称 / 身份 / 指令）", Raw: userInstructionsPrompt(), Enabled: strings.TrimSpace(userInstructionsPrompt()) != ""},
 		{Key: "memory", Title: "长期记忆（常驻 pinned + 记忆索引）", Raw: memoryRaw, Enabled: memoryRaw != ""},
+		{Key: "memory", Title: "自动提取事实（按当前任务检索）", Raw: autoFacts, Enabled: autoFacts != ""},
 	}
 	c.JSON(http.StatusOK, gin.H{"segments": out})
 }

@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"backend/internal/ai/core"
 )
 
 // withTempRepoRoot 把 GitRepoRoot 换成临时目录，测试结束自动还原，
@@ -19,8 +21,18 @@ func withTempRepoRoot(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	old := GitRepoRoot
+	oldProjectRoot := core.GetProjectRoot()
+	t.Setenv("SHANXI_WORKDIR_STATE_FILE", filepath.Join(t.TempDir(), "workdir.txt"))
+	if err := core.SetProjectRoot(dir); err != nil {
+		t.Fatalf("切换临时工作目录失败: %v", err)
+	}
 	GitRepoRoot = dir
-	t.Cleanup(func() { GitRepoRoot = old })
+	t.Cleanup(func() {
+		GitRepoRoot = old
+		if err := core.SetProjectRoot(oldProjectRoot); err != nil {
+			t.Errorf("恢复工作目录失败: %v", err)
+		}
+	})
 	return dir
 }
 

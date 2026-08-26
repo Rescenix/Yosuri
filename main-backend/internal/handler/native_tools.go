@@ -15,6 +15,7 @@ import (
 type nativeToolResult struct {
 	Text   string
 	Images []mcpImageArtifact
+	Videos []mcpVideoArtifact
 	// URLs 是 web_search（Firecrawl 联网搜索）结果的引用来源，透出给前端来源卡片
 	URLs []string
 }
@@ -140,6 +141,10 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, arxivToolDef)
 	// mambo_video：曼波视频一键生成（配音+字幕+素材匹配+ffmpeg 合成）
 	defs = append(defs, mamboToolDef)
+	// video_watermark_remove：AI 视频去水印（ffmpeg delogo + 清元数据）
+	defs = append(defs, watermarkToolDef)
+	// video_generate：AI 生视频（Agnes 免费 API，$0/秒）
+	defs = append(defs, videoGenToolDef)
 	return defs
 }
 
@@ -195,12 +200,16 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return nativeToolResult{Text: text}, nil
 	case "mambo_video":
 		return callMamboVideo(ctx, argsJSON)
+	case "video_watermark_remove":
+		return callWatermarkRemove(ctx, argsJSON)
 	case "web_search":
 		return callFirecrawlSearch(ctx, argsJSON)
 	case "view_image":
 		return callNativeViewImage(ctx, argsJSON)
 	case "image_generate":
 		return callNativeImageGenerate(ctx, argsJSON)
+	case "video_generate":
+		return callNativeVideoGenerate(ctx, argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
 		"workdir_read", "workdir_write", "workdir_append":
 		return callNativeMemoryTool(name, argsJSON)

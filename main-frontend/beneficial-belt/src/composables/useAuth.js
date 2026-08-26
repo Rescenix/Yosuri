@@ -13,6 +13,7 @@ const isLoggedIn = ref(false)
 const login = ref('')   // Rescene Cloud 账号名
 const name = ref('')    // 账号显示名
 const avatar = ref('')  // 账号头像 URL
+const customAvatar = ref('') // 用户在本机设置的头像（优先于账号头像）
 const uid = ref(null)   // cloud 分发的账号 UID（游客/登录都有）
 const isVip = ref(false) // 会员标识：仅由服务端 JWT 的 is_vip 决定，绝不读 localStorage（堵住游客伪造）
 const intimacy = ref(0) // 亲密度：无上限互动值（云端权威，随 UID 账号存储、跨设备保留）
@@ -25,6 +26,7 @@ let refreshing = false
 const DEVICE_KEY = 'aurora_device_id'
 const UID_KEY = 'aurora_uid'
 const INTIMACY_KEY = 'aurora_intimacy'
+const USER_AVATAR_KEY = 'rescene_user_avatar_v1'
 
 // 设备指纹：首次生成 UUID 存 localStorage（同一设备恒定；换设备/清缓存 = 新游客号）
 function getDeviceId() {
@@ -159,11 +161,28 @@ const displayName = computed(() => {
   return u ? 'UID ' + u : '未登录'
 })
 
-// 展示头像：登录用账号头像，未登录用 null（UI 回退到默认图标）
+// 展示头像：本机自定义头像优先，其次是登录账号头像；都没有时由 UI 统一回退到首字母。
 const displayAvatar = computed(() => {
+  if (customAvatar.value) return customAvatar.value
   if (isLoggedIn.value) return avatar.value || ''
   return ''
 })
+const hasCustomAvatar = computed(() => Boolean(customAvatar.value))
+
+function setCustomAvatar(dataUrl) {
+  const value = typeof dataUrl === 'string' ? dataUrl.trim() : ''
+  if (!value) {
+    clearCustomAvatar()
+    return
+  }
+  localStorage.setItem(USER_AVATAR_KEY, value)
+  customAvatar.value = value
+}
+
+function clearCustomAvatar() {
+  localStorage.removeItem(USER_AVATAR_KEY)
+  customAvatar.value = ''
+}
 
 async function refresh() {
   if (refreshing) return
@@ -232,6 +251,8 @@ if (cachedUid) uid.value = Number(cachedUid)
 // 首帧先读本地缓存的亲密度（避免闪烁 0），UID 到位后再向 cloud 校准
 const cachedIntimacy = localStorage.getItem(INTIMACY_KEY)
 if (cachedIntimacy) intimacy.value = Number(cachedIntimacy)
+const cachedCustomAvatar = localStorage.getItem(USER_AVATAR_KEY)
+if (cachedCustomAvatar) customAvatar.value = cachedCustomAvatar
 
 // 首次加载即验真；并监听登录态变化事件自动刷新
 refresh()
@@ -255,7 +276,10 @@ export function useAuth() {
     intimacyLevel: readonly(intimacyLevel),
     displayName: readonly(displayName),
     displayAvatar: readonly(displayAvatar),
+    hasCustomAvatar: readonly(hasCustomAvatar),
     authError: readonly(authError),
+    setCustomAvatar,
+    clearCustomAvatar,
     refresh,
     logout,
     fetchIntimacy,

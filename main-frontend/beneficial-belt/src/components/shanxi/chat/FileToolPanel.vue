@@ -17,6 +17,10 @@
             @unpin-file="unpinFile"
           >
             <template #tab-actions>
+              <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? '保存并在终端运行当前文件' : '当前文件暂不支持一键运行'" @click="runActiveFile">
+                <Icon icon="mdi:play" width="15" />
+                <span>运行</span>
+              </button>
               <span v-if="saveState" class="file-tool-save-state" :class="saveState">
                 {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
               </span>
@@ -32,7 +36,7 @@
           <div class="file-tool-tree-header">
             <span class="file-tool-tree-project">
               <Icon icon="mdi:folder-outline" width="14" />
-              <span>re0</span>
+              <span>{{ workdirName || '项目' }}</span>
             </span>
             <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
               <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
@@ -60,6 +64,10 @@
                 :selected="selectedNode"
                 @select="onSelectNode"
                 @toggle="onToggleNode"
+                @create-file="createFile"
+                @create-folder="createFolder"
+                @rename="renameNode"
+                @delete="deleteNode"
               />
             </div>
           </template>
@@ -75,6 +83,10 @@
               :selected="selectedNode"
               @select="onSelectNode"
               @toggle="onToggleNode"
+              @create-file="createFile"
+              @create-folder="createFolder"
+              @rename="renameNode"
+              @delete="deleteNode"
             />
           </div>
         </aside>
@@ -101,6 +113,10 @@
               @unpin-file="unpinFile"
             >
               <template #tab-actions>
+                <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? '保存并在终端运行当前文件' : '当前文件暂不支持一键运行'" @click="runActiveFile">
+                  <Icon icon="mdi:play" width="15" />
+                  <span>运行</span>
+                </button>
                 <span v-if="saveState" class="file-tool-save-state" :class="saveState">
                   {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
                 </span>
@@ -119,7 +135,7 @@
             <div class="file-tool-tree-header">
               <span class="file-tool-tree-project">
                 <Icon icon="mdi:folder-outline" width="14" />
-                <span>re0</span>
+                <span>{{ workdirName || '项目' }}</span>
               </span>
               <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
                 <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
@@ -146,6 +162,10 @@
                   :selected="selectedNode"
                   @select="onSelectNode"
                   @toggle="onToggleNode"
+                  @create-file="createFile"
+                  @create-folder="createFolder"
+                  @rename="renameNode"
+                  @delete="deleteNode"
                 />
               </div>
             </template>
@@ -161,6 +181,10 @@
                 :selected="selectedNode"
                 @select="onSelectNode"
                 @toggle="onToggleNode"
+                @create-file="createFile"
+                @create-folder="createFolder"
+                @rename="renameNode"
+                @delete="deleteNode"
               />
             </div>
           </aside>
@@ -177,9 +201,11 @@ import CodeEditor from './CodeEditor.vue'
 import FileTreeNode from './FileTreeNode.vue'
 import { useResizableWidth } from './useResizable.js'
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'run-command'])
 const props = defineProps({
-  embedded: { type: Boolean, default: false }
+  embedded: { type: Boolean, default: false },
+  workdirPath: { type: String, default: '' },
+  workdirName: { type: String, default: '' }
 })
 
 // 文件树左边框拖拽调宽：树贴在右边，手柄在它左边界，edge:'left' 时
@@ -211,6 +237,7 @@ const externalChanges = ref(new Set())
 let fileChangesStream = null
 
 const activeTab = computed(() => tabs.value.find(t => t.path === activeFilePath.value) || null)
+const runnableCommand = computed(() => activeTab.value ? commandFor(activeTab.value) : '')
 
 // ---- 搜索：点搜索图标后整块替换树视图（仿 Cursor），不是叠加一层筛选框 ----
 const treeSearchOpen = ref(false)
@@ -293,6 +320,83 @@ function onToggleNode(node) {
   node.expanded = !node.expanded
 }
 
+function validNewPath(path) {
+  return path && !path.startsWith('/') && !path.startsWith('\\') && !path.split(/[\\/]/).includes('..')
+}
+
+async function createFile(folder) {
+  const name = window.prompt(`在「${folder.name}」中新建文件（例如 hello.py）`)?.trim()
+  if (!name) return
+  if (!validNewPath(name) || name.includes('/')) return window.alert('请输入文件名，不要包含路径')
+  const path = `${folder.path}/${name}`
+  try {
+    const res = await fetch('/api/file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, content: '' }) })
+    if (!res.ok) throw new Error(await res.text())
+    await loadTree()
+    const tab = { path, name: path.split('/').pop(), content: '', savedContent: '' }
+    tabs.value.push(tab)
+    activeFilePath.value = path
+    selectedNode.value = { type: 'file', path, name: tab.name }
+  } catch (e) { window.alert('新建文件失败：' + (e.message || '未知错误')) }
+}
+
+async function createFolder(folder) {
+  const name = window.prompt(`在「${folder.name}」中新建文件夹`)?.trim()
+  if (!name) return
+  if (!validNewPath(name) || name.includes('/')) return window.alert('请输入文件夹名，不要包含路径')
+  const path = `${folder.path}/${name}`
+  try {
+    const res = await fetch('/api/folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) })
+    if (!res.ok) throw new Error(await res.text())
+    await loadTree()
+  } catch (e) { window.alert('新建文件夹失败：' + (e.message || '未知错误')) }
+}
+
+async function renameNode(node) {
+  const name = window.prompt(`重命名「${node.name}」`, node.name)?.trim()
+  if (!name || name === node.name) return
+  if (!validNewPath(name) || name.includes('/')) return window.alert('请输入名称，不要包含路径')
+  const parent = node.path.includes('/') ? node.path.slice(0, node.path.lastIndexOf('/')) : ''
+  const newPath = parent ? `${parent}/${name}` : name
+  try {
+    const res = await fetch('/api/file/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: node.path, newPath }) })
+    if (!res.ok) throw new Error(await res.text())
+    tabs.value.filter(tab => tab.path === node.path || tab.path.startsWith(node.path + '/')).forEach(tab => closeFile(tab.path))
+    await loadTree()
+  } catch (e) { window.alert('重命名失败：' + (e.message || '未知错误')) }
+}
+
+async function deleteNode(node) {
+  const detail = node.type === 'folder' ? '及其所有内容' : ''
+  if (!window.confirm(`确定删除「${node.name}」${detail}？此操作不可恢复。`)) return
+  try {
+    const res = await fetch('/api/file?path=' + encodeURIComponent(node.path), { method: 'DELETE' })
+    if (!res.ok) throw new Error(await res.text())
+    tabs.value.filter(tab => tab.path === node.path || tab.path.startsWith(node.path + '/')).forEach(tab => closeFile(tab.path))
+    await loadTree()
+  } catch (e) { window.alert('删除失败：' + (e.message || '未知错误')) }
+}
+
+function quotePowerShell(value) { return "'" + value.replaceAll("'", "''") + "'" }
+function commandFor(tab) {
+  const path = quotePowerShell(tab.path)
+  switch (languageOf(tab.name)) {
+    case 'typescript': return `npx --no-install tsx ${path}`
+    case 'python': return `python ${path}`
+    case 'go': return `go run ${path}`
+    case 'rust': return `rustc ${path} -o \"$env:TEMP\\rescene-lesson.exe\"; if ($LASTEXITCODE -eq 0) { & \"$env:TEMP\\rescene-lesson.exe\" }`
+    default: return ''
+  }
+}
+
+async function runActiveFile() {
+  if (!runnableCommand.value) return
+  clearTimeout(autoSaveTimer)
+  // 一键运行必须等保存成功；否则终端很容易读到上一版文件，录教学视频会显得像“代码没生效”。
+  if (await saveActiveFile() === false) return
+  emit('run-command', runnableCommand.value)
+}
+
 // 单击直接打开——原来是"点一下选中、再点一下（哪怕是同一下）才真正打开"，
 // 等于强制双击，体验上跟 Cursor 点文件立刻显示的预期完全对不上。现在选中和
 // 打开是同一个动作，selectedNode 只留给 FileTreeNode 做高亮用。
@@ -362,6 +466,21 @@ function connectFileChanges() {
 
 watch(() => tabs.value.map(tab => tab.path).join('\u0000'), connectFileChanges)
 
+// 对话切换项目时，文件 API 的根目录也随之切换。清掉旧标签，避免同名相对路径
+// 在新项目里被误保存或继续展示；文件树则立即从新的根目录重载。
+watch(() => props.workdirPath, (next, previous) => {
+  if (!next || next === previous) return
+  fileChangesStream?.close()
+  fileChangesStream = null
+  clearTimeout(autoSaveTimer)
+  tabs.value = []
+  activeFilePath.value = ''
+  selectedNode.value = null
+  externalChanges.value = new Set()
+  treeQuery.value = ''
+  loadTree()
+})
+
 function switchFile(path) {
   flushAutoSave() // 离开当前标签前把没落盘的防抖改动先冲掉，不等 600ms
   activeFilePath.value = path
@@ -419,7 +538,7 @@ function isDirty(tab) {
 
 async function saveActiveFile() {
   const tab = activeTab.value
-  if (!tab || !isDirty(tab)) return
+  if (!tab || !isDirty(tab)) return true
   saveState.value = 'saving'
   try {
     const res = await fetch('/api/file', {
@@ -430,8 +549,11 @@ async function saveActiveFile() {
     if (!res.ok) throw new Error(await res.text())
     tab.savedContent = tab.content
     saveState.value = 'saved'
+    return true
   } catch (e) {
     saveState.value = 'error'
+    window.alert('保存失败，未运行当前文件。')
+    return false
   } finally {
     clearTimeout(saveStateTimer)
     saveStateTimer = setTimeout(() => { saveState.value = '' }, 2000)
@@ -524,6 +646,23 @@ onUnmounted(() => {
   color: var(--app-text-faint);
   padding: 0 4px;
 }
+.file-tool-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 25px;
+  margin-right: 2px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 46%, var(--app-border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--app-accent) 12%, var(--app-surface));
+  color: var(--app-accent);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.file-tool-run-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--app-accent) 20%, var(--app-surface)); }
+.file-tool-run-btn:disabled { opacity: .4; cursor: not-allowed; }
 
 .file-tool-save-state.saved { color: #12b76a; }
 .file-tool-save-state.error { color: #d94834; }

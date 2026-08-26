@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"backend/internal/ai/core"
 )
 
 // skipTreeDirs 是构建文件树时整个跳过的目录名（不进 children，也不递归）。
@@ -93,7 +95,7 @@ func FileChangesHandler(w http.ResponseWriter, r *http.Request) {
 
 // FileTreeHandler 返回项目目录树
 func FileTreeHandler(w http.ResponseWriter, r *http.Request) {
-	root := GitRepoRoot
+	root := currentFileRoot()
 	tree, err := buildFileTree(root, root)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -190,11 +192,108 @@ func FileWriteHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"ok": true})
 }
 
-// resolveRepoPath 把请求里的相对路径解析成绝对路径，并确认没跑出仓库根目录。
+// FileCreateFolderHandler 创建空目录。写文件时会自动创建父级目录，但教学演示或
+// 新项目起步时，用户也需要能先把目录结构搭出来。
+func FileCreateFolderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Path) == "" {
+		http.Error(w, "path required", http.StatusBadRequest)
+		return
+	}
+	fullPath, ok := resolveRepoPath(req.Path)
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if err := os.MkdirAll(fullPath, 0755); err != nil {
+		http.Error(w, fmt.Sprintf("cannot create folder %s: %v", req.Path, err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+type fileRenameRequest struct {
+	Path    string `json:"path"`
+	NewPath string `json:"newPath"`
+}
+
+// FileRenameHandler 重命名文件或目录。目标已存在时拒绝覆盖，避免一次误操作损失内容。
+func FileRenameHandler(w http.ResponseWriter, r *http.Request) {
+	var req fileRenameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	from, fromOK := resolveRepoPath(req.Path)
+	to, toOK := resolveRepoPath(req.NewPath)
+	if !fromOK || !toOK || from == currentFileRoot() || strings.TrimSpace(req.NewPath) == "" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if _, err := os.Stat(to); err == nil {
+		http.Error(w, "destination already exists", http.StatusConflict)
+		return
+	} else if !os.IsNotExist(err) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := os.Rename(from, to); err != nil {
+		http.Error(w, fmt.Sprintf("cannot rename %s: %v", req.Path, err), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+// FileDeleteHandler 删除项目根内的单个文件或目录；根目录本身永远不可删除。
+func FileDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	fullPath, ok := resolveRepoPath(path)
+	if !ok || path == "" || fullPath == currentFileRoot() {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if info.IsDir() {
+		err = os.RemoveAll(fullPath)
+	} else {
+		err = os.Remove(fullPath)
+	}
+	if err != nil {
+		http.Error(w, fmt.Sprintf("cannot delete %s: %v", path, err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+// currentFileRoot 让编辑器跟随当前对话工作目录；GitRepoRoot 仍只服务 git 操作和
+// 工作目录的相对路径解析，不能再拿它当文件面板的根，否则会出现“对话已切项目、
+// 编辑器仍显示 re0”的脱节。
+func currentFileRoot() string {
+	return filepath.Clean(core.GetProjectRoot())
+}
+
+// resolveRepoPath 把请求里的相对路径解析成绝对路径，并确认没跑出当前工作目录。
 // FileReadHandler / FileWriteHandler 共用，越界拦截逻辑只写一份。
 func resolveRepoPath(relPath string) (string, bool) {
-	fullPath := filepath.Clean(filepath.Join(GitRepoRoot, relPath))
-	root := filepath.Clean(GitRepoRoot)
+	root := currentFileRoot()
+	fullPath := filepath.Clean(filepath.Join(root, relPath))
 	if fullPath != root && !strings.HasPrefix(fullPath, root+string(filepath.Separator)) {
 		return "", false
 	}
