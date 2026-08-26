@@ -102,6 +102,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	// 创作工作台：文案成片（曼波视频一键生成 + 产物静态服务）
 	r.POST("/api/studio/mambo", HandleStudioMambo)
+	r.POST("/api/studio/manga/plan", HandleMangaPlan)
+	r.POST("/api/studio/manga/shot", HandleMangaShot)
 	r.GET("/api/studio/files/:file", HandleStudioFiles)
 	r.POST("/api/translate", HandleTranslate)
 	r.POST("/api/translate/batch", HandleTranslateBatch)
@@ -289,6 +291,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	// Rescene 聚合 API：OpenAI 兼容端点，聚合免费模型池 + 自定义提供方
 	r.POST("/v1/chat/completions", HandleAggregateChat)
+	// /v1/responses —— Responses 协议翻译层（2026-08-26）：新版 OpenAI 生态
+	// 客户端（Claude Code / Codex / agent 框架）默认优先走 /responses
+	r.POST("/v1/responses", HandleAggregateResponses)
 	r.GET("/v1/models", HandleAggregateModels)
 	// 聚合 API 健康度可视化（设置面板「聚合 API」tab）
 	r.GET("/api/aggregate/health", HandleAggregateHealth)

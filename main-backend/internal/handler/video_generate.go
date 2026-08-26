@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -415,18 +414,17 @@ func downloadVideo(ctx context.Context, videoURL string, spec videoGenSpec, res 
 	if name == "" {
 		name = fmt.Sprintf("video-%d", time.Now().UnixMilli())
 	}
+	// 统一存 .mp4：Agnes 返回的 Content-Type 常是 video/x-m4v / video/mp4，
+	// 若按 Content-Type 推断会存成 .m4v——Wails WebView2 / 浏览器 <video> 对 .m4v
+	// 播放支持差（2026-08-26 实测：对话内嵌播放器弹不出来）。m4v 与 mp4 同为
+	// MPEG-4 容器，改扩展名即可正常播放；Content-Type 也归一为 video/mp4。
 	ext := ".mp4"
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		if e, err := mime.ExtensionsByType(strings.Split(ct, ";")[0]); err == nil && len(e) > 0 && e[0] != "" {
-			ext = e[0]
-		}
-	}
 	file := filepath.Join(dir, name+ext)
 	if wErr := os.WriteFile(file, data, 0o644); wErr != nil {
 		return res, fmt.Errorf("保存视频失败: %w", wErr)
 	}
 	res.File = file
-	res.MimeType = resp.Header.Get("Content-Type")
+	res.MimeType = "video/mp4"
 	res.Bytes = data
 	if rel, relErr := filepath.Rel(videoOutputDir(), file); relErr == nil && !strings.HasPrefix(rel, "..") {
 		res.URL = "/api/video/file/" + filepath.ToSlash(rel)

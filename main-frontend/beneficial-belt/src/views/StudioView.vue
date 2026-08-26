@@ -4,8 +4,8 @@
     <header class="studio-header">
       <div class="studio-title">
         <span class="studio-logo">🎬</span>
-        <h1>创作工作台 · 文案成片</h1>
-        <span class="studio-sub">贴文案 → 自动配音 + 字幕 + 联网配素材 → 一键成片</span>
+        <h1>创作工作台 · 漫剧</h1>
+        <span class="studio-sub">分镜脚本 → 多平台生成(即梦/Kling/海螺) → 自动剪辑 → 成片</span>
       </div>
       <router-link to="/" class="studio-back">← 返回对话</router-link>
     </header>
@@ -14,12 +14,12 @@
       <!-- 左栏：输入 -->
       <section class="studio-panel input-panel">
         <div class="panel-head">
-          <span>① 写文案</span>
-          <span class="panel-hint">每句自动一段，换行或 | 分隔</span>
+          <span>① 分镜剧本</span>
+          <span class="panel-hint">每句一个分镜，换行或 | 分隔</span>
         </div>
 
         <div class="field-row">
-          <input v-model="topic" class="studio-input topic-input" placeholder="主题（必填）" />
+          <input v-model="topic" class="studio-input topic-input" placeholder="主题（必填，如：AI 少女的日常）" />
           <select v-model="voice" class="studio-input voice-select" title="配音音色">
             <option value="zh-TW-HsiaoChenNeural">曉臻 · 台湾普通话女声（默认）</option>
             <option value="openai:nova">Nova · OpenAI女声</option>
@@ -27,22 +27,51 @@
             <option value="zh-CN-XiaoyiNeural">晓伊 · edge女声（免费）</option>
             <option value="zh-CN-YunxiNeural">云希 · 青年男声</option>
           </select>
+        </div>
+
+        <div class="field-row">
           <select v-model="orientation" class="studio-input orient-select" title="画面方向">
             <option value="landscape">横屏 16:9</option>
             <option value="portrait">竖屏 9:16</option>
           </select>
+          <select v-model="genPlatform" class="studio-input orient-select" title="生成平台">
+            <option value="auto">自动分配（即梦/Kling/海螺）</option>
+            <option value="jimeng">即梦 Fast VIP（每日免费1条）</option>
+            <option value="kling">Kling 国际版（66分/日）</option>
+            <option value="hailuo">海螺 MiniMax（新户300分）</option>
+          </select>
         </div>
 
-        <div class="field-row api-row">
-          <input v-model="pexelsKey" class="studio-input api-input" placeholder="Pexels API Key（有 key 时自动搜真实视频素材）" />
-          <button class="studio-input api-save-btn" @click="saveKey">保存</button>
-          <span v-if="keySaved" class="api-saved">✓</span>
+        <div class="credit-row">
+          <span class="credit-badge">🔹 即梦 55分</span>
+          <span class="credit-badge">🔹 Kling 免登</span>
+          <span class="credit-badge">🔹 海螺 300分</span>
+        </div>
+
+        <div class="keys-panel">
+          <div class="panel-head" style="cursor:pointer" @click="keysOpen = !keysOpen">
+            <span>🔑 生成平台 API Key</span>
+            <span class="panel-hint">{{ keysOpen ? '收起' : (platformKeyCount + ' 已填') }}</span>
+          </div>
+          <div v-if="keysOpen" class="keys-body">
+            <div class="field-row" v-for="k in platformKeys" :key="k.id">
+              <span class="key-label">{{ k.label }}</span>
+              <input
+                :type="k.show ? 'text' : 'password'"
+                v-model="platformKeysMap[k.id]"
+                class="studio-input key-input"
+                :placeholder="k.placeholder"
+              />
+              <button class="key-eye" @click="k.show = !k.show" :title="k.show ? '隐藏' : '显示'">{{ k.show ? '🙈' : '👁️' }}</button>
+            </div>
+            <div class="keys-hint">Key 只存本地浏览器，不会上传。留空则对应平台不参与生成。</div>
+          </div>
         </div>
 
         <textarea
           v-model="text"
           class="studio-input script-input"
-          placeholder="粘贴你的文案，例如：&#10;曼波曼波，跳舞啦！&#10;音乐响起，节奏飞起！&#10;跟我一起摇起来！曼波曼波~&#10;&#10;留空则按主题自动生成曼波模板文案"
+          placeholder="粘贴分镜剧本，每行一个镜头：&#10;少女在樱花树下回眸，柔光&#10;她伸手接住飘落的花瓣&#10;背景切换为城市夜景，霓虹灯闪烁&#10;&#10;留空则按主题自动生成分镜"
         ></textarea>
 
         <div class="gen-row">
@@ -51,8 +80,8 @@
             <span>合成完整视频（配音+拼接）</span>
           </label>
           <button class="studio-btn gen-btn" :disabled="busy" @click="generate">
-            <span v-if="!busy">⚡ {{ compose ? '一键生成完整视频' : '生成素材片段' }}</span>
-            <span v-else class="gen-busy">🎬 生成中…（约 10-20 分钟）</span>
+            <span v-if="!busy">⚡ 生成分镜计划</span>
+            <span v-else class="gen-busy">🧠 分镜生成中…</span>
           </button>
         </div>
 
@@ -83,50 +112,59 @@
         </div>
       </section>
 
-      <!-- 右栏：产物 -->
+      <!-- 右栏：分镜计划 / 产物 -->
       <section class="studio-panel result-panel">
         <div class="panel-head">
-          <span>② 预览 · 剪辑 · 导出</span>
-          <span v-if="result" class="panel-hint">{{ fmtDur(result.duration) }} · {{ result.segments.length }} 段</span>
+          <span>② 分镜计划 · 人设 · 生成</span>
+          <span v-if="plan" class="panel-hint">{{ plan.characters?.length }} 角色 · {{ plan.shots?.length }} 镜头 · 约 {{ plan.total_dur }}s</span>
         </div>
 
-        <div v-if="!result" class="empty-state">
+        <div v-if="!plan" class="empty-state">
           <div class="empty-art">🎬</div>
-          <p>左侧贴好文案，点「一键生成视频」<br />自动配音 + 字幕 + 联网搜素材拼接</p>
+          <p>左侧写好剧情/主题，点「生成分镜计划」<br />LLM 自动拆镜头 + 人设卡，再逐镜生成</p>
         </div>
 
         <template v-else>
-          <!-- 视频预览 -->
-          <div class="video-wrap">
-            <video :src="result.video" controls playsinline class="studio-video"></video>
-          </div>
-
-          <!-- 段落剪辑时间轴 -->
-          <div class="timeline-head">
-            <span>段落剪辑（删段 / 换序 → 重新生成生效）</span>
-          </div>
-          <div class="timeline">
-            <div v-for="(seg, i) in segs" :key="i" class="timeline-seg" :style="{ width: segW(seg) }">
-              <div class="seg-top">
-                <span class="seg-idx">{{ i + 1 }}</span>
-                <span class="seg-dur">{{ seg.duration.toFixed(1) }}s</span>
-              </div>
-              <div class="seg-text" :title="seg.sentence">{{ seg.sentence }}</div>
-              <div class="seg-topic" v-if="seg.topic" :title="'素材搜索词: ' + ((seg.search_terms || []).join(' / '))">🎯 {{ seg.topic }}</div>
-              <div class="seg-src" :title="seg.source">{{ srcShort(seg.source) }}</div>
-              <div class="seg-ops">
-                <button class="seg-btn" :disabled="i === 0" @click="move(i, -1)" title="上移">↑</button>
-                <button class="seg-btn" :disabled="i === segs.length - 1" @click="move(i, 1)" title="下移">↓</button>
-                <button class="seg-btn del" @click="remove(i)" title="删除该段">✕</button>
+          <!-- 人设卡 -->
+          <div class="manga-sec">
+            <div class="timeline-head">👤 人设卡（角色一致性锚点）</div>
+            <div class="char-grid">
+              <div v-for="ch in plan.characters" :key="ch.id" class="char-card">
+                <div class="char-head">
+                  <span class="char-name">{{ ch.name }}</span>
+                  <span class="char-role">{{ ch.role }}</span>
+                </div>
+                <div class="char-line">👀 {{ ch.appearance }}</div>
+                <div class="char-line char-personality">💬 {{ ch.personality }}</div>
+                <div class="char-prompt" :title="ch.ref_prompt">{{ ch.ref_prompt }}</div>
               </div>
             </div>
           </div>
 
-          <div class="export-row">
-            <button class="studio-btn regen-btn" :disabled="busy" @click="regenerate">
-              {{ busy ? '⏳ 重新生成中…' : '🔄 按剪辑重新生成（导出）' }}
-            </button>
-            <a v-if="result.videoPath" class="export-path" :href="result.video" download target="_blank">
+          <!-- 分镜列表 -->
+          <div class="manga-sec">
+            <div class="timeline-head">🎞️ 分镜（点击生成 → 多平台调度）</div>
+            <div class="shot-list">
+              <div v-for="(shot, i) in plan.shots" :key="shot.shot_no" class="shot-card" :class="{ generating: shot.status === 'busy', done: shot.status === 'done' }">
+                <div class="shot-top">
+                  <span class="shot-no">{{ shot.shot_no }}</span>
+                  <span class="shot-dur">{{ shot.duration }}s</span>
+                  <span class="shot-platform">{{ shot.platform }}</span>
+                  <span v-if="shot.status === 'done'" class="shot-done">✅</span>
+                  <span v-else-if="shot.status === 'busy'" class="shot-done">⏳</span>
+                </div>
+                <div class="shot-scene">🏞️ {{ shot.scene }}</div>
+                <div class="shot-action">🎥 {{ shot.action }}</div>
+                <div class="shot-dialogue" v-if="shot.dialogue">💬 {{ shot.dialogue }}</div>
+                <button class="shot-gen-btn" :disabled="shot.status === 'busy'" @click="genShot(i)">
+                  {{ shot.status === 'done' ? '重新生成' : (shot.status === 'busy' ? '生成中…' : '⚡ 生成镜头') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="export-row" v-if="result">
+            <a class="export-path" :href="result.video" download target="_blank">
               📁 {{ result.videoPath }}
             </a>
           </div>
@@ -137,7 +175,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { API_BASE_URL } from '../config.js'
 
 const topic = ref('')
@@ -146,16 +184,42 @@ const text = ref('')
 const busy = ref(false)
 const logLines = ref([])
 const result = ref(null)
+const plan = ref(null)
 const segs = ref([])
 const pexelsKey = ref(localStorage.getItem('pexels_key') || '')
 const keySaved = ref(false)
 const orientation = ref('landscape')
+const genPlatform = ref('auto')
 const compose = ref(false)
 const transOpen = ref(false)
 const transLang = ref('en')
 const transBusy = ref(false)
 const transResult = ref('')
 const transError = ref('')
+
+// ---- 生成平台 API Key（localStorage 持久化）----
+const KEY_STORE = 'studio_platform_keys'
+const platformKeys = ref([
+  { id: 'jimeng', label: '即梦', placeholder: '即梦 API Key / Cookie', show: false },
+  { id: 'hailuo', label: '海螺 MiniMax', placeholder: '海螺 API Key', show: false },
+  { id: 'agnes', label: 'Agnes', placeholder: 'Agnes API Key', show: false },
+  { id: 'kling', label: 'Kling', placeholder: 'Kling API Key（留空则每日白嫖）', show: false },
+])
+const keysOpen = ref(false)
+const platformKeysMap = ref(loadPlatformKeys())
+const platformKeyCount = computed(() => Object.values(platformKeysMap.value).filter(v => v && v.trim()).length)
+
+function loadPlatformKeys() {
+  try {
+    const raw = localStorage.getItem(KEY_STORE)
+    if (raw) return JSON.parse(raw)
+  } catch (e) {}
+  return {}
+}
+// 监听变化持久化
+watch(platformKeysMap, (v) => {
+  localStorage.setItem(KEY_STORE, JSON.stringify(v))
+}, { deep: true })
 
 function saveKey() {
   localStorage.setItem('pexels_key', pexelsKey.value.trim())
@@ -210,78 +274,60 @@ async function doTranslate() {
 async function generate() {
   const t = topic.value.trim()
   if (!t) { pushLog('✗ 先填主题'); return }
-  const payload = {
-    topic: t, text: text.value.trim(), voice: voice.value,
-    pexels_key: pexelsKey.value.trim(),
-    orientation: orientation.value,
-    compose: compose.value,
-  }
-  await runGen(payload)
-}
-
-async function regenerate() {
-  if (!result.value || !segs.value.length) return
-  // 剪辑 = 保留段的文案按顺序拼回，引擎重新 TTS + 重新配素材（保证音画字对齐）
-  const newText = segs.value.map(s => s.sentence).join('|')
-  await runGen({
-    topic: topic.value.trim() || '曼波',
-    text: newText,
-    voice: voice.value,
-    out: result.value.videoPath.split(/[\\/]/).pop().replace(/\.mp4$/, '')
-  }, true)
-}
-
-async function runGen(payload, isRegen = false) {
   busy.value = true
+  plan.value = null
+  result.value = null
   logLines.value = []
-  pushLog('🎬 开始生成（约 10-20 分钟）')
+  pushLog('🧠 LLM 生成分镜计划 + 人设卡…')
   try {
-    const resp = await fetch(`${API_BASE_URL}/api/studio/mambo`, {
+    const resp = await fetch(`${API_BASE_URL}/api/studio/manga/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, pexels_key: pexelsKey.value.trim() })
+      body: JSON.stringify({ topic: t, script: text.value.trim(), genre: '' })
     })
-    const reader = resp.body.getReader()
-    const decoder = new TextDecoder()
-    let buf = ''
-    let resultData = null
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
-      const events = buf.split('\n\n')
-      buf = events.pop() || ''
-      for (const evt of events) {
-        const lines = evt.split('\n')
-        const eventType = lines.find(l => l.startsWith('event:'))?.slice(6).trim() || ''
-        const dataLine = lines.find(l => l.startsWith('data:'))?.slice(5).trim() || ''
-        if (eventType === 'result') {
-          try { resultData = JSON.parse(dataLine) } catch {}
-        } else if (eventType === 'progress') {
-          pushLog(dataLine)
-        } else if (eventType === 'error') {
-          pushLog('✗ ' + dataLine)
-        } else if (dataLine) {
-          pushLog(dataLine)
-        }
-      }
+    const data = await resp.json()
+    if (!resp.ok || !data.ok) {
+      pushLog('✗ ' + (data.error || resp.status))
+      return
     }
-    if (resultData?.ok) {
-      result.value = {
-        video: resultData.video || resultData.videoPath || '',
-        videoPath: resultData.videoPath || resultData.video || '',
-        duration: resultData.duration || 0,
-        segments: resultData.segments || []
-      }
-      segs.value = (resultData.segments || []).map(s => ({ ...s }))
-      pushLog(`✅ 完成：${resultData.duration || 0}s`)
-    } else {
-      pushLog('✗ 生成失败')
-    }
+    plan.value = data.plan
+    // 给每个镜头加前端状态
+    plan.value.shots.forEach(s => s.status = '')
+    pushLog(`✅ 分镜计划完成：${plan.value.characters.length} 角色 · ${plan.value.shots.length} 镜头 · 约 ${plan.value.total_dur}s`)
   } catch (e) {
     pushLog('✗ 请求失败：' + e.message)
   } finally {
     busy.value = false
+  }
+}
+
+async function genShot(i) {
+  const shot = plan.value.shots[i]
+  if (!shot || shot.status === 'busy') return
+  shot.status = 'busy'
+  pushLog(`🎥 生成镜头 ${shot.shot_no}（${shot.platform}）…`)
+  try {
+    const resp = await fetch(`${API_BASE_URL}/api/studio/manga/shot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shot_no: shot.shot_no,
+        prompt: shot.prompt,
+        platform: genPlatform.value === 'auto' ? shot.platform : genPlatform.value,
+        ref_image: ''
+      })
+    })
+    const data = await resp.json()
+    if (resp.ok && data.ok) {
+      shot.status = 'done'
+      pushLog(`✅ 镜头 ${shot.shot_no} 已提交生成`)
+    } else {
+      shot.status = ''
+      pushLog('✗ ' + (data.error || '生成失败'))
+    }
+  } catch (e) {
+    shot.status = ''
+    pushLog('✗ 请求失败：' + e.message)
   }
 }
 
@@ -295,7 +341,7 @@ function remove(i) {
   segs.value.splice(i, 1)
 }
 
-onMounted(() => { document.title = '创作工作台 · 文案成片' })
+onMounted(() => { document.title = '创作工作台 · 漫剧' })
 </script>
 
 <style scoped>
@@ -357,6 +403,15 @@ onMounted(() => { document.title = '创作工作台 · 文案成片' })
 }
 
 .gen-row { display: flex; }
+.credit-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.credit-badge {
+  font-size: 11.5px; font-weight: 600;
+  background: var(--app-accent-soft, #2dd4bf22);
+  color: var(--app-accent);
+  border: 1px solid var(--app-border);
+  border-radius: 20px;
+  padding: 4px 12px;
+}
 .studio-btn {
   flex: 1;
   border: none; border-radius: 10px;
@@ -436,4 +491,52 @@ onMounted(() => { document.title = '创作工作台 · 文案成片' })
   text-decoration: none; word-break: break-all;
 }
 .export-path:hover { color: var(--app-accent); }
+
+/* ---- 漫剧：人设卡 + 分镜列表 ---- */
+.manga-sec { display: flex; flex-direction: column; gap: 8px; }
+.char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.char-card {
+  background: var(--app-bg); border: 1px solid var(--app-border);
+  border-left: 4px solid var(--app-accent); border-radius: 9px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 5px;
+}
+.char-head { display: flex; align-items: center; justify-content: space-between; }
+.char-name { font-weight: 700; font-size: 13.5px; }
+.char-role {
+  font-size: 11px; font-weight: 700; color: var(--app-accent);
+  background: var(--app-accent-soft, #2dd4bf22);
+  border-radius: 20px; padding: 2px 9px;
+}
+.char-line { font-size: 12px; color: var(--app-text-soft); line-height: 1.5; }
+.char-personality { color: var(--app-text-faint); }
+.char-prompt {
+  font-size: 10.5px; color: var(--app-text-faint); font-family: ui-monospace, Consolas, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.6;
+}
+.shot-list { display: flex; flex-direction: column; gap: 8px; }
+.shot-card {
+  background: var(--app-bg); border: 1px solid var(--app-border);
+  border-radius: 9px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.shot-card.generating { border-color: var(--app-accent); opacity: .8; }
+.shot-card.done { border-color: #12b76a55; }
+.shot-top { display: flex; align-items: center; gap: 10px; font-size: 11.5px; }
+.shot-no { font-weight: 800; color: var(--app-accent); }
+.shot-dur { color: var(--app-text-faint); }
+.shot-platform {
+  color: var(--app-accent); border: 1px solid var(--app-border);
+  border-radius: 20px; padding: 1px 8px; font-size: 10.5px;
+}
+.shot-done { margin-left: auto; }
+.shot-scene { font-size: 12px; font-weight: 700; color: var(--app-text); }
+.shot-action { font-size: 12px; color: var(--app-text-soft); line-height: 1.5; }
+.shot-dialogue { font-size: 12px; color: var(--app-accent); font-style: italic; }
+.shot-gen-btn {
+  align-self: flex-end; margin-top: 2px;
+  border: 1px solid var(--app-accent); background: var(--app-accent-soft, #2dd4bf22);
+  color: var(--app-accent); border-radius: 8px; padding: 6px 14px;
+  font-size: 12.5px; font-weight: 700; cursor: pointer;
+}
+.shot-gen-btn:disabled { opacity: .5; cursor: not-allowed; }
 </style>

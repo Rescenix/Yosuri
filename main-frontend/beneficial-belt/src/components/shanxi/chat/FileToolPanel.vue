@@ -195,9 +195,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, defineAsyncComponent } from 'vue'
 import { Icon } from '@iconify/vue'
-import CodeEditor from './CodeEditor.vue'
+import { useEditorPrefs } from '../composables/useEditorPrefs.js'
+
+// CodeEditor 是 Monaco 编辑器（5MB+ JS + 4 个 worker），默认按需加载（懒加载），
+// 用户关闭懒加载时应用启动后后台预取，打开文件面板秒开。
+const { editorLazy } = useEditorPrefs()
+const CodeEditor = defineAsyncComponent(() => import('./CodeEditor.vue'))
+let editorPrefetchStarted = false
+function prefetchEditor() {
+  if (editorPrefetchStarted) return
+  editorPrefetchStarted = true
+  import('./CodeEditor.vue').catch(() => {})
+}
+// 如果关闭了懒加载，立即预取编辑器
+watch(editorLazy, (lazy) => { if (!lazy) prefetchEditor() }, { immediate: true })
 import FileTreeNode from './FileTreeNode.vue'
 import { useResizableWidth } from './useResizable.js'
 

@@ -373,12 +373,23 @@ func HandleGetModelConfig(c *gin.Context) {
 		firecrawlKeySet = true
 	}
 
+	// Agnes AI 生视频 Key 状态（video_generate 工具用，前端「Agnes API Key」设置）。
+	// key 来源 = user_configs id=agnes 条目，或环境变量 AGNES_API_KEY 兜底。
+	agnesKeySet := false
+	if e, ok := entryByID["agnes"]; ok && e.APIKey != "" {
+		agnesKeySet = true
+	}
+	if !agnesKeySet && os.Getenv("AGNES_API_KEY") != "" {
+		agnesKeySet = true
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"configs":           safe,
 		"free_models":       freeModels,
 		"custom_models":     customModels,
 		"free_model_order":  freeModelOrder,
 		"firecrawl_key_set": firecrawlKeySet,
+		"agnes_key_set":     agnesKeySet,
 	})
 }
 

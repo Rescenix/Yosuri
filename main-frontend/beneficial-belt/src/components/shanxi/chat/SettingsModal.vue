@@ -52,6 +52,8 @@
             <div class="settings-nav-label">体验与能力</div>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'editor' }" @click="activeTab = 'editor'">
+              <Icon icon="mdi:code-tags" width="16" />编辑器</button>
             <button class="settings-tab" :class="{ on: activeTab === 'safety' }" @click="activeTab = 'safety'; loadProtectedWorkspace()">
               <Icon icon="mdi:shield-lock-outline" width="16" />安全</button>
             <div class="settings-tab-group">
@@ -147,8 +149,25 @@
                   </div>
                   <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
                 </div>
+                <div class="param-row">
+                  <span class="param-label">Agnes API Key（AI 生视频）</span>
+                  <div class="search-model-row">
+                    <input
+                      v-model="agnesKeyDraft"
+                      type="password"
+                      class="vendor-key-input"
+                      placeholder="Agnes API Key（AI 生视频/动漫分镜，$0/秒）"
+                      @keyup.enter="saveAgnesKey"
+                    />
+                    <button class="vendor-key-save" type="button" @click="saveAgnesKey">
+                      {{ agnesKeySet ? '已配置 · 更新' : '保存' }}
+                    </button>
+                  </div>
+                  <span v-if="agnesKeySet" class="firecrawl-key-status">✅ AI 生视频已启用（Agnes，免费 $0/秒）</span>
+                </div>
                 <div class="settings-section-desc" style="margin-top:6px">
                   联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
+                  Agnes Key 在 platform.agnes-ai.com 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
                 </div>
               </template>
 
@@ -195,8 +214,25 @@
                   </div>
                   <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
                 </div>
+                <div class="param-row">
+                  <span class="param-label">Agnes API Key（AI 生视频）</span>
+                  <div class="search-model-row">
+                    <input
+                      v-model="agnesKeyDraft"
+                      type="password"
+                      class="vendor-key-input"
+                      placeholder="Agnes API Key（AI 生视频/动漫分镜，$0/秒）"
+                      @keyup.enter="saveAgnesKey"
+                    />
+                    <button class="vendor-key-save" type="button" @click="saveAgnesKey">
+                      {{ agnesKeySet ? '已配置 · 更新' : '保存' }}
+                    </button>
+                  </div>
+                  <span v-if="agnesKeySet" class="firecrawl-key-status">✅ AI 生视频已启用（Agnes，免费 $0/秒）</span>
+                </div>
                 <div class="settings-section-desc" style="margin-top:6px">
                   联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
+                  Agnes Key 在 platform.agnes-ai.com 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
                 </div>
               </template>
             </div>
@@ -648,7 +684,23 @@
               </div>
             </div>
 
-            <!-- ========== 受保护工作区 ========== -->
+                        <!-- ========== 编辑器 ========== -->
+                        <div v-show="activeTab === 'editor'" class="settings-panel">
+                          <div class="settings-section-title">代码编辑器</div>
+                          <div class="settings-section-desc">
+                            打开项目时按需加载代码编辑器（Monaco），降低低配机器启动卡顿。
+                            关闭后应用启动即后台预取编辑器，打开文件面板秒开（高配机/重度使用编辑器时可选）。
+                          </div>
+                          <div class="param-row">
+                            <span class="param-label">按需加载（懒加载）</span>
+                            <div class="seg-control">
+                              <button class="seg-btn" :class="{ on: editorLazyEnabled }" type="button" @click="setEditorLazy(true)">开启（推荐）</button>
+                              <button class="seg-btn" :class="{ on: !editorLazyEnabled }" type="button" @click="setEditorLazy(false)">关闭</button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- ========== 受保护工作区 ========== -->
             <div v-show="activeTab === 'safety'" class="settings-panel">
               <div class="settings-section-title">受保护工作区</div>
               <div class="settings-section-desc">
@@ -1075,6 +1127,7 @@
 import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
+import { useEditorPrefs } from '../composables/useEditorPrefs.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled, isTestUpdatesEnabled, setTestUpdatesEnabled, isPrereleaseVersionString } from '../../../composables/updatePrefs.js'
@@ -1093,6 +1146,7 @@ const activeTab = ref(props.defaultTab || 'models')
 const providerSubTab = ref('free')
 const dhsSubTab = ref(props.defaultDhsSubTab || 'installed')
 const skillsSubTab = ref('local')
+const { editorLazy: editorLazyEnabled, setEditorLazy } = useEditorPrefs()
 
 const VENDOR_ICONS = [
   [/sensenova|商汤/i, 'lucide:sparkles'],
@@ -1706,6 +1760,7 @@ async function loadConfigs() {
     freeModels.value = data.free_models || []
     customModels.value = data.custom_models || []
     firecrawlKeySet.value = !!data.firecrawl_key_set
+    agnesKeySet.value = !!data.agnes_key_set
   } catch (e) {
     errorMsg.value = '加载配置失败，请稍后再试'
   } finally {
@@ -2018,6 +2073,29 @@ async function saveFirecrawlKey() {
   await loadConfigs()
   firecrawlKeyDraft.value = ''
   firecrawlKeySet.value = true
+}
+
+const AGNES_KEY_ID = 'agnes'
+// 后端 /api/models/config 的 agnes_key_set 字段返回是否已配 Key（AI 生视频）
+const agnesKeySet = ref(false)
+const agnesKeyDraft = ref('')
+async function saveAgnesKey() {
+  const key = agnesKeyDraft.value
+  if (!key || !key.trim()) {
+    errorMsg.value = '请输入 Agnes API Key'
+    return
+  }
+  errorMsg.value = ''
+  const untouched = configs.value
+    .filter(c => c.id !== AGNES_KEY_ID)
+    .map(c => ({ ...c, api_key: MASKED }))
+  await persist([...untouched, {
+    id: AGNES_KEY_ID, name: 'Agnes', endpoint: 'https://apihub.agnes-ai.com',
+    api_key: key, default_model: '', is_default: false
+  }])
+  await loadConfigs()
+  agnesKeyDraft.value = ''
+  agnesKeySet.value = true
 }
 
 // id → 是否支持识图，合并免费池 + 自定义配置两个来源（/api/models/config 都带 vision 字段）。
