@@ -315,7 +315,17 @@ func HandleGetModelConfig(c *gin.Context) {
 	}
 	// 免费池自动发现：有 key 的提供方自动 /v1/models，全部模型并入列表
 	// （提供方粒度，一个 key 拉全部模型，2026-08-04）。
-	freeModels = append(freeModels, discoveredFreeModels(userKey)...)
+	// ⚠️ 2026-08-26 收窄：只收「整账号免费额度制」厂商（魔搭/商汤/阶跃）的自动发现——
+	// 它们的全部模型共享同一份免费额度，新模型可以放心展示。Kilo/Zen 这类通用网关
+	// 的 /v1/models 全量列表绝大多数是付费模型（Kilo 366 个只有 13 个真免费），自动
+	// 发现混进下拉会让用户选中后收到 401 PAID_MODEL_AUTH_REQUIRED。
+	// 通用网关的自动发现一律不进模型下拉；要用的免费档走目录手工精选条目。
+	for _, dm := range discoveredFreeModels(userKey) {
+		if !isWholeAccountFreeVendor(dm.Vendor) {
+			continue
+		}
+		freeModels = append(freeModels, dm)
+	}
 	// 免费池显示顺序 = Auto 智能路由顺序（用户可在「编辑模型」弹窗调整）；
 	// 没保存过排序时保持目录声明顺序。信号格高的、最近成功用过的排前面。
 	orderRank := freeOrderRank()

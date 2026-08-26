@@ -879,6 +879,11 @@ func aggregateCandidates() []aggCandidate {
 		if isAutoModelDisabled(dm.Endpoint, dm.Model) {
 			continue
 		}
+		// 2026-08-26：只收整账号免费厂商的自动发现；Kilo/Zen 通用网关全量列表
+		// 绝大多数是付费模型，进候选会误导小白（与 /api/models/config 同口径）。
+		if !isWholeAccountFreeVendor(dm.Vendor) {
+			continue
+		}
 		id := autoReadableID(dm.ID)
 		if seen[id] {
 			continue
