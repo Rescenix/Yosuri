@@ -205,6 +205,10 @@ func proxyIntimacyToCloud(c *gin.Context, targetPath string) {
 	if ct := c.GetHeader("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
+	// 透传 Authorization：游客/登录用户 JWT 云端验签，读取端点要求「查自己」
+	if auth := c.GetHeader("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
 
 	resp, err := cloudHTTPClient.Do(req)
 	if err != nil {
@@ -229,15 +233,16 @@ func proxyIntimacyToCloud(c *gin.Context, targetPath string) {
 }
 
 // CloudStatsIncProxy 主页统计增量上报：转发到 ResceneCloud 的 /api/stats/inc。
-// uid 由前端/后端随 body 携带，re0 只透传（不需要知道 uid）。
+// uid 由前端/后端随 body 携带，re0 只透传（不需要知道 uid）。带 Authorization（云端验签）。
 func CloudStatsIncProxy(c *gin.Context) {
-	proxyToCloud(c, "/api/stats/inc")
+	proxyToCloudAuth(c, "/api/stats/inc")
 }
 
 // CloudStatsGetProxy 主页统计查询：转发到 ResceneCloud 的 /api/stats（带 uid 查询参数）。
+// 带 Authorization：云端要求 JWT uid == 请求 uid（只能查自己）。
 func CloudStatsGetProxy(c *gin.Context) {
 	q := c.Request.URL.Query()
-	proxyToCloud(c, "/api/stats?"+q.Encode())
+	proxyToCloudAuth(c, "/api/stats?"+q.Encode())
 }
 
 // CloudNotificationProxy 透传 /api/notifications/* 到 ResceneCloud（带 Authorization）。

@@ -48,6 +48,10 @@ func reportStatsAsync(msg DSMessage) {
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
+		// 鉴权头：云端要求 JWT uid == 请求 uid（2026-08-27 起写端点也锁），不带会 401 静默丢弃
+		if tok := readGuestToken(); tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -91,6 +95,10 @@ func fetchCloudStats(uid int64) (resp cloudStatsResp, ok bool) {
 	req, err := http.NewRequest(http.MethodGet, cloudAuthBase()+"/api/stats?uid="+strconv.FormatInt(uid, 10), nil)
 	if err != nil {
 		return resp, false
+	}
+	// 鉴权头：云端要求 JWT uid == 请求 uid（2026-08-27 起），不带会 401 回退本地
+	if tok := readGuestToken(); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	res, err := client.Do(req)
 	if err != nil || res.StatusCode != http.StatusOK {

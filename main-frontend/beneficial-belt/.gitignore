@@ -28,3 +28,6 @@ shanxi_data/
 
 # Agent 前端编程能力测试产物（实测生成，不进版本控制）
 src/components/__agent_test__/
+
+# 短剧展示素材（本地演示用，不进仓库）
+public/

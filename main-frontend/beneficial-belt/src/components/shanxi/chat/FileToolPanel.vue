@@ -35,12 +35,17 @@
           <div class="file-tool-tree-resize" title="拖拽调整宽度" @mousedown="startTreeResize"></div>
           <div class="file-tool-tree-header">
             <span class="file-tool-tree-project">
-              <Icon icon="mdi:folder-outline" width="14" />
-              <span>{{ workdirName || '项目' }}</span>
-            </span>
-            <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
-              <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
-            </button>
+                        <Icon icon="mdi:folder-outline" width="14" />
+                        <span>{{ workdirName || '项目' }}</span>
+                      </span>
+                      <div class="file-tool-tree-actions">
+                        <button class="file-tool-icon-btn" type="button" :class="{ spin: treeLoading }" @click="loadTree" title="刷新文件树">
+                          <Icon icon="mdi:refresh" width="14" />
+                        </button>
+                        <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
+                          <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
+                        </button>
+                      </div>
           </div>
 
           <!-- 搜索：整块替换文件树视图，不是叠加在上面（仿 Cursor） -->
@@ -56,38 +61,40 @@
               <div v-if="!treeQuery.trim()" class="file-tool-tree-msg">输入关键字搜索文件名</div>
               <div v-else-if="filteredTreeNodes.length === 0" class="file-tool-tree-msg">没有匹配的文件</div>
               <FileTreeNode
-                v-else
-                v-for="node in filteredTreeNodes"
-                :key="node.path || node.name"
-                :node="node"
-                :depth="0"
-                :selected="selectedNode"
-                @select="onSelectNode"
-                @toggle="onToggleNode"
-                @create-file="createFile"
-                @create-folder="createFolder"
-                @rename="renameNode"
-                @delete="deleteNode"
-              />
+                              v-else
+                              v-for="node in filteredTreeNodes"
+                              :key="node.path || node.name"
+                              :node="node"
+                              :depth="0"
+                              :selected="selectedNode"
+                              :workdir-path="props.workdirPath"
+                              @select="onSelectNode"
+                              @toggle="onToggleNode"
+                              @create-file="createFile"
+                              @create-folder="createFolder"
+                              @rename="renameNode"
+                              @delete="deleteNode"
+                            />
             </div>
           </template>
           <div v-else class="file-tool-tree-body">
             <div v-if="treeLoading" class="file-tool-tree-msg">加载中…</div>
             <div v-else-if="treeError" class="file-tool-tree-msg error">{{ treeError }}</div>
             <FileTreeNode
-              v-else
-              v-for="node in treeNodes"
-              :key="node.path || node.name"
-              :node="node"
-              :depth="0"
-              :selected="selectedNode"
-              @select="onSelectNode"
-              @toggle="onToggleNode"
-              @create-file="createFile"
-              @create-folder="createFolder"
-              @rename="renameNode"
-              @delete="deleteNode"
-            />
+                          v-else
+                          v-for="node in treeNodes"
+                          :key="node.path || node.name"
+                          :node="node"
+                          :depth="0"
+                          :selected="selectedNode"
+                          :workdir-path="props.workdirPath"
+                          @select="onSelectNode"
+                          @toggle="onToggleNode"
+                          @create-file="createFile"
+                          @create-folder="createFolder"
+                          @rename="renameNode"
+                          @delete="deleteNode"
+                        />
           </div>
         </aside>
       </div>
@@ -134,12 +141,17 @@
             <div class="file-tool-tree-resize" title="拖拽调整宽度" @mousedown="startTreeResize"></div>
             <div class="file-tool-tree-header">
               <span class="file-tool-tree-project">
-                <Icon icon="mdi:folder-outline" width="14" />
-                <span>{{ workdirName || '项目' }}</span>
-              </span>
-              <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
-                <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
-              </button>
+                          <Icon icon="mdi:folder-outline" width="14" />
+                          <span>{{ workdirName || '项目' }}</span>
+                        </span>
+                        <div class="file-tool-tree-actions">
+                          <button class="file-tool-icon-btn" type="button" :class="{ spin: treeLoading }" @click="loadTree" title="刷新文件树">
+                            <Icon icon="mdi:refresh" width="14" />
+                          </button>
+                          <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
+                            <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
+                          </button>
+                        </div>
             </div>
 
             <template v-if="treeSearchOpen">
@@ -154,38 +166,40 @@
                 <div v-if="!treeQuery.trim()" class="file-tool-tree-msg">输入关键字搜索文件名</div>
                 <div v-else-if="filteredTreeNodes.length === 0" class="file-tool-tree-msg">没有匹配的文件</div>
                 <FileTreeNode
-                  v-else
-                  v-for="node in filteredTreeNodes"
-                  :key="node.path || node.name"
-                  :node="node"
-                  :depth="0"
-                  :selected="selectedNode"
-                  @select="onSelectNode"
-                  @toggle="onToggleNode"
-                  @create-file="createFile"
-                  @create-folder="createFolder"
-                  @rename="renameNode"
-                  @delete="deleteNode"
-                />
+                                v-else
+                                v-for="node in filteredTreeNodes"
+                                :key="node.path || node.name"
+                                :node="node"
+                                :depth="0"
+                                :selected="selectedNode"
+                                :workdir-path="props.workdirPath"
+                                @select="onSelectNode"
+                                @toggle="onToggleNode"
+                                @create-file="createFile"
+                                @create-folder="createFolder"
+                                @rename="renameNode"
+                                @delete="deleteNode"
+                              />
               </div>
             </template>
             <div v-else class="file-tool-tree-body">
               <div v-if="treeLoading" class="file-tool-tree-msg">加载中…</div>
               <div v-else-if="treeError" class="file-tool-tree-msg error">{{ treeError }}</div>
               <FileTreeNode
-                v-else
-                v-for="node in treeNodes"
-                :key="node.path || node.name"
-                :node="node"
-                :depth="0"
-                :selected="selectedNode"
-                @select="onSelectNode"
-                @toggle="onToggleNode"
-                @create-file="createFile"
-                @create-folder="createFolder"
-                @rename="renameNode"
-                @delete="deleteNode"
-              />
+                            v-else
+                            v-for="node in treeNodes"
+                            :key="node.path || node.name"
+                            :node="node"
+                            :depth="0"
+                            :selected="selectedNode"
+                            :workdir-path="props.workdirPath"
+                            @select="onSelectNode"
+                            @toggle="onToggleNode"
+                            @create-file="createFile"
+                            @create-folder="createFolder"
+                            @rename="renameNode"
+                            @delete="deleteNode"
+                          />
             </div>
           </aside>
         </div>
@@ -482,7 +496,7 @@ watch(() => tabs.value.map(tab => tab.path).join('\u0000'), connectFileChanges)
 // 对话切换项目时，文件 API 的根目录也随之切换。清掉旧标签，避免同名相对路径
 // 在新项目里被误保存或继续展示；文件树则立即从新的根目录重载。
 watch(() => props.workdirPath, (next, previous) => {
-  if (!next || next === previous) return
+  if (next === previous) return
   fileChangesStream?.close()
   fileChangesStream = null
   clearTimeout(autoSaveTimer)
@@ -491,6 +505,10 @@ watch(() => props.workdirPath, (next, previous) => {
   selectedNode.value = null
   externalChanges.value = new Set()
   treeQuery.value = ''
+  if (!next) {
+    treeNodes.value = []
+    return
+  }
   loadTree()
 })
 
@@ -607,11 +625,16 @@ function languageOf(name) {
   return LANG_MAP[ext] || 'plaintext'
 }
 
-onMounted(loadTree)
+onMounted(() => {
+  loadTree()
+  // 工作流结束（可能新建/修改了文件）自动刷新文件树；手动刷新按钮在树头
+  window.addEventListener('file-tree-changed', loadTree)
+})
 onUnmounted(() => {
   clearTimeout(autoSaveTimer)
   clearTimeout(saveStateTimer)
   fileChangesStream?.close()
+  window.removeEventListener('file-tree-changed', loadTree)
 })
 </script>
 
@@ -753,6 +776,12 @@ onUnmounted(() => {
   letter-spacing: 0.3px;
   color: var(--app-text-soft);
   min-width: 0;
+}
+.file-tool-tree-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 /* 搜索：点搜索图标后整块替换树视图，Aa/全字/正则三个小按钮是真开关 */
 .file-tool-search-bar {

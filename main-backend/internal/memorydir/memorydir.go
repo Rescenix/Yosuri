@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -378,6 +379,20 @@ func ReadRaw(file string) string {
 var SyncableFiles = map[string]bool{
 	"index": true, "pinned": true, "preferences": true,
 	"project": true, "projects": true, "decisions": true, "memories": true, "facts": true,
+}
+
+// FileModTime 返回 memory/<file>.md 的修改时间；文件不存在返回零值。
+// 供云端记忆同步做「防旧覆盖新」合并（云端包更新时间早于本地文件 mtime → 保留本地）。
+func FileModTime(file string) time.Time {
+	file = strings.TrimSpace(file)
+	if file == "" {
+		return time.Time{}
+	}
+	fi, err := os.Stat(filepath.Join(path(), file+".md"))
+	if err != nil {
+		return time.Time{}
+	}
+	return fi.ModTime()
 }
 
 // WriteRaw 覆盖写 memory/<file>.md（仅限 SyncableFiles 白名单，防云端记忆包路径穿越）。

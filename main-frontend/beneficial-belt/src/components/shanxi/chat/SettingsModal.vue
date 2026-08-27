@@ -39,11 +39,12 @@
                   <Icon icon="mdi:gift-outline" width="15" />免费模型
                 </button>
                 <button
-                                  class="settings-subtab locked"
+                                  class="settings-subtab"
+                                  :class="{ locked: !apiUnlocked }"
                                   type="button"
-                                  @click="showCustomLockModal = true"
+                                  @click="openCustomLock"
                                 >
-                                  <Icon icon="mdi:lock-outline" width="15" />自定义 API
+                                  <Icon :icon="apiUnlocked ? 'mdi:lock-open-variant' : 'mdi:lock-outline'" width="15" />自定义 API
                                 </button>
               </div>
             </div>
@@ -346,7 +347,7 @@
                   <div v-else class="api-config-form">
                     <div class="api-preset-row">
                       <span class="api-preset-label">预设模板：</span>
-                      <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" type="button" @click="applyPreset(p)">{{ p.name }}</button>
+                      <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" :class="{ active: activePreset === p.name }" type="button" @click="applyPreset(p)">{{ p.name }}</button>
                     </div>
                     <label class="api-form-field">
                       <span>提供方名称</span>
@@ -1098,25 +1099,54 @@
     <FreeOrderModal v-if="showFreeOrderModal" :openid="props.openid" @close="showFreeOrderModal = false" />
       </Teleport>
 
-      <!-- 自定义 API 解锁弹窗 -->
+      <!-- 自定义 API 解锁弹窗（协议 + 5s 倒计时） -->
       <Teleport to="body">
         <div v-if="showCustomLockModal" class="mm-backdrop" @click.self="showCustomLockModal = false">
-          <div class="mm-card" style="max-width:380px;text-align:center">
-            <div style="font-size:20px;margin-bottom:4px">🔒</div>
-            <div class="mm-title">答应我，不白嫖的请划走</div>
-            <div style="margin:12px 0">
-              <input
-                v-model="customLockKey"
-                type="password"
-                class="mm-input"
-                placeholder="开发者密码"
-                @keyup.enter="unlockCustom"
-              />
+          <div class="mm-card gate-modal" style="max-width:440px;text-align:center">
+            <!-- 彼岸花 -->
+            <div class="gate-flower">
+              <svg viewBox="0 0 100 100" width="56" height="56" fill="none">
+                <g stroke="#e63946" stroke-width="2.2" stroke-linecap="round">
+                  <path d="M50 72 C40 58 40 44 50 30 M50 72 C60 58 60 44 50 30 M50 72 C45 56 55 42 50 30" />
+                  <path d="M50 30 C44 26 40 28 38 24 M50 30 C54 24 58 26 62 22 M50 30 C50 24 46 20 48 16 M50 30 C52 24 56 22 54 16" stroke-width="1.8"/>
+                  <path d="M38 24 C34 20 36 16 32 14 M62 22 C66 18 64 14 68 12 M48 16 C50 12 44 10 42 8" stroke-width="1.4"/>
+                </g>
+                <g stroke="#c1121f" stroke-width="1.6" stroke-linecap="round">
+                  <path d="M50 72 C48 78 44 82 40 86 M50 72 C52 78 56 82 60 86" />
+                  <path d="M40 86 C36 88 34 90 36 94 M60 86 C64 88 66 90 64 94 M50 72 C50 80 50 86 50 94" stroke-width="1.8"/>
+                </g>
+                <circle cx="50" cy="34" r="2.4" fill="#e63946"/>
+                <circle cx="40" cy="40" r="1.8" fill="#e63946"/>
+                <circle cx="60" cy="40" r="1.8" fill="#e63946"/>
+              </svg>
             </div>
+            <div class="gate-title">禁忌之门的宣告</div>
+            <div class="gate-sub">FORBIDDEN GATE · 彼岸花开时</div>
+            <div class="agree-text gate-text">
+              骚年，你正站在 Rescene 的禁忌之门前。<br />
+              自定义 API 是封印着创世之力的远古法器——<br />
+              填入你自己的 Key，即可撬动 OpenAI、Anthropic 等异世界的伟力。<br /><br />
+              但记住，这力量源于你的<b>本命契约（Key）</b>：<br />
+              其消耗的灵石由你向源头世界（Key 所属平台）支付，<br />
+              Rescene 只是引路人，不承担任何法力反噬之责。<br /><br />
+              知晓此理，勾选同意，吾将为你开启创世伟力。<br />
+              （本协议最终解释权归 Rescene 所有）
+            </div>
+            <label class="agree-check">
+              <input type="checkbox" v-model="agreeCustom" /> 我已阅读并同意上述协议
+            </label>
             <div v-if="customLockError" class="mm-error">{{ customLockError }}</div>
             <div class="mm-actions">
-              <button class="mm-btn mm-btn-cancel" type="button" @click="showCustomLockModal = false">划走</button>
-              <button class="mm-btn mm-btn-primary" type="button" @click="unlockCustom">解锁</button>
+              <button class="mm-btn mm-btn-cancel" type="button" @click="showCustomLockModal = false">取消</button>
+              <button
+                class="mm-btn mm-btn-primary"
+                :class="{ 'countdown-disabled': countdown > 0 }"
+                type="button"
+                :disabled="countdown > 0"
+                @click="unlockCustom"
+              >
+                {{ countdown > 0 ? `请阅读协议 (${countdown}s)` : '同意并解锁' }}
+              </button>
             </div>
           </div>
         </div>
@@ -1266,8 +1296,17 @@ function selectTheme(key) {
 }
 
 const PRESETS = [
-  { name: 'DeepSeek', endpoint: 'https://api.deepseek.com' }
+  { name: 'DeepSeek', endpoint: 'https://api.deepseek.com' },
+  { name: 'OpenAI', endpoint: 'https://api.openai.com/v1' },
+  { name: 'Kimi 月之暗面', endpoint: 'https://api.moonshot.cn/v1' },
+  { name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4' },
+  { name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { name: 'Groq', endpoint: 'https://api.groq.com/openai/v1' },
+  { name: 'Mistral', endpoint: 'https://api.mistral.ai/v1' },
+  { name: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  { name: '腾讯混元', endpoint: 'https://api.hunyuan.cloud.tencent.com/v1' },
 ]
+const activePreset = ref('')
 const MASKED = '••••••••'
 
 const configs = ref([])
@@ -1722,20 +1761,39 @@ watch(aggModelIDs, () => {
   aggAutoSaveTimer = setTimeout(saveAggConfig, 400)
 }, { deep: true })
 
-// 自定义 API 解锁弹窗
+// 自定义 API 解锁弹窗（协议 + 5s 倒计时）
 const showCustomLockModal = ref(false)
 const customLockKey = ref('')
 const customLockError = ref('')
+const agreeCustom = ref(false)
+const countdown = ref(0)
+let countdownTimer = null
 const CUSTOM_API_UNLOCK_KEY = 'rescene' // ← 开发者密码，改这里
+const apiUnlocked = computed(() => !!localStorage.getItem('studio_api_agreed') || providerSubTab.value === 'custom')
+function openCustomLock() {
+  // 已同意过协议不再弹，直接进
+  if (localStorage.getItem('studio_api_agreed')) {
+    providerSubTab.value = 'custom'
+    return
+  }
+  showCustomLockModal.value = true
+  customLockError.value = ''
+  agreeCustom.value = false
+  countdown.value = 5
+  // 按钮显示 5s 倒计时，期间禁用，5s 后才可点击
+  clearInterval(countdownTimer)
+  countdownTimer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) { clearInterval(countdownTimer); countdown.value = 0 }
+  }, 1000)
+}
 function unlockCustom() {
   customLockError.value = ''
-  if (customLockKey.value === CUSTOM_API_UNLOCK_KEY) {
-    showCustomLockModal.value = false
-    customLockKey.value = ''
-    providerSubTab.value = 'custom'
-  } else {
-    customLockError.value = '密码不对，划走吧'
-  }
+  if (countdown.value > 0) { customLockError.value = `请阅读协议（${countdown.value}s）`; return }
+  if (!agreeCustom.value) { customLockError.value = '请先勾选同意协议'; return }
+  localStorage.setItem('studio_api_agreed', '1')
+  showCustomLockModal.value = false
+  providerSubTab.value = 'custom'
 }
 
 // 「Auto 自定义排序」弹窗（提供方 → 免费模型 → 标题行按钮打开）
@@ -1784,6 +1842,7 @@ async function persist(nextConfigs) {
 function startAdd() {
   isNew.value = true
   errorMsg.value = ''
+  activePreset.value = ''
   editingConfig.value = {
     id: 'cfg_' + Date.now().toString(36),
     name: '', endpoint: '', api_key: '', api_key_set: false,
@@ -1845,8 +1904,9 @@ function cancelEdit() {
 }
 function applyPreset(p) {
   if (!editingConfig.value) return
+  editingConfig.value.name = p.name
   editingConfig.value.endpoint = p.endpoint
-  if (!editingConfig.value.name) editingConfig.value.name = p.name
+  activePreset.value = p.name
 }
 
 function providerModelCount(cfg) {
@@ -3033,6 +3093,69 @@ onUnmounted(() => {
 /* 自定义 API 锁 + 解锁弹窗 */
 .locked { opacity: 0.5; cursor: pointer; }
 .locked:hover { opacity: 0.7; }
+.agree-text {
+  text-align: left; font-size: 12.5px; line-height: 1.7; color: var(--app-text-soft);
+  background: var(--app-bg); border-radius: 10px; padding: 12px 14px; margin: 12px 0; max-height: 200px; overflow-y: auto;
+}
+.agree-check {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--app-text);
+  cursor: pointer; justify-content: center; margin-bottom: 4px;
+}
+.agree-check input { accent-color: var(--app-accent); width: 15px; height: 15px; }
+.countdown-disabled {
+  background: #e05252 !important; color: #fff !important; cursor: not-allowed !important; opacity: .9;
+}
+/* 彼岸花哥特弹窗 */
+.gate-modal {
+  background: linear-gradient(160deg, #0a0a0a 0%, #1a0a0a 40%, #0d0505 100%) !important;
+  border: 1px solid #3a1a1a !important; box-shadow: 0 0 40px rgba(230,57,70,.15), 0 20px 60px rgba(0,0,0,.5) !important;
+}
+.gate-flower { margin: 0 0 6px; filter: drop-shadow(0 0 8px rgba(230,57,70,.6)); animation: gate-flower-breathe 3.2s ease-in-out infinite; }
+.gate-title {
+  font-size: 20px; font-weight: 900; letter-spacing: 4px;
+  background: linear-gradient(135deg, #e63946 0%, #ff6b6b 25%, #c1121f 50%, #ff8a8a 75%, #e63946 100%);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent; text-shadow: none; margin-bottom: 2px;
+  animation: gate-gradient-flow 3.6s linear infinite;
+}
+.gate-sub {
+  font-size: 10.5px; color: #8b4a4a; letter-spacing: 3px; font-weight: 600; margin-bottom: 10px;
+  font-family: 'Georgia', serif;
+  animation: gate-fade-up .6s ease .25s both;
+}
+.gate-text {
+  background: rgba(20,5,5,.5) !important; border: 1px solid #3a1a1a !important;
+  color: #d4a0a0 !important; font-size: 12.5px !important; line-height: 1.8 !important;
+  animation: gate-fade-up .7s ease .45s both;
+  scrollbar-width: thin; scrollbar-color: #7a2a2a transparent;
+}
+.gate-text::-webkit-scrollbar { width: 6px; }
+.gate-text::-webkit-scrollbar-track { background: transparent; }
+.gate-text::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7a2a2a, #c1121f); border-radius: 3px;
+}
+.gate-text::-webkit-scrollbar-thumb:hover { background: #e63946; }
+@keyframes gate-gradient-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes gate-flower-breathe {
+  0%, 100% { transform: translateY(0) scale(1); opacity: .85; }
+  50% { transform: translateY(-4px) scale(1.04); opacity: 1; }
+}
+@keyframes gate-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.gate-text b { color: #ff6b6b; }
+.gate-modal .agree-check { color: #d4a0a0; }
+.gate-modal .agree-check input { accent-color: #e63946; }
+.gate-modal .mm-btn-cancel { border-color: #3a1a1a; color: #8b4a4a; background: transparent; }
+.gate-modal .mm-btn-primary { background: #e63946; border: none; color: #fff; }
+.gate-modal .mm-btn-primary:disabled { opacity: .5; }
+.gate-modal .mm-error { color: #e63946; }
 .mm-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 99999; }
 .mm-card { width: 420px; max-width:90vw; max-height: 80vh; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden; padding:24px; }
 .mm-input { width:100%; padding:8px 12px; border:1px solid var(--app-border); border-radius:8px; background:var(--app-surface); color:var(--app-text); font-size:13px; outline:none; box-sizing:border-box; }
@@ -3069,8 +3192,9 @@ onUnmounted(() => {
 .vendor-key-cancel { font-size: 12px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-cancel:hover { background: var(--app-surface-3); }
 .api-preset-label { font-size: 11.5px; color: var(--app-text-faint); margin-right: 2px; }
-.api-preset-btn { font-size: 11.5px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.api-preset-btn { font-size: 11.5px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 4px 10px; cursor: pointer; transition: all .15s; }
 .api-preset-btn:hover { background: var(--app-surface-3); }
+.api-preset-btn.active { background: var(--app-accent); color: #fff; border-color: var(--app-accent); }
 
 .api-form-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .api-form-field span { font-size: 11.5px; color: var(--app-text-soft); font-weight: 600; }

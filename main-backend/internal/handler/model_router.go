@@ -125,10 +125,7 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_openrouter_router", Vendor: "OpenRouter", Name: "OpenRouter Free Router（免费）", Endpoint: "https://openrouter.ai/api/v1", Model: "openrouter/free", KeyEnv: "OPENROUTER_API_KEY", ParamsB: 0, Note: "OpenRouter 免费自动路由·当前聚合 20+ 免费模型·200K", KeyURL: "https://openrouter.ai/settings/keys", Vision: true, Reasoning: true, ContextWindow: 200000},
 	{ID: "free_openrouter_ox_alpha", Vendor: "OpenRouter", Name: "Ox Alpha（OpenRouter·限时免费）", Endpoint: "https://openrouter.ai/api/v1", Model: "stealth/ox-alpha", KeyEnv: "OPENROUTER_API_KEY", ParamsB: 0, Note: "OpenRouter 限时免费·代码 Agent·工具调用·图像/视频·1M", KeyURL: "https://openrouter.ai/settings/keys", Vision: true, Reasoning: true, ContextWindow: 1048576},
 
-	// —— Google AI Studio（Gemini API OpenAI 兼容端点）——
-	// 免费额度与可用地区由 Google 账号/网络环境决定；大陆直连可能超时，但保留在
-	// 「免费模型」Tab 供有可用网络的用户填写 Gemini API Key。
-	{ID: "free_google_gemini_2_5_flash", Vendor: "Google AI Studio", Name: "Gemini 2.5 Flash（Google·免费额度）", Endpoint: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-2.5-flash", KeyEnv: "GEMINI_API_KEY", ParamsB: 0, Note: "Google AI Studio 免费额度·多模态·1M 上下文", KeyURL: "https://aistudio.google.com/apikey", Vision: true, Reasoning: true, ContextWindow: 1048576},
+	// —— Google AI Studio 已移除（2026-08-27 用户清理）：国内不可达，留着是死入口 ——
 
 	// —— NVIDIA NIM 免费试用档已整体移除：2026-07-23 实测限流严重，跑 Agent 频繁 429，
 	// 体验不可用。保留 nim_refresh.go 作为运行时探测骨架，目录中不再硬编码 NIM 条目。 ——
@@ -195,13 +192,7 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_zhipu_glm_4_flash", Vendor: "智谱 BigModel", Name: "GLM-4-Flash（永久免费）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4-flash-250414", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱永久免费", ContextWindow: 128000, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
 	{ID: "free_zhipu_glm_4_6v_flash", Vendor: "智谱 BigModel", Name: "GLM-4.6V-Flash（免费·视觉）", Endpoint: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.6v-flash", KeyEnv: "ZHIPU_API_KEY", ParamsB: 0, Note: "智谱免费·识图", Vision: true, ContextWindow: 128000, Reasoning: true, KeyURL: "https://open.bigmodel.cn/usercenter/apikeys"},
 
-	// —— Groq Cloud（api.groq.com/openai/v1，OpenAI 兼容）——
-	// 免费开发者额度 + LPU 高速推理；大陆 IP 可能被地域风控 403，仍在「免费模型」
-	// Tab 提供配置入口，供网络可达地区的用户填写 Groq API Key。
-	{ID: "free_groq_llama_3_3_70b", Vendor: "Groq Cloud", Name: "Llama 3.3 70B Versatile（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "llama-3.3-70b-versatile", KeyEnv: "GROQ_API_KEY", ParamsB: 70, Note: "Groq 免费开发者额度·LPU 高速·128K", ContextWindow: 128000, KeyURL: "https://console.groq.com/keys"},
-	{ID: "free_groq_qwen3_32b", Vendor: "Groq Cloud", Name: "Qwen3 32B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "qwen/qwen3-32b", KeyEnv: "GROQ_API_KEY", ParamsB: 32, Note: "Groq 免费开发者额度·LPU 高速·工具调用", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
-	{ID: "free_groq_gpt_oss_120b", Vendor: "Groq Cloud", Name: "GPT-OSS 120B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "openai/gpt-oss-120b", KeyEnv: "GROQ_API_KEY", ParamsB: 120, Note: "Groq 免费开发者额度·LPU 高速·工具调用", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
-	{ID: "free_groq_gpt_oss_20b", Vendor: "Groq Cloud", Name: "GPT-OSS 20B（Groq·免费额度）", Endpoint: "https://api.groq.com/openai/v1", Model: "openai/gpt-oss-20b", KeyEnv: "GROQ_API_KEY", ParamsB: 20, Note: "Groq 免费开发者额度·LPU 高速·工具调用", ContextWindow: 131072, Reasoning: true, KeyURL: "https://console.groq.com/keys"},
+	// —— Groq Cloud 已移除（2026-08-27 用户清理）：国内不可达（地域风控 403），留着是死入口 ——
 
 	// —— 本地 llama.cpp 已移除：维护 Vision 标签成本高于收益，识图模型由用户自行选择 ——
 
@@ -248,12 +239,7 @@ var freeModelCatalog = []FreeModelDef{
 	// —— NVIDIA NIM 已整体移除（2026-08-13 用户清理：「纯纯垃圾，不要了」，实测慢/超时）——
 	// —— Step Plan 订阅已移除：无订阅用不了（2026-08-13 用户清理）——
 
-	// —— 硅基流动 SiliconFlow（api.siliconflow.cn/v1，OpenAI 兼容）——
-	// 2026-08-18 新增：硅基流动赠送免费 API 额度，注册即领 2000 万 tokens。
-	// 免费模型：DeepSeek V4 Flash / Qwen3.5-397B / Qwen3-235B 等。
-	{ID: "free_silicon_deepseek_v4_flash", Vendor: "硅基流动", Name: "DeepSeek V4 Flash（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "deepseek-v4-flash", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 0, Note: "硅基流动·免费额度·2000万 tokens", ContextWindow: 1048576, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
-	{ID: "free_silicon_qwen3_5_397b", Vendor: "硅基流动", Name: "Qwen3.5-397B（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "qwen3.5-397b", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 397, Note: "硅基流动·免费额度", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
-	{ID: "free_silicon_qwen3_235b", Vendor: "硅基流动", Name: "Qwen3-235B（硅基·免费）", Endpoint: "https://api.siliconflow.cn/v1", Model: "qwen3-235b", KeyEnv: "SILICONFLOW_API_KEY", ParamsB: 235, Note: "硅基流动·免费额度", ContextWindow: 131072, Reasoning: true, KeyURL: "https://cloud.siliconflow.cn/apiKey"},
+	// —— 硅基流动 SiliconFlow 已移除（2026-08-27 用户清理）：送券额度用完即无，不可靠 ——
 }
 
 func isFreeCatalogID(id string) bool {
@@ -680,49 +666,82 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 		reqBody["tools"] = tools
 	}
 	body, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
-	if err != nil {
-		return "", nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	// 浏览器 UA 必带：OpenCode Zen / Kilo 等免 key 网关有 Cloudflare 防护，
-	// Go 默认 UA 会吃 403 error code 1010（2026-08-08 实测根因，agent-os 同修）。
-	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
-	if b.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
-	}
 
-	client := backendHTTPClient(b, b.Timeout, false)
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		// 连接失败/超时：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
-		circuitFail(b)
-		return "", nil, err
+	// 暂时性故障（429/5xx/连接错误）自动重试 maxTransientRetries 次，
+	// 撞完才把错误交回路由层 failover。401/403/404/400 确定性失败不重试。
+	var resp *http.Response
+	var lastErr error
+	for attempt := 0; attempt <= maxTransientRetries; attempt++ {
+		if ctx.Err() != nil {
+			return "", nil, ctx.Err()
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
+		if err != nil {
+			return "", nil, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		// 浏览器 UA 必带：OpenCode Zen / Kilo 等免 key 网关有 Cloudflare 防护，
+		// Go 默认 UA 会吃 403 error code 1010（2026-08-08 实测根因，agent-os 同修）。
+		httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+		if b.APIKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
+		}
+
+		client := backendHTTPClient(b, b.Timeout, false)
+		resp, err = client.Do(httpReq)
+		if err != nil {
+			// 连接失败/超时/EOF：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
+			circuitFail(b)
+			lastErr = err
+			if attempt < maxTransientRetries {
+				if !waitRetry(ctx.Done(), retryWait(0, "", attempt)) {
+					return "", nil, ctx.Err()
+				}
+				continue
+			}
+			return "", nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
+			// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
+			// 400 属请求格式/上游解析 bug，不禁用。自动发现模型（auto_ 前缀，
+			// 不在 freeModelCatalog 里）单独走 autoDisabled 淘汰。这些都不重试。
+			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+				if strings.HasPrefix(b.ID, "auto_") {
+					disableAutoModel(b.BaseURL, b.Model)
+				} else {
+					disableFreeModel(b.Model)
+				}
+				return "", nil, lastErr
+			}
+			if transientStatus(resp.StatusCode) {
+				// 限流 / 服务端故障：暂时性，计入熔断
+				circuitFail(b)
+				// 额度耗尽判定：429/5xx 响应体带 quota 特征 → 标记耗尽，自动降权。
+				// 判定为额度耗尽说明短时间恢复不了，重试无意义，直接放弃。
+				if markQuotaExhaustedIfError(b, string(raw)) {
+					fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
+					return "", nil, lastErr
+				}
+				if attempt < maxTransientRetries {
+					if !waitRetry(ctx.Done(), retryWait(resp.StatusCode, resp.Header.Get("Retry-After"), attempt)) {
+						return "", nil, ctx.Err()
+					}
+					continue
+				}
+			}
+			return "", nil, lastErr
+		}
+		// 拿到 200：上游可用，清零失败计数
+		circuitSuccess(b)
+		break
+	}
+	if resp == nil {
+		return "", nil, lastErr
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
-		// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
-		// 400 属请求格式/上游解析 bug，不禁用。自动发现模型（auto_ 前缀，
-		// 不在 freeModelCatalog 里）单独走 autoDisabled 淘汰。
-		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
-			if strings.HasPrefix(b.ID, "auto_") {
-				disableAutoModel(b.BaseURL, b.Model)
-			} else {
-				disableFreeModel(b.Model)
-			}
-		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			// 限流 / 服务端故障：暂时性，计入熔断
-			circuitFail(b)
-			// 额度耗尽判定：429/5xx 响应体带 quota 特征 → 标记耗尽，自动降权
-			if markQuotaExhaustedIfError(b, string(raw)) {
-				fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
-			}
-		}
-		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
-	}
-	// 拿到 200：上游可用，清零失败计数
-	circuitSuccess(b)
 
 	var parsed struct {
 		Choices []struct {
@@ -771,47 +790,80 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 		reqBody["tools"] = toResponsesTools(tools)
 	}
 	body, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", responsesURL(b.BaseURL), bytes.NewBuffer(body))
-	if err != nil {
-		return "", nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	// 浏览器 UA 必带：OpenCode Zen / Kilo 等免 key 网关有 Cloudflare 防护（2026-08-08 实测根因）。
-	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
-	if b.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
-	}
 
-	client := backendHTTPClient(b, b.Timeout, false)
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		// 连接失败/超时：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
-		circuitFail(b)
-		return "", nil, err
+	// 暂时性故障（429/5xx/连接错误）自动重试 maxTransientRetries 次，
+	// 撞完才把错误交回路由层 failover。401/403/404/400 确定性失败不重试。
+	var resp *http.Response
+	var lastErr error
+	for attempt := 0; attempt <= maxTransientRetries; attempt++ {
+		if ctx.Err() != nil {
+			return "", nil, ctx.Err()
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", responsesURL(b.BaseURL), bytes.NewBuffer(body))
+		if err != nil {
+			return "", nil, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		// 浏览器 UA 必带：OpenCode Zen / Kilo 等免 key 网关有 Cloudflare 防护（2026-08-08 实测根因）。
+		httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+		if b.APIKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
+		}
+
+		client := backendHTTPClient(b, b.Timeout, false)
+		resp, err = client.Do(httpReq)
+		if err != nil {
+			// 连接失败/超时/EOF：暂时性故障，计入熔断（Auto 路由冷却期内跳过）
+			circuitFail(b)
+			lastErr = err
+			if attempt < maxTransientRetries {
+				if !waitRetry(ctx.Done(), retryWait(0, "", attempt)) {
+					return "", nil, ctx.Err()
+				}
+				continue
+			}
+			return "", nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
+			// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
+			// 400 属请求格式/上游解析 bug，不禁用。自动发现模型走 autoDisabled。
+			// 这些都不重试。
+			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+				if strings.HasPrefix(b.ID, "auto_") {
+					disableAutoModel(b.BaseURL, b.Model)
+				} else {
+					disableFreeModel(b.Model)
+				}
+				return "", nil, lastErr
+			}
+			if transientStatus(resp.StatusCode) {
+				// 限流 / 服务端故障：暂时性，计入熔断
+				circuitFail(b)
+				// 额度耗尽判定：判定为耗尽说明短时间恢复不了，重试无意义，直接放弃。
+				if markQuotaExhaustedIfError(b, string(raw)) {
+					fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
+					return "", nil, lastErr
+				}
+				if attempt < maxTransientRetries {
+					if !waitRetry(ctx.Done(), retryWait(resp.StatusCode, resp.Header.Get("Retry-After"), attempt)) {
+						return "", nil, ctx.Err()
+					}
+					continue
+				}
+			}
+			return "", nil, lastErr
+		}
+		// 拿到 200：上游可用，清零失败计数
+		circuitSuccess(b)
+		break
+	}
+	if resp == nil {
+		return "", nil, lastErr
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
-		// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
-		// 400 属请求格式/上游解析 bug，不禁用。自动发现模型走 autoDisabled。
-		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
-			if strings.HasPrefix(b.ID, "auto_") {
-				disableAutoModel(b.BaseURL, b.Model)
-			} else {
-				disableFreeModel(b.Model)
-			}
-		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			// 限流 / 服务端故障：暂时性，计入熔断
-			circuitFail(b)
-			// 额度耗尽判定：429/5xx 响应体带 quota 特征 → 标记耗尽，自动降权
-			if markQuotaExhaustedIfError(b, string(raw)) {
-				fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
-			}
-		}
-		return "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
-	}
-	// 拿到 200：上游可用，清零失败计数
-	circuitSuccess(b)
 
 	var parsed struct {
 		Output []struct {
@@ -960,86 +1012,122 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		// drainChatStream 的 ReadString 会永久阻塞，表现为「工具跑完后 agent 卡死、
 		// 只有心跳在跳、要再戳一下才动」。180s 足够正常长任务，超时就当本轮上游失败，
 		// 走现有 err 分支发 flow_error + workflow_done(resumable)，不再冻死整个工作流。
-		roundCtx, roundCancel := context.WithTimeout(c.Request.Context(), 180*time.Second)
-		defer roundCancel()
-		httpReq, err := http.NewRequestWithContext(roundCtx, "POST", chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
-		if err != nil {
-			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
-			continue
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		if b.APIKey != "" {
-			httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
-		}
+		// 每次重试各拿一条全新的 180s 窗口。
+		//
+		// 自动重试（2026-08-27）：暂时性故障（连接失败/429/5xx/流式中断）在同一源上
+		// 先重试 maxTransientRetries 次，撞满才秒切下一个源——exactModel 单源时，
+		// 一次 429 抽风不再直接掐断整条工作流。
+		var lastErr error
+		var was429 bool
+		for attempt := 0; attempt <= maxTransientRetries; attempt++ {
+			roundCtx, roundCancel := context.WithTimeout(c.Request.Context(), 180*time.Second)
+			httpReq, err := http.NewRequestWithContext(roundCtx, "POST", chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
+			if err != nil {
+				roundCancel()
+				lastErr = err
+				break
+			}
+			httpReq.Header.Set("Content-Type", "application/json")
+			if b.APIKey != "" {
+				httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
+			}
 
-		client := backendHTTPClient(b, 0, true)
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
-			fmt.Printf("🔀 [路由] %s 连接失败，秒切下一个\n", b.Name)
-			circuitFail(b)
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			// 401(鉴权)/403(额度)/404(模型不存在) 是确定性不可用，当场标记禁用；
-			// 400 是请求格式/上游解析问题，属客户端侧，不该永久禁用模型，
-			// 否则一棍子打死整个免费档。自动发现模型走 autoDisabled。
-			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
-				if strings.HasPrefix(b.ID, "auto_") {
-					disableAutoModel(b.BaseURL, b.Model)
-				} else {
-					disableFreeModel(b.Model)
-				}
-			} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-				// 限流 / 服务端故障：暂时性，计入熔断
+			client := backendHTTPClient(b, 0, true)
+			resp, err := client.Do(httpReq)
+			if err != nil {
+				roundCancel()
+				// 连接失败/超时：暂时性故障，计入熔断
 				circuitFail(b)
+				lastErr = err
+				if attempt < maxTransientRetries && waitRetry(c.Request.Context().Done(), retryWait(0, "", attempt)) {
+					continue
+				}
+				break
 			}
-			reason := fmt.Sprintf("HTTP %d", resp.StatusCode)
-			low := strings.ToLower(string(raw))
-			if resp.StatusCode == 451 || strings.Contains(low, "censorship") || strings.Contains(low, "blocked") {
-				// StepFun 等国内模型服务对联网搜到的敏感新闻做内容审核，整请求 451 拒收
-				// （实测：censorship_blocked）。这是明确原因，别让用户误以为是网络/服务在折腾。
-				reason = "内容审核拦截(HTTP 451)：模型服务商封了这段内容——联网搜到的新闻敏感时常见。换不审的源（如 Zen 免 key）或换个话题再试"
+			if resp.StatusCode != http.StatusOK {
+				raw, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				roundCancel()
+				reason := fmt.Sprintf("HTTP %d", resp.StatusCode)
+				if resp.StatusCode == http.StatusTooManyRequests {
+					was429 = true
+				}
+				low := strings.ToLower(string(raw))
+				if resp.StatusCode == 451 || strings.Contains(low, "censorship") || strings.Contains(low, "blocked") {
+					// StepFun 等国内模型服务对联网搜到的敏感新闻做内容审核，整请求 451 拒收
+					// （实测：censorship_blocked）。这是明确原因，别让用户误以为是网络/服务在折腾。
+					reason = "内容审核拦截(HTTP 451)：模型服务商封了这段内容——联网搜到的新闻敏感时常见。换不审的源（如 Zen 免 key）或换个话题再试"
+				}
+				lastErr = fmt.Errorf("%s", reason)
+				// 401(鉴权)/403(额度)/404(模型不存在) 是确定性不可用，当场标记禁用；
+				// 400 是请求格式/上游解析问题，属客户端侧，不该永久禁用模型，
+				// 否则一棍子打死整个免费档。自动发现模型走 autoDisabled。这些都不重试。
+				if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+					if strings.HasPrefix(b.ID, "auto_") {
+						disableAutoModel(b.BaseURL, b.Model)
+					} else {
+						disableFreeModel(b.Model)
+					}
+					break
+				}
+				if transientStatus(resp.StatusCode) {
+					// 限流 / 服务端故障：暂时性，计入熔断
+					circuitFail(b)
+					// 额度耗尽：短时间恢复不了，重试无意义，直接放弃
+					if markQuotaExhaustedIfError(b, string(raw)) {
+						fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
+						break
+					}
+					if attempt < maxTransientRetries && waitRetry(c.Request.Context().Done(), retryWait(resp.StatusCode, resp.Header.Get("Retry-After"), attempt)) {
+						continue
+					}
+				}
+				break
 			}
-			tried = append(tried, fmt.Sprintf("%s: %s", b.Name, reason))
-			if resp.StatusCode == http.StatusTooManyRequests {
-				writeCodeSSE(c, "flow_notice", map[string]any{
-					"message": fmt.Sprintf("%s 正在限流，%s", b.Name, map[bool]string{true: "请稍候重试或切换其他模型", false: "正在切换其他模型源"}[exactModel]),
-				})
-			}
-			fmt.Printf("🔀 [路由] %s HTTP %d，秒切下一个: %s\n", b.Name, resp.StatusCode, truncateChars(string(raw), 120))
-			continue
-		}
-		circuitSuccess(b)
+			// 拿到 200：上游可用，清零失败计数
+			circuitSuccess(b)
 
-		if len(tried) > 0 {
-			fmt.Printf("🔀 [路由] 流式请求由 %s 承接（此前 %d 个源失败）\n", b.Name, len(tried))
-			// 之前的源里如果有因内容审核（451/censorship）被拒的，failover 切下一个源
-			// 成功后这段就悄悄过去了——用户只看到答案，不知道联网搜到的内容被上游
-			// 审核拦过一次，容易把"换源后答案变差/变敷衍"误判成 web_search 本身坏了
-			// （2026-08-20 用户反馈）。这里补一条不阻断流程的提示，让用户知道发生了什么。
-			if note := censorshipNoteFromTried(tried); note != "" {
-				writeCodeSSE(c, "flow_notice", map[string]any{"message": note})
+			if len(tried) > 0 {
+				fmt.Printf("🔀 [路由] 流式请求由 %s 承接（此前 %d 个源失败）\n", b.Name, len(tried))
+				// 之前的源里如果有因内容审核（451/censorship）被拒的，failover 切下一个源
+				// 成功后这段就悄悄过去了——用户只看到答案，不知道联网搜到的内容被上游
+				// 审核拦过一次，容易把"换源后答案变差/变敷衍"误判成 web_search 本身坏了
+				// （2026-08-20 用户反馈）。这里补一条不阻断流程的提示，让用户知道发生了什么。
+				if note := censorshipNoteFromTried(tried); note != "" {
+					writeCodeSSE(c, "flow_notice", map[string]any{"message": note})
+				}
 			}
+			content, calls, inTok, outTok, err := drainChatStream(c, resp, msgs, staticSum)
+			resp.Body.Close()
+			roundCancel()
+			if err != nil {
+				// 流式中途失败（上游推到一半冻住 / 我方 180s 读取超时 / 连接被掐）：
+				// 免费模型源本就不稳定，这种"进行中"的失败不该直接判死整个工作流。
+				// 先发 flow_error 让前端清掉半截 intent/thinking（避免显示残缺回答），
+				// 然后同源自动重试这一轮（把单源抽风吸收掉），重试撞满才切下一个源。
+				fmt.Printf("🔀 [路由] %s 流式中途失败，同源重试 %d/%d: %s\n", b.Name, attempt+1, maxTransientRetries+1, truncateChars(err.Error(), 120))
+				writeCodeSSE(c, "flow_error", map[string]any{"message": "上游响应中断，正在重试…"})
+				lastErr = err
+				if attempt < maxTransientRetries && waitRetry(c.Request.Context().Done(), retryWait(0, "", attempt)) {
+					continue
+				}
+				break
+			}
+			usedBackend := b
+			return content, calls, inTok, outTok, &usedBackend, nil
 		}
-		content, calls, inTok, outTok, err := drainChatStream(c, resp, msgs, staticSum)
-		resp.Body.Close()
-		if err != nil {
-			// 流式中途失败（上游推到一半冻住 / 我方 180s 读取超时 / 连接被掐）：
-			// 免费模型源本就不稳定，这种"进行中"的失败不该直接判死整个工作流——
-			// 跟首包前的 failover 同一思路，记进 tried 并切下一个源重试这一轮，
-			// 把不稳定的单源抽风吸收掉，agent 才能真正一口气跑完。
-			// 先发 flow_error 让前端清掉半截 intent/thinking（避免显示残缺回答），
-			// 再 continue 到下一个源。
-			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, err))
-			fmt.Printf("🔀 [路由] %s 流式中途失败，秒切下一个: %s\n", b.Name, truncateChars(err.Error(), 120))
-			writeCodeSSE(c, "flow_error", map[string]any{"message": "上游响应中断，正在切换模型源重试…"})
-			continue
+		// 同源重试撞满，给这一轮记一笔并秒切下一个源；429 提示只在放弃后发，
+		// 重试过程中不吓唬用户（重试可能立刻就成功了）。
+		if was429 {
+			writeCodeSSE(c, "flow_notice", map[string]any{
+				"message": fmt.Sprintf("%s 正在限流，%s", b.Name, map[bool]string{true: "请稍候重试或切换其他模型", false: "正在切换其他模型源"}[exactModel]),
+			})
 		}
-		usedBackend := b
-		return content, calls, inTok, outTok, &usedBackend, nil
+		if lastErr != nil {
+			tried = append(tried, fmt.Sprintf("%s: %v", b.Name, lastErr))
+			fmt.Printf("🔀 [路由] %s 失败，秒切下一个: %s\n", b.Name, truncateChars(lastErr.Error(), 120))
+		}
+		continue
 	}
 	if exactModel {
 		return "", nil, 0, 0, nil, exactModelUnavailableError(backends[0], tried)
@@ -1243,46 +1331,81 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 		reqBody["reasoning"] = map[string]any{"effort": effort}
 	}
 	body, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", responsesURL(b.BaseURL), bytes.NewBuffer(body))
-	if err != nil {
-		return "", nil, 0, 0, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if b.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
-	}
 
-	client := backendHTTPClient(b, 0, true)
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		// 连接失败/超时：暂时性故障，计入熔断
-		circuitFail(b)
-		return "", nil, 0, 0, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		// 401(鉴权)/403(额度)/404(模型不存在) 是确定性不可用，当场标记禁用；
-		// 400 是请求格式/上游解析问题，属客户端侧，不该永久禁用模型。
-		// 自动发现模型走 autoDisabled。
-		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
-			if strings.HasPrefix(b.ID, "auto_") {
-				disableAutoModel(b.BaseURL, b.Model)
-			} else {
-				disableFreeModel(b.Model)
-			}
-		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			// 限流 / 服务端故障：暂时性，计入熔断
-			circuitFail(b)
+	// 暂时性故障（连接失败/429/5xx/流式中断）自动重试 maxTransientRetries 次，
+	// 撞满才把错误交回路由层 failover。401/403/404/400 确定性失败不重试。
+	var resp *http.Response
+	var lastErr error
+	for attempt := 0; attempt <= maxTransientRetries; attempt++ {
+		if c.Request.Context().Err() != nil {
+			return "", nil, 0, 0, c.Request.Context().Err()
 		}
-		return "", nil, 0, 0, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
-	}
-	// 拿到 200：上游可用，清零失败计数
-	circuitSuccess(b)
-	defer resp.Body.Close()
+		httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", responsesURL(b.BaseURL), bytes.NewBuffer(body))
+		if err != nil {
+			return "", nil, 0, 0, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		if b.APIKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
+		}
 
-	content, calls, inTok, outTok, err := drainResponsesStream(c, resp, msgs, staticSum, reasoningOut)
-	return content, calls, inTok, outTok, err
+		client := backendHTTPClient(b, 0, true)
+		resp, err = client.Do(httpReq)
+		if err != nil {
+			// 连接失败/超时/EOF：暂时性故障，计入熔断
+			circuitFail(b)
+			lastErr = err
+			if attempt < maxTransientRetries && waitRetry(c.Request.Context().Done(), retryWait(0, "", attempt)) {
+				continue
+			}
+			return "", nil, 0, 0, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
+			// 401(鉴权)/403(额度)/404(模型不存在) 是确定性不可用，当场标记禁用；
+			// 400 是请求格式/上游解析问题，属客户端侧，不该永久禁用模型。
+			// 自动发现模型走 autoDisabled。这些都不重试。
+			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+				if strings.HasPrefix(b.ID, "auto_") {
+					disableAutoModel(b.BaseURL, b.Model)
+				} else {
+					disableFreeModel(b.Model)
+				}
+				return "", nil, 0, 0, lastErr
+			}
+			if transientStatus(resp.StatusCode) {
+				// 限流 / 服务端故障：暂时性，计入熔断
+				circuitFail(b)
+				// 额度耗尽：短时间恢复不了，重试无意义，直接放弃
+				if markQuotaExhaustedIfError(b, string(raw)) {
+					fmt.Printf("⚠️ [额度] %s 判定额度耗尽（%s），Auto 将排到末尾\n", b.Name, truncateChars(string(raw), 120))
+					return "", nil, 0, 0, lastErr
+				}
+				if attempt < maxTransientRetries && waitRetry(c.Request.Context().Done(), retryWait(resp.StatusCode, resp.Header.Get("Retry-After"), attempt)) {
+					continue
+				}
+			}
+			return "", nil, 0, 0, lastErr
+		}
+		// 拿到 200：上游可用，清零失败计数
+		circuitSuccess(b)
+
+		content, calls, inTok, outTok, err := drainResponsesStream(c, resp, msgs, staticSum, reasoningOut)
+		resp.Body.Close()
+		if err != nil {
+			// 流式中途失败：同源自动重试，撞满才返回让路由层 failover
+			fmt.Printf("🔀 [路由] %s (Responses) 流式中途失败，同源重试 %d/%d: %s\n", b.Name, attempt+1, maxTransientRetries+1, truncateChars(err.Error(), 120))
+			lastErr = err
+			if attempt < maxTransientRetries && waitRetry(c.Request.Context().Done(), retryWait(0, "", attempt)) {
+				continue
+			}
+			return "", nil, 0, 0, err
+		}
+		return content, calls, inTok, outTok, nil
+	}
+	return "", nil, 0, 0, lastErr
 }
 
 // drainResponsesStream 读一条已建立的 Responses API SSE 流，实时转发

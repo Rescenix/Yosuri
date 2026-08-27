@@ -250,6 +250,22 @@ func (s *historyStore) Restore(seq int) ([]byte, error) {
 	return s.loadBlob(a.AfterBlob)
 }
 
+// RestoreBefore 返回某条审计记录写操作之前的文件内容（回退到工作流前版本）。
+// 返回 nil,nil 表示该文件在本次写之前不存在（即文件是本次写新建的，回退=删除）。
+func (s *historyStore) RestoreBefore(seq int) ([]byte, error) {
+	a, err := s.Find(seq)
+	if err != nil {
+		return nil, err
+	}
+	if !a.ExistsBefore {
+		return nil, nil
+	}
+	if a.BeforeBlob == "" {
+		return nil, fmt.Errorf("该记录没有保存 before 状态")
+	}
+	return s.loadBlob(a.BeforeBlob)
+}
+
 // Diff 生成某条审计记录本身对应的 unified diff（before → after）。
 func (s *historyStore) Diff(workdir, relPath string, seq int) (string, error) {
 	a, err := s.Find(seq)

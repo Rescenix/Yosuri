@@ -54,6 +54,52 @@ func memorySyncSettingPath() string {
 	return filepath.Join(home, "rescene_data", "cloud_sync_enabled.md")
 }
 
+// guestTokenPath 游客/登录 JWT 的本地落盘位置（前端 fetchUid 拿到 token 后
+// POST /api/auth/guest-token 缓存到这里；后端 push/pull 云端记忆时带上鉴权头）。
+func guestTokenPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "rescene_data", "cloud_guest_token")
+}
+
+// readGuestToken 读本地缓存的 JWT（无则空串——旧版/未缓存时推送会 401 静默失败）。
+func readGuestToken() string {
+	if p := guestTokenPath(); p != "" {
+		if data, err := os.ReadFile(p); err == nil {
+			return strings.TrimSpace(string(data))
+		}
+	}
+	return ""
+}
+
+// HandleGuestTokenStore POST /api/auth/guest-token {token}
+// 前端把云端签发的 JWT 交给本地后端缓存，供 memory_sync 推送/拉取鉴权。
+func HandleGuestTokenStore(c *gin.Context) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 token"})
+		return
+	}
+	p := guestTokenPath()
+	if p == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户目录不可用"})
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败"})
+		return
+	}
+	if err := os.WriteFile(p, []byte(req.Token+"\n"), 0o644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // HandleMemorySyncSettings GET /api/memory/sync/settings → {enabled, env_override}
 // env_override=true 表示部署级 RESCENE_MEMORY_SYNC=off 强制关闭，前端开关应禁用。
 func HandleMemorySyncSettings(c *gin.Context) {
@@ -111,7 +157,9 @@ func memorySyncPayload() string {
 
 // applyMemorySyncPayload 把云端记忆包写回本地。文件名去 .md 后必须在白名单内
 // （WriteRaw 内二次校验，防路径穿越）；本地独有文件不受影响（合并语义）。
-func applyMemorySyncPayload(payload string) {
+// cloudUpdatedAt 是云端包最近更新时间：早于本地文件 mtime 说明本地更新（鉴权断链
+// 期云端会停更，直接拉回会把新记忆覆盖成旧版），跳过不覆盖。
+func applyMemorySyncPayload(payload string, cloudUpdatedAt time.Time) {
 	var m map[string]string
 	if err := json.Unmarshal([]byte(payload), &m); err != nil {
 		return
@@ -119,6 +167,10 @@ func applyMemorySyncPayload(payload string) {
 	for name, content := range m {
 		file := strings.TrimSuffix(name, ".md")
 		if file == name || file == "" {
+			continue
+		}
+		// 防旧覆盖新：本地文件比云端包还新 → 保留本地（等下次 push 推上去）
+		if !cloudUpdatedAt.IsZero() && memorydir.FileModTime(file).After(cloudUpdatedAt) {
 			continue
 		}
 		if err := memorydir.WriteRaw(file, strings.TrimSpace(content)); err != nil {
@@ -147,6 +199,10 @@ func pushMemorySync() {
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
+		// 鉴权头：云端要求 JWT uid == 请求 uid（08-17 起），不带会 401 静默失败
+		if tok := readGuestToken(); tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -166,6 +222,10 @@ func pullMemorySync(uid int64) bool {
 	if err != nil {
 		return false
 	}
+	// 鉴权头：云端要求 JWT uid == 请求 uid，不带会 401 静默失败
+	if tok := readGuestToken(); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
 	res, err := client.Do(req)
 	if err != nil {
 		return false
@@ -175,12 +235,21 @@ func pullMemorySync(uid int64) bool {
 		return false // 404 = 账号还没有云端记忆，正常
 	}
 	var parsed struct {
-		Payload string `json:"payload"`
+		Payload   string `json:"payload"`
+		UpdatedAt string `json:"updated_at"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
 		return false
 	}
-	applyMemorySyncPayload(parsed.Payload)
+	// 云端 updated_at 是 UTC（SQLite datetime('now')）；与本地 mtime 的 After 比较
+	// 按绝对时刻，时区无关，无需手动换算。
+	var cloudAt time.Time
+	if parsed.UpdatedAt != "" {
+		if t, err := time.Parse("2006-01-02 15:04:05", parsed.UpdatedAt); err == nil {
+			cloudAt = t
+		}
+	}
+	applyMemorySyncPayload(parsed.Payload, cloudAt)
 	return true
 }
 
@@ -215,7 +284,17 @@ func HandleMemorySyncPush(c *gin.Context) {
 	}
 	body, _ := json.Marshal(map[string]any{"uid": req.UID, "payload": payload})
 	client := &http.Client{Timeout: 5 * time.Second}
-	res, err := client.Post(cloudAuthBase()+"/api/memory/sync", "application/json", bytes.NewReader(body))
+	r, err := http.NewRequest(http.MethodPost, cloudAuthBase()+"/api/memory/sync", bytes.NewReader(body))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "构造请求失败"})
+		return
+	}
+	r.Header.Set("Content-Type", "application/json")
+	// 鉴权头：云端要求 JWT uid == 请求 uid，不带会 401
+	if tok := readGuestToken(); tok != "" {
+		r.Header.Set("Authorization", "Bearer "+tok)
+	}
+	res, err := client.Do(r)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "连接 ResceneCloud 失败: " + err.Error()})
 		return

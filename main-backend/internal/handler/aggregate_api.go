@@ -303,42 +303,64 @@ func HandleAggregateChat(c *gin.Context) {
 }
 
 // aggregateStreamOnce 请求上游流式端点，返回裸响应（SSE 由调用方转发）。
+// 暂时性故障（连接错误/429/5xx）在同一源上自动重试 maxTransientRetries 次，
+// 撞满才把错误交回 failover；401/403/404/400 确定性失败不重试。
 func aggregateStreamOnce(ctx context.Context, b RouterBackend, reqBody map[string]any) (*http.Response, error) {
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	// 带浏览器 UA：Cerebras/Zen 等走 Cloudflare 风控，无 UA 返回 403/1009（2026-08-13 实测）
-	httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
-	if b.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
-	}
-	client := backendHTTPClient(b, b.Timeout, false)
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		// 与主链同口径：401/403/404 永久禁用（auto_ 发现模型走 autoDisabled），429/5xx 计入熔断
-		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
-			if strings.HasPrefix(b.ID, "auto_") {
-				disableAutoModel(b.BaseURL, b.Model)
-			} else {
-				disableFreeModel(b.Model)
-			}
-		} else if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			circuitFail(b)
+	var lastErr error
+	for attempt := 0; attempt <= maxTransientRetries; attempt++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
+		if err != nil {
+			return nil, err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		// 带浏览器 UA：Cerebras/Zen 等走 Cloudflare 风控，无 UA 返回 403/1009（2026-08-13 实测）
+		httpReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+		if b.APIKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+b.APIKey)
+		}
+		client := backendHTTPClient(b, b.Timeout, false)
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			// 连接失败/超时/EOF：暂时性故障，计入熔断，退避后重试
+			circuitFail(b)
+			lastErr = err
+			if attempt < maxTransientRetries && waitRetry(ctx.Done(), retryWait(0, "", attempt)) {
+				continue
+			}
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
+			// 与主链同口径：401/403/404 永久禁用（auto_ 发现模型走 autoDisabled），不重试
+			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404 {
+				if strings.HasPrefix(b.ID, "auto_") {
+					disableAutoModel(b.BaseURL, b.Model)
+				} else {
+					disableFreeModel(b.Model)
+				}
+				return nil, lastErr
+			}
+			// 429/5xx 暂时性：计入熔断，尊重 Retry-After 退避后重试
+			if transientStatus(resp.StatusCode) {
+				circuitFail(b)
+				if attempt < maxTransientRetries && waitRetry(ctx.Done(), retryWait(resp.StatusCode, resp.Header.Get("Retry-After"), attempt)) {
+					continue
+				}
+			}
+			return nil, lastErr
+		}
+		return resp, nil
 	}
-	return resp, nil
+	return nil, lastErr
 }
 
 // aggregateForwardSSE 把上游 OpenAI SSE 流逐 chunk 重组为标准 OpenAI 格式转发。

@@ -211,7 +211,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		writeCodeSSE(c, "workflow_done", map[string]any{
 			"status": "failed", "final_output": message,
 			"input_tokens": 0, "output_tokens": 0, "conversation_tokens": 0,
-			"resumable": false,
+			"resumable":     false,
+			"changed_files": changedFilesPayload(),
 		})
 		return
 	}
@@ -437,6 +438,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 				"resumable":           true, "workflow_id": workflowID,
+				"changed_files": changedFilesPayload(),
 			})
 			return
 		}
@@ -455,6 +457,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 					"conversation_tokens": conversationTokens(inputTokens, staticSum),
 					"resumable":           false,
 					"workflow_id":         workflowID,
+					"changed_files":       changedFilesPayload(),
 				})
 			} else {
 				historyFinal = "工作流连接中断，任务未完成。"
@@ -555,6 +558,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 						"conversation_tokens": conversationTokens(inputTokens, staticSum),
 						"resumable":           false,
 						"workflow_id":         workflowID,
+						"changed_files":       changedFilesPayload(),
 					})
 				} else {
 					historyFinal = "工作流连接中断，任务未完成。"
@@ -571,6 +575,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 				"resumable":           true, "workflow_id": workflowID,
+				"changed_files": changedFilesPayload(),
 			})
 			return
 		}
@@ -614,6 +619,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 							"conversation_tokens": conversationTokens(inputTokens, staticSum),
 							"resumable":           false,
 							"workflow_id":         workflowID,
+							"changed_files":       changedFilesPayload(),
 						})
 					} else {
 						// 网络断线：保留检查点，可续跑
@@ -628,10 +634,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			deleteWorkflowCheckpoint(workflowID)
 			// agent 决定结束对话：跑一次 build + 截图校验（旁路，失败不阻断）
 			verifyOnWorkflowDone(c, workflowID)
+			// 本次会话改过的文件列表（AgentFS 审计聚合），随 workflow_done 下发，
+			// 前端收到后弹「改动文件卡片」：逐个预览 diff / 一键回退到工作流前版本。
+			// 所有收尾分支（completed/stopped/failed/预算耗尽/上游错误）都带，断联也算。
 			writeCodeSSE(c, "workflow_done", map[string]any{
 				"status": "completed", "final_output": content,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
+				"changed_files":       changedFilesPayload(),
 			})
 			go generateSkillAsync(task, transcript)
 			return
@@ -843,28 +853,28 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 					mime = "image/png"
 				}
 				writeCodeSSE(c, "artifact", map[string]any{
-									"id":         fmt.Sprintf("%s_image_%d", tc.ID, imageIndex),
-									"kind":       "image",
-									"tool":       tc.Function.Name,
-									"image":      "data:" + mime + ";base64," + image.Data,
-									"source_url": artifactSourceURL(tc.Function.Arguments),
-									"caption":    "Agent 已截取当前页面，作为本次交付凭证。",
-								})
-							}
-							// 视频工件：同图片模式，内嵌可拖动进度条播放块
-							for videoIndex, video := range results[i].videos {
-								writeCodeSSE(c, "artifact", map[string]any{
-									"id":      fmt.Sprintf("%s_video_%d", tc.ID, videoIndex),
-									"kind":    "video",
-									"tool":    tc.Function.Name,
-									"url":     video.URL,
-									"file":    video.File,
-									"mime":    video.Mime,
-									"size":    video.Size,
-									"seconds": video.Seconds,
-									"caption": "Agent 已生成视频，可拖动进度条播放。",
-								})
-							}
+					"id":         fmt.Sprintf("%s_image_%d", tc.ID, imageIndex),
+					"kind":       "image",
+					"tool":       tc.Function.Name,
+					"image":      "data:" + mime + ";base64," + image.Data,
+					"source_url": artifactSourceURL(tc.Function.Arguments),
+					"caption":    "Agent 已截取当前页面，作为本次交付凭证。",
+				})
+			}
+			// 视频工件：同图片模式，内嵌可拖动进度条播放块
+			for videoIndex, video := range results[i].videos {
+				writeCodeSSE(c, "artifact", map[string]any{
+					"id":      fmt.Sprintf("%s_video_%d", tc.ID, videoIndex),
+					"kind":    "video",
+					"tool":    tc.Function.Name,
+					"url":     video.URL,
+					"file":    video.File,
+					"mime":    video.Mime,
+					"size":    video.Size,
+					"seconds": video.Seconds,
+					"caption": "Agent 已生成视频，可拖动进度条播放。",
+				})
+			}
 			status := "ok"
 			if results[i].failed {
 				status = "error"

@@ -66,7 +66,8 @@ import { Icon } from '@iconify/vue'
 const props = defineProps({
   node: { type: Object, required: true },
   depth: { type: Number, default: 0 },
-  selected: { type: Object, default: null }
+  selected: { type: Object, default: null },
+  workdirPath: { type: String, default: '' }
 })
 
 const emit = defineEmits(['select', 'toggle', 'create-file', 'create-folder', 'rename', 'delete'])
@@ -160,7 +161,8 @@ function closeMenu(event) {
 
 function handleCopyPath() {
   const relativePath = props.node.path || props.node.name
-  const absolutePath = `C:\\Pro2026\\re0\\${relativePath}`
+  const root = props.workdirPath || document.querySelector('.file-tool-tree-project span')?.textContent || ''
+  const absolutePath = root ? `${root.replace(/[/\\]$/, '')}/${relativePath}` : relativePath
   navigator.clipboard.writeText(absolutePath)
   showMenu.value = false
 }

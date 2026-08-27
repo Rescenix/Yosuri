@@ -697,7 +697,7 @@
                     </span>
                   </transition>
 
-                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
+                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
 
                   <!-- "+" 附加菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
                   <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
@@ -801,13 +801,19 @@
                   </div>
 
                   <!-- 模型名 pill -->
-                  <div class="sch-model" @click.stop="showModelMenu = !showModelMenu">
+                  <div class="sch-model" @click.stop="toggleModelMenu">
                     <span>{{ selectedModelLabel }}</span>
                     <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
                     <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
-                      <div class="model-menu-search">
-                        <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
-                        <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
+                      <div class="model-menu-head">
+                        <div class="model-menu-search">
+                          <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
+                          <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
+                        </div>
+                        <button class="model-menu-manage" @click.stop="showModelManager = true; showModelMenu = false" title="管理模型">
+                          <Icon icon="mdi:cog-outline" width="14" />
+                          <span>管理模型</span>
+                        </button>
                       </div>
                       <div v-if="!hasModels" class="model-menu-empty">没有可用模型（去设置填 Key 或选免 Key 模型）</div>
                       <div v-if="hasModels" class="model-menu-list">
@@ -831,9 +837,6 @@
                             @click="selectModel(m.value)"
                           ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">公益免费</span></div>
                         </template>
-                      </div>
-                      <div class="model-menu-footer" @click.stop="showModelManager = true; showModelMenu = false">
-                        <Icon icon="mdi:cog-outline" width="14" /> 管理模型
                       </div>
                     </div>
                   </div>
@@ -1231,7 +1234,15 @@ function selectSession(id) {
 async function followSessionWorkdir(id) {
   const target = sessionList.value.find(s => s.id === id)
   const wdName = target?.workdir || ''
-  if (!wdName) return
+  // 未分组会话：没有归属项目，清空当前工作目录（文件树随之清空/显示项目占位），
+  // 不再沿用上一个项目——否则切到未分组会话，文件编辑器还停在旧项目（re0）上。
+  if (!wdName) {
+    if (currentWorkDir.value?.path) {
+      currentWorkDir.value = { name: '', path: '' }
+      saveWorkDirState()
+    }
+    return
+  }
   if (currentWorkDir.value?.name === wdName) return
   const project = projects.value.find(p => p.name === wdName)
   if (!project) return
@@ -2715,6 +2726,11 @@ const groupedModelOptions = computed(() => {
 const modelOptions = computed(() => groupedModelOptions.value.flatMap(g => g.items))
 const hasModels = computed(() => modelOptions.value.length > 0)
 const showModelMenu = ref(false)
+
+// 打开/关闭模型菜单（纯切换，高度交由 CSS 处理）
+function toggleModelMenu() {
+  showModelMenu.value = !showModelMenu.value
+}
 const modelSearch = ref('')
 // 搜索过滤后的分组（图1 顶部搜索框）
 const filteredGroupedOptions = computed(() => {
@@ -3336,6 +3352,61 @@ function jumpToGroup(id) {
 // 合并成一条：永远走四态机（startCodeWorkflow），模型自己判断要不要调工具，
 // 不需要工具时就是普通对话回复，agent 两件事都能干，用户不用先选模式。
 // 共享池模型（免费试用）走简单聊天/POST 流式，无 agent 工作流。
+// ==================== 输入历史（↑/↓ 浏览最近发送） ====================
+// Claude Code 式：输入框为空时 ↑ 回退上一条，↓ 前进；发送成功后入栈。
+// 仅在「已进入浏览」或「输入为空」时拦截箭头，不干扰多行编辑的光标移动。
+const chatHistory = ref([])
+const chatHistoryIndex = ref(-1) // -1 = 未在浏览（编辑新内容）
+const CHAT_HISTORY_KEY = 'rescene_chat_history'
+const CHAT_HISTORY_MAX = 50
+
+function loadChatHistory() {
+  try {
+    const raw = localStorage.getItem(CHAT_HISTORY_KEY)
+    chatHistory.value = raw ? JSON.parse(raw) : []
+  } catch { chatHistory.value = [] }
+}
+function saveChatHistory() {
+  try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatHistory.value)) } catch {}
+}
+function pushChatHistory(text) {
+  const t = (text || '').trim()
+  if (!t) return
+  chatHistory.value = [t, ...chatHistory.value.filter(x => x !== t)].slice(0, CHAT_HISTORY_MAX)
+  chatHistoryIndex.value = -1
+  saveChatHistory()
+}
+function onChatInputKeydown(e) {
+  if (e.key === 'ArrowUp') {
+    // 未浏览且输入非空 → 让位给光标移动（多行编辑）
+    if (chatHistoryIndex.value === -1 && userInput.value.trim()) return
+    if (!chatHistory.value.length) return
+    e.preventDefault()
+    if (chatHistoryIndex.value === -1) chatHistoryIndex.value = 0
+    else chatHistoryIndex.value = Math.min(chatHistoryIndex.value + 1, chatHistory.value.length - 1)
+    const text = chatHistory.value[chatHistoryIndex.value]
+    userInput.value = text
+    e.target.value = text
+    e.target.dispatchEvent(new Event('input', {bubbles: true}))
+    nextTick(adjustInputHeight)
+  } else if (e.key === 'ArrowDown') {
+    if (chatHistoryIndex.value === -1) return
+    e.preventDefault()
+    chatHistoryIndex.value -= 1
+    let text
+    if (chatHistoryIndex.value < 0) {
+      chatHistoryIndex.value = -1
+      text = ''
+    } else {
+      text = chatHistory.value[chatHistoryIndex.value]
+    }
+    userInput.value = text
+    e.target.value = text
+    e.target.dispatchEvent(new Event('input', {bubbles: true}))
+    nextTick(adjustInputHeight)
+  }
+}
+
 function handleSend() {
   if (hasPendingAttachments.value) return
   // 亲密度 +1（fire-and-forget，失败静默不阻断发送）
@@ -3347,6 +3418,7 @@ function handleSend() {
       userInput.value = ''
       nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
       const ok = sendSteerMessage(steerText)
+      if (ok) pushChatHistory(steerText)
       if (!ok) {
         messages.value.push({
           id: `steer-fail-${Date.now()}`,
@@ -3363,6 +3435,7 @@ function handleSend() {
   const combined = buildOutgoingMessage()
   if (!combined) return
   const displayText = userInput.value.trim()
+  pushChatHistory(displayText)
   const displayAttachments = attachments.value.filter(a => a.status === 'ready').map(a => ({ ...a }))
   clearAttachments()
   userInput.value = ''
@@ -3770,6 +3843,7 @@ onMounted(() => {
   refreshGitGraph()
   loadWorkDirState()
   syncWorkDirFromBackend()
+  loadChatHistory()
   refreshAgentFSTimeline()
   agentFSPollTimer = window.setInterval(() => {
     if (!sidebarOpen.value) refreshAgentFSTimeline()
@@ -3788,6 +3862,8 @@ onMounted(() => {
   // 监听 AI 标题生成中事件：列表刷新时保持「新对话」，避免后端派生的原文标题抢先替换
     window.addEventListener('session-title-pending', onSessionTitlePending)
     startNotifPoll()
+    // 右键菜单「粘贴」如果剪贴板是图片，DesktopFloatingMenu 会 dispatch paste-image
+    window.addEventListener('paste-image', onPasteImageFromMenu)
   })
   onUnmounted(() => {
     window.removeEventListener('keydown', onGlobalDockShortcut)
@@ -3795,8 +3871,16 @@ onMounted(() => {
     window.clearInterval(agentFSPollTimer)
     window.removeEventListener('session-title-update', onSessionTitleUpdate)
     window.removeEventListener('session-title-pending', onSessionTitlePending)
+    window.removeEventListener('paste-image', onPasteImageFromMenu)
     stopNotifPoll()
   })
+// 右键菜单粘贴图片：与 Ctrl+V（handlePaste）走同一条附件路
+function onPasteImageFromMenu(e) {
+  const file = e.detail && e.detail.file
+  if (!file) return
+  if (flowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
+  attachImageFile(file)
+}
 async function refreshGitGraph() {
   try {
     const res = await fetch('/api/git/graph')

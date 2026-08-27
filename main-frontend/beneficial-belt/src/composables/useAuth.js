@@ -27,6 +27,9 @@ const DEVICE_KEY = 'aurora_device_id'
 const UID_KEY = 'aurora_uid'
 const INTIMACY_KEY = 'aurora_intimacy'
 const USER_AVATAR_KEY = 'rescene_user_avatar_v1'
+// 游客 token：uid 分发时云端签发（guest JWT，含 uid claim），用于查询本人统计/亲密值等
+// 内部数据（云端 AuthRequired + uid 匹配，只放行「查自己」）。独立 key，不覆盖登录 token。
+const GUEST_TOKEN_KEY = 'aurora_guest_token'
 
 // 设备指纹：首次生成 UUID 存 localStorage（同一设备恒定；换设备/清缓存 = 新游客号）
 function getDeviceId() {
@@ -37,6 +40,12 @@ function getDeviceId() {
     localStorage.setItem(DEVICE_KEY, d)
   }
   return d
+}
+
+// 请求鉴权头：优先登录 token，游客（未登录）用云端签发的 guest token。
+function authHeaders(extra) {
+  const token = localStorage.getItem('token') || localStorage.getItem(GUEST_TOKEN_KEY) || ''
+  return Object.assign({}, extra, token ? { Authorization: 'Bearer ' + token } : {})
 }
 
 // 向 cloud 请求/取回本设备 UID：同一 device_id 恒定返回同一 UID（幂等）。
@@ -56,6 +65,18 @@ async function fetchUid() {
       if (data.uid) {
         uid.value = data.uid
         localStorage.setItem(UID_KEY, String(data.uid))
+      }
+      // 签发的游客 JWT 存起来（用于查询本人统计/亲密值等内部数据鉴权）
+      if (data.token) {
+        localStorage.setItem(GUEST_TOKEN_KEY, data.token)
+        // 交给本地后端缓存：记忆同步（push/pull）是 Go 后端在跑，需要这份 token
+        try {
+          fetch('/api/auth/guest-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: data.token })
+          })
+        } catch { /* 本地后端不可达时忽略，下次启动再补 */ }
       }
     }
   } catch {
@@ -94,7 +115,7 @@ async function fetchIntimacy() {
   const u = uid.value
   if (!u) return
   try {
-    const res = await fetch('/api/auth/intimacy?uid=' + u)
+    const res = await fetch('/api/auth/intimacy?uid=' + u, { headers: authHeaders() })
     if (res.ok) {
       const data = await res.json()
       if (typeof data.intimacy === 'number') {
@@ -114,7 +135,7 @@ async function incIntimacy() {
   try {
     const res = await fetch('/api/auth/intimacy/inc', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ uid: u, delta: 1 })
     })
     if (res.ok) {

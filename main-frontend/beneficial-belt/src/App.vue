@@ -72,6 +72,8 @@
       <span>欢迎回来，<b>{{ welcomeName }}</b>！</span>
       <button class="updated-banner-close" type="button" @click="closeWelcomeBanner" aria-label="关闭">×</button>
     </div>
+    <!-- 全局悬浮剪贴板卡片：输入框右键 剪切/复制/粘贴/全选 + 选中文本悬浮复制按钮（2026-08-27） -->
+    <DesktopFloatingMenu />
   </template>
 
 <script setup>
@@ -81,6 +83,7 @@ import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
+import DesktopFloatingMenu from './components/shanxi/chat/DesktopFloatingMenu.vue'
 import DHSCommunityModal from './components/shanxi/chat/DHSCommunityModal.vue'
 import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
 

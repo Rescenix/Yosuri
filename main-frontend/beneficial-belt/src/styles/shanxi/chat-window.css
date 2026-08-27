@@ -3559,6 +3559,101 @@ min-height: 90px !important;
 .agentfs-branch-btn:hover { background: color-mix(in srgb, var(--app-accent) 14%, var(--app-surface)); }
 .agentfs-branch-btn:disabled { cursor: wait; opacity: 0.55; }
 .agentfs-card-close { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; }
+
+/* 「改动文件卡片」—— 工作流收尾自动弹出，右下角悬浮，列文件+预览+回退 */
+.agentfs-changes-card {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: min(460px, calc(100vw - 36px));
+  max-height: min(480px, calc(100vh - 120px));
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 14%, var(--app-border));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-surface) 96%, transparent);
+  color: var(--app-text);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.65) inset,
+    0 24px 70px rgba(0,0,0,0.18),
+    0 5px 18px rgba(0,0,0,0.09);
+  backdrop-filter: blur(22px) saturate(1.2);
+}
+.agentfs-changes-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--app-border);
+}
+.agentfs-changes-head strong { font-size: 13px; letter-spacing: 0.01em; }
+.agentfs-changes-head .agentfs-card-close { margin-left: auto; }
+.agentfs-changes-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.agentfs-change-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  transition: background 0.15s;
+}
+.agentfs-change-row:hover { background: var(--app-surface-3); }
+.agentfs-change-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 12px "JetBrains Mono", ui-monospace, monospace;
+  color: var(--app-text);
+}
+.agentfs-change-ops {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--app-text-faint);
+  min-width: 28px;
+  text-align: right;
+}
+.agentfs-change-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface-2);
+  color: var(--app-text-soft);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.agentfs-change-btn:hover {
+  background: var(--app-surface-3);
+  color: var(--app-text);
+  border-color: var(--app-accent);
+}
+.agentfs-change-btn.danger:hover {
+  border-color: #e24546;
+  color: #e24546;
+  background: color-mix(in srgb, #e24546 10%, var(--app-surface));
+}
+.agentfs-change-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.agentfs-restore-msg {
+  font-size: 11px;
+  color: var(--app-accent);
+  flex-shrink: 0;
+}
 .agentfs-diff-body { min-height: 0; }
 .agentfs-diff-body {
   flex: 1;
@@ -4623,6 +4718,9 @@ img.gem-rail-avatar {
 .model-menu-search-icon { color: var(--app-text-faint); flex-shrink: 0; }
 .model-menu-search-input { min-width: 0; border: none; background: none; outline: none; flex: 1; font-size: 13px; color: var(--app-text); }
 .model-menu-list { min-height: 0; overflow-y: auto; padding: 2px 1px; scrollbar-color: var(--app-border) transparent; }
+.model-menu-head { display: flex; align-items: center; gap: 6px; margin: 0 0 5px; }
+.model-menu-manage { display: flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 0 10px; height: 34px; border: 1px solid var(--app-border); border-radius: 9px; background: transparent; color: var(--app-text-soft); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .18s; white-space: nowrap; }
+.model-menu-manage:hover { background: var(--app-surface-2); color: var(--app-text); border-color: var(--app-text-3); }
 .model-menu-empty { padding: 18px 12px; font-size: 12px; line-height: 1.55; color: var(--app-text-faint); }
 .model-menu-item { min-height: 36px; padding: 7px 10px; border-radius: 8px; font-size: 13px; font-weight: 500; }
 .model-menu-item:hover { background: var(--app-surface-3); }

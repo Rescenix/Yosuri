@@ -631,11 +631,16 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
                 contextPct: flow.modelInfo?.context_window ? Math.min(((d.input_tokens + d.output_tokens) / flow.modelInfo.context_window) * 100, 100) : 0,
                 latencyMs: 0
             }, localStorage.getItem('prism_session_id') || '')
+            // 改动文件卡片：工作流收尾固定内嵌在工作流卡片最底部（像引用来源一样）。
+            // 无论正常/失败/停止/预算耗尽收尾都展示，可预览 diff / 一键回退。
+            flow.changedFiles = Array.isArray(d.changed_files) ? d.changed_files : []
             currentFlow = null
             closeStream()
             // 上游报错时后端留了检查点（workflow_done.resumable），拉出来给续跑条用；
-            // 正常完成则检查点已被后端删掉，这次查询自然返回空。
-            if (d.resumable) refreshResumable()
+                        // 正常完成则检查点已被后端删掉，这次查询自然返回空。
+                        if (d.resumable) refreshResumable()
+                        // 工作流结束 = 可能改了文件，通知文件树刷新
+                        window.dispatchEvent(new Event('file-tree-changed'))
         })
 
         // Hermes 式后台任务：agent 回答已送达但后台任务还在跑——不关流，

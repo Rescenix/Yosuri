@@ -243,6 +243,41 @@
         </a>
       </TransitionGroup>
     </div>
+
+    <!-- 改动文件：工作流收尾固定内嵌在最底部（像引用来源一样平铺）。
+         列出本次会话改过的文件，逐个预览 diff / 一键回退到工作流前版本。
+         数据源 flow.changedFiles（后端 workflow_done 下发，各收尾分支都有）。 -->
+    <div v-if="flow.changedFiles && flow.changedFiles.length" class="flow-changed-files">
+      <div class="flow-refs-title">本次改动 {{ flow.changedFiles.length }} 个文件</div>
+      <div class="flow-changed-list">
+        <div v-for="f in flow.changedFiles" :key="f.rel_path" class="flow-changed-row">
+          <Icon icon="mdi:file-code-outline" class="flow-changed-file-icon" width="13" />
+          <span class="flow-changed-path" :title="f.rel_path">{{ f.rel_path }}</span>
+          <span class="flow-changed-stats">
+            <b class="flow-changed-add">+{{ f.added || 0 }}</b>
+            <b class="flow-changed-del">−{{ f.removed || 0 }}</b>
+          </span>
+          <button type="button" class="flow-changed-btn" :disabled="changedRestoring" @click="previewChangedFile(f)">
+            <Icon icon="mdi:eye-outline" width="12" /> 预览
+          </button>
+          <button type="button" class="flow-changed-btn danger" :disabled="changedRestoring" @click="restoreChangedFile(f)">
+            <Icon icon="mdi:undo" width="12" /> 回退
+          </button>
+        </div>
+      </div>
+      <div v-if="changedMsg" class="flow-changed-msg" :class="{ error: changedMsgErr }">{{ changedMsg }}</div>
+      <!-- 预览 diff（点「预览」后内嵌展开，像工具 diff 一样） -->
+      <div v-if="changedDiffOpen" class="flow-changed-diff">
+        <div v-if="changedDiffLoading" class="flow-changed-state">正在读取快照…</div>
+        <div v-else-if="changedDiffError" class="flow-changed-state error">{{ changedDiffError }}</div>
+        <div v-else-if="changedDiffLines.length" class="flow-changed-code">
+          <div v-for="(l, li) in changedDiffLines" :key="li" class="flow-changed-code-line" :class="l.kind">
+                      <code>{{ l.text || ' ' }}</code>
+          </div>
+        </div>
+        <div v-else class="flow-changed-state">该文件没有可显示的文本差异</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -257,6 +292,94 @@ import { renderMarkdown } from './markdownRenderer.js'
 const props = defineProps({
   flow: { type: Object, required: true }
 })
+
+// ==================== 改动文件卡片（内嵌工作流底部） ====================
+const changedDiffOpen = ref(false)
+const changedDiffLoading = ref(false)
+const changedDiffError = ref('')
+const changedDiffRaw = ref('')
+const changedMsg = ref('')
+const changedMsgErr = ref(false)
+const changedRestoring = ref(false)
+
+// 当前项目名：从 ChatWidget 的工作目录 localStorage 取（与 /api/agentfs/* 的 project 口径一致）
+function currentProjectName() {
+  try {
+    const raw = localStorage.getItem('aether_workdir_state_v1')
+    if (raw) {
+      const d = JSON.parse(raw)
+      if (d?.current?.name) return d.current.name
+    }
+  } catch {}
+  return ''
+}
+
+// diff 原始文本 → 行数组（保留行首 +/− 符号作为增删标记，不做红绿双重显示）
+const changedDiffLines = computed(() => {
+  const rows = []
+  for (const line of changedDiffRaw.value.split('\n')) {
+    if (!line) continue
+    // 跳过 diff 头行（@@ 位置、--- +++ 文件名），它们不是内容
+    if (line.startsWith('@@') || line.startsWith('--- ') || line.startsWith('+++ ')) continue
+    if (line.startsWith('-') && !line.startsWith('--')) rows.push({ kind: 'del', text: line })
+    else if (line.startsWith('+') && !line.startsWith('++')) rows.push({ kind: 'add', text: line })
+    else rows.push({ kind: '', text: line })
+  }
+  return rows
+})
+
+async function previewChangedFile(f) {
+  if (!f || !f.first_seq) return
+  changedDiffOpen.value = true
+  changedDiffLoading.value = true
+  changedDiffError.value = ''
+  changedDiffRaw.value = ''
+  try {
+    const res = await fetch('/api/agentfs/diff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // project 留空：后端自动用当前 AgentFS 会话的项目，不依赖前端猜工作目录名
+      body: JSON.stringify({ project: '', seq: f.first_seq })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `Diff 读取失败 (${res.status})`)
+    changedDiffRaw.value = data.diff || ''
+  } catch (err) {
+    changedDiffError.value = err.message || '无法读取该快照'
+  } finally {
+    changedDiffLoading.value = false
+  }
+}
+
+async function restoreChangedFile(f) {
+  if (!f || !f.first_seq) return
+  const isNew = f.exists_before === false
+  if (!window.confirm(isNew
+    ? `删除 ${f.rel_path}（本次工作流新建的文件，回退=删除）？`
+    : `回退 ${f.rel_path} 到本次工作流开始前的版本？`)) return
+  changedRestoring.value = true
+  changedMsg.value = ''
+  changedMsgErr.value = false
+  try {
+    const res = await fetch('/api/agentfs/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // project 留空：后端自动用当前 AgentFS 会话的项目
+      body: JSON.stringify({ project: '', seq: f.first_seq, before: true })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `回退失败 (${res.status})`)
+    changedMsg.value = data.deleted ? `已删除 ${data.restored}` : `已回退 ${data.restored}`
+    // 回退后从列表移除；全部回退完收起到卡片标题状态
+    props.flow.changedFiles = (props.flow.changedFiles || []).filter(x => x.rel_path !== f.rel_path)
+    changedDiffOpen.value = false
+  } catch (err) {
+    changedMsg.value = err.message || '回退失败'
+    changedMsgErr.value = true
+  } finally {
+    changedRestoring.value = false
+  }
+}
 
 // ★ 工具调用收进概要组；回复(intent)单独平铺，不收纳
 // thinking（思考）与 web_search（联网搜索）也不收束——思考是推理轨迹要
@@ -1666,5 +1789,136 @@ function toolBodyText(b) {
   color: var(--app-text);
   line-height: 1.5;
   word-break: break-word;
+}
+
+/* ============ 改动文件卡片（内嵌工作流底部） ============ */
+.flow-changed-files {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--app-border);
+}
+.flow-changed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.flow-changed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: var(--app-surface-2);
+}
+.flow-changed-file-icon {
+  flex-shrink: 0;
+  color: var(--app-text-faint);
+}
+.flow-changed-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--app-mono-font, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--app-text);
+}
+.flow-changed-ops {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--app-text-faint);
+}
+.flow-changed-stats {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--app-mono-font, ui-monospace, monospace);
+  font-size: 10.5px;
+}
+.flow-changed-add {
+  color: #2ea043;
+  font-weight: 700;
+}
+.flow-changed-del {
+  color: #e24546;
+  font-weight: 700;
+}
+.flow-changed-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-text-soft);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.flow-changed-btn:hover {
+  color: var(--app-text);
+  border-color: var(--app-accent);
+}
+.flow-changed-btn.danger:hover {
+  color: #e24546;
+  border-color: #e24546;
+}
+.flow-changed-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.flow-changed-msg {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--app-accent);
+}
+.flow-changed-msg.error {
+  color: #e24546;
+}
+.flow-changed-diff {
+  margin-top: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--app-surface-2);
+}
+.flow-changed-state {
+  padding: 10px 12px;
+  font-size: 11.5px;
+  color: var(--app-text-faint);
+}
+.flow-changed-state.error {
+  color: #e24546;
+}
+.flow-changed-code-line {
+  display: flex;
+  gap: 8px;
+  padding: 1px 10px;
+  font-family: var(--app-mono-font, ui-monospace, monospace);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--app-text);
+}
+.flow-changed-code-line.add {
+  background: color-mix(in srgb, #2ea043 14%, transparent);
+  color: #7ee787;
+}
+.flow-changed-code-line.del {
+  background: color-mix(in srgb, #f85149 14%, transparent);
+  color: #ffa198;
+}
+.flow-changed-line-no {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--app-text-faint);
+  text-align: right;
+  user-select: none;
 }
 </style>

@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -244,13 +245,174 @@ func HandleStudioFiles(c *gin.Context) {
 		return
 	}
 	name := filepath.Base(c.Param("file"))
-	// 只放行视频/字幕/清单三种产物
+	// 只放行视频/字幕/清单/图片四种产物（png 供短剧工作台模板卡缩略图）
 	if !strings.HasSuffix(name, ".mp4") && !strings.HasSuffix(name, ".srt") &&
-		!strings.HasSuffix(name, ".json") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅允许 mp4/srt/json"})
+		!strings.HasSuffix(name, ".json") && !strings.HasSuffix(name, ".png") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅允许 mp4/srt/json/png"})
 		return
 	}
-	http.ServeFile(c.Writer, c.Request, filepath.Join(root, studioOutputDir, name))
+	// 优先 studio 产物目录，找不到再从素材目录（~/rescene_data/videos）服务
+	p := filepath.Join(root, studioOutputDir, name)
+	if _, err := os.Stat(p); err != nil {
+		p = filepath.Join(videoOutputDir(), name)
+	}
+	http.ServeFile(c.Writer, c.Request, p)
+}
+
+// HandleStudioLibrary GET /api/studio/library —— 扫描本地素材目录返回素材列表
+// （素材库是基础设施：角色图/视频/抽帧图动态入库，不硬编码）
+func HandleStudioLibrary(c *gin.Context) {
+	type asset struct {
+		Name string `json:"name"`
+		Kind string `json:"kind"` // image / video
+		Src  string `json:"src"`
+		Dur  string `json:"dur,omitempty"`
+	}
+	var out []asset
+	seen := map[string]bool{}
+	add := func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			lower := strings.ToLower(name)
+			kind := ""
+			if strings.HasSuffix(lower, ".mp4") || strings.HasSuffix(lower, ".webm") || strings.HasSuffix(lower, ".mov") {
+				kind = "video"
+			} else if strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") || strings.HasSuffix(lower, ".webp") {
+				kind = "image"
+			}
+			if kind == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			dur := ""
+			if kind == "video" {
+				dur = "00:05"
+			}
+			out = append(out, asset{Name: name, Kind: kind, Src: "/api/studio/files/" + name, Dur: dur})
+		}
+	}
+	// 素材目录：生成视频 + 角色图 + 基准图
+	add(filepath.Join(videoOutputDir()))            // ~/rescene_data/videos
+	add(filepath.Join(resceneUserDataDir(), "videos")) // 兜底同目录
+	root, _ := backendRoot()
+	add(filepath.Join(root, "drama", "assets", "characters"))
+	add(filepath.Join(root, "drama", "assets", "refs"))
+	c.JSON(http.StatusOK, gin.H{"assets": out})
+}
+
+// HandleStudioLibraryDelete DELETE /api/studio/library/:file —— 删除素材文件
+// （仅删素材目录/产物目录内文件，杜绝路径穿越）
+func HandleStudioLibraryDelete(c *gin.Context) {
+	name := filepath.Base(c.Param("file"))
+	if name == "." || name == ".." {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法文件名"})
+		return
+	}
+	root, _ := backendRoot()
+	candidates := []string{
+		filepath.Join(videoOutputDir(), name),
+		filepath.Join(root, studioOutputDir, name),
+		filepath.Join(root, "drama", "assets", "characters", name),
+		filepath.Join(root, "drama", "assets", "refs", name),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			if err := os.Remove(p); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败: " + err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"ok": true, "deleted": name})
+			return
+		}
+	}
+	c.JSON(http.StatusNotFound, gin.H{"error": "素材不存在"})
+}
+
+// HandleStudioUpload POST /api/studio/upload —— 上传参考素材（图片/视频）到素材库
+func HandleStudioUpload(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少文件"})
+		return
+	}
+	name := filepath.Base(file.Filename)
+	lower := strings.ToLower(name)
+	if !strings.HasSuffix(lower, ".png") && !strings.HasSuffix(lower, ".jpg") &&
+		!strings.HasSuffix(lower, ".jpeg") && !strings.HasSuffix(lower, ".webp") &&
+		!strings.HasSuffix(lower, ".mp4") && !strings.HasSuffix(lower, ".webm") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "仅支持图片(png/jpg/webp)或视频(mp4/webm)"})
+		return
+	}
+	dir := videoOutputDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建目录失败"})
+		return
+	}
+	dst := filepath.Join(dir, name)
+	if err := c.SaveUploadedFile(file, dst); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
+		return
+	}
+	kind := "image"
+	if strings.HasSuffix(lower, ".mp4") || strings.HasSuffix(lower, ".webm") {
+		kind = "video"
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "name": name, "kind": kind, "src": "/api/studio/files/" + name})
+}
+
+// HandleStudioExtractFrame POST /api/studio/frames —— 视频抽帧转图片参考
+// body: {video: "xxx.mp4", time: 2.5} → ffmpeg 抽帧 → 存素材库 → 返回图片
+func HandleStudioExtractFrame(c *gin.Context) {
+	var req struct {
+		Video string  `json:"video"`
+		Time  float64 `json:"time"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	name := filepath.Base(req.Video)
+	if !strings.HasSuffix(strings.ToLower(name), ".mp4") && !strings.HasSuffix(strings.ToLower(name), ".webm") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "仅支持 mp4/webm 视频抽帧"})
+		return
+	}
+	// 找视频文件
+	root, _ := backendRoot()
+	candidates := []string{
+		filepath.Join(videoOutputDir(), name),
+		filepath.Join(root, studioOutputDir, name),
+	}
+	srcPath := ""
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			srcPath = p
+			break
+		}
+	}
+	if srcPath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "视频不存在: " + name})
+		return
+	}
+	if req.Time < 0 {
+		req.Time = 0
+	}
+	// ffmpeg 抽帧（毫秒级）
+	outName := strings.TrimSuffix(name, filepath.Ext(name)) + "_frame.png"
+	outPath := filepath.Join(videoOutputDir(), outName)
+	args := []string{"-y", "-ss", fmt.Sprintf("%.2f", req.Time), "-i", srcPath, "-frames:v", "1", "-q:v", "2", outPath}
+	cmd := exec.Command("ffmpeg", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "抽帧失败: " + err.Error() + " " + truncateChars(string(out), 200)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "name": outName, "kind": "image", "src": "/api/studio/files/" + outName})
 }
 
 func regexpReplaceNonWord(s string) string {

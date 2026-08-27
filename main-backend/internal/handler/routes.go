@@ -105,6 +105,17 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/studio/manga/plan", HandleMangaPlan)
 	r.POST("/api/studio/manga/shot", HandleMangaShot)
 	r.GET("/api/studio/files/:file", HandleStudioFiles)
+	// 素材库：扫描本地素材目录动态返回（不硬编码）
+	r.GET("/api/studio/library", HandleStudioLibrary)
+	// 素材库：上传参考素材（图片/视频）/ 删除 / 私密管理
+	r.POST("/api/studio/upload", HandleStudioUpload)
+	r.DELETE("/api/studio/library/:file", HandleStudioLibraryDelete)
+	// 短剧工作台：Agnes 图生视频（异步提交 + 状态查询）
+	r.POST("/api/studio/agnes", HandleStudioAgnesSubmit)
+	r.POST("/api/studio/agnes/chain", HandleStudioAgnesChain)
+	r.GET("/api/studio/agnes/status/:id", HandleStudioAgnesStatus)
+	// 素材库：视频抽帧转图片参考
+	r.POST("/api/studio/frames", HandleStudioExtractFrame)
 	r.POST("/api/translate", HandleTranslate)
 	r.POST("/api/translate/batch", HandleTranslateBatch)
 
@@ -240,6 +251,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 游客持设备指纹换 UID；登录后 bind 把游客号升级为正式账号（永久保留）。
 	r.POST("/api/auth/uid", CloudUidProxy)
 	r.POST("/api/auth/uid/bind", CloudUidBindProxy)
+	// 游客 JWT 缓存：前端 uid 分发拿到 token 后交给本地后端，供记忆同步鉴权
+	r.POST("/api/auth/guest-token", HandleGuestTokenStore)
 	// 亲密度（无上限互动值）：云端权威存储，re0 透传 + 本地缓存
 	r.POST("/api/auth/intimacy/inc", CloudIntimacyIncProxy)
 	r.GET("/api/auth/intimacy", CloudIntimacyGetProxy)

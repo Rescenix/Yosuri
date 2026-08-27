@@ -15,16 +15,22 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"backend/internal/ai/core"
+
+	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -48,6 +54,9 @@ type videoGenSpec struct {
 	Seed      int64
 	Negative  string // 仅 2.0 支持
 	ImageURL  string // 图生视频（2.0 用 image 字段）
+	VideoURL  string // 视频参考（2.5 reference 模式的 videos 参数，2026-08-27 新增）
+	FirstFrame string // 首尾帧：首帧图（keyframe 模式，2026-08-27 新增）
+	LastFrame  string // 首尾帧：尾帧图（keyframe 模式）
 	OutDir    string // 落盘目录，默认 videoOutputDir()
 	Name      string // 文件名（不含扩展名），默认按时间戳
 	Style     string // 风格模板：anime（动漫）/ real（真人写实）/ anime_live（动漫真人化，默认）
@@ -253,14 +262,28 @@ func generateVideoV25(ctx context.Context, key string, spec videoGenSpec) (video
 	}
 	if strings.TrimSpace(spec.Ratio) != "" {
 		payload["aspect_ratio"] = strings.TrimSpace(spec.Ratio)
+	} else if spec.Width > 0 && spec.Height > 0 {
+		// 2.5 系列不认 width/height，但从宽高推断画幅（竖屏 720x1280 → 9:16）
+		payload["aspect_ratio"] = inferAspectRatio(spec.Width, spec.Height)
 	} else {
 		payload["aspect_ratio"] = "16:9"
 	}
 	if spec.Seed > 0 {
 		payload["seed"] = spec.Seed
 	}
-	// 图生视频：2.5 系列走 reference 模式
-	if strings.TrimSpace(spec.ImageURL) != "" {
+	// 参考模式优先级：keyframe（首尾帧）> reference videos（视频）> reference images（图片）
+	if strings.TrimSpace(spec.FirstFrame) != "" || strings.TrimSpace(spec.LastFrame) != "" {
+		payload["mode"] = "keyframe"
+		if strings.TrimSpace(spec.FirstFrame) != "" {
+			payload["first_frame"] = spec.FirstFrame
+		}
+		if strings.TrimSpace(spec.LastFrame) != "" {
+			payload["last_frame"] = spec.LastFrame
+		}
+	} else if strings.TrimSpace(spec.VideoURL) != "" {
+		payload["mode"] = "reference"
+		payload["videos"] = []map[string]any{{"url": spec.VideoURL, "start_seconds": 0, "require_audio": false}}
+	} else if strings.TrimSpace(spec.ImageURL) != "" {
 		payload["mode"] = "reference"
 		payload["images"] = []string{spec.ImageURL}
 	}
@@ -444,6 +467,10 @@ func callNativeVideoGenerate(ctx context.Context, argsJSON string) (nativeToolRe
 		Seed      int64  `json:"seed"`
 		Negative  string `json:"negative"`
 		ImageURL  string `json:"image_url"`
+		Ratio     string `json:"aspect_ratio"` // 2.5 系列：画幅 16:9/9:16/1:1/4:3/3:4/21:9
+		Style     string `json:"style"`        // anime / real / anime_live（默认）
+		Seconds   string `json:"seconds"`      // 2.5 系列：时长 "4"-"12"，默认 "5"
+		Size      string `json:"size"`         // 2.5 系列：720P（默认，flash 固定）/ 960P / 2K
 	}
 	if strings.TrimSpace(argsJSON) != "" {
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
@@ -460,6 +487,10 @@ func callNativeVideoGenerate(ctx context.Context, argsJSON string) (nativeToolRe
 		Seed:      args.Seed,
 		Negative:  args.Negative,
 		ImageURL:  args.ImageURL,
+		Ratio:     args.Ratio,
+		Style:     args.Style,
+		Seconds:   args.Seconds,
+		Size:      args.Size,
 	})
 	if err != nil {
 		return nativeToolResult{}, err
@@ -480,4 +511,392 @@ func callNativeVideoGenerate(ctx context.Context, argsJSON string) (nativeToolRe
 // urlQueryEscape 简化：video_id 是 base64url 安全字符集，直接透传即可。
 func urlQueryEscape(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "+", "%2B"), "=", "%3D")
+}
+
+// inferAspectRatio 从宽高推断常见画幅比例字符串（2.5 系列用）。
+// 1280×704 → 16:9，720×1280 → 9:16，等。
+func inferAspectRatio(w, h int) string {
+	if w <= 0 || h <= 0 {
+		return "16:9"
+	}
+	ratio := float64(w) / float64(h)
+	switch {
+	case ratio > 2.0:
+		return "21:9"
+	case ratio > 1.6:
+		return "16:9"
+	case ratio > 1.2:
+		return "4:3"
+	case ratio > 0.9:
+		return "1:1"
+	case ratio > 0.7:
+		return "3:4"
+	default:
+		return "9:16"
+	}
+}
+
+// HandleStudioAgnesVideo POST /api/studio/agnes —— 短剧工作台直接调 Agnes 图生视频。
+// body: {prompt, ref_image?, model?, seconds?, ratio?, size?}
+// ref_image 支持 /api/studio/files/xxx.png 相对路径或公网 URL。
+func HandleStudioAgnesVideo(c *gin.Context) {
+	var req struct {
+		Prompt   string `json:"prompt"`
+		RefImage string `json:"ref_image"`
+		Model    string `json:"model"`
+		Seconds  string `json:"seconds"`
+		Ratio    string `json:"ratio"`
+		Size     string `json:"size"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt 不能为空"})
+		return
+	}
+	// 参考素材：/api/studio/files/xxx → 本地文件 → data URL（图片走 images，视频走 videos）
+	imageURL := strings.TrimSpace(req.RefImage)
+	videoURL := ""
+	if imageURL != "" {
+		if strings.HasPrefix(imageURL, "/api/studio/files/") {
+			name := filepath.Base(imageURL)
+			root, _ := backendRoot()
+			candidates := []string{
+				filepath.Join(videoOutputDir(), name),
+				filepath.Join(root, studioOutputDir, name),
+				filepath.Join(root, "..", "main-frontend", "beneficial-belt", "public", name),
+			}
+			var data []byte
+			var mime string
+			for _, p := range candidates {
+				if d, err := os.ReadFile(p); err == nil {
+					data = d
+					lower := strings.ToLower(p)
+					mime = "image/png"
+					if strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") {
+						mime = "image/jpeg"
+					} else if strings.HasSuffix(lower, ".webp") {
+						mime = "image/webp"
+					} else if strings.HasSuffix(lower, ".mp4") || strings.HasSuffix(lower, ".webm") {
+						mime = "video/mp4"
+					}
+					break
+				}
+			}
+			if data == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "参考素材文件不存在: " + name})
+				return
+			}
+			if strings.HasPrefix(mime, "video/") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Agnes 免费档仅支持图片参考，不支持视频"})
+				return
+			} else {
+				imageURL = "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+			}
+		} else if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") &&
+			!strings.HasPrefix(imageURL, "data:") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "参考素材必须是公网 URL、data URL 或 /api/studio/files/ 路径"})
+			return
+		}
+	}
+	if req.Model == "" {
+		req.Model = "agnes-video-2.5-flash"
+	}
+	if req.Seconds == "" {
+		req.Seconds = "5"
+	}
+	if req.Ratio == "" {
+		req.Ratio = "16:9"
+	}
+	// 2.0 用 1080P 需 size=1080P；2.5-flash 固定 720P
+	if req.Size == "" {
+		req.Size = "720P"
+	}
+	res, err := generateVideo(c.Request.Context(), videoGenSpec{
+		Prompt:   req.Prompt,
+		Model:    req.Model,
+		Seconds:  req.Seconds,
+		Ratio:    req.Ratio,
+		Size:     req.Size,
+		ImageURL: imageURL,
+		VideoURL: videoURL,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ok": true, "video": res.URL, "name": filepath.Base(res.File),
+		"model": res.Model, "size": res.Size, "seconds": res.Seconds,
+	})
+}
+
+// —— 后台异步生成：提交即返回 task_id，生成完再查 ——
+type agnesTask struct {
+	Mu      sync.Mutex
+	Status  string // pending / done / failed
+	Video   string
+	Name    string
+	Size    string
+	Seconds string
+	Err     string
+}
+
+var agnesTasks = map[string]*agnesTask{}
+var agnesTasksMu sync.Mutex
+
+func agnesTaskSet(id string, t *agnesTask) {
+	agnesTasksMu.Lock()
+	agnesTasks[id] = t
+	agnesTasksMu.Unlock()
+}
+
+func agnesTaskGet(id string) *agnesTask {
+	agnesTasksMu.Lock()
+	defer agnesTasksMu.Unlock()
+	return agnesTasks[id]
+}
+
+// studioRefToDataURL 把 /api/studio/files/xxx 读成本地 data URL（多候选目录）。
+// 返回 (dataURL, isVideo, errMsg)。仅图片支持；视频返回错误。
+func studioRefToDataURL(ref string) (string, bool, string) {
+	if !strings.HasPrefix(ref, "/api/studio/files/") {
+		return ref, false, ""
+	}
+	name := filepath.Base(ref)
+	root, _ := backendRoot()
+	candidates := []string{
+		filepath.Join(videoOutputDir(), name),
+		filepath.Join(root, studioOutputDir, name),
+		filepath.Join(root, "..", "main-frontend", "beneficial-belt", "public", name),
+	}
+	var data []byte
+	var mime string
+	for _, p := range candidates {
+		if d, err := os.ReadFile(p); err == nil {
+			data = d
+			lower := strings.ToLower(p)
+			mime = "image/png"
+			if strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") {
+				mime = "image/jpeg"
+			} else if strings.HasSuffix(lower, ".webp") {
+				mime = "image/webp"
+			} else if strings.HasSuffix(lower, ".mp4") || strings.HasSuffix(lower, ".webm") {
+				mime = "video/mp4"
+			}
+			break
+		}
+	}
+	if data == nil {
+		return "", false, "参考素材文件不存在: " + name
+	}
+	if strings.HasPrefix(mime, "video/") {
+		return "", true, "Agnes 免费档仅支持图片参考，不支持视频"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), false, ""
+}
+
+// HandleStudioAgnesSubmit POST /api/studio/agnes —— 异步提交，立即返回 task_id
+// body: {prompt, ref_image?, first_frame?, last_frame?, model?, seconds?, ratio?, size?}
+// ref_image=图片参考；first_frame+last_frame=首尾帧（keyframe 模式）
+func HandleStudioAgnesSubmit(c *gin.Context) {
+	var req struct {
+		Prompt     string `json:"prompt"`
+		RefImage   string `json:"ref_image"`
+		FirstFrame string `json:"first_frame"`
+		LastFrame  string `json:"last_frame"`
+		Model      string `json:"model"`
+		Seconds    string `json:"seconds"`
+		Ratio      string `json:"ratio"`
+		Size       string `json:"size"`
+		Seed       int64  `json:"seed"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt 不能为空"})
+		return
+	}
+	imageURL := ""
+	firstFrame := ""
+	lastFrame := ""
+	if req.FirstFrame != "" || req.LastFrame != "" {
+		// 首尾帧模式
+		if req.FirstFrame != "" {
+			u, isV, errMsg := studioRefToDataURL(req.FirstFrame)
+			if errMsg != "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+			}
+			if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "首帧必须是图片"}); return }
+			firstFrame = u
+		}
+		if req.LastFrame != "" {
+			u, isV, errMsg := studioRefToDataURL(req.LastFrame)
+			if errMsg != "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+			}
+			if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "尾帧必须是图片"}); return }
+			lastFrame = u
+		}
+	} else if req.RefImage != "" {
+		u, isV, errMsg := studioRefToDataURL(req.RefImage)
+		if errMsg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+		}
+		if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "Agnes 免费档仅支持图片参考，不支持视频"}); return }
+		imageURL = u
+	}
+	if req.Model == "" {
+		req.Model = "agnes-video-2.5-flash"
+	}
+	if req.Seconds == "" {
+		req.Seconds = "5"
+	}
+	if req.Ratio == "" {
+		req.Ratio = "16:9"
+	}
+	if req.Size == "" {
+		req.Size = "720P"
+	}
+	taskID := "task_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	task := &agnesTask{Status: "pending", Size: req.Size, Seconds: req.Seconds}
+	agnesTaskSet(taskID, task)
+	go func() {
+		res, err := generateVideo(context.Background(), videoGenSpec{
+			Prompt: req.Prompt, Model: req.Model, Seconds: req.Seconds,
+			Ratio: req.Ratio, Size: req.Size, ImageURL: imageURL,
+			FirstFrame: firstFrame, LastFrame: lastFrame,
+		})
+		task.Mu.Lock()
+		defer task.Mu.Unlock()
+		if err != nil {
+			task.Status = "failed"
+			task.Err = err.Error()
+			return
+		}
+		task.Status = "done"
+		task.Video = res.URL
+		task.Name = filepath.Base(res.File)
+	}()
+	c.JSON(http.StatusOK, gin.H{"ok": true, "task_id": taskID})
+}
+
+// HandleStudioAgnesChain POST /api/studio/agnes/chain —— 链式生成长视频
+// body: {prompt, ref_image?, segments, model?, seconds?, ratio?, size?, seed?}
+// 第一段用 ref_image（或纯文生），后续段首帧 = 上一段尾帧（抽帧接续），最后 ffmpeg 拼接。
+func HandleStudioAgnesChain(c *gin.Context) {
+	var req struct {
+		Prompt   string `json:"prompt"`
+		RefImage string `json:"ref_image"`
+		Segments int    `json:"segments"`
+		Model    string `json:"model"`
+		Seconds  string `json:"seconds"`
+		Ratio    string `json:"ratio"`
+		Size     string `json:"size"`
+		Seed     int64  `json:"seed"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt 不能为空"})
+		return
+	}
+	if req.Segments <= 0 || req.Segments > 12 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "segments 需在 1-12 之间"})
+		return
+	}
+	imageURL := ""
+	if req.RefImage != "" {
+		u, isV, errMsg := studioRefToDataURL(req.RefImage)
+		if errMsg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+		}
+		if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "首帧必须是图片"}); return }
+		imageURL = u
+	}
+	if req.Model == "" { req.Model = "agnes-video-2.5-flash" }
+	if req.Seconds == "" { req.Seconds = "5" }
+	if req.Ratio == "" { req.Ratio = "16:9" }
+	if req.Size == "" { req.Size = "720P" }
+
+	taskID := "chain_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	task := &agnesTask{Status: "pending", Size: req.Size, Seconds: req.Seconds}
+	agnesTaskSet(taskID, task)
+	go func() {
+		// 每段生成 + 抽尾帧接续
+		root, _ := backendRoot()
+		workDir := filepath.Join(root, studioOutputDir, "chain_"+taskID)
+		os.MkdirAll(workDir, 0o755)
+		var segFiles []string
+		prevURL := imageURL
+		var errMsg string
+		for i := 0; i < req.Segments; i++ {
+			res, err := generateVideo(context.Background(), videoGenSpec{
+				Prompt: req.Prompt + ", continuous cinematic shot, seamless transition, consistent style and lighting",
+				Model:  req.Model, Seconds: req.Seconds, Ratio: req.Ratio, Size: req.Size,
+				ImageURL: prevURL, Seed: req.Seed + int64(i),
+				OutDir: workDir, Name: fmt.Sprintf("seg_%d", i+1),
+			})
+			if err != nil {
+				errMsg = fmt.Sprintf("第 %d 段失败: %v", i+1, err)
+				break
+			}
+			segFiles = append(segFiles, res.File)
+			// 抽尾帧 → 下一段首帧
+			lastPNG := filepath.Join(workDir, fmt.Sprintf("last_%d.png", i+1))
+			args := []string{"-y", "-sseof", "-0.1", "-i", res.File, "-frames:v", "1", lastPNG}
+			if _, err := exec.Command("ffmpeg", args...).CombinedOutput(); err == nil {
+				if data, err := os.ReadFile(lastPNG); err == nil {
+					prevURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+				}
+			}
+		}
+		task.Mu.Lock()
+		defer task.Mu.Unlock()
+		if errMsg != "" {
+			task.Status = "failed"
+			task.Err = errMsg
+			return
+		}
+		// ffmpeg 拼接
+		listFile := filepath.Join(workDir, "list.txt")
+		var sb strings.Builder
+		for _, f := range segFiles {
+			sb.WriteString("file '" + strings.ReplaceAll(f, "'", "'\\''") + "'\n")
+		}
+		os.WriteFile(listFile, []byte(sb.String()), 0o644)
+		finalName := "chain_" + strconv.FormatInt(time.Now().UnixNano(), 36) + ".mp4"
+		finalPath := filepath.Join(videoOutputDir(), finalName)
+		concatArgs := []string{"-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", finalPath}
+		if _, err := exec.Command("ffmpeg", concatArgs...).CombinedOutput(); err != nil {
+			task.Status = "failed"
+			task.Err = "拼接失败: " + err.Error()
+			return
+		}
+		task.Status = "done"
+		task.Video = "/api/video/file/" + finalName
+		task.Name = finalName
+	}()
+	c.JSON(http.StatusOK, gin.H{"ok": true, "task_id": taskID, "segments": req.Segments})
+}
+
+// HandleStudioAgnesStatus GET /api/studio/agnes/status/:id
+func HandleStudioAgnesStatus(c *gin.Context) {
+	task := agnesTaskGet(c.Param("id"))
+	if task == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
+		return
+	}
+	task.Mu.Lock()
+	defer task.Mu.Unlock()
+	c.JSON(http.StatusOK, gin.H{
+		"ok": true, "status": task.Status, "video": task.Video, "name": task.Name,
+		"size": task.Size, "seconds": task.Seconds, "error": task.Err,
+	})
 }

@@ -127,6 +127,59 @@ func OpenAgentFSSession(project, workdir string, boundSessionID ...string) *agen
 	return sess
 }
 
+// restoreActiveSession 后端重启后 activeSession 内存态丢失（nil）时，从磁盘
+// sessions/*.json 恢复最近打开的会话。避免「后端重启 + 前端未刷新页面」时
+// agent 写操作因 sess==nil 被 OnBeforeWrite/OnAfterWrite 静默跳过、审计零记录，
+// 最终 workflow_done 收不到 changed_files（卡片不弹）的断链场景。
+func restoreActiveSession() *agentfsSession {
+	agentfsMu.Lock()
+	defer agentfsMu.Unlock()
+	if activeSession != nil {
+		return activeSession
+	}
+	root := agentfsRoot()
+	entries, err := os.ReadDir(filepath.Join(root, "sessions"))
+	if err != nil {
+		return nil
+	}
+	var latestName string
+	var latestMod time.Time
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().After(latestMod) {
+			latestName = e.Name()
+			latestMod = info.ModTime()
+		}
+	}
+	if latestName == "" {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(root, "sessions", latestName))
+	if err != nil {
+		return nil
+	}
+	var sess agentfsSession
+	if json.Unmarshal(data, &sess) != nil || sess.Workdir == "" {
+		return nil
+	}
+	// 恢复 seq 计数（与 OpenAgentFSSession 同口径），保证审计序号连续
+	if ad, err := os.ReadFile(agentfsAuditPath(sess.Project)); err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(ad)), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var a agentfsAudit
+			if json.Unmarshal([]byte(line), &a) == nil && a.Seq >= sess.Seq {
+				sess.Seq = a.Seq + 1
+			}
+		}
+	}
+	activeSession = &sess
+	return activeSession
+}
+
 // OnBeforeWrite 在文件工具真实落盘前调用：捕获 before 内容，存进 pending。
 // apply_patch 的每个新增/更新文件会分别调用一次；删除仍走不可逆审批。
 func OnBeforeWrite(fullName string, args map[string]any) {
@@ -138,6 +191,9 @@ func OnBeforeWrite(fullName string, args map[string]any) {
 	agentfsMu.Lock()
 	sess := activeSession
 	agentfsMu.Unlock()
+	if sess == nil {
+		sess = restoreActiveSession() // 后端重启后会话丢失：尝试从磁盘恢复
+	}
 	if sess == nil {
 		return
 	}
@@ -225,6 +281,91 @@ type beforeHashEntry struct {
 // agentfsPending 进程内 before 暂存，key = sessionID\x00relPath。
 var agentfsPending sync.Map
 
+// collectChangedFiles 聚合本次会话改过的文件列表，随 workflow_done 下发。
+// 每个文件：first_seq=本会话第一次写（回退基准=它之前的状态，即工作流前版本）、
+// last_seq=最后一次写、ops=本会话对该文件的写次数。sess 为空或没有改动返回 nil。
+func collectChangedFiles(sess *agentfsSession) []map[string]any {
+	if sess == nil {
+		return nil
+	}
+	ap := agentfsAuditPath(sess.Project)
+	data, err := os.ReadFile(ap)
+	if err != nil {
+		return nil
+	}
+	type fileAgg struct {
+		firstSeq     int
+		lastSeq      int
+		ops          int
+		lastOp       string
+		existsBefore bool
+	}
+	agg := map[string]*fileAgg{}
+	var order []string
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var a agentfsAudit
+		if json.Unmarshal([]byte(line), &a) != nil || a.SessionID != sess.SessionID {
+			continue
+		}
+		f, ok := agg[a.RelPath]
+		if !ok {
+			order = append(order, a.RelPath)
+			f = &fileAgg{}
+			agg[a.RelPath] = f
+		}
+		if f.firstSeq == 0 || a.Seq < f.firstSeq {
+			f.firstSeq = a.Seq
+			f.existsBefore = a.ExistsBefore // 首次写之前是否存在=回退是恢复还是删除
+		}
+		if a.Seq > f.lastSeq {
+			f.lastSeq = a.Seq
+			f.lastOp = a.Op
+		}
+		f.ops++
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	store := newHistoryStore(sess.Project)
+	files := make([]map[string]any, 0, len(order))
+	for _, rel := range order {
+		f := agg[rel]
+		added, removed := 0, 0
+		// 该文件 first_seq 的 before vs 当前真实盘 → 增删行数（卡片红绿 +− 数字）
+		if diffStr, err := store.Diff(sess.Workdir, rel, f.firstSeq); err == nil {
+			for _, ln := range strings.Split(diffStr, "\n") {
+				if strings.HasPrefix(ln, "+") && !strings.HasPrefix(ln, "+++") {
+					added++
+				} else if strings.HasPrefix(ln, "-") && !strings.HasPrefix(ln, "---") {
+					removed++
+				}
+			}
+		}
+		files = append(files, map[string]any{
+			"rel_path":     rel,
+			"first_seq":    f.firstSeq,
+			"last_seq":     f.lastSeq,
+			"ops":          f.ops,
+			"op":           f.lastOp,
+			"exists_before": f.existsBefore,
+			"added":        added,
+			"removed":      removed,
+		})
+	}
+	return files
+}
+
+// changedFilesPayload 聚合当前会话改过的文件列表，供 workflow_done 各分支统一下发。
+// 线程安全地取 activeSession；无会话或没改动返回 nil（前端不弹卡片）。
+func changedFilesPayload() []map[string]any {
+	agentfsMu.Lock()
+	defer agentfsMu.Unlock()
+	return collectChangedFiles(activeSession)
+}
+
 // --- HTTP handlers ---
 
 // AgentFSOpen POST /api/agentfs/open {project?, workdir?} 开辟/恢复会话。
@@ -273,15 +414,27 @@ func AgentFSLog(c *gin.Context) {
 	c.JSON(200, gin.H{"project": project, "log": logEntries, "current_branch": "main"})
 }
 
-// AgentFSDiff POST /api/agentfs/diff {project, seq} 返回该审计记录的 before 与当前文件的 diff。
+// AgentFSDiff POST /api/agentfs/diff {project?, seq} 返回该审计记录的 before 与当前文件的 diff。
+// project 可省略：为空时自动用当前 AgentFS 会话的项目（前端不用猜工作目录名）。
 func AgentFSDiff(c *gin.Context) {
 	var body struct {
 		Project string `json:"project"`
 		Seq     int    `json:"seq"`
 	}
 	_ = c.BindJSON(&body)
-	if body.Project == "" || body.Seq <= 0 {
-		c.JSON(400, gin.H{"error": "project 与 seq 必填"})
+	if body.Seq <= 0 {
+		c.JSON(400, gin.H{"error": "seq 必填"})
+		return
+	}
+	if body.Project == "" {
+		agentfsMu.Lock()
+		if activeSession != nil {
+			body.Project = activeSession.Project
+		}
+		agentfsMu.Unlock()
+	}
+	if body.Project == "" {
+		c.JSON(400, gin.H{"error": "project 必填（当前无 AgentFS 会话）"})
 		return
 	}
 	workdir := core.GetProjectRoot()
@@ -306,15 +459,31 @@ func AgentFSDiff(c *gin.Context) {
 	c.JSON(200, gin.H{"project": body.Project, "seq": body.Seq, "rel_path": a.RelPath, "diff": diff})
 }
 
-// AgentFSRestore POST /api/agentfs/restore {project, seq} 把某次写操作前的版本还原到真实盘。
+// AgentFSRestore POST /api/agentfs/restore {project?, seq, before?}
+// 默认把文件还原到 seq 对应的写操作之后的状态（时间线点节点恢复）；
+// before=true 时还原到该次写之前的状态（工作流结束卡片「回退到工作流前」），
+// 若文件是本次写新建的（不存在 before），则回退=删除该文件。
+// project 可省略：为空时自动用当前 AgentFS 会话的项目。
 func AgentFSRestore(c *gin.Context) {
 	var body struct {
 		Project string `json:"project"`
 		Seq     int    `json:"seq"`
+		Before  bool   `json:"before"`
 	}
 	_ = c.BindJSON(&body)
-	if body.Project == "" || body.Seq <= 0 {
-		c.JSON(400, gin.H{"error": "project 与 seq 必填"})
+	if body.Seq <= 0 {
+		c.JSON(400, gin.H{"error": "seq 必填"})
+		return
+	}
+	if body.Project == "" {
+		agentfsMu.Lock()
+		if activeSession != nil {
+			body.Project = activeSession.Project
+		}
+		agentfsMu.Unlock()
+	}
+	if body.Project == "" {
+		c.JSON(400, gin.H{"error": "project 必填（当前无 AgentFS 会话）"})
 		return
 	}
 	workdir := core.GetProjectRoot()
@@ -331,12 +500,31 @@ func AgentFSRestore(c *gin.Context) {
 		c.JSON(404, gin.H{"error": err.Error()})
 		return
 	}
-	data, err := store.Restore(body.Seq)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "还原失败: " + err.Error()})
-		return
-	}
 	dst := filepath.Join(workdir, a.RelPath)
+
+	var data []byte
+	if body.Before {
+		data, err = store.RestoreBefore(body.Seq)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "还原失败: " + err.Error()})
+			return
+		}
+		if data == nil {
+			// 文件是本次写新建的：回退到工作流前 = 删除它
+			if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+				c.JSON(500, gin.H{"error": "删除文件失败: " + err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"restored": a.RelPath, "seq": body.Seq, "deleted": true})
+			return
+		}
+	} else {
+		data, err = store.Restore(body.Seq)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "还原失败: " + err.Error()})
+			return
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		c.JSON(500, gin.H{"error": "创建目录失败: " + err.Error()})
 		return
