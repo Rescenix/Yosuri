@@ -30,7 +30,12 @@ var (
 
 // aggStatsInc 记录一次聚合端口调用（成功分支调用）。内存计数，异步上报，零阻塞。
 // tokens 用请求 JSON 长度估算（不读响应，避免多一次解析）。
-func aggStatsInc(model string, reqTokens int64) {
+// model 传 catalog ID（b.ID），与应用内 user_stats 同口径——云端才能按模型合并进排行榜。
+func aggStatsInc(b RouterBackend, reqTokens int64) {
+	model := b.ID
+	if model == "" {
+		model = b.Model // 兜底：上游模型名
+	}
 	aggStatsMu.Lock()
 	st := aggStatsBuf[model]
 	if st == nil {

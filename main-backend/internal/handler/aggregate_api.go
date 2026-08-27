@@ -260,7 +260,7 @@ func HandleAggregateChat(c *gin.Context) {
 				continue // 流还没开始，切下一个
 			}
 			// 流已建立：转发 SSE（开始后不再 failover，与主链语义一致）
-			aggStatsInc(b.Model, estimateJSONTokens(rawBody))
+			aggStatsInc(b, estimateJSONTokens(rawBody))
 			aggregateForwardSSE(c, b, resp)
 			return
 		}
@@ -270,7 +270,7 @@ func HandleAggregateChat(c *gin.Context) {
 			continue
 		}
 		// 200 已由 openAIChatOnce 内部处理 circuitSuccess；这里计一次聚合调用
-		aggStatsInc(b.Model, estimateJSONTokens(rawBody))
+		aggStatsInc(b, estimateJSONTokens(rawBody))
 		msg := map[string]any{"role": "assistant", "content": content}
 		if len(calls) > 0 {
 			tcs := make([]map[string]any, 0, len(calls))
