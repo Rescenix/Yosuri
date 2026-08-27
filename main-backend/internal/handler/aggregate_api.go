@@ -201,6 +201,9 @@ func HandleAggregateChat(c *gin.Context) {
 	if !aggregateAuth(c) {
 		return
 	}
+	// 先读原始 body（用于聚合统计 token 估算），再解析请求
+	rawBody, _ := io.ReadAll(c.Request.Body)
+	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
 	var req aggregateChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
@@ -257,6 +260,7 @@ func HandleAggregateChat(c *gin.Context) {
 				continue // 流还没开始，切下一个
 			}
 			// 流已建立：转发 SSE（开始后不再 failover，与主链语义一致）
+			aggStatsInc(b.Model, estimateJSONTokens(rawBody))
 			aggregateForwardSSE(c, b, resp)
 			return
 		}
@@ -265,7 +269,8 @@ func HandleAggregateChat(c *gin.Context) {
 			lastErr = err
 			continue
 		}
-		// 200 已由 openAIChatOnce 内部处理 circuitSuccess
+		// 200 已由 openAIChatOnce 内部处理 circuitSuccess；这里计一次聚合调用
+		aggStatsInc(b.Model, estimateJSONTokens(rawBody))
 		msg := map[string]any{"role": "assistant", "content": content}
 		if len(calls) > 0 {
 			tcs := make([]map[string]any, 0, len(calls))

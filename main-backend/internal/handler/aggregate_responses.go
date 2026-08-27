@@ -8,8 +8,10 @@ package handler
 // 完全复用现有链路。
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -32,6 +34,8 @@ func HandleAggregateResponses(c *gin.Context) {
 	if !aggregateAuth(c) {
 		return
 	}
+	rawBody, _ := io.ReadAll(c.Request.Body)
+	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
 	var req aggregateResponsesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
@@ -90,6 +94,7 @@ func HandleAggregateResponses(c *gin.Context) {
 				lastErr = err
 				continue
 			}
+			aggStatsInc(b.Model, estimateJSONTokens(rawBody))
 			aggregateForwardResponsesSSE(c, b, resp)
 			return
 		}
@@ -98,6 +103,7 @@ func HandleAggregateResponses(c *gin.Context) {
 			lastErr = err
 			continue
 		}
+		aggStatsInc(b.Model, estimateJSONTokens(rawBody))
 		c.JSON(http.StatusOK, buildAggregateResponses(b, content, calls))
 		return
 	}
