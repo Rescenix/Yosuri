@@ -53,9 +53,11 @@ jobs:
 
       - name: 构建前端 + 同步 embed
         run: |
-          cd main-backend/frontend
-          npm ci --prefix ../../main-frontend/beneficial-belt
+          cd main-frontend/beneficial-belt
+          npm ci
           npm run build
+          cd ../../main-backend/frontend
+          node copy-dist.mjs
 
       - name: Wails 构建 (Windows)
         if: runner.os == 'Windows'
