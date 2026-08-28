@@ -148,21 +148,21 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: r2 object put rescene-downloads/Rescene-windows-amd64-portable.zip --file assets/Rescene-windows-amd64-portable.zip --remote
+          command: r2 object put rescene-downloads/Rescene-windows-amd64-portable.zip --file assets/Rescene-windows-amd64-portable.zip
 
       - name: 同步 Linux tar.gz → R2
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: r2 object put rescene-downloads/Rescene-linux-amd64.tar.gz --file assets/Rescene-linux-amd64.tar.gz --remote
+          command: r2 object put rescene-downloads/Rescene-linux-amd64.tar.gz --file assets/Rescene-linux-amd64.tar.gz
 
       - name: 同步 macOS tar.gz → R2
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: r2 object put rescene-downloads/Rescene-darwin-amd64.tar.gz --file assets/Rescene-darwin-amd64.tar.gz --remote
+          command: r2 object put rescene-downloads/Rescene-darwin-amd64.tar.gz --file assets/Rescene-darwin-amd64.tar.gz
 
       - name: 清理 CDN 缓存
         env:
