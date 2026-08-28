@@ -59,13 +59,17 @@ jobs:
           cd ../../main-backend/frontend
           node copy-dist.mjs
 
+      - name: 安装 NSIS (Windows)
+        if: runner.os == 'Windows'
+        run: choco install nsis -y --no-progress
+
       - name: Wails 构建 (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $v = (Get-Content main-backend/wails.json -Raw | ConvertFrom-Json).info.productVersion
           cd main-backend
-          wails build -platform windows/amd64 -o rescene-package.exe -noinstaller -skipfrontend -ldflags "-X backend/internal/handler.AppVersion=$v"
+          wails build -platform windows/amd64 -o rescene-package.exe -s -ldflags "-X backend/internal/handler.AppVersion=$v"
 
       - name: 组装 Windows 便携版 zip
         if: runner.os == 'Windows'
@@ -80,7 +84,7 @@ jobs:
         run: |
           v=$(python3 -c "import json;print(json.load(open('main-backend/wails.json'))['info']['productVersion'])")
           cd main-backend
-          wails build -platform linux/amd64 -o rescene -skipfrontend -ldflags "-X backend/internal/handler.AppVersion=$v"
+          wails build -platform linux/amd64 -o rescene -s -ldflags "-X backend/internal/handler.AppVersion=$v"
           cd ..
           mkdir -p dist/Rescene-linux-amd64
           cp main-backend/build/bin/rescene dist/Rescene-linux-amd64/
@@ -91,7 +95,7 @@ jobs:
         run: |
           v=$(python3 -c "import json;print(json.load(open('main-backend/wails.json'))['info']['productVersion'])")
           cd main-backend
-          wails build -platform darwin/amd64 -o rescene -skipfrontend -ldflags "-X backend/internal/handler.AppVersion=$v"
+          wails build -platform darwin/amd64 -o rescene -s -ldflags "-X backend/internal/handler.AppVersion=$v"
           cd ..
           mkdir -p dist/Rescene-darwin-amd64
           cp main-backend/build/bin/rescene dist/Rescene-darwin-amd64/
