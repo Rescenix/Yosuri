@@ -1,0 +1,166 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-amd64
+            wplatform: windows/amd64
+            asset: Rescene-windows-amd64-portable.zip
+          - os: ubuntu-latest
+            name: linux-amd64
+            wplatform: linux/amd64
+            asset: Rescene-linux-amd64.tar.gz
+          - os: macos-latest
+            name: darwin-amd64
+            wplatform: darwin/amd64
+            asset: Rescene-darwin-amd64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+          cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: main-frontend/beneficial-belt/package-lock.json
+
+      - name: Linux 系统依赖 (GTK/WebKit)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libglib2.0-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libgbm-dev
+
+      - name: 安装 Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+
+      - name: 构建前端 + 同步 embed
+        run: |
+          cd main-backend/frontend
+          npm ci --prefix ../../main-frontend/beneficial-belt
+          npm run build
+
+      - name: Wails 构建 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = (Get-Content main-backend/wails.json -Raw | ConvertFrom-Json).info.productVersion
+          cd main-backend
+          wails build -platform windows/amd64 -o rescene-package.exe -noinstaller -ldflags "-X backend/internal/handler.AppVersion=$v"
+
+      - name: 组装 Windows 便携版 zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item main-backend/build/bin/rescene-package.exe dist/rescene.exe -Force
+          Compress-Archive -Path dist/rescene.exe -DestinationPath "dist/${{ matrix.asset }}" -Force
+
+      - name: Wails 构建 + 打包 (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/build-linux.sh amd64
+
+      - name: Wails 构建 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('main-backend/wails.json'))['info']['productVersion'])")
+          cd main-backend
+          wails build -platform darwin/amd64 -o rescene -ldflags "-X backend/internal/handler.AppVersion=$v"
+          cd ..
+          mkdir -p dist/Rescene-darwin-amd64
+          cp main-backend/build/bin/rescene dist/Rescene-darwin-amd64/
+          tar -C dist -czf "dist/${{ matrix.asset }}" Rescene-darwin-amd64
+
+      - name: 汇总 SHA256
+        shell: bash
+        run: |
+          cd dist
+          python3 - <<'PY'
+          import hashlib, glob
+          lines = []
+          for f in sorted(glob.glob('*')):
+              if f == 'SHA256SUMS.txt':
+                  continue
+              lines.append(hashlib.sha256(open(f, 'rb').read()).hexdigest() + '  ' + f)
+          open('SHA256SUMS.txt', 'w').write('\n'.join(lines) + '\n')
+          PY
+
+      - name: 上传产物 (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
+
+      - name: 上传 Release 资产
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/SHA256SUMS.txt
+            dist/*.zip
+            dist/*.tar.gz
+
+  sync-r2:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: 查看产物
+        run: ls -la assets/
+
+      - name: 同步 Windows zip → R2
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object put rescene-downloads/Rescene-windows-amd64-portable.zip --file assets/Rescene-windows-amd64-portable.zip --remote
+
+      - name: 同步 Linux tar.gz → R2
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object put rescene-downloads/Rescene-linux-amd64.tar.gz --file assets/Rescene-linux-amd64.tar.gz --remote
+
+      - name: 同步 macOS tar.gz → R2
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object put rescene-downloads/Rescene-darwin-amd64.tar.gz --file assets/Rescene-darwin-amd64.tar.gz --remote
+
+      - name: 清理 CDN 缓存
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_ZONE_TOKEN }}
+        run: |
+          ZONE_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=shanca.me" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['result'][0]['id'] if d.get('result') else '')")
+          echo "zone: $ZONE_ID"
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"files":["https://download.shanca.me/Rescene-windows-amd64-portable.zip","https://download.shanca.me/Rescene-linux-amd64.tar.gz","https://download.shanca.me/Rescene-darwin-amd64.tar.gz"]}'
+          echo "purge done"
