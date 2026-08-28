@@ -16,3 +16,8 @@ func hiddenCommand(name string, args ...string) *exec.Cmd {
 func hiddenCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
 	return exec.CommandContext(ctx, name, args...)
 }
+
+// detachedCommand is a no-op wrapper on non-Windows.
+func detachedCommand(name string, args ...string) *exec.Cmd {
+	return exec.Command(name, args...)
+}

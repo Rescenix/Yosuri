@@ -7,7 +7,6 @@ package handler
 
 import (
 	"image"
-	"image/color"
 )
 
 func init() {
@@ -33,19 +32,4 @@ func init() {
 	robotgoGetScreenSize = func() (int, int) { return 1920, 1080 }
 	robotgoGetDisplayCount = func() int { return 1 }
 	robotgoScroll = func(x, y int) {}
-
-	// 覆写 captureFullScreen / captureActiveWindow 的 stub 版本
-	captureFullScreen = func() (image.Image, error) {
-		img := image.NewRGBA(image.Rect(0, 0, 1, 1))
-		img.Set(0, 0, color.Black)
-		return img, fmt.Errorf("Computer Use 仅在 Windows 上可用")
-	}
-	captureActiveWindow = func() (image.Image, error) {
-		img := image.NewRGBA(image.Rect(0, 0, 1, 1))
-		img.Set(0, 0, color.Black)
-		return img, fmt.Errorf("Computer Use 仅在 Windows 上可用")
-	}
 }
-
-// 确保在非 Windows 平台上也能编译（引用 fmt）
-import "fmt"

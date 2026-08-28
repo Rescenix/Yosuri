@@ -33,3 +33,14 @@ func hiddenCommandContext(ctx context.Context, name string, args ...string) *exe
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 	return cmd
 }
+
+// detachedCommand spawns a fully detached process (DETACHED_PROCESS + new
+// process group) without a console window — used for DHS watchdog restart.
+func detachedCommand(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x00000200 | 0x00000008, // CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
+	}
+	return cmd
+}
