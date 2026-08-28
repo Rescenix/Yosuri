@@ -32,7 +32,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -1740,13 +1739,9 @@ func spawnDsh(nodeBin, binJS, profile string) error {
 		f, _ = os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	}
 	defer f.Close()
-	cmd := exec.Command(nodeBin, binJS, profile)
+	cmd := detachedCommand(nodeBin, binJS, profile)
 	cmd.Stdout = f
 	cmd.Stderr = f
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x00000200 | 0x00000008, // CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
-	}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
