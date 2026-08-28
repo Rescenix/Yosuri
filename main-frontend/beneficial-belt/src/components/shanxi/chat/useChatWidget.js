@@ -220,18 +220,30 @@ function adjustInputHeight() {
          // 四态机工作流留下的轨迹（后端 FlowBlock）：还原成一条 agentflow 消息，
          // AgentWorkflowPanel 照常渲染，工具行和展开的 Diff/输出跟刚跑完时一样。
          if (item?.blocks?.length) {
+           // 改动文件卡片持久化：历史里存了 type=changed-files 的特殊块，
+           // 重放时从中恢复 flow.changedFiles（2026-08-28）
+           let changedFiles = []
+           const kept = []
+           for (const b of item.blocks) {
+             if (b.type === 'changed-files') {
+               changedFiles = Array.isArray(b.changed_files) ? b.changed_files : []
+             } else {
+               kept.push(b)
+             }
+           }
            return {
              id: idx,
              kind: 'agentflow',
              sender: 'bot',
              status: 'completed',
-             blocks: item.blocks.map(b => ({
+             blocks: kept.map(b => ({
                ...b,
                // 落盘的是原始 JSON 参数串（跟 SSE action 事件同口径），面板要对象
                args: parseArgs(b.args),
                expanded: false
              })),
              subagents: [],
+             changedFiles,
              timestamp: item?.timestamp || new Date()
            }
          }

@@ -13,7 +13,7 @@
   "info": {
     "companyName": "Rescenix",
     "productName": "Rescene Agent",
-    "productVersion": "0.2.0",
+    "productVersion": "0.2.1",
     "copyright": "Copyright 2026 Rescenix",
     "comments": "Zero-friction local AI agent client"
   }

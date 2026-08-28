@@ -1,7 +1,7 @@
 <template>
   <!-- 用户消息导航轴：一个节点 = 一条用户消息，点它跳过去。
        固定在聊天正文左侧居中，用短横线表达整段对话的位置。 -->
-  <div v-if="items.length" class="umr" @mouseleave="hoverIdx = -1">
+  <div v-if="items.length" class="umr" @mouseleave="scheduleHide()">
     <div ref="trackRef" class="umr-track" @wheel.prevent="onWheel">
       <div
         v-for="(m, i) in items"
@@ -21,10 +21,26 @@
       </div>
     </div>
 
-    <!-- 悬浮预览从轴的右侧展开，跟随当前节点。 -->
-    <div v-if="hovered" class="umr-tip" :style="{ top: tipTop + 'px' }">
-      <span class="umr-tip-idx">#{{ hoverIdx + 1 }}</span>
-      <span class="umr-tip-text">{{ preview(hovered) }}</span>
+    <!-- 悬浮时展开完整用户消息列表（多条），点击任意一条跳转；
+         列表内滚轮滚动时选中跟随（hoverIdx 同步），不只依赖刻度 -->
+    <div
+      v-if="hovered"
+      ref="listRef"
+      class="umr-list"
+      @scroll="onListScroll"
+      @mouseenter="cancelHide()"
+      @mouseleave="scheduleHide()"
+    >
+      <div
+        v-for="(m, i) in items"
+        :key="m.id"
+        class="umr-list-row"
+        :class="{ active: jumpIdx === i, hovered: hoverIdx === i }"
+        @mouseenter="hoverIdx = i"
+        @click="$emit('jump', m.id)"
+      >
+        <span class="umr-list-text">{{ preview(m) }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -41,19 +57,30 @@ const props = defineProps({
 defineEmits(['jump'])
 
 const trackRef = ref(null)
+const listRef = ref(null)
 const hoverIdx = ref(-1)
 const tipTop = ref(0)
+let hideTimer = null
 
 // 只要用户真正说过的话：附件占位、空内容的气泡不该占一个点位
 const items = computed(() =>
   (props.messages || []).filter(m => m.sender === 'user' && (m.content || '').trim())
 )
 
+// 刻度轴当前位置：activeId 空或找不到时回落到最后一条（当前位置指示）
 const activeIdx = computed(() => {
   if (props.activeId == null || props.activeId === '') return items.value.length - 1
   const target = String(props.activeId)
   const idx = items.value.findIndex(m => String(m.id) === target)
   return idx >= 0 ? idx : items.value.length - 1
+})
+
+// 列表的跳转目标索引：必须精确匹配，找不到就 -1（不回落最新）
+// 避免「activeId 设了但 id 对不上时又把最新消息标成选中」的 bug
+const jumpIdx = computed(() => {
+  if (props.activeId == null || props.activeId === '') return -1
+  const target = String(props.activeId)
+  return items.value.findIndex(m => String(m.id) === target)
 })
 
 const hovered = computed(() => (hoverIdx.value >= 0 ? items.value[hoverIdx.value] : null))
@@ -78,6 +105,30 @@ function onWheel(e) {
   el.scrollTop += (e.deltaY || e.deltaX)
 }
 
+// 列表滚动时选中跟随：把 hoverIdx 同步到当前视口顶部那一条，
+// 刻度轴波浪也跟着走——滚动列表就能选中，不必回去点刻度。
+function onListScroll() {
+  const el = listRef.value
+  if (!el) return
+  const rows = el.querySelectorAll('.umr-list-row')
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].offsetTop + rows[i].offsetHeight / 2 >= el.scrollTop) {
+      hoverIdx.value = i
+      break
+    }
+  }
+}
+
+// 鼠标离开刻度/列表时延迟 200ms 再隐藏——留出从刻度移到列表的时间，
+// 否则列表一弹鼠标一移开就消失，根本点不到列表里的条目。
+function scheduleHide() {
+  if (hideTimer) clearTimeout(hideTimer)
+  hideTimer = setTimeout(() => { hoverIdx.value = -1 }, 200)
+}
+function cancelHide() {
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null }
+}
+
 // 气泡跟着当前悬浮的节点定位；节点可能被滚出可视区，所以要减掉 scrollTop。
 watch(hoverIdx, async (i) => {
   if (i < 0) return
@@ -88,6 +139,15 @@ watch(hoverIdx, async (i) => {
   if (!el || !dot) return
   const raw = dot.offsetTop - el.scrollTop + dot.offsetHeight / 2
   tipTop.value = Math.max(0, Math.min(raw, el.clientHeight))
+  // 刻度选中 → 列表滚动跟随到该行（双向联动）
+  const lst = listRef.value
+  if (lst) {
+    const row = lst.querySelectorAll('.umr-list-row')[i]
+    if (row) {
+      const mid = row.offsetTop + row.offsetHeight / 2 - lst.clientHeight / 2
+      if (Math.abs(mid - lst.scrollTop) > 4) lst.scrollTop = Math.max(0, mid)
+    }
+  }
 })
 
 // 新消息进来时自动滚到底，保持最近的提问可见。
@@ -183,36 +243,53 @@ watch(() => items.value.length, async () => {
   background-color: var(--app-text, #27272a);
 }
 
-.umr-tip {
+/* 悬浮列表：从轴的右侧紧贴展开（无缝隙，鼠标可顺滑移入），显示全部用户消息 */
+.umr-list {
   position: absolute;
-  left: calc(100% + 24px);
-  transform: translateY(-50%);
+  left: calc(100%);
+  top: 0;
   width: min(360px, 42vw);
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  padding: 6px 10px;
-  border-radius: 10px;
+  max-height: 46vh;
+  overflow-y: auto;
   background: var(--app-surface);
   border: 1px solid var(--app-border);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  z-index: 60;
+}
+.umr-list-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
   font-size: 12px;
   line-height: 1.4;
   color: var(--app-text);
-  white-space: nowrap;
+}
+.umr-list-row:hover,
+.umr-list-row.hovered {
+  background: color-mix(in srgb, var(--app-accent, #6366f1) 10%, transparent);
+}
+.umr-list-row.active {
+  background: color-mix(in srgb, var(--app-accent, #6366f1) 14%, transparent);
+  font-weight: 600;
+}
+.umr-list-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: none;
-  z-index: 60;
+  white-space: nowrap;
 }
-.umr-tip-idx { color: var(--app-text-faint); flex: 0 0 auto; font-weight: 600; }
-.umr-tip-text { overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 720px) {
   .umr { left: 0; }
   .umr-track { padding-inline: 3px; }
   .umr-node-wrap.wave-peak .umr-node { width: 28px; }
-  .umr-tip { width: min(300px, 76vw); }
+  .umr-list { width: min(300px, 76vw); }
 }
 </style>
 
@@ -298,16 +375,22 @@ watch(() => items.value.length, async () => {
   background: linear-gradient(90deg, rgba(240,98,146,0.25), rgba(240,98,146,0.95), rgba(240,98,146,0.25));
 }
 
-/* 悬浮提示：粉丝绒卡片 */
-[data-skin="witchtrial_hiiro"] .umr-tip {
+/* 悬浮列表：粉丝绒卡片 */
+[data-skin="witchtrial_hiiro"] .umr-list {
   background: rgba(32, 16, 22, 0.96);
   border-color: rgba(233, 30, 99, 0.32);
-  color: #ffeef4;
   border-radius: 14px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 0 22px rgba(233, 30, 99, 0.05);
 }
-[data-skin="witchtrial_hiiro"] .umr-tip-idx {
-  color: #ff9ec4;
+[data-skin="witchtrial_hiiro"] .umr-list-row:hover,
+[data-skin="witchtrial_hiiro"] .umr-list-row.hovered {
+  background: rgba(233, 30, 99, 0.12);
+}
+[data-skin="witchtrial_hiiro"] .umr-list-row.active {
+  background: rgba(233, 30, 99, 0.2);
+}
+[data-skin="witchtrial_hiiro"] .umr-list-text {
+  color: #ffeef4;
 }
 
 /* ==================== 魔女审判 · 用户消息导航轴 ==================== */
@@ -374,15 +457,21 @@ watch(() => items.value.length, async () => {
   box-shadow: 0 0 8px rgba(199, 62, 62, 0.5);
 }
 
-/* 悬浮提示：羊皮纸 */
-[data-skin="witchtrial"] .umr-tip {
+/* 悬浮列表：羊皮纸 */
+[data-skin="witchtrial"] .umr-list {
   background: rgba(28, 20, 16, 0.96);
   border-color: rgba(139, 110, 90, 0.38);
-  color: #e8ddd0;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 22px rgba(139, 110, 90, 0.06);
 }
-[data-skin="witchtrial"] .umr-tip-idx {
-  color: #e08a78;
+[data-skin="witchtrial"] .umr-list-row:hover,
+[data-skin="witchtrial"] .umr-list-row.hovered {
+  background: rgba(139, 110, 90, 0.12);
+}
+[data-skin="witchtrial"] .umr-list-row.active {
+  background: rgba(139, 110, 90, 0.2);
+}
+[data-skin="witchtrial"] .umr-list-text {
+  color: #e8ddd0;
 }
 
 /* 主题只改变颜色，不改变 Codex 式竖向刻度的尺寸与形态。 */

@@ -387,6 +387,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				historyFinal = "用户主动停止了工作流。"
 			}
 		}
+		// 改动文件卡片持久化：把本次工作流的 changed_files 作为特殊 FlowBlock
+		// 追加进历史 blocks，刷新页面重放时前端从 blocks 恢复卡片（2026-08-28）。
+		if files := changedFilesPayload(); len(files) > 0 {
+			flowBlocks = append(flowBlocks, FlowBlock{
+				Type:        "changed-files",
+				ChangedFiles: files,
+			})
+		}
 		r.persistWorkflowHistory(
 			sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
 		)

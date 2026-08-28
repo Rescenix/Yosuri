@@ -337,6 +337,7 @@
 import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { API_BASE_URL } from '../config.js'
+import { backendURL } from '../desktopTransport.js'
 
 const topic = ref('')
 const voice = ref('zh-TW-HsiaoChenNeural')  // 曉臻默认
@@ -390,7 +391,7 @@ async function doDelete() {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
   try {
     const r = await fetch(API_BASE_URL + '/api/studio/library')
-    if (r.ok) { const d = await r.json(); if (d.assets) libraryAssets.value = d.assets }
+        if (r.ok) { const d = await r.json(); if (d.assets) libraryAssets.value = d.assets.map(a => ({...a, src: backendURL(a.src)})) }
   } catch (e) {}
 }
 const assetFilter = ref('all') // all / image / video / private
@@ -443,7 +444,7 @@ async function extractFrame() {
       toastMsg.value = `已抽帧：${d.name}（可作图片参考）`
       // 刷新素材库
       const rr = await fetch(API_BASE_URL + '/api/studio/library')
-      if (rr.ok) { const dd = await rr.json(); if (dd.assets) libraryAssets.value = dd.assets }
+      if (rr.ok) { const dd = await rr.json(); if (dd.assets) libraryAssets.value = dd.assets.map(a => ({...a, src: backendURL(a.src)})) }
     } else {
       toastMsg.value = `抽帧失败：${d.error || ''}`
     }
@@ -791,7 +792,7 @@ onMounted(async () => {
     const r = await fetch(API_BASE_URL + '/api/studio/library')
     if (r.ok) {
       const d = await r.json()
-      if (d.assets?.length) libraryAssets.value = d.assets
+      if (d.assets?.length) libraryAssets.value = d.assets.map(a => ({...a, src: backendURL(a.src)}))
     }
   } catch (e) { /* 后端未启动则保持空 */ }
   // 恢复未完成的异步生成任务（跳走去聊天后回来）

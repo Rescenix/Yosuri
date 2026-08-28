@@ -26,15 +26,17 @@
           v-if="dlState === 'done'"
           class="update-modal-btn primary"
           type="button"
-          :disabled="opening"
-          @click="onInstall"
-        >{{ opening ? '正在启动…' : '一键安装' }}</button>
+          disabled
+        >已就绪，下次启动生效</button>
         <button
           v-else-if="dlState === 'downloading'"
-          class="update-modal-btn primary"
+          class="update-modal-btn primary dl-progress-btn"
           type="button"
           disabled
-        >正在准备安装包…</button>
+        >
+          <span class="dl-progress-fill" :style="{ width: dlPercent + '%' }"></span>
+          <span class="dl-progress-text">{{ dlPercentText }}</span>
+        </button>
         <button
           v-else
           class="update-modal-btn primary"
@@ -43,14 +45,6 @@
         >安装包未就绪</button>
       </div>
       <div v-if="dlState === 'error'" class="update-modal-dlerr">{{ dlError }}</div>
-    </div>
-    <!-- 更新进度占位层：点击一键安装后显示动画进度条，应用重启前有反馈（2026-08-16） -->
-    <div v-if="installing" class="update-progress-mask">
-      <div class="update-progress-card">
-        <div class="update-progress-title">正在更新…</div>
-        <div class="update-progress-track"><div class="update-progress-bar" /></div>
-        <div class="update-progress-hint">更新完成后应用将自动重启</div>
-      </div>
     </div>
   </div>
 </template>
@@ -65,10 +59,16 @@ const props = defineProps({
 })
 const emit = defineEmits(['close'])
 
-const opening = ref(false)
-const installing = ref(false) // 一键安装后显示进度占位层（应用即将重启，2026-08-16）
 const dlState = ref('downloading') // downloading | done | error
 const dlError = ref('')
+// 下载进度（后端 /api/update/download/status 返回 percent 0~100；下载完自动应用在下次启动）
+const dlPercent = ref(0)
+const dlPercentText = computed(() => {
+  const p = Math.round(dlPercent.value)
+  if (p <= 0) return '正在下载…'
+  if (p >= 100) return '解压安装包…'
+  return `下载中 ${p}%`
+})
 let dlTimer = null
 
 const renderedNotes = computed(() => renderMarkdown(props.update.release_notes || ''))
@@ -100,6 +100,7 @@ async function refreshStatus() {
       dlState.value = 'done'
     } else if (d.state === 'downloading') {
       dlState.value = 'downloading'
+      if (typeof d.percent === 'number') dlPercent.value = d.percent
       pollStatus()
     } else if (d.state === 'error') {
       dlState.value = 'error'
@@ -143,6 +144,7 @@ function pollStatus() {
       const d = await res.json()
       if (d.state === 'downloading') {
         dlState.value = 'downloading'
+        if (typeof d.percent === 'number') dlPercent.value = d.percent
       } else if (d.state === 'done') {
         dlState.value = 'done'
         clearInterval(dlTimer)
@@ -155,27 +157,6 @@ function pollStatus() {
       }
     } catch { /* 轮询失败忽略 */ }
   }, 1500)
-}
-
-// 一键安装：直接拉起本地已下载的安装程序
-async function onInstall() {
-  opening.value = true
-  try {
-    const res = await fetch('/api/update/install', { method: 'POST' })
-    if (res.ok) {
-      // 不关闭弹窗：显示进度占位层，应用将在 3 秒后退出并自动重启（2026-08-16）
-      installing.value = true
-    } else {
-      const d = await res.json().catch(() => ({}))
-      dlError.value = d.error || '启动安装失败'
-      dlState.value = 'error'
-    }
-  } catch {
-    dlError.value = '启动安装失败'
-    dlState.value = 'error'
-  } finally {
-    opening.value = false
-  }
 }
 
 onUnmounted(() => {
@@ -330,6 +311,26 @@ onUnmounted(() => {
 }
 .update-modal-btn.primary:hover { background: var(--app-accent-hover); }
 .update-modal-btn.primary:disabled { cursor: default; opacity: 0.6; }
+/* 下载进度涂黑按钮：用填充色从左到右表示真实下载进度（2026-08-28 用户定稿） */
+.dl-progress-btn {
+  position: relative;
+  overflow: hidden;
+  min-width: 130px;
+}
+.dl-progress-btn .dl-progress-fill {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  background: rgba(0, 0, 0, 0.28); /* 已下载部分涂黑 */
+  transition: width 0.3s ease;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.dl-progress-btn .dl-progress-text {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+}
 .update-modal-dlerr {
   margin: 0 20px 14px;
   color: #e5484d;

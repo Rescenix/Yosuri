@@ -1047,47 +1047,34 @@
                 <button
                   class="api-form-btn save"
                   type="button"
-                  v-if="dlState === 'downloading'"
+                  v-if="dlState === 'done'"
                   disabled
-                >正在准备安装包…</button>
+                >已就绪，下次启动生效</button>
                 <button
-                  class="api-form-btn save"
+                  class="api-form-btn save dl-progress-btn"
                   type="button"
-                  v-else-if="dlState === 'done'"
-                  @click="installUpdate"
-                  :disabled="dlWorking"
-                >{{ dlWorking ? '正在启动…' : '一键安装' }}</button>
+                  v-else-if="dlState === 'downloading'"
+                  disabled
+                >
+                  <span class="dl-progress-fill" :style="{ width: dlPercent + '%' }"></span>
+                  <span class="dl-progress-text">{{ dlPercentText }}</span>
+                </button>
                 <button
                   class="api-form-btn save"
                   type="button"
                   v-else
-                  @click="startAutoDownload"
-                  :disabled="dlWorking"
-                >{{ dlWorking ? '正在下载…' : '下载安装包' }}</button>
+                  disabled
+                >正在下载…</button>
                 <span v-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
               </div>
 
-              <!-- 偏好开关：总是显示（不依赖是否有更新，2026-08-16 修复） -->
+              <!-- 偏好开关：不提示版本更新（2026-08-28 起不再区分测试版，删掉「热更新测试版本」开关） -->
               <div class="profile-actions" style="margin-top: 10px; align-items: center;">
-                <label class="param-switch" title="开启后接收测试版（alpha/beta）更新并热更新直更；关闭后只接收正式版更新">
-                  <input type="checkbox" v-model="testUpdates" @change="onTestUpdatesChange" />
-                  <span class="param-switch-track"></span>
-                </label>
-                <span class="param-value">热更新测试版本</span>
-                <label class="param-switch" style="margin-left: auto;" title="关闭后启动不再检查/弹窗提示更新">
+                <label class="param-switch" title="关闭后启动不再检查/弹窗提示更新">
                   <input type="checkbox" v-model="notifyDisabled" @change="onNotifyDisabledChange" />
                   <span class="param-switch-track"></span>
                 </label>
                 <span class="param-value">不提示版本更新</span>
-              </div>
-            </div>
-
-            <!-- 更新进度占位层：版本 tab 一键安装后显示（2026-08-16） -->
-            <div v-if="installing" class="settings-update-progress-mask">
-              <div class="update-progress-card">
-                <div class="update-progress-title">正在更新…</div>
-                <div class="update-progress-track"><div class="update-progress-bar" /></div>
-                <div class="update-progress-hint">更新完成后应用将自动重启</div>
               </div>
             </div>
           </div>
@@ -1160,7 +1147,7 @@ import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useThem
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
-import { isUpdateNotifyDisabled, setUpdateNotifyDisabled, isTestUpdatesEnabled, setTestUpdatesEnabled, isPrereleaseVersionString } from '../../../composables/updatePrefs.js'
+import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
 import { useAuth } from '../../../composables/useAuth.js'
 import FreeOrderModal from './FreeOrderModal.vue'
 
@@ -2554,13 +2541,18 @@ async function saveProfile() {
 const versionLoading = ref(false)
 const versionInfo = ref({})
 const notifyDisabled = ref(isUpdateNotifyDisabled())
-// 是否接收测试版（alpha）更新：默认开启（2026-08-16）
-const testUpdates = ref(isTestUpdatesEnabled())
 // 自动下载状态：idle | downloading | done | error
 const dlState = ref('idle')
 const dlError = ref('')
 const dlWorking = ref(false)
-const installing = ref(false) // 版本 tab 一键安装后显示进度占位层（2026-08-16）
+// 下载进度（后端 /api/update/download/status 返回 percent 0~100；下载完自动应用在下次启动）
+const dlPercent = ref(0)
+const dlPercentText = computed(() => {
+  const p = Math.round(dlPercent.value)
+  if (p <= 0) return '正在下载…'
+  if (p >= 100) return '解压安装包…'
+  return `下载中 ${p}%`
+})
 let dlTimer = null
 
 async function loadVersion() {
@@ -2568,14 +2560,9 @@ async function loadVersion() {
   try {
     const res = await fetch('/api/update/check')
     if (res.ok) {
-      const data = await res.json()
-      const u = data.ok && data.update ? data.update : {}
-      // 关闭「热更新测试版本」时忽略预发布（alpha/beta/rc）更新（2026-08-16）
-      if (u.has_update && !testUpdates.value && isPrereleaseVersionString(u.latest_version)) {
-        versionInfo.value = { ...u, has_update: false }
-      } else {
-        versionInfo.value = u
-      }
+          const data = await res.json()
+          const u = data.ok && data.update ? data.update : {}
+          versionInfo.value = u
     }
   } catch (e) {
     versionInfo.value = {}
@@ -2597,16 +2584,15 @@ async function refreshDlStatus() {
       dlState.value = 'done'
     } else if (d.state === 'downloading') {
       dlState.value = 'downloading'
+      if (typeof d.percent === 'number') dlPercent.value = d.percent
       pollDownloadStatus()
     } else if (d.state === 'error') {
       dlState.value = 'error'
       dlError.value = d.error || '下载失败'
     } else {
-      // idle：静默下载可能正在后台进行（App.vue 启动时已触发），
-      // 轮询等它完成自动变「一键安装」，不再卡死「下载安装包」
-      // （2026-08-25 修复：静默下载极快但按钮不实时更新的 bug）
-      dlState.value = 'idle'
-      pollDownloadStatus()
+      // idle：App.vue 启动/周期轮询已触发后台下载（2026-08-28 用户定稿：无需手动点下载），
+      // 这里兜底再触发一次并轮询进度；下载完自动应用在下次启动。
+      startAutoDownload()
     }
   } catch { /* 轮询失败忽略 */ }
 }
@@ -2645,6 +2631,7 @@ async function pollDownloadStatus() {
       const d = await res.json()
       if (d.state === 'downloading') {
         dlState.value = 'downloading'
+        if (typeof d.percent === 'number') dlPercent.value = d.percent
       } else if (d.state === 'done') {
         dlState.value = 'done'
         clearInterval(dlTimer)
@@ -2659,34 +2646,8 @@ async function pollDownloadStatus() {
   }, 800)
 }
 
-async function installUpdate() {
-  dlWorking.value = true
-  try {
-    const res = await fetch('/api/update/install', { method: 'POST' })
-    if (res.ok) {
-      dlState.value = 'done'
-      // 应用即将退出重启，显示进度占位层（2026-08-16）
-      installing.value = true
-    } else {
-      const d = await res.json().catch(() => ({}))
-      dlError.value = d.error || '启动安装失败'
-      dlState.value = 'error'
-    }
-  } catch (e) {
-    dlError.value = '启动安装失败'
-    dlState.value = 'error'
-  } finally {
-    dlWorking.value = false
-  }
-}
-
 function onNotifyDisabledChange() {
   setUpdateNotifyDisabled(notifyDisabled.value)
-}
-
-function onTestUpdatesChange() {
-  setTestUpdatesEnabled(testUpdates.value)
-  loadVersion() // 切换后重新检查（关闭时立即隐藏测试版更新）
 }
 
 function handleEsc(e) {
@@ -3515,65 +3476,26 @@ onUnmounted(() => {
 }
 .version-value { color: var(--app-text); font-size: 12.5px; font-weight: 600; }
 .version-new { color: var(--app-accent); }
-.update-progress {
-  height: 8px;
-  background: var(--app-bg-soft, rgba(128,128,128,.15));
-  border-radius: 999px;
-  overflow: hidden;
-  min-width: 120px;
-}
-.update-progress-bar {
-  height: 100%;
-  background: var(--app-accent);
-  border-radius: 999px;
-  transition: width .3s ease;
-}
 .update-err { color: #e5484d; font-size: 12.5px; word-break: break-all; }
-.settings-update-progress-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(20, 18, 15, 0.45);
-  backdrop-filter: blur(4px);
-  z-index: 20030;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.settings-update-progress-mask .update-progress-card {
-  width: 320px;
-  background: var(--app-surface);
-  border-radius: 14px;
-  padding: 24px 24px 20px;
-  box-shadow: var(--app-shadow);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.settings-update-progress-mask .update-progress-title {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--app-text);
-}
-.settings-update-progress-mask .update-progress-track {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--app-surface-3);
+/* 下载进度涂黑按钮：用填充色从左到右表示真实下载进度（2026-08-28 用户定稿） */
+.dl-progress-btn {
+  position: relative;
   overflow: hidden;
+  min-width: 130px;
 }
-.settings-update-progress-mask .update-progress-bar {
-  width: 40%;
-  height: 100%;
-  border-radius: 3px;
-  background: var(--app-accent);
-  animation: settings-update-progress-slide 1.1s ease-in-out infinite;
+.dl-progress-btn .dl-progress-fill {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  background: rgba(0, 0, 0, 0.28);
+  transition: width 0.3s ease;
+  pointer-events: none;
+  border-radius: inherit;
 }
-@keyframes settings-update-progress-slide {
-  0% { margin-left: -40%; }
-  100% { margin-left: 100%; }
-}
-.settings-update-progress-mask .update-progress-hint {
-  font-size: 11.5px;
-  color: var(--app-text-faint);
+.dl-progress-btn .dl-progress-text {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
 }
 .update-notes {
   flex: 1;

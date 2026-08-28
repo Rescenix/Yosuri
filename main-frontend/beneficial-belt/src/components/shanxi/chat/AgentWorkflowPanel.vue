@@ -279,6 +279,18 @@
       </div>
     </div>
   </div>
+  <!-- 回退确认弹窗（轻量模态，替代原生 window.confirm） -->
+  <Teleport to="body">
+    <div v-if="confirmRestoreTarget" class="confirm-overlay" @click.self="confirmRestoreTarget = null">
+      <div class="confirm-dialog">
+        <p>{{ confirmRestoreMsg }}</p>
+        <div class="confirm-actions">
+          <button class="confirm-btn cancel" @click="confirmRestoreTarget = null">取消</button>
+          <button class="confirm-btn ok" @click="doRestore()">确认回退</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -301,6 +313,9 @@ const changedDiffRaw = ref('')
 const changedMsg = ref('')
 const changedMsgErr = ref(false)
 const changedRestoring = ref(false)
+// 回退确认弹窗（轻量模态，替代原生 window.confirm）
+const confirmRestoreTarget = ref(null)
+const confirmRestoreMsg = ref('')
 
 // 当前项目名：从 ChatWidget 的工作目录 localStorage 取（与 /api/agentfs/* 的 project 口径一致）
 function currentProjectName() {
@@ -330,6 +345,12 @@ const changedDiffLines = computed(() => {
 
 async function previewChangedFile(f) {
   if (!f || !f.first_seq) return
+  // 已展开 → 再次点击收回（2026-08-28 用户反馈：预览展开后点不收回）
+  if (changedDiffOpen.value) {
+    changedDiffOpen.value = false
+    changedDiffRaw.value = ''
+    return
+  }
   changedDiffOpen.value = true
   changedDiffLoading.value = true
   changedDiffError.value = ''
@@ -353,10 +374,17 @@ async function previewChangedFile(f) {
 
 async function restoreChangedFile(f) {
   if (!f || !f.first_seq) return
-  const isNew = f.exists_before === false
-  if (!window.confirm(isNew
-    ? `删除 ${f.rel_path}（本次工作流新建的文件，回退=删除）？`
-    : `回退 ${f.rel_path} 到本次工作流开始前的版本？`)) return
+  // 轻量确认弹窗，替代原生 window.confirm（2026-08-28 用户反馈）
+  confirmRestoreTarget.value = f
+  confirmRestoreMsg.value = f.exists_before === false
+    ? `删除 ${f.rel_path}？（本次工作流新建的文件，回退=删除）`
+    : `回退 ${f.rel_path} 到本次工作流开始前的版本？`
+}
+
+async function doRestore() {
+  const f = confirmRestoreTarget.value
+  confirmRestoreTarget.value = null
+  if (!f || !f.first_seq) return
   changedRestoring.value = true
   changedMsg.value = ''
   changedMsgErr.value = false
@@ -1907,12 +1935,12 @@ function toolBodyText(b) {
   color: var(--app-text);
 }
 .flow-changed-code-line.add {
-  background: color-mix(in srgb, #2ea043 14%, transparent);
-  color: #7ee787;
+  background: color-mix(in srgb, #1f6f3a 12%, transparent);
+  color: #7aa38a;
 }
 .flow-changed-code-line.del {
-  background: color-mix(in srgb, #f85149 14%, transparent);
-  color: #ffa198;
+  background: color-mix(in srgb, #a33a3c 12%, transparent);
+  color: #c9969a;
 }
 .flow-changed-line-no {
   flex-shrink: 0;

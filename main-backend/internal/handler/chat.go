@@ -47,6 +47,8 @@ type FlowBlock struct {
 	Options  []askUserOption `json:"options,omitempty"`  // 候选选项
 	Answer   string          `json:"answer,omitempty"`   // 用户回答后回填
 	Multi    bool            `json:"multi,omitempty"`    // 是否多选
+	// changed-files 块专用字段（工作流收尾的改动文件卡片，持久化用）
+	ChangedFiles []map[string]any `json:"changed_files,omitempty"`
 }
 
 type DSReq struct {

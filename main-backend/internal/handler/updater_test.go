@@ -352,32 +352,5 @@ func TestIsPrereleaseVersion(t *testing.T) {
 
 // TestPatchTargetIsStable 自动应用按【目标版本】判断：正式版补丁弹窗、预发布补丁直更
 // （2026-08-16 用户定稿修订，从 exe 内嵌版本串识别）。
-func TestPatchTargetIsStable(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, content string) string {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-	// 预发布 exe（只有 alpha 串）→ 预发布补丁 → 自动应用（false）
-	if patchTargetIsStable(write("pre.exe", "version 0.1.3-alpha.6 build")) {
-		t.Fatal("alpha 串应判预发布（自动应用）")
-	}
-	// 正式版 exe（裸 semver）→ 正式版补丁 → 弹窗（true）
-	if !patchTargetIsStable(write("stable.exe", "version 0.1.3 build")) {
-		t.Fatal("裸 semver 应判正式版（弹窗确认）")
-	}
-	// 正式版 exe 可能残留旧 alpha 串（前端 JS）→ 有裸 semver 即正式版
-	if !patchTargetIsStable(write("mixed.exe", "0.1.3-alpha.3 x 0.1.3")) {
-		t.Fatal("混合串含裸 semver 应判正式版")
-	}
-	// 无版本串/文件不存在 → 按预发布处理
-	if patchTargetIsStable(write("none.exe", "no version here")) {
-		t.Fatal("无版本串应判预发布")
-	}
-	if patchTargetIsStable(filepath.Join(dir, "missing.exe")) {
-		t.Fatal("文件不存在应判预发布")
-	}
-}
+// TestPatchTargetIsStable 已随函数一起删除（2026-08-28：不再发测试版，
+// 正式版同样启动自动应用，patchTargetIsStable 判断成为死代码）。

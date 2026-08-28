@@ -1321,6 +1321,30 @@ min-height: 90px !important;
   cursor: pointer;
   transition: all 0.2s;
 }
+/* 回退确认弹窗——覆盖层 + 按钮颜色（2026-08-28 替代 window.confirm） */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.confirm-btn.cancel {
+  background: var(--app-surface-3);
+  color: var(--app-text);
+}
+.confirm-btn.cancel:hover {
+  opacity: 0.8;
+}
+.confirm-btn.ok {
+  background: #2ea043;
+  color: #fff;
+}
+.confirm-btn.ok:hover {
+  background: #238636;
+}
 .btn-cancel {
   background: var(--app-surface-3);
   color: var(--app-text);

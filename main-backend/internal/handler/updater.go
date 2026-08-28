@@ -28,7 +28,10 @@ const (
 	updateRepoName  = "ResceneAgent"
 	// 官网 update.json 优先（国内可达的 Cloudflare CDN），GitHub API 兜底
 	siteUpdateURL  = "https://rescene.shanca.me/update.json"
-	updateCacheTTL = 30 * time.Minute // 官网接口无认证限流，可缩短缓存；GitHub 未认证 API 限 60 次/小时/IP
+	// 2026-08-28 用户定稿：官网一更新要尽快触发后台自动下载 → 缓存 TTL 30min→60s。
+	// update.json 是静态小 JSON、Cloudflare Pages 项目级缓存已 Disabled，压力可忽略；
+	// GitHub 兜底未认证 API 限 60 次/小时/IP——官网可达时走官网不触发，官网挂了兜底超限也只是静默。
+	updateCacheTTL = 60 * time.Second
 	// 官网目前只发布 portable zip。旧安装器地址已经下线，不能再把缺失的
 	// download_url_exe 静默回退到 setup.exe，否则真实用户会稳定得到 HTTP 404。
 	updateDownloadURL = "https://download.shanca.me/Rescene-windows-amd64-setup.exe"
@@ -214,10 +217,9 @@ func checkUpdate() (*updateInfo, error) {
 		hasUpdate = compareVersions(AppVersion, latestNum)
 	}
 	hotPatchURL := resolveHotPatchURL(rel, fromSite)
-	// 按钮文案语义（2026-08-16 用户定稿修订）：hot_patch 不只表示「走 zip 热补丁通道」，
-	// 还区分升级语义——目标版本是预发布 → 「立即更新」（测试通道热更新直更）；
-	// 目标版本是正式版 → 「一键安装」（正式安装语义，虽然机制仍是 zip 替换）。
-	hotPatch := hotPatchURL != "" && isPrereleaseVersion(latestNum)
+	// hot_patch = 是否存在可用的 zip 热补丁通道（2026-08-28 用户定稿：不再区分
+	// 预发布/正式版，正式版同样走 zip 热补丁自动应用，旧的「正式版→一键安装」语义删除）。
+	hotPatch := hotPatchURL != ""
 	info := &updateInfo{
 		HasUpdate:      hasUpdate,
 		CurrentVersion: cur,
@@ -289,8 +291,8 @@ var errNoRelease = fmt.Errorf("no release yet")
 const lastAppliedVersionFileName = "last-applied.txt"
 
 // writeLastAppliedVersion 从补丁 exe 二进制里提取新版本号，写入一次性标记。
-// 版本串取自 ldflags 注入的 UTF-8 版本（versionRe 不匹配 UTF-16 版本资源），
-// 与 patchTargetIsStable 的判定同源。提取失败静默跳过（提示非关键路径）。
+// 版本串取自 ldflags 注入的 UTF-8 版本（versionRe 不匹配 UTF-16 版本资源）。
+// 提取失败静默跳过（提示非关键路径）。
 func writeLastAppliedVersion(newExe, localDir string) error {
 	data, err := os.ReadFile(newExe)
 	if err != nil {
@@ -602,25 +604,6 @@ func isPrereleaseVersion(v string) bool {
 		return true
 	}
 	return regexp.MustCompile(`-[A-Za-z]`).MatchString(v)
-}
-
-// patchTargetIsStable 读补丁 exe 内嵌版本串判断升级目标是否为正式版：
-// 存在无预发布后缀的裸 semver（如 0.1.3）→ 正式版补丁（应弹窗确认）；
-// 只有 alpha/beta/rc/dev 后缀串 → 预发布补丁（应自动应用）。
-// 依据：ldflags 注入的 AppVersion 是 UTF-8 裸串；实测预发布 exe 只含 alpha 串、
-// 正式版 exe 必含裸 semver 串（versionRe 不匹配 UTF-16 版本资源里的 \x00 间隔，无干扰）。
-func patchTargetIsStable(exePath string) bool {
-	data, err := os.ReadFile(exePath)
-	if err != nil {
-		return false // 读不到按预发布处理（脚本会校验 MZ 头/大小）
-	}
-	for _, m := range versionRe.FindAll(data, -1) {
-		s := strings.ToLower(string(m))
-		if !strings.ContainsAny(s, "-+") {
-			return true // 裸 semver = 正式版
-		}
-	}
-	return false
 }
 
 func isLikelyWindowsExecutable(path string) bool {
@@ -1039,15 +1022,12 @@ exit /b 0
 }
 
 // ApplyPendingHotPatch 启动早期调用（main 入口，wails.Run 之前）：
-// 上次会话下载了热补丁 exe（rescene-new.exe，用户选了「下次启动时更新」/「稍后」关闭）且
-// 未被跳过 → 本次启动直接应用：写替换脚本 → 分离启动 → 等 3 秒让脚本拉起 → 退出本进程，
+// 上次会话后台下载了热补丁 exe（rescene-new.exe）→ 本次启动直接自动应用：
+// 写替换脚本 → 分离启动 → 等 3 秒让脚本拉起 → 退出本进程，
 // 脚本 copy 覆盖 exe 后启动新版。返回 true 表示本进程即将退出，调用方应立即 return。
 //
-// ⚠️ 自动应用按【目标版本】判断（2026-08-16 用户定稿修订）：
-//   补丁是正式版（无预发布后缀）→ 不自动应用，补丁留原地，前端弹窗「一键安装」确认；
-//   补丁是预发布（alpha/beta/rc/dev）→ 静默自动应用（测试通道直更，不打扰）。
-// 从 exe 内嵌版本串识别目标版本（ldflags 注入的 AppVersion；预发布 exe 无裸 semver 串，
-// 正式版 exe 必含裸 semver 串——实测 .6 只有 alpha 串、0.1.3 含 0.1.3 裸串）。
+// ⚠️ 2026-08-28 用户定稿：不再发测试版，正式版也一律自动应用（免用户去 tab 点「一键安装」）。
+// 旧的「正式版不自动应用、留弹窗确认」分支已删除。
 func ApplyPendingHotPatch() bool {
 	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
 	newExe := filepath.Join(localDir, updateHotPatchFileName)
@@ -1055,12 +1035,7 @@ func ApplyPendingHotPatch() bool {
 	if err != nil || fi.Size() < 1024*1024 {
 		return false // 没有待应用的热补丁
 	}
-	// 正式版补丁：不自动应用，留给前端弹窗确认（App.vue 检测到本地已有补丁 → showUpdate=true）
-	if patchTargetIsStable(newExe) {
-		return false
-	}
-	// 写「已更新到 vX」一次性标记：前端启动时读取并显示升级完成提示（2026-08-18 用户定稿：
-	// alpha 静默自动应用保留，但升级完要让用户看到新版本号）
+	// 写「已更新到 vX」一次性标记：前端启动时读取并显示升级完成提示（2026-08-18 用户定稿）
 	_ = writeLastAppliedVersion(newExe, localDir)
 	exePath, err := os.Executable()
 	if err != nil {

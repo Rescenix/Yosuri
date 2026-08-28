@@ -81,7 +81,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
-import { getSkippedVersion, isUpdateNotifyDisabled, isTestUpdatesEnabled, isPrereleaseVersionString, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
+import { getSkippedVersion, isUpdateNotifyDisabled, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 import DesktopFloatingMenu from './components/shanxi/chat/DesktopFloatingMenu.vue'
 import DHSCommunityModal from './components/shanxi/chat/DHSCommunityModal.vue'
@@ -190,6 +190,8 @@ function onRailPointerUp(event) {
 // 顶部轻量更新横幅：检测到新安装包已就绪时显示 15s，点击才弹全窗（2026-08-17 用户定稿）
 const showUpdateBanner = ref(false)
 let updateBannerTimer = null
+// 待显示的更新通知：应用在后台时检测到新版本，等用户切回来再弹（2026-08-28）
+const pendingUpdateBanner = ref(null) // 存 latest_version 字符串，用于 visibilitychange 检测
 // 升级完成横幅：alpha 补丁静默自动应用后显示「已更新到 vX」15s（2026-08-18 用户定稿）
 const showUpdatedBanner = ref(false)
 const updatedVersion = ref('')
@@ -201,12 +203,26 @@ const showWelcomeBanner = ref(false)
 const welcomeName = ref('')
 let welcomeBannerTimer = null
 
+// 检测到新版本：页面在前台直接弹，后台则挂起等用户切回来（2026-08-28 用户定稿：
+// 后台弹横幅=用户切回来早消失了，等于没提示）
 function showBanner() {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+    pendingUpdateBanner.value = updateInfo.value ? updateInfo.value.latest_version : true
+    return
+  }
   showUpdateBanner.value = true
   updateBannerTimer = setTimeout(() => {
     showUpdateBanner.value = false
     updateBannerTimer = null
   }, 15000)
+}
+
+// 应用回到前台时，把挂起的更新通知弹出来（一次性）
+function onWindowVisible() {
+  if (pendingUpdateBanner.value) {
+    pendingUpdateBanner.value = null
+    showBanner()
+  }
 }
 
 function closeUpdatedBanner() {
@@ -250,7 +266,6 @@ async function checkAndDownload(silent) {
   try { data = await res.json() } catch { return }
   if (!(data.ok && data.update && data.update.has_update)) return
   if (getSkippedVersion() === data.update.latest_version) return
-  if (!isTestUpdatesEnabled() && isPrereleaseVersionString(data.update.latest_version)) return
   updateInfo.value = data.update
   // 秒弹：新版本一被检测到就提示（3 天节流，同版本不重复），不等下载完成
   if (shouldShowUpdateBanner(data.update.latest_version)) {
@@ -286,6 +301,7 @@ onBeforeUnmount(() => {
   if (updateCheckTimer) clearInterval(updateCheckTimer)
   window.removeEventListener('pointermove', onRailPointerMove)
   window.removeEventListener('auth-welcome', onAuthWelcome)
+  document.removeEventListener('visibilitychange', onWindowVisible)
 })
 
 onMounted(() => {
@@ -313,6 +329,8 @@ onMounted(() => {
     window.dispatchEvent(new Event('auth-change'))
   }
   window.addEventListener('auth-welcome', onAuthWelcome)
+  // 应用回到前台 → 弹挂起的更新通知（2026-08-28）
+  document.addEventListener('visibilitychange', onWindowVisible)
 })
 
 onMounted(async () => {
@@ -322,14 +340,20 @@ onMounted(async () => {
     const d = await r.json()
     if (d && d.ok && d.version) {
       updatedVersion.value = d.version
-      showUpdatedBanner.value = true
-      updatedBannerTimer = setTimeout(closeUpdatedBanner, 15000)
+      // 前台直接弹升级完成横幅，后台挂起等用户切回来（2026-08-28）
+      if (document.visibilityState === 'visible') {
+        showUpdatedBanner.value = true
+        updatedBannerTimer = setTimeout(closeUpdatedBanner, 15000)
+      } else {
+        pendingUpdateBanner.value = 'upgraded'
+      }
     }
   } catch { /* 标记接口不可达：静默 */ }
-  // 2) 更新检查 + 后台下载：启动时一次 + 每 30 分钟周期检查
-  //    （运行中发布新版也会自动下载，下完等下次进应用提示；2026-08-18）
+  // 2) 更新检查 + 后台下载：启动时一次 + 每 60 秒周期检查
+  //    （2026-08-28 用户定稿：官网一更新尽快自动下载；30min→60s，配合后端缓存 TTL 60s，
+  //    发布后最多 1 分钟触发下载。update.json 静态小 JSON + CDN 已去缓存，压力可忽略）
   await checkAndDownload(false)
-  updateCheckTimer = setInterval(() => checkAndDownload(true), 30 * 60 * 1000)
+  updateCheckTimer = setInterval(() => checkAndDownload(true), 60 * 1000)
 })
 </script>
 

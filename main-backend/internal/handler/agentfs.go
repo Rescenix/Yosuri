@@ -46,6 +46,11 @@ type agentfsSession struct {
 	Workdir   string    `json:"workdir"` // 绝对路径
 	OpenedAt  time.Time `json:"opened_at"`
 	Seq       int       `json:"seq"` // 审计序号计数器
+	// LastReportedSeq 上次 workflow_done 已下发过的审计序号水位线。
+	// 卡片只报「本次工作流新产生的改动」：collectChangedFiles 只聚合
+	// seq > LastReportedSeq 的审计条目，避免每次发「你好」都重复列出
+	// 上一个工作流改过的文件（2026-08-28 用户反馈）。
+	LastReportedSeq int `json:"last_reported_seq,omitempty"`
 }
 
 // agentfsRoot 返回 AgentFS 数据根目录（可被 RESCENE_DATA_DIR 覆盖，与 session/checkpoint 同域）。
@@ -281,9 +286,12 @@ type beforeHashEntry struct {
 // agentfsPending 进程内 before 暂存，key = sessionID\x00relPath。
 var agentfsPending sync.Map
 
-// collectChangedFiles 聚合本次会话改过的文件列表，随 workflow_done 下发。
+// collectChangedFiles 聚合本次工作流新改过的文件列表，随 workflow_done 下发。
 // 每个文件：first_seq=本会话第一次写（回退基准=它之前的状态，即工作流前版本）、
-// last_seq=最后一次写、ops=本会话对该文件的写次数。sess 为空或没有改动返回 nil。
+// last_seq=最后一次写、ops=本会话对该文件的写次数。sess 为空或没有新改动返回 nil。
+// 只聚合 seq > sess.LastReportedSeq 的审计条目——上次 workflow_done 已报过的
+// 文件不重复上报（2026-08-28 用户反馈「发句你好也弹卡片」：旧会话审计一直在，
+// 不做水位线过滤时每次收尾都把历史改动全列一遍）。
 func collectChangedFiles(sess *agentfsSession) []map[string]any {
 	if sess == nil {
 		return nil
@@ -302,12 +310,17 @@ func collectChangedFiles(sess *agentfsSession) []map[string]any {
 	}
 	agg := map[string]*fileAgg{}
 	var order []string
+	floor := sess.LastReportedSeq
 	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		var a agentfsAudit
 		if json.Unmarshal([]byte(line), &a) != nil || a.SessionID != sess.SessionID {
+			continue
+		}
+		if a.Seq <= floor {
+			// 上次已上报过的历史条目，跳过
 			continue
 		}
 		f, ok := agg[a.RelPath]
@@ -358,12 +371,42 @@ func collectChangedFiles(sess *agentfsSession) []map[string]any {
 	return files
 }
 
-// changedFilesPayload 聚合当前会话改过的文件列表，供 workflow_done 各分支统一下发。
-// 线程安全地取 activeSession；无会话或没改动返回 nil（前端不弹卡片）。
+// changedFilesPayload 聚合当前会话新改过的文件列表，供 workflow_done 各分支统一下发。
+// 线程安全地取 activeSession；无会话或没新改动返回 nil（前端不弹卡片）。
+// 读取后把水位线推到当前审计最大 seq——这批文件已上报过，下次收尾不再重复。
 func changedFilesPayload() []map[string]any {
 	agentfsMu.Lock()
 	defer agentfsMu.Unlock()
-	return collectChangedFiles(activeSession)
+	if activeSession == nil {
+		return nil
+	}
+	files := collectChangedFiles(activeSession)
+	if len(files) == 0 {
+		return nil
+	}
+	// 推进水位线到本次审计末尾（含本工作流全部写操作）
+	ap := agentfsAuditPath(activeSession.Project)
+	if data, err := os.ReadFile(ap); err == nil {
+		maxSeq := activeSession.LastReportedSeq
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var a agentfsAudit
+			if json.Unmarshal([]byte(line), &a) == nil && a.SessionID == activeSession.SessionID && a.Seq > maxSeq {
+				maxSeq = a.Seq
+			}
+		}
+		if maxSeq > activeSession.LastReportedSeq {
+			activeSession.LastReportedSeq = maxSeq
+			// 落盘会话（重启恢复时水位线不丢，避免重启后重复上报旧文件）
+			if buf, err := json.MarshalIndent(activeSession, "", "  "); err == nil {
+				_ = os.MkdirAll(filepath.Dir(agentfsSessionPath(activeSession.Project)), 0o755)
+				_ = os.WriteFile(agentfsSessionPath(activeSession.Project), buf, 0o644)
+			}
+		}
+	}
+	return files
 }
 
 // --- HTTP handlers ---
