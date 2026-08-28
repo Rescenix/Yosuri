@@ -106,10 +106,10 @@ jobs:
         run: |
           cd dist
           python3 - <<'PY'
-          import hashlib, glob
+          import hashlib, glob, os
           lines = []
           for f in sorted(glob.glob('*')):
-              if f == 'SHA256SUMS.txt':
+              if f == 'SHA256SUMS.txt' or not os.path.isfile(f):
                   continue
               lines.append(hashlib.sha256(open(f, 'rb').read()).hexdigest() + '  ' + f)
           open('SHA256SUMS.txt', 'w').write('\n'.join(lines) + '\n')
