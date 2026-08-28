@@ -285,8 +285,8 @@
       <div class="confirm-dialog">
         <p>{{ confirmRestoreMsg }}</p>
         <div class="confirm-actions">
-          <button class="confirm-btn cancel" @click="confirmRestoreTarget = null">取消</button>
-          <button class="confirm-btn ok" @click="doRestore()">确认回退</button>
+          <button type="button" class="confirm-btn cancel" @click="confirmRestoreTarget = null">取消</button>
+          <button type="button" class="confirm-btn ok" @click="doRestore()">确认回退</button>
         </div>
       </div>
     </div>
@@ -1948,5 +1948,60 @@ function toolBodyText(b) {
   color: var(--app-text-faint);
   text-align: right;
   user-select: none;
+}
+
+/* 回退确认弹窗：Teleport 到 body 后没有 ChatWidget 的 scope id，
+   全局 chat-window.css 的 .confirm-overlay 是 scoped 的匹配不上，
+   所以这里必须自带 scoped 样式（2026-08-28 实测弹窗裸奔 position:static）。 */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147482000;
+}
+.confirm-dialog {
+  background: var(--app-surface, #fff);
+  border: 1px solid var(--app-border, #e4e4e7);
+  border-radius: 14px;
+  padding: 22px 24px;
+  max-width: 320px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.18);
+  text-align: center;
+}
+.confirm-dialog p {
+  color: var(--app-text, #27272a);
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.confirm-btn {
+  border: none;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.confirm-btn.cancel {
+  background: var(--app-surface-3, #f1f1f3);
+  color: var(--app-text, #27272a);
+}
+.confirm-btn.cancel:hover {
+  opacity: 0.8;
+}
+.confirm-btn.ok {
+  background: #2ea043;
+  color: #fff;
+}
+.confirm-btn.ok:hover {
+  background: #238636;
 }
 </style>

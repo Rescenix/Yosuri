@@ -261,6 +261,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	bgNotifyCh := registerBgNotify(workflowID)
 	defer unregisterBgNotify(workflowID)
 	c.Request = c.Request.WithContext(withWorkflowID(c.Request.Context(), workflowID))
+	// 工作流开始：重置 AgentFS 水位线为当前审计最大 seq。
+	// 结束聚合 seq>起点 = 本次工作流新增改动——改了文件才弹卡片（2026-08-28）。
+	markWorkflowStart()
+
 	writeCodeSSE(c, "workflow_start", map[string]any{
 		"workflow_id": workflowID, "task": task, "mode": mode,
 		"resumed": resumed != nil, "resumed_round": func() int {
@@ -401,7 +405,16 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 用户通过 remember 工具主动写入 MEMORY.md，此处不自动写
 		historyPersisted = true
 	}
-	defer persistHistory()
+	// 收尾时序（2026-08-28 实锤 bug）：persistHistory 内推进水位线会误伤 SSE。
+	// 手动调用 persistHistory()（预算耗尽/停止分支）发生在 writeCodeSSE 之前，
+	// 若在 persistHistory 里推进水位线，后面的 changed_files 就取不到本次改动
+	// （seq>floor 已无新条目）→ 实时不弹卡片、只有刷新历史才显示。
+	// 修复：推进水位线挪到 defer 收尾——等所有 workflow_done SSE 写完、前端拿到
+	// 本次改动后再推进，下次工作流（markWorkflowStart 重置起点）不重复上报。
+	defer func() {
+		persistHistory()
+		advanceChangedFilesWatermark()
+	}()
 
 	// Invoked 钩子：每轮收尾把状态落成检查点。启动参数（task/mode/model…）由这里的
 	// 闭包捕获，轮次内变化的 msgs/transcript/token 由 roundState 传入——

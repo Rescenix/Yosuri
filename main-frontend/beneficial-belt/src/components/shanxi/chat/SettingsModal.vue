@@ -347,6 +347,7 @@
                   <div v-else class="api-config-form">
                     <div class="api-preset-row">
                       <span class="api-preset-label">预设模板：</span>
+                      <button class="api-preset-btn" :class="{ active: activePreset === '__custom__' }" type="button" @click="applyCustomPreset">自定义</button>
                       <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" :class="{ active: activePreset === p.name }" type="button" @click="applyPreset(p)">{{ p.name }}</button>
                     </div>
                     <label class="api-form-field">
@@ -1292,6 +1293,12 @@ const PRESETS = [
   { name: 'Mistral', endpoint: 'https://api.mistral.ai/v1' },
   { name: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
   { name: '腾讯混元', endpoint: 'https://api.hunyuan.cloud.tencent.com/v1' },
+  { name: 'OpenCode Zen', endpoint: 'https://opencode.ai/zen/v1' },
+  { name: 'OpenCode Go', endpoint: 'https://opencode.ai/zen/go/v1' },
+  { name: 'Command Code', endpoint: 'https://api.commandcode.ai/provider/v1' },
+  { name: '火山引擎', endpoint: 'https://ark.cn-beijing.volces.com/api/v3' },
+  { name: '小米 MiMo', endpoint: 'https://api.xiaomimimo.com/v1' },
+  { name: 'MiniMax', endpoint: 'https://api.minimax.io/v1' },
 ]
 const activePreset = ref('')
 const MASKED = '••••••••'
@@ -1894,6 +1901,14 @@ function applyPreset(p) {
   editingConfig.value.name = p.name
   editingConfig.value.endpoint = p.endpoint
   activePreset.value = p.name
+}
+
+// 自定义预设：不套模板，清空 name/endpoint 让用户手填（2026-08-28 用户反馈）
+function applyCustomPreset() {
+  if (!editingConfig.value) return
+  editingConfig.value.name = ''
+  editingConfig.value.endpoint = ''
+  activePreset.value = '__custom__'
 }
 
 function providerModelCount(cfg) {

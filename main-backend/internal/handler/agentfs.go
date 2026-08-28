@@ -289,9 +289,10 @@ var agentfsPending sync.Map
 // collectChangedFiles 聚合本次工作流新改过的文件列表，随 workflow_done 下发。
 // 每个文件：first_seq=本会话第一次写（回退基准=它之前的状态，即工作流前版本）、
 // last_seq=最后一次写、ops=本会话对该文件的写次数。sess 为空或没有新改动返回 nil。
-// 只聚合 seq > sess.LastReportedSeq 的审计条目——上次 workflow_done 已报过的
-// 文件不重复上报（2026-08-28 用户反馈「发句你好也弹卡片」：旧会话审计一直在，
-// 不做水位线过滤时每次收尾都把历史改动全列一遍）。
+// 只聚合 seq > sess.LastReportedSeq 的审计条目——markWorkflowStart 在工作流开始
+// 时把水位线重置为「当前审计最大 seq」，所以这里聚合的就是本次工作流新增的写入：
+// 改了文件才弹卡片，发「你好」没新写入返回 nil（2026-08-28 用户定稿）。
+// 不做 SessionID 过滤：审计按项目分文件、seq 全局递增，水位线已精确表达工作流边界。
 func collectChangedFiles(sess *agentfsSession) []map[string]any {
 	if sess == nil {
 		return nil
@@ -316,7 +317,11 @@ func collectChangedFiles(sess *agentfsSession) []map[string]any {
 			continue
 		}
 		var a agentfsAudit
-		if json.Unmarshal([]byte(line), &a) != nil || a.SessionID != sess.SessionID {
+		// 只校验能解析 + seq 高于水位线。不做 SessionID 过滤——审计按项目分文件、
+		// seq 全局递增，水位线已精确表达「上次报到哪」；SessionID 过滤会把
+		// 新会话（重新打开项目 = 新 session_id）的写入全部丢掉 → 卡片不弹
+		// （2026-08-28 实测：sess_mt8tkge4 打开后第二次跑工作流写入 sess_mtcjf8hk）。
+		if json.Unmarshal([]byte(line), &a) != nil {
 			continue
 		}
 		if a.Seq <= floor {
@@ -373,40 +378,87 @@ func collectChangedFiles(sess *agentfsSession) []map[string]any {
 
 // changedFilesPayload 聚合当前会话新改过的文件列表，供 workflow_done 各分支统一下发。
 // 线程安全地取 activeSession；无会话或没新改动返回 nil（前端不弹卡片）。
-// 读取后把水位线推到当前审计最大 seq——这批文件已上报过，下次收尾不再重复。
+// ⚠️ 只读，不推进水位线——推进由 advanceChangedFilesWatermark 单独做。
+// 之前在这里顺手推进水位线是重大 bug：workflow_done 分支先调用本函数推进后，
+// defer persistHistory 再调用时 seq>floor 已无新条目 → 返回 nil → 改动文件卡片
+// 不写进历史、前端不弹卡片（2026-08-28 用户反馈「不弹修改文件卡片了」）。
 func changedFilesPayload() []map[string]any {
 	agentfsMu.Lock()
 	defer agentfsMu.Unlock()
 	if activeSession == nil {
 		return nil
 	}
-	files := collectChangedFiles(activeSession)
-	if len(files) == 0 {
-		return nil
+	return collectChangedFiles(activeSession)
+}
+
+// advanceChangedFilesWatermark 把水位线推到当前审计最大 seq，并落盘会话。
+// 在工作流收尾 persistHistory 里调用一次：这批文件已写入历史，下次收尾不再重复。
+func advanceChangedFilesWatermark() {
+	agentfsMu.Lock()
+	defer agentfsMu.Unlock()
+	if activeSession == nil {
+		return
 	}
-	// 推进水位线到本次审计末尾（含本工作流全部写操作）
 	ap := agentfsAuditPath(activeSession.Project)
-	if data, err := os.ReadFile(ap); err == nil {
-		maxSeq := activeSession.LastReportedSeq
-		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-			if strings.TrimSpace(line) == "" {
-				continue
-			}
-			var a agentfsAudit
-			if json.Unmarshal([]byte(line), &a) == nil && a.SessionID == activeSession.SessionID && a.Seq > maxSeq {
-				maxSeq = a.Seq
-			}
+	data, err := os.ReadFile(ap)
+	if err != nil {
+		return
+	}
+	maxSeq := activeSession.LastReportedSeq
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
 		}
-		if maxSeq > activeSession.LastReportedSeq {
-			activeSession.LastReportedSeq = maxSeq
-			// 落盘会话（重启恢复时水位线不丢，避免重启后重复上报旧文件）
-			if buf, err := json.MarshalIndent(activeSession, "", "  "); err == nil {
-				_ = os.MkdirAll(filepath.Dir(agentfsSessionPath(activeSession.Project)), 0o755)
-				_ = os.WriteFile(agentfsSessionPath(activeSession.Project), buf, 0o644)
-			}
+		var a agentfsAudit
+		if json.Unmarshal([]byte(line), &a) == nil && a.Seq > maxSeq {
+			maxSeq = a.Seq
 		}
 	}
-	return files
+	if maxSeq > activeSession.LastReportedSeq {
+		activeSession.LastReportedSeq = maxSeq
+		// 落盘会话（重启恢复时水位线不丢，避免重启后重复上报旧文件）
+		if buf, err := json.MarshalIndent(activeSession, "", "  "); err == nil {
+			_ = os.MkdirAll(filepath.Dir(agentfsSessionPath(activeSession.Project)), 0o755)
+			_ = os.WriteFile(agentfsSessionPath(activeSession.Project), buf, 0o644)
+		}
+	}
+}
+
+// markWorkflowStart 工作流开始时调用：把水位线重置为「当前审计最大 seq」。
+// 这样 workflow_done 时 collectChangedFiles 只聚合本次工作流新增的写入
+// （seq > 起点）——本次改了文件才弹卡片，发「你好」没新写入不弹。
+// 替代之前「会话水位线持续推进」的方案：那次是最后一次上报后不再推进，
+// 新会话（重新打开项目）的写入被 SessionID 过滤丢光 → 永不弹卡片
+// （2026-08-28 用户反馈「之前无脑弹卡片，现在永不弹」）。
+func markWorkflowStart() {
+	agentfsMu.Lock()
+	defer agentfsMu.Unlock()
+	if activeSession == nil {
+		return
+	}
+	ap := agentfsAuditPath(activeSession.Project)
+	data, err := os.ReadFile(ap)
+	if err != nil {
+		return
+	}
+	maxSeq := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var a agentfsAudit
+		if json.Unmarshal([]byte(line), &a) == nil && a.Seq > maxSeq {
+			maxSeq = a.Seq
+		}
+	}
+	if maxSeq != activeSession.LastReportedSeq {
+		activeSession.LastReportedSeq = maxSeq
+		// 落盘会话（重启恢复时水位线不丢）
+		if buf, err := json.MarshalIndent(activeSession, "", "  "); err == nil {
+			_ = os.MkdirAll(filepath.Dir(agentfsSessionPath(activeSession.Project)), 0o755)
+			_ = os.WriteFile(agentfsSessionPath(activeSession.Project), buf, 0o644)
+		}
+	}
 }
 
 // --- HTTP handlers ---
