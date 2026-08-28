@@ -84,7 +84,7 @@ jobs:
         run: |
           v=$(python3 -c "import json;print(json.load(open('main-backend/wails.json'))['info']['productVersion'])")
           cd main-backend
-          wails build -platform linux/amd64 -o rescene -s -ldflags "-X backend/internal/handler.AppVersion=$v"
+          wails build -platform linux/amd64 -tags webkit2_41 -o rescene -s -ldflags "-X backend/internal/handler.AppVersion=$v"
           cd ..
           mkdir -p dist/Rescene-linux-amd64
           cp main-backend/build/bin/rescene dist/Rescene-linux-amd64/
@@ -98,7 +98,7 @@ jobs:
           wails build -platform darwin/amd64 -o rescene -s -ldflags "-X backend/internal/handler.AppVersion=$v"
           cd ..
           mkdir -p dist/Rescene-darwin-amd64
-          cp main-backend/build/bin/rescene dist/Rescene-darwin-amd64/
+          cp main-backend/build/bin/rescene.app/Contents/MacOS/rescene dist/Rescene-darwin-amd64/
           tar -C dist -czf "dist/${{ matrix.asset }}" Rescene-darwin-amd64
 
       - name: 汇总 SHA256
