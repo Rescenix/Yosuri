@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://rescene.shanca.me/download.html">
-    <img src="https://img.shields.io/badge/下载-Windows%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="下载">
+    <img src="https://img.shields.io/badge/下载-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="下载">
   </a>
   <a href="https://rescene.shanca.me/">
     <img src="https://img.shields.io/badge/官网-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="官网">
@@ -51,8 +51,22 @@
 
 👉 **[https://rescene.shanca.me/download.html](https://rescene.shanca.me/download.html)** 👈
 
-- **Windows 版** — 标准安装器，向导式安装，开始菜单启动，系统设置可卸载
+**桌面版（全平台）**
+- **Windows 版** — 便携版 ZIP / 安装器，解压即用，自动更新
+- **Linux 版** — 桌面客户端 tar.gz（GTK/WebKit），官网直接下载
+- **macOS 版** — 桌面客户端 tar.gz
 - **Android 版** — 移动端同步使用
+
+**终端版（CLI，一行安装）**
+- **Linux / macOS / 手机 Termux：**
+  ```bash
+  curl -fsSL https://download.shanca.me/rescene-cli/install.sh | sh
+  ```
+- **Windows (PowerShell)：**
+  ```powershell
+  irm https://download.shanca.me/rescene-cli/install.ps1 | iex
+  ```
+
 - **极致轻量** — 不内置浏览器，无需预装 Node.js / Python
 - **自动更新** — 发现新版本自动下载安装，配置保留
 
