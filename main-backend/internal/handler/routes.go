@@ -412,4 +412,12 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.DELETE("/api/galgame/session/:id", HandleGalgameDeleteSession)
 	// Galgame 立绘/背景静态服务
 	r.Static("/api/galgame/asset", galgameOutputDir())
+	// 局域网同步信息（前端二维码/连接面板展示用）：返回 IP+port+token
+	r.GET("/api/lan/sync-info", func(c *gin.Context) {
+		if lanSync == nil {
+			c.JSON(500, gin.H{"error": "局域网同步服务未启动"})
+			return
+		}
+		c.JSON(200, gin.H{"ip": getLanIP(), "port": lanSync.Port(), "token": lanSync.Token(), "device": "re0"})
+	})
 }

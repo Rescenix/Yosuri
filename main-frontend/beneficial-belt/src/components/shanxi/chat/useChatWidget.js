@@ -98,7 +98,7 @@ function adjustInputHeight() {
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
   const {
       flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow,
-      resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
+      todoState, sendSteerMessage,
       questionState, answerQuestion
     } = useAgentWorkflow({
       messages,
@@ -282,8 +282,6 @@ async function switchSession(id) {
   // 上下文分类明细同样要跟着会话走。之前只在 ChatWidget setup 时 load 过一次，
   // 切会话不重载 —— 结果面板一直显示上一个会话的分类，只有刷新页面才纠正。
   loadContextBreakdown(id)
-  // 新会话里可能躺着上次没跑完的工作流（后端重启/断线留下的检查点）
-  refreshResumable()
   await loadAllHistory()
 }
 
@@ -315,8 +313,6 @@ async function switchSession(id) {
     fetchBalance()
     // 初始化时恢复当前会话持久化的真实 token（横条绑定会话，刷新不丢）
     sessionTokenStats.value = loadSessionTokenStats(sessionId.value)
-    // 关掉页面/后端崩了之后重新打开：把没跑完的工作流捞出来问要不要续跑
-    refreshResumable()
   })
 
   // 滚动监听挂在 messagesContainer ref 上（watch 而非 onMounted）：
@@ -415,7 +411,7 @@ async function switchSession(id) {
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     backgroundTaskList,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-    resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
+    todoState, sendSteerMessage,
     questionState, answerQuestion,
     toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime

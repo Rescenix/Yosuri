@@ -6,8 +6,10 @@ package handler
 // 换设备登录后拉回 —— 记忆跟账号走，与亲密等级/统计同一套"珍惜账号"语义。
 //
 //   - 可选开关：环境变量 RESCENE_MEMORY_SYNC=off 关闭（默认开启）。关闭后不推不拉。
-//   - 推送：记忆写工具（remember / memory_pin / memory_append / memory_handoff）
-//     写完后异步全量推送（fire-and-forget，不阻塞）。
+//   - 推送（2026-08-28 用户定稿：开启即自动同步，不再等记忆写工具）：
+//     ① StartMemorySyncLoop 定时全量推送（启动 2s 后立即推一次，此后每 60s 一次）；
+//     ② 记忆写工具（remember / memory_pin / memory_append / memory_handoff）
+//       写完后异步补推一次（fire-and-forget，不阻塞）。
 //   - 拉取：re0 启动时（有 uid 缓存）自动拉一次；前端也可在登录/启动后显式调
 //     POST /api/memory/sync/pull 触发。
 //   - 合并策略：拉取时云端文件写回本地（同名覆盖），本地独有文件保留 —— 换设备
@@ -311,6 +313,29 @@ func StartupMemorySyncPull() {
 		uid, _ := memorydir.ReadIntimacy()
 		if uid > 0 {
 			pullMemorySync(uid)
+		}
+	}()
+}
+
+// memorySyncLoopInterval 定时全量同步周期（2026-08-28 用户定稿：开启即自动同步）。
+const memorySyncLoopInterval = 60 * time.Second
+
+// StartMemorySyncLoop 云端记忆同步定时循环（2026-08-28 用户定稿新增）：
+// 不再等记忆写工具才推送——开关开启（默认开）时，启动 2s 后立即全量推+拉一次，
+// 此后每 60s 双向同步一次（push 全量覆盖云端 / pull 比较后写回本地，防旧覆盖新）。
+// 开关关闭或 uid 未就绪时静默跳过；每次 tick 都重新检查开关，随时生效。
+func StartMemorySyncLoop() {
+	go func() {
+		time.Sleep(2 * time.Second) // 等 uid 缓存 / 前端 guest-token 落盘 / 网络就绪
+		for {
+			if memorySyncEnabled() {
+				uid, _ := memorydir.ReadIntimacy()
+				if uid > 0 {
+					pushMemorySync()
+					pullMemorySync(uid)
+				}
+			}
+			time.Sleep(memorySyncLoopInterval)
 		}
 	}()
 }

@@ -495,23 +495,6 @@
                 <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
               </div>
 
-              <!-- ===== 断点续跑条 =====
-                   后端每轮落盘检查点，重启/断线后这里显示上次没跑完的任务。
-                   续跑复用原 workflow_id 和原模型，从断点那一轮接着问，
-                   已经跑完的工具不会重跑。 -->
-              <div v-if="resumeState.pending && !flowState.active" class="resume-bar">
-                <Icon icon="mdi:history" width="15" class="resume-bar-icon" />
-                <div class="resume-bar-main">
-                  <div class="resume-bar-line">
-                    <span class="resume-bar-label">上次任务未跑完</span>
-                    <span class="resume-bar-round">第 {{ resumeState.pending.round }} 轮中断</span>
-                  </div>
-                  <div class="resume-bar-task" :title="resumeState.pending.task">{{ resumeState.pending.task }}</div>
-                </div>
-                <button class="resume-bar-btn ghost" @click="dismissResumable">放弃</button>
-                <button class="resume-bar-btn primary" @click="resumeCodeWorkflow">续跑</button>
-              </div>
-
               <!-- 输入框上方工具栏三态切换 -->
               <div v-if="inputTopBarMode === 'dir'" class="input-dir-bar">
                 <div class="toolbar-dropdown-wrap input-dir-menu-wrap">
@@ -1178,7 +1161,7 @@ const runningSession = computed(() => (flowState.active ? activeSession.value : 
 const completedSessions = ref(new Set())
 // 有未决问题的会话：approval/resume/question 任一 pending 即认为该会话在提问
 const questionSession = computed(() => {
-  if (approvalState.pending.length > 0 || resumeState.pending || questionState.pending) {
+  if (approvalState.pending.length > 0 || questionState.pending) {
     return activeSession.value
   }
   return ''
@@ -2727,9 +2710,19 @@ const modelOptions = computed(() => groupedModelOptions.value.flatMap(g => g.ite
 const hasModels = computed(() => modelOptions.value.length > 0)
 const showModelMenu = ref(false)
 
-// 打开/关闭模型菜单（纯切换，高度交由 CSS 处理）
+// 打开/关闭模型菜单（打开时定位到当前选中模型，避免 124 个模型列表打开在顶部还要手动拉）
 function toggleModelMenu() {
   showModelMenu.value = !showModelMenu.value
+  if (showModelMenu.value) {
+    nextTick(() => {
+      const list = document.querySelector('.model-menu-list')
+      const active = list?.querySelector('.model-menu-item.active')
+      if (list && active) {
+        // 滚动到选中项：优先居中显示（长列表），列表太短滚不动就自动贴近
+        list.scrollTop = Math.max(0, active.offsetTop - list.clientHeight / 2 + active.clientHeight / 2)
+      }
+    })
+  }
 }
 const modelSearch = ref('')
 // 搜索过滤后的分组（图1 顶部搜索框）
@@ -3035,7 +3028,7 @@ const {
   onStreamUpdate,
   backgroundTaskList,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-  resumeState, resumeCodeWorkflow, dismissResumable, todoState, sendSteerMessage,
+  todoState, sendSteerMessage,
   questionState, answerQuestion,
   toggleChat, updateParams,
   groupedMessages, formatChatTime
@@ -3576,85 +3569,134 @@ function handleSend() {
 
   // 公益免费流式：把上游 SSE 流进「handleSend 已即时建好并显示『正在思考』」的 flow。
     // 创建/回显已在 handleSend 完成，这里只装配请求 + 组装 blocks，避免重复创建。
+    // 断连自动重试（08-28）：流式中断/网络错误时重新发起请求，最多 MAX_STREAM_RETRY 次，
+    // 每次重试在 flow 里插一条「重新尝试连接神经网络 (n/m)」的可见提示（颜文字友好），
+    // 已累积的回复文本保留不清空；全部撞完才判失败。
+    const MAX_STREAM_RETRY = 3
     async function sendSharedPoolStream(flow, combined, model) {
       // 先确保游客 UID 已拿到并缓存，请求才带得上 X-Guest-Uid（否则云端 401）
       await ensureGuestUid()
-      fetch('/api/chat/shared-pool', {
-          method: 'POST',
-          headers: sharedPoolAuthHeaders(),
-      body: JSON.stringify({
-        model: model,
-                messages: [{ role: 'user', content: combined }],
-        stream: true
-      })
-    }).then(async res => {
-      if (res.status === 429) {
-        const err = await res.json().catch(() => ({}))
-        const used = err.quota?.used, limit = err.quota?.limit
-        flow.status = 'failed'
-        flow.blocks.push({
-          type: 'intent',
-          text: used != null
-            ? `😅 公益免费额度已用完（今日 ${used}/${limit} 次）\n\n填自己的 Key 继续使用，无限制～`
-            : `😅 上游免费模型暂时繁忙（429），稍等几分钟再试试～`
-        })
-        flow.endTime = Date.now()
-        onStreamUpdate?.()
-        return
-      }
-      if (res.status === 401 || res.status === 403) {
-        // 云端没识别游客身份（极端情况：游客 UID 服务不可达）。
-        // 公益免费不需要登录 —— 这是网络/云端问题，给平实提示并引导重试。
-        flow.status = 'failed'
-        flow.blocks.push({ type: 'intent', text: `😅 暂时连不上公益免费服务，请检查网络后重试～` })
-        flow.endTime = Date.now()
-        onStreamUpdate?.()
-        return
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: '请求失败' }))
-        flow.status = 'failed'
-        flow.blocks.push({ type: 'intent', text: `共享池错误：${err.error || '未知错误'}` })
-        flow.endTime = Date.now()
-        onStreamUpdate?.()
-        return
-      }
-      // 流式读取 SSE
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6)
-          if (data === '[DONE]') { flow.status = 'completed'; break }
-          try {
-            const parsed = JSON.parse(data)
-            const content = parsed.choices?.[0]?.delta?.content || ''
-            if (content) {
-              const last = flow.blocks[flow.blocks.length - 1]
-              if (last?.type === 'intent') last.text += content
-              else flow.blocks.push({ type: 'intent', text: content })
+      const retryMsg = (n, total) => `重新尝试连接神经网络 (${n}/${total})～`
+      let accumulated = '' // 已流式累积的回复文本（重试时保留）
+      let retryCount = 0
+      for (; ; ) {
+        const attempt = retryCount + 1
+        const ok = await new Promise(resolve => {
+          fetch('/api/chat/shared-pool', {
+            method: 'POST',
+            headers: sharedPoolAuthHeaders(),
+            body: JSON.stringify({
+              model: model,
+              messages: [{ role: 'user', content: combined }],
+              stream: true
+            })
+          }).then(async res => {
+            if (res.status === 429) {
+              const err = await res.json().catch(() => ({}))
+              const used = err.quota?.used, limit = err.quota?.limit
+              flow.status = 'failed'
+              flow.blocks.push({
+                type: 'intent',
+                text: used != null
+                  ? `😅 公益免费额度已用完（今日 ${used}/${limit} 次）\n\n填自己的 Key 继续使用，无限制～`
+                  : `😅 上游免费模型暂时繁忙（429），稍等几分钟再试试～`
+              })
+              flow.endTime = Date.now()
               onStreamUpdate?.()
+              resolve(false)
+              return
             }
-          } catch {}
+            if (res.status === 401 || res.status === 403) {
+              // 云端没识别游客身份（极端情况：游客 UID 服务不可达）。
+              // 公益免费不需要登录 —— 这是网络/云端问题，给平实提示并引导重试。
+              flow.status = 'failed'
+              flow.blocks.push({ type: 'intent', text: `😅 暂时连不上公益免费服务，请检查网络后重试～` })
+              flow.endTime = Date.now()
+              onStreamUpdate?.()
+              resolve(false)
+              return
+            }
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ error: '请求失败' }))
+              flow.status = 'failed'
+              flow.blocks.push({ type: 'intent', text: `共享池错误：${err.error || '未知错误'}` })
+              flow.endTime = Date.now()
+              onStreamUpdate?.()
+              resolve(false)
+              return
+            }
+            // 流式读取 SSE
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            const streamOk = await (async () => {
+              try {
+                while (true) {
+                  const { done, value } = await reader.read()
+                  if (done) break
+                  buffer += decoder.decode(value, { stream: true })
+                  const lines = buffer.split('\n')
+                  buffer = lines.pop() || ''
+                  for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue
+                    const data = line.slice(6)
+                    if (data === '[DONE]') { flow.status = 'completed'; return true }
+                    try {
+                      const parsed = JSON.parse(data)
+                      const content = parsed.choices?.[0]?.delta?.content || ''
+                      if (content) {
+                        accumulated += content
+                        const last = flow.blocks[flow.blocks.length - 1]
+                        // 上一条是「重新尝试连接」提示块：用真实回复替换它，别把提示和正文黏在一起
+                        if (last?.type === 'intent' && last.retryNote) {
+                          flow.blocks[flow.blocks.length - 1] = { type: 'intent', text: content }
+                        } else if (last?.type === 'intent') last.text += content
+                        else flow.blocks.push({ type: 'intent', text: content })
+                        onStreamUpdate?.()
+                      }
+                    } catch { }
+                  }
+                }
+                flow.status = 'completed'
+                flow.endTime = Date.now()
+                onStreamUpdate?.()
+                return true
+              } catch (e) {
+                // 流式中断（网络抖动/上游断流）：返回 false 走外层重试
+                console.warn('shared-pool stream interrupted:', e)
+                return false
+              }
+            })()
+            resolve(streamOk)
+          }).catch(err => {
+            // fetch 层网络错误（连接失败）：也走外层重试
+            console.warn('shared-pool fetch error:', err)
+            resolve(false)
+          })
+        })
+        if (ok) return
+        // 到这里 = 本次尝试失败，判断还能不能重试
+        retryCount++
+        if (retryCount >= MAX_STREAM_RETRY) {
+          flow.status = 'failed'
+          flow.blocks.push({ type: 'intent', text: `😅 连接一直不稳定，试了 ${MAX_STREAM_RETRY} 次都没连上，稍等片刻再发一次试试～` })
+          flow.endTime = Date.now()
+          onStreamUpdate?.()
+          return
         }
+        // 重试前清理：若上次尝试已流出半截回复（最后一个 intent 块），删掉它，
+        // 避免重试生成的完整回复和半截内容拼在一起重复；保留提示块等重试成功后替换
+        const lastBlock = flow.blocks[flow.blocks.length - 1]
+        if (lastBlock?.type === 'intent' && !lastBlock.retryNote) {
+          flow.blocks.pop()
+        }
+        // 重试提示：插一条可见的友好提示（保留已累积回复），短暂停顿让用户看得见
+        flow.blocks.push({ type: 'intent', text: retryMsg(attempt, MAX_STREAM_RETRY), retryNote: true })
+        flow.status = 'running'
+        onStreamUpdate?.()
+        await new Promise(r => setTimeout(r, 900))
       }
-      flow.status = 'completed'
-      flow.endTime = Date.now()
-      onStreamUpdate?.()
-    }).catch(err => {
-      flow.status = 'failed'
-      flow.blocks.push({ type: 'intent', text: `网络错误：${err.message}` })
-      flow.endTime = Date.now()
-      onStreamUpdate?.()
-    })
-  }
+    }
 
   const showTokenPanel = ref(false)
 function formatTok(n) {

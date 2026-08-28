@@ -111,7 +111,9 @@ func OpenAgentFSSession(project, workdir string, boundSessionID ...string) *agen
 		OpenedAt:  time.Now(),
 		Seq:       0,
 	}
-	// 恢复已有会话的 seq
+	// 恢复已有会话的 seq + 水位线：LastReportedSeq 一旦持久化就不能丢，否则
+	// 重启/新会话后 collectChangedFiles 的 floor=0 → 把历史所有审计当「本次改动」
+	// 全报一遍（2026-08-28 用户反馈：卡片显示本次改动4个文件全是历史）。
 	if data, err := os.ReadFile(agentfsAuditPath(project)); err == nil {
 		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
 			if strings.TrimSpace(line) == "" {
@@ -121,6 +123,14 @@ func OpenAgentFSSession(project, workdir string, boundSessionID ...string) *agen
 			if json.Unmarshal([]byte(line), &a) == nil && a.Seq >= sess.Seq {
 				sess.Seq = a.Seq + 1
 			}
+		}
+	}
+	// 恢复已有会话文件里持久化的水位线（若存在），避免从 0 开始重复上报旧文件。
+	// 注意 LastReportedSeq 用 omitempty，0 时不写盘；这里读到的可能就是历史推进值。
+	if sp, err := os.ReadFile(agentfsSessionPath(project)); err == nil {
+		var old agentfsSession
+		if json.Unmarshal(sp, &old) == nil && old.LastReportedSeq > sess.LastReportedSeq {
+			sess.LastReportedSeq = old.LastReportedSeq
 		}
 	}
 	// 落盘会话文件

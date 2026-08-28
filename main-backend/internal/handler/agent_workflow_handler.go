@@ -177,9 +177,19 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	openID, model := c.Query("openid"), c.Query("model")
 	effort := c.Query("effort") // "low"/"medium"/"high"，只有 backend.Reasoning=true 时才真的生效
 	if resumed != nil {
-		// 续跑沿用原来的模型：中途换模型会让已有的 tool_calls 历史落到另一套
-		// 工具调用格式上，不如从头跑一遍干净。
-		openID, model, effort = resumed.OpenID, resumed.Model, resumed.Effort
+		// 续跑默认沿用检查点里的模型（保证 tool_calls 历史与工具格式一致）；
+		// 但若前端显式传了 model 参数，说明用户已切换选择（或失败后换可用模型），
+		// 尊重前端传参而不是闷头用旧模型——否则「续跑换模型」永远无效（低级 bug）。
+		// （2026-08-28 用户反馈：续跑用了旧模型，切换模型无法无缝续跑）
+		if model == "" {
+			model = resumed.Model
+		}
+		if openID == "" {
+			openID = resumed.OpenID
+		}
+		if effort == "" {
+			effort = resumed.Effort
+		}
 	}
 	backends := resolveBackends(openID, model)
 
@@ -595,7 +605,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"status": "failed", "final_output": historyFinal,
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
-				"resumable":           true, "workflow_id": workflowID,
+				// 模型调用失败（429/不可用等）≠ 断线：任务没跑起来，续跑无意义，
+				// 标 resumable:false 免得前端弹续跑条（2026-08-28 用户反馈「没断连也老弹续跑条」）
+				"resumable":           false, "workflow_id": workflowID,
 				"changed_files": changedFilesPayload(),
 			})
 			return

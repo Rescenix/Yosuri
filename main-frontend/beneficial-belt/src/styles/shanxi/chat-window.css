@@ -4345,8 +4345,7 @@ img.gem-rail-avatar {
 .chat-window.expanded .chat-body.studio .chat-content .input-bottom-toolbar,
 .chat-window.expanded .chat-body.studio .chat-content .approval-bar,
 .chat-window.expanded .chat-body.studio .chat-content .question-bar,
-.chat-window.expanded .chat-body.studio .chat-content .todo-bar,
-.chat-window.expanded .chat-body.studio .chat-content .resume-bar {
+.chat-window.expanded .chat-body.studio .chat-content .todo-bar {
   /* chat-input-area 是 flex column，光有 margin:auto（cross-axis 自动外边距）
      反而会让 stretch 失效、退化成按内容宽度收缩；显式给 width:100% 保证跟
      input-wrapper 一样占满可用宽度，max-width 再统一封顶到 720px */
@@ -4646,61 +4645,6 @@ img.gem-rail-avatar {
   border-color: var(--app-border);
 }
 .approval-bar-btn.deny:hover { background: var(--app-border-soft); }
-
-/* ===== 断点续跑条 =====
-   与审批条同一套视觉语言（输入框上方轻量条），但用中性描边而非主题色左栏——
-   它是「可以做但不急」的提示，不该抢审批条那种「正等你决定」的注意力权重。 */
-.resume-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 -1px;
-  padding: 7px 10px;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: 0;
-  box-shadow: none;
-  animation: approval-bar-in 0.16s ease-out;
-  box-sizing: border-box;
-  max-width: 100%;
-  overflow: hidden;
-}
-.resume-bar-icon { flex-shrink: 0; color: var(--app-text-faint); }
-.resume-bar-main { flex: 1; min-width: 0; }
-.resume-bar-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.resume-bar-label { font-size: 12.5px; font-weight: 600; color: var(--app-text); }
-.resume-bar-round {
-  font-size: 11px;
-  color: var(--app-text-faint);
-  font-variant-numeric: tabular-nums;
-}
-/* 任务原文可能很长，单行省略——续跑条只是提醒，不是任务详情面板 */
-.resume-bar-task {
-  margin-top: 2px;
-  font-size: 11.5px;
-  color: var(--app-text-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.resume-bar-btn {
-  flex-shrink: 0;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: filter 0.15s ease, background 0.15s ease;
-}
-.resume-bar-btn.primary { color: #fff; background: var(--app-accent); }
-.resume-bar-btn.primary:hover { filter: brightness(1.06); }
-.resume-bar-btn.ghost {
-  color: var(--app-text-soft);
-  background: var(--app-surface-3);
-  border-color: var(--app-border);
-}
-.resume-bar-btn.ghost:hover { background: var(--app-border-soft); }
 
 .add-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: var(--app-text); cursor: pointer; }
 .add-menu-item:hover { background: var(--app-surface-3); }

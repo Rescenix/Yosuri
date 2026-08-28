@@ -57,6 +57,8 @@ func (a *DesktopApp) StartBackend() error {
 	}
 	// 云端记忆同步（可选）：启动后自动拉取一次（换设备恢复记忆）
 	handler.StartupMemorySyncPull()
+	// 云端记忆同步定时循环（2026-08-28 用户定稿：开启即自动双向同步，不再等记忆写工具）
+	handler.StartMemorySyncLoop()
 	// 聚合端口调用统计：启动定时批量上报 goroutine（不阻塞，未配 key 静默跳过）
 	go handler.StartAggStatsFlusher()
 	return nil

@@ -16,6 +16,15 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
     let es = null
     let currentFlow = null
     let titleTimer = null
+    // 免费模型调用失败自动重试计数（模块级，跨 flow 持久）：flow_error 触发的 resume 会
+    // 新建 flow 对象，计数放 flow 上会被清零导致无限循环（永远 1/3）。放这里跨 flow 累计。
+    let transientRetryCount = 0
+const KAOMOJI = [
+    "(◕‿◕)", "(｡•́︿•̀｡)", "(´｡• ᵕ •｡`)", "(≧▽≦)", "(づ｡◕‿‿◕｡)づ",
+    "(•̀ᴗ•́)و", "ヽ(・∀・)ﾉ", "(｡•̀ᴗ-)✧", "(*´∀｀*)", "(๑•̀ㅂ•́)و✧",
+    "(｡•ᴗ-)✧", "(◕ᴗ◕✿)", "(っ´▽`)っ", "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
+]
+const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
 
     // 审批状态：Ask 模式下后端推 approval_request 时压入；用户点允许/拒绝后该条消失。
     // 同一次工作流可能连续多个危险工具待批，所以用数组挂多个。
@@ -33,41 +42,6 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
     // 同一工作流同一时刻只会有一个未决提问（后端循环阻塞着），数组是为了容错。
     const questionState = reactive({ pending: null })
 
-    // 断点续跑：后端每轮把进行中的工作流落盘（workflow_checkpoint.go），
-    // 后端重启/SSE 断线后这里查得到，输入框上方出一条「上次任务跑到第 N 轮」。
-    // Yolo 全自动跑长任务时最要紧——否则一断就得从头重发，工具全再跑一遍。
-    const resumeState = reactive({ pending: null })
-
-    async function refreshResumable() {
-        const sid = localStorage.getItem('prism_session_id') || ''
-        if (!sid) { resumeState.pending = null; return }
-        try {
-            const res = await fetch('/api/code/workflow/checkpoints?session_id=' + encodeURIComponent(sid))
-            const data = await res.json()
-            // 只提示最近的那一个：同一会话堆着多个中断任务时，逐条问反而是噪音
-            resumeState.pending = (data.checkpoints || [])[0] || null
-        } catch {
-            resumeState.pending = null // 查不到就当没有，不打扰用户
-        }
-        onStreamUpdate?.()
-    }
-
-    function dismissResumable() {
-        const cp = resumeState.pending
-        resumeState.pending = null
-        onStreamUpdate?.()
-        if (!cp) return
-        fetch('/api/code/workflow/checkpoints/' + encodeURIComponent(cp.workflow_id), { method: 'DELETE' })
-            .catch(err => console.error('删除检查点失败', err))
-    }
-
-    function resumeCodeWorkflow() {
-        const cp = resumeState.pending
-        if (!cp || flowState.active) return
-        resumeState.pending = null
-        // task 走检查点里的原文，model/mode/effort 后端也从检查点取，这里不用带
-        startCodeWorkflow(cp.task, null, { resumeId: cp.workflow_id, resumedRound: cp.round })
-    }
 
     function clearApprovalTimer(id) {
         const t = approvalTimers.get(id)
@@ -121,7 +95,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
     // display 可选：{ text, attachments } —— 气泡展示用的"用户实际打的字 + 附件 chip"，
     // 跟真正发给模型的 task（附件内容已经拍平拼接）分开，不然气泡里会把图片解析原文/
     // 文件全文都摊开显示，等于把输入框背后的东西又倒回来给用户看一遍
-    // opts.resumeId：从后端检查点续跑（见 resumeCodeWorkflow）。续跑时这条任务的
+    // opts.resumeId：从后端检查点续跑。续跑时这条任务的
     // 用户消息上次已经上过屏、也已在后端历史里，不再重复插入用户气泡。
     function startCodeWorkflow(task, display, opts = {}) {
             task = (task || '').trim()
@@ -184,11 +158,12 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
         const imageProvider = localStorage.getItem('imageProvider') || 'pollinations'
         // 联网搜索已内置为 web_search 常驻工具（Firecrawl，模型自主触发），
         // 无需 search_model 参数——后端不再有「搜索模型」概念。
-        // 续跑：只带 resume=<workflow_id>，task/model/mode/effort 后端全从检查点取，
-        // 免得前端此刻的模型选择跟中断前不一致（换模型会让已有 tool_calls 历史串味）
-        const url = opts.resumeId
-            ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}`
-            : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}`
+        // 续跑：带 resume=<workflow_id>，并带上当前选中的 model——
+                // 若用户续跑前切了模型，后端尊重前端传参缩短/改用新模型（无缝衔接）；
+                // 不传 model 时后端才回退到检查点里的旧模型（2026-08-28 修「续跑用旧模型」）。
+                const url = opts.resumeId
+                    ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`
+                    : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}`
         es = new EventSource(url)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
@@ -525,15 +500,35 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
 
         es.addEventListener('flow_error', e => {
             const d = JSON.parse(e.data)
-            appendText('intent', `\n\n⚠️ ${d.message}`)
+            const msg = d.message || ''
+            // 暂时性错误（限流/服务端故障）自动重试（08-28）：429/5xx/暂时/繁忙/服务端 是
+            // 上游抽风，前端收到后自动 resume 续跑最多 3 次，并显示「重新尝试连接神经网络
+            // (n/3)」提示；401/403/404/400/无权访问/已下架 是确定性失败，重试无意义，原样红字。
+            const isTransient = /HTTP 429|限流|HTTP 5\d\d|暂时|繁忙|服务端|稍候|稍后/.test(msg)
+            const wfId = flow.workflowId
+            if (isTransient && wfId && transientRetryCount < 3) {
+                transientRetryCount++
+                flow.blocks.push({ type: 'intent', text: `重新尝试连接神经网络 (${transientRetryCount}/3)～ ${_randKaomoji()}`, retryNote: true })
+                flow.status = 'stopped'
+                flow.endTime = Date.now()
+                onStreamUpdate?.()
+                // 等后端 workflow_done 收尾（closeStream 置 active=false）后再 resume 续跑；
+                // 若后端没发 done（连接也断了），主动关流再续跑。
+                setTimeout(() => {
+                    if (flowState.active) closeStream()
+                    startCodeWorkflow(flow.task, null, { resumeId: wfId, resumedRound: 0 })
+                }, 700)
+                return
+            }
+            appendText('intent', `\n\n⚠️ ${msg}`)
             // 401/403/404 的自动发现模型已在后端淘汰。立刻刷新下拉，避免用户
             // 继续看到并再次选中“列得出、但实际不能用”的模型。
-            if (/无权访问|已下架|已从可用列表移除|HTTP (401|403|404)/.test(d.message || '')) {
+            if (/无权访问|已下架|已从可用列表移除|HTTP (401|403|404)/.test(msg)) {
                 window.dispatchEvent(new Event('model-config-changed'))
             }
             // 后端通常紧随其后发送 workflow_done；这里先收尾，避免网络在两事件之间
             // 断开时把“生成预览”永远留在界面上。
-            settlePendingTools('error', d.message || '工作流已中断')
+            settlePendingTools('error', msg || '工作流已中断')
         })
 
         // flow_notice：本轮最终成功了，但过程里发生了值得让用户知道的事（如联网搜到
@@ -609,6 +604,8 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
             const d = JSON.parse(e.data)
             flow.status = d.status || 'completed'
             flow.endTime = Date.now()
+            // 正常完成/收尾：重置免费模型重试计数，让下一次新任务从 1/3 重新开始
+            if (d.status !== 'failed') transientRetryCount = 0
             settlePendingTools('error', d.final_output || '工具调用未完成')
             flow.inputTokens = d.input_tokens || 0
             flow.outputTokens = d.output_tokens || 0
@@ -634,11 +631,8 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
             // 改动文件卡片：工作流收尾固定内嵌在工作流卡片最底部（像引用来源一样）。
             // 无论正常/失败/停止/预算耗尽收尾都展示，可预览 diff / 一键回退。
             flow.changedFiles = Array.isArray(d.changed_files) ? d.changed_files : []
-            currentFlow = null
-            closeStream()
-            // 上游报错时后端留了检查点（workflow_done.resumable），拉出来给续跑条用；
-                        // 正常完成则检查点已被后端删掉，这次查询自然返回空。
-                        if (d.resumable) refreshResumable()
+                        currentFlow = null
+                        closeStream()
                         // 工作流结束 = 可能改了文件，通知文件树刷新
                         window.dispatchEvent(new Event('file-tree-changed'))
         })
@@ -675,19 +669,37 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
         })
 
         // 服务端正常结束响应也会触发 onerror（EventSource 会尝试重连），
-        // workflow_done 已把 es 置 null，这里只兜底异常断开
+        // workflow_done 已把 es 置 null，这里只兜底异常断开。
+        // 断线自动重连（08-28）：工作流跑一半断线时，若已拿到 workflow_id（后端已落检查点），
+        // 显示「重新尝试连接神经网络 (n/3)」提示并用 resume 自动续跑，最多 3 次；
+        // 全部失败才判 failed + 出续跑条。避免用户看到「秒断连」直接红字。
         es.onerror = () => {
-            if (currentFlow && (currentFlow.status === 'running' || currentFlow.status === 'waiting')) {
-                currentFlow.status = 'failed'
-                currentFlow.endTime = Date.now()
+            const flow = currentFlow
+            if (flow && (flow.status === 'running' || flow.status === 'waiting')) {
+                const wfId = flow.workflowId
+                if (wfId && transientRetryCount < 3) {
+                    transientRetryCount++
+                    // 插入可见的重试提示（保留已累积的回复块）
+                    flow.blocks.push({ type: 'intent', text: `重新尝试连接神经网络 (${transientRetryCount}/3)～ ${_randKaomoji()}`, retryNote: true })
+                    // 旧 flow 收拢（提示留在卡片里），不判失败不转圈；新 flow 由 resume 续跑
+                    flow.status = 'stopped'
+                    flow.endTime = Date.now()
+                    onStreamUpdate?.()
+                    // 关掉旧流（置 active=false，才能重新 startCodeWorkflow 续跑）
+                    closeStream()
+                    // 短暂停顿让提示可见，再用 resume 续跑（同一 workflow_id，后端从检查点继续）
+                    setTimeout(() => {
+                        startCodeWorkflow(flow.task, null, { resumeId: wfId, resumedRound: 0 })
+                    }, 900)
+                    return
+                }
+                flow.status = 'failed'
+                flow.endTime = Date.now()
                 settlePendingTools('error', '连接已断开，工具调用未完成')
-                settleSubagents(currentFlow, 'failed')
+                settleSubagents(flow, 'failed')
                 currentFlow = null
-                // 断在半路（后端被重启 / 网络断）—— 这正是检查点存在的意义，
-                // 查一下断点，输入框上方出续跑条。
-                refreshResumable()
-            }
-            closeStream()
+                            }
+                            closeStream()
         }
     }
 
@@ -736,8 +748,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
             }
         }
         closeStream()
-        refreshResumable()
-    }
+            }
 
     // 中途插话：工作流跑着的时候塞一条消息，不用等它完全停下。
     // 依赖 currentFlow.workflowId（由 workflow_start 事件回填）定位正在跑的那个工作流；
@@ -801,8 +812,7 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
 
     return {
         flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow,
-        resumeState, refreshResumable, resumeCodeWorkflow, dismissResumable,
-        todoState, sendSteerMessage, questionState, answerQuestion
+                todoState, sendSteerMessage, questionState, answerQuestion
     }
 }
 

@@ -395,6 +395,7 @@ import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import RunningRing from './RunningRing.vue'
 import { useAuth } from '../../../composables/useAuth.js'
+import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
 
 const auth = useAuth()
 const avatarFallback = computed(() => {
@@ -754,7 +755,7 @@ async function loginResceneCloud() {
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password: rcPwd.value })
+      body: JSON.stringify({ username, password: rcPwd.value, fingerprint: computeHardwareFingerprint() })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.token) { rcError.value = data.error || '登录失败，请检查账号密码'; return }
@@ -775,7 +776,7 @@ async function registerResceneCloud() {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password: rcPwd.value })
+      body: JSON.stringify({ username, password: rcPwd.value, fingerprint: computeHardwareFingerprint() })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.token) { rcError.value = data.error || '注册失败，请稍后再试'; return }
@@ -1203,18 +1204,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   font-weight: 600;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-text), transparent 88%);
 }
-/* 运行中会话行：直角白框（去圆角，避免 SVG 电流在转角描边扭曲）。电流由 RunningRing(SVG 描边) 叠加。 */
+/* 运行中会话行：保留高亮边框（波浪环覆盖在边框上做动态提示，圆点状态灯照常保留） */
 .smc-session-row.running {
   background: var(--app-surface);
-  border-radius: 0;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 70%);
 }
-/* RunningRing 覆盖层：定位整行，SVG 电流弧沿边框绕 */
+/* RunningRing(波浪环) 覆盖整行边框 */
 .smc-running-ring {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
   pointer-events: none;
 }
 

@@ -14,6 +14,7 @@
       <div
         v-if="group.type === 'visible'"
         class="flow-intent markdown-body"
+        :class="{ 'flow-retry-note': group.retryNote }"
         v-html="renderMarkdown(group.text, true)"
       ></div>
 
@@ -429,7 +430,8 @@ const blockGroups = computed(() => {
         current = null
       }
       if (b.type === 'intent') {
-        groups.push({ type: 'visible', text: b.text })
+        // retryNote = 免费模型重试提示（「重新尝试连接神经网络 (n/3)」），小字彩虹扫描样式
+        groups.push({ type: 'visible', text: b.text, retryNote: !!b.retryNote })
       } else if (b.type === 'thinking') {
         // 思考：单步平铺，不收束（推理轨迹全程可见）
         groups.push({ type: 'single-thinking', block: b })
@@ -1594,6 +1596,26 @@ function toolBodyText(b) {
   line-height: 1.75;
   color: var(--app-text);
   word-break: break-word;
+}
+
+/* 免费模型重试提示（「重新尝试连接神经网络 (n/3)」）：小字 + 彩虹渐变文字 + 扫描线动画 */
+.flow-retry-note {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 3px 0;
+  background: linear-gradient(90deg, #ff6b6b, #ffa94d, #ffe066, #69db7c, #4dabf7, #9775fa, #f783ac);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: flow-retry-scan 1.8s linear infinite;
+  position: relative;
+  display: inline-block;
+  opacity: .85;
+}
+@keyframes flow-retry-scan {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
 }
 
 /* 生成视频内嵌块：带进度条播放器，同图片内嵌块模式 */
