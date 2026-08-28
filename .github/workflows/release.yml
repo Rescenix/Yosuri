@@ -65,7 +65,7 @@ jobs:
         run: |
           $v = (Get-Content main-backend/wails.json -Raw | ConvertFrom-Json).info.productVersion
           cd main-backend
-          wails build -platform windows/amd64 -o rescene-package.exe -noinstaller -ldflags "-X backend/internal/handler.AppVersion=$v"
+          wails build -platform windows/amd64 -o rescene-package.exe -noinstaller -skipfrontend -ldflags "-X backend/internal/handler.AppVersion=$v"
 
       - name: 组装 Windows 便携版 zip
         if: runner.os == 'Windows'
@@ -77,14 +77,21 @@ jobs:
 
       - name: Wails 构建 + 打包 (Linux)
         if: runner.os == 'Linux'
-        run: bash scripts/build-linux.sh amd64
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('main-backend/wails.json'))['info']['productVersion'])")
+          cd main-backend
+          wails build -platform linux/amd64 -o rescene -skipfrontend -ldflags "-X backend/internal/handler.AppVersion=$v"
+          cd ..
+          mkdir -p dist/Rescene-linux-amd64
+          cp main-backend/build/bin/rescene dist/Rescene-linux-amd64/
+          tar -C dist -czf "dist/${{ matrix.asset }}" Rescene-linux-amd64
 
       - name: Wails 构建 (macOS)
         if: runner.os == 'macOS'
         run: |
           v=$(python3 -c "import json;print(json.load(open('main-backend/wails.json'))['info']['productVersion'])")
           cd main-backend
-          wails build -platform darwin/amd64 -o rescene -ldflags "-X backend/internal/handler.AppVersion=$v"
+          wails build -platform darwin/amd64 -o rescene -skipfrontend -ldflags "-X backend/internal/handler.AppVersion=$v"
           cd ..
           mkdir -p dist/Rescene-darwin-amd64
           cp main-backend/build/bin/rescene dist/Rescene-darwin-amd64/
