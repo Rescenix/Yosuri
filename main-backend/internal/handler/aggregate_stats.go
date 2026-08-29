@@ -91,10 +91,13 @@ func flushAggStatsNow() {
 		Model  string `json:"model"`
 		Calls  int64  `json:"calls"`
 		Tokens int64  `json:"tokens"`
+		Date   string `json:"date"`
 	}
 	rows := make([]row, 0, len(aggStatsBuf))
+	// 北京时间当天（与云端排行 range 过滤口径一致，自然日）
+	date := time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02")
 	for m, st := range aggStatsBuf {
-		rows = append(rows, row{Model: m, Calls: st.calls, Tokens: st.tokens})
+		rows = append(rows, row{Model: m, Calls: st.calls, Tokens: st.tokens, Date: date})
 	}
 	aggStatsBuf = map[string]*aggStat{}
 	aggStatsMu.Unlock()
