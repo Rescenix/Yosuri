@@ -18,7 +18,7 @@ A long-term companion AI workbench: **cross-device sync** keeps your context ali
   <a href="https://rescene.shanca.me/">
     <img src="https://img.shields.io/badge/Website-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="Website">
   </a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0 License"></a>
   <img src="https://img.shields.io/badge/Release-v0.1.5-blue" alt="Release v0.1.5">
   <img src="https://img.shields.io/badge/Backend-Go-00ADD8" alt="Go">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
@@ -92,4 +92,4 @@ bash scripts/build-linux.sh amd64   # or arm64
 
 - 🐛 Bugs / suggestions → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
 - 💬 Community → [QQ Group 796474621](https://qm.qq.com/q/796474621)
-- Core code: [MIT License](./LICENSE)
+- Core code: [AGPL-3.0 License](./LICENSE)

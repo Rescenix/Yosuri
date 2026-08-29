@@ -22,7 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 ```
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0 License"></a>
   <img src="https://img.shields.io/badge/Release-v0.1.0-blue" alt="Release v0.1.0">
   <img src="https://img.shields.io/badge/Backend-Go%201.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
@@ -95,7 +95,7 @@ cd main-frontend/beneficial-belt && npm install && npm run dev   # フロント�
 
 - 🐛 バグ / 提案 → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
 - Windows リリースは CI でビルドされ SignPath で署名されます（[ポリシー](./docs/CODE_SIGNING_POLICY.md)）
-- コアコード：[MIT License](./LICENSE)
+- コアコード：[AGPL-3.0 License](./LICENSE)
 
 ---
 

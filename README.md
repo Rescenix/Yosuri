@@ -18,7 +18,7 @@
   <a href="https://rescene.shanca.me/">
     <img src="https://img.shields.io/badge/官网-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="官网">
   </a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0 License"></a>
   <img src="https://img.shields.io/badge/Release-v0.1.5-blue" alt="Release v0.1.5">
   <img src="https://img.shields.io/badge/Backend-Go-00ADD8" alt="Go">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
@@ -106,4 +106,4 @@ bash scripts/build-linux.sh amd64   # 或 arm64
 
 - 🐛 Bug / 建议 → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
 - 💬 交流 → [QQ 群 796474621](https://qm.qq.com/q/796474621)
-- 核心代码：[MIT License](./LICENSE)
+- 核心代码：[AGPL-3.0 License](./LICENSE)
