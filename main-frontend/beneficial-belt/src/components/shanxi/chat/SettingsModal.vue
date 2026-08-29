@@ -51,6 +51,8 @@
             <button class="settings-tab" :class="{ on: activeTab === 'aggapi' }" @click="activeTab = 'aggapi'">
               <Icon icon="mdi:api" width="16" />聚合 API</button>
             <div class="settings-nav-label">体验与能力</div>
+            <button class="settings-tab" :class="{ on: activeTab === 'persona' }" @click="activeTab = 'persona'">
+              <Icon icon="mdi:heart-cog-outline" width="16" />人设</button>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
               <Icon icon="mdi:palette-outline" width="16" />外观</button>
             <button class="settings-tab" :class="{ on: activeTab === 'editor' }" @click="activeTab = 'editor'">
@@ -90,7 +92,9 @@
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'memory' }" @click="activeTab = 'memory'; loadMemoryInject()">
               <Icon icon="mdi:notebook-outline" width="16" />记忆</button>
-            <div class="settings-nav-label">账户与产品</div>
+                          <button class="settings-tab" :class="{ on: activeTab === 'lan' }" @click="activeTab = 'lan'; loadLanSyncSetting()">
+                            <Icon icon="mdi:lan-connect" width="16" />局域网</button>
+                          <div class="settings-nav-label">账户与产品</div>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
             <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion()">
@@ -132,24 +136,121 @@
                   <span class="param-label">生图提供商</span>
                   <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
                     <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
+                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
+                    <option value="mcp">MCP 生图工具</option>
                   </select>
                 </div>
+
+                <!-- 生图：自定义模型配置卡片 -->
+                <div v-if="imageProviderDraft === 'custom'" class="cap-card">
+                  <div class="cap-card-title">自定义生图</div>
+                  <div class="cap-field">
+                    <span class="cap-label">Endpoint</span>
+                    <input v-model="imageCustomEndpoint" type="text" class="cap-input" placeholder="https://api.example.com" @keyup.enter="saveImageCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">模型名</span>
+                    <input v-model="imageCustomModel" type="text" class="cap-input" placeholder="如 gpt-image-1" @keyup.enter="saveImageCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">API Key</span>
+                    <input v-model="imageKeyDraft" type="password" class="cap-input" :placeholder="imageKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveImageCapability" />
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                  </div>
+                </div>
+
+                <!-- 生图：MCP 工具配置卡片 -->
+                <div v-else-if="imageProviderDraft === 'mcp'" class="cap-card">
+                  <div class="cap-card-title">MCP 生图工具</div>
+                  <div class="cap-field">
+                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <select v-model="imageMCPTool" class="model-select">
+                      <option value="">未选择</option>
+                      <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
+                    </select>
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                  </div>
+                </div>
+
                 <div class="param-row">
-                  <span class="param-label">Firecrawl API Key</span>
-                  <div class="search-model-row">
+                  <span class="param-label">联网来源</span>
+                  <select class="model-select" v-model="websearchMode">
+                    <option value="bing">Bing（免费，无 key）</option>
+                    <option value="firecrawl">Firecrawl（免费 500 次/月）</option>
+                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
+                    <option value="mcp">MCP 搜索工具</option>
+                  </select>
+                </div>
+
+                <!-- 联网：Bing（默认，免 key） -->
+                <div v-if="websearchMode === 'bing'" class="cap-card">
+                  <div class="cap-card-title">Bing 免 key 联网</div>
+                  <div class="cap-card-desc">零配置即可联网搜索（国内可达），无需任何 API Key。</div>
+                  <span class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</span>
+                </div>
+
+                <!-- 联网：Firecrawl 配置 -->
+                <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
+                  <div class="cap-card-title">Firecrawl API Key</div>
+                  <div class="cap-field">
+                    <span class="cap-label">fc- 开头的 Firecrawl API Key（联网搜索用）</span>
                     <input
                       v-model="firecrawlKeyDraft"
                       type="password"
-                      class="vendor-key-input"
-                      placeholder="fc- 开头的 Firecrawl API Key（联网搜索用）"
+                      class="cap-input"
+                      placeholder="fc- 开头的 Firecrawl API Key"
                       @keyup.enter="saveFirecrawlKey"
                     />
+                  </div>
+                  <div class="cap-actions">
                     <button class="vendor-key-save" type="button" @click="saveFirecrawlKey">
                       {{ firecrawlKeySet ? '已配置 · 更新' : '保存' }}
                     </button>
                   </div>
                   <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
                 </div>
+
+                <!-- 联网：自定义模型配置 -->
+                <div v-else-if="websearchMode === 'custom'" class="cap-card">
+                  <div class="cap-card-title">自定义联网</div>
+                  <div class="cap-field">
+                    <span class="cap-label">Endpoint</span>
+                    <input v-model="websearchEndpoint" type="text" class="cap-input" placeholder="https://api.deepseek.com" @keyup.enter="saveWebsearchCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">联网模型名（需支持服务端搜索）</span>
+                    <input v-model="websearchModel" type="text" class="cap-input" placeholder="如 deepseek-chat" @keyup.enter="saveWebsearchCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">API Key</span>
+                    <input v-model="websearchKeyDraft" type="password" class="cap-input" :placeholder="websearchKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveWebsearchCapability" />
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                  </div>
+                  <span class="firecrawl-key-status">自定义联网走 Endpoint 的 /v1/responses（内置 web_search 工具），DeepSeek 等服务端联网模型可用。</span>
+                </div>
+
+                <!-- 联网：MCP 搜索工具配置 -->
+                <div v-else class="cap-card">
+                  <div class="cap-card-title">MCP 搜索工具</div>
+                  <div class="cap-field">
+                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <select v-model="websearchMCPTool" class="model-select">
+                      <option value="">未选择</option>
+                      <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
+                    </select>
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                  </div>
+                  <span v-if="websearchMCPTool" class="firecrawl-key-status">✅ 联网搜索已指向 MCP 工具，模型自主触发</span>
+                </div>
+
                 <div class="param-row">
                   <span class="param-label">Agnes API Key（AI 生视频）</span>
                   <div class="search-model-row">
@@ -196,25 +297,121 @@
                   <span class="param-label">生图提供商</span>
                   <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
                     <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
-                    <option value="siliconflow">SiliconFlow（免费额度，需 key）</option>
+                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
+                    <option value="mcp">MCP 生图工具</option>
                   </select>
                 </div>
+
+                <!-- 生图：自定义模型配置卡片 -->
+                <div v-if="imageProviderDraft === 'custom'" class="cap-card">
+                  <div class="cap-card-title">自定义生图</div>
+                  <div class="cap-field">
+                    <span class="cap-label">Endpoint</span>
+                    <input v-model="imageCustomEndpoint" type="text" class="cap-input" placeholder="https://api.example.com" @keyup.enter="saveImageCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">模型名</span>
+                    <input v-model="imageCustomModel" type="text" class="cap-input" placeholder="如 gpt-image-1" @keyup.enter="saveImageCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">API Key</span>
+                    <input v-model="imageKeyDraft" type="password" class="cap-input" :placeholder="imageKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveImageCapability" />
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                  </div>
+                </div>
+
+                <!-- 生图：MCP 工具配置卡片 -->
+                <div v-else-if="imageProviderDraft === 'mcp'" class="cap-card">
+                  <div class="cap-card-title">MCP 生图工具</div>
+                  <div class="cap-field">
+                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <select v-model="imageMCPTool" class="model-select">
+                      <option value="">未选择</option>
+                      <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
+                    </select>
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                  </div>
+                </div>
+
                 <div class="param-row">
-                  <span class="param-label">Firecrawl API Key</span>
-                  <div class="search-model-row">
+                  <span class="param-label">联网来源</span>
+                  <select class="model-select" v-model="websearchMode">
+                    <option value="bing">Bing（免费，无 key）</option>
+                    <option value="firecrawl">Firecrawl（免费 500 次/月）</option>
+                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
+                    <option value="mcp">MCP 搜索工具</option>
+                  </select>
+                </div>
+
+                <!-- 联网：Bing（默认，免 key） -->
+                <div v-if="websearchMode === 'bing'" class="cap-card">
+                  <div class="cap-card-title">Bing 免 key 联网</div>
+                  <div class="cap-card-desc">零配置即可联网搜索（国内可达），无需任何 API Key。</div>
+                  <span class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</span>
+                </div>
+
+                <!-- 联网：Firecrawl 配置 -->
+                <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
+                  <div class="cap-card-title">Firecrawl API Key</div>
+                  <div class="cap-field">
+                    <span class="cap-label">fc- 开头的 Firecrawl API Key（联网搜索用）</span>
                     <input
                       v-model="firecrawlKeyDraft"
                       type="password"
-                      class="vendor-key-input"
-                      placeholder="fc- 开头的 Firecrawl API Key（联网搜索用）"
+                      class="cap-input"
+                      placeholder="fc- 开头的 Firecrawl API Key"
                       @keyup.enter="saveFirecrawlKey"
                     />
+                  </div>
+                  <div class="cap-actions">
                     <button class="vendor-key-save" type="button" @click="saveFirecrawlKey">
                       {{ firecrawlKeySet ? '已配置 · 更新' : '保存' }}
                     </button>
                   </div>
                   <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
                 </div>
+
+                <!-- 联网：自定义模型配置 -->
+                <div v-else-if="websearchMode === 'custom'" class="cap-card">
+                  <div class="cap-card-title">自定义联网</div>
+                  <div class="cap-field">
+                    <span class="cap-label">Endpoint</span>
+                    <input v-model="websearchEndpoint" type="text" class="cap-input" placeholder="https://api.deepseek.com" @keyup.enter="saveWebsearchCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">联网模型名（需支持服务端搜索）</span>
+                    <input v-model="websearchModel" type="text" class="cap-input" placeholder="如 deepseek-chat" @keyup.enter="saveWebsearchCapability" />
+                  </div>
+                  <div class="cap-field">
+                    <span class="cap-label">API Key</span>
+                    <input v-model="websearchKeyDraft" type="password" class="cap-input" :placeholder="websearchKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveWebsearchCapability" />
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                  </div>
+                  <span class="firecrawl-key-status">自定义联网走 Endpoint 的 /v1/responses（内置 web_search 工具），DeepSeek 等服务端联网模型可用。</span>
+                </div>
+
+                <!-- 联网：MCP 搜索工具配置 -->
+                <div v-else class="cap-card">
+                  <div class="cap-card-title">MCP 搜索工具</div>
+                  <div class="cap-field">
+                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <select v-model="websearchMCPTool" class="model-select">
+                      <option value="">未选择</option>
+                      <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
+                    </select>
+                  </div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                  </div>
+                  <span v-if="websearchMCPTool" class="firecrawl-key-status">✅ 联网搜索已指向 MCP 工具，模型自主触发</span>
+                </div>
+
                 <div class="param-row">
                   <span class="param-label">Agnes API Key（AI 生视频）</span>
                   <div class="search-model-row">
@@ -561,7 +758,106 @@
                             </div>
                           </div>
 
-            <!-- ========== 外观 ========== -->
+            <!-- ========== 人设 ========== -->
+                        <div v-show="activeTab === 'persona'" class="settings-panel">
+                                      <div class="settings-section-title settings-section-title-row">
+                                        <span>人设</span>
+                                        <button class="persona-report-btn" type="button" @click="personaReportPost">
+                                                                          <Icon icon="mdi:email-fast-outline" width="14" /> 周报投递
+                                                                        </button>
+                                      </div>
+                          <div class="settings-section-desc">
+                            当前人设文案显示在下面，直接改内容再点「保存」即可；也可以存成预设，或者每天随机换一个。
+                          </div>
+                          <textarea
+                            v-model="personaDraft"
+                            class="persona-textarea"
+                            rows="5"
+                            placeholder="写下你自己的 AI 人设，比如：你是冷面可靠的工作助手，话少、直接、从不客套……"
+                            @focus="personaEditing = true"
+                            @input="personaEditing = true"
+                          ></textarea>
+
+                          <!-- 编辑态操作行 -->
+                          <div class="persona-actions" v-if="personaEditing">
+                            <button class="vendor-key-save" type="button" @click="saveCustomPersona">保存</button>
+                            <button class="vendor-key-save" type="button" style="margin-left: 8px;" @click="personaSavingPreset = !personaSavingPreset">
+                              {{ personaSavingPreset ? '取消存预设' : '保存为预设' }}
+                            </button>
+                            <button class="vendor-key-cancel" type="button" style="margin-left: 8px;" @click="clearPersona">清除人设（中性助手）</button>
+                          </div>
+                          <!-- 保存为预设：命名行 -->
+                          <div class="persona-save-preset-row" v-if="personaSavingPreset">
+                            <input
+                              v-model="newPresetName"
+                              class="persona-preset-name-input"
+                              type="text"
+                              placeholder="预设名字，比如：我的老板人设"
+                              @keyup.enter="saveAsPreset"
+                            />
+                            <button class="vendor-key-save" type="button" @click="saveAsPreset">存进「我的预设」</button>
+                          </div>
+
+                          <div class="persona-divider"></div>
+
+                          <!-- 每日随机 -->
+                          <button
+                            class="persona-preset-card persona-random-card"
+                            :class="{ on: personaSelected === 'random' }"
+                            type="button"
+                            @click="selectRandomPreset"
+                          >
+                            <Icon :icon="RANDOM_PRESET.icon" width="22" class="persona-preset-icon" />
+                            <span class="persona-preset-name">{{ RANDOM_PRESET.name }}</span>
+                            <span class="persona-preset-desc">{{ RANDOM_PRESET.desc }}</span>
+                          </button>
+
+                          <!-- 内置预设 -->
+                          <div class="persona-group-title">预设</div>
+                          <div class="persona-preset-grid">
+                            <button
+                              v-for="p in BUILTIN_PRESETS"
+                              :key="p.id"
+                              class="persona-preset-card"
+                              :class="{ on: personaSelected === p.id }"
+                              type="button"
+                              @click="selectPersonaPreset(p)"
+                            >
+                              <Icon :icon="p.icon" width="22" class="persona-preset-icon" />
+                              <span class="persona-preset-name">{{ p.name }}</span>
+                              <span class="persona-preset-desc">{{ p.desc }}</span>
+                            </button>
+                          </div>
+
+                          <!-- 我的预设 -->
+                          <template v-if="myPersonas.length">
+                            <div class="persona-group-title">我的预设</div>
+                            <div class="persona-preset-grid">
+                              <button
+                                v-for="p in myPersonas"
+                                :key="p.id"
+                                class="persona-preset-card"
+                                :class="{ on: personaSelected === p.id }"
+                                type="button"
+                                @click="selectPersonaPreset(p)"
+                              >
+                                <Icon icon="mdi:account-heart" width="22" class="persona-preset-icon" />
+                                <span class="persona-preset-name">{{ p.name }}</span>
+                                <span class="persona-preset-desc">自定义预设</span>
+                                <span class="persona-preset-del" title="删除预设" @click="deleteMyPreset(p.id, $event)">×</span>
+                              </button>
+                            </div>
+                          </template>
+
+                          <Transition name="persona-toast">
+                            <div v-if="personaToast" class="persona-toast" :class="{ error: !personaToast.ok }" role="status" aria-live="polite">
+                              <Icon :icon="personaToast.ok ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'" width="16" />
+                              <span>{{ personaToast.message }}</span>
+                            </div>
+                          </Transition>
+                        </div>
+
+                        <!-- ========== 外观 ========== -->
             <div v-show="activeTab === 'appearance'" class="settings-panel">
               <div class="settings-section-title">主题</div>
               <div class="settings-section-desc">选择你喜欢的主题色，设置会立即应用到整个界面。</div>
@@ -959,6 +1255,28 @@
               <div v-else class="memory-empty">尚未配置任何记忆。</div>
             </div>
 
+            <!-- ========== 局域网（手机↔电脑内网同步对话，零云端；记忆走云端同步不在此处） ========== -->
+            <div v-show="activeTab === 'lan'" class="settings-panel">
+              <div class="settings-section-title">局域网同步</div>
+              <div class="param-row" style="align-items: center;">
+                <span class="param-label">开启同步</span>
+                <label class="param-switch">
+                  <input type="checkbox" v-model="lanSyncEnabled" @change="saveLanSyncSetting" />
+                  <span class="param-switch-track"></span>
+                </label>
+                <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
+                  开启后电脑监听 18080 端口（仅内网可达，token 鉴权 + 加密传输），手机 App 填下面信息即可同步对话。默认关闭，首次开启时 Windows 防火墙会弹窗，允许即可。
+                </span>
+              </div>
+              <div v-if="lanSyncEnabled && lanSyncInfo" class="lan-sync-box">
+                <div class="lan-sync-row"><span class="lan-sync-lbl">IP</span><code class="lan-sync-val">{{ lanSyncInfo.ip }}</code></div>
+                <div class="lan-sync-row"><span class="lan-sync-lbl">端口</span><code class="lan-sync-val">{{ lanSyncInfo.port }}</code></div>
+                <div class="lan-sync-row"><span class="lan-sync-lbl">Token</span><code class="lan-sync-val lan-sync-token">{{ lanSyncInfo.token }}</code></div>
+                <button class="lan-sync-copy" @click="copyLanSyncInfo">📋 复制连接信息</button>
+              </div>
+              <div v-else class="memory-empty">未开启局域网同步，手机无法连接。</div>
+            </div>
+
             <!-- ========== 我的（Profile + 自定义指令，仿 Claude Profile） ========== -->
             <div v-show="activeTab === 'profile'" class="settings-panel">
               <div class="settings-section-title">个人资料</div>
@@ -1049,8 +1367,9 @@
                   class="api-form-btn save"
                   type="button"
                   v-if="dlState === 'done'"
-                  disabled
-                >已就绪，下次启动生效</button>
+                  :disabled="installing"
+                  @click="onInstallUpdate"
+                >{{ installing ? '正在安装，即将重启…' : '一键安装' }}</button>
                 <button
                   class="api-form-btn save dl-progress-btn"
                   type="button"
@@ -1066,7 +1385,7 @@
                   v-else
                   disabled
                 >正在下载…</button>
-                <span v-if="dlState === 'error'" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ dlError }}</span>
+                <span v-if="dlState === 'error' || installError" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ installError || dlError }}</span>
               </div>
 
               <!-- 偏好开关：不提示版本更新（2026-08-28 起不再区分测试版，删掉「热更新测试版本」开关） -->
@@ -1139,6 +1458,8 @@
           </div>
         </div>
       </Teleport>
+
+    <PersonaReportModal v-if="personaReportOpen" @close="personaReportOpen = false" />
 </template>
 
 <script setup>
@@ -1146,11 +1467,13 @@ import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
+import { DEFAULT_PERSONA } from '../composables/useAgentWorkflow.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
 import { useAuth } from '../../../composables/useAuth.js'
 import FreeOrderModal from './FreeOrderModal.vue'
+import PersonaReportModal from './PersonaReportModal.vue'
 
 const props = defineProps({
   openid: { type: String, default: '' },
@@ -1164,6 +1487,203 @@ const activeTab = ref(props.defaultTab || 'models')
 const providerSubTab = ref('free')
 const dhsSubTab = ref(props.defaultDhsSubTab || 'installed')
 const skillsSubTab = ref('local')
+
+// ── 人设预设 ─────────────────────────────────────────────
+// 内置预设 + 我的预设（localStorage.myPersonas）+ 每日随机。
+// 生效的人设始终落在 localStorage.persona，前端发工作流时经 persona
+// 参数带给后端（见 useAgentWorkflow.js）。内置预设不开个人化，我的预设本地存。
+const BUILTIN_PRESETS = [
+  { id: 'rescene', name: 'Rescene酱', icon: 'mdi:heart', desc: '默认 · 软软暖暖的元气助手', prompt: DEFAULT_PERSONA },
+  { id: 'catgirl', name: '猫娘', icon: 'mdi:cat', desc: '喵系撒娇，带猫娘口癖', prompt: `你是小猫娘，一只软萌的猫耳 AI 助手。说话带「喵」的口癖，喜欢撒娇、蹭蹭，偶尔用一两个「~」「♪」点缀语气；但卖萌归卖萌，该做的事一件都不会少。遇到不确定的事会老实承认，不会编造假数据骗人。` },
+  { id: 'mature', name: '御姐', icon: 'mdi:flower-tulip', desc: '成熟冷静，可靠的大姐姐', prompt: `你是御姐型的 AI 助手，成熟、冷静、可靠。语气从容不迫，话不多但每句都在点上，遇到问题先给结论再解释原因；该严肃时严肃，偶尔流露一点温柔体贴。不装可爱，不堆语气词。` },
+  { id: 'loli', name: '萝莉', icon: 'mdi:candy', desc: '天真活泼，可爱软萌', prompt: `你是萝莉型的 AI 助手，天真烂漫、活泼可爱。语气轻盈欢快，喜欢用「哇」「耶」这样的感叹词，偶尔用一两个颜文字点缀；但小脑袋可聪明了，复杂的事也能讲得清清楚楚，绝不因为卖萌就偷懒。` },
+  { id: 'senpai', name: '学姐', icon: 'mdi:school', desc: '温柔知性，耐心照顾', prompt: `你是温柔知性的学姐型 AI 助手，耐心、体贴、有书卷气。说话条理清晰、循循善诱，像前辈一样照顾对方，遇到难题会一步步带着解决；语气温和但不拖沓，该给结论时干脆利落。` },
+]
+const loadMyPersonas = () => {
+  try {
+    const raw = localStorage.getItem('myPersonas')
+    if (!raw) return []
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr.filter(p => p && p.name && p.prompt) : []
+  } catch { return [] }
+}
+const myPersonas = ref(loadMyPersonas())
+const persistMyPersonas = () => localStorage.setItem('myPersonas', JSON.stringify(myPersonas.value))
+const PERSONA_PRESETS = computed(() => [...BUILTIN_PRESETS, ...myPersonas.value])
+const RANDOM_PRESET = { id: 'random', name: '每日随机', icon: 'mdi:dice-multiple', desc: '每天自动换一个人设' }
+
+const personaToast = ref(null) // { ok, message } 轻量浮条反馈
+const personaDraft = ref('') // 人设草稿
+const personaSelected = ref('')
+const personaEditing = ref(false) // 编辑过输入框才显示按钮，避免误导
+const personaSavingPreset = ref(false) // 显示「保存为预设」命名行
+const newPresetName = ref('')
+const personaReportOpen = ref(false) // 人设周报弹窗（改为手动打开）
+// 周报投递到通知中心（本地通知 API，不弹窗，邮件图标可见）
+const personaReportPost = async () => {
+  try {
+    const arr = JSON.parse(localStorage.getItem('personaHistory') || '[]')
+    if (!Array.isArray(arr) || !arr.length) { showPersonaToast(false, '暂无周报数据，先换几天人设再看看吧'); return }
+    // 计算统计（与 PersonaReportModal 一致）
+    const rangeDays = 7
+    const cutoff = Date.now() - rangeDays * 864e5
+    const h = arr.filter(x => x.ts > cutoff)
+    const switchCount = h.length
+    const activeDays = new Set(h.map(x => x.key)).size
+    const randomDays = new Set(h.filter(x => x.mode === 'random').map(x => x.key)).size
+    const counts = {}
+    for (const x of h) counts[x.name] = (counts[x.name] || 0) + 1
+    let topName = '', topCount = 0
+    for (const [n, c] of Object.entries(counts)) { if (c > topCount) { topName = n; topCount = c } }
+    const end = new Date(); const start = new Date(); start.setDate(start.getDate() - rangeDays + 1)
+    const f = d => `${d.getMonth()+1}.${d.getDate()}`
+    const title = `人设周报 ${f(start)}-${f(end)}`
+    const body = `换了 ${switchCount} 次人设，活跃 ${activeDays} 天，每日随机 ${randomDays} 天，最宠「${topName}」（${topCount} 次）`
+    await fetch('/api/notifications/local', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body, icon: 'mdi:heart-pulse' })
+    })
+    showPersonaToast(true, '周报已投递到通知中心')
+  } catch { showPersonaToast(false, '投递失败，后端没起？') }
+}
+let personaToastTimer = null
+const showPersonaToast = (ok, message) => {
+  personaToast.value = { ok, message }
+  clearTimeout(personaToastTimer)
+  personaToastTimer = setTimeout(() => { personaToast.value = null }, 2200)
+}
+// 人设使用埋点：周报数据源（只记预设名/模式/日期，不碰对话内容）
+const recordPersonaUse = (name, mode) => {
+  try {
+    const key = new Date().toISOString().slice(0, 10)
+    const arr = JSON.parse(localStorage.getItem('personaHistory') || '[]')
+    arr.push({ key, name, mode, ts: Date.now() })
+    const cutoff = Date.now() - 60 * 24 * 3600 * 1000 // 只留最近 60 天
+    const trimmed = arr.filter(x => x.ts > cutoff)
+    localStorage.setItem('personaHistory', JSON.stringify(trimmed.slice(-1000)))
+  } catch { /* 埋点失败不影响主流程 */ }
+}
+const todayKey = () => new Date().toDateString()
+const todaySeed = () => {
+  const d = new Date()
+  const s = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+// 每日随机落地：以日期为种子从全部预设里挑一个，写进 localStorage.persona
+const applyDailyRandom = () => {
+  const pool = PERSONA_PRESETS.value
+  if (!pool.length) return null
+  const picked = pool[todaySeed() % pool.length]
+  localStorage.setItem('persona', picked.prompt)
+  localStorage.setItem('randomPersona', 'true')
+  localStorage.setItem('randomPersonaDate', todayKey())
+  return picked
+}
+const loadPersona = () => {
+  // 每日随机开启：同一天沿用，跨天自动重抽
+  if (localStorage.getItem('randomPersona') === 'true') {
+    if (localStorage.getItem('randomPersonaDate') !== todayKey()) {
+      const picked = applyDailyRandom()
+      if (picked) {
+        personaSelected.value = 'random'
+        personaDraft.value = picked.prompt
+        return
+      }
+    } else {
+      personaSelected.value = 'random'
+      personaDraft.value = localStorage.getItem('persona') || ''
+      return
+    }
+  }
+  const v = localStorage.getItem('persona')
+  if (v === null || v === '') {
+    personaSelected.value = 'rescene'
+    personaDraft.value = BUILTIN_PRESETS[0].prompt
+    return
+  }
+  const hit = PERSONA_PRESETS.value.find(p => p.prompt === v)
+  if (hit) {
+    personaSelected.value = hit.id
+    personaDraft.value = v
+  } else {
+    personaSelected.value = 'custom'
+    personaDraft.value = v
+  }
+}
+const selectPersonaPreset = (p) => {
+  personaSelected.value = p.id
+  personaDraft.value = p.prompt
+  personaEditing.value = false
+  localStorage.removeItem('randomPersona')
+  localStorage.removeItem('randomPersonaDate')
+  localStorage.setItem('persona', p.prompt)
+  recordPersonaUse(p.name, 'preset')
+  showPersonaToast(true, '已切换人设：' + p.name)
+}
+const selectRandomPreset = () => {
+  const picked = applyDailyRandom()
+  personaSelected.value = 'random'
+  personaDraft.value = picked ? picked.prompt : ''
+  personaEditing.value = false
+  if (picked) recordPersonaUse(picked.name, 'random')
+  showPersonaToast(true, picked ? '已开启每日随机：今天 ' + picked.name : '暂无可用预设')
+}
+const saveCustomPersona = () => {
+  const t = personaDraft.value.trim()
+  if (!t) {
+    showPersonaToast(false, '先写下你的人设内容再保存')
+    return
+  }
+  localStorage.setItem('persona', t)
+  localStorage.removeItem('randomPersona')
+    localStorage.removeItem('randomPersonaDate')
+    personaSelected.value = 'custom'
+    personaEditing.value = false
+    recordPersonaUse('自定义', 'custom')
+    showPersonaToast(true, '自定义人设已保存')
+}
+// 把当前文案存成「我的预设」（带名字，进分组）
+const saveAsPreset = () => {
+  const t = personaDraft.value.trim()
+  const n = newPresetName.value.trim()
+  if (!t) { showPersonaToast(false, '先写下人设内容'); return }
+  if (!n) { showPersonaToast(false, '给预设起个名字'); return }
+  const id = 'mp_' + Date.now()
+  myPersonas.value.push({ id, name: n, prompt: t })
+  persistMyPersonas()
+  localStorage.setItem('persona', t)
+  localStorage.removeItem('randomPersona')
+  localStorage.removeItem('randomPersonaDate')
+  personaSelected.value = id
+  personaEditing.value = false
+  personaSavingPreset.value = false
+  newPresetName.value = ''
+  recordPersonaUse(n, 'preset')
+  showPersonaToast(true, '已保存为预设：' + n)
+}
+const deleteMyPreset = (id, e) => {
+  e.stopPropagation()
+  myPersonas.value = myPersonas.value.filter(p => p.id !== id)
+  persistMyPersonas()
+  if (personaSelected.value === id) {
+    selectPersonaPreset(BUILTIN_PRESETS[0])
+  }
+  showPersonaToast(true, '已删除预设')
+}
+const clearPersona = () => {
+  localStorage.removeItem('persona')
+  localStorage.removeItem('randomPersona')
+  localStorage.removeItem('randomPersonaDate')
+  personaSelected.value = 'rescene'
+  personaDraft.value = ''
+  personaEditing.value = false
+  recordPersonaUse('中性助手', 'none')
+  showPersonaToast(true, '已清除人设，恢复中性助手')
+}
+loadPersona()
 const { editorLazy: editorLazyEnabled, setEditorLazy } = useEditorPrefs()
 
 const VENDOR_ICONS = [
@@ -1813,6 +2333,18 @@ async function loadConfigs() {
     customModels.value = data.custom_models || []
     firecrawlKeySet.value = !!data.firecrawl_key_set
     agnesKeySet.value = !!data.agnes_key_set
+    // 联网来源（websearch）+ 生图来源（image_cfg）状态恢复
+    const ws = data.websearch || {}
+    websearchMode.value = ws.mode || 'bing'
+    websearchEndpoint.value = ws.endpoint || ''
+    websearchModel.value = ws.model || ''
+    websearchMCPTool.value = ws.mcp_tool || ''
+    websearchKeySet.value = !!ws.api_key_set
+    const ic = data.image_cfg || {}
+    imageCustomEndpoint.value = ic.endpoint || ''
+    imageCustomModel.value = ic.model || ''
+    imageMCPTool.value = ic.mcp_tool || ''
+    imageKeySet.value = !!ic.api_key_set
   } catch (e) {
     errorMsg.value = '加载配置失败，请稍后再试'
   } finally {
@@ -2158,6 +2690,109 @@ async function saveAgnesKey() {
   await loadConfigs()
   agnesKeyDraft.value = ''
   agnesKeySet.value = true
+}
+
+// ============ 联网来源 + 生图来源（firecrawl/pollinations 默认之外，可换自定义模型或 MCP） ============
+// 配置存在 user_configs 的特殊条目：id=websearch（联网）/ id=image（生图），
+// mode 存在 Extra.mode；自定义的 Endpoint/Key/模型名走标准字段。
+const WEBSEARCH_CFG_ID = 'websearch'
+const IMAGE_CFG_ID = 'image'
+const websearchMode = ref('bing')
+const websearchEndpoint = ref('')
+const websearchModel = ref('')
+const websearchMCPTool = ref('')
+const websearchKeyDraft = ref('')
+const websearchKeySet = ref(false)
+const websearchSaving = ref(false)
+const imageCustomEndpoint = ref('')
+const imageCustomModel = ref('')
+const imageMCPTool = ref('')
+const imageKeyDraft = ref('')
+const imageKeySet = ref(false)
+const imageSaving = ref(false)
+// 已装 MCP 工具的完整工具名列表（/api/mcp → servers[].tools），供联网/生图的下拉选择
+const mcpToolOptions = ref([])
+async function loadMCPToolOptions() {
+  try {
+    const res = await fetch('/api/mcp')
+    if (!res.ok) return
+    const data = await res.json()
+    const list = []
+    for (const s of data.servers || []) for (const t of s.tools || []) list.push(t)
+    mcpToolOptions.value = [...new Set(list)].sort()
+  } catch (e) { mcpToolOptions.value = [] }
+}
+
+// 保存联网来源配置：mode + （custom 时）endpoint/key/模型名 + （mcp 时）工具名。
+async function saveWebsearchCapability() {
+  const mode = websearchMode.value
+  if (mode === 'custom' && !websearchEndpoint.value.trim()) {
+    errorMsg.value = '请输入自定义联网 Endpoint'
+    return
+  }
+  if (mode === 'custom' && !websearchModel.value.trim()) {
+    errorMsg.value = '请输入自定义联网模型名'
+    return
+  }
+  if (mode === 'mcp' && !websearchMCPTool.value) {
+    errorMsg.value = '请选择 MCP 搜索工具'
+    return
+  }
+  errorMsg.value = ''
+  websearchSaving.value = true
+  try {
+    const untouched = configs.value
+      .filter(c => c.id !== WEBSEARCH_CFG_ID)
+      .map(c => ({ ...c, api_key: MASKED }))
+    await persist([...untouched, {
+      id: WEBSEARCH_CFG_ID, name: '联网搜索',
+      endpoint: mode === 'custom' ? websearchEndpoint.value.trim() : (mode === 'mcp' ? 'mcp://' + websearchMCPTool.value : 'https://api.firecrawl.dev'),
+      api_key: mode === 'custom' ? (websearchKeyDraft.value || (websearchKeySet.value ? MASKED : '')) : '',
+      default_model: mode === 'custom' ? websearchModel.value.trim() : '',
+      is_default: false,
+      extra: { mode, mcp_tool: mode === 'mcp' ? websearchMCPTool.value : '' }
+    }])
+    await loadConfigs()
+    websearchKeyDraft.value = ''
+  } catch (e) {
+    errorMsg.value = e.message || '保存联网来源失败'
+  } finally { websearchSaving.value = false }
+}
+
+// 保存生图来源配置（provider 选择已存 localStorage=imageProvider；这里存 endpoint/key/模型名/mcp 工具）。
+async function saveImageCapability() {
+  const mode = imageProviderDraft.value
+  if (mode === 'custom' && !imageCustomEndpoint.value.trim()) {
+    errorMsg.value = '请输入自定义生图 Endpoint'
+    return
+  }
+  if (mode === 'custom' && !imageCustomModel.value.trim()) {
+    errorMsg.value = '请输入自定义生图模型名'
+    return
+  }
+  if (mode === 'mcp' && !imageMCPTool.value) {
+    errorMsg.value = '请选择 MCP 生图工具'
+    return
+  }
+  errorMsg.value = ''
+  imageSaving.value = true
+  try {
+    const untouched = configs.value
+      .filter(c => c.id !== IMAGE_CFG_ID)
+      .map(c => ({ ...c, api_key: MASKED }))
+    await persist([...untouched, {
+      id: IMAGE_CFG_ID, name: '生图',
+      endpoint: mode === 'custom' ? imageCustomEndpoint.value.trim() : (mode === 'mcp' ? 'mcp://' + imageMCPTool.value : ''),
+      api_key: mode === 'custom' ? (imageKeyDraft.value || (imageKeySet.value ? MASKED : '')) : '',
+      default_model: mode === 'custom' ? imageCustomModel.value.trim() : '',
+      is_default: false,
+      extra: { mode, mcp_tool: mode === 'mcp' ? imageMCPTool.value : '' }
+    }])
+    await loadConfigs()
+    imageKeyDraft.value = ''
+  } catch (e) {
+    errorMsg.value = e.message || '保存生图来源失败'
+  } finally { imageSaving.value = false }
 }
 
 // id → 是否支持识图，合并免费池 + 自定义配置两个来源（/api/models/config 都带 vision 字段）。
@@ -2521,6 +3156,34 @@ async function saveAutomaticMemorySetting() {
     })
   } catch (e) {}
 }
+// 局域网同步开关（局域网 tab）：默认关，按需开启才监听 0.0.0.0（避免每次启动触发防火墙弹窗）
+const lanSyncEnabled = ref(false)
+const lanSyncInfo = ref(null)
+async function loadLanSyncSetting() {
+  try {
+    const res = await fetch('/api/lan/sync-info')
+    if (res.ok) {
+      const data = await res.json()
+      lanSyncEnabled.value = !!data.enabled
+      lanSyncInfo.value = data.enabled ? data : null
+    }
+  } catch (e) {}
+}
+async function saveLanSyncSetting() {
+  try {
+    const res = await fetch('/api/lan/' + (lanSyncEnabled.value ? 'enable' : 'disable'), { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      lanSyncInfo.value = data.enabled ? data : null
+    }
+  } catch (e) {}
+}
+function copyLanSyncInfo() {
+  const info = lanSyncInfo.value
+  if (!info) return
+  const text = `IP ${info.ip}\n端口 ${info.port}\nToken ${info.token}`
+  if (navigator.clipboard) navigator.clipboard.writeText(text)
+}
 async function loadProfile() {
   try {
     const res = await fetch('/api/profile')
@@ -2665,6 +3328,25 @@ function onNotifyDisabledChange() {
   setUpdateNotifyDisabled(notifyDisabled.value)
 }
 
+// 一键安装：后台已下好的热补丁 exe → 调后端安装接口，3 秒后自动替换 exe 并重启进新版
+// （后端 HandleInstallUpdate /api/update/install，2026-08-29 修复：之前按钮 disabled 只能重启才生效）
+const installing = ref(false)
+const installError = ref('')
+async function onInstallUpdate() {
+  if (installing.value) return
+  installing.value = true
+  installError.value = ''
+  try {
+    const res = await fetch('/api/update/install', { method: 'POST' })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(d.error || `安装失败 (${res.status})`)
+    // 成功：后端 3 秒后退出本进程替换 exe，这里保持「正在安装」提示，应用马上会重启
+  } catch (err) {
+    installing.value = false
+    installError.value = err.message || '安装失败，请稍后重试'
+  }
+}
+
 function handleEsc(e) {
   if (e.key === 'Escape') emit('close')
 }
@@ -2672,6 +3354,7 @@ function handleEsc(e) {
 
 onMounted(() => {
   loadConfigs()
+  loadMCPToolOptions()
   loadProfile()
   document.addEventListener('keydown', handleEsc)
   // 其他入口改了模型配置（如 FreeOrderModal 拖拽排序）→ 设置页也刷新顺序
@@ -2865,6 +3548,26 @@ onUnmounted(() => {
 }
 .model-select:focus { outline: none; border-color: var(--app-accent); box-shadow: 0 0 0 3px var(--app-accent-soft); }
 
+.param-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; }
+.param-label { flex: none; width: 128px; font-size: 12.5px; color: var(--app-text-soft); }
+.search-model-row { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.vendor-key-input { flex: 1; min-width: 0; height: 34px; box-sizing: border-box; padding: 0 10px; font: inherit; font-size: 12px; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; }
+.vendor-key-save { flex: none; height: 34px; padding: 0 16px; border: 1px solid var(--app-accent); border-radius: 8px; color: #fff; background: var(--app-accent); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; transition: opacity .15s ease, transform .15s ease; }
+.vendor-key-save:hover { opacity: .9; transform: translateY(-1px); }
+.vendor-key-save:disabled { opacity: .55; cursor: default; transform: none; }
+.firecrawl-key-status { display: block; margin-top: 7px; font-size: 11.5px; color: #12b76a; }
+.model-select { height: 34px; box-sizing: border-box; padding: 0 8px; font: inherit; font-size: 12px; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; }
+
+/* 联网/生图能力配置卡片：每个来源一块浅色卡片，字段竖排，一眼看懂 */
+.cap-card { margin-top: 8px; padding: 12px 14px; border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-surface-2); }
+.cap-card-title { font-size: 12.5px; font-weight: 700; color: var(--app-text); margin-bottom: 10px; }
+.cap-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.cap-field:last-of-type { margin-bottom: 12px; }
+.cap-label { font-size: 11.5px; color: var(--app-text-faint); }
+.cap-input { width: 100%; height: 34px; box-sizing: border-box; padding: 0 10px; font: inherit; font-size: 12px; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; }
+.cap-input:focus { outline: none; border-color: var(--app-accent); }
+.cap-actions { display: flex; align-items: center; gap: 8px; }
+.cap-card .model-select { width: 100%; }
 .model-pick-btn {
   flex-shrink: 0; margin-left: auto; padding: 3px 12px; font-size: 12px; font-weight: 600;
   color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid #ddd; border-radius: 999px; cursor: pointer;
@@ -3164,6 +3867,42 @@ onUnmounted(() => {
 .vendor-key-input:focus { outline: none; border-color: #c0c0c0; }
 .vendor-key-save { font-size: 12px; font-weight: 600; color: #fff; background: #1a1a1a; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-save:hover { background: #333; }
+.persona-preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.persona-preset-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-surface); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+.persona-preset-card:hover { border-color: var(--app-border-soft); background: var(--app-surface-2); }
+.persona-preset-card.on { border-color: color-mix(in srgb, var(--app-accent, #7c6cf0) 55%, var(--app-border)); background: color-mix(in srgb, var(--app-accent, #7c6cf0) 10%, var(--app-surface)); }
+.persona-preset-icon { flex: none; color: var(--app-text-soft); }
+.persona-preset-card.on .persona-preset-icon { color: var(--app-accent, #7c6cf0); }
+.persona-preset-name { font-size: 14px; font-weight: 700; color: var(--app-text); }
+.persona-preset-desc { font-size: 11px; color: var(--app-text-faint); line-height: 1.4; }
+.persona-group-title { font-size: 11px; font-weight: 700; color: var(--app-text-soft); text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 8px; }
+.persona-preset-del { position: absolute; top: 4px; right: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 13px; font-weight: 700; color: var(--app-text-soft); background: var(--app-surface-3); cursor: pointer; opacity: 0; transition: opacity .12s; line-height: 1; }
+.persona-preset-card:hover .persona-preset-del { opacity: 1; }
+.persona-preset-del:hover { color: #e74c3c; background: color-mix(in srgb, #e74c3c 15%, var(--app-surface-3)); }
+.persona-preset-card { position: relative; } /* 为删除按钮定位 */
+.persona-random-card { margin-top: 0; } /* 就是普通卡片 */
+.persona-save-preset-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.persona-report-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--app-accent, #7c6cf0); background: transparent; border: 1px solid color-mix(in srgb, var(--app-accent, #7c6cf0) 40%, var(--app-border)); border-radius: 999px; padding: 3px 10px; cursor: pointer; margin-left: auto; }
+.persona-report-btn:hover { background: color-mix(in srgb, var(--app-accent, #7c6cf0) 12%, var(--app-surface)); }
+.persona-preset-name-input { flex: 1; background: var(--app-surface-2); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit; }
+.persona-preset-name-input:focus { outline: none; border-color: var(--app-accent, #7c6cf0); }
+.persona-divider { height: 1px; background: var(--app-border); margin: 18px 0 14px; }
+.persona-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.persona-textarea { width: 100%; box-sizing: border-box; background: var(--app-surface-2); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; font-size: 13px; font-family: inherit; line-height: 1.6; resize: vertical; }
+.persona-textarea:focus { outline: none; border-color: var(--app-accent, #7c6cf0); }
+.persona-toast {
+  position: fixed; left: 50%; bottom: 34px; z-index: 10030;
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 36px; padding: 0 14px;
+  border: 1px solid color-mix(in srgb, #16a06a, transparent 70%); border-radius: 999px;
+  color: #0f6b49; background: color-mix(in srgb, #ecfdf5 94%, transparent);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .16);
+  font-size: 12px; font-weight: 650;
+  transform: translateX(-50%); pointer-events: none;
+}
+.persona-toast.error { border-color: color-mix(in srgb, #dc4c4c, transparent 70%); color: #b42323; background: color-mix(in srgb, #fff1f1 94%, transparent); }
+.persona-toast-enter-active, .persona-toast-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.persona-toast-enter-from, .persona-toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(6px); }
 .firecrawl-key-status { font-size: 12px; color: #2e7d32; margin-top: 6px; display: inline-block; }
 .vendor-key-cancel { font-size: 12px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-cancel:hover { background: var(--app-surface-3); }
@@ -3489,6 +4228,20 @@ onUnmounted(() => {
   border: 1px dashed var(--app-border);
   border-radius: 12px;
 }
+/* 局域网同步连接信息（局域网 tab，按需开启后展示） */
+.lan-sync-box {
+  padding: 12px 14px;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.lan-sync-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.lan-sync-lbl { width: 40px; font-size: 12px; color: var(--app-text-faint); flex-shrink: 0; }
+.lan-sync-val { font-size: 12.5px; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; background: var(--app-bg); border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 8px; color: var(--app-text); }
+.lan-sync-token { word-break: break-all; }
+.lan-sync-copy { margin-top: 8px; font-size: 12px; padding: 5px 12px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); color: var(--app-text); cursor: pointer; }
+.lan-sync-copy:hover { border-color: var(--app-accent); color: var(--app-accent); }
 .version-value { color: var(--app-text); font-size: 12.5px; font-weight: 600; }
 .version-new { color: var(--app-accent); }
 .update-err { color: #e5484d; font-size: 12.5px; word-break: break-all; }

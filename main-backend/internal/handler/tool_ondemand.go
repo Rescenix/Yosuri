@@ -27,7 +27,7 @@ var loadToolsToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name: loadToolsToolName,
-		Description: "按名字取回 Go 内置或外部 MCP 工具的完整参数说明并激活它们。系统提示词里的「按需工具索引」" +
+		Description: "按名字取回内置或扩展工具的完整参数说明并激活它们。系统提示词里的「工具索引」" +
 			"只给了名字和用途，要真正调用某个工具，先用这个把它加载进来（可一次传多个）。" +
 			"加载后该工具就出现在你的可用工具列表里，直接照常调用即可。",
 		Parameters: core.ToolParameters{
@@ -53,26 +53,13 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// apply_patch 是长文件写入的基础能力，必须从第一轮起直接可用。
 		// 模型可以先建骨架，再用多个小补丁逐段追加，避开单次 write_file 参数过长。
 		nativeApplyPatchToolDef,
-		dispatchAgentToolDef, loadToolsToolDef, updateTodoToolDef, readSkillToolDef, skillManageToolDef,
-		// harness_status：让模型能问"我上下文里现在有什么、丢了什么、去哪捞"。
-		// 常驻是有意的——正因为它是自省用的，模型需要它的时候恰恰是"感觉不对劲"
-		// 的时候，那时再让它先 load_tools 就晚了。
-		harnessStatusToolDef,
+		dispatchAgentToolDef, loadToolsToolDef,
 		// ask_user：让 agent 在工作流中途向用户提问并暂停等待回答（human-in-the-loop）。
 		// 常驻是因为它是交互控制面工具，需要用时再 load_tools 就打断节奏了。
 		askUserToolDef,
-		// open_preview：agent 主动把指定页面弹进内嵌预览面板（harness CDP 通道），
-		// 区别于系统收尾自动弹——主动权在 agent。常驻，无需 load_tools。
-		openPreviewToolDef,
-		// 通用页面注入：供前端设计 Agent 在当前预览页执行交互或验证脚本。
-		injectPreviewToolDef,
-		// remember：用户说「记住」时写入长期记忆文件。
-		rememberToolDef,
-		// web_search：联网搜索（Firecrawl）。默认开通——模型自主判断要不要搜，
-		// 不需要时零开销；需要时直接调，无需 load_tools。
-		webSearchToolDef,
-		// session_search：搜索所有历史对话记录，让 agent 回忆过去说过什么、做过什么。
-		sessionSearchToolDef,
+		// 其余参数简单的常驻工具（update_todo/read_skill/skill_manage/harness_status/
+		// web_search/session_search/remember/open_preview/inject_preview）已简化为按需
+		// 加载（见 native_tools.go）——模型直接调即自动带 schema，无需常驻占 token。
 	}
 }
 
@@ -88,9 +75,33 @@ func firstSentence(s string) string {
 	return truncateChars(s, 110)
 }
 
+// isOnDemandTool 判断一个名字是不是按需池里的工具（Go 内置或外部 MCP）。
+// 不在按需池、也不是常驻工具的名字 = 幻觉工具名，自动激活不该给它们开后门。
+func isOnDemandTool(name string) bool {
+	for _, t := range allOnDemandToolDefs() {
+		if t.Function.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// autoActivateOnDemandTool 动态按需加载的核心：模型直接调用了按需工具时，
+// 由系统侧把它激活（挂进 activated），下一轮 tools 数组即带上完整 schema。
+// 模型不再需要先手动 load_tools 绕路——首次调用即自动加载，之后一直可用。
+// 返回是否真的激活了（用于决定要不要刷新 tools 数组）。
+func autoActivateOnDemandTool(activated map[string]bool, name string) bool {
+	if activated[name] || !isOnDemandTool(name) {
+		return false
+	}
+	activated[name] = true
+	return true
+}
+
 // mcpToolIndexPrompt 保留旧函数名以减少调用面变更；它现在生成全部按需工具索引。
+// 只列出模型可见的工具（4 个核心 + 扩展），legacy 文件/命令类工具被过滤。
 func mcpToolIndexPrompt() string {
-	defs := allOnDemandToolDefs()
+	defs := coreToolIndexDefs()
 	if len(defs) == 0 {
 		return ""
 	}
@@ -99,9 +110,9 @@ func mcpToolIndexPrompt() string {
 		lines = append(lines, fmt.Sprintf("- %s：%s", t.Function.Name, firstSentence(t.Function.Description)))
 	}
 	sort.Strings(lines)
-	return "\n━━━ 按需工具索引（Go 内置 + 外部 MCP） ━━━\n" +
-		"下列工具的完整参数说明没有直接给你——需要用哪个，先调 load_tools 加载，加载后再正常调用。\n" +
-		"一次可以加载多个；已加载的工具在后续轮次一直可用，不用重复加载。\n" +
+	return "\n━━━ 工具索引（核心 read/write/patch/bash + 自研扩展，动态按需加载） ━━━\n" +
+		"下列工具默认不在你的可用工具列表里，但**直接调用即可**：系统会在你首次调用时自动加载其完整参数说明，" +
+		"之后该工具就一直可用。若想批量预加载（或先看一眼参数再决定），也可用 load_tools 主动加载。\n" +
 		"截图/页面自检/浏览器快照成功时会直接作为图片插入当前聊天消息流；不要声称无法贴图、不要要求用户另存文件。\n" +
 		strings.Join(lines, "\n") + "\n"
 }
@@ -127,10 +138,12 @@ func nativeToolIndexPrompt() string {
 
 // buildCodeWorkflowTools 组装本轮要发给模型的 tools 数组：
 // 常驻工具 + 已被 load_tools 激活的 Go 内置/MCP 工具。activated 为 nil 时就只有常驻工具。
+// 激活段用 coreToolIndexDefs —— legacy 文件/命令类工具即使被激活也不进 tools 数组，
+// 保证模型可见的工具面始终收敛在 read/write/patch/bash + 扩展。
 func buildCodeWorkflowTools(activated map[string]bool) []map[string]any {
 	defs := nativeWorkflowToolDefs()
 	if len(activated) > 0 {
-		for _, t := range allOnDemandToolDefs() {
+		for _, t := range coreToolIndexDefs() {
 			if activated[t.Function.Name] {
 				defs = append(defs, t)
 			}

@@ -11,6 +11,26 @@ import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from '
 
 let msgSeq = 0
 
+// ── 人设预设（模块顶层：export 不能在函数体内）──────────────────────
+// 人设原本硬编码在后端 MainAgentConfigNative() 的 SystemPrompt 里（自称 Rescene酱、
+// 颜文字、撒娇风格），2026-08-29 抽到前端：这里就是「默认预设」，
+// 随 /api/code/workflow 的 persona 参数发给后端，后端不再写死任何自称。
+// 用户以后自定义人设：写入 localStorage.persona 即覆盖本预设（当前无 UI，
+// 留好扩展位）；置空串则后端用纯中性基底、不注入任何性格。
+export const DEFAULT_PERSONA = `你是 Rescene酱 (｡•ᴗ•｡)♡，一个超级卡哇伊的 AI 小助手～
+你说话软软的、暖暖的，偶尔用一两个颜文字点缀心情，但绝不堆砌
+你会在回复里自然地鼓励用户，但绝不会因为卖萌就偷懒——该做的事一件都不会少哦
+遇到不确定的事会老实承认，不会编造假数据骗人
+
+【风格】语气软软暖暖、自然亲切；颜文字克制使用、偶尔点缀即可，别每句都堆，
+把复杂概念解释清楚比卖萌更重要。`
+
+const _personaParam = () => {
+    const custom = localStorage.getItem('persona')
+    if (custom !== null && custom !== '') return custom
+    return DEFAULT_PERSONA
+}
+
 export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTitleUpdate }) {
     const flowState = reactive({ active: false })
     let es = null
@@ -151,19 +171,20 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         // effort 只有当前 backend 真支持 reasoning 时后端才会真的采用（否则安静忽略），
         // 前端不需要自己先判断"这个模型支不支持"再决定发不发
         const effort = localStorage.getItem('debugReasoning') || ''
-        // mode: yolo(全自动) / ask(危险工具每步问) / plan(执行前必问)，由底部工具条选出
-        const mode = localStorage.getItem('agentMode') || 'yolo'
+        // mode 已删除（自研沙盒），默认全自动 yolo
+                const mode = 'yolo'
         // 生图提供商：设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
         // 不走提示词——跟识图模型路由一个思路，模型不感知、不浪费 token
         const imageProvider = localStorage.getItem('imageProvider') || 'pollinations'
-        // 联网搜索已内置为 web_search 常驻工具（Firecrawl，模型自主触发），
+        // 联网搜索已内置为 web_search 常驻工具（引擎自动选择用户配置的来源），
         // 无需 search_model 参数——后端不再有「搜索模型」概念。
         // 续跑：带 resume=<workflow_id>，并带上当前选中的 model——
                 // 若用户续跑前切了模型，后端尊重前端传参缩短/改用新模型（无缝衔接）；
                 // 不传 model 时后端才回退到检查点里的旧模型（2026-08-28 修「续跑用旧模型」）。
                 const url = opts.resumeId
                     ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`
-                    : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}`
+                    : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}&persona=${encodeURIComponent(_personaParam())}`
+        // 人设随每次新工作流发送（续跑分支不传：检查点 msgs[0] 已含当初完整系统提示词）。
         es = new EventSource(url)
 
         // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
@@ -389,7 +410,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     ? 'running'
                     : (d.ok ? 'ok' : 'error')
                 t.output = d.output || ''
-                // 联网搜索（Firecrawl）：result 事件带引用来源 URL，回填进 args.urls，
+                // 联网搜索：result 事件带引用来源 URL，回填进 args.urls，
                 // 来源卡片与「搜索到 N 个来源」都读它（后端 DS 时代在 action 里给，现在在 result 里给）
                 if (d.name === 'web_search' && Array.isArray(d.urls)) {
                     t.args = { ...(t.args || {}), urls: d.urls }

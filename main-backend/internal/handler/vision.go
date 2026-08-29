@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,26 +20,82 @@ type VisionQA struct {
 	A string `json:"a"`
 }
 
-// defaultVisionModelID 默认的视觉模型：硅基流动的 Kimi K2.6（代金券免费额度）。
-// 用 VISION_MODEL_ID 覆盖成同池里任何一个标了 Vision:true 的模型（比如 GLM-5.2）。
-const defaultVisionModelID = "free_sf_pro_moonshotai_kimi_k2_6"
-
-// visionBackends 解析视觉模型的 backend 链。返回 nil 表示"没配好"，
-// 调用方应回退到 DashScope 老路径——这样没配 SILICONFLOW_API_KEY 的环境行为完全不变。
+// visionBackends 构建视觉模型 backend 链（负载均衡：按成功率排序，逐个 failover）。
+//
+// 不再只认一个写死的默认 ID——那样一旦默认模型下线，Rescene 就「有识图模型却不会识图」。
+// 改为收集免费池里所有 Vision=true 且当前可用（keyless 或有 key）的条目，
+// 按「信号格高 + 最近真实成功过」优先排序成链，routeChatOnce 会依次尝试、失败自动切下一个。
+// 用户配置的 VISION_MODEL_ID 若仍指向某个具体模型，则只精确用那一个（保留覆盖能力）。
+//
+// 2026-08-29 修复：原实现只解析默认 ID free_sf_pro_moonshotai_kimi_k2_6（硅基流动已移除），
+// 导致「免费池一堆识图模型，粘贴图片却总失败」。负载均衡后原生识图，任何环境都有可用视觉链。
 func visionBackends() []RouterBackend {
 	id := os.Getenv("VISION_MODEL_ID")
-	if id == "" {
-		id = defaultVisionModelID
-	}
-	bs := resolveBackends("", id)
-	// 精确识图模型解析失败时 resolveBackends 返回空链，不再偷偷改用 Auto。
-	// 仍校验 Vision 标记，避免把图像发给明确不支持图像的模型。
-	for _, b := range bs {
-		if b.Vision {
-			return []RouterBackend{b}
+	if id != "" {
+		// 显式覆盖：只精确用这一个（沿用旧行为，供高级用户钉死某个模型）
+		bs := resolveBackends("", id)
+		for _, b := range bs {
+			if b.Vision {
+				return []RouterBackend{b}
+			}
 		}
+		return nil
 	}
-	return nil
+
+	envKeys := userKeysByEnv("")
+	var chain []RouterBackend
+	for _, f := range freeModelCatalog {
+		if f.Disabled || !f.Vision {
+			continue
+		}
+		key := ""
+		entry, hasEntry := capabilityEntry(f.ID)
+		if hasEntry {
+			key = entry.APIKey
+		}
+		if key == "" && !f.Local && !f.Keyless {
+			key = envKeys[f.KeyEnv]
+		}
+		if key == "" && !f.Local && !f.Keyless {
+			key = os.Getenv(f.KeyEnv)
+		}
+		if key == "" && !f.Local && !f.Keyless {
+			continue // 要 key 但没配：不进视觉链
+		}
+		chain = append(chain, RouterBackend{
+			Name: f.Name, BaseURL: f.Endpoint, Model: f.Model, APIKey: key,
+			Timeout: 5 * time.Minute, Source: "free",
+			Vision: true, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
+			Keyless: f.Keyless,
+		})
+	}
+
+	// 按成功率排序：信号格高（0-4）优先，信号相同时最近真实成功过的优先。
+	// 这样「成功率最高的模型」总是排在最前，失败自动切下一个（负载均衡 failover）。
+	sort.SliceStable(chain, func(i, j int) bool {
+		si, sj := probeSignal(chain[i]), probeSignal(chain[j])
+		if si != sj {
+			if si == -1 {
+				return false // 未探测的沉底
+			}
+			if sj == -1 {
+				return true
+			}
+			return si > sj
+		}
+		ui, uj := freeLastUsed(chain[i]), freeLastUsed(chain[j])
+		if !ui.IsZero() && !uj.IsZero() {
+			if !ui.Equal(uj) {
+				return ui.After(uj)
+			}
+		} else if !ui.IsZero() {
+			return true
+		} else if !uj.IsZero() {
+			return false
+		}
+		return false
+	})
+	return chain
 }
 
 // analyzeImageViaRouter 用 OpenAI 兼容的视觉格式走通用模型路由（model_router.go）。

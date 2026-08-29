@@ -90,6 +90,10 @@ func generateImage(ctx context.Context, spec imageGenSpec) (imageGenResult, erro
 	switch provider {
 	case "sd":
 		data, mime, err = generateImageSD(ctx, spec)
+	case "custom":
+		data, mime, err = generateImageCustom(ctx, spec)
+	case "mcp":
+		data, mime, err = generateImageMCP(ctx, spec)
 	default:
 		provider = "pollinations"
 		data, mime, err = generateImagePollinations(ctx, spec)
@@ -244,6 +248,145 @@ func generateImageSD(ctx context.Context, spec imageGenSpec) ([]byte, string, er
 		return nil, "", fmt.Errorf("SD 图片数据无效: %w", err)
 	}
 	return data, "image/png", nil
+}
+
+// generateImageCustom 走用户自定义的 OpenAI 兼容生图端点（/v1/images/generations）。
+// 配置在设置面板 → 模型 → 生图提供商 → 自定义模型（Endpoint/API Key/模型名）。
+func generateImageCustom(ctx context.Context, spec imageGenSpec) ([]byte, string, error) {
+	entry, ok := capabilityEntry(imageCapabilityID)
+	if !ok || strings.TrimSpace(entry.Endpoint) == "" {
+		return nil, "", fmt.Errorf("未配置自定义生图：打开设置 → 模型 → 生图提供商 → 自定义模型，填写 Endpoint")
+	}
+	model := strings.TrimSpace(entry.DefaultModel)
+	if model == "" {
+		return nil, "", fmt.Errorf("未配置自定义生图模型名：打开设置 → 模型 → 生图提供商 → 自定义模型，填写模型名")
+	}
+	key := strings.TrimSpace(entry.APIKey)
+	endpoint := strings.TrimRight(strings.TrimSpace(entry.Endpoint), "/")
+	if !strings.HasSuffix(endpoint, "/v1") {
+		endpoint += "/v1"
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"model":  model,
+		"prompt": spec.Prompt,
+		"n":      1,
+		"size":   fmt.Sprintf("%dx%d", spec.Width, spec.Height),
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/images/generations", bytes.NewReader(payload))
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := imageGenHTTPClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("自定义生图连接失败: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, imageGenMaxBytes))
+	if resp.StatusCode >= 400 {
+		return nil, "", fmt.Errorf("自定义生图 HTTP %d: %s", resp.StatusCode, truncateChars(strings.TrimSpace(string(body)), 300))
+	}
+	var out struct {
+		Data []struct {
+			URL     string `json:"url"`
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil || len(out.Data) == 0 {
+		return nil, "", fmt.Errorf("自定义生图响应无效（无 data 字段）")
+	}
+	item := out.Data[0]
+	if item.B64JSON != "" {
+		data, derr := base64.StdEncoding.DecodeString(item.B64JSON)
+		if derr != nil {
+			return nil, "", fmt.Errorf("自定义生图 base64 无效: %w", derr)
+		}
+		return data, "image/png", nil
+	}
+	u := strings.TrimSpace(item.URL)
+	if u == "" {
+		return nil, "", fmt.Errorf("自定义生图响应里没有图片 URL")
+	}
+	return downloadImageBytes(ctx, u)
+}
+
+// generateImageMCP 把生图委托给用户指定的已装 MCP 工具（mcp__server__tool）。
+// 配置在设置面板 → 模型 → 生图提供商 → MCP 工具。
+func generateImageMCP(ctx context.Context, spec imageGenSpec) ([]byte, string, error) {
+	entry, ok := capabilityEntry(imageCapabilityID)
+	if !ok || strings.TrimSpace(entry.Extra["mcp_tool"]) == "" {
+		return nil, "", fmt.Errorf("未选择 MCP 生图工具：打开设置 → 模型 → 生图提供商 → MCP 工具")
+	}
+	tool := strings.TrimSpace(entry.Extra["mcp_tool"])
+	args, _ := json.Marshal(map[string]any{
+		"prompt": spec.Prompt, "negative": spec.Negative,
+		"width": spec.Width, "height": spec.Height, "seed": spec.Seed,
+	})
+	result, err := callMCPToolWithArtifacts(tool, string(args))
+	if err != nil {
+		return nil, "", fmt.Errorf("MCP 生图失败: %w", err)
+	}
+	if len(result.Images) == 0 {
+		return nil, "", fmt.Errorf("MCP 生图工具没有返回图片：%s", truncateChars(result.Text, 200))
+	}
+	img := result.Images[0]
+	data, derr := base64.StdEncoding.DecodeString(img.Data)
+	if derr != nil {
+		return nil, "", fmt.Errorf("MCP 图片数据无效: %w", derr)
+	}
+	mime := strings.TrimSpace(img.MimeType)
+	if mime == "" {
+		mime = "image/png"
+	}
+	return data, mime, nil
+}
+
+// downloadImageBytes 抓取生图端返回的图片 URL（http(s) 或 data: 两种形态）。
+func downloadImageBytes(ctx context.Context, u string) ([]byte, string, error) {
+	if strings.HasPrefix(u, "data:") {
+		// data:image/png;base64,xxxx
+		idx := strings.Index(u, ",")
+		mime := "image/png"
+		if strings.HasPrefix(u, "data:") && idx > 5 {
+			meta := u[5:idx]
+			if semi := strings.Index(meta, ";"); semi > 0 {
+				mime = meta[:semi]
+			}
+		}
+		if idx < 0 {
+			return nil, "", fmt.Errorf("data URL 无效")
+		}
+		data, err := base64.StdEncoding.DecodeString(u[idx+1:])
+		if err != nil {
+			return nil, "", fmt.Errorf("data URL base64 无效: %w", err)
+		}
+		return data, mime, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("User-Agent", "Rescene/1.0")
+	resp, err := imageGenHTTPClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("下载生图结果失败: %w", err)
+	}
+	defer resp.Body.Close()
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, imageGenMaxBytes))
+	if readErr != nil {
+		return nil, "", readErr
+	}
+	if resp.StatusCode >= 400 {
+		return nil, "", fmt.Errorf("下载生图结果 HTTP %d", resp.StatusCode)
+	}
+	mime := resp.Header.Get("Content-Type")
+	if mime == "" {
+		mime = "image/png"
+	}
+	return body, mime, nil
 }
 
 func clampImageSide(v int) int {

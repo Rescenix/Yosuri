@@ -25,19 +25,27 @@ func writeSkillFile(t *testing.T, dir string, s Skill) {
 	}
 }
 
-// 常驻工具集必须包含 read_skill 本身——否则模型没有任何办法把技能全文取回来，
-// 技能库的索引就只是摆设。
+// read_skill 从常驻工具改为按需工具（2026-08-29 收敛）：
+// 参数简单，模型直接调即自动带 schema。它必须在按需池里（索引可见）且
+// 可被 load_tools 激活——否则技能全文将永远不可达。
 func TestNativeToolsAlwaysIncludeReadSkill(t *testing.T) {
-	tools := buildCodeWorkflowTools(nil)
+	if !isOnDemandTool(readSkillToolName) {
+		t.Fatalf("%s 不在按需池里，技能全文将永远不可达", readSkillToolName)
+	}
+	activated := map[string]bool{}
+	out, changed := handleLoadTools(`{"names":["`+readSkillToolName+`"]}`, activated)
+	if !changed || !activated[readSkillToolName] {
+		t.Fatalf("%s 不能被 load_tools 激活: %s", readSkillToolName, out)
+	}
 	found := false
-	for _, tl := range tools {
+	for _, tl := range buildCodeWorkflowTools(activated) {
 		fn := tl["function"].(map[string]any)
 		if fn["name"] == readSkillToolName {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("常驻工具集里没有 %s，技能全文将永远不可达", readSkillToolName)
+		t.Fatalf("%s 激活后没进 tools 数组", readSkillToolName)
 	}
 }
 

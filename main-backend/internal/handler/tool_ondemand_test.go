@@ -49,7 +49,7 @@ func TestHandleLoadToolsBadArgs(t *testing.T) {
 // 激活后该工具必须真的进 tools 数组——只回 schema 文本而不进数组的话，
 // 模型看得见说明书却调不动，会卡在反复 load_tools。
 func TestActivatedToolEntersToolsArray(t *testing.T) {
-	name := "read_file"
+	name := "read"
 
 	base := len(buildCodeWorkflowTools(nil))
 	activated := map[string]bool{}
@@ -72,9 +72,34 @@ func TestActivatedToolEntersToolsArray(t *testing.T) {
 	}
 }
 
+// legacy 工具（如旧 read_file）即使被 load_tools 显式激活也不应进 tools 数组——
+// 模型可见的工具面已收敛到 read/write/patch/bash + 扩展，旧名不得复活。
+func TestLegacyToolNeverEntersToolsArray(t *testing.T) {
+	name := "read_file"
+	base := len(buildCodeWorkflowTools(nil))
+	activated := map[string]bool{}
+	out, changed := handleLoadTools(`{"names":["`+name+`"]}`, activated)
+	// 旧的 read_file 仍在按需池里，load_tools 应能认出来并激活（执行层兼容）
+	if !changed || !activated[name] {
+		t.Fatalf("legacy %s 应被 load_tools 识别激活: %s", name, out)
+	}
+	after := buildCodeWorkflowTools(activated)
+	if len(after) != base {
+		t.Fatalf("legacy %s 激活后不应增加 tools 数量：激活 %v → %d 个，仍有 %d 个",
+			name, activated, len(after), base)
+	}
+	for _, tl := range after {
+		fn := tl["function"].(map[string]any)
+		if fn["name"] == name {
+			t.Errorf("legacy %s 不应出现在 tools 数组里", name)
+		}
+	}
+}
+
 // 索引行必须精简：一个工具占一行、一句话。膨胀了就退化成"换个地方塞全量 schema"。
+// 索引只应包含 coreToolIndexDefs（4 核心 + 扩展），legacy 工具应被过滤掉。
 func TestToolIndexIsCompact(t *testing.T) {
-	defs := allOnDemandToolDefs()
+	defs := coreToolIndexDefs()
 	index := mcpToolIndexPrompt()
 	fullJSON, _ := json.Marshal(buildCodeWorkflowTools(func() map[string]bool {
 		all := map[string]bool{}
@@ -93,7 +118,15 @@ func TestToolIndexIsCompact(t *testing.T) {
 			t.Errorf("索引里漏了工具 %s——模型将永远不知道它存在", d.Function.Name)
 		}
 	}
-}
+	// legacy 文件/命令工具绝不能出现在模型可见索引里（收敛到 read/write/patch/bash）。
+		// 用「索引行首 - name：」精确匹配，避免工具 description 里出现同名子串造成误判
+		// （如 read 的说明里含 "glob" 字样）。
+		for _, d := range nativeOnDemandToolDefs() {
+			if legacyFileToolSet[d.Function.Name] && strings.Contains(index, "- "+d.Function.Name+"：") {
+				t.Errorf("legacy 工具 %s 不应出现在模型可见索引里", d.Function.Name)
+			}
+		}
+	}
 
 func TestFirstSentence(t *testing.T) {
 	cases := map[string]string{

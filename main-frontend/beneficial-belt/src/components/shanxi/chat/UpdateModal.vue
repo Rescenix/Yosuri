@@ -26,8 +26,9 @@
           v-if="dlState === 'done'"
           class="update-modal-btn primary"
           type="button"
-          disabled
-        >已就绪，下次启动生效</button>
+          :disabled="installing"
+          @click="onInstall"
+        >{{ installing ? '正在安装，即将重启…' : '一键安装' }}</button>
         <button
           v-else-if="dlState === 'downloading'"
           class="update-modal-btn primary dl-progress-btn"
@@ -44,7 +45,7 @@
           disabled
         >安装包未就绪</button>
       </div>
-      <div v-if="dlState === 'error'" class="update-modal-dlerr">{{ dlError }}</div>
+      <div v-if="dlState === 'error' || installError" class="update-modal-dlerr">{{ installError || dlError }}</div>
     </div>
   </div>
 </template>
@@ -85,6 +86,25 @@ function onSkip() {
   setSkippedVersion(props.update.latest_version)
   fetch('/api/update/pending', { method: 'DELETE' }).catch(() => {})
   emit('close')
+}
+
+// 一键安装：后台已下好的热补丁 exe → 调后端安装接口，3 秒后自动替换 exe 并重启进新版
+// （后端 HandleInstallUpdate /api/update/install，2026-08-29 修复：之前按钮 disabled 只能重启才生效）
+const installing = ref(false)
+const installError = ref('')
+async function onInstall() {
+  if (installing.value) return
+  installing.value = true
+  installError.value = ''
+  try {
+    const res = await fetch('/api/update/install', { method: 'POST' })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(d.error || `安装失败 (${res.status})`)
+    // 成功：后端 3 秒后退出本进程替换 exe，这里保持「正在安装」提示，应用马上会重启
+  } catch (err) {
+    installing.value = false
+    installError.value = err.message || '安装失败，请稍后重试'
+  }
 }
 
 // 挂载时只查询后台下载状态（下载由启动时 App.vue 静默完成，弹窗不再触发下载，2026-08-16 用户定稿）

@@ -7,7 +7,10 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 
 	"backend/internal/ai/core"
 )
@@ -22,6 +25,38 @@ type nativeToolResult struct {
 
 func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs := []core.ToolDefinition{
+		// ── 核心工具（Pi 风格最小集：read / write / patch / bash）──
+		// 文件/命令/检索的日常操作全部收敛到这 4 个；旧的文件系统工具
+		// （read_file/grep/glob/run_command/task_* 等）被吸收为 legacy，
+		// 执行层仍兼容，但不再出现在模型可见的工具索引里。
+		nativeTool("read", "读取与检索：读取文件内容、在文件内容中搜索正则(pattern)、按文件名匹配(glob)、列目录或查看文件/目录信息。给了 pattern 做内容搜索，给了 glob 做文件名搜索，path 指向目录且无 pattern/glob 时列目录，info=true 只看元信息。", map[string]core.ToolProperty{
+			"path":    {Type: "string", Description: "文件或目录路径；相对路径按当前工作目录解析"},
+			"offset":  {Type: "integer", Description: "读文件起始行号，1-indexed，默认 1"},
+			"limit":   {Type: "integer", Description: "读文件行数，默认 200，最大 400"},
+			"pattern": {Type: "string", Description: "可选：在文件内容中搜索的正则表达式"},
+			"glob":    {Type: "string", Description: "可选：按文件名/路径匹配，如 **/*.go"},
+			"depth":   {Type: "integer", Description: "可选：path 为目录时递归列目录的深度，默认 4，最大 8"},
+			"info":    {Type: "boolean", Description: "可选：只返回文件/目录的大小、修改时间、类型"},
+		}, []string{"path"}),
+		nativeTool("write", "写文件系统：默认写入完整文件内容（自动创建父目录）；action=create_dir 建目录；action=move 移动/重命名（需 source）；action=delete 删除文件或目录（不可逆）。", map[string]core.ToolProperty{
+			"path":    {Type: "string", Description: "目标路径"},
+			"content": {Type: "string", Description: "文件完整内容（action=write 时必填）"},
+			"action":  {Type: "string", Description: "操作类型：write(默认)/create_dir/move/delete"},
+			"source":  {Type: "string", Description: "action=move 时的源路径"},
+		}, []string{"path"}),
+		nativeTool("patch", "在文本文件中做一次定点替换；old_string 应从 read 结果原样复制（含缩进/空白/换行）。", map[string]core.ToolProperty{
+			"path":       {Type: "string", Description: "目标文件路径"},
+			"old_string": {Type: "string", Description: "要替换的原始文本"},
+			"new_string": {Type: "string", Description: "替换后的文本"},
+		}, []string{"path", "old_string", "new_string"}),
+		nativeTool("bash", "执行系统命令并返回退出码、stdout、stderr；默认前台等待完成。background=true 后台执行并立即返回 task_id，之后用 action=status/log/wait/kill + task_id 管理。", map[string]core.ToolProperty{
+			"command":    {Type: "string", Description: "要执行的命令"},
+			"timeout":    {Type: "integer", Description: "前台超时秒数，默认 120，最大 600"},
+			"background": {Type: "boolean", Description: "后台执行（默认 false）"},
+			"action":     {Type: "string", Description: "后台任务管理：status/log/wait/kill"},
+			"task_id":    {Type: "string", Description: "后台任务 ID"},
+		}, []string{"command"}),
+		// ── 扩展工具（仍按需暴露，非核心）──
 		nativeTool("read_file", "按行读取文本文件，返回带行号的内容；一次最多 400 行。offset 从 1 开始，limit 是行数。", map[string]core.ToolProperty{
 			"path":   {Type: "string", Description: "文件路径；相对路径按当前工作目录解析"},
 			"offset": {Type: "integer", Description: "起始行号，1-indexed，默认 1"},
@@ -145,6 +180,13 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, watermarkToolDef)
 	// video_generate：AI 生视频（Agnes 免费 API，$0/秒）
 	defs = append(defs, videoGenToolDef)
+	// 原常驻工具简化为按需加载（2026-08-29 收敛）：update_todo/read_skill/skill_manage/
+	// harness_status/open_preview/inject_preview/remember/web_search/session_search
+	// 参数简单，模型一眼就知道怎么调，不需要常驻完整 schema 占 3k+ token。
+	// 常驻只保留 dispatch_agent/apply_patch/load_tools/ask_user 四个复杂/交互控制面。
+	defs = append(defs, updateTodoToolDef, readSkillToolDef, skillManageToolDef,
+		harnessStatusToolDef, openPreviewToolDef, injectPreviewToolDef,
+		rememberToolDef, webSearchToolDef, sessionSearchToolDef)
 	return defs
 }
 
@@ -183,6 +225,14 @@ func allOnDemandToolDefs() []core.ToolDefinition {
 
 func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResult, error) {
 	switch name {
+	case "read":
+		return callNativeReadTool(argsJSON)
+	case "write":
+		return callNativeWriteTool(argsJSON)
+	case "patch":
+		return callNativePatchTool(argsJSON)
+	case "bash":
+		return callNativeBashTool(ctx, argsJSON)
 	case "read_file", "grep", "glob", "list_directory", "directory_tree", "get_file_info",
 		"write_file", "edit_file", "apply_patch", "create_directory", "move_file", "delete_file", "delete_directory":
 		return callNativeFileTool(name, argsJSON)
@@ -222,4 +272,181 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 	default:
 		return nativeToolResult{}, fmt.Errorf("未知的内置工具: %s", name)
 	}
+}
+
+// legacyFileToolSet 被 read/write/patch/bash 四个核心工具吸收的旧文件/命令/检索工具。
+// 它们仍可被调用（执行层 / 续跑检查点 / 内部引用兼容），但不再出现在模型可见的
+// 工具索引里——模型只认识 read/write/patch/bash 这四个核心。
+var legacyFileToolSet = map[string]bool{
+	"read_file": true, "grep": true, "glob": true,
+	"list_directory": true, "directory_tree": true, "get_file_info": true,
+	"write_file": true, "edit_file": true, "apply_patch": true,
+	"create_directory": true, "move_file": true, "delete_file": true, "delete_directory": true,
+	"run_command": true,
+	"run_task": true, "task_status": true, "task_log": true, "task_wait": true, "task_kill": true,
+}
+
+// coreToolIndexDefs 返回模型可见的工具定义：4 个核心工具 + 未并入核心的扩展工具。
+// legacy 文件/命令类工具被过滤掉——索引里只有 read/write/patch/bash 四个核心，
+// 其余是搜索/视觉/记忆/视频/MCP 等扩展。
+func coreToolIndexDefs() []core.ToolDefinition {
+	defs := nativeOnDemandToolDefs()
+	out := make([]core.ToolDefinition, 0, len(defs))
+	for _, d := range defs {
+		if !legacyFileToolSet[d.Function.Name] {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// isCoreTool 判断名字是否是 read/write/patch/bash 之一。
+func isCoreTool(name string) bool {
+	return name == "read" || name == "write" || name == "patch" || name == "bash"
+}
+
+// callNativeReadTool 把 read 的多种模式分发到底层文件/检索实现：
+// pattern → grep（内容搜索）；glob → glob（文件名匹配）；info → get_file_info；
+// path 指向目录 → list_directory / directory_tree；否则 → read_file。
+func callNativeReadTool(argsJSON string) (nativeToolResult, error) {
+	var a struct {
+		Path    string `json:"path"`
+		Offset  int    `json:"offset"`
+		Limit   int    `json:"limit"`
+		Pattern string `json:"pattern"`
+		Glob    string `json:"glob"`
+		Depth   int    `json:"depth"`
+		Info    bool   `json:"info"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil || strings.TrimSpace(a.Path) == "" {
+		return nativeToolResult{}, fmt.Errorf("read 需要 path 参数")
+	}
+	switch {
+	case strings.TrimSpace(a.Pattern) != "":
+		return callNativeFileTool("grep", jsonMap("pattern", a.Pattern, "path", a.Path))
+	case strings.TrimSpace(a.Glob) != "":
+		return callNativeFileTool("glob", jsonMap("pattern", a.Glob, "path", a.Path))
+	case a.Info:
+		return callNativeFileTool("get_file_info", jsonMap("path", a.Path))
+	}
+	if info, err := os.Stat(absAgainstRoot(a.Path)); err == nil && info.IsDir() {
+		if a.Depth > 0 {
+			return callNativeFileTool("directory_tree", jsonMap("path", a.Path, "depth", a.Depth))
+		}
+		return callNativeFileTool("list_directory", jsonMap("path", a.Path))
+	}
+	args := map[string]any{"path": a.Path}
+	if a.Offset > 0 {
+		args["offset"] = a.Offset
+	}
+	if a.Limit > 0 {
+		args["limit"] = a.Limit
+	}
+	return callNativeFileTool("read_file", jsonMapFrom(args))
+}
+
+// callNativeWriteTool 把 write 的 action 分发到底层文件操作：
+// create_dir → create_directory；move → move_file；delete → delete_file/delete_directory；
+// 默认 write → write_file。
+func callNativeWriteTool(argsJSON string) (nativeToolResult, error) {
+	var a struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+		Action  string `json:"action"`
+		Source  string `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil || strings.TrimSpace(a.Path) == "" {
+		return nativeToolResult{}, fmt.Errorf("write 需要 path 参数")
+	}
+	switch strings.ToLower(strings.TrimSpace(a.Action)) {
+	case "create_dir":
+		return callNativeFileTool("create_directory", jsonMap("path", a.Path))
+	case "move":
+		if strings.TrimSpace(a.Source) == "" {
+			return nativeToolResult{}, fmt.Errorf("write action=move 需要 source 参数")
+		}
+		return callNativeFileTool("move_file", jsonMap("source", a.Source, "destination", a.Path))
+	case "delete":
+		if info, err := os.Stat(absAgainstRoot(a.Path)); err == nil && info.IsDir() {
+			return callNativeFileTool("delete_directory", jsonMap("path", a.Path))
+		}
+		return callNativeFileTool("delete_file", jsonMap("path", a.Path))
+	default:
+		return callNativeFileTool("write_file", jsonMap("path", a.Path, "content", a.Content))
+	}
+}
+
+// callNativePatchTool 把 patch 分发到底层 edit_file（定点替换）。
+func callNativePatchTool(argsJSON string) (nativeToolResult, error) {
+	var a struct {
+		Path      string `json:"path"`
+		OldString string `json:"old_string"`
+		NewString string `json:"new_string"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil || a.Path == "" || a.OldString == "" {
+		return nativeToolResult{}, fmt.Errorf("patch 需要 path 和 old_string 参数")
+	}
+	return callNativeFileTool("edit_file", jsonMap("path", a.Path, "old_string", a.OldString, "new_string", a.NewString))
+}
+
+// callNativeBashTool 把 bash 分发到命令/后台任务实现：
+// action=status/log/wait/kill → 后台任务管理；background=true → run_task；否则 → run_command。
+func callNativeBashTool(ctx context.Context, argsJSON string) (nativeToolResult, error) {
+	var a struct {
+		Command    string `json:"command"`
+		Timeout    int    `json:"timeout"`
+		Background bool   `json:"background"`
+		Action     string `json:"action"`
+		TaskID     string `json:"task_id"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil {
+		return nativeToolResult{}, fmt.Errorf("bash 参数解析失败: %v", err)
+	}
+	if a.Action != "" {
+		taskName := ""
+		switch strings.ToLower(strings.TrimSpace(a.Action)) {
+		case "status":
+			taskName = "task_status"
+		case "log":
+			taskName = "task_log"
+		case "wait":
+			taskName = "task_wait"
+		case "kill":
+			taskName = "task_kill"
+		default:
+			return nativeToolResult{}, fmt.Errorf("bash action 只支持 status/log/wait/kill，收到 %q", a.Action)
+		}
+		if a.TaskID == "" {
+			return nativeToolResult{}, fmt.Errorf("bash action=%s 需要 task_id", a.Action)
+		}
+		return callBgTaskTool(ctx, taskName, jsonMap("task_id", a.TaskID), workflowIDFromCtx(ctx))
+	}
+	if a.Background {
+		if strings.TrimSpace(a.Command) == "" {
+			return nativeToolResult{}, fmt.Errorf("bash 需要 command 参数")
+		}
+		return callBgTaskTool(ctx, "run_task", jsonMap("command", a.Command), workflowIDFromCtx(ctx))
+	}
+	if strings.TrimSpace(a.Command) == "" {
+		return nativeToolResult{}, fmt.Errorf("bash 需要 command 参数")
+	}
+	args := map[string]any{"command": a.Command}
+	if a.Timeout > 0 {
+		args["timeout"] = a.Timeout
+	}
+	return callNativeCommand(ctx, jsonMapFrom(args))
+}
+
+// jsonMap 快速构造扁平 JSON 参数字符串（值为 string 或 int）。
+func jsonMap(pairs ...any) string {
+	m := map[string]any{}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		m[pairs[i].(string)] = pairs[i+1]
+	}
+	return jsonMapFrom(m)
+}
+
+func jsonMapFrom(m map[string]any) string {
+	b, _ := json.Marshal(m)
+	return string(b)
 }

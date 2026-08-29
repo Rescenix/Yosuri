@@ -672,6 +672,14 @@
                      真正的文字内容只在发送那一刻才拼进正文（buildOutgoingMessage） -->
                 <AttachmentChipRow :attachments="attachments" removable @remove="removeAttachment" />
 
+                <!-- 后台任务/子代理悬浮条：有进行中的任务时显示在输入框上方，点击展开任务面板 -->
+                <div v-if="runningTaskCount > 0" class="input-running-tasks-bar" @click.stop="toggleDockPanel('tasks')">
+                  <Icon icon="mdi:loading" width="13" class="rt-spin" />
+                  <span>{{ runningTaskCount }} 个后台任务进行中</span>
+                  <span class="rt-sub">（含子代理）</span>
+                  <Icon icon="mdi:chevron-up" width="14" class="rt-caret" />
+                </div>
+
                 <div class="input-row">
                   <!-- 渐变动画的浮动占位符 -->
                   <transition name="fade-placeholder" mode="out-in">
@@ -698,26 +706,6 @@
               <!-- ========== 底部工具条（本次漏掉的部分已精准补全） ========== -->
               <div class="input-bottom-toolbar">
                 <div class="input-toolbar-left">
-                  <div class="toolbar-dropdown-wrap">
-                    <button
-                      class="toolbar-pill-btn mode-pill"
-                      :class="{ 'mode-yolo': agentModeIsYolo, 'mode-idle': !agentModeIsYolo }"
-                      @click.stop="showAutoMenu = !showAutoMenu"
-                    >
-                      <Icon icon="mdi:creation" width="13" />
-                      <span>{{ autoMode }}</span>
-                      <span class="sch-caret">▾</span>
-                    </button>
-                    <div v-if="showAutoMenu" class="auto-menu-dropdown" @click.stop>
-                      <div
-                        v-for="opt in autoModeOptions"
-                        :key="opt"
-                        class="auto-menu-item"
-                        :class="{ active: autoMode === opt }"
-                        @click="selectAutoMode(opt)"
-                      >{{ opt }}</div>
-                    </div>
-                  </div>
                   <!-- git 工具栏开关：点亮时上方展开分支/PR 状态条，只在有会话时出现 -->
                   <button
                     v-if="inputTopBarMode === 'git'"
@@ -2773,11 +2761,28 @@ function getAuthToken() {
 }
 async function pollNotifications() {
   try {
+    // 云端通知
     const res = await fetch('/api/notifications?limit=50&unread_only=false')
-    if (!res.ok) { notifCount.value = 0; return }
-    const data = await res.json()
-    notifications.value = data.notifications || []
-    notifCount.value = data.unread_count || 0
+    let cloudList = []
+    let cloudUnread = 0
+    if (res.ok) {
+      const data = await res.json()
+      cloudList = data.notifications || []
+      cloudUnread = data.unread_count || 0
+    }
+    // 本地通知（脚本/人设周报等，不依赖云端）
+    let localList = []
+    let localUnread = 0
+    try {
+      const lres = await fetch('/api/notifications/local')
+      if (lres.ok) {
+        const ldata = await lres.json()
+        localList = ldata.notifications || []
+        localUnread = ldata.unread_count || 0
+      }
+    } catch {}
+    notifications.value = [...localList, ...cloudList]
+    notifCount.value = localUnread + cloudUnread
   } catch { /* 后端没起就静默 */ }
 }
 function startNotifPoll() {
@@ -2793,6 +2798,14 @@ async function markNotifRead() {
     await fetch('/api/notifications/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: '{}'
+    })
+  } catch {}
+  // 本地通知也标已读
+  try {
+    await fetch('/api/notifications/read/local', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: '{}'
     })
   } catch {}
@@ -2848,22 +2861,9 @@ function onCreateScheduledTask(data) {
     })
 }
 
-// ==================== 底部工具条：Yolo 模式 + "+" 附加菜单 + Command 切换器 ====================
-// 模式三态：Yolo（全自动批准）/ Ask（危险工具每步问）/ Plan（执行前必问）。
-// 选了就写 localStorage('agentMode')，四态机发起工作流时透传给后端；
-// 同时回显到 autoMode 变量驱动按钮文案与主题色动画。
-const autoModeOptions = ['Yolo', 'Ask']
-const autoMode = ref(localStorage.getItem('agentMode') === 'ask' ? 'Ask' : 'Yolo')
-const showAutoMenu = ref(false)
+// ==================== 底部工具条："+" 附加菜单 + Command 切换器 ====================
+// 模式已删除（自研沙盒，agentfs 回退兜底），默认全自动 yolo，不再有 Ask/Plan 审批。
 const showAddMenu = ref(false)
-const agentModeIsYolo = computed(() => autoMode.value === 'Yolo')
-function selectAutoMode(opt) {
-  autoMode.value = opt
-  showAutoMenu.value = false
-  // 只有两态：Yolo(全自动批准) / Ask(危险工具每步问)
-  const mode = opt === 'Yolo' ? 'yolo' : 'ask'
-  localStorage.setItem('agentMode', mode)
-}
 
 // 审批弹窗里把工具参数 JSON 美化显示；解析失败就原样展示字符串。
 // 审批条是单行轻量展示，不能像原来的弹窗那样摊开整段 JSON。
@@ -3027,6 +3027,7 @@ const {
   forceScrollToBottom, adjustInputHeight, switchSession,
   onStreamUpdate,
   backgroundTaskList,
+  runningTaskCount,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   todoState, sendSteerMessage,
   questionState, answerQuestion,
@@ -3892,7 +3893,7 @@ onMounted(() => {
   }, 4000)
   document.addEventListener('click', () => {
     showModelMenu.value = false; showTokenPanel.value = false
-    showAutoMenu.value = false; showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false; showBranchMenu.value = false
+    showAddMenu.value = false; showPrMenu.value = false; showWorkDirMenu.value = false; showBranchMenu.value = false
     showDockAddMenu.value = false
     closeAgentFSDiff()
   })
@@ -3942,6 +3943,27 @@ async function refreshGitGraph() {
 /* 加固：.chat-window 本身是 position:fixed，理论上不会撑高这个根节点，
    但显式约束一下成本很低，避免任何万一 */
 .chat-widget-root { height: 100%; overflow: hidden; }
+
+/* 后台任务/子代理悬浮条：输入框上方，有进行中任务时显示 */
+.input-running-tasks-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 10%, var(--app-surface));
+  border: 1px solid color-mix(in srgb, var(--app-accent) 35%, transparent);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.input-running-tasks-bar:hover { background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface)); }
+.rt-spin { animation: rt-spin 1s linear infinite; }
+@keyframes rt-spin { to { transform: rotate(360deg); } }
+.rt-sub { color: var(--app-text-faint); font-size: 11px; }
+.rt-caret { margin-left: auto; opacity: 0.6; }
 
 /* 自适应占位符的绝对定位 */
 .input-placeholder-text {

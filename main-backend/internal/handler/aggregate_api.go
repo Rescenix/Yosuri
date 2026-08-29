@@ -115,16 +115,61 @@ func aggAutoChain() []RouterBackend {
 	sort.SliceStable(out, func(i, j int) bool {
 		return quotaExhausted(out[i]) != quotaExhausted(out[j]) && !quotaExhausted(out[i])
 	})
-	// 2. 负载均衡：额度同组的 backend 随机打散，避免总先试同一个慢 backend
+	// 2. 健康优先：按「探活信号降序 → 实测延迟升序 → 最近成功降序」排，
+	//    让 auto 每次都直接走当前最健康的那条，撞到慢/挂源才 failover。
+	//    （08-29 实锤：之前只按额度+随机打散，auto 常在随机慢源上拖 4-6s）
+	//    用 Timsort（稳定）：auto 链 n≤10 走二分插入分支，最健康已在首时 O(n)。
 	if len(out) > 1 {
-		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
-		// 只在「未耗尽」组内打乱，耗尽组保持沉底
-		exhaustedStart := 0
-		for exhaustedStart < len(out) && !quotaExhausted(out[exhaustedStart]) {
-			exhaustedStart++
+		// 预取健康快照（probeStates 加锁一次，比较零锁）
+		probeMu.Lock()
+		items := make([]autoItem, len(out))
+		for i := range out {
+			k := probeKey(out[i])
+			st, ok := probeStates[k]
+			sig, lat := -1, time.Duration(0)
+			if ok {
+				sig, lat = st.signal, st.latency
+			}
+			items[i] = autoItem{b: out[i], h: autoHealth{
+				exhausted: quotaExhausted(out[i]),
+				signal:    sig, latency: lat,
+				lastOK: freeLastUsed(out[i]),
+			}}
 		}
-		if exhaustedStart > 1 {
-			rnd.Shuffle(exhaustedStart, func(i, j int) { out[i], out[j] = out[j], out[i] })
+		probeMu.Unlock()
+		less := func(a, b autoItem) bool { // a 是否应排在 b 前
+			ha, hb := a.h, b.h
+			if ha.exhausted != hb.exhausted {
+				return !ha.exhausted
+			}
+			da, db := ha.signal == 0, hb.signal == 0 // 已确认死的沉底
+			if da != db {
+				return !da
+			}
+			if ha.signal != hb.signal {
+				return ha.signal > hb.signal
+			}
+			if ha.latency != hb.latency {
+				return ha.latency < hb.latency
+			}
+			return ha.lastOK.After(hb.lastOK)
+		}
+		items = timSortStable(items, less)
+		for i := range items {
+			out[i] = items[i].b
+		}
+		// 3. 末尾轻微打散：只在健康度完全相同的前缀里做小扰动，
+		//    避免永远钉死同一个源（防止某个源被一直打到限流）。
+		if len(out) > 1 {
+			rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			k := 3
+			if k > len(out) {
+				k = len(out)
+			}
+			if k > 1 {
+				j := rnd.Intn(k)
+				out[0], out[j] = out[j], out[0]
+			}
 		}
 	}
 	return out

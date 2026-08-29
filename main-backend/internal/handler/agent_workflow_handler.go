@@ -306,6 +306,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 系统提示词分段声明、稳定段排前面（前缀缓存友好）、分类占用与提示词同源、
 	// 按需加载的工具激活集也归它管。SwiftNet 的无条件记忆注入是其中一段。
 	provider := newWorkflowContextProvider(task)
+	// 人设由前端默认预设/用户自定义经 persona 参数传入；空则保持中性基底。
+	// 续跑时 msgs[0] 已含当初的完整系统提示词（含人设），整体 replay，不在此重建。
+	provider.WithPersona(c.Query("persona"))
 	contextBreakdown := provider.Breakdown()
 	staticSum := provider.StaticSum()
 	tools := provider.Tools()
@@ -716,6 +719,13 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				continue
 			}
 			allBlocked = false
+			// 动态按需加载：模型直接调用了按需工具（读写/命令/检索等高频工具），
+			// 系统侧自动激活它，下一轮 tools 数组即带上完整 schema——模型不用再
+			// 先手动 load_tools 绕路。本轮调用照常分发执行（执行层本就容忍未激活
+			// 的 Go 内置/MCP 工具直接跑），参数错了有 schema 自纠，参数对了省一轮。
+			if !provider.IsActivated(tc.Function.Name) && autoActivateOnDemandTool(provider.ActivatedTools(), tc.Function.Name) {
+				tools = provider.Tools()
+			}
 			// load_tools 是纯上下文操作（取 schema + 激活），没有副作用也不需要审批，
 			// 在这层直接办掉，不进工具执行链。
 			if tc.Function.Name == loadToolsToolName {
@@ -1222,9 +1232,9 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			results[i] = codeExecResult{output: out, images: mcpResult.Images}
 			return
 		}
-		// 到这里说明是个既非 Go 内置/MCP、也非编排类的工具名。
+		// 到这里说明是个既非内置/扩展、也非编排类的工具名。
 		results[i] = codeExecResult{
-			output: fmt.Sprintf("未知工具 %s：请对照按需工具索引，先用 load_tools 加载再调用。", name),
+			output: fmt.Sprintf("未知工具 %s：请对照工具索引里的名字核对。", name),
 			failed: true,
 		}
 	}

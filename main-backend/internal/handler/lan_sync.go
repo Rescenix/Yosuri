@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -13,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"backend/internal/memorydir"
@@ -23,10 +25,12 @@ import (
 // 记忆/会话内容全部用 token 派生的 AES 密钥加密传输，内网即使被嗅探也读不到明文。
 // 只暴露 /lan/ 端点，不碰 re0 主服务的其他 API。
 type LanSyncService struct {
-	store  *SessionStore
-	token  string
-	port   string
-	server *http.Server
+	store   *SessionStore
+	token   string
+	port    string
+	server  *http.Server
+	mu      sync.Mutex
+	running bool
 }
 
 // NewLanSyncService 创建并启动局域网同步服务。
@@ -40,8 +44,14 @@ func NewLanSyncService(store *SessionStore, port string) *LanSyncService {
 	return &LanSyncService{store: store, token: token, port: port}
 }
 
-// Start 启动 HTTP 服务（goroutine，非阻塞）。
+// Start 启动 HTTP 服务（goroutine，非阻塞）。幂等：已运行时直接返回。
+// 默认不自动调用（避免每次启动触发 Windows 防火墙弹窗），由前端 /api/lan/enable 按需开启。
 func (s *LanSyncService) Start() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.running {
+		return
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/lan/info", s.handleInfo)
 	mux.HandleFunc("/lan/memory/pull", s.handleMemoryPull)
@@ -51,12 +61,39 @@ func (s *LanSyncService) Start() {
 
 	addr := "0.0.0.0:" + s.port
 	s.server = &http.Server{Addr: addr, Handler: mux}
+	s.running = true
 	log.Printf("📡 局域网同步服务 %s（token=%s，AES-GCM 加密传输）", addr, s.token)
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("⚠️ 局域网同步服务异常: %v", err)
+			s.mu.Lock()
+			s.running = false
+			s.mu.Unlock()
 		}
 	}()
+}
+
+// Stop 停止局域网同步服务（幂等）。
+func (s *LanSyncService) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.running {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if s.server != nil {
+		_ = s.server.Shutdown(ctx)
+	}
+	s.running = false
+	log.Printf("📴 局域网同步服务已停止")
+}
+
+// Running 返回服务是否正在监听。
+func (s *LanSyncService) Running() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.running
 }
 
 // Token 返回当前 token（供前端显示）。

@@ -20,11 +20,11 @@ export function setUpdateNotifyDisabled(v) {
   else localStorage.removeItem(NOTIFY_DISABLED_KEY)
 }
 
-// ── 更新横幅重复提醒节流（2026-08-18 用户定稿「没下载就三天弹一次」）──
-// 安装包已就绪但用户一直没装：同一版本 3 天内只提醒一次，3 天后再次弹横幅；
-// 新版本（版本串变化）立即提醒，不继承旧版本的节流记录。
+// ── 更新横幅重复提醒节流（2026-08-29 用户定稿：3 天一次太疏，没人更新）──
+// 安装包已就绪但用户一直没装：同一版本 8 小时内只提醒一次（前台使用中一天最多弹 3 次），
+// 每次轮询（60s）都检查是否过 8h，过了就再弹；新版本（版本串变化）立即提醒。
 export const BANNER_KEY = 'rescene_banner_last_shown'
-const BANNER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000 // 3 天
+const BANNER_INTERVAL_MS = 8 * 60 * 60 * 1000 // 8 小时 = 一天最多 3 次
 
 export function shouldShowUpdateBanner(version) {
   try {

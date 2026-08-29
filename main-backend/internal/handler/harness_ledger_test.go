@@ -69,17 +69,24 @@ func TestLedgerReportsCompaction(t *testing.T) {
 	}
 }
 
-// harness_status 必须常驻工具集：模型需要它的时候正是"感觉不对劲"的时候，
-// 那时再让它先 load_tools 就晚了。
+// harness_status 已从常驻改为按需（2026-08-29 收敛）：模型直接调即自动带 schema。
+// 它必须在按需池里且可被 load_tools 激活，否则自省能力不可达。
 func TestHarnessStatusIsAlwaysAvailable(t *testing.T) {
+	if !isOnDemandTool(harnessStatusToolName) {
+		t.Fatalf("%s 不在按需池里", harnessStatusToolName)
+	}
+	activated := map[string]bool{}
+	if _, changed := handleLoadTools(`{"names":["`+harnessStatusToolName+`"]}`, activated); !changed {
+		t.Fatalf("%s 不能被 load_tools 激活", harnessStatusToolName)
+	}
 	found := false
-	for _, tl := range buildCodeWorkflowTools(nil) {
+	for _, tl := range buildCodeWorkflowTools(activated) {
 		if tl["function"].(map[string]any)["name"] == harnessStatusToolName {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("%s 不在常驻工具集里", harnessStatusToolName)
+		t.Fatalf("%s 激活后没进 tools 数组", harnessStatusToolName)
 	}
 }
 

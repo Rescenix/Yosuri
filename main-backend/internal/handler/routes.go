@@ -33,6 +33,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 		c.Next()
 	})
 	r.GET("/api/git-status", gin.WrapH(http.HandlerFunc(GitStatusHandler)))
+	// 本地健康诊断快照（doctor skill 用）：key 一律脱敏（sk-...abcd），只返回配置状态与运行健康
+	r.GET("/api/diagnose", HandleDiagnose)
 	r.GET("/api/git/branches", GitBranches)
 	r.GET("/api/git/graph", GitGraph)
 	r.POST("/api/git/checkout", GitCheckout)
@@ -328,6 +330,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/notifications", CloudNotificationProxy)
 	r.POST("/api/notifications/read", CloudNotificationProxy)
 	r.POST("/api/notifications/clear", CloudNotificationProxy)
+	// 本地通知：不依赖云端，脚本/前端可直接创建（人设周报等）
+	r.GET("/api/notifications/local", HandleLocalNotifList)
+	r.POST("/api/notifications/local", HandleLocalNotifCreate)
+	r.POST("/api/notifications/read/local", HandleLocalNotifRead)
 
 	r.Static("/images", "./public/images")
 
@@ -412,12 +418,35 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.DELETE("/api/galgame/session/:id", HandleGalgameDeleteSession)
 	// Galgame 立绘/背景静态服务
 	r.Static("/api/galgame/asset", galgameOutputDir())
-	// 局域网同步信息（前端二维码/连接面板展示用）：返回 IP+port+token
+	// 局域网同步信息（前端开关/连接面板展示用）：默认关闭，开启后才监听 0.0.0.0
 	r.GET("/api/lan/sync-info", func(c *gin.Context) {
 		if lanSync == nil {
-			c.JSON(500, gin.H{"error": "局域网同步服务未启动"})
+			c.JSON(500, gin.H{"error": "局域网同步服务不可用"})
 			return
 		}
-		c.JSON(200, gin.H{"ip": getLanIP(), "port": lanSync.Port(), "token": lanSync.Token(), "device": "re0"})
+		resp := gin.H{"enabled": lanSync.Running()}
+		if lanSync.Running() {
+			resp["ip"] = getLanIP()
+			resp["port"] = lanSync.Port()
+			resp["token"] = lanSync.Token()
+			resp["device"] = "re0"
+		}
+		c.JSON(200, resp)
+	})
+	// 开启局域网同步（幂等）：开始监听 0.0.0.0:port。首次开启时 Windows 防火墙会弹窗确认
+	r.POST("/api/lan/enable", func(c *gin.Context) {
+		if lanSync == nil {
+			c.JSON(500, gin.H{"error": "局域网同步服务不可用"})
+			return
+		}
+		lanSync.Start()
+		c.JSON(200, gin.H{"enabled": true, "ip": getLanIP(), "port": lanSync.Port(), "token": lanSync.Token(), "device": "re0"})
+	})
+	// 关闭局域网同步（幂等）
+	r.POST("/api/lan/disable", func(c *gin.Context) {
+		if lanSync != nil {
+			lanSync.Stop()
+		}
+		c.JSON(200, gin.H{"enabled": false})
 	})
 }

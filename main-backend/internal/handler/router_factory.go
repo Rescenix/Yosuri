@@ -27,7 +27,7 @@ func NewAPIRouter() *gin.Engine {
 	RegisterRoutes(r, sessionStore)
 	// 局域网同步服务：独立 0.0.0.0 端口 + token 鉴权，只暴露 /lan/ 端点，
 	// re0 主服务继续只听 127.0.0.1，零额外暴露面。
+	// 默认不启动（避免每次启动触发 Windows 防火墙弹窗），由前端 /api/lan/enable 按需开启。
 	lanSync = NewLanSyncService(sessionStore, os.Getenv("LAN_SYNC_PORT"))
-	lanSync.Start()
 	return r
 }

@@ -450,8 +450,9 @@ var skillManageToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name:        skillManageToolName,
-		Description: "创建并启用一个自研技能。仅在用户明确要求保存工作流经验时使用；技能必须是可复用、可验证的具体流程。",
+		Description: "创建或更新一个自研技能。仅在用户明确要求保存工作流经验时使用；技能必须是可复用、可验证的具体流程。action=create 新建（同名拒绝）；action=update 更新已有技能内容。",
 		Parameters: core.ToolParameters{Type: "object", Properties: map[string]core.ToolProperty{
+			"action":       {Type: "string", Description: "create=新建（默认，同名拒绝）；update=更新已有技能（保留使用计数与创建时间）"},
 			"name":         {Type: "string", Description: "kebab-case 英文技能名"},
 			"description":  {Type: "string", Description: "不超过 60 字的中文用途描述"},
 			"trigger":      {Type: "string", Description: "明确的使用条件"},
@@ -462,10 +463,21 @@ var skillManageToolDef = core.ToolDefinition{
 }
 
 func handleSkillManage(argsJSON string) string {
-	var skill Skill
-	if err := json.Unmarshal([]byte(argsJSON), &skill); err != nil {
+	var req struct {
+		Skill
+		Action string `json:"action"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &req); err != nil {
 		return "参数解析失败：需要 name、description、trigger、verification、steps"
 	}
+	action := strings.TrimSpace(req.Action)
+	if action == "" {
+		action = "create"
+	}
+	if action != "create" && action != "update" {
+		return "技能未保存：action 只支持 create（新建）或 update（更新已有技能）"
+	}
+	skill := req.Skill
 	skill.Name = skillNameSanitizer.ReplaceAllString(strings.ToLower(strings.TrimSpace(skill.Name)), "-")
 	skill.Name = strings.Trim(skill.Name, "-")
 	skill.Description, skill.Trigger, skill.Verification = strings.TrimSpace(skill.Description), strings.TrimSpace(skill.Trigger), strings.TrimSpace(skill.Verification)
@@ -479,11 +491,27 @@ func handleSkillManage(argsJSON string) string {
 		return "技能未保存：" + err.Error()
 	}
 	path := filepath.Join(skillsDir(), skill.Name+".json")
-	if _, err := os.Stat(path); err == nil {
-		return "技能未保存：同名技能已存在，请在设置页审阅或换名"
+	_, statErr := os.Stat(path)
+	exists := statErr == nil
+	if action == "create" && exists {
+		return "技能未保存：同名技能已存在，请在设置页审阅或换名（或用 action=update 更新）"
+	}
+	if action == "update" && !exists {
+		return "技能未更新：该技能不存在，请用 action=create 新建"
+	}
+	if action == "update" {
+		// 保留使用计数、最近使用时间与创建时间，只刷新正文与更新时间
+		if data, err := os.ReadFile(path); err == nil {
+			var old Skill
+			if json.Unmarshal(data, &old) == nil && old.Name == skill.Name {
+				skill.UseCount, skill.LastUsedAt, skill.CreatedAt = old.UseCount, old.LastUsedAt, old.CreatedAt
+			}
+		}
+	} else {
+		skill.CreatedAt = time.Now()
 	}
 	skill.Source, skill.Status = "learned", skillStatusActive
-	skill.CreatedAt, skill.UpdatedAt = time.Now(), time.Now()
+	skill.UpdatedAt = time.Now()
 	persistLearnedSkill(path, skill)
 	return fmt.Sprintf("技能已保存并启用：%s。", skill.Name)
 }

@@ -48,6 +48,9 @@ type ModelConfigEntry struct {
 	ContextWindow int                `json:"context_window,omitempty"`
 	Reasoning     bool               `json:"reasoning,omitempty"`
 	Models        []ModelConfigModel `json:"models,omitempty"`
+	// Extra 是能力条目的扩展字段（如联网/生图的 mode、mcp_tool）。普通提供方留空，
+	// 也不会写进 /v1/chat/completions 的模型路由判断里。
+	Extra map[string]string `json:"extra,omitempty"`
 }
 
 // 前端在没有修改 Key 的情况下会把这个占位符原样传回来，后端据此判断"不用覆盖旧 key"
@@ -261,9 +264,10 @@ func HandleGetModelConfig(c *gin.Context) {
 		if isFreeCatalogID(e.ID) {
 			continue // 免费池条目走下面的 free_models 视图，不在自定义列表里重复出现
 		}
-		if strings.TrimSpace(e.Endpoint) == "" {
+		if strings.TrimSpace(e.Endpoint) == "" && !isCapabilityConfigID(e.ID) {
 			// 目录外残留（厂商已整体移除/字段损坏）：不进前端列表，否则会以
 			// 「未命名」展示且任何保存都被 Endpoint 校验拦死（2026-08-14 修复）。
+			// 能力条目（联网/生图）的 mcp 模式允许空 Endpoint（2026-08-29）。
 			continue
 		}
 		e.APIKeySet = e.APIKey != ""
@@ -383,6 +387,26 @@ func HandleGetModelConfig(c *gin.Context) {
 		agnesKeySet = true
 	}
 
+	// 联网来源（web_search 工具）配置状态：bing（默认，免 key）/ firecrawl / custom / mcp。
+	// 前端「模型」tab 能力区据此恢复用户选过的来源与自定义参数。
+	websearchStatus := gin.H{"mode": "bing", "endpoint": "", "model": "", "api_key_set": false, "mcp_tool": ""}
+	if e, ok := entryByID[websearchCapabilityID]; ok {
+		websearchStatus["mode"] = capabilityMode(e, "bing")
+		websearchStatus["endpoint"] = e.Endpoint
+		websearchStatus["model"] = e.DefaultModel
+		websearchStatus["api_key_set"] = e.APIKey != ""
+		websearchStatus["mcp_tool"] = e.Extra["mcp_tool"]
+	}
+	// 生图来源（image_generate 工具）配置状态：pollinations（默认）/ custom / mcp。
+	imageStatus := gin.H{"mode": "pollinations", "endpoint": "", "model": "", "api_key_set": false, "mcp_tool": ""}
+	if e, ok := entryByID[imageCapabilityID]; ok {
+		imageStatus["mode"] = capabilityMode(e, "pollinations")
+		imageStatus["endpoint"] = e.Endpoint
+		imageStatus["model"] = e.DefaultModel
+		imageStatus["api_key_set"] = e.APIKey != ""
+		imageStatus["mcp_tool"] = e.Extra["mcp_tool"]
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"configs":           safe,
 		"free_models":       freeModels,
@@ -390,6 +414,8 @@ func HandleGetModelConfig(c *gin.Context) {
 		"free_model_order":  freeModelOrder,
 		"firecrawl_key_set": firecrawlKeySet,
 		"agnes_key_set":     agnesKeySet,
+		"websearch":         websearchStatus,
+		"image_cfg":         imageStatus,
 	})
 }
 

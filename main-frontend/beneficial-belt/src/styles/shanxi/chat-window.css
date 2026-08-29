@@ -4487,7 +4487,6 @@ img.gem-rail-avatar {
 
 
 /* Auto/+ 下拉都开在工具条上方——工具条贴着窗口底边，往下开会出屏 */
-.auto-menu-dropdown,
 .add-menu-dropdown {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -4497,35 +4496,8 @@ img.gem-rail-avatar {
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 6px 0;
-  min-width: 130px;
+  min-width: 170px;
   z-index: 50;
-}
-.add-menu-dropdown { min-width: 170px; }
-.auto-menu-item { padding: 7px 14px; font-size: 12.5px; color: var(--app-text-soft); cursor: pointer; }
-.auto-menu-item:hover { background: var(--app-surface-3); }
-.auto-menu-item.active { background: var(--app-surface-3); color: var(--app-text); font-weight: 600; }
-
-/* ===== Yolo 模式按钮：开启走主题色脉冲/流光动画，关闭变灰停动画 ===== */
-.toolbar-pill-btn.mode-pill { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
-.toolbar-pill-btn.mode-pill.mode-yolo {
-  color: #fff;
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
-  box-shadow: 0 0 0 0 var(--app-accent-soft);
-  animation: yolo-pulse 1.8s ease-in-out infinite;
-}
-.toolbar-pill-btn.mode-pill.mode-yolo:hover { filter: brightness(1.05); }
-.toolbar-pill-btn.mode-pill.mode-idle {
-  color: var(--app-text-faint);
-  border-color: var(--app-border);
-  background: var(--app-surface-2);
-  animation: none;
-  box-shadow: none;
-}
-@keyframes yolo-pulse {
-  0%   { box-shadow: 0 0 0 0 var(--app-accent-soft); }
-  70%  { box-shadow: 0 0 0 7px rgba(201, 100, 66, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(201, 100, 66, 0); }
 }
 
 /* ===== 工具审批轻量条（Ask 模式）=====

@@ -82,7 +82,8 @@ var currentImageProvider = "pollinations"
 // SetImageProvider 设置当前工作流的生图提供商，工作流启动时调用一次。
 func SetImageProvider(provider string) {
 	p := strings.TrimSpace(strings.ToLower(provider))
-	if p == "pollinations" {
+	switch p {
+	case "pollinations", "custom", "mcp":
 		currentImageProvider = p
 	}
 }

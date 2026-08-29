@@ -2,8 +2,6 @@ module backend
 
 go 1.26.3
 
-license AGPL-3.0
-
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible

@@ -158,6 +158,67 @@ function adjustInputHeight() {
     try { return JSON.parse(raw) } catch { return {} }
   }
 
+  // 中断/失败工作流的「中断前已执行步骤摘要」文本 → tool 块列表。
+  // 后端 workflowHistoryContent 把它拼成 "- 工具名({json}) => 结果" 每行一条，
+  // 但结果常是多行 JSON（输出被截断跨行），按行解析会拆散。
+  // 这里按「- 工具名(」开头识别条目起点，整段归并，再切出 args 与 output。
+  function parseInterruptedSummary(content) {
+    const text = String(content || '')
+    const blocks = []
+    const prose = []
+    const lines = text.split('\n')
+    let i = 0
+    while (i < lines.length) {
+      const line = lines[i]
+      // 条目起点：- 工具名({...})
+      const m = /^\s*-\s*([A-Za-z_][\w]*)\s*\(/.exec(line)
+      if (m) {
+        // 找到该条目结束（下一个 "- 工具名(" 或文本结尾）
+        let j = i + 1
+        while (j < lines.length && !/^\s*-\s*[A-Za-z_][\w]*\s*\(/.test(lines[j])) j++
+        const entry = lines.slice(i, j).join('\n')
+        i = j
+        // 从条目里拆 args（第一个 '(' 到配对的 ')' 之后）+ 剩余为 output
+        const openIdx = entry.indexOf('(')
+        const closeIdx = entry.lastIndexOf(')')
+        let name = m[1], argsRaw = '', outRaw = ''
+        if (openIdx >= 0) {
+          const after = entry.slice(openIdx + 1)
+          // args 是 {...} JSON，输出可能在 ) 后面有 "=> 结果"
+          const braceMatch = /^\{.*\}/s.exec(after)
+          if (braceMatch) {
+            argsRaw = braceMatch[0]
+            const rest = after.slice(braceMatch[0].length)
+            const arrow = rest.indexOf('=>')
+            outRaw = (arrow >= 0 ? rest.slice(arrow + 2) : rest).trim()
+          } else {
+            argsRaw = closeIdx > openIdx ? entry.slice(openIdx + 1, closeIdx) : after
+          }
+        }
+        blocks.push({
+          type: 'tool',
+          name,
+          args: parseArgs(argsRaw),
+          status: 'ok',
+          text: '',
+          output: outRaw || '',
+          expanded: false
+        })
+      } else if (line.trim()) {
+        prose.push(line.trim())
+        i++
+      } else {
+        i++
+      }
+    }
+    // 摘要外的说明文字（如"用户主动停止了工作流。"）作为 intent 展示，
+    // 但只有真的有工具行时才生成 agentflow（避免纯文本消息被误判）
+    if (blocks.length && prose.length) {
+      blocks.unshift({ type: 'intent', text: prose.join('\n') })
+    }
+    return { blocks, prose }
+  }
+
   function cleanContent(content) {
     return content ? content.replace(/\[(action|emotion):[^\]]*\]/g, '') : ''
   }
@@ -248,7 +309,46 @@ function adjustInputHeight() {
            }
          }
          const role = item?.role === 'assistant' ? 'bot' : (item?.role ?? 'user')
-         const extracted = role === 'user' ? extractAttachmentsFromContent(item?.content) : null
+                 // 中断/失败的工作流：content 里只有「中断前已执行步骤摘要」纯文本
+                 // （- ask_user({...}) => 结果 这种格式），没有 blocks 也没有 tool_calls。
+                 // 解析成 tool 块渲染，而不是把 raw JSON 当聊天文本显示（2026-08-29 修复）
+                 if (role === 'bot' && item?.content && item.content.includes('中断前已执行步骤摘要') && !item?.blocks?.length) {
+                   const parsed = parseInterruptedSummary(item.content)
+                   if (parsed.blocks.length) {
+                     return {
+                       id: idx,
+                       kind: 'agentflow',
+                       sender: 'bot',
+                       status: 'completed',
+                       blocks: parsed.blocks,
+                       subagents: [],
+                       changedFiles: [],
+                       timestamp: item?.timestamp || new Date()
+                     }
+                   }
+                 }
+                 // 助理消息落盘时 tool_calls 可能存了原始 JSON，但 blocks 为空（旧存档/其他agent写入）。
+                 // 把它渲染成 tool 块，而不是把 raw JSON 当聊天文本显示（2026-08-29 修复）
+                 if (role === 'bot' && item?.tool_calls?.length && !item?.blocks?.length) {
+                                    return {
+                                      id: idx,
+                                      kind: 'agentflow',
+                                      sender: 'bot',
+                                      status: 'completed',
+                                      blocks: item.tool_calls.map((tc, ti) => ({
+                                        type: 'tool',
+                                        name: tc.function?.name || tc.name || 'tool',
+                                        args: parseArgs(tc.function?.arguments || tc.arguments || '{}'),
+                                        status: 'ok',
+                                        text: '',
+                                        expanded: false
+                                      })),
+                                      subagents: [],
+                                      changedFiles: [],
+                                      timestamp: item?.timestamp || new Date()
+                                    }
+                                  }
+                 const extracted = role === 'user' ? extractAttachmentsFromContent(item?.content) : null
          return {
            id: idx,
            content: cleanContent(extracted ? extracted.text : (item?.content ?? '')),
@@ -403,6 +503,11 @@ async function switchSession(id) {
     }
   }
 
+  // 进行中的后台任务数（输入框上方悬浮任务条用）——含雨燕子代理 + 旧 group 工作流
+  const runningTaskCount = computed(() =>
+    backgroundTaskList.value.filter(t => t.status === 'running').length
+  )
+
   return {
     isOpen, isExpanded, userInput, messages, sessionId,
     isLoggedIn, debugTemp, debugTopP, debugReasoning, debugMaxTokens, balance,
@@ -410,6 +515,7 @@ async function switchSession(id) {
     messagesContainer, chatInputRef, userScrolledUp, inputBarFade,
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     backgroundTaskList,
+    runningTaskCount,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     todoState, sendSteerMessage,
     questionState, answerQuestion,

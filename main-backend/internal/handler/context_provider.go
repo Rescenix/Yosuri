@@ -154,6 +154,19 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 	}
 }
 
+// WithPersona 注入前端传来的「人设」段（/api/code/workflow 的 persona 参数）。
+// 空串则忽略（保持纯中性基底）。人设排在整个系统提示词第一段、归稳定段，
+// 与 MainAgentConfigNative 的中性基底互补：性格/称呼/语气全由前端预设驱动，
+// 后端不再写死任何自称（原「你是 Rescene酱…」已移为前端默认预设）。
+func (p *contextProvider) WithPersona(persona string) *contextProvider {
+	persona = strings.TrimSpace(persona)
+	if persona == "" {
+		return p
+	}
+	p.sections = append([]contextSection{{key: "system", content: persona + "\n\n", stable: true}}, p.sections...)
+	return p
+}
+
 // OnInvoked 注册每轮收尾的落状态回调。
 func (p *contextProvider) OnInvoked(fn func(round int, st roundState)) {
 	p.onInvoked = fn
@@ -224,6 +237,10 @@ func (p *contextProvider) ActivateTools(argsJSON string) (string, bool) {
 
 // ActivatedTools 导出已激活集合，用于落检查点。
 func (p *contextProvider) ActivatedTools() map[string]bool { return p.activated }
+
+// IsActivated 判断某个工具是否已激活（用于动态按需加载：模型直接调用按需工具时，
+// 主循环据此决定要不要自动激活并刷新 tools 数组）。
+func (p *contextProvider) IsActivated(name string) bool { return p.activated[name] }
 
 // RestoreActivatedTools 续跑时恢复中断前已加载的工具，
 // 否则模型上一轮刚加载的工具突然消失，得再 load 一遍白费一轮。

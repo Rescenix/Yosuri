@@ -267,7 +267,7 @@ async function checkAndDownload(silent) {
   if (!(data.ok && data.update && data.update.has_update)) return
   if (getSkippedVersion() === data.update.latest_version) return
   updateInfo.value = data.update
-  // 秒弹：新版本一被检测到就提示（3 天节流，同版本不重复），不等下载完成
+  // 秒弹：新版本一被检测到就提示（8 小时节流，同版本一天最多弹 3 次），不等待下载完成
   if (shouldShowUpdateBanner(data.update.latest_version)) {
     markUpdateBannerShown(data.update.latest_version)
     showBanner()

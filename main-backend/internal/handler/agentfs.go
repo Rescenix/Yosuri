@@ -198,9 +198,7 @@ func restoreActiveSession() *agentfsSession {
 // OnBeforeWrite 在文件工具真实落盘前调用：捕获 before 内容，存进 pending。
 // apply_patch 的每个新增/更新文件会分别调用一次；删除仍走不可逆审批。
 func OnBeforeWrite(fullName string, args map[string]any) {
-	if fullName != "write_file" && fullName != "edit_file" &&
-		fullName != "apply_patch" &&
-		fullName != "mcp__fs__write_file" && fullName != "mcp__fs__edit_file" {
+	if !isWriteAuditTool(fullName) {
 		return
 	}
 	agentfsMu.Lock()
@@ -234,9 +232,7 @@ func OnBeforeWrite(fullName string, args map[string]any) {
 
 // OnAfterWrite 在文件工具真实落盘后调用：把 before 内容写入本地历史并记录审计。
 func OnAfterWrite(fullName string, args map[string]any) {
-	if fullName != "write_file" && fullName != "edit_file" &&
-		fullName != "apply_patch" &&
-		fullName != "mcp__fs__write_file" && fullName != "mcp__fs__edit_file" {
+	if !isWriteAuditTool(fullName) {
 		return
 	}
 	agentfsMu.Lock()
@@ -280,10 +276,24 @@ func OnAfterWrite(fullName string, args map[string]any) {
 
 // opName 把工具名映射成写操作类型。
 func opName(fullName string) string {
-	if fullName == "edit_file" || fullName == "apply_patch" || fullName == "mcp__fs__edit_file" {
+	if fullName == "edit_file" || fullName == "apply_patch" || fullName == "mcp__fs__edit_file" ||
+		fullName == "patch" {
 		return "edit"
 	}
 	return "write"
+}
+
+// isWriteAuditTool 判定一个工具名是否属于「文件写盘需进 AgentFS 影子仓审计」的集合。
+// 核心 write/patch 与旧 write_file/edit_file/apply_patch 及 MCP 文件写删同级，
+// 都必须在落盘前后捕获 before/after，否则改动不进快照、无法回滚。
+func isWriteAuditTool(fullName string) bool {
+	switch fullName {
+	case "write", "patch",
+		"write_file", "edit_file", "apply_patch",
+		"mcp__fs__write_file", "mcp__fs__edit_file":
+		return true
+	}
+	return false
 }
 
 // beforeHashEntry pending 暂存的 before 信息。

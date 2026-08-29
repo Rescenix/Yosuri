@@ -29,14 +29,19 @@ import (
 // 危险工具分级：这些工具在 Ask 模式必须等人批准；其余（read_file /
 // search_memory / dispatch_agent / 只读 MCP）任何模式都直过，不烦人。
 var dangerousToolSet = map[string]bool{
-	"write_file":       true,
-	"edit_file":        true,
-	"apply_patch":      true,
-	"create_directory": true,
-	"move_file":        true,
-	"delete_file":      true,
-	"delete_directory": true,
-	"run_command":      true,
+	"write_file": true,
+	"edit_file":  true,
+	"apply_patch": true,
+	// 核心四件套：write/patch/bash 是文件写删与命令执行的入口，ask 模式必须拦截。
+	// read 是纯读，任何模式直过（与旧 read_file 同级，不烦人）。
+	"write":             true,
+	"patch":             true,
+	"bash":              true,
+	"create_directory":  true,
+	"move_file":         true,
+	"delete_file":       true,
+	"delete_directory":  true,
+	"run_command":       true,
 	// MCP filesystem 写删类：mcp__fs__write / edit / delete_file / move_file / create_directory
 	"mcp__fs__write_file":       true,
 	"mcp__fs__edit_file":        true,
