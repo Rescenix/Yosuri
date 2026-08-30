@@ -1,4 +1,4 @@
-[中文](./README.md) · [English](./README.en.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
   <img src="./assets/rescene-icon.png" alt="Rescene" width="96" style="vertical-align: middle; margin-right: 16px;">
@@ -6,15 +6,15 @@
 </p>
 
 <p align="center">
-  会成长的 AI 工作台 —— 让 AI <b>记住</b>、<b>执行</b>并<b>持续进化</b>
+  A growing AI workbench — AI that <b>remembers</b>, <b>executes</b>, and <b>keeps evolving</b>
 </p>
 
 <p align="center">
   <a href="https://rescene.shanca.me/download.html">
-    <img src="https://img.shields.io/badge/下载-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="下载">
+    <img src="https://img.shields.io/badge/Download-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="Download">
   </a>
   <a href="https://rescene.shanca.me/">
-    <img src="https://img.shields.io/badge/官网-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="官网">
+    <img src="https://img.shields.io/badge/Website-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="Website">
   </a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0"></a>
   <img src="https://img.shields.io/badge/Release-v0.2.4-blue" alt="Release v0.2.4">
@@ -22,66 +22,66 @@
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>
 
-![Rescene 工作台概览](./assets/rescene-main.png)
+A long-term companion AI workbench: **five-platform sync** keeps your context alive across Windows, Linux, macOS, Android and CLI, **automation** carries tasks through to the end, and the **aggregated API** unifies every model entry. It **self-learns** from every collaboration and gets to know you better through **long-term memory** — with **zero API key needed** for web search and image understanding.
+
+![Rescene workbench overview](./assets/rescene-main.png)
 
 ---
 
-## ⚡ 核心能力
+## ⚡ Core capabilities
 
-| 能力 | 一句话 |
+| Capability | What it does |
 | --- | --- |
-| **🔄 跨设备同步** | 会话、长期记忆跨 Windows / Linux / macOS / Android 天然接续，换屏不换上下文 |
-| **🤖 自动化闭环** | 浏览器、终端、真实工具组成可验证执行链——任务不在回答里停下，自动推进到底 |
-| **🔌 聚合 API** | 98 个免费模型 + 自定义提供方，统一为 OpenAI 兼容入口，智能路由自动走最快活源 |
+| **🔄 Five-platform sync** | Sessions and long-term memory continue naturally across Windows / Linux / macOS / Android / CLI. You change screens, not your working context |
+| **🤖 Automation loop** | Browser, terminal and real tools form a verifiable execution chain — tasks don't stop at answers, they run to completion |
+| **🔌 Aggregated API** | 98 free models + custom providers unified behind one OpenAI-compatible endpoint, with smart routing that automatically picks the fastest healthy source |
 
-![聚合 API 配置：一键接入全部免费模型](./assets/rescene-agg.png)
+![Aggregated API: one-click access to all free models](./assets/rescene-agg.png)
 
-## ✨ 更多特性
+## ✨ More features
 
-| 特性 | 一句话 |
+| Feature | What it does |
 | --- | --- |
-| **🧲 免费联网搜索** | 内置 Bing 兜底，零 API Key 就能联网找资料 |
-| **👁️ 免费识图** | 所有视觉模型按成功率负载均衡，失败自动换，不绑任何厂商 |
-| **🎬 免费短剧** | 内置免费 AI 短剧工作台：参考图 / 首尾帧 / 分镜链式衔接 |
-| **👨‍👩‍👧 子代理可视化** | 后台任务、子代理并发工作流带完成通知，时间线面板一目了然 |
-| **🖱️ Computer Use** | 截图、鼠标、键盘、拖拽、滚动——不止会改代码，能操作桌面 |
-| **🛡️ AgentFS 审计** | AI 每次改文件都有快照 / Diff / 回滚，危险操作经你批准 |
+| **🔍 Free web search** | Built-in Bing fallback — search the web with **zero API key**; Firecrawl, custom models and MCP tools also supported |
+| **👁️ Native free vision** | All vision models load-balanced by success rate, auto-failover — paste an image and get it understood, no vendor lock-in, no key needed |
+| **🎬 Free short-drama studio** | Built-in AI short-drama workbench: reference images / first & last frames / storyboard chaining |
+| **👨‍👩‍👧 Sub-agents & background tasks** | Concurrent sub-agent workflows and background tasks (run_task) with completion notifications, all visible on a timeline panel |
+| **⚙️ Settings fully open** | The agent can analyze and modify your configuration — models, persona, web/image sources, skill toggles — no black box |
+| **🛠️ Self-editing skills & on-demand tools** | Skill library with add/remove/enable/disable; native tools slimmed down and loaded on demand (load_tools) |
+| **🖱️ Computer Use** | Screenshots, mouse, keyboard, drag & drop, scrolling — it operates your desktop, not just your code |
+| **🛡️ AgentFS change audit** | Every AI file edit gets a snapshot / diff / rollback; dangerous operations require your approval |
 
-![免费短剧工作台：模板、参考图、生成参数一屏搞定](./assets/rescene-studio.png)
+![Free short-drama studio: templates, reference images and generation params on one screen](./assets/rescene-studio.png)
 
 ---
 
-## 🚀 下载与安装
+## 🚀 Download & Install
 
 👉 **[https://rescene.shanca.me/download.html](https://rescene.shanca.me/download.html)** 👈
 
-| 平台 | 方式 |
+| Platform | How |
 | --- | --- |
-| Windows | 便携版 ZIP / 安装器，解压即用，自动更新 |
-| Linux / macOS | 桌面客户端 tar.gz |
-| Android | 移动端同步使用 |
-| **CLI（一行安装）** | `curl -fsSL https://download.shanca.me/rescene-cli/install.sh \| sh` |
+| Windows | Portable ZIP / installer — unzip and run, auto-update |
+| Linux / macOS | Desktop client tar.gz |
+| Android | Mobile sync & continue |
+| **CLI (one line)** | `curl -fsSL https://download.shanca.me/rescene-cli/install.sh \| sh` |
 
-> 📢 遇到问题或想提建议，加入 QQ 群：**一群 609967535**（即将满员）· **二群 796474621**（新开）
->
-> 扫码加入（二群）：
->
-> <img src="https://qr.api.cli.im/qr?data=https%3A%2F%2Fqm.qq.com%2Fq%2F796474621&size=200" width="120" alt="QQ 群二维码">
+> 💬 Questions or suggestions? Join our QQ groups: **Group 1 609967535** (almost full) · **Group 2 796474621** (new)
 
-## 🛠️ 源码编译（贡献者）
+## 🛠️ Build from Source (contributors)
 
 ```bash
-# 后端（Go 1.22+）
+# Backend (Go 1.22+)
 cd main-backend && go run .
 
-# 前端（Node 18+）
+# Frontend (Node 18+)
 cd main-frontend/beneficial-belt && npm install && npm run dev
 ```
 
-访问 `http://localhost:4322` 打开本地开发工作台。Linux 构建见 [`main-backend/docs/linux-build.md`](./main-backend/docs/linux-build.md)。
+Visit `http://localhost:4322` for the local dev workbench. Linux build: [`main-backend/docs/linux-build.md`](./main-backend/docs/linux-build.md).
 
-## 💬 反馈与协议
+## 💬 Feedback & License
 
-- 🐛 Bug / 建议 → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
-- 💬 交流 → [QQ 群 796474621](https://qm.qq.com/q/796474621)
-- 核心代码：[AGPL-3.0 License](./LICENSE)
+- 🐛 Bugs / suggestions → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
+- 💬 Community → [QQ Group 796474621](https://qm.qq.com/q/796474621)
+- Core code: [AGPL-3.0 License](./LICENSE)

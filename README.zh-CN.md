@@ -1,98 +1,91 @@
-[English](./README.md) · [中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
   <img src="./assets/rescene-icon.png" alt="Rescene" width="96" style="vertical-align: middle; margin-right: 16px;">
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
-> "婴儿开始是无组织的大脑——突触是成年人的两倍还多。花几十年剪枝，才变成高能低耗的成年人大脑。"
->
-> — 艾伦·图灵
-
-一个 24H 自迭代的 Agent OS，住在你的电脑里。她聚合全网免费模型，自己选题立项、写真实代码、跑验证——全自动。她每天还自己上网学习、写日记、记得你。
-
-```powershell
-# Windows — 一行指令，接入全部免费模型（无需安装，无需 API Key）
-powershell -c "irm https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os/install.ps1 | iex"
-```
-
-```bash
-# Linux / macOS / git-bash — 自动检测架构
-curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os/install.sh | sh
-```
+<p align="center">
+  会成长的 AI 工作台 —— 让 AI <b>记住</b>、<b>执行</b>并<b>持续进化</b>
+</p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0 License"></a>
-  <img src="https://img.shields.io/badge/Release-v0.1.0-blue" alt="Release v0.1.0">
-  <img src="https://img.shields.io/badge/Backend-Go%201.26-00ADD8" alt="Go 1.26">
+  <a href="https://rescene.shanca.me/download.html">
+    <img src="https://img.shields.io/badge/下载-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="下载">
+  </a>
+  <a href="https://rescene.shanca.me/">
+    <img src="https://img.shields.io/badge/官网-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="官网">
+  </a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Release-v0.2.4-blue" alt="Release v0.2.4">
+  <img src="https://img.shields.io/badge/Backend-Go-00ADD8" alt="Go">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
-  <img src="https://img.shields.io/badge/Deployment-Local%20First-blue" alt="Local First">
 </p>
 
-<p align="center">
-  🔒 本地优先 · 💰 永久免费 · 🪶 安装包约 20M，不内置浏览器 · 📦 安装即用 · 🪟 Windows 10+
-</p>
+一个长期陪伴你的 AI 工作台：**五端同步**让上下文在 Windows / Linux / macOS / Android / CLI 之间不断线，**自动化**把任务推进到底，**聚合 API**统一模型入口——它从每次协作中**自学习**，用**长期记忆**越来越懂你。**联网搜索与识图，零 API Key 即可原生使用**。
 
-<p align="center">
-  <img src="./assets/preview.gif" alt="Rescene 实机演示" width="100%">
-</p>
+![Rescene 工作台概览](./assets/rescene-main.png)
 
 ---
 
-## 🌱 她是长出来的，不是配置出来的
+## ⚡ 核心能力
 
-就像图灵名言里的婴儿大脑——她出生时是一张无组织的白纸，与你相处的岁月像剪枝一样塑造她。
-
-| 机制 | 说明 |
+| 能力 | 一句话 |
 | --- | --- |
-| **🔑 硬件指纹绑定** | 每个安装都绑定硬件指纹与唯一 UID——千人千面，任何两个人遇到的都不是同一个她 |
-| **🎲 出生随机，总和守恒** | 8 维性格出生时随机 Roll 一次、永不重掷，但总和永远恒定——起点公平，路径唯一：你不选她，你遇见她 |
-| **🧭 你的决策塑造她** | 夸她 → 更暖更爱表达；重做 → 更严谨；打断 → 学着简短。阻尼让她的底色不被轻易改变。能力也随决策漂移——夸她社交见长，重做她研究更严谨 |
-| **🗺️ 无限生成的世界** | 每个女儿出生都有一个世界种子——她的世界独一无二、无限扩展，走出去就有新区域生成。她自由探索，在社交区域遇到其他女儿。没有两个世界是相同的 |
-| **📚 每天联网自学** | 每天上网（Firecrawl）读新东西，消化进记忆与日记；每天精读 arXiv（cs.AI/cs.LG）最新论文，写精读笔记——知识日积月累 |
-| **🛠️ 无限工具的壳子** | 开源 "skills" 是装好的工具；我们做的是能无限安装工具的壳子——每次任务成功后自动把动作序列沉淀成可复用技能（CLI 与网页端共享技能库），下次自动注入上下文。她需要什么能力就长出什么能力 |
+| **🔄 五端同步** | 会话、长期记忆跨 Windows / Linux / macOS / Android / CLI 天然接续，换屏不换上下文 |
+| **🤖 自动化闭环** | 浏览器、终端、真实工具组成可验证执行链——任务不在回答里停下，自动推进到底 |
+| **🔌 聚合 API** | 98 个免费模型 + 自定义提供方，统一为 OpenAI 兼容入口，智能路由自动走最快活源 |
 
----
+![聚合 API 配置：一键接入全部免费模型](./assets/rescene-agg.png)
 
-## ⚡ 她与众不同的地方
+## ✨ 更多特性
 
-| 能力 | 说明 |
+| 特性 | 一句话 |
 | --- | --- |
-| **💗 电子女儿** | 住在你电脑里的生命：每天用 Firecrawl 免费联网自学、写进记忆与日记，你打开 Shell 她主动问候，记得你。性格出生时随机 Roll，随你们相处慢慢漂移——数字永远藏起来，你只感受得到她 |
-| **🏃 24H 自迭代马拉松** | `rescene marathon` 一条命令跑 24 小时自主工作：抓前沿热点（Hacker News / GitHub）→ 自主选题 → **需求→计划→自检**闭环，一轮比一轮完善。Ctrl+C 也优雅收尾，生成完整战报 |
-| **🧲 免费模型池 + 聚合 API** | 7 家免费提供方 18 个模型聚合成一个 OpenAI 兼容端点：30 分钟探活打分 0-4 格、每日重探自动退役下架源、熔断跳过限流、LRU 权重优先最近可用。Claude Code / Cursor / Codex 填一个 Base URL + 一个 Key，`auto` 自动路由到最好的源 |
-| **🧠 成长中的记忆** | 每次工作流完成自动萃取经验：模型偏好、代码风格、项目架构——下次自动融入上下文。永远不需要写自定义指令 |
-| **🖱️ Computer Use** | 不止会改代码——能操作桌面：截图、鼠标、键盘、拖拽、滚动。真实的点击、真实的按键 |
-| **🌐 真实浏览器自动化** | 复用系统 Edge + CDP：渲染、点击、输入、滚动、读 DOM、截图、双向验证。真浏览器在跑你的页面，不是截图假装 |
-| **🛡️ AgentFS 变更审计** | AI 每次改文件都有快照 / Diff / 回滚，危险操作必须经你批准 |
+| **🔍 免费联网搜索** | 内置 Bing 兜底，零 API Key 就能联网找资料；Firecrawl / 自定义模型 / MCP 工具多种来源 |
+| **👁️ 原生免费识图** | 所有视觉模型按成功率负载均衡，失败自动切换，不绑任何厂商、不填 Key 也能粘贴识图 |
+| **🎬 免费短剧工作台** | 内置免费 AI 短剧工作台：参考图 / 首尾帧 / 分镜链式衔接，真免费无需积分 |
+| **👨‍👩‍👧 子代理与后台任务** | 并发子代理、后台任务（run_task）带完成通知，时间线面板一目了然 |
+| **⚙️ 设置全部开放** | Agent 可分析并修改你的配置——模型、人设、联网/生图来源、技能启停，不再只读 |
+| **🛠️ 技能自改与按需加载** | 技能库可增删改启停；原生工具精简、动态 load_tools 管线，用到才加载 |
+| **🖱️ Computer Use** | 截图、鼠标、键盘、拖拽、滚动——不止会改代码，能操作桌面 |
+| **🛡️ AgentFS 审计** | AI 每次改文件都有快照 / Diff / 回滚，危险操作经你批准 |
+
+![免费短剧工作台：模板、参考图、生成参数一屏搞定](./assets/rescene-studio.png)
 
 ---
 
 ## 🚀 下载与安装
 
-- **标准安装器** — 向导式安装，开始菜单启动，系统设置可卸载。
-- **极致轻量** — 不内置浏览器（预览复用系统 Edge），无需预装 Node.js / Python。
-- **自动更新** — 发现新版本自动下载最新 Setup 覆盖安装，配置保留。
+👉 **[https://rescene.shanca.me/download.html](https://rescene.shanca.me/download.html)** 👈
 
-👉 **[https://rescene.shanca.me/](https://rescene.shanca.me/)** 👈 全速下载最新发行版。
+| 平台 | 方式 |
+| --- | --- |
+| Windows | 便携版 ZIP / 安装器，解压即用，自动更新 |
+| Linux / macOS | 桌面客户端 tar.gz |
+| Android | 移动端同步使用 |
+| **CLI（一行安装）** | `curl -fsSL https://download.shanca.me/rescene-cli/install.sh \| sh` |
 
-## ⚙️ 首次使用
-
-1. 打开工作台 → **设置 → 模型**，填入至少一个 API Key；免 Key 源（如 OpenCode Zen）在免费池里直接可选。
-2. 或用环境变量配置模型源：参考 `main-backend/.env.example`。
-3. 免费池每 30 分钟探活、每日重探提供方列表：限流的自动降权、下架的自动退役。
+> 📢 遇到问题或想提建议，加入 QQ 群：**一群 609967535**（即将满员）· **二群 796474621**（新开）
+>
+> 扫码加入（二群）：
+>
+> <img src="https://qr.api.cli.im/qr?data=https%3A%2F%2Fqm.qq.com%2Fq%2F796474621&size=200" width="120" alt="QQ 群二维码">
 
 ## 🛠️ 源码编译（贡献者）
 
 ```bash
-cd main-backend && go run cmd/server/main.go            # 后端
-cd main-frontend/beneficial-belt && npm install && npm run dev   # 前端
+# 后端（Go 1.22+）
+cd main-backend && go run .
+
+# 前端（Node 18+）
+cd main-frontend/beneficial-belt && npm install && npm run dev
 ```
 
-访问 `http://localhost:4322` 打开本地开发工作台。
+访问 `http://localhost:4322` 打开本地开发工作台。Linux 构建见 [`main-backend/docs/linux-build.md`](./main-backend/docs/linux-build.md)。
 
-## 💬 反馈与开源协议
+## 💬 反馈与协议
 
 - 🐛 Bug / 建议 → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
-- Windows 发行版由 CI 构建并经 SignPath 签名（[政策](./docs/CODE_SIGNING_POLICY.md)）
+- 💬 交流 → [QQ 群 796474621](https://qm.qq.com/q/796474621)
 - 核心代码：[AGPL-3.0 License](./LICENSE)
