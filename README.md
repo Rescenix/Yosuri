@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <b style="font-size: 19px;">Zero API key. Web search, image understanding, and 98 free models — out of the box.</b><br/>
-  Not a chat window. A workbench that runs real tools and keeps getting smarter.
+  <b style="font-size: 19px;">Five-platform sync. Full automation. One aggregated API for every model.</b><br/>
+  Not a chat window. A workbench that remembers your projects, runs real tools, and keeps getting smarter.
 </p>
 
 <p align="center">
@@ -31,21 +31,21 @@
 
 ---
 
-## ⚡ Native free capabilities — no API key required
-
-| Capability | What it does |
-| --- | --- |
-| **🔍 Free web search** | Built-in Bing fallback — search the web with **zero API key**; Firecrawl, custom models and MCP tools also supported |
-| **👁️ Native free vision** | All vision models load-balanced by success rate, auto-failover — paste an image and get it understood, no vendor lock-in, no key needed |
-| **🧲 Free model pool** | 98 free models from multiple providers unified behind one OpenAI-compatible endpoint — smart routing automatically picks the fastest healthy source |
-| **🎬 Free short-drama studio** | Built-in AI short-drama workbench: reference images / first & last frames / storyboard chaining — free, no credits |
-
-## ⚙️ A workbench, not a chatbot
+## ⚡ Core capabilities
 
 | Capability | What it does |
 | --- | --- |
 | **🔄 Five-platform sync** | Sessions and long-term memory continue naturally across Windows / Linux / macOS / Android / CLI. You change screens, not your working context |
 | **🤖 Automation loop** | Browser, terminal and real tools form a verifiable execution chain — tasks don't stop at answers, they run to completion |
+| **🔌 Aggregated API** | 98 free models + custom providers unified behind one OpenAI-compatible endpoint, with smart routing that automatically picks the fastest healthy source |
+
+## ✨ Also free, out of the box
+
+| Capability | What it does |
+| --- | --- |
+| **🔍 Free web search** | Built-in Bing fallback — search the web with **zero API key**; Firecrawl, custom models and MCP tools also supported |
+| **👁️ Native free vision** | All vision models load-balanced by success rate, auto-failover — paste an image and get it understood, no vendor lock-in, no key needed |
+| **🎬 Free short-drama studio** | Built-in AI short-drama workbench: reference images / first & last frames / storyboard chaining — free, no credits |
 | **👨‍👩‍👧 Sub-agents & background tasks** | Concurrent sub-agent workflows and background tasks (run_task) with completion notifications, all visible on a timeline panel |
 | **⚙️ Settings fully open** | The agent can analyze and modify your configuration — models, persona, web/image sources, skill toggles — no black box |
 | **🛠️ Self-editing skills & on-demand tools** | Skill library with add/remove/enable/disable; native tools slimmed down and loaded on demand (load_tools) |
