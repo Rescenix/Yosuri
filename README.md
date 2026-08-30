@@ -10,6 +10,11 @@
 </p>
 
 <p align="center">
+  <b style="font-size: 19px;">Zero API key. Web search, image understanding, and 98 free models — out of the box.</b><br/>
+  Not a chat window. A workbench that runs real tools and keeps getting smarter.
+</p>
+
+<p align="center">
   <a href="https://rescene.shanca.me/download.html">
     <img src="https://img.shields.io/badge/Download-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="Download">
   </a>
@@ -22,29 +27,25 @@
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>
 
-A long-term companion AI workbench: **five-platform sync** keeps your context alive across Windows, Linux, macOS, Android and CLI, **automation** carries tasks through to the end, and the **aggregated API** unifies every model entry. It **self-learns** from every collaboration and gets to know you better through **long-term memory** — with **zero API key needed** for web search and image understanding.
-
 ![Rescene workbench overview](./assets/rescene-main.png)
 
 ---
 
-## ⚡ Core capabilities
+## ⚡ Native free capabilities — no API key required
+
+| Capability | What it does |
+| --- | --- |
+| **🔍 Free web search** | Built-in Bing fallback — search the web with **zero API key**; Firecrawl, custom models and MCP tools also supported |
+| **👁️ Native free vision** | All vision models load-balanced by success rate, auto-failover — paste an image and get it understood, no vendor lock-in, no key needed |
+| **🧲 Free model pool** | 98 free models from multiple providers unified behind one OpenAI-compatible endpoint — smart routing automatically picks the fastest healthy source |
+| **🎬 Free short-drama studio** | Built-in AI short-drama workbench: reference images / first & last frames / storyboard chaining — free, no credits |
+
+## ⚙️ A workbench, not a chatbot
 
 | Capability | What it does |
 | --- | --- |
 | **🔄 Five-platform sync** | Sessions and long-term memory continue naturally across Windows / Linux / macOS / Android / CLI. You change screens, not your working context |
 | **🤖 Automation loop** | Browser, terminal and real tools form a verifiable execution chain — tasks don't stop at answers, they run to completion |
-| **🔌 Aggregated API** | 98 free models + custom providers unified behind one OpenAI-compatible endpoint, with smart routing that automatically picks the fastest healthy source |
-
-![Aggregated API: one-click access to all free models](./assets/rescene-agg.png)
-
-## ✨ More features
-
-| Feature | What it does |
-| --- | --- |
-| **🔍 Free web search** | Built-in Bing fallback — search the web with **zero API key**; Firecrawl, custom models and MCP tools also supported |
-| **👁️ Native free vision** | All vision models load-balanced by success rate, auto-failover — paste an image and get it understood, no vendor lock-in, no key needed |
-| **🎬 Free short-drama studio** | Built-in AI short-drama workbench: reference images / first & last frames / storyboard chaining |
 | **👨‍👩‍👧 Sub-agents & background tasks** | Concurrent sub-agent workflows and background tasks (run_task) with completion notifications, all visible on a timeline panel |
 | **⚙️ Settings fully open** | The agent can analyze and modify your configuration — models, persona, web/image sources, skill toggles — no black box |
 | **🛠️ Self-editing skills & on-demand tools** | Skill library with add/remove/enable/disable; native tools slimmed down and loaded on demand (load_tools) |
