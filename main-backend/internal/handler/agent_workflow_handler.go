@@ -136,6 +136,26 @@ func truncateChars(s string, max int) string {
 	return s
 }
 
+// isModelUnavailableError 判断 400 响应体是否明确表示「模型当前不可用/不存在」。
+// 这是确定性死源（上游模型下架/改名/临时下线），必须淘汰沉底，不能当普通 400 忽略
+// （08-29 实锤：LLM7 返回 Model 'DeepSeek-V4-Flash-0731' is currently unavailable）。
+func isModelUnavailableError(raw string) bool {
+	lower := strings.ToLower(raw)
+	for _, pat := range []string{
+		"model_unavailable",
+		"currently unavailable",
+		"model not found",
+		"model does not exist",
+		"unknown model",
+		"not available",
+	} {
+		if strings.Contains(lower, pat) {
+			return true
+		}
+	}
+	return false
+}
+
 // HandleCodeWorkflow GET /api/code/workflow — 四态机 SSE 工作流
 func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// resume=<workflow_id>：从上次落盘的检查点接着跑（后端重启/SSE 断线后的续跑入口）。

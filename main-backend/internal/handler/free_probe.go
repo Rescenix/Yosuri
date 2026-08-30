@@ -18,9 +18,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -56,13 +56,6 @@ var (
 	aggAutoTierMu sync.Mutex
 	aggAutoTier   = map[string]int{}
 )
-
-// isProtectedModel 判断模型是否受保护（DeepSeek 系永不淘汰）。
-// 用户明确要求：DeepSeek 是核心卖点模型，即使上游临时 401/403/404 或探活
-// 失败，也不从聚合池移除（真实请求失败由熔断/failover 兜底，冷却后自愈）。
-func isProtectedModel(model string) bool {
-	return strings.Contains(strings.ToLower(model), "deepseek")
-}
 
 // disableAutoModel 标记一个自动发现模型确定性不可用（401/403/404）。
 // 注意：自动发现（auto_）模型按实际可用性淘汰——Kilo/Ollama/Zen 等
@@ -218,9 +211,17 @@ func probeCatalogEntry(f *FreeModelDef) {
 		IsLocal: f.Local, Keyless: f.Keyless,
 	}
 	start := time.Now()
-	ok, status := probeChatOnce(b)
+	ok, status, raw := probeChatOnce(b)
 	lat := time.Since(start)
 	recordProbeResult(f, lat, status, ok)
+	// 确定性死源（401/403/404 或 400 model_unavailable）顺手标 Disabled：让「一打开就是可用的」。
+	// 探活信号只影响 Auto 排序权重，不驱动下拉可见性——若不标 Disabled，
+	// 重启后死源会短暂出现在下拉里直到被真实请求命中（2026-08-30 实锤）。
+	// 429/5xx/超时属抖动，只降权不标死（防本机 IP 限流误杀全池）。
+	if !ok && (status == 401 || status == 403 || status == 404 ||
+		(status == 400 && isModelUnavailableError(raw))) {
+		disableFreeModel(f.Model)
+	}
 }
 
 // freeEntrySavedKey 读用户保存的同 ID 条目 key（避免重复 loadModelConfigs 的开销，
@@ -236,9 +237,10 @@ func freeEntrySavedKey(id string) (string, bool) {
 	return "", false
 }
 
-// probeChatOnce 发一次最小探活请求。返回 (是否成功, HTTP 状态码)。
+// probeChatOnce 发一次最小探活请求。返回 (是否成功, HTTP 状态码, 响应体原文)。
 // 429 视为「可用但受限」：成功路径但信号低（见 recordProbeResult）。
-func probeChatOnce(b RouterBackend) (bool, int) {
+// 响应体原文用于识别 400 model_unavailable 类确定性死源（2026-08-30 新增）。
+func probeChatOnce(b RouterBackend) (bool, int, string) {
 	reqBody := map[string]any{
 		"model":      b.Model,
 		"messages":   []map[string]any{{"role": "user", "content": "hi"}},
@@ -248,7 +250,7 @@ func probeChatOnce(b RouterBackend) (bool, int) {
 	body, _ := json.Marshal(reqBody)
 	req, err := http.NewRequest(http.MethodPost, chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
 	if err != nil {
-		return false, 0
+		return false, 0, ""
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if b.APIKey != "" {
@@ -257,11 +259,12 @@ func probeChatOnce(b RouterBackend) (bool, int) {
 	client := backendHTTPClient(b, probeTimeout, false)
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, 0
+		return false, 0, ""
 	}
 	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return false, resp.StatusCode
+		return false, resp.StatusCode, string(raw)
 	}
 	// 200 但 usage=0 = 请求未真正处理（魔搭 DS 间歇空回复 bug，实测 usage=0 空 content）
 	// → 判失败，防「200 空回复」模型靠状态码混进可用池（2026-08-13）
@@ -270,10 +273,10 @@ func probeChatOnce(b RouterBackend) (bool, int) {
 			TotalTokens int `json:"total_tokens"`
 		} `json:"usage"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&probeResp) == nil && probeResp.Usage.TotalTokens == 0 {
-		return false, resp.StatusCode
+	if json.Unmarshal(raw, &probeResp) == nil && probeResp.Usage.TotalTokens == 0 {
+		return false, resp.StatusCode, string(raw)
 	}
-	return true, resp.StatusCode
+	return true, resp.StatusCode, string(raw)
 }
 
 // recordProbeResult 按一次探活结果更新信号格。
@@ -405,7 +408,7 @@ func probeAutoDiscovered(wg *sync.WaitGroup) {
 				APIKey: key, Keyless: fm.Keyless,
 			}
 			start := time.Now()
-			ok, status := probeChatOnce(b)
+			ok, status, _ := probeChatOnce(b)
 			lat := time.Since(start)
 			recordProbeResultDef(fm.Endpoint, fm.Model, lat, status, ok)
 			if ok {

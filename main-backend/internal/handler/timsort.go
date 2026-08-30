@@ -26,10 +26,11 @@ type autoItem struct {
 
 // autoHealth 一次探活/真实请求后的健康快照（aggAutoChain 内预取）。
 type autoHealth struct {
-	exhausted bool
-	signal    int
-	latency   time.Duration
-	lastOK    time.Time
+	exhausted   bool
+	signal      int
+	latency     time.Duration
+	lastOK      time.Time
+	circuitOpen bool // 熔断中（真实请求连续失败已确认不可用）——排序时沉底
 }
 
 const timMinRun = 10 // auto 链 n≤10 恒走二分插入；>10 走归并

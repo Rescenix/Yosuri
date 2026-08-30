@@ -3732,13 +3732,17 @@ function handlePaste(e) {
   const items = e.clipboardData?.items
   if (!items) return
   let imageFile = null
+  let videoFile = null
   for (const item of items) {
     if (item.type && item.type.startsWith('image/')) { imageFile = item.getAsFile(); break }
+    if (item.type && item.type.startsWith('video/')) { videoFile = item.getAsFile(); break }
   }
-  if (!imageFile) return
+  const file = imageFile || videoFile
+  if (!file) return
   e.preventDefault()
-  if (flowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
-  attachImageFile(imageFile)
+  if (flowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片/视频'); return }
+  if (file.type.startsWith('video/')) attachVideoFile(file)
+  else attachImageFile(file)
 }
 
 // ==================== "+" 附加菜单：添加文件/照片、添加文件夹 ====================
@@ -3805,6 +3809,32 @@ async function attachImageFile(file) {
   }
 }
 
+// 视频附件：与图片共用同一套「先附加、分析完成标 ready、用户自己决定发送」的流程，
+// 只是走后端 /api/video/analyze（multipart 上传 → ffmpeg 抽帧 → 视觉模型链理解）。
+async function attachVideoFile(file) {
+  const id = ++attachmentSeq
+  const previewUrl = URL.createObjectURL(file)
+  attachments.value.push({ id, kind: 'video', name: file.name, status: 'analyzing', previewUrl })
+  try {
+    const modelMode = localStorage.getItem('modelMode') === 'split' ? 'split' : 'unified'
+    const visionModel = modelMode === 'split'
+      ? (localStorage.getItem('visionModel') || '')
+      : (localStorage.getItem('selectedModel') || '')
+    const fd = new FormData()
+    fd.append('file', file)
+    if (visionModel) fd.append('model', visionModel)
+    const res = await fetch('/api/video/analyze', { method: 'POST', body: fd })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `视频理解请求失败 (${res.status})`)
+    if (!data.text) throw new Error('未返回分析文本')
+    const item = attachments.value.find(a => a.id === id)
+    if (item) { item.status = 'ready'; item.analysisText = data.text }
+  } catch (err) {
+    const item = attachments.value.find(a => a.id === id)
+    if (item) { item.status = 'error'; item.errorMsg = err?.message || '视频理解失败' }
+  }
+}
+
 async function attachTextFile(file) {
   const id = ++attachmentSeq
   // 只登记文件名，不读全文——发送时只把文件名带进消息，agent 在工作目录里自己 read_file。
@@ -3817,6 +3847,7 @@ function onAttachFilesSelected(e) {
   e.target.value = ''
   for (const file of files) {
     if (file.type && file.type.startsWith('image/')) attachImageFile(file)
+    else if (file.type && file.type.startsWith('video/')) attachVideoFile(file)
     else attachTextFile(file)
   }
 }
@@ -3844,6 +3875,7 @@ function buildOutgoingMessage() {
     .filter(a => a.status === 'ready')
     .map(a => {
       if (a.kind === 'image') return `[图片: ${a.name}]\n${a.analysisText || ''}`
+      if (a.kind === 'video') return `[视频: ${a.name}]\n${a.analysisText || ''}`
       if (a.kind === 'folder') return `[文件夹: ${a.name}，共 ${a.fileCount} 个文件]\n${a.manifest}`
       // 文本/代码文件：只给文件名，让 agent 自行 read_file，不把内容塞进消息
       return `[文件: ${a.name}]`

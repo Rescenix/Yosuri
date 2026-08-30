@@ -164,10 +164,9 @@ var freeModelCatalog = []FreeModelDef{
 	// 能力元数据未知者一律留 0/false，绝不伪造（与目录「未知留空」规矩一致）。
 	// Keyless=true：免 key 远端网关，可直接进链、可被「提供方」直接勾选，无需填 Key。
 	// 2026-08-21 实测审计：HTTP 400 "Model is unavailable"（仍在 /v1/models 列表里，
-	// 只是调用直接挂，不是探活抖动）。手动标 Disabled——这条命中 isProtectedModel
-	// （名字含 deepseek），24h 存在性重探不会因它「消失」而下架，只有「重新出现在
-	// 列表里」才会把 Disabled 拨回 false，所以这次标记可能在它被列表重探判定
-	// "仍存在" 时被自动复位；如果之后发现又被派上场但还是 400，需要再手动查一次。
+	// 只是调用直接挂，不是探活抖动）。手动标 Disabled——24h 存在性重探不会因它「消失」
+	// 而下架，只有「重新出现在列表里」才会把 Disabled 拨回 false，所以这次标记可能在它
+	// 被列表重探判定"仍存在"时被自动复位；如果之后发现又被派上场但还是 400，需要再手动查一次。
 	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true, Disabled: true},
 	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
 	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·最快）", Keyless: true, Reasoning: true},
@@ -337,6 +336,12 @@ func resolveBackends(userKey string, model string) []RouterBackend {
 	envKeys := userKeysByEnv(userKey)
 	for _, f := range freeModelCatalog {
 		if f.Disabled {
+			continue
+		}
+		// 熔断中的源直接不进链（08-29 实锤：LLM7 真实 400 model_unavailable 被熔断，
+		// 但 freeModelCatalog.Disabled 没标，探活 signal=2 还让它排 auto 链第一，
+		// auto 每次先撞它白白失败。熔断 = 连续失败已确认不可用，必须跳过）。
+		if circuitOpen(RouterBackend{BaseURL: f.Endpoint, Model: f.Model, Source: "free"}) {
 			continue
 		}
 		key := ""
@@ -716,6 +721,19 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 				}
 				return "", nil, lastErr
 			}
+			// 400 一般属请求格式/上游解析 bug，不禁用；但若上游明确说「模型当前不可用/
+			// 不存在」（如 LLM7 的 Model ... is currently unavailable），这是确定性死源，
+			// 必须淘汰沉底——否则 auto 链每次首跳撞它，白白失败不 failover（08-29 实锤：
+			// LLM7 探活 signal=2 显示健康，真实请求 400 model_unavailable，auto 8 次挂 6 次）。
+			if resp.StatusCode == 400 && isModelUnavailableError(string(raw)) {
+				if strings.HasPrefix(b.ID, "auto_") {
+					disableAutoModel(b.BaseURL, b.Model)
+				} else {
+					// 模型不存在 = 永久下架，强制淘汰（绕过 deepseek 系保护）
+					forceDisableFreeModel(b.Model)
+				}
+				return "", nil, lastErr
+			}
 			if transientStatus(resp.StatusCode) {
 				// 限流 / 服务端故障：暂时性，计入熔断
 				circuitFail(b)
@@ -836,6 +854,19 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 					disableAutoModel(b.BaseURL, b.Model)
 				} else {
 					disableFreeModel(b.Model)
+				}
+				return "", nil, lastErr
+			}
+			// 400 一般属请求格式/上游解析 bug，不禁用；但若上游明确说「模型当前不可用/
+			// 不存在」（如 LLM7 的 Model ... is currently unavailable），这是确定性死源，
+			// 必须淘汰沉底——否则 auto 链每次首跳撞它，白白失败不 failover（08-29 实锤：
+			// LLM7 探活 signal=2 显示健康，真实请求 400 model_unavailable，auto 8 次挂 6 次）。
+			if resp.StatusCode == 400 && isModelUnavailableError(string(raw)) {
+				if strings.HasPrefix(b.ID, "auto_") {
+					disableAutoModel(b.BaseURL, b.Model)
+				} else {
+					// 模型不存在 = 永久下架，强制淘汰（绕过 deepseek 系保护）
+					forceDisableFreeModel(b.Model)
 				}
 				return "", nil, lastErr
 			}

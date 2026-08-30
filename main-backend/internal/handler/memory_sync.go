@@ -18,7 +18,9 @@ package handler
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -76,6 +78,46 @@ func readGuestToken() string {
 	return ""
 }
 
+// uidFromToken 从 JWT payload 解出 uid（登录 token 或游客 token 均可）。
+// 不依赖 intimacy.md（那个只在亲密度接口成功后落盘——登录用户若亲密度接口用的
+// 登录 token 而推送用游客 token，uid 对不上 → 403 → 零上传，2026-08-30 实锤）。
+// JWT 格式 header.payload.signature，payload 是 base64(JSON)，本地只读缓存 token
+// 解 payload 即可（不解密不验签，不涉及密钥）。
+func uidFromToken(tok string) int64 {
+	if tok == "" {
+		return 0
+	}
+	parts := strings.Split(tok, ".")
+	if len(parts) < 2 {
+		return 0
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		// 兼容带 padding 的编码
+		payload, err = base64.URLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return 0
+		}
+	}
+	var claims struct {
+		UID json.Number `json:"uid"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(payload))
+	dec.UseNumber()
+	if err := dec.Decode(&claims); err != nil {
+		return 0
+	}
+	if n, err := claims.UID.Int64(); err == nil {
+		return n
+	}
+	return 0
+}
+
+// uidFromGuestToken 从本地缓存的 guest JWT payload 解出 uid（兼容旧调用）。
+func uidFromGuestToken() int64 {
+	return uidFromToken(readGuestToken())
+}
+
 // HandleGuestTokenStore POST /api/auth/guest-token {token}
 // 前端把云端签发的 JWT 交给本地后端缓存，供 memory_sync 推送/拉取鉴权。
 func HandleGuestTokenStore(c *gin.Context) {
@@ -98,6 +140,86 @@ func HandleGuestTokenStore(c *gin.Context) {
 	if err := os.WriteFile(p, []byte(req.Token+"\n"), 0o644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败: " + err.Error()})
 		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// ── 登录 token 缓存（2026-08-30：登录用户用登录 token 推送记忆，guest token 的 uid
+// 是游客号，与登录账号 uid 不匹配 → 云端 requireUIDMatch 403 → 零上传） ──
+
+func loginTokenPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "rescene_data", "cloud_login_token")
+}
+
+// readLoginToken 读本地缓存的登录 JWT（member token，含 uid=登录账号）。
+func readLoginToken() string {
+	if p := loginTokenPath(); p != "" {
+		if data, err := os.ReadFile(p); err == nil {
+			return strings.TrimSpace(string(data))
+		}
+	}
+	return ""
+}
+
+// readAuthToken 优先读登录 token，回退 guest token。
+// 登录用户用 member JWT（uid=登录账号），游客用 guest JWT（uid=游客号）——
+// 两者 uid 必须匹配云端 requireUIDMatch，否则 403 静默失败。
+func readAuthToken() (token string, isLogin bool) {
+	if t := readLoginToken(); t != "" {
+		return t, true
+	}
+	return readGuestToken(), false
+}
+
+// HandleLoginTokenStore POST /api/auth/login-token {token}
+// 前端登录成功后（refresh / login）把 member JWT 缓存到本地，供 push 鉴权。
+func HandleLoginTokenStore(c *gin.Context) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 token"})
+		return
+	}
+	p := loginTokenPath()
+	if p == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户目录不可用"})
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败"})
+		return
+	}
+	if err := os.WriteFile(p, []byte(req.Token+"\n"), 0o644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// HandleLoginTokenGet GET /api/auth/login-token
+// 前端重启后 WebView2 localStorage 丢失时，从这里恢复登录 token（2026-08-30：
+// WebView2 数据目录随 exe 路径变化 → localStorage 清空 → 登录身份丢失，改为
+// 从 rescene_data 持久化文件恢复，登录态不再依赖浏览器存储）。
+func HandleLoginTokenGet(c *gin.Context) {
+	tok := readLoginToken()
+	if tok == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "无缓存登录态"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"token": tok})
+}
+
+// HandleLoginTokenDelete DELETE /api/auth/login-token
+// 前端登出时清掉缓存 token，避免重启后 restoreLoginToken 又自动恢复登录态。
+func HandleLoginTokenDelete(c *gin.Context) {
+	p := loginTokenPath()
+	if p != "" {
+		_ = os.Remove(p)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -181,40 +303,65 @@ func applyMemorySyncPayload(payload string, cloudUpdatedAt time.Time) {
 	}
 }
 
-// pushMemorySync 异步把本地记忆全量推送到云端（fire-and-forget）。
+// pushMemorySync 异步把本地记忆全量推送到云端。
+// uid 与 token 必须同源（云端 requireUIDMatch 校验 JWT uid == 请求 uid）：
+//   - 登录用户：login token（uid=登录账号）
+//   - 游客：guest token（uid=游客号）
+// 统一从「实际鉴权 token」解 uid，杜绝 body uid 与 JWT uid 错配导致 403。
+// 带重试（网络抖动/云端冷启动）与失败日志——之前 fire-and-forget 连日志都没有，
+// 401/超时全吞掉，「零上传」时无从排查（2026-08-30 实锤）。
 func pushMemorySync() {
 	if !memorySyncEnabled() {
 		return
 	}
-	uid, _ := memorydir.ReadIntimacy()
+	tok, _ := readAuthToken()
+	uid := uidFromToken(tok)
 	if uid <= 0 {
-		return // 账号 uid 尚未同步到本地缓存
+		// 兼容旧版：无 token 时回退 intimacy.md 缓存（能推但 uid 可能非账号 uid）
+		uid, _ = memorydir.ReadIntimacy()
+	}
+	if uid <= 0 {
+		log.Printf("[memory-sync] 跳过推送：本地无可用 token 且 intimacy 缓存无 uid（未登录或未分发 UID）")
+		return
 	}
 	payload := memorySyncPayload()
 	if payload == "" {
 		return
 	}
 	body, _ := json.Marshal(map[string]any{"uid": uid, "payload": payload})
+	client := &http.Client{Timeout: 8 * time.Second}
+	target := cloudAuthBase() + "/api/memory/sync"
+
 	go func() {
-		req, err := http.NewRequest(http.MethodPost, cloudAuthBase()+"/api/memory/sync", bytes.NewReader(body))
-		if err != nil {
-			return
+		// 最多重试 3 次（间隔 1s/2s/4s）：Render 免费实例冷启动慢，首击 401/超时后重试能补上
+		for attempt := 1; attempt <= 3; attempt++ {
+			req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(body))
+			if err != nil {
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			// 鉴权头：云端要求 JWT uid == 请求 uid（08-17 起），不带会 401 静默失败
+			if tok != "" {
+				req.Header.Set("Authorization", "Bearer "+tok)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("[memory-sync] 推送失败(uid=%d, 第%d次): %v", uid, attempt, err)
+				time.Sleep(time.Duration(attempt) * time.Second)
+				continue
+			}
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return // 成功
+			}
+			log.Printf("[memory-sync] 推送被拒(uid=%d, HTTP %d, 第%d次)", uid, resp.StatusCode, attempt)
+			time.Sleep(time.Duration(attempt) * time.Second)
 		}
-		req.Header.Set("Content-Type", "application/json")
-		// 鉴权头：云端要求 JWT uid == 请求 uid（08-17 起），不带会 401 静默失败
-		if tok := readGuestToken(); tok != "" {
-			req.Header.Set("Authorization", "Bearer "+tok)
-		}
-		client := &http.Client{Timeout: 5 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return
-		}
-		resp.Body.Close()
 	}()
 }
 
 // pullMemorySync 从云端拉取记忆包并写回本地。返回是否成功拉取并应用。
+// 与 push 同源原则：token 优先登录 token（登录用户 uid=登录账号），回退 guest token。
 func pullMemorySync(uid int64) bool {
 	if !memorySyncEnabled() || uid <= 0 {
 		return false
@@ -225,15 +372,17 @@ func pullMemorySync(uid int64) bool {
 		return false
 	}
 	// 鉴权头：云端要求 JWT uid == 请求 uid，不带会 401 静默失败
-	if tok := readGuestToken(); tok != "" {
+	if tok, _ := readAuthToken(); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	res, err := client.Do(req)
 	if err != nil {
+		log.Printf("[memory-sync] 拉取失败(uid=%d): %v", uid, err)
 		return false
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
+		log.Printf("[memory-sync] 拉取被拒(uid=%d, HTTP %d) —— 404 表示账号还没有云端记忆，正常", uid, res.StatusCode)
 		return false // 404 = 账号还没有云端记忆，正常
 	}
 	var parsed struct {
@@ -293,7 +442,7 @@ func HandleMemorySyncPush(c *gin.Context) {
 	}
 	r.Header.Set("Content-Type", "application/json")
 	// 鉴权头：云端要求 JWT uid == 请求 uid，不带会 401
-	if tok := readGuestToken(); tok != "" {
+	if tok, _ := readAuthToken(); tok != "" {
 		r.Header.Set("Authorization", "Bearer "+tok)
 	}
 	res, err := client.Do(r)
@@ -310,11 +459,20 @@ func HandleMemorySyncPush(c *gin.Context) {
 func StartupMemorySyncPull() {
 	go func() {
 		time.Sleep(2 * time.Second)
-		uid, _ := memorydir.ReadIntimacy()
+		uid := uidFromToken(mustAuthToken())
+		if uid <= 0 {
+			uid, _ = memorydir.ReadIntimacy()
+		}
 		if uid > 0 {
 			pullMemorySync(uid)
 		}
 	}()
+}
+
+// mustAuthToken 取当前可用鉴权 token（登录优先，回退游客）。
+func mustAuthToken() string {
+	tok, _ := readAuthToken()
+	return tok
 }
 
 // memorySyncLoopInterval 定时全量同步周期（2026-08-28 用户定稿：开启即自动同步）。
@@ -324,12 +482,17 @@ const memorySyncLoopInterval = 60 * time.Second
 // 不再等记忆写工具才推送——开关开启（默认开）时，启动 2s 后立即全量推+拉一次，
 // 此后每 60s 双向同步一次（push 全量覆盖云端 / pull 比较后写回本地，防旧覆盖新）。
 // 开关关闭或 uid 未就绪时静默跳过；每次 tick 都重新检查开关，随时生效。
+// uid 从「实际鉴权 token」解析（2026-08-30 修复：登录用户用 login token、游客用
+// guest token，二者 uid 与云端 requireUIDMatch 匹配，杜绝零上传）。
 func StartMemorySyncLoop() {
 	go func() {
-		time.Sleep(2 * time.Second) // 等 uid 缓存 / 前端 guest-token 落盘 / 网络就绪
+		time.Sleep(2 * time.Second) // 等 uid 缓存 / 前端 guest-token/login-token 落盘 / 网络就绪
 		for {
 			if memorySyncEnabled() {
-				uid, _ := memorydir.ReadIntimacy()
+				uid := uidFromToken(mustAuthToken())
+				if uid <= 0 {
+					uid, _ = memorydir.ReadIntimacy()
+				}
 				if uid > 0 {
 					pushMemorySync()
 					pullMemorySync(uid)

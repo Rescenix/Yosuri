@@ -174,6 +174,8 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, capturePreviewToolDef)
 	// arxiv_search：arXiv 论文检索/预览（alphaXiv 风格），Go 直连 API 免外部依赖
 	defs = append(defs, arxivToolDef)
+	// knowledge_search / knowledge_list：外挂知识库 RAG 检索
+	defs = append(defs, knowledgeSearchToolDef, knowledgeListToolDef)
 	// mambo_video：曼波视频一键生成（配音+字幕+素材匹配+ffmpeg 合成）
 	defs = append(defs, mamboToolDef)
 	// video_watermark_remove：AI 视频去水印（ffmpeg delogo + 清元数据）
@@ -263,6 +265,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
 		"workdir_read", "workdir_write", "workdir_append":
 		return callNativeMemoryTool(name, argsJSON)
+	case "knowledge_search", "knowledge_list":
+		return callNativeKnowledgeTool(name, argsJSON)
 	case "session_search":
 		return callNativeSessionSearch(argsJSON)
 	case "computer_screenshot", "computer_mouse_move", "computer_mouse_click",
@@ -283,7 +287,7 @@ var legacyFileToolSet = map[string]bool{
 	"write_file": true, "edit_file": true, "apply_patch": true,
 	"create_directory": true, "move_file": true, "delete_file": true, "delete_directory": true,
 	"run_command": true,
-	"run_task": true, "task_status": true, "task_log": true, "task_wait": true, "task_kill": true,
+	"run_task":    true, "task_status": true, "task_log": true, "task_wait": true, "task_kill": true,
 }
 
 // coreToolIndexDefs 返回模型可见的工具定义：4 个核心工具 + 未并入核心的扩展工具。

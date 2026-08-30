@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -37,18 +38,146 @@ type providerModelList struct {
 // 用互斥锁保护全局 freeModelCatalog 切片，避免并发写冲突。
 var freeCatalogMu sync.Mutex
 
-func disableFreeModel(model string) {
-	if model == "" || isProtectedModel(model) {
-		// DeepSeek 系受保护模型永不淘汰（核心卖点，见 free_probe.go isProtectedModel）
+// ==================== Disabled 状态持久化（2026-08-30 新增） ====================
+// Disabled 是内存态，重启即丢——重启后死源会短暂出现在下拉里直到被重新探活/请求命中。
+// 无 key 免 key 网关（Kilo/LLM7/Zen）探活零成本，完全可以在启动时立即探活并持久化结果：
+//   - 启动：loadPersistedDisabledModels() 恢复上次标死的模型 → freeModelCatalog 直接置位
+//   - 运行时：disableFreeModel/forceDisableFreeModel 标死时同步 persistDisabledModels()
+//   - 恢复：providerListRefreshOnce 发现模型回到 /v1/models 列表 → 从持久化移除并写盘
+// 文件：~/rescene_data/free_model_disabled.json（与 free_model_order.json 同目录），
+// 存被标死模型的 Model 名数组（上游模型名，不是 catalog ID）。
+
+func freeModelDisabledPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, "rescene_data", "free_model_disabled.json")
+}
+
+// loadPersistedDisabledModels 读回上次持久化的死源 Model 名集合（空文件/不存在 = 空集）。
+func loadPersistedDisabledModels() map[string]bool {
+	path := freeModelDisabledPath()
+	if path == "" {
+		return map[string]bool{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return map[string]bool{}
+	}
+	var names []string
+	if json.Unmarshal(data, &names) != nil {
+		return map[string]bool{}
+	}
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		if n != "" {
+			set[n] = true
+		}
+	}
+	return set
+}
+
+// persistDisabledModels 把当前 freeModelCatalog 里所有 Disabled=true 的 Model 名写盘。
+func persistDisabledModels() {
+	path := freeModelDisabledPath()
+	if path == "" {
+		return
+	}
+	freeCatalogMu.Lock()
+	names := make([]string, 0)
+	for _, f := range freeModelCatalog {
+		if f.Disabled && f.Model != "" {
+			names = append(names, f.Model)
+		}
+	}
+	freeCatalogMu.Unlock()
+	data, _ := json.MarshalIndent(names, "", "  ")
+	_ = os.WriteFile(path, data, 0600)
+}
+
+// removePersistedDisabledModel 模型恢复可用时，从持久化名单移除该 Model 名并写盘。
+func removePersistedDisabledModel(model string) {
+	if model == "" {
+		return
+	}
+	set := loadPersistedDisabledModels()
+	if !set[model] {
+		return // 不在名单里，无需写盘
+	}
+	delete(set, model)
+	names := make([]string, 0, len(set))
+	for n := range set {
+		names = append(names, n)
+	}
+	path := freeModelDisabledPath()
+	if path == "" {
+		return
+	}
+	data, _ := json.MarshalIndent(names, "", "  ")
+	_ = os.WriteFile(path, data, 0600)
+}
+
+// applyPersistedDisabledModels 启动时把持久化死源名单应用到 freeModelCatalog
+// （Disable=true 由 disableFreeModel/forceDisableFreeModel 写盘，这里是恢复）。
+func applyPersistedDisabledModels() {
+	set := loadPersistedDisabledModels()
+	if len(set) == 0 {
 		return
 	}
 	freeCatalogMu.Lock()
 	defer freeCatalogMu.Unlock()
+	applied := 0
+	for i := range freeModelCatalog {
+		if set[freeModelCatalog[i].Model] && !freeModelCatalog[i].Disabled {
+			freeModelCatalog[i].Disabled = true
+			applied++
+		}
+	}
+	if applied > 0 {
+		fmt.Printf("🗂️ [持久化] 恢复 %d 个上次标记的死源（free_model_disabled.json）\n", applied)
+	}
+}
+
+// forceDisableFreeModel 强制把某个免费模型标记为不可用。
+// 用于「模型不存在」类确定性错误（model_unavailable / currently unavailable）：
+// 这是永久下架，不是临时故障，必须淘汰——模型若上游已不存在，
+// 保留在链里只会让 auto 每次首跳白撞（2026-08-29 实锤：LLM7 模型已下架）。
+func forceDisableFreeModel(model string) {
+	if model == "" {
+		return
+	}
+	freeCatalogMu.Lock()
+	marked := false
 	for i := range freeModelCatalog {
 		if freeModelCatalog[i].Model == model && !freeModelCatalog[i].Disabled {
 			freeModelCatalog[i].Disabled = true
+			marked = true
+			fmt.Printf("🚫 [路由自愈] 强制标记下架(模型不存在): %s (%s)\n", freeModelCatalog[i].ID, model)
+		}
+	}
+	freeCatalogMu.Unlock()
+	if marked {
+		persistDisabledModels()
+	}
+}
+
+func disableFreeModel(model string) {
+	if model == "" {
+		return
+	}
+	freeCatalogMu.Lock()
+	marked := false
+	for i := range freeModelCatalog {
+		if freeModelCatalog[i].Model == model && !freeModelCatalog[i].Disabled {
+			freeModelCatalog[i].Disabled = true
+			marked = true
 			fmt.Printf("🚫 [路由自愈] 标记不可用(HTTP确定性错误): %s (%s)\n", freeModelCatalog[i].ID, model)
 		}
+	}
+	freeCatalogMu.Unlock()
+	if marked {
+		persistDisabledModels()
 	}
 }
 
@@ -148,13 +277,12 @@ func providerListRefreshOnce() {
 			if alive[strings.TrimSpace(f.Model)] {
 				if f.Disabled && !manuallyPinnedDeadCatalog[f.ID] {
 					f.Disabled = false
+					removePersistedDisabledModel(f.Model) // 活回列表 → 清持久化死源标记
 					enabled++
 					fmt.Printf("✅ [提供方重探] 恢复可用: %s (%s)\n", f.ID, f.Model)
 				}
 			} else {
-				if !f.Disabled && !isProtectedModel(f.Model) {
-					// DeepSeek 系受保护模型不因重探短暂缺位而下架（核心卖点，
-					// 上游可能临时改 ID 或限流；见 free_probe.go isProtectedModel）
+				if !f.Disabled {
 					f.Disabled = true
 					disabled++
 					fmt.Printf("🚫 [提供方重探] 标记退役(下架): %s (%s)\n", f.ID, f.Model)

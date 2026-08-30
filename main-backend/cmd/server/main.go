@@ -27,6 +27,11 @@ func main() {
 
 	r := handler.NewAPIRouter()
 
+	// 云端记忆同步：启动后自动拉取一次（换设备恢复记忆）+ 定时双向循环
+	// （2026-08-30：cmd/server 之前漏掉这两个调用，纯后端模式永远不同步记忆）
+	handler.StartupMemorySyncPull()
+	handler.StartMemorySyncLoop()
+
 	log.Println("🚀 Rescene 引擎已启动，监听端口 :8080")
 	addr := os.Getenv("PORT")
 	if addr == "" {

@@ -10,6 +10,7 @@
       />
       <div v-else class="attach-chip-icon">
         <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#94a3b8" />
+        <Icon v-else-if="att.kind === 'video'" icon="mdi:video-outline" width="20" color="#94a3b8" />
         <span v-else>{{ att.ext }}</span>
       </div>
       <div class="attach-chip-meta">

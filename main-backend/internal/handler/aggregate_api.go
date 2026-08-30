@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -131,9 +130,10 @@ func aggAutoChain() []RouterBackend {
 				sig, lat = st.signal, st.latency
 			}
 			items[i] = autoItem{b: out[i], h: autoHealth{
-				exhausted: quotaExhausted(out[i]),
-				signal:    sig, latency: lat,
-				lastOK: freeLastUsed(out[i]),
+				exhausted:    quotaExhausted(out[i]),
+				signal:       sig, latency: lat,
+				lastOK:       freeLastUsed(out[i]),
+				circuitOpen:  circuitOpen(out[i]), // 熔断中的源沉底（保护模型不删，但真实失败排最后）
 			}}
 		}
 		probeMu.Unlock()
@@ -142,9 +142,23 @@ func aggAutoChain() []RouterBackend {
 			if ha.exhausted != hb.exhausted {
 				return !ha.exhausted
 			}
+			// 熔断中的源沉底：未熔断排前（真实失败已确认不可用，让健康源先试）
+			if ha.circuitOpen != hb.circuitOpen {
+				return !ha.circuitOpen
+			}
 			da, db := ha.signal == 0, hb.signal == 0 // 已确认死的沉底
 			if da != db {
 				return !da
+			}
+			// ⚠️ 真实成功优先于探活信号（08-29 实锤）：probe 24h 一轮且只探
+			// keyless 网关，用户 key 源（商汤/B.AI）signal 恒 -1，而 LLM7 探活
+			// signal=2 却是假健康（真实 400 model_unavailable）。排序若只看
+			// signal，假健康的 LLM7 会压在「真实 200 但未探活」的 SenseNova
+			// 前面，auto 首跳先撞死源 → 502。真实请求成功时间 lastOK 才是
+			// 地面真相：近期真实成功过的源优先于只靠陈旧探活撑着的源。
+			//   取「最近一次真实成功」时刻，零值 = 从未真实成功过（只靠探活）。
+			if !ha.lastOK.IsZero() != !hb.lastOK.IsZero() {
+				return !ha.lastOK.IsZero() // 有真实成功记录的优先
 			}
 			if ha.signal != hb.signal {
 				return ha.signal > hb.signal
@@ -158,19 +172,10 @@ func aggAutoChain() []RouterBackend {
 		for i := range items {
 			out[i] = items[i].b
 		}
-		// 3. 末尾轻微打散：只在健康度完全相同的前缀里做小扰动，
-		//    避免永远钉死同一个源（防止某个源被一直打到限流）。
-		if len(out) > 1 {
-			rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
-			k := 3
-			if k > len(out) {
-				k = len(out)
-			}
-			if k > 1 {
-				j := rnd.Intn(k)
-				out[0], out[j] = out[j], out[0]
-			}
-		}
+		// ⚠️ 不搞「轻微打散」——健康排序已把最健康源稳定在 #1，打散只会
+		// 把假健康/未探测源换到最前，让 auto 首跳撞慢/挂源（08-29 实锤：
+		// LLM7 探活 signal=2 但真实 400 model_unavailable，被随机换到 #1
+		// 后 auto 每次先撞它，成功率暴跌）。最健康源就该一直在第一位。
 	}
 	return out
 }
@@ -204,6 +209,9 @@ func modelToAggregateBackends(model string) []RouterBackend {
 		entryByID[e.ID] = e
 	}
 	lower := strings.ToLower(model)
+	// ⚠️ 精准选模型绝不 failover（08-13 用户铁律）：外部填了具体模型名（如
+	// deepseek-v4-flash），只路由到匹配的第一个可用源，挂了就如实报错，
+	// 禁止悄悄切到别的源。failover 只属于 auto 模式。
 	for _, f := range freeModelCatalog {
 		if f.Disabled {
 			continue
@@ -219,14 +227,13 @@ func modelToAggregateBackends(model string) []RouterBackend {
 			if key == "" && !f.Local && !f.Keyless {
 				continue
 			}
-			b := RouterBackend{
+			return []RouterBackend{{
 				ID: f.ID, Name: f.Name, BaseURL: f.Endpoint, Model: f.Model,
 				APIKey:  key,
 				ParamsB: f.ParamsB, Timeout: 45 * time.Second, Source: "free",
 				Vision: f.Vision, ContextWindow: f.ContextWindow, Reasoning: f.Reasoning,
 				IsLocal: f.Local, Keyless: f.Keyless, WireResponses: f.Responses,
-			}
-			return []RouterBackend{b}
+			}}
 		}
 	}
 	// 按自动发现模型（auto_ 前缀）解析：/v1/models 暴露的是解码后的可读 ID（hex → 真实模型名），
@@ -304,7 +311,14 @@ func HandleAggregateChat(c *gin.Context) {
 				lastErr = err
 				continue // 流还没开始，切下一个
 			}
-			// 流已建立：转发 SSE（开始后不再 failover，与主链语义一致）
+			// 预读第一块，检测空流假成功：200 但无合法 delta → 判失败，触发 failover
+			// （08-29 实锤：B.AI 偶发返回 200 但流里无 content，之前被静默透传）
+			if resp, err = aggregateStreamFirstDelta(c.Request.Context(), b, resp); err != nil {
+				circuitFail(b)
+				lastErr = err
+				continue
+			}
+			// 流已建立并验证首块合法：转发 SSE（开始后不再 failover）
 			aggStatsInc(b, estimateJSONTokens(rawBody))
 			aggregateForwardSSE(c, b, resp)
 			return
@@ -407,6 +421,84 @@ func aggregateStreamOnce(ctx context.Context, b RouterBackend, reqBody map[strin
 	}
 	return nil, lastErr
 }
+
+// aggregateStreamOnce 的调用方在拿到 resp 后直接转发 SSE。为避免「200 但空流」
+// 的假成功被静默透传（2026-08-29 实锤：B.AI 偶发返回 200 但流里无 content，
+// auto 链不 failover，客户端等到超时显示空回复），转发前必须预读第一块：
+// 空流/无合法 delta 视为该源失败，交回 failover 换下一个源。
+func aggregateStreamFirstDelta(ctx context.Context, b RouterBackend, resp *http.Response) (*http.Response, error) {
+	br := bufio.NewReaderSize(resp.Body, 64*1024)
+	for {
+		if ctx.Err() != nil {
+			resp.Body.Close()
+			return nil, ctx.Err()
+		}
+		line, err := br.ReadString('\n')
+		if err != nil {
+			// EOF/错误：流已结束且没拿到任何合法 delta = 空流，判失败
+			resp.Body.Close()
+			return nil, fmt.Errorf("空流响应（上游 200 但无内容）: %s", b.Name)
+		}
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasPrefix(line, "data:") {
+			continue // 心跳/空行/非 data 行，跳过继续读
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" {
+			continue // 首块就 DONE = 空生成，继续等后续（仍未内容则 EOF 时判失败）
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta map[string]any `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue // 坏 JSON 跳过
+		}
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		delta := chunk.Choices[0].Delta
+		// ⚠️ 必须真的有内容才算「合法首块」。判断三样：content（正文）、
+		// tool_calls（工具调用）、reasoning_content（推理过程）——DeepSeek 系
+		// 流式会先发长串 reasoning_content 再发 content，只认 content 会把
+		// 推理模型误判成空流，整链 failover 全 502（2026-08-29 三次实锤）。
+		hasContent := false
+		if c, ok := delta["content"].(string); ok && c != "" {
+			hasContent = true
+		}
+		if rc, ok := delta["reasoning_content"].(string); ok && rc != "" {
+			hasContent = true
+		}
+		if tc, ok := delta["tool_calls"]; ok && tc != nil {
+			hasContent = true
+		}
+		if !hasContent {
+			continue // 纯 role/无内容的块跳过
+		}
+		// 拿到合法首块：把预读的首行补回 Body，让下游无感知继续读完整流
+		resp.Body = &prefixedReadCloser{prefix: []byte(line + "\n"), rest: br}
+		return resp, nil
+	}
+}
+
+// prefixedReadCloser 把预读的首行 + 剩余 reader 拼回一个 ReadCloser，
+// 让下游 aggregateForwardSSE 无感知地继续读完整流。
+type prefixedReadCloser struct {
+	prefix []byte
+	rest   *bufio.Reader
+}
+
+func (p *prefixedReadCloser) Read(b []byte) (int, error) {
+	if len(p.prefix) > 0 {
+		n := copy(b, p.prefix)
+		p.prefix = p.prefix[n:]
+		return n, nil
+	}
+	return p.rest.Read(b)
+}
+
+func (p *prefixedReadCloser) Close() error { return nil }
 
 // aggregateForwardSSE 把上游 OpenAI SSE 流逐 chunk 重组为标准 OpenAI 格式转发。
 // 流开始后（收到第一个合法 delta）不再 failover；中途错误直接结束流。

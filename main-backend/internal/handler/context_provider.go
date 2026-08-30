@@ -27,6 +27,7 @@ import (
 
 	"backend/internal/agent"
 	"backend/internal/ai/core"
+	"backend/internal/knowledge"
 	"backend/internal/memorydir"
 )
 
@@ -122,6 +123,16 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 		}
 	}
 
+	// 外挂知识库 RAG：用户丢进 ~/rescene_data/knowledge/ 的文档（md/txt/docx/pptx/pdf），
+	// 按任务检索召回相关片段。与 memory 互补：memory 是 agent 沉淀的精简记忆（每轮注入），
+	// knowledge 是用户提供的大体量文档（只按需召回相关段，控制 token）。
+	knowledgeSection := ""
+	if task != "" {
+		if hit := knowledge.Search(task, 3); hit != "" {
+			knowledgeSection = "\n\n# 外挂知识库（检索召回的相关片段，仅作参考，以你本地文件/实际代码为准）\n" + hit
+		}
+	}
+
 	return &contextProvider{
 		activated: map[string]bool{},
 		sections: []contextSection{
@@ -147,6 +158,7 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 			{key: "memory", content: prefSection},                                        // 偏好自动回填：亲密度 ≥100 无条件注入
 			{key: "memory", content: workdirSection},                                     // 项目级 workdir.md，会话开始即注入，跨对话不失业
 			{key: "memory", content: taskMemory},                                         // 反向链接联想召回：命中 + 1跳展开
+			{key: "memory", content: knowledgeSection},                                   // 外挂知识库 RAG：检索召回相关片段
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},

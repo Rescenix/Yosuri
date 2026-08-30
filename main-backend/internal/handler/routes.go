@@ -153,6 +153,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
 	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)
 
+	// 视频理解：上传视频 → ffmpeg 抽帧 → 视觉模型链（多图 image_url）
+	r.POST("/api/video/analyze", HandleVideoAnalyze)
+
 	r.GET("/api/sessions/:id", func(c *gin.Context) {
 		id := c.Param("id")
 		// 返回持久化视图而不是 []DSMessage：DSMessage 的 Timestamp/Blocks 打了 json:"-"
@@ -255,6 +258,14 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/auth/uid/bind", CloudUidBindProxy)
 	// 游客 JWT 缓存：前端 uid 分发拿到 token 后交给本地后端，供记忆同步鉴权
 	r.POST("/api/auth/guest-token", HandleGuestTokenStore)
+	// 登录 JWT 缓存：前端登录/refresh 成功后交给本地后端，供记忆同步鉴权
+	// （2026-08-30：登录用户必须用登录 token 推记忆，guest token uid 是游客号，
+	// 与登录账号 uid 不匹配 → 云端 requireUIDMatch 403 → 零上传）
+	r.POST("/api/auth/login-token", HandleLoginTokenStore)
+	// 登录 token 恢复：WebView2 localStorage 随 exe 路径丢失时，从 rescene_data 持久化文件恢复登录态
+	r.GET("/api/auth/login-token", HandleLoginTokenGet)
+	// 登录 token 清除：登出时清掉缓存，避免重启后自动恢复登录态
+	r.DELETE("/api/auth/login-token", HandleLoginTokenDelete)
 	// 亲密度（无上限互动值）：云端权威存储，re0 透传 + 本地缓存
 	r.POST("/api/auth/intimacy/inc", CloudIntimacyIncProxy)
 	r.GET("/api/auth/intimacy", CloudIntimacyGetProxy)

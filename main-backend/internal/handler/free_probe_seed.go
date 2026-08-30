@@ -58,7 +58,10 @@ var freeProbeSeed = []seedProbe{
 	{ID: "kilo_nemotron_safety_free", Status: 200, LatMS: 933, OK: true},
 	{ID: "kilo_openrouter_free", Status: 200, LatMS: 1257, OK: true},
 	// —— LLM7.io（2026-08-22 接入，免 key）——
-	{ID: "free_llm7_deepseek_v4_flash", Status: 200, LatMS: 1045, OK: true},
+	// ⚠️ 2026-08-29 实锤：free_llm7_deepseek_v4_flash 上游模型 DeepSeek-V4-Flash-0731
+	// 已下架（真实请求 400 Model 'DeepSeek-V4-Flash-0731' is currently unavailable）。
+	// 之前 seed 标 200 健康 → 每次重启复活 → auto 链首跳白撞 → 整链拖垮。
+	{ID: "free_llm7_deepseek_v4_flash", Status: 400, LatMS: 0, OK: false}, // 真死：model currently unavailable
 	{ID: "free_llm7_codestral", Status: 200, LatMS: 1860, OK: true},
 	{ID: "free_llm7_gemini_flash_lite", Status: 200, LatMS: 2036, OK: true},
 	{ID: "free_llm7_gpt_oss_20b", Status: 400, LatMS: 0, OK: false}, // 真死：model currently unavailable

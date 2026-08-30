@@ -84,6 +84,10 @@ func init() {
 	// 官方探测基准：启动即灌入 probeStates（首次/本地未探时兜底），
 	// 之后被日级本地探活逐条覆盖。见 free_probe_seed.go。
 	applyFreeProbeSeed()
+	// 恢复上次持久化的死源（free_model_disabled.json）：重启后一打开下拉就是干净的，
+	// 不出现「列得出但一选就 404/502」的模型（2026-08-30 实锤）。须在探活前应用，
+	// 让 probeOnce 对已标死条目直接跳过。
+	applyPersistedDisabledModels()
 	// 免费池日级探活（2026-08-26 恢复）：只探免 key 网关目录条目（Kilo/LLM7/Zen），
 	// 探活零成本，不烧用户填的 key 额度。2026-08-15 曾禁用是因为当时 probeOnce 并发探
 	// freeModelCatalog 全部条目 + 自动发现快照（魔搭 43/Zen 54/NVIDIA 100+）烧穿全部免费

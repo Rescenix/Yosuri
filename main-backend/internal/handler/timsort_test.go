@@ -78,6 +78,37 @@ func TestTimSortStable(t *testing.T) {
 		t.Fatal("耗尽应沉底")
 	}
 
+	// 3b. 熔断沉底：signal 高但熔断中的源应排到未熔断健康源后面（08-29 实锤：
+	// LLM7 探活 signal=2 但真实 400 熔断，之前排 auto 链第一拖垮整链）
+	rawCB := []autoItem{
+		{h: autoHealth{signal: 2, latency: 273, lastOK: t0(1), circuitOpen: true}},  // 熔断中但探活健康
+		{h: autoHealth{signal: -1, latency: 0, lastOK: t0(2), circuitOpen: false}},  // 未探测但可用
+		{h: autoHealth{signal: 1, latency: 500, lastOK: t0(3), circuitOpen: false}}, // 健康可用
+	}
+	lessCB := func(a, b autoItem) bool {
+		ha, hb := a.h, b.h
+		if ha.exhausted != hb.exhausted {
+			return !ha.exhausted
+		}
+		if ha.circuitOpen != hb.circuitOpen {
+			return !ha.circuitOpen
+		}
+		if ha.signal != hb.signal {
+			return ha.signal > hb.signal
+		}
+		if ha.latency != hb.latency {
+			return ha.latency < hb.latency
+		}
+		return ha.lastOK.After(hb.lastOK)
+	}
+	gotCB := timSortStable(rawCB, lessCB)
+	if gotCB[0].h.circuitOpen {
+		t.Fatalf("熔断中的源应沉底, 首位实际 circuitOpen=%v", gotCB[0].h.circuitOpen)
+	}
+	if !gotCB[2].h.circuitOpen {
+		t.Fatalf("熔断中的源应排最后, 末位实际 circuitOpen=%v", gotCB[2].h.circuitOpen)
+	}
+
 	// 4. 稳定性：完全相同健康度的元素顺序不变
 	raw3 := []autoItem{
 		{h: autoHealth{signal: 1, latency: 10, lastOK: t0(1)}},
