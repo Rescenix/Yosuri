@@ -2,9 +2,9 @@
   <main class="sites-view">
     <header class="sites-hero">
       <div>
-        <p class="eyebrow"><Icon icon="mdi:web" width="17" /> RESCENE SITES · POWERED BY NETLIFY</p>
+        <p class="eyebrow"><Icon icon="mdi:web" width="17" /> AMEKO SITES · POWERED BY NETLIFY</p>
         <h1>把 Agent 写好的作品，<em>一键分享</em>出去</h1>
-        <p class="intro">选择 Agent 已构建的网页，发布后会得到一个公开链接。朋友不需要安装 Rescene，也能直接打开。</p>
+        <p class="intro">选择 Agent 已构建的网页，发布后会得到一个公开链接。朋友不需要安装 Ameko，也能直接打开。</p>
       </div>
       <div class="hero-actions">
         <button type="button" class="sites-return" @click="backToChat"><Icon icon="mdi:arrow-left" width="16" /> 回到聊天</button>
@@ -21,7 +21,7 @@
       <div v-else class="deploy-form">
         <label><span>公开地址名称</span><input v-model="name" autocomplete="off" placeholder="例如：my-travel-plan" /><small>将作为 <code>名称.netlify.app</code>，需在全球唯一。</small></label>
         <label><span>发布哪个构建目录</span><select v-model="source"><option v-for="item in candidates" :key="item.path" :value="item.path">{{ item.label }}</option></select></label>
-        <label class="token-field"><span>Netlify Personal Access Token <a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noreferrer">去创建 ↗</a></span><div><input v-model="token" :type="showToken ? 'text' : 'password'" autocomplete="off" placeholder="nfp_..." /><button type="button" @click="showToken = !showToken" :aria-label="showToken ? '隐藏令牌' : '显示令牌'"><Icon :icon="showToken ? 'mdi:eye-off-outline' : 'mdi:eye-outline'" width="18" /></button></div><small>令牌只用于本次上传，不会由 Rescene 保存。</small></label>
+        <label class="token-field"><span>Netlify Personal Access Token <a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noreferrer">去创建 ↗</a></span><div><input v-model="token" :type="showToken ? 'text' : 'password'" autocomplete="off" placeholder="nfp_..." /><button type="button" @click="showToken = !showToken" :aria-label="showToken ? '隐藏令牌' : '显示令牌'"><Icon :icon="showToken ? 'mdi:eye-off-outline' : 'mdi:eye-outline'" width="18" /></button></div><small>令牌只用于本次上传，不会由 Ameko 保存。</small></label>
         <label class="public-confirm"><input v-model="publishApproved" type="checkbox" /><span>我确认将此站点公开发布。任何拿到链接的人都可以访问。</span></label>
         <button class="deploy-button" type="button" :disabled="deploying || !name.trim() || !token.trim() || !publishApproved" @click="deploy(selectedSite)"><Icon :icon="deploying ? 'mdi:loading' : 'mdi:rocket-launch-outline'" width="19" :class="{ spinning: deploying }" />{{ deploying ? '正在发布…' : (selectedSite ? '确认并更新到 Netlify' : '确认并发布到 Netlify') }}</button>
       </div>

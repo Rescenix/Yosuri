@@ -1,7 +1,7 @@
 [中文](./README.zh-CN.md) · [English](./README.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
-  <img src="./assets/rescene-icon.png" alt="Rescene" width="96" style="vertical-align: middle; margin-right: 16px;">
+  <img src="./assets/rescene-icon.png" alt="Ameko" width="96" style="vertical-align: middle; margin-right: 16px;">
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
@@ -13,12 +13,12 @@
 
 ```powershell
 # Windows — 一行で全無料モデルに接続（インストール不要・API Key 不要）
-powershell -c "irm https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os/install.ps1 | iex"
+powershell -c "irm https://raw.githubusercontent.com/Rescenix/Ameko/main/agent-os/install.ps1 | iex"
 ```
 
 ```bash
 # Linux / macOS / git-bash — アーキテクチャ自動検出
-curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Rescenix/Ameko/main/agent-os/install.sh | sh
 ```
 
 <p align="center">
@@ -34,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/ResceneAgent/main/agent-os
 </p>
 
 <p align="center">
-  <img src="./assets/preview.gif" alt="Rescene 動作デモ" width="100%">
+  <img src="./assets/preview.gif" alt="Ameko 動作デモ" width="100%">
 </p>
 
 ---
@@ -93,7 +93,7 @@ cd main-frontend/beneficial-belt && npm install && npm run dev   # フロント�
 
 ## 💬 フィードバックとライセンス
 
-- 🐛 バグ / 提案 → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
+- 🐛 バグ / 提案 → [GitHub Issues](https://github.com/Rescenix/Ameko/issues)
 - Windows リリースは CI でビルドされ SignPath で署名されます（[ポリシー](./docs/CODE_SIGNING_POLICY.md)）
 - コアコード：[AGPL-3.0 License](./LICENSE)
 

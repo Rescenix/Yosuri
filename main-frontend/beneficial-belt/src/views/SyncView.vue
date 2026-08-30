@@ -14,7 +14,7 @@
 
     <header class="sv-header">
       <div class="sv-title-row">
-        <h1>Rescene Agent OS · 100 人公司</h1>
+        <h1>Ameko Agent OS · 100 人公司</h1>
         <div class="sv-live" :class="{ on: anyWorking }">
           <span class="live-dot"></span> LIVE · {{ workingCount }}/{{ agents.length }} 工作中
         </div>
@@ -232,7 +232,7 @@ async function loadAgents() {
 
 let timer
 onMounted(() => {
-  document.title = 'Rescene Agent OS · 王者归来'
+  document.title = 'Ameko Agent OS · 王者归来'
   loadAgents()
   timer = setInterval(loadAgents, 3000)
 })

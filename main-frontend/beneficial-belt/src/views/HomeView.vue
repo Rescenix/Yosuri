@@ -13,7 +13,7 @@ import ChatWidget from '../components/shanxi/chat/ChatWidget.vue'
 let prevOverflow = ''
 
 onMounted(() => {
-  document.title = 'Rescene'
+  document.title = 'Ameko'
   prevOverflow = document.body.style.overflow
   document.body.style.overflow = 'hidden'
 })

@@ -1,7 +1,7 @@
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
-  <img src="./assets/rescene-icon.png" alt="Rescene" width="96" style="vertical-align: middle; margin-right: 16px;">
+  <img src="./assets/rescene-icon.png" alt="Ameko" width="96" style="vertical-align: middle; margin-right: 16px;">
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
@@ -27,7 +27,7 @@
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>
 
-![Rescene workbench overview](./assets/rescene-main.png)
+![Ameko workbench overview](./assets/rescene-main.png)
 
 ---
 
@@ -49,6 +49,7 @@
 | **👨‍👩‍👧 Sub-agents & background tasks** | Concurrent sub-agent workflows and background tasks (run_task) with completion notifications, all visible on a timeline panel |
 | **⚙️ Settings fully open** | The agent can analyze and modify your configuration — models, persona, web/image sources, skill toggles — no black box |
 | **🛠️ Self-editing skills & on-demand tools** | Skill library with add/remove/enable/disable; native tools slimmed down and loaded on demand (load_tools) |
+| **🧠 Auto memory extraction** | Background pipeline reads your finished conversations, extracts durable facts (profile / preferences / projects / decisions) into a versioned fact ledger — idempotent, atomic, corrected by `update`/`delete`, injected by task relevance instead of bloating every prompt |
 | **🖱️ Computer Use** | Screenshots, mouse, keyboard, drag & drop, scrolling — it operates your desktop, not just your code |
 | **🛡️ AgentFS change audit** | Every AI file edit gets a snapshot / diff / rollback; dangerous operations require your approval |
 
@@ -83,6 +84,6 @@ Visit `http://localhost:4322` for the local dev workbench. Linux build: [`main-b
 
 ## 💬 Feedback & License
 
-- 🐛 Bugs / suggestions → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
+- 🐛 Bugs / suggestions → [GitHub Issues](https://github.com/Rescenix/Ameko/issues)
 - 💬 Community → [QQ Group 796474621](https://qm.qq.com/q/796474621)
 - Core code: [AGPL-3.0 License](./LICENSE)

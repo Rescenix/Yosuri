@@ -116,7 +116,7 @@ const stats = computed(() => {
 })
 
 const TOP_ICONS = {
-  'Rescene酱': 'mdi:heart',
+  'Ameko酱': 'mdi:heart',
   '猫娘': 'mdi:cat',
   '御姐': 'mdi:flower-tulip',
   '萝莉': 'mdi:candy',

@@ -1,7 +1,7 @@
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
-  <img src="./assets/rescene-icon.png" alt="Rescene" width="96" style="vertical-align: middle; margin-right: 16px;">
+  <img src="./assets/rescene-icon.png" alt="Ameko" width="96" style="vertical-align: middle; margin-right: 16px;">
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
@@ -27,7 +27,7 @@
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>
 
-![Rescene 工作台概览](./assets/rescene-main.png)
+![Ameko 工作台概览](./assets/rescene-main.png)
 
 ---
 
@@ -49,6 +49,7 @@
 | **👨‍👩‍👧 子代理与后台任务** | 并发子代理、后台任务（run_task）带完成通知，时间线面板一目了然 |
 | **⚙️ 设置全部开放** | Agent 可分析并修改你的配置——模型、人设、联网/生图来源、技能启停，不再只读 |
 | **🛠️ 技能自改与按需加载** | 技能库可增删改启停；原生工具精简、动态 load_tools 管线，用到才加载 |
+| **🧠 自动提取记忆** | 后台管线读你完成的对话，把稳定事实（画像/偏好/项目/决策）写进版本化事实账本——幂等、原子写，`update`/`delete` 修正，按任务相关度注入而不是每轮撑爆提示词 |
 | **🖱️ Computer Use** | 截图、鼠标、键盘、拖拽、滚动——不止会改代码，能操作桌面 |
 | **🛡️ AgentFS 审计** | AI 每次改文件都有快照 / Diff / 回滚，危险操作经你批准 |
 
@@ -87,6 +88,6 @@ cd main-frontend/beneficial-belt && npm install && npm run dev
 
 ## 💬 反馈与协议
 
-- 🐛 Bug / 建议 → [GitHub Issues](https://github.com/Rescenix/ResceneAgent/issues)
+- 🐛 Bug / 建议 → [GitHub Issues](https://github.com/Rescenix/Ameko/issues)
 - 💬 交流 → [QQ 群 796474621](https://qm.qq.com/q/796474621)
 - 核心代码：[AGPL-3.0 License](./LICENSE)

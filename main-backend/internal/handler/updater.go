@@ -25,7 +25,7 @@ var AppVersion = "0.0.0-dev"
 
 const (
 	updateRepoOwner = "Rescenix"
-	updateRepoName  = "ResceneAgent"
+	updateRepoName  = "Ameko"
 	// 官网 update.json 优先（国内可达的 Cloudflare CDN），GitHub API 兜底
 	siteUpdateURL  = "https://rescene.shanca.me/update.json"
 	// 2026-08-28 用户定稿：官网一更新要尽快触发后台自动下载 → 缓存 TTL 30min→60s。

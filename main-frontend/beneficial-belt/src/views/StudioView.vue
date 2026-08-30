@@ -695,7 +695,7 @@ async function generate() {
     delete base.first_frame
     delete base.last_frame
   }
-  pushLog(isChain ? `Rescene 链式生成 ${segments.value} 段长视频中…` : 'Rescene 视频生成中…')
+  pushLog(isChain ? `Ameko 链式生成 ${segments.value} 段长视频中…` : 'Ameko 视频生成中…')
   try {
     const resp = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
@@ -707,7 +707,7 @@ async function generate() {
     // 异步任务：存 localStorage（跳走聊天回来能恢复），开始轮询
     taskId.value = data.task_id
     localStorage.setItem('studio_agnes_task', JSON.stringify({ task_id: data.task_id, ts: Date.now() }))
-    pushLog('已提交后台生成，等待期间可以去和 Rescene 聊天')
+    pushLog('已提交后台生成，等待期间可以去和 Ameko 聊天')
     pollTask()
   } catch (e) {
     pushLog('× 提交失败：' + e.message)

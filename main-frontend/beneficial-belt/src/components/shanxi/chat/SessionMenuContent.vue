@@ -399,7 +399,7 @@ import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.j
 
 const auth = useAuth()
 const avatarFallback = computed(() => {
-  const label = String(auth.displayName.value || 'Rescene').trim()
+  const label = String(auth.displayName.value || 'Ameko').trim()
   return (label.charAt(0) || 'R').toUpperCase()
 })
 
@@ -721,7 +721,7 @@ function shareCard() {
   })
   // 页脚
   g.fillStyle = '#94a3b8'; g.font = '600 12px sans-serif'; g.textAlign = 'center'
-  g.fillText('数据来自真实使用记录 · Rescene', W / 2, H - 18)
+  g.fillText('数据来自真实使用记录 · Ameko', W / 2, H - 18)
   g.textAlign = 'left'
   // 下载
   const a = document.createElement('a')

@@ -84,6 +84,47 @@ async function fetchUid() {
   }
 }
 
+// 登录成功后把 member token（登录账号 JWT）交给本地后端缓存，供云端记忆同步 push/pull 鉴权。
+// 关键：登录用户必须用登录 token 推记忆——guest token 的 uid 是游客号，与登录账号 uid
+// 不匹配会被云端 requireUIDMatch 拒掉（403 静默失败 = 登录用户零上传，2026-08-30 实锤）。
+async function storeLoginToken() {
+  const token = localStorage.getItem('token')
+  if (!token) return
+  try {
+    await fetch('/api/auth/login-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    })
+  } catch { /* 本地后端不可达时忽略，下次 refresh 再补 */ }
+}
+
+// 从后端持久化文件恢复登录 token（2026-08-30：WebView2 数据目录随 exe 路径变化，
+// localStorage 会被清空导致登录身份丢失——token 已由 storeLoginToken 写到
+// rescene_data/cloud_login_token，重启后从这里捞回来，登录态不再依赖浏览器存储）。
+// ⚠️ 不能在模块顶层执行时依赖 fetch 桥（desktopTransport 的 /api 改写要在
+// installDesktopTransport() 之后才生效）——直接用 Wails 注入的 BackendURL 拼绝对地址，
+// 否则启动即执行时 fetch('/api/...') 打到 AssetServer 返回 404，恢复静默失败。
+async function restoreLoginToken() {
+  // 不以「本地有无 token」为准——localStorage 里可能残留旧/失效 token（WebView2 数据
+  // 目录变化时 localStorage 未必清空），那会跳过恢复导致 refresh 401。后端 cloud_login_token
+  // 是最近一次登录成功写入的（登出会删除），比 localStorage 更权威：有就覆盖。
+  let base = ''
+  try {
+    const binding = globalThis.go?.main?.DesktopApp?.BackendURL
+    if (typeof binding === 'function') base = String(await binding()).replace(/\/+$/, '')
+  } catch { /* 非 Wails 环境 */ }
+  if (!base) base = globalThis.__RESCENE_BACKEND_URL__ || ''
+  try {
+    const res = await fetch(base + '/api/auth/login-token')
+    if (!res.ok) return
+    const data = await res.json()
+    if (data && data.token) {
+      localStorage.setItem('token', data.token)
+    }
+  } catch { /* 本地后端不可达：本次不恢复，保持未登录 */ }
+}
+
 // 登录成功后把游客 UID 升级为正式账号：UID 不变，永久保留（换设备可恢复）。
 async function bindUid() {
   try {
@@ -177,7 +218,7 @@ async function pullCloudMemory() {
 
 // 展示名：登录用账号名，未登录用 cloud 分发的 UID
 const displayName = computed(() => {
-  if (isLoggedIn.value) return name.value || login.value || 'Rescene 用户'
+  if (isLoggedIn.value) return name.value || login.value || 'Ameko 用户'
   const u = uid.value
   return u ? 'UID ' + u : '未登录'
 })
@@ -236,6 +277,9 @@ async function refresh() {
         // 首次登录（JWT 尚无 uid）：把游客 UID 升级为正式账号
         bindUid()
       }
+      // 登录成功后缓存 member token 给本地后端，供云端记忆同步鉴权
+      // （2026-08-30：之前 push 只用 guest token，UID 是游客号≠登录号→403→零上传）
+      storeLoginToken()
     } else if (res.status === 401) {
       // 云端明确说 token 无效/过期：才是真的要清掉
       localStorage.removeItem('token')
@@ -262,6 +306,13 @@ function logout() {
   localStorage.removeItem('token')
   isLoggedIn.value = false
   login.value = name.value = avatar.value = ''
+  // 登出后清掉后端缓存的登录 token，避免重启时 restoreLoginToken 又自动恢复登录态
+  try {
+    fetch('/api/auth/login-token', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch { /* 本地后端不可达：忽略 */ }
   // 登出后仍是游客身份：UID 保留（本设备账号），仅清登录态
   window.dispatchEvent(new Event('auth-change'))
 }
@@ -275,11 +326,14 @@ if (cachedIntimacy) intimacy.value = Number(cachedIntimacy)
 const cachedCustomAvatar = localStorage.getItem(USER_AVATAR_KEY)
 if (cachedCustomAvatar) customAvatar.value = cachedCustomAvatar
 
-// 首次加载即验真；并监听登录态变化事件自动刷新
-refresh()
-fetchUid().then(() => {
-  fetchIntimacy()
-  pullCloudMemory()
+// 首次加载：先从后端持久化文件恢复登录 token（WebView2 localStorage 可能因 exe
+// 路径变化被清空），再验真登录态；随后分发/校准 UID。
+restoreLoginToken().then(() => {
+  refresh()
+  fetchUid().then(() => {
+    fetchIntimacy()
+    pullCloudMemory()
+  })
 })
 if (typeof window !== 'undefined') {
   window.addEventListener('auth-change', refresh)

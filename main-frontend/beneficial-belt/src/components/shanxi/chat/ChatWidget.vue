@@ -65,7 +65,7 @@
           <!-- 顶部：品牌标识；搜索与定时任务收进右上角，和 Codex 侧栏保持一致 -->
                     <div class="gem-top">
                                 <div class="gem-brand-wrap">
-                                  <span v-if="sidebarOpen" class="gem-brand-text">Rescene</span>
+                                  <span v-if="sidebarOpen" class="gem-brand-text">Ameko</span>
                                 </div>
                                 <div v-if="sidebarOpen" class="gem-top-actions">
                                   <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话" aria-label="搜索对话">
@@ -2656,7 +2656,7 @@ async function copyText(text) {
 // 不再有「选为可用」手动门控——填了 Key（或模型本身免 key）就自动出现。
 // 图2「编辑模型」弹窗里的开关控制 hiddenModelIds（用户可隐藏不想见的模型），默认空=全显示。
 // hiddenModelIds 由 composables/modelVisibility.js 统一管理（与图2 弹窗共享）。
-const isModelVisible = (fm) => (fm.keyless || fm.api_key_set) && !hiddenModelIds.value.has(fm.id)
+const isModelVisible = (fm) => (fm.keyless || fm.api_key_set) && !fm.disabled && !hiddenModelIds.value.has(fm.id)
 
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
 // 模型 pill 的显示名：Auto 模式固定文案；其他取下拉里的 label，找不到回退占位。

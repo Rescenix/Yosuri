@@ -244,7 +244,7 @@ func handleOverlayWindowMessage(hwnd uintptr, message uint32, wParam, lParam uin
 
 func createOverlayWindow(instance uintptr) uintptr {
 	className, _ := windows.UTF16PtrFromString(overlayClassName)
-	windowName, _ := windows.UTF16PtrFromString("Rescene Agent Overlay")
+	windowName, _ := windows.UTF16PtrFromString("Ameko Agent Overlay")
 	cursor, _, _ := procLoadCursor.Call(0, idcArrow)
 	icon := extractApplicationIcon(instance)
 

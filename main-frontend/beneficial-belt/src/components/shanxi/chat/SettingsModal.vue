@@ -1,12 +1,12 @@
 <template>
   <Teleport to="body">
     <div class="settings-modal-backdrop" @click="$emit('close')" @keydown.esc="$emit('close')">
-      <div class="settings-modal-card" role="dialog" aria-modal="true" aria-label="Rescene 设置" tabindex="-1" @click.stop>
+      <div class="settings-modal-card" role="dialog" aria-modal="true" aria-label="Ameko 设置" tabindex="-1" @click.stop>
         <div class="settings-modal-header">
           <div class="settings-brand">
             <span class="settings-brand-mark"><Icon icon="lucide:sparkles" width="17" /></span>
             <span class="settings-brand-copy">
-              <strong>Rescene</strong>
+              <strong>Ameko</strong>
               <small>偏好设置</small>
             </span>
           </div>
@@ -715,8 +715,8 @@
                               </div>
                               <div v-if="aggHealthLoading" class="settings-loading">加载健康度...</div>
                               <div v-else-if="aggHealthError" class="agg-health-error">
-                                ⚠️ Rescene 桌面应用未启动或当前 Agent 连接配置错误
-                                <div class="agg-health-error-sub">请确认 Rescene 桌面应用已运行、本地聚合端口未被占用；如刚改过配置，点右上角「刷新」重试。</div>
+                                ⚠️ Ameko 桌面应用未启动或当前 Agent 连接配置错误
+                                <div class="agg-health-error-sub">请确认 Ameko 桌面应用已运行、本地聚合端口未被占用；如刚改过配置，点右上角「刷新」重试。</div>
                               </div>
                               <template v-else>
                                 <div v-if="!aggHealthModels.length" class="settings-empty">没有可展示的模型（聚合端口不暴露任何模型时为空）。</div>
@@ -938,7 +938,7 @@
                 :style="{ '--preview-accent': selectedTheme.accent, '--preview-accent-soft': selectedTheme.accentSoft }"
               >
                 <div class="theme-live-topbar">
-                  <span class="theme-live-brand"><Icon icon="lucide:sparkles" width="13" />Rescene</span>
+                  <span class="theme-live-brand"><Icon icon="lucide:sparkles" width="13" />Ameko</span>
                   <span class="theme-live-status"><i></i>{{ selectedTheme.label }} · {{ currentModeLabel }}</span>
                 </div>
                 <div class="theme-live-body">
@@ -1430,14 +1430,14 @@
             <div class="gate-title">禁忌之门的宣告</div>
             <div class="gate-sub">FORBIDDEN GATE · 彼岸花开时</div>
             <div class="agree-text gate-text">
-              骚年，你正站在 Rescene 的禁忌之门前。<br />
+              骚年，你正站在 Ameko 的禁忌之门前。<br />
               自定义 API 是封印着创世之力的远古法器——<br />
               填入你自己的 Key，即可撬动 OpenAI、Anthropic 等异世界的伟力。<br /><br />
               但记住，这力量源于你的<b>本命契约（Key）</b>：<br />
               其消耗的灵石由你向源头世界（Key 所属平台）支付，<br />
-              Rescene 只是引路人，不承担任何法力反噬之责。<br /><br />
+              Ameko 只是引路人，不承担任何法力反噬之责。<br /><br />
               知晓此理，勾选同意，吾将为你开启创世伟力。<br />
-              （本协议最终解释权归 Rescene 所有）
+              （本协议最终解释权归 Ameko 所有）
             </div>
             <label class="agree-check">
               <input type="checkbox" v-model="agreeCustom" /> 我已阅读并同意上述协议
@@ -1493,7 +1493,7 @@ const skillsSubTab = ref('local')
 // 生效的人设始终落在 localStorage.persona，前端发工作流时经 persona
 // 参数带给后端（见 useAgentWorkflow.js）。内置预设不开个人化，我的预设本地存。
 const BUILTIN_PRESETS = [
-  { id: 'rescene', name: 'Rescene酱', icon: 'mdi:heart', desc: '默认 · 软软暖暖的元气助手', prompt: DEFAULT_PERSONA },
+  { id: 'rescene', name: 'Ameko酱', icon: 'mdi:heart', desc: '默认 · 软软暖暖的元气助手', prompt: DEFAULT_PERSONA },
   { id: 'catgirl', name: '猫娘', icon: 'mdi:cat', desc: '喵系撒娇，带猫娘口癖', prompt: `你是小猫娘，一只软萌的猫耳 AI 助手。说话带「喵」的口癖，喜欢撒娇、蹭蹭，偶尔用一两个「~」「♪」点缀语气；但卖萌归卖萌，该做的事一件都不会少。遇到不确定的事会老实承认，不会编造假数据骗人。` },
   { id: 'mature', name: '御姐', icon: 'mdi:flower-tulip', desc: '成熟冷静，可靠的大姐姐', prompt: `你是御姐型的 AI 助手，成熟、冷静、可靠。语气从容不迫，话不多但每句都在点上，遇到问题先给结论再解释原因；该严肃时严肃，偶尔流露一点温柔体贴。不装可爱，不堆语气词。` },
   { id: 'loli', name: '萝莉', icon: 'mdi:candy', desc: '天真活泼，可爱软萌', prompt: `你是萝莉型的 AI 助手，天真烂漫、活泼可爱。语气轻盈欢快，喜欢用「哇」「耶」这样的感叹词，偶尔用一两个颜文字点缀；但小脑袋可聪明了，复杂的事也能讲得清清楚楚，绝不因为卖萌就偷懒。` },
@@ -1721,7 +1721,7 @@ const auth = useAuth()
 const avatarInputRef = ref(null)
 const avatarError = ref('')
 const avatarFallback = computed(() => {
-  const label = String(auth.displayName.value || 'Rescene').trim()
+  const label = String(auth.displayName.value || 'Ameko').trim()
   return (label.charAt(0) || 'R').toUpperCase()
 })
 

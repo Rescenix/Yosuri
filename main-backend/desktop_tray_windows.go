@@ -141,7 +141,7 @@ func (a *DesktopApp) runTray() {
 		return
 	}
 	className, _ := windows.UTF16PtrFromString("ResceneAgentTrayWindow")
-	windowName, _ := windows.UTF16PtrFromString("Rescene Agent")
+	windowName, _ := windows.UTF16PtrFromString("Ameko Agent")
 	cursor, _, _ := procLoadCursor.Call(0, idcArrow)
 	icon := extractApplicationIcon(instance)
 
@@ -201,7 +201,7 @@ func (a *DesktopApp) runTray() {
 	iconData.Icon = icon
 	iconData.State = 0
 	iconData.StateMask = nisHidden
-	copy(iconData.Tip[:], windows.StringToUTF16("Rescene Agent"))
+	copy(iconData.Tip[:], windows.StringToUTF16("Ameko Agent"))
 	if ok, _, notifyErr := procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&iconData))); ok == 0 {
 		log.Printf("⚠️ 创建系统托盘失败：显示通知区图标：%v", notifyErr)
 		procDestroyWindow.Call(hwnd)
