@@ -128,11 +128,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   box-sizing: border-box;
   max-width: 100%;
   color: var(--app-text);
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
+  /* 背景完全透明（Hermes 实际显示）：question 条纯文字浮在聊天内容上，能看到后面聊天 */
+  background: transparent;
+  border: none;
   border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: opacity 0.18s ease;
+  box-shadow: none;
+  transition: opacity 0.2s ease;
   animation: question-bar-in 0.14s ease-out;
 }
 .question-error {
@@ -159,7 +160,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   place-items: center;
   border-radius: 6px;
   color: var(--app-text-soft);
-  background: var(--app-surface-2);
+  background: transparent;
   border: 1px solid var(--app-border-soft);
   font-size: 12px;
   font-weight: 750;
@@ -215,8 +216,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   box-sizing: border-box;
   padding: 7px 10px 7px 8px;
     color: var(--app-text);
-    background: var(--app-surface);
-    border: 1px solid transparent;
+    /* Hermes 式 ghost 按钮：背景透明、只留边框，浮在聊天内容上不遮挡 */
+    background: transparent;
+    border: 1px solid var(--app-border);
     font-size: 12px;
     transition: border-color .14s ease, background .14s ease, color .14s ease, transform .08s ease;
   }
@@ -255,7 +257,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   box-sizing: border-box;
   border-radius: 7px;
   color: var(--app-text-soft);
-  background: var(--app-surface-3);
+  background: transparent;
   border: 1px solid var(--app-border-soft);
   font-size: 10px;
   font-weight: 750;

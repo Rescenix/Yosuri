@@ -4,11 +4,11 @@
     <div class="smc-nav">
       <button class="smc-nav-item primary" type="button" @click="onClickNewSession">
         <Icon icon="mdi:plus" width="18" />
-        <span>新建会话</span>
+        <span>{{ t('nav.newSession') }}</span>
       </button>
       <router-link class="smc-nav-item" to="/sites" title="发布并分享 Agent 写好的网页">
         <Icon icon="mdi:web" width="18" />
-        <span>站点</span>
+        <span>{{ t('nav.sites') }}</span>
       </router-link>
     </div>
 
@@ -19,7 +19,7 @@
       <div v-if="pinnedFolders.length" class="smc-section">
         <div class="smc-section-label">
           <Icon icon="mdi:pin" width="14" color="var(--app-accent)" />
-          <span>置顶</span>
+          <span>{{ t('nav.pinned') }}</span>
         </div>
         <div v-for="f in pinnedFolders" :key="'pin_' + f.name" class="smc-folder">
           <div class="smc-folder-head" @click="togglePinnedFolder(f.name)">
@@ -66,6 +66,7 @@
                 @blur="commitRename"
               />
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
+              <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
               <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
@@ -79,7 +80,7 @@
       <!-- 项目：按工作目录分组 -->
       <div class="smc-section">
         <div class="smc-section-label">
-          <span>项目</span>
+          <span>{{ t('nav.projects') }}</span>
           <button class="smc-project-bulk" type="button" :title="bulkMode ? '退出批量管理' : '批量管理会话'" :class="{ active: bulkMode }" @click="toggleBulkMode">
             <Icon icon="mdi:playlist-edit" width="18" />
           </button>
@@ -92,7 +93,6 @@
             <span v-if="bulkMode" class="smc-bulk-check smc-group-check" @click.stop="toggleGroupSelect(grp.name)">
               <Icon :icon="groupAllSelected(grp.name) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
             </span>
-            <span class="smc-folder-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
             <span class="smc-folder-name">{{ grp.name }}</span>
             <button
@@ -108,6 +108,7 @@
             <button v-if="bulkMode" class="smc-group-delete" type="button" title="删除项目（含其下所有会话）" @click.stop="onDeleteProject(grp.name)">
               <Icon icon="mdi:trash-can-outline" width="15" />
             </button>
+            <span class="smc-folder-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
           </div>
           <div v-if="isGroupOpen(grp.name)" class="smc-folder-children">
             <div
@@ -138,6 +139,7 @@
                 @blur="commitRename"
               />
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
+              <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
               <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
@@ -151,7 +153,7 @@
           <div class="smc-folder-head" @click="toggleOrphan">
             <span class="smc-folder-chevron" :class="{ open: showOrphan }">›</span>
             <Icon icon="mdi:folder-outline" width="15" color="var(--app-text-faint)" />
-            <span class="smc-folder-name" style="color:var(--app-text-faint)">未分组</span>
+            <span class="smc-folder-name" style="color:var(--app-text-faint)">{{ t('nav.ungrouped') }}</span>
           </div>
           <div v-if="showOrphan" class="smc-folder-children">
             <div
@@ -182,6 +184,7 @@
                 @blur="commitRename"
               />
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
+              <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
               <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
@@ -210,7 +213,7 @@
         <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
         <span v-else class="fm-user-avatar fm-user-avatar-fallback">{{ avatarFallback }}</span>
         <span class="fm-user-id">
-          <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : '未登录' }}</span>
+          <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : t('account.notLoggedIn') }}</span>
         </span>
       </div>
       <button class="fm-footer-mail" type="button" title="通知" @click.stop="$emit('open-mail')">
@@ -224,8 +227,8 @@
 
     <!-- 用户卡片菜单 -->
     <Teleport to="body">
-      <template v-if="showUserMenu">
-        <div class="smc-card-backdrop" @click="showUserMenu = false"></div>
+      <template v-if="showProfileCard">
+        <div class="smc-card-backdrop" @click="showProfileCard = false"></div>
         <div ref="userCardRef" class="smc-user-card is-profile" :style="userMenuStyle" @click.stop>
           <header class="smc-profile-hero">
             <div class="smc-profile-aura" aria-hidden="true"></div>
@@ -236,14 +239,14 @@
             </div>
             <div class="smc-user-card-name">
               <span class="smc-profile-kicker">RESCENE IDENTITY</span>
-              <strong>{{ auth.name.value || auth.login.value || '本地访客' }}</strong>
+              <strong>{{ auth.name.value || auth.login.value || t('login.localGuest') }}</strong>
               <div class="smc-profile-meta">
                 <span v-if="auth.uid.value">UID {{ auth.uid.value }}</span>
                 <span>本地 AI 档案</span>
               </div>
             </div>
             <button class="smc-profile-share" type="button" aria-label="分享角色卡" @click="shareCard"><Icon icon="mdi:share-variant-outline" width="18" /></button>
-            <button class="smc-profile-close" type="button" aria-label="关闭角色卡" @click="showUserMenu = false"><Icon icon="mdi:close" width="18" /></button>
+            <button class="smc-profile-close" type="button" aria-label="关闭角色卡" @click="showProfileCard = false"><Icon icon="mdi:close" width="18" /></button>
           </header>
           <div v-if="auth.authError.value" class="smc-auth-warn"><Icon icon="mdi:cloud-alert-outline" width="15" />{{ auth.authError.value }}</div>
           <div v-if="evolve" class="smc-evolve">
@@ -295,19 +298,87 @@
             <span><Icon icon="mdi:shield-check-outline" width="15" /> 数据来自真实使用记录</span>
             <button v-if="isLoggedIn" class="smc-user-card-item danger" @click="logout"><Icon icon="mdi:logout-variant" width="16" />退出登录</button>
           </footer>
-          <div v-if="!isLoggedIn" class="smc-login-panel">
+      </div>
+      </template>
+    </Teleport>
+
+    <!-- 登录面板（从账户菜单进入，独立于角色卡） -->
+    <Teleport to="body">
+      <template v-if="showUserMenu">
+        <div class="smc-card-backdrop" @click="showUserMenu = false"></div>
+        <div class="smc-user-card is-login" :style="userMenuStyle" @click.stop>
+          <header class="smc-login-head">
+            <div class="smc-login-title">
+              <span class="smc-profile-kicker">RESCENE CLOUD</span>
+              <strong>{{ rcMode === 'login' ? t('login.title') : t('login.registerTitle') }}</strong>
+            </div>
+            <button class="smc-profile-close" type="button" aria-label="关闭登录" @click="showUserMenu = false"><Icon icon="mdi:close" width="18" /></button>
+          </header>
           <div class="smc-rc-login">
-            <input v-model="rcUser" class="smc-rc-input" :placeholder="rcMode === 'login' ? 'Rescene Cloud 账号' : '用户名（3-32 字符）'" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
-            <input v-model="rcPwd" type="password" class="smc-rc-input" :placeholder="rcMode === 'login' ? '密码' : '密码（6-64 字符）'" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
-            <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? '处理中…' : (rcMode === 'login' ? '登录' : '注册') }}</button>
+            <input v-model="rcUser" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.account') : t('login.username')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+            <input v-model="rcPwd" type="password" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.password') : t('login.passwordHint')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+            <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? (isZh ? '处理中…' : 'Loading…') : (rcMode === 'login' ? t('login.submit') : t('login.registerSubmit')) }}</button>
             <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
             <div class="smc-rc-hint">
-              <template v-if="rcMode === 'login'">没有账号？<a class="smc-rc-link" @click="rcMode = 'register'; rcError = ''">注册一个</a></template>
-              <template v-else>已有账号？<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''">去登录</a></template>
+              <template v-if="rcMode === 'login'">{{ t('login.noAccount') }}<a class="smc-rc-link" @click="rcMode = 'register'; rcError = ''">{{ t('login.registerLink') }}</a></template>
+              <template v-else>{{ t('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''">{{ t('login.loginLink') }}</a></template>
             </div>
           </div>
+          <div class="smc-login-footer">
+            <span><Icon icon="mdi:shield-account-outline" width="15" /> {{ t('login.footer') }}</span>
           </div>
-      </div>
+        </div>
+      </template>
+    </Teleport>
+
+    <!-- 账户菜单（点击用户名弹出：角色卡 / 登录 / 注册 / 语言 / 帮助） -->
+    <Teleport to="body">
+      <template v-if="accountMenuOpen">
+        <div class="smc-account-backdrop" @click="accountMenuOpen = false"></div>
+        <div class="smc-account-menu" :style="accountMenuStyle" @click.stop>
+          <button class="smc-account-item" type="button" @click="openProfileCard">
+            <Icon icon="mdi:card-account-details-outline" width="18" />
+            <span>{{ t('account.menu.profileCard') }}</span>
+          </button>
+          <template v-if="!isLoggedIn">
+            <button class="smc-account-item" type="button" @click="openLoginPanel">
+              <Icon icon="mdi:login-variant" width="18" />
+              <span>{{ t('account.menu.login') }}</span>
+            </button>
+            <button class="smc-account-item" type="button" @click="openRegisterPanel">
+              <Icon icon="mdi:account-plus-outline" width="18" />
+              <span>{{ t('account.menu.register') }}</span>
+            </button>
+          </template>
+          <button class="smc-account-item" type="button" @click="langMenuOpen = !langMenuOpen">
+            <Icon icon="mdi:translate" width="18" />
+            <span>{{ t('account.menu.language') }}</span>
+            <span class="smc-account-lang-current">{{ isZh ? '中文' : 'EN' }}</span>
+          </button>
+          <template v-if="langMenuOpen">
+            <div class="smc-account-sub">
+              <button class="smc-account-item smc-account-sub-item" type="button" @click="setLocale('zh'); langMenuOpen = false">
+                <Icon icon="mdi:check" v-if="isZh" width="16" color="var(--app-accent)" />
+                <span class="smc-account-lang-name">{{ t('lang.zh') }}</span>
+              </button>
+              <button class="smc-account-item smc-account-sub-item" type="button" @click="setLocale('en'); langMenuOpen = false">
+                <Icon icon="mdi:check" v-if="!isZh" width="16" color="var(--app-accent)" />
+                <span class="smc-account-lang-name">{{ t('lang.en') }}</span>
+              </button>
+            </div>
+          </template>
+          <button class="smc-account-item" type="button" @click="openHelp">
+            <Icon icon="mdi:help-circle-outline" width="18" />
+            <span>{{ t('account.menu.help') }}</span>
+          </button>
+          <template v-if="isLoggedIn">
+            <div class="smc-account-divider"></div>
+            <button class="smc-account-item danger" type="button" @click="logout">
+              <Icon icon="mdi:logout-variant" width="18" />
+              <span>{{ t('account.menu.logout') }}</span>
+            </button>
+          </template>
+        </div>
       </template>
     </Teleport>
 
@@ -395,9 +466,19 @@ import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import RunningRing from './RunningRing.vue'
 import { useAuth } from '../../../composables/useAuth.js'
+import { useI18n } from '../../../composables/useI18n.js'
 import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
 
 const auth = useAuth()
+const { t, isZh, setLocale } = useI18n()
+const langMenuOpen = ref(false)
+// 帮助 → 跳官网文档页（AMEKO 官网 docs.html）
+const AMEKO_DOCS_URL = 'https://ameko.shanca.me/docs.html'
+function openHelp() {
+  accountMenuOpen.value = false
+  langMenuOpen.value = false
+  window.open(AMEKO_DOCS_URL, '_blank', 'noopener')
+}
 const avatarFallback = computed(() => {
   const label = String(auth.displayName.value || 'Ameko').trim()
   return (label.charAt(0) || 'R').toUpperCase()
@@ -581,7 +662,11 @@ const footerRef = ref(null)
 const userRef = ref(null)
 const userCardRef = ref(null)
 const showUserMenu = ref(false)
+const showProfileCard = ref(false)
 const userMenuStyle = ref({})
+// 账户菜单：点击用户名弹出的「角色卡 / 登录 / 注册 / 语言 / 帮助」小菜单
+const accountMenuOpen = ref(false)
+const accountMenuStyle = ref({})
 const isLoggedIn = auth.isLoggedIn
 function refreshLoginState() { auth.refresh() }
 
@@ -748,7 +833,7 @@ function announceWelcome(username) {
 
 async function loginResceneCloud() {
   rcError.value = ''
-  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = '请输入账号和密码'; return }
+  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = t('login.emptyInput'); return }
   rcLoading.value = true
   try {
     const username = rcUser.value.trim()
@@ -758,18 +843,18 @@ async function loginResceneCloud() {
       body: JSON.stringify({ username, password: rcPwd.value, fingerprint: computeHardwareFingerprint() })
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.token) { rcError.value = data.error || '登录失败，请检查账号密码'; return }
+    if (!res.ok || !data.token) { rcError.value = data.error || t('login.fail'); return }
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
     announceWelcome(username)
     rcUser.value = ''; rcPwd.value = ''
     showUserMenu.value = false
-  } catch (e) { rcError.value = '网络错误，请稍后再试' } finally { rcLoading.value = false }
+  } catch (e) { rcError.value = t('login.netError') } finally { rcLoading.value = false }
 }
 
 async function registerResceneCloud() {
   rcError.value = ''
-  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = '请输入用户名和密码'; return }
+  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = t('login.emptyRegister'); return }
   rcLoading.value = true
   try {
     const username = rcUser.value.trim()
@@ -779,26 +864,57 @@ async function registerResceneCloud() {
       body: JSON.stringify({ username, password: rcPwd.value, fingerprint: computeHardwareFingerprint() })
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.token) { rcError.value = data.error || '注册失败，请稍后再试'; return }
+    if (!res.ok || !data.token) { rcError.value = data.error || t('login.fail'); return }
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
     announceWelcome(username)
     rcUser.value = ''; rcPwd.value = ''
     rcMode.value = 'login'
     showUserMenu.value = false
-  } catch (e) { rcError.value = '网络错误，请稍后再试' } finally { rcLoading.value = false }
+  } catch (e) { rcError.value = t('login.netError') } finally { rcLoading.value = false }
 }
 
+// 点击用户名：弹「角色卡 / 登录 / 注册 / 语言 / 帮助」账户菜单（贴用户名上方）
 function toggleUserMenu() {
-  if (showUserMenu.value) { showUserMenu.value = false; return }
-  showUserMenu.value = true
-  loadEvolve()
+  if (accountMenuOpen.value) { accountMenuOpen.value = false; return }
+  accountMenuOpen.value = true
   refreshLoginState()
-  // 居中弹窗：位置交给 CSS（.smc-user-card fixed 居中），无需按触发点计算
+  // 贴住用户名按钮定位：记录按钮矩形，菜单向上弹出
+  const el = userRef.value
+  if (el) {
+    const r = el.getBoundingClientRect()
+    accountMenuStyle.value = { bottom: (window.innerHeight - r.top + 8) + 'px', left: r.left + 'px' }
+  } else {
+    accountMenuStyle.value = { bottom: '72px', left: '16px' }
+  }
+}
+// 打开角色卡（本地成长档案，未登录也可看）
+function openProfileCard() {
+  accountMenuOpen.value = false
+  showProfileCard.value = true
+  loadEvolve()
+  userMenuStyle.value = {}
+}
+// 打开登录面板（从账户菜单进入，不再挤在角色卡底部）
+function openLoginPanel() {
+  accountMenuOpen.value = false
+  rcMode.value = 'login'
+  showUserMenu.value = true
+  refreshLoginState()
+  userMenuStyle.value = {}
+}
+// 打开注册面板（独立入口，注册/登录分开）
+function openRegisterPanel() {
+  accountMenuOpen.value = false
+  rcMode.value = 'register'
+  showUserMenu.value = true
+  refreshLoginState()
   userMenuStyle.value = {}
 }
 function logout() {
   auth.logout()
+  accountMenuOpen.value = false
+  showProfileCard.value = false
   showUserMenu.value = false
   refreshLoginState()
 }
@@ -817,6 +933,17 @@ function dotClass(s) {
   if (props.completedSessions.has(s.id)) return 'completed'
   if (s.id === props.questionSession) return 'question'
   return ''
+}
+
+// 会话时间锚点：跟 SUMU 一致——轻量、右对齐、浅灰，做行的视觉锚定。
+function fmtTime(t) {
+  if (!t) return ''
+  const d = new Date(t)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
 function toggleMenu(s, ev) {
@@ -908,7 +1035,7 @@ function onDeleteProject(name) {
   emit('delete-project', name)
   toggleBulkMode()
 }
-function onDocClick() { openMenuId.value = null; showUserMenu.value = false }
+function onDocClick() { openMenuId.value = null; showUserMenu.value = false; accountMenuOpen.value = false }
 
 onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick); window.addEventListener('auth-change', refreshLoginState) })
 onUnmounted(() => { document.removeEventListener('click', onDocClick); window.removeEventListener('auth-change', refreshLoginState) })
@@ -1096,7 +1223,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 /* ===== Folder：IDE 列表式分组，不再做圆角卡片 ===== */
 .smc-folder { margin-bottom: 0; }
 .smc-folder-head {
-  min-height: 36px;
+  min-height: 34px;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1104,6 +1231,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   border-radius: 0;
   cursor: pointer;
   transition: background .15s ease;
+  /* 组头与会话区拉开层次：下方留一点空隙，让「项目名」像标题托起内容 */
+  margin-bottom: 2px;
 }
 .smc-folder-head:hover {
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
@@ -1193,20 +1322,19 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   gap: 8px;
   padding: 9px 10px;
   border-radius: 0;
-  margin: 0;
+  margin: 2px 0;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .smc-session-row:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 95%); }
-/* 恢复原来的会话层级：列表保留皮肤纸色，当前会话回到主表面色和细描边。 */
+/* 当前会话：纯背景高亮（与 SUMU 一致，去描边阴影，更通透） */
 .smc-session-row.active {
-  background: var(--app-surface);
+  background: color-mix(in srgb, var(--app-accent), transparent 90%);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-text), transparent 88%);
 }
 /* 运行中会话行：保留高亮边框（波浪环覆盖在边框上做动态提示，圆点状态灯照常保留） */
 .smc-session-row.running {
-  background: var(--app-surface);
+  background: color-mix(in srgb, var(--app-accent), transparent 94%);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 70%);
 }
 /* RunningRing(波浪环) 覆盖整行边框 */
@@ -1248,6 +1376,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--app-text);
+}
+/* 会话时间锚点：右对齐、浅灰、靠右不占宽，像 SUMU 给每行一个轻量视觉锚 */
+.smc-session-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--app-text-faint);
+  margin-left: 2px;
+  letter-spacing: 0.01em;
 }
 /* 标题渐变替换：旧标题淡出、新标题淡入（AI 生成标题替换默认标题时）。
    纯透明度渐变，不加位移——之前的 translateY 会让标题看起来在跳 */
@@ -1412,6 +1549,90 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   font-size: 11px;
   font-weight: 700;
 }
+
+/* ===== Account dropdown menu (角色卡/登录/注册/语言/帮助) ===== */
+.smc-account-backdrop { position: fixed; inset: 0; z-index: 9990; }
+.smc-account-menu {
+  position: fixed;
+  z-index: 10001;
+  min-width: 196px;
+  padding: 6px;
+  box-sizing: border-box;
+  background: var(--app-surface, #fff);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.08);
+  animation: smcMenuIn 0.16s ease-out;
+}
+@keyframes smcMenuIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.smc-account-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.smc-account-item:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 94%); }
+.smc-account-item.danger { color: #d94834; }
+.smc-account-item.danger:hover { background: rgba(217, 72, 52, 0.08); }
+.smc-account-divider { height: 1px; margin: 4px 6px; background: var(--app-border, #e5e7eb); }
+.smc-account-lang-current { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--app-text-faint); }
+.smc-account-sub { margin: 0 0 2px; padding: 2px 4px; border-radius: 8px; background: color-mix(in srgb, var(--app-text, #202124), transparent 96%); }
+.smc-account-sub-item { min-height: 32px; font-size: 13px; }
+.smc-account-lang-name { flex: 1; }
+
+/* ===== Login panel (从账户菜单进入) ===== */
+.smc-user-card.is-login { width: min(380px, calc(100vw - 40px)); padding: 0; border-radius: 18px; }
+.smc-login-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border, #e5e7eb), transparent 30%);
+}
+.smc-login-title { min-width: 0; }
+.smc-login-title strong { display: block; font-size: 18px; font-weight: 700; color: var(--app-text); }
+.smc-user-card.is-login .smc-profile-close { position: static; width: 32px; height: 32px; color: var(--app-text-soft); background: transparent; }
+.smc-user-card.is-login .smc-profile-close:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 94%); }
+.smc-rc-login { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; }
+.smc-rc-input {
+  width: 100%; height: 40px; padding: 0 12px;
+  font-size: 13.5px; font-family: inherit;
+  color: var(--app-text);
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+.smc-rc-input:focus { border-color: var(--app-accent); }
+.smc-rc-btn {
+  width: 100%; height: 42px; margin-top: 2px;
+  font-size: 14px; font-weight: 600; font-family: inherit;
+  color: #fff;
+  background: var(--app-accent);
+  border: 0; border-radius: 9px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.smc-rc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.smc-rc-err { color: #d94834; font-size: 12.5px; }
+.smc-rc-hint { color: var(--app-text-soft); font-size: 12.5px; }
+.smc-rc-link { color: var(--app-accent); cursor: pointer; }
+.smc-login-footer { display: flex; align-items: center; gap: 6px; padding: 10px 20px 14px; color: var(--app-text-faint); font-size: 11.5px; border-top: 1px solid color-mix(in srgb, var(--app-border, #e5e7eb), transparent 40%); }
+.smc-login-footer span { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ===== User card ===== */
 .smc-card-backdrop {

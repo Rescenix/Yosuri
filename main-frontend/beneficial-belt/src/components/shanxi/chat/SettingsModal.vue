@@ -591,6 +591,10 @@
                   <code class="agg-api-code">sk-rescene-local</code>
                   <button class="agg-api-copy" type="button" @click="copyAggText('sk-rescene-local', 'API Key')">复制</button>
                 </div>
+                <div class="agg-api-row">
+                  <span class="agg-api-label">本地代理端口</span>
+                  <input v-model="aggLocalProxyPort" class="agg-proxy-input" type="number" min="1" max="65535" placeholder="如 9910（留空=自动探测）" @blur="onAggProxyPortBlur()" @keyup.enter="onAggProxyPortBlur()" />
+                </div>
               </div>
               <Transition name="agg-copy-toast">
                 <div v-if="aggCopyFeedback" class="agg-copy-feedback" :class="{ error: !aggCopyFeedback.ok }" role="status" aria-live="polite">
@@ -1233,22 +1237,11 @@
                   <span class="param-switch-track"></span>
                 </label>
                 <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
-                  开启后，记忆（偏好 / 决策 / 索引）会随账号存到云端，换设备登录自动恢复。
-                  <template v-if="memorySyncEnvOverride">（当前被部署环境变量 RESCENE_MEMORY_SYNC=off 强制关闭）</template>
-                </span>
-              </div>
-              <div class="param-row" style="align-items: center;">
-                <span class="param-label">自动提取事实</span>
-                <label class="param-switch">
-                  <input type="checkbox" v-model="automaticMemoryEnabled" :disabled="automaticMemoryEnvOverride" @change="saveAutomaticMemorySetting" />
-                  <span class="param-switch-track"></span>
-                </label>
-                <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
-                  完成任务后，后台会把用户原话发送给轻量模型，提取偏好、项目和修正，并保留本地纠错账本。默认关闭。
-                  <template v-if="automaticMemoryEnvOverride">（当前被部署环境变量 RESCENE_AUTO_MEMORY=off 强制关闭）</template>
-                </span>
-              </div>
-              <div v-if="memoryLoading" class="settings-loading">加载中…</div>
+                                  开启后，记忆（偏好 / 决策 / 索引）会随账号存到云端，换设备登录自动恢复。
+                                  <template v-if="memorySyncEnvOverride">（当前被部署环境变量 RESCENE_MEMORY_SYNC=off 强制关闭）</template>
+                                </span>
+                              </div>
+                              <div v-if="memoryLoading" class="settings-loading">加载中…</div>
               <template v-else-if="humanReadableMemoryMarkdown">
                 <div class="memory-md markdown-body" v-html="renderMarkdown(humanReadableMemoryMarkdown)"></div>
               </template>
@@ -1327,6 +1320,38 @@
                     <span class="intimacy-progress-text">{{ intimacyProgressPct }}%</span>
                   </span>
                 </div>
+              </div>
+
+              <div class="profile-row">
+                <span class="profile-label">绑定的邮箱</span>
+                <div v-if="!auth.isLoggedIn.value" class="profile-uid faint">登录后可绑定邮箱（用于找回密码）</div>
+                <template v-else-if="auth.email.value">
+                  <div class="profile-email-bound">
+                    <span class="profile-email-value">{{ auth.email.value }}</span>
+                    <button class="profile-email-action" type="button" @click="openEmailBind">改绑</button>
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="profile-uid faint">未绑定</span>
+                  <button class="profile-email-action" type="button" @click="openEmailBind">补绑邮箱</button>
+                </template>
+              </div>
+
+              <!-- 邮箱绑定弹窗 -->
+              <div v-if="showEmailBind" class="email-bind-panel">
+                <div class="email-bind-hint">绑定后可用于「找回密码」。一个邮箱只绑一个账号。</div>
+                <div class="email-bind-row">
+                  <input v-model="bindEmailDraft" type="email" class="profile-input" placeholder="例如 you@example.com" @keyup.enter="emailBindSendCode" />
+                  <button class="profile-email-action" type="button" :disabled="emailCodeCooldown || !bindEmailDraft" @click="emailBindSendCode">
+                    {{ emailCodeCooldown ? emailCodeCooldown + 's' : '发送验证码' }}
+                  </button>
+                </div>
+                <div v-if="emailCodeSent" class="email-bind-row">
+                  <input v-model="bindEmailCode" type="text" inputmode="numeric" class="profile-input" placeholder="6 位验证码" @keyup.enter="emailBindConfirm" />
+                  <button class="profile-email-action primary" type="button" :disabled="!bindEmailCode" @click="emailBindConfirm">确认绑定</button>
+                </div>
+                <button v-if="auth.email.value" class="profile-email-action muted" type="button" @click="showEmailBind = false">取消</button>
+                <div v-if="emailBindError" class="profile-avatar-error" role="alert">{{ emailBindError }}</div>
               </div>
 
               <div class="settings-section-title" style="margin-top: 18px;">给 AI 的自定义指令</div>
@@ -2124,6 +2149,7 @@ onMounted(() => {
 // ===== 聚合 API 暴露模型配置（官方遴选 / 用户自定义，issue #5）=====
 const aggMode = ref('official')
 const aggModelIDs = ref([])
+const aggLocalProxyPort = ref('')
 const aggCandidates = ref([])
 const aggCfgSaving = ref(false)
 const aggCfgSearch = ref('')
@@ -2236,6 +2262,7 @@ async function loadAggConfig() {
     if (!res.ok) return
     const data = await res.json()
     aggCandidates.value = data.candidates || []
+    aggLocalProxyPort.value = data.local_proxy_port ? String(data.local_proxy_port) : ''
     // 默认全部展开
     for (const c of aggCandidates.value) aggOpen[c.vendor] = true
     if (data.mode === 'custom') {
@@ -2260,7 +2287,7 @@ async function saveAggConfig() {
     await fetch('/api/aggregate/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: aggMode.value === 'official' ? 'official' : 'custom', model_ids: aggModelIDs.value }),
+      body: JSON.stringify({ mode: aggMode.value === 'official' ? 'official' : 'custom', model_ids: aggModelIDs.value, local_proxy_port: parseInt(aggLocalProxyPort.value, 10) || 0 }),
     })
     if (aggHealthLoaded.value) loadAggHealth() // 暴露范围变了，刷新健康度
     persistTags()
@@ -2274,6 +2301,23 @@ watch(aggModelIDs, () => {
   clearTimeout(aggAutoSaveTimer)
   aggAutoSaveTimer = setTimeout(saveAggConfig, 400)
 }, { deep: true })
+
+// 本地代理端口输入：失焦 / 回车保存（单独函数，避免被 custom 空勾选保护挡掉）
+function onAggProxyPortBlur() {
+  if (aggLoading) return
+  // 保护：custom 模式下空勾选不覆盖后端——否则切到空标签改代理端口会把暴露池清空
+  if (aggMode.value !== 'official' && !aggModelIDs.value.length) return
+  aggCfgSaving.value = true
+  try {
+    fetch('/api/aggregate/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: aggMode.value === 'official' ? 'official' : 'custom', model_ids: aggModelIDs.value, local_proxy_port: parseInt(aggLocalProxyPort.value, 10) || 0 }),
+    }).then(() => { if (aggHealthLoaded.value) loadAggHealth() })
+  } finally {
+    aggCfgSaving.value = false
+  }
+}
 
 // 自定义 API 解锁弹窗（协议 + 5s 倒计时）
 const showCustomLockModal = ref(false)
@@ -3085,8 +3129,6 @@ const memoryLoading = ref(false)
 // 云端记忆同步开关（记忆 tab）：默认开；env_override 时禁用（部署级强制关闭）
 const memorySyncEnabled = ref(true)
 const memorySyncEnvOverride = ref(false)
-const automaticMemoryEnabled = ref(false)
-const automaticMemoryEnvOverride = ref(false)
 const humanReadableMemoryMarkdown = computed(() => {
   const parts = []
   for (const seg of memorySegments.value) {
@@ -3099,7 +3141,6 @@ const humanReadableMemoryMarkdown = computed(() => {
 async function loadMemoryInject() {
   memoryLoading.value = true
   loadMemorySyncSetting()
-  loadAutomaticMemorySetting()
   try {
     const res = await fetch('/api/memory/inject')
     if (res.ok) {
@@ -3116,6 +3157,79 @@ async function loadMemoryInject() {
 }
 const profileSaving = ref(false)
 const profileSaved = ref(false)
+
+// ============ 邮箱绑定（补绑/改绑） ============
+// 老用户注册时大多没填邮箱；账号绑定后可用于「找回密码」。走云端验证码两步：
+//   POST /api/auth/bind-send-code {email}        → 发验证码（限流 60s）
+//   POST /api/auth/bind-email     {email, code}  → 校验后绑定/改绑（需登录 JWT）
+const showEmailBind = ref(false)
+const bindEmailDraft = ref('')
+const bindEmailCode = ref('')
+const bindEmailError = ref('')
+const emailCodeSent = ref(false)
+const emailCodeCooldown = ref(0)
+let emailCooldownTimer = null
+
+function openEmailBind() {
+  showEmailBind.value = true
+  bindEmailError.value = ''
+  bindEmailCode.value = ''
+  emailCodeSent.value = false
+}
+
+function emailBindSendCode() {
+  const email = bindEmailDraft.value.trim()
+  if (!email || emailCodeCooldown.value > 0) return
+  bindEmailError.value = ''
+  const token = localStorage.getItem('token')
+  if (!token) { bindEmailError.value = '请先登录账号' ; return }
+  fetch('/api/auth/bind-send-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ email })
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      emailCodeSent.value = true
+      bindEmailError.value = ''
+      emailCodeCooldown.value = 60
+      if (emailCooldownTimer) clearInterval(emailCooldownTimer)
+      emailCooldownTimer = setInterval(() => {
+        emailCodeCooldown.value -= 1
+        if (emailCodeCooldown.value <= 0) { clearInterval(emailCooldownTimer); emailCooldownTimer = null }
+      }, 1000)
+    } else {
+      bindEmailError.value = data.error || ('发送失败（HTTP ' + res.status + '）')
+    }
+  }).catch(() => { bindEmailError.value = '网络异常，请稍后重试' })
+}
+
+async function emailBindConfirm() {
+  const email = bindEmailDraft.value.trim()
+  const code = bindEmailCode.value.trim()
+  if (!email || !code) return
+  bindEmailError.value = ''
+  const token = localStorage.getItem('token')
+  if (!token) { bindEmailError.value = '请先登录账号' ; return }
+  try {
+    const res = await fetch('/api/auth/bind-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ email, code })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      showEmailBind.value = false
+      bindEmailDraft.value = ''
+      bindEmailCode.value = ''
+      emailCodeSent.value = false
+      // 刷新账号信息，让「我的」tab 显示刚绑定的脱敏邮箱
+      auth.refresh()
+    } else {
+      bindEmailError.value = data.error || ('绑定失败（HTTP ' + res.status + '）')
+    }
+  } catch (e) { bindEmailError.value = '网络异常，请稍后重试' }
+}
 
 // 云端记忆同步开关：读取当前状态 + 切换保存（记忆 tab 开关）
 async function loadMemorySyncSetting() {
@@ -3134,25 +3248,6 @@ async function saveMemorySyncSetting() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: memorySyncEnabled.value })
-    })
-  } catch (e) {}
-}
-async function loadAutomaticMemorySetting() {
-  try {
-    const res = await fetch('/api/memory/automatic/settings')
-    if (res.ok) {
-      const data = await res.json()
-      automaticMemoryEnabled.value = data.enabled === true
-      automaticMemoryEnvOverride.value = !!data.env_override
-    }
-  } catch (e) {}
-}
-async function saveAutomaticMemorySetting() {
-  try {
-    await fetch('/api/memory/automatic/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: automaticMemoryEnabled.value })
     })
   } catch (e) {}
 }
@@ -3646,6 +3741,8 @@ onUnmounted(() => {
 .agg-api-code { font-size: 11.5px; font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace); color: var(--app-accent); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; }
 .agg-api-copy { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 2px 8px; cursor: pointer; flex: none; }
 .agg-api-copy:hover { background: var(--app-surface-3); }
+.agg-proxy-input { flex: 1; min-width: 0; font-size: 11.5px; font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace); color: var(--app-text); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 6px; padding: 3px 8px; }
+.agg-proxy-input:focus { outline: none; border-color: var(--app-accent); }
 .agg-copy-feedback {
   position: fixed; left: 50%; bottom: 34px; z-index: 10020;
   display: inline-flex; align-items: center; gap: 7px;
@@ -4120,6 +4217,20 @@ onUnmounted(() => {
 /* 账号 UID：灰色小字 */
 .profile-uid { font-size: 13px; color: var(--app-text-soft); }
 .profile-uid.faint { color: var(--app-text-faint); }
+/* 邮箱绑定：脱敏展示 + 补绑/改绑 */
+.profile-email-bound { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.profile-email-value { font-size: 13px; color: var(--app-text); font-weight: 600; }
+.profile-email-action { flex-shrink: 0; padding: 0; border: 0; background: transparent; color: var(--app-accent); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.profile-email-action:hover { text-decoration: underline; }
+.profile-email-action.primary { padding: 6px 12px; background: var(--app-accent); color: #fff; border-radius: 8px; }
+.profile-email-action.primary:disabled { opacity: .5; cursor: default; }
+.profile-email-action.primary:disabled:hover { text-decoration: none; }
+.profile-email-action.muted { color: var(--app-text-faint); font-weight: 500; }
+.profile-email-action:disabled { opacity: .5; cursor: default; }
+.email-bind-panel { padding: 12px 0 2px; border-bottom: 1px solid var(--app-border-soft); }
+.email-bind-hint { font-size: 12px; color: var(--app-text-faint); margin-bottom: 10px; }
+.email-bind-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.email-bind-row .profile-email-action { min-width: 96px; }
 /* 亲密等级：爱心表示 */
 .profile-intimacy { display: flex; align-items: center; gap: 8px; }
 .intimacy-hearts { font-size: 15px; line-height: 1; letter-spacing: 2px; color: #ff5d7e; }

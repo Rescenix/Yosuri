@@ -390,7 +390,7 @@ async function switchSession(id) {
   // scroll 事件里直接算，离底部 0→FADE_RANGE 线性降到保底值，滚回底部恢复 1。
   const inputBarFade = ref(1)
   const INPUT_BAR_FADE_RANGE = 160 // px：滚出这么远就淡到底
-  const INPUT_BAR_FADE_MIN = 0.15 // 保底透明度：完全消失会让区域突然空掉，留一点存在感
+  const INPUT_BAR_FADE_MIN = 0.02 // 背景已完全透明 + 上滑内容也淡到近乎消失，符合「上滑透明99%」
   function updateInputBarFade(el) {
     const maxScroll = el.scrollHeight - el.clientHeight
     const dist = Math.max(0, maxScroll - el.scrollTop)
@@ -462,7 +462,8 @@ async function switchSession(id) {
 
   // 后台任务清单（BackgroundTasksPanel 用）：
   // - 旧工作流的 kind:'group' 消息（形状本来就匹配面板）
-  // - 四态机工作流派发的雨燕子代理（agentflow.subagents），点击跳转到所属流
+  // - 四态机工作流派发的雨燕子代理（agentflow.subagents）
+  // - run_task 后台进程（agentflow.bgTasks，与子代理分开）
   const backgroundTaskList = computed(() => {
     const out = []
     for (const m of messages.value) {
@@ -480,6 +481,19 @@ async function switchSession(id) {
             endTime: sa.endTime,
             totalTokens: 0,
             toolUseCount: (sa.tools || []).length
+          })
+        }
+        for (const bt of (m.bgTasks || [])) {
+          out.push({
+            id: bt.id,              // task_id，点「查看日志」走 /api/bg-task/log
+            key: `${m.id}_${bt.id}`,
+            agentLabel: '后台进程',
+            description: bt.task,
+            status: bt.status,
+            startTime: bt.startTime,
+            endTime: bt.endTime,
+            totalTokens: 0,
+            toolUseCount: (bt.tools || []).length
           })
         }
       }
@@ -507,6 +521,30 @@ async function switchSession(id) {
   const runningTaskCount = computed(() =>
     backgroundTaskList.value.filter(t => t.status === 'running').length
   )
+  // 进行中的子代理数（仅雨燕，不含后台进程）
+  const runningSubagentCount = computed(() => {
+    let n = 0
+    for (const m of messages.value) {
+      if (m.kind === 'agentflow') {
+        for (const sa of (m.subagents || [])) {
+          if (sa.status === 'running') n++
+        }
+      }
+    }
+    return n
+  })
+  // 进行中的后台进程数（仅 run_task，不含子代理）
+  const runningBgTaskCount = computed(() => {
+    let n = 0
+    for (const m of messages.value) {
+      if (m.kind === 'agentflow') {
+        for (const bt of (m.bgTasks || [])) {
+          if (bt.status === 'running') n++
+        }
+      }
+    }
+    return n
+  })
 
   return {
     isOpen, isExpanded, userInput, messages, sessionId,
@@ -516,6 +554,8 @@ async function switchSession(id) {
     forceScrollToBottom, smartScrollToBottom, smartScrollAndRefresh, adjustInputHeight, switchSession,
     backgroundTaskList,
     runningTaskCount,
+    runningSubagentCount,
+    runningBgTaskCount,
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     todoState, sendSteerMessage,
     questionState, answerQuestion,

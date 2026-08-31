@@ -675,8 +675,9 @@
                 <!-- 后台任务/子代理悬浮条：有进行中的任务时显示在输入框上方，点击展开任务面板 -->
                 <div v-if="runningTaskCount > 0" class="input-running-tasks-bar" @click.stop="toggleDockPanel('tasks')">
                   <Icon icon="mdi:loading" width="13" class="rt-spin" />
-                  <span>{{ runningTaskCount }} 个后台任务进行中</span>
-                  <span class="rt-sub">（含子代理）</span>
+                  <template v-if="runningSubagentCount > 0"><span>{{ runningSubagentCount }} 个子代理进行中</span></template>
+                  <template v-if="runningBgTaskCount > 0"><span>{{ runningBgTaskCount }} 个后台任务进行中</span></template>
+                  <template v-if="runningSubagentCount === 0 && runningBgTaskCount === 0"><span>{{ runningTaskCount }} 个任务进行中</span></template>
                   <Icon icon="mdi:chevron-up" width="14" class="rt-caret" />
                 </div>
 
@@ -690,11 +691,12 @@
 
                   <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
 
-                  <!-- "+" 附加菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
+                  <!-- "追加"菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
                   <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
                   <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
+                  <input ref="attachVideoInputRef" type="file" accept="video/*" multiple style="display:none" @change="onAttachVideoSelected" @click.stop />
 
-                  <button v-if="flowState.active" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
+                  <button v-if="flowState.active && !userInput.trim() && attachments.length === 0" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
                     <Icon icon="mdi:stop" width="16" color="#fff" />
                   </button>
                   <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
@@ -723,6 +725,10 @@
                       <div class="add-menu-item" @click="triggerAttachFiles">
                         <Icon icon="mdi:paperclip" width="14" color="#6b6b6b" />
                         <span>添加文件或照片</span>
+                      </div>
+                      <div class="add-menu-item" @click="triggerAttachVideo">
+                        <Icon icon="mdi:video-outline" width="14" color="#6b6b6b" />
+                        <span>添加视频</span>
                       </div>
                       <div class="add-menu-item" @click="triggerAttachFolder">
                         <Icon icon="mdi:folder-outline" width="14" color="#6b6b6b" />
@@ -1611,8 +1617,8 @@ const bottomDockPanels = computed(() => dockPanels.value.filter(key => dockPlace
 const visibleDockLocations = computed(() => {
   if (!isExpanded.value) return []
   const locations = []
-  if (rightDockPanels.value.length) locations.push('right')
-  if (bottomDockPanels.value.length) locations.push('bottom')
+  if (rightDockPanels.value.length && !dockHidden.right) locations.push('right')
+  if (bottomDockPanels.value.length && !dockHidden.bottom) locations.push('bottom')
   return locations
 })
 const dockHidden = reactive({ right: false, bottom: false })
@@ -3028,6 +3034,8 @@ const {
   onStreamUpdate,
   backgroundTaskList,
   runningTaskCount,
+  runningSubagentCount,
+  runningBgTaskCount,
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   todoState, sendSteerMessage,
   questionState, answerQuestion,
@@ -3401,6 +3409,18 @@ function onChatInputKeydown(e) {
   }
 }
 
+// ★ 直连流式模式下的思考区域「瀑布滚动」：思考 text 流式追加时滚到底，避免置顶不动。
+watch(
+  messages,
+  () => {
+    nextTick(() => {
+      const list = document.querySelectorAll('.assistant-message.streaming .reasoning-text')
+      if (list.length) list[list.length - 1].scrollTop = list[list.length - 1].scrollHeight
+    })
+  },
+  { deep: true }
+)
+
 function handleSend() {
   if (hasPendingAttachments.value) return
   // 亲密度 +1（fire-and-forget，失败静默不阻断发送）
@@ -3750,8 +3770,10 @@ function handlePaste(e) {
 // "先附加、用户自己决定何时发送"
 const attachFileInputRef = ref(null)
 const attachFolderInputRef = ref(null)
+const attachVideoInputRef = ref(null)
 
 function triggerAttachFiles() { showAddMenu.value = false; attachFileInputRef.value?.click() }
+function triggerAttachVideo() { showAddMenu.value = false; attachVideoInputRef.value?.click() }
 function triggerAttachFolder() { showAddMenu.value = false; attachFolderInputRef.value?.click() }
 
 // 附件不再直接怼进输入框文字里——改成跟 ChatGPT/Claude 一样，在输入框上方
@@ -3849,6 +3871,15 @@ function onAttachFilesSelected(e) {
     if (file.type && file.type.startsWith('image/')) attachImageFile(file)
     else if (file.type && file.type.startsWith('video/')) attachVideoFile(file)
     else attachTextFile(file)
+  }
+}
+
+// 「添加视频」专用入口：菜单项触发 attachVideoInputRef（accept="video/*"）后走这里。
+function onAttachVideoSelected(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ''
+  for (const file of files) {
+    attachVideoFile(file)
   }
 }
 

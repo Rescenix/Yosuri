@@ -2300,7 +2300,7 @@ min-height: 90px !important;
 /* 聚焦：主题色边框，与上方 todo/提问条连成一块时不打架 */
 .input-wrapper:focus-within { border-color: var(--app-accent); }
 
-.input-row { display: flex; align-items: flex-end; gap: 4px; padding: 0 12px 0 16px; }
+.input-row { display: flex; align-items: center; gap: 4px; padding: 0 12px 0 16px; }
 
 /* 附件 chip 行本体样式挪进 AttachmentChipRow.vue（输入框上方/用户气泡两处共用）；
    这里只留输入框场景专属的外边距——chip 行离输入行要留一点上边距，气泡里不需要 */
@@ -2311,7 +2311,7 @@ min-height: 90px !important;
    overflow-y 改回 auto：hidden 时内容超过 max-height(150px) 会把光标那行裁掉、
    看不见输入，配合上面拿掉 scrollTop=0，光标现在能正常跟随滚动。
    line-height 提到 24px，让光标（高度=行高）更饱满，不再显得"太矮"。 */
-.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 8px 0 !important; resize: none; min-height: 40px !important; max-height: 150px; line-height: 24px; font-size: 15px; color: var(--app-text); font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
+.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 4px 0 !important; resize: none; min-height: 40px !important; max-height: 150px; line-height: 24px; font-size: 15px; color: var(--app-text); font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
 .chat-input::-webkit-scrollbar { display: none; }
 .chat-input::placeholder { color: var(--app-text-faint); font-style: italic; }
 
@@ -2487,6 +2487,14 @@ min-height: 90px !important;
 .chat-window.expanded .tool-panel.tool-panel-tabbed.drop-active {
   box-shadow: inset 0 0 0 2px var(--app-accent);
 }
+/* 隐藏：收进 0 宽但不 v-if 卸载——terminal 会话/预览页面导航状态都留着，
+   随手点开任意面板按钮就原样回来（见 openDockPanel 里 dockHidden=false）。
+   ★ 覆盖 flex-basis 而不是 width：这一路径上叠了三层 `flex:` 简写声明
+   （.tool-panel 的 flex:0 0 320px、.chat-window.expanded .tool-panel 的
+   flex:0 0 auto……），flex-basis:auto 时理论上会去接 width 的值，但实测在
+   这套多层覆盖下不可靠——width 加 !important 都测不出效果，直接覆盖
+   flex-basis 才是真正决定渲染宽度的那个属性，改哪个属性就得跟已有规则用
+   同一套语言，不能指望隔着一层 auto 解析链去赢它。 */
 /* 隐藏：收进 0 宽但不 v-if 卸载——terminal 会话/预览页面导航状态都留着，
    随手点开任意面板按钮就原样回来（见 openDockPanel 里 dockHidden=false）。
    ★ 覆盖 flex-basis 而不是 width：这一路径上叠了三层 `flex:` 简写声明
@@ -4362,11 +4370,12 @@ img.gem-rail-avatar {
   margin-bottom: -1px;
   padding: 9px 14px 11px;
   overflow: hidden;
-  border: 1px solid var(--app-border);
+  /* 背景完全透明（Hermes 实际显示）：todo 条纯文字浮在聊天内容上，能看到后面聊天 */
+  background: transparent;
+  border: none;
   border-radius: 0;
-  background: var(--app-surface);
   box-shadow: none;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.2s ease;
   animation: todo-bar-in 0.16s ease-out;
 }
 /* 全部完成后整条淡出（配合 <Transition name="todo-fade">） */
