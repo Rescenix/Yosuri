@@ -147,6 +147,16 @@ func CloudUidBindProxy(c *gin.Context) {
 	proxyToCloudAuth(c, "/api/auth/uid/bind")
 }
 
+// CloudBindEmailSendCodeProxy 账号邮箱补绑/改绑 - 发验证码（需登录 token，透传 Authorization）。
+func CloudBindEmailSendCodeProxy(c *gin.Context) {
+	proxyToCloudAuth(c, "/api/auth/bind-send-code")
+}
+
+// CloudBindEmailProxy 账号邮箱补绑/改绑 - 校验验证码后绑定（需登录 token，透传 Authorization）。
+func CloudBindEmailProxy(c *gin.Context) {
+	proxyToCloudAuth(c, "/api/auth/bind-email")
+}
+
 // AuthMe 本地验 JWT（复用 middleware.AuthRequired 透传的 claims），回传 is_vip。
 // 这是薄中间件：不信任网络，只信本地用 JWT_SECRET 验过的 token。
 func AuthMe(c *gin.Context) {

@@ -5,6 +5,7 @@ package handler
 // 域名启用 DoH 解析，其他提供方继续使用系统 DNS，避免扩大网络行为变化范围。
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +27,72 @@ const (
 	baiDNSCacheCeil  = 10 * time.Minute
 )
 
-var baiLocalProxyPorts = []string{"7890", "7897", "10809"}
+// baiLocalProxyPorts 常见本地代理的 HTTP 混合端口（按使用频率排序）：
+// Clash/Mihomo(7890/7891/7897/7898)、Geph 迷雾通(9909/9910)、V2Ray/Xray(10808/10809)、
+// Shadowsocks/SSR(1080/1081)、sing-box(2080/2081)、NekoBox(33210)。
+// 探测时会真实验证是 HTTP 代理（发 CONNECT 看响应），不会误连普通服务。
+var baiLocalProxyPorts = []string{
+	"7890", "7891", "7897", "7898", // Clash / Mihomo 混合端口
+	"9909", "9910", // Geph 迷雾通
+	"10808", "10809", // V2Ray / Xray
+	"1080", "1081", // Shadowsocks / SSR
+	"2080", "2081", // sing-box
+	"33210", // NekoBox
+}
+
+// baiProxyDetectCache 自动探测结果缓存（避免每个 B.AI 请求都重新探测）。
+type baiProxyDetectCache struct {
+	sync.Mutex
+	u  *url.URL
+	at time.Time
+}
+
+var baiDetectCache baiProxyDetectCache
+
+const baiDetectTTL = 60 * time.Second
+
+// isHTTPProxyPort 验证 127.0.0.1:<port> 是真 HTTP 代理：发 CONNECT 请求，
+// 收到 HTTP/1.x 响应即判定（代理会回 200 Connection Established / 407 等）。
+func isHTTPProxyPort(port string) bool {
+	address := net.JoinHostPort("127.0.0.1", port)
+	conn, err := net.DialTimeout("tcp", address, 300*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	if _, err := fmt.Fprintf(conn, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n"); err != nil {
+		return false
+	}
+	br := bufio.NewReader(conn)
+	line, err := br.ReadString('\n')
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(line, "HTTP/1.")
+}
+
+// detectLocalHTTPProxy 自动探测本机运行的 HTTP 代理端口（带 60s 缓存）。
+// 返回 nil 表示没找到。包级变量便于测试注入。
+var detectLocalHTTPProxy = func() *url.URL {
+	baiDetectCache.Lock()
+	defer baiDetectCache.Unlock()
+	if baiDetectCache.u != nil && time.Since(baiDetectCache.at) < baiDetectTTL {
+		return baiDetectCache.u
+	}
+	for _, port := range baiLocalProxyPorts {
+		if !isHTTPProxyPort(port) {
+			continue
+		}
+		u, err := url.Parse("http://" + net.JoinHostPort("127.0.0.1", port))
+		if err == nil {
+			baiDetectCache.u = u
+			baiDetectCache.at = time.Now()
+			return u
+		}
+	}
+	return nil
+}
 
 var baiDNSCache struct {
 	sync.Mutex
@@ -164,9 +231,34 @@ func baiAwareDialContext(timeout time.Duration) func(context.Context, string, st
 	}
 }
 
-// baiProxy 优先级：B.AI 专用环境变量 > 标准 HTTP(S)_PROXY > 本机 Clash 常用混合端口。
-// Rescene 不修改系统代理；这里只在 B.AI 请求上复用已经运行的本地代理进程。
+// baiConfigProxyPort 读聚合配置里的 local_proxy_port（本机本地代理端口）。
+// 包级变量便于测试注入。
+var baiConfigProxyPort = func() int {
+	return loadAggregateExposeConfig().LocalProxyPort
+}
+
+// baiConfigProxyURL 把端口拼成 http://127.0.0.1:<port>；0/非法端口返回空（走自动探测）。
+// 包级变量便于测试注入。
+var baiConfigProxyURL = func() string {
+	port := baiConfigProxyPort()
+	if port <= 0 || port > 65535 {
+		return ""
+	}
+	return "http://127.0.0.1:" + strconv.Itoa(port)
+}
+
+// baiProxy 优先级：聚合配置 local_proxy_port > B.AI 专用环境变量 > 标准 HTTP(S)_PROXY >
+// Windows 系统代理 > 本机常见代理端口自动探测。Rescene 不修改系统代理；这里只在 B.AI
+// 请求上复用已经运行的本地代理进程。local_proxy_port 可在设置面板「聚合 API」页配置；
+// 不填则自动检测系统代理 / 常见代理端口，用户无需知道自己软件的代理端口。
 func baiProxy(req *http.Request) (*url.URL, error) {
+	if raw := strings.TrimSpace(baiConfigProxyURL()); raw != "" {
+		proxyURL, err := url.Parse(raw)
+		if err != nil || proxyURL.Host == "" {
+			return nil, fmt.Errorf("local_proxy_port 无效: %q", raw)
+		}
+		return proxyURL, nil
+	}
 	if raw := strings.TrimSpace(os.Getenv("BAI_PROXY_URL")); raw != "" {
 		proxyURL, err := url.Parse(raw)
 		if err != nil || proxyURL.Host == "" {
@@ -177,14 +269,16 @@ func baiProxy(req *http.Request) (*url.URL, error) {
 	if proxyURL, err := http.ProxyFromEnvironment(req); err != nil || proxyURL != nil {
 		return proxyURL, err
 	}
-	for _, port := range baiLocalProxyPorts {
-		address := net.JoinHostPort("127.0.0.1", port)
-		conn, err := net.DialTimeout("tcp", address, 150*time.Millisecond)
-		if err != nil {
-			continue
+	// Windows 系统代理（ProxyEnable + ProxyServer，Clash/迷雾通等开启系统代理时写入）
+	if raw := sysProxyURL(); raw != "" {
+		proxyURL, err := url.Parse(raw)
+		if err == nil && proxyURL.Host != "" {
+			return proxyURL, nil
 		}
-		conn.Close()
-		return url.Parse("http://" + address)
+	}
+	// 常见代理端口自动探测（真实验证是 HTTP 代理，60s 缓存）
+	if u := detectLocalHTTPProxy(); u != nil {
+		return u, nil
 	}
 	return nil, nil
 }

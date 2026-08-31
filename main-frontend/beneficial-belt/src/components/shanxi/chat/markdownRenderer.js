@@ -97,3 +97,50 @@ export function renderMarkdown(text, skipSanitize = false) {
   const raw = md.render(text)
   return skipSanitize ? raw : DOMPurify.sanitize(raw)
 }
+
+// ── mermaid 图表（嵌入聊天正文，不算交付文件）──
+// 渲染时先把 ```mermaid 围栏转成占位 div（图源码 base64 存 data 属性，躲开
+// DOMPurify 对 <svg> 的清洗——mermaid 的 SVG 带 style/foreignObject，sanitize
+// 会剥掉导致图表烂掉），之后调用方在 DOM 就绪后调 renderMermaidIn() 批量转换。
+// 懒加载：mermaid 是重型依赖（~1MB），动态 import 只在真有图时加载。
+md.renderer.rules.fence = function (tokens, idx) {
+  const t = tokens[idx]
+  if (t.info && t.info.trim().toLowerCase() === 'mermaid') {
+    const b64 = btoa(unescape(encodeURIComponent(t.content)))
+    return '<div class="mermaid-diagram" data-diagram="' + b64 + '"></div>'
+  }
+  // 默认 fence 渲染（code block）
+  const lang = t.info ? t.info.trim() : ''
+  const code = md.utils.escapeHtml(t.content)
+  return '<pre><code' + (lang ? ' class="language-' + md.utils.escapeHtml(lang) + '"' : '') + '>' + code + '</code></pre>\n'
+}
+
+// renderMermaidIn 把容器内未转换的 .mermaid-diagram 渲染成 SVG。
+// 幂等：已经转换过的（有 svg 子节点）跳过。聊天流式渲染时每帧都调它也没事。
+let mermaidLoadPromise = null
+export async function renderMermaidIn(root) {
+  const nodes = (root && typeof root.querySelectorAll === 'function')
+    ? root.querySelectorAll('.mermaid-diagram')
+    : []
+  if (!nodes.length) return
+  if (!mermaidLoadPromise) {
+    mermaidLoadPromise = import('mermaid').then(m => {
+      m.default.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' })
+      return m.default
+    })
+  }
+  const mermaid = await mermaidLoadPromise
+  for (const el of Array.from(nodes)) {
+    if (el.querySelector('svg')) continue
+    const b64 = el.getAttribute('data-diagram')
+    if (!b64) continue
+    try {
+      const code = decodeURIComponent(escape(atob(b64)))
+      const { svg } = await mermaid.render('mmd-' + Math.random().toString(36).slice(2, 10), code)
+      el.innerHTML = svg
+      el.classList.add('rendered')
+    } catch (e) {
+      el.innerHTML = '<div class="mermaid-error">图表渲染失败：' + String(e.message || e) + '</div>'
+    }
+  }
+}

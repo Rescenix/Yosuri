@@ -43,6 +43,7 @@
     "markdown-it": "^14.2.0",
     "marked": "^18.0.5",
     "marked-katex-extension": "^5.1.10",
+    "mermaid": "^11.17.2",
     "monaco-editor": "^0.55.1",
     "monaco-editor-vue3": "^1.0.5",
     "page-flip": "^2.0.7",

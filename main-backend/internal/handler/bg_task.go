@@ -15,13 +15,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"backend/internal/ai/core"
+
+	"github.com/gin-gonic/gin"
 )
 
 // 通知通道注册表：workflow_id → 完成通知通道。工作流循环在启动时注册、
@@ -123,9 +127,10 @@ func workflowIDFromCtx(ctx context.Context) string {
 	return ""
 }
 
-// bgTaskResult 一次后台任务的完成通知。
+// bgTaskResult 一次后台任务的生命周期事件（start / done）。
 type bgTaskResult struct {
 	TaskID   string `json:"task_id"`
+	Stage    string `json:"stage"`          // "start" 或 "done"
 	Command  string `json:"command"`
 	ExitCode int    `json:"exit_code"`
 	Output   string `json:"output"` // 输出尾部（完成通知用，完整日志走 task_log）
@@ -205,6 +210,19 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 	bgTasks[task.id] = task
 	bgTasksMu.Unlock()
 
+	// 启动成功 → 立即推一条 start 事件（前端面板实时登记 running 卡片）。
+	// 非阻塞投递：与完成通知同一通道，缓冲 16 条；工作流循环每轮 drain 一条。
+	if ch != nil {
+		select {
+		case ch <- bgTaskResult{
+			TaskID:  task.id,
+			Stage:   "start",
+			Command: task.command,
+		}:
+		default:
+		}
+	}
+
 	// 等待 + 收尾：进程退出 → 记退出码 → 关 done → 推完成通知
 	go func() {
 		err := cmd.Wait()
@@ -227,6 +245,7 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 			select {
 			case task.ch <- bgTaskResult{
 				TaskID:   task.id,
+				Stage:    "done",
 				Command:  task.command,
 				ExitCode: exitCode,
 				Output:   task.outputTail(2000),
@@ -406,6 +425,14 @@ func bgTaskDonePayload(res bgTaskResult) map[string]any {
 	}
 }
 
+// bgTaskStartPayload 构造推给前端的启动事件负载（前端据此登记 running 卡片）。
+func bgTaskStartPayload(res bgTaskResult) map[string]any {
+	return map[string]any{
+		"task_id": res.TaskID,
+		"command": res.Command,
+	}
+}
+
 // callBgTaskTool 分发 run_task / task_status / task_log / task_wait / task_kill。
 // workflow 为空（非工作流上下文）时 run_task 仍可用，只是没有完成通知。
 func callBgTaskTool(ctx context.Context, name, argsJSON string, workflow string) (nativeToolResult, error) {
@@ -440,4 +467,41 @@ func callBgTaskTool(ctx context.Context, name, argsJSON string, workflow string)
 		return nativeToolResult{Text: jsonOf(killBgTask(args.TaskID))}, nil
 	}
 	return nativeToolResult{}, fmt.Errorf("未知的后台任务工具: %s", name)
+}
+
+// HandleBgTaskStatus HTTP: 前端后台任务面板查任务状态（无需经 agent 工具）。
+// GET /api/bg-task/status?task_id=xxx
+func HandleBgTaskStatus(c *gin.Context) {
+	id := c.Query("task_id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 task_id"})
+		return
+	}
+	c.JSON(http.StatusOK, bgTaskStatus(id))
+}
+
+// HandleBgTaskLog HTTP: 前端后台任务面板查任务完整日志（无需经 agent 工具）。
+// GET /api/bg-task/log?task_id=xxx&offset=N&limit=N
+func HandleBgTaskLog(c *gin.Context) {
+	id := c.Query("task_id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 task_id"})
+		return
+	}
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "200"))
+	c.JSON(http.StatusOK, bgTaskLog(id, offset, limit))
+}
+
+// HandleBgTaskKill HTTP: 前端后台任务面板终止任务。
+// POST /api/bg-task/kill  {"task_id": "..."}
+func HandleBgTaskKill(c *gin.Context) {
+	var body struct {
+		TaskID string `json:"task_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.TaskID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 task_id"})
+		return
+	}
+	c.JSON(http.StatusOK, killBgTask(body.TaskID))
 }

@@ -1,7 +1,7 @@
 <template>
   <!-- 用户消息导航轴：一个节点 = 一条用户消息，点它跳过去。
        固定在聊天正文左侧居中，用短横线表达整段对话的位置。 -->
-  <div v-if="items.length" class="umr" @mouseleave="scheduleHide()">
+  <div v-if="items.length" class="umr" ref="rootRef" @mouseenter="onRootEnter" @mouseleave="onRootLeave">
     <div ref="trackRef" class="umr-track" @wheel.prevent="onWheel">
       <div
         v-for="(m, i) in items"
@@ -58,6 +58,7 @@ defineEmits(['jump'])
 
 const trackRef = ref(null)
 const listRef = ref(null)
+const rootRef = ref(null)
 const hoverIdx = ref(-1)
 const tipTop = ref(0)
 let hideTimer = null
@@ -107,9 +108,15 @@ function onWheel(e) {
 
 // 列表滚动时选中跟随：把 hoverIdx 同步到当前视口顶部那一条，
 // 刻度轴波浪也跟着走——滚动列表就能选中，不必回去点刻度。
+// 设置一个短暂标记，让 watch(hoverIdx) 知道滚动来自列表自身，不强制居中（避免死循环锁死滚动）。
+let listScrollGuard = false
+let listScrollGuardTimer = null
 function onListScroll() {
   const el = listRef.value
   if (!el) return
+  listScrollGuard = true
+  clearTimeout(listScrollGuardTimer)
+  listScrollGuardTimer = setTimeout(() => { listScrollGuard = false }, 200)
   const rows = el.querySelectorAll('.umr-list-row')
   for (let i = 0; i < rows.length; i++) {
     if (rows[i].offsetTop + rows[i].offsetHeight / 2 >= el.scrollTop) {
@@ -119,9 +126,28 @@ function onListScroll() {
   }
 }
 
+// 鼠标是否在 .umr 根内（刻度+列表）。用真实 mouseenter/mouseleave 事件跟踪，
+// 不用 CSS :hover 伪类——列表是 absolute 定位在 .umr 盒子外的子元素，
+// 滚动/动态渲染时 :hover 判定会滞后，导致「鼠标已离开但 matches(':hover') 仍为
+// true → 永远不排定隐藏」（2026-08-31 实锤：列表一直显示不消失）。
+let mouseInside = false
+function onRootEnter() { mouseInside = true }
+function onRootLeave() {
+  mouseInside = false
+  scheduleHide()
+}
+
 // 鼠标离开刻度/列表时延迟 200ms 再隐藏——留出从刻度移到列表的时间，
 // 否则列表一弹鼠标一移开就消失，根本点不到列表里的条目。
+// ⚠️ 守卫：只有鼠标真的离开整个 .umr 根（刻度+列表都算里面）才排定隐藏。
+// 滚轮滚动列表时，行的 class 变化会让鼠标"离开"某一行触发 mouseleave 冒泡，
+// 但鼠标其实还在列表里——直接隐藏会把列表销毁（消息多滚动时列表闪没，实测实锤 2026-08-31）。
 function scheduleHide() {
+  if (mouseInside) {
+    // 鼠标仍在 .umr 根内（刻度或列表），不排定隐藏；取消待执行的隐藏
+    cancelHide()
+    return
+  }
   if (hideTimer) clearTimeout(hideTimer)
   hideTimer = setTimeout(() => { hoverIdx.value = -1 }, 200)
 }
@@ -139,9 +165,11 @@ watch(hoverIdx, async (i) => {
   if (!el || !dot) return
   const raw = dot.offsetTop - el.scrollTop + dot.offsetHeight / 2
   tipTop.value = Math.max(0, Math.min(raw, el.clientHeight))
-  // 刻度选中 → 列表滚动跟随到该行（双向联动）
+  // 刻度选中 → 列表滚动跟随到该行（双向联动）。
+  // ⚠️ 若滚动来自列表自身（用户正在滚列表），跳过强制居中——否则 scrollTop 被
+  // 拉回顶部，与用户滚轮打架，形成死循环锁死滚动（消息多时 30 次滚轮 scrollTop 纹丝不动，实测实锤 2026-08-31）。
   const lst = listRef.value
-  if (lst) {
+  if (lst && !listScrollGuard) {
     const row = lst.querySelectorAll('.umr-list-row')[i]
     if (row) {
       const mid = row.offsetTop + row.offsetHeight / 2 - lst.clientHeight / 2

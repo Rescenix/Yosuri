@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -84,6 +85,93 @@ func TestBAIProxyURLOverride(t *testing.T) {
 	}
 	if proxyURL == nil || proxyURL.String() != "http://127.0.0.1:18080" {
 		t.Fatalf("BAI_PROXY_URL 未生效: %v", proxyURL)
+	}
+}
+
+func TestIsHTTPProxyPort(t *testing.T) {
+	// 本地 mock HTTP 代理：收到 CONNECT 就回 HTTP/1.1 200 Connection Established
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	port := fmt.Sprint(ln.Addr().(*net.TCPAddr).Port)
+	go func() {
+		for {
+			conn, aerr := ln.Accept()
+			if aerr != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				br := bufio.NewReader(c)
+				if _, rerr := br.ReadString('\n'); rerr != nil {
+					return
+				}
+				c.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+			}(conn)
+		}
+	}()
+	if !isHTTPProxyPort(port) {
+		t.Fatalf("mock HTTP 代理端口 %s 应被识别为代理", port)
+	}
+	// 普通服务（非代理）不应被识别：监听但不回 HTTP 响应
+	ln2, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln2.Close()
+	port2 := fmt.Sprint(ln2.Addr().(*net.TCPAddr).Port)
+	go func() {
+		conn, aerr := ln2.Accept()
+		if aerr != nil {
+			return
+		}
+		defer conn.Close()
+		time.Sleep(3 * time.Second) // 收到 CONNECT 不回任何内容
+	}()
+	if isHTTPProxyPort(port2) {
+		t.Fatalf("非代理端口 %s 不应被识别为代理", port2)
+	}
+}
+
+func TestBAIProxyConfigURLPriority(t *testing.T) {
+	// 配置 local_proxy_port 应优先于 BAI_PROXY_URL 环境变量
+	t.Setenv("BAI_PROXY_URL", "http://127.0.0.1:18080")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("ALL_PROXY", "")
+	old := baiConfigProxyURL
+	defer func() { baiConfigProxyURL = old }()
+	baiConfigProxyURL = func() string { return "http://127.0.0.1:9910" }
+	req, err := http.NewRequest(http.MethodGet, "https://api.b.ai/v1/models", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyURL, err := baiProxy(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proxyURL == nil || proxyURL.String() != "http://127.0.0.1:9910" {
+		t.Fatalf("local_proxy_port 应优先于环境变量: %v", proxyURL)
+	}
+}
+
+func TestBaiConfigProxyURLPortCompose(t *testing.T) {
+	// 端口拼 URL 逻辑：有效端口拼 http://127.0.0.1:<port>，0/非法返回空
+	old := baiConfigProxyPort
+	defer func() { baiConfigProxyPort = old }()
+	baiConfigProxyPort = func() int { return 9910 }
+	if got := baiConfigProxyURL(); got != "http://127.0.0.1:9910" {
+		t.Fatalf("端口 9910 应拼成 http://127.0.0.1:9910, got %q", got)
+	}
+	baiConfigProxyPort = func() int { return 0 }
+	if got := baiConfigProxyURL(); got != "" {
+		t.Fatalf("端口 0 应返回空(走自动探测), got %q", got)
+	}
+	baiConfigProxyPort = func() int { return 99999 }
+	if got := baiConfigProxyURL(); got != "" {
+		t.Fatalf("非法端口 99999 应返回空, got %q", got)
 	}
 }
 

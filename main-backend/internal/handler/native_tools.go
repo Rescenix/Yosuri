@@ -19,6 +19,9 @@ type nativeToolResult struct {
 	Text   string
 	Images []mcpImageArtifact
 	Videos []mcpVideoArtifact
+	// Files 是 Agent 落盘、可作为产物交付的文件（md/pdf/pptx/docx/xlsx 等）。
+	// 由 write/patch/bash 等写文件的工具填充；执行层把它们转成 artifact(kind:file)。
+	Files []fileDeliverable
 	// URLs 是 web_search（Firecrawl 联网搜索）结果的引用来源，透出给前端来源卡片
 	URLs []string
 }

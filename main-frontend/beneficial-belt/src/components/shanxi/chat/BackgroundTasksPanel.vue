@@ -26,6 +26,9 @@
             <div class="bgtask-meta-row secondary">
               {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
             </div>
+            <div v-if="isBgTask(t)" class="bgtask-actions">
+              <button class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
+            </div>
           </div>
           <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
         </div>
@@ -67,16 +70,35 @@
             <div class="bgtask-meta-row secondary">
               {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
             </div>
+            <div v-if="isBgTask(t)" class="bgtask-actions">
+              <button class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
+            </div>
           </div>
           <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
         </div>
       </div>
     </div>
   </template>
+
+  <!-- 日志查看弹层（两个分支共用） -->
+  <div v-if="logPanel.open" class="bgtask-log-backdrop" @click.stop="closeLog">
+    <div class="bgtask-log-panel" @click.stop>
+      <div class="bgtask-log-header">
+        <span class="bgtask-log-title">任务日志</span>
+        <span class="bgtask-log-sub">{{ logPanel.taskId }} · {{ logPanel.status }}</span>
+        <button class="bgpanel-close-btn" @click.stop="closeLog" title="关闭">
+          <Icon icon="mdi:close" width="16" color="#8a8a8a" />
+        </button>
+      </div>
+      <div class="bgtask-log-body">
+        <pre class="bgtask-log-pre">{{ logPanel.output || (logPanel.loading ? '加载中…' : '(无输出)') }}</pre>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps({
@@ -86,6 +108,43 @@ const props = defineProps({
 defineEmits(['close', 'select-task'])
 
 const finishedCount = computed(() => props.tasks.filter(t => t.status !== 'running').length)
+
+// 日志查看弹层
+const logPanel = reactive({
+  open: false,
+  taskId: '',
+  status: '',
+  output: '',
+  loading: false
+})
+
+function isBgTask(t) {
+  return t.id && t.id.startsWith('task_')
+}
+
+async function openLog(t) {
+  logPanel.open = true
+  logPanel.taskId = t.id
+  logPanel.status = statusLabel(t.status)
+  logPanel.output = ''
+  logPanel.loading = true
+  try {
+    const res = await fetch(`/api/bg-task/log?task_id=${encodeURIComponent(t.id)}&limit=500`)
+    const data = await res.json()
+    if (data.status === 'not_found') {
+      logPanel.output = '(任务已过期或不存在)'
+    } else {
+      logPanel.output = data.output || '(无输出)'
+    }
+  } catch (e) {
+    logPanel.output = '加载失败: ' + (e.message || e)
+  }
+  logPanel.loading = false
+}
+
+function closeLog() {
+  logPanel.open = false
+}
 
 // 运行中任务的时长需要每秒刷新一次显示
 const nowTick = ref(Date.now())
@@ -242,4 +301,53 @@ function statusLabel(status) {
 .bgtask-status-failed { color: #d94834; font-weight: 600; }
 .bgtask-status-stopped { color: var(--app-text-faint); font-weight: 600; }
 .bgtask-jump-icon { flex-shrink: 0; margin-top: 2px; color: #c4c4c4; }
+
+/* run_task 卡片「查看日志」按钮 */
+.bgtask-actions { margin-top: 6px; display: flex; gap: 8px; }
+.bgtask-log-btn {
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text-soft);
+  font-size: 11.5px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.bgtask-log-btn:hover { border-color: var(--app-accent, #3b82f6); color: var(--app-accent, #3b82f6); }
+
+/* 日志查看弹层 */
+.bgtask-log-backdrop {
+  position: fixed; inset: 0; z-index: 99999;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.bgtask-log-panel {
+  width: min(720px, 90vw);
+  max-height: 80vh;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.bgtask-log-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--app-border);
+  flex-shrink: 0;
+}
+.bgtask-log-title { font-size: 14px; font-weight: 700; color: var(--app-text); }
+.bgtask-log-sub { font-size: 12px; color: var(--app-text-faint); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bgtask-log-body { padding: 14px 16px; overflow: auto; flex: 1; }
+.bgtask-log-pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
 </style>

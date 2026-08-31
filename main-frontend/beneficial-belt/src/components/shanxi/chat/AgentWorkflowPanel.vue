@@ -2,9 +2,9 @@
   <div class="agent-flow" :class="{ streaming: flow.status === 'running' }">
     <!-- 首条回复前的「正在思考」扫描线：不可折叠、无 chevron；首字一到（blockGroups 非空）自动消失 -->
     <div v-if="flow.status === 'running' && blockGroups.length === 0" class="flow-pending-scanline">
-      <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
-      <span class="flow-pending-label">正在思考</span>
-    </div>
+          <RoseParticleLoader :size="20" class="flow-pending-loader" />
+          <span class="flow-pending-label">正在思考</span>
+        </div>
     <!--
       ★ 按顺序渲染，但「回复(intent)」始终平铺可见；
       连续出现的「思考 + 工具调用」才收纳进同一个概要栏 + 可折叠时间线。
@@ -21,7 +21,7 @@
       <!-- 单步思考：不收束，直接平铺 -->
       <div v-else-if="group.type === 'single-thinking'" class="flow-thinking flow-thinking-single">
         <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`)">
-          <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
+          <RoseIcon :size="16" class="flow-row-icon icon-think" />
           <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : (flow.status === 'waiting' ? '等待后台任务' : '思考') }}</span>
           <span v-if="!(thinkOpen[`single-${gIdx}`] ?? true) && group.block.text" class="flow-row-preview">{{ onelinePreview(group.block.text) }}</span>
           <span v-else class="flow-spacer"></span>
@@ -108,7 +108,43 @@
           class="flow-video-player"
         ></video>
         <div v-if="group.block.caption" class="flow-video-caption">{{ group.block.caption }}</div>
-      </div>
+        </div>
+
+        <!-- Agent 交付文件（md/pdf/pptx/docx/xlsx/html/txt 等）：
+             交付卡片，点「预览」把内容送进右侧预览窗口；带内嵌「下载」按钮。 -->
+        <div v-else-if="group.type === 'file'" class="flow-file-deliver">
+          <div class="flow-file-head">
+            <span
+              class="flow-file-icon"
+              :class="'ext-' + (group.block.ext ? group.block.ext.replace('.', '') : 'file')"
+            >
+              <Icon
+                :icon="fileIcon(group.block.ext)"
+                width="16"
+              />
+            </span>
+            <div class="flow-file-meta">
+              <span class="flow-file-name" :title="group.block.name">{{ group.block.name }}</span>
+              <span class="flow-file-sub">
+                <span>Agent 交付文件</span>
+                <template v-if="group.block.size"><span>·</span><span>{{ formatFileSize(group.block.size) }}</span></template>
+              </span>
+            </div>
+            <div class="flow-file-actions">
+              <button type="button" class="flow-file-btn" @click="previewDeliveredFile(group.block)">
+                <Icon icon="mdi:eye-outline" width="13" /> 预览
+              </button>
+              <a
+                class="flow-file-btn download"
+                :href="'/api/agent/file?path=' + encodeURIComponent(group.block.path) + '&raw=1'"
+                :download="group.block.name"
+              >
+                <Icon icon="mdi:download-outline" width="13" /> 下载
+              </a>
+            </div>
+          </div>
+          <div v-if="group.block.previewError" class="flow-file-err">{{ group.block.previewError }}</div>
+        </div>
 
       <!-- 记忆写入：单行彩虹反馈（不占卡片，直接铺在聊天流里） -->
       <div v-else-if="group.type === 'memory-saved'" class="flow-memory-saved">
@@ -147,7 +183,7 @@
               <!-- 思考 -->
               <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
                 <div class="flow-row-head" @click.stop="toggleThink(`${gIdx}-${i}`)">
-                  <Icon icon="mdi:sparkles" class="flow-row-icon icon-think" width="13" />
+                  <RoseIcon :size="16" class="flow-row-icon icon-think" />
                   <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : (flow.status === 'waiting' ? '等待后台任务' : '思考') }}</span>
                   <span v-if="!(thinkOpen[`${gIdx}-${i}`] ?? true) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
                   <span v-else class="flow-spacer"></span>
@@ -295,16 +331,88 @@
 </template>
 
 <script setup>
-import { reactive, computed, ref, watch } from 'vue'
+import { reactive, computed, ref, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
 import ArxivPaperCard from './ArxivPaperCard.vue'
+import RoseParticleLoader from './RoseParticleLoader.vue'
+import RoseIcon from './RoseIcon.vue'
 import { renderMarkdown } from './markdownRenderer.js'
+import { requestPreview } from '../composables/previewBus.js'
 
 const props = defineProps({
   flow: { type: Object, required: true }
 })
+
+// ==================== Agent 交付文件卡片 ====================
+// md/html/txt 拉取内容在前端转 HTML 送右侧预览窗口；pdf/pptx/docx/xlsx 等二进制
+// 走 /api/agent/file?path=..&raw=1 新开。预览只做一次，失败给可见错误，不循环弹。
+const TEXT_PREVIEW_EXTS = new Set(['md', 'htm', 'html', 'txt'])
+function fileIcon(ext) {
+  switch ((ext || '').replace('.', '').toLowerCase()) {
+    case 'pdf': return 'mdi:file-pdf-box'
+    case 'pptx': return 'mdi:file-powerpoint-box'
+    case 'docx': case 'doc': return 'mdi:file-word-box'
+    case 'xlsx': case 'xls': case 'csv': return 'mdi:file-excel-box'
+    case 'html': case 'htm': return 'mdi:language-html5'
+    case 'txt': return 'mdi:file-document-outline'
+    case 'md': return 'mdi:markdown'
+    default: return 'mdi:file-outline'
+  }
+}
+function formatFileSize(bytes) {
+  const n = Number(bytes) || 0
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+  return (n / (1024 * 1024)).toFixed(1) + ' MB'
+}
+async function previewDeliveredFile(block) {
+  if (block._previewing) return
+  block._previewing = true
+  block.previewError = ''
+  const ext = (block.ext || '').replace('.', '').toLowerCase()
+  try {
+    if (TEXT_PREVIEW_EXTS.has(ext)) {
+      // 文本类（md/html/txt）：拉 content，前端渲染成独立 HTML blob 进右侧窗口。
+      const res = await fetch('/api/agent/file?path=' + encodeURIComponent(block.path))
+      if (!res.ok) throw new Error('读取失败 (' + res.status + ')')
+      const data = await res.json()
+      const body = ext === 'txt' ? escapeHtml(data.content || '')
+        : renderMarkdown(data.content || '')
+      const html = '<!doctype html><html><head><meta charset="utf-8">' +
+        '<style>body{font-family:system-ui,Segoe UI,Microsoft YaHei,sans-serif;padding:24px;line-height:1.7;color:#1e293b;max-width:880px;margin:0 auto;}' +
+        'pre{background:#f8f7fc;padding:14px;border-radius:8px;overflow:auto}code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:.92em}' +
+        'pre code{background:none;padding:0}table{border-collapse:collapse}th,td{border:1px solid #e2e8f0;padding:6px 10px}img{max-width:100%}' +
+        '.katex-display{overflow-x:auto}svg{max-width:100%}</style></head><body>' + body + '</body></html>'
+      requestPreview('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+    } else {
+      // 二进制类（pdf/pptx/docx/xlsx）：直接新开 raw 文件。
+      window.open('/api/agent/file?path=' + encodeURIComponent(block.path) + '&raw=1', '_blank')
+    }
+  } catch (err) {
+    block.previewError = err.message || '预览失败'
+  } finally {
+    block._previewing = false
+  }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
+// ★ 思考区域「瀑布滚动」：流式追加思考 text 时，把当前正在书写的思考窗口滚到底，
+// 否则新增思考一直被钉在顶部折叠线后，看起来"置顶不动"。
+watch(
+  () => props.flow?.blocks,
+  () => {
+    nextTick(() => {
+      const list = document.querySelectorAll('.agent-flow.streaming .flow-thinking-detail')
+      if (list.length) list[list.length - 1].scrollTop = list[list.length - 1].scrollHeight
+    })
+  },
+  { deep: true }
+)
+
 
 // ==================== 改动文件卡片（内嵌工作流底部） ====================
 const changedDiffOpen = ref(false)
@@ -441,8 +549,11 @@ const blockGroups = computed(() => {
       } else if (b.type === 'image') {
         groups.push({ type: 'image', block: b })
       } else if (b.type === 'video') {
-        groups.push({ type: 'video', block: b })
-      } else if (b.type === 'tool' && b.name === 'web_search') {
+              groups.push({ type: 'video', block: b })
+            } else if (b.type === 'file') {
+              // Agent 落盘的可交付文件：单独平铺成交付卡片（预览送右侧窗口/下载）
+              groups.push({ type: 'file', block: b })
+            } else if (b.type === 'tool' && b.name === 'web_search') {
               // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
               groups.push({ type: 'search-tool', block: b })
             } else if (b.type === 'steer') {
@@ -1100,9 +1211,12 @@ function toolBodyText(b) {
   min-width: 0;
 }
 .flow-thinking-detail {
+  /* 思考窗口：高度随内容自适应（少内容不白占留白），超出 max-height 才滚动（右侧竖线） */
+  height: auto;
   max-height: 240px;
   overflow-y: auto;
   padding-right: 10px;
+  border-right: 2px solid var(--app-border);
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--app-text-faint) 45%, transparent) transparent;
 }
@@ -1126,6 +1240,10 @@ function toolBodyText(b) {
   margin: 4px 0;
   font-size: 12px;
   color: var(--app-text-soft);
+}
+.flow-pending-loader {
+  color: var(--app-accent);
+  line-height: 0;
 }
 .flow-pending-scanline .flow-pending-label {
   font-weight: 500;
@@ -1247,7 +1365,7 @@ function toolBodyText(b) {
   border-color: #e2e2e6;
 }
 .flow-row-icon { flex-shrink: 0; }
-.icon-think { color: #8b5cf6; }
+.icon-think { color: var(--app-accent); }
 .icon-search { color: #8b5cf6; }
 .icon-tool { color: var(--app-text-soft); }
 
@@ -1270,6 +1388,7 @@ function toolBodyText(b) {
   font-weight: 600;
   color: var(--app-text-soft);
   padding: 0 2px 6px;
+  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
 }
 .flow-refs-list {
   position: relative;
@@ -1647,6 +1766,79 @@ function toolBodyText(b) {
 }
 .flow-video-caption { padding: 6px 10px 8px; font-size: 11px; color: var(--app-text-soft); }
 
+/* Agent 交付文件卡片 */
+.flow-file-deliver {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 18%, var(--app-border));
+  border-radius: 10px;
+  background: var(--app-surface-2);
+}
+.flow-file-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.flow-file-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-surface-3);
+  color: var(--app-accent);
+}
+.flow-file-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.flow-file-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-file-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--app-text-faint);
+}
+.flow-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.flow-file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface-3);
+  color: var(--app-text);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.flow-file-btn:hover { border-color: var(--app-accent); color: var(--app-accent); }
+.flow-file-btn.download:hover { border-color: var(--app-accent); color: var(--app-accent); }
+.flow-file-err { font-size: 11px; color: #d94834; }
+
 /* 截图默认只占一行半的紧凑预览，不抢走聊天阅读节奏；点击后才展开全图。 */
 .flow-screenshot {
   display: block;
@@ -1871,7 +2063,7 @@ function toolBodyText(b) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--app-mono-font, ui-monospace, monospace);
+  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   font-size: 12px;
   color: var(--app-text);
 }
@@ -1885,7 +2077,7 @@ function toolBodyText(b) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--app-mono-font, ui-monospace, monospace);
+  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   font-size: 10.5px;
 }
 .flow-changed-add {
@@ -1950,19 +2142,19 @@ function toolBodyText(b) {
   display: flex;
   gap: 8px;
   padding: 1px 10px;
-  font-family: var(--app-mono-font, ui-monospace, monospace);
+  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--app-text);
 }
 .flow-changed-code-line.add {
-  background: color-mix(in srgb, #1f6f3a 12%, transparent);
-  color: #7aa38a;
+  background: color-mix(in srgb, #2ea043 10%, transparent);
+  color: #1f7a3d;
 }
 .flow-changed-code-line.del {
-  background: color-mix(in srgb, #a33a3c 12%, transparent);
-  color: #c9969a;
+  background: color-mix(in srgb, #e24546 10%, transparent);
+  color: #c02a2b;
 }
 .flow-changed-line-no {
   flex-shrink: 0;

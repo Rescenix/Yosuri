@@ -634,6 +634,15 @@ type mcpVideoArtifact struct {
 	Seconds string `json:"seconds"` // 时长
 }
 
+// fileDeliverable 是 Agent 落盘、可作为产物交付给用户的文件（md/pdf/pptx/docx/xlsx 等）。
+// 走 artifact(kind:file) 事件交给前端：自动弹预览、md 内嵌渲染、其余走下载/新开。
+type fileDeliverable struct {
+	Path string `json:"path"` // 主工作目录下的相对路径（前端经 /api/agent/file 拉取）
+	Name string `json:"name"` // 文件名（含扩展名）
+	Ext  string `json:"ext"`  // 小写扩展名（含点）
+	Size int64  `json:"size"` // 字节数
+}
+
 type mcpToolCallResult struct {
 	Text   string
 	Images []mcpImageArtifact

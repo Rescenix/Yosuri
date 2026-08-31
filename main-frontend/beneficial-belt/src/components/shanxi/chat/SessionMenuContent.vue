@@ -47,10 +47,10 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-                          <RunningRing
-                            v-if="s.id === runningSession"
-                            class="smc-running-ring"
-                          />
+                          <RunningArc
+                                                      v-if="s.id === runningSession"
+                                                      class="smc-running-ring"
+                                                    />
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
@@ -120,10 +120,10 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-                          <RunningRing
-                            v-if="s.id === runningSession"
-                            class="smc-running-ring"
-                          />
+                          <RunningArc
+                                                      v-if="s.id === runningSession"
+                                                      class="smc-running-ring"
+                                                    />
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
@@ -165,10 +165,10 @@
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
             >
-                          <RunningRing
-                            v-if="s.id === runningSession"
-                            class="smc-running-ring"
-                          />
+                          <RunningArc
+                                                      v-if="s.id === runningSession"
+                                                      class="smc-running-ring"
+                                                    />
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
@@ -464,7 +464,7 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import RunningRing from './RunningRing.vue'
+import RunningArc from './RunningArc.vue'
 import { useAuth } from '../../../composables/useAuth.js'
 import { useI18n } from '../../../composables/useI18n.js'
 import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
@@ -1337,7 +1337,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: color-mix(in srgb, var(--app-accent), transparent 94%);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent), transparent 70%);
 }
-/* RunningRing(波浪环) 覆盖整行边框 */
+/* RunningArc(Hermes 同款流动边框) 覆盖整行边框 */
 .smc-running-ring {
   position: absolute;
   inset: 0;

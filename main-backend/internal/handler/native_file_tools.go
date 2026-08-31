@@ -441,7 +441,29 @@ func nativeWriteFile(args map[string]any) (nativeToolResult, error) {
 	if err := atomicWriteNative(path, []byte(content), 0o644); err != nil {
 		return nativeToolResult{}, err
 	}
-	return nativeToolResult{Text: "已写入 " + displayNativePath(path)}, nil
+	return nativeToolResult{Text: "已写入 " + displayNativePath(path), Files: deliverableFromPath(path)}, nil
+}
+
+// deliverableFromPath 判断落盘文件是否可作为产物交付给用户。
+// 可交付扩展名（md/pdf/pptx/docx/xlsx/html 等）才填 fileDeliverable——这样前端
+// artifact(kind:file) 只会在 agent 产出用户要的文档时弹交付卡片，不会拿源码/配置刷屏。
+// 返回 nil 表示不是交付物（例如 .go/.py/.json 源码、.git 等），前端不会弹卡片。
+func deliverableFromPath(path string) []fileDeliverable {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".md", ".pdf", ".pptx", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".html", ".htm", ".txt":
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil
+		}
+		return []fileDeliverable{{
+			Path: displayNativePath(path),
+			Name: filepath.Base(path),
+			Ext:  ext,
+			Size: info.Size(),
+		}}
+	}
+	return nil
 }
 
 func nativeEditFile(args map[string]any) (nativeToolResult, error) {

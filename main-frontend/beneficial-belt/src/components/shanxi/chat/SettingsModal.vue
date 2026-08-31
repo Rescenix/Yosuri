@@ -440,9 +440,6 @@
               <template v-if="providerSubTab === 'free'">
                 <div class="settings-section-title settings-section-title-row">
                   <span>免费模型</span>
-                  <button class="auto-sort-btn" type="button" @click="showFreeOrderModal = true">
-                    <Icon icon="mdi:auto-fix" width="13" /> Auto 自定义排序
-                  </button>
                 </div>
                 <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；点击「官网获取 Key」打开官网登录即可免费领取 API Key，粘贴输入框即可使用；免 Key 提供方无需配置。</div>
 
@@ -1430,7 +1427,6 @@
     </div>
     <FreeOrderModal v-if="showFreeOrderModal" :openid="props.openid" @close="showFreeOrderModal = false" />
       </Teleport>
-
       <!-- 自定义 API 解锁弹窗（协议 + 5s 倒计时） -->
       <Teleport to="body">
         <div v-if="showCustomLockModal" class="mm-backdrop" @click.self="showCustomLockModal = false">

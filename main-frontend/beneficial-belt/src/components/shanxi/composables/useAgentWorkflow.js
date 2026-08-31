@@ -150,6 +150,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             resumedFrom: opts.resumeId ? (opts.resumedRound || 0) : 0, // >0 时卡片头显示「从第 N 轮续跑」
             blocks: [],
             subagents: [], // 雨燕子代理生命周期（后台任务面板的数据源）
+            bgTasks: [],   // run_task 后台进程生命周期（与子代理分开，2026-08-31）
             startTime: Date.now(),
             endTime: null,
             inputTokens: 0,
@@ -461,6 +462,18 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     seconds: d.seconds || '',
                     caption: d.caption || 'Agent 已生成视频，可拖动进度条播放。'
                 })
+            } else if (d.kind === 'file' && d.path) {
+                // Agent 落盘的可交付文件（md/pdf/pptx/docx/xlsx/html 等）：
+                // 交付卡片，点「预览」把内容送进右侧预览窗口（md/html/txt 本地渲染，
+                // 其余走 /api/agent/file?path=..&raw=1 新开）；带内嵌「下载」。
+                flow.blocks.push({
+                    type: 'file',
+                    id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                    path: d.path,
+                    name: d.name || d.path.split('/').pop() || d.path,
+                    ext: d.ext || '',
+                    size: d.size || 0
+                })
             }
             onStreamUpdate?.()
         })
@@ -671,21 +684,47 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             onStreamUpdate?.()
         })
 
-        // 后台任务完成：恢复 running 状态 + 在后台任务面板登记一条完成记录。
+        // Hermes 式后台任务：run_task 启动时后端推 bg_task_start → 面板立刻登记 running 卡片，
+        // 完成后 bg_task_done 更新同一张（不再运行时空白、完成才冒出来）。
+        // 走独立的 bgTasks 数组，与雨燕子代理（subagents）分开计数显示。
+        es.addEventListener('bg_task_start', e => {
+            const d = JSON.parse(e.data)
+            flow.bgTasks.push({
+                id: d.task_id,
+                task: `[后台任务] ${d.command || ''}`,
+                status: 'running',
+                rounds: 0,
+                tools: [],
+                output: '',
+                startTime: Date.now(),
+                endTime: null
+            })
+            onStreamUpdate?.()
+        })
+
+        // 后台任务完成：恢复 running 状态 + 把面板上对应的 running 卡片改绿/改红。
+        // 找不到（start 事件没接到/断线重连）就兜底登记一条完成记录。
         es.addEventListener('bg_task_done', e => {
             const d = JSON.parse(e.data)
             flow.status = 'running'
             flow.endTime = null
-            flow.subagents.push({
-                id: d.task_id,
-                task: `[后台任务] ${d.command || ''}`,
-                status: d.exit_code === 0 ? 'completed' : 'failed',
-                rounds: 0,
-                tools: [],
-                output: d.output || '',
-                startTime: Date.now(),
-                endTime: Date.now()
-            })
+            const bt = flow.bgTasks.find(s => s.id === d.task_id)
+            if (bt) {
+                bt.status = d.exit_code === 0 ? 'completed' : 'failed'
+                bt.output = d.output || ''
+                bt.endTime = Date.now()
+            } else {
+                flow.bgTasks.push({
+                    id: d.task_id,
+                    task: `[后台任务] ${d.command || ''}`,
+                    status: d.exit_code === 0 ? 'completed' : 'failed',
+                    rounds: 0,
+                    tools: [],
+                    output: d.output || '',
+                    startTime: Date.now(),
+                    endTime: Date.now()
+                })
+            }
             onStreamUpdate?.()
         })
 

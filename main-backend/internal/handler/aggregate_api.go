@@ -130,10 +130,10 @@ func aggAutoChain() []RouterBackend {
 				sig, lat = st.signal, st.latency
 			}
 			items[i] = autoItem{b: out[i], h: autoHealth{
-				exhausted:    quotaExhausted(out[i]),
-				signal:       sig, latency: lat,
-				lastOK:       freeLastUsed(out[i]),
-				circuitOpen:  circuitOpen(out[i]), // 熔断中的源沉底（保护模型不删，但真实失败排最后）
+				exhausted: quotaExhausted(out[i]),
+				signal:    sig, latency: lat,
+				lastOK:      freeLastUsed(out[i]),
+				circuitOpen: circuitOpen(out[i]), // 熔断中的源沉底（保护模型不删，但真实失败排最后）
 			}}
 		}
 		probeMu.Unlock()
@@ -811,8 +811,9 @@ type aggExposedModel struct {
 
 // aggregateExposeConfig 聚合 API 暴露模型配置。
 type aggregateExposeConfig struct {
-	Mode     string   `json:"mode"`      // official=官方遴选（默认）| custom=用户自定义
-	ModelIDs []string `json:"model_ids"` // custom 模式暴露的模型 ID（目录 / auto_ 可读 / custom::）
+	Mode           string   `json:"mode"`             // official=官方遴选（默认）| custom=用户自定义
+	ModelIDs       []string `json:"model_ids"`        // custom 模式暴露的模型 ID（目录 / auto_ 可读 / custom::）
+	LocalProxyPort int      `json:"local_proxy_port"` // 本机本地代理端口（如 9910），B.AI 海外源专用；0=自动探测 Clash/环境变量
 }
 
 func aggregateConfigPath() (string, error) {
@@ -1120,9 +1121,10 @@ func hasFreeSuffix(model string) bool {
 func HandleGetAggregateConfig(c *gin.Context) {
 	cfg := loadAggregateExposeConfig()
 	c.JSON(http.StatusOK, gin.H{
-		"mode":       cfg.Mode,
-		"model_ids":  cfg.ModelIDs,
-		"candidates": aggregateCandidates(),
+		"mode":             cfg.Mode,
+		"model_ids":        cfg.ModelIDs,
+		"local_proxy_port": cfg.LocalProxyPort,
+		"candidates":       aggregateCandidates(),
 	})
 }
 
@@ -1130,8 +1132,9 @@ func HandleGetAggregateConfig(c *gin.Context) {
 // mode ∈ {official, custom}；model_ids 只保留候选清单里真实存在的 ID（过滤脏 ID）。
 func HandlePutAggregateConfig(c *gin.Context) {
 	var req struct {
-		Mode     string   `json:"mode"`
-		ModelIDs []string `json:"model_ids"`
+		Mode           string   `json:"mode"`
+		ModelIDs       []string `json:"model_ids"`
+		LocalProxyPort int      `json:"local_proxy_port"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -1154,10 +1157,18 @@ func HandlePutAggregateConfig(c *gin.Context) {
 		seen[id] = true
 		ids = append(ids, id)
 	}
-	cfg := aggregateExposeConfig{Mode: req.Mode, ModelIDs: ids}
+	// 保护：custom 模式下过滤后 model_ids 为空 → 拒绝保存，保留原配置。
+	// 否则「切到空标签 / 勾选的模型全被候选白名单淘汰」时，会把空数组覆盖进
+	// aggregate_config.json，导致 /v1/models 只剩 auto，用户以为聚合端口被清空。
+	// 误清空危害远大于「用户想全取消」的低频需求（与前端 saveAggConfig 口径一致）。
+	if req.Mode == "custom" && len(ids) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户自定义模式至少需保留一个模型，未保存"})
+		return
+	}
+	cfg := aggregateExposeConfig{Mode: req.Mode, ModelIDs: ids, LocalProxyPort: req.LocalProxyPort}
 	if err := saveAggregateExposeConfig(cfg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true, "mode": cfg.Mode, "model_ids": cfg.ModelIDs})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "mode": cfg.Mode, "model_ids": cfg.ModelIDs, "local_proxy_port": cfg.LocalProxyPort})
 }

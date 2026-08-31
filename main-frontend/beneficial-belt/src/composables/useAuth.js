@@ -17,6 +17,7 @@ const customAvatar = ref('') // 用户在本机设置的头像（优先于账号
 const uid = ref(null)   // cloud 分发的账号 UID（游客/登录都有）
 const isVip = ref(false) // 会员标识：仅由服务端 JWT 的 is_vip 决定，绝不读 localStorage（堵住游客伪造）
 const intimacy = ref(0) // 亲密度：无上限互动值（云端权威，随 UID 账号存储、跨设备保留）
+const email = ref('')   // 账号绑定的邮箱（云端脱敏后返回：前3后3、不含后缀；空=未绑定）
 // authError：/api/auth/me 请求本身失败（网络/云端 502 等，不是「token 无效」）时的提示。
 // 之前这类瞬时故障会被当成 token 无效直接清掉、悄悄退回未登录态，用户毫无提示——
 // 看起来就是「login过后过一会又要求登录」（2026-08-20 用户反馈：前端反馈不鲁棒）。
@@ -253,7 +254,7 @@ async function refresh() {
   try {
     if (!token) {
       isLoggedIn.value = false
-      login.value = name.value = avatar.value = ''
+      login.value = name.value = avatar.value = email.value = ''
       authError.value = ''
       return
     }
@@ -266,6 +267,7 @@ async function refresh() {
       login.value = data.login || data.openid || ''
       name.value = data.name || login.value
       avatar.value = data.avatar || ''
+      email.value = data.email || '' // 云端脱敏邮箱；空=未绑定
       // is_vip 以服务端 JWT 为准：GitHub 登录或管理员密码登录才会是 true，游客恒为 false
       isVip.value = data.is_vip === true
       authError.value = ''
@@ -284,7 +286,7 @@ async function refresh() {
       // 云端明确说 token 无效/过期：才是真的要清掉
       localStorage.removeItem('token')
       isLoggedIn.value = false
-      login.value = name.value = avatar.value = ''
+      login.value = name.value = avatar.value = email.value = ''
       isVip.value = false
       authError.value = ''
     } else {
@@ -305,6 +307,7 @@ async function refresh() {
 function logout() {
   localStorage.removeItem('token')
   isLoggedIn.value = false
+  email.value = ''
   login.value = name.value = avatar.value = ''
   // 登出后清掉后端缓存的登录 token，避免重启时 restoreLoginToken 又自动恢复登录态
   try {
@@ -347,9 +350,10 @@ export function useAuth() {
     avatar: readonly(avatar),
     uid: readonly(uid),
     isVip: readonly(isVip),
-    intimacy: readonly(intimacy),
-    intimacyLevel: readonly(intimacyLevel),
-    displayName: readonly(displayName),
+        intimacy: readonly(intimacy),
+        intimacyLevel: readonly(intimacyLevel),
+        email: readonly(email),
+        displayName: readonly(displayName),
     displayAvatar: readonly(displayAvatar),
     hasCustomAvatar: readonly(hasCustomAvatar),
     authError: readonly(authError),

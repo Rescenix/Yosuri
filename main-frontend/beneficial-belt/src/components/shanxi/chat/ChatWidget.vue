@@ -425,30 +425,30 @@
                    后端推 todo 事件 → todoState.items 全量覆盖。全部完成后延迟 3.5s 淡出，
                    让用户先看到 N/N 再整条消失；中途出现新/未完成项则取消淡出。 -->
               <Transition name="todo-fade">
-                <div v-if="todoState.items.length" class="todo-bar" :style="inputBarFadeStyle">
-                  <div class="todo-bar-head">
-                    <Icon icon="mdi:chevron-down" width="14" class="todo-bar-chevron" />
-                    <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
-                    <span class="todo-bar-title">任务</span>
-                    <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
-                  </div>
-                  <ul class="todo-bar-list">
-                    <li
-                      v-for="(it, i) in todoState.items"
-                      :key="i"
-                      class="todo-bar-item"
-                      :class="'todo-' + it.status"
-                    >
-                      <Icon
-                        :icon="it.status === 'done' ? 'mdi:check-circle' : it.status === 'doing' ? 'mdi:dots-vertical' : 'mdi:circle-outline'"
-                        width="14"
-                        class="todo-bar-mark"
-                      />
-                      <span class="todo-bar-text">{{ it.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-              </Transition>
+                              <div v-if="todoState.items.length" class="todo-bar" :style="inputBarFadeStyle">
+                                <div class="todo-bar-head" :class="{ collapsed: todoCollapsed }" @click="todoCollapsed = !todoCollapsed">
+                                  <Icon :icon="todoCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="14" class="todo-bar-chevron" />
+                                  <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
+                                  <span class="todo-bar-title">任务</span>
+                                  <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
+                                </div>
+                                <ul v-show="!todoCollapsed" class="todo-bar-list">
+                                  <li
+                                    v-for="(it, i) in todoState.items"
+                                    :key="i"
+                                    class="todo-bar-item"
+                                    :class="'todo-' + it.status"
+                                  >
+                                    <Icon
+                                      :icon="it.status === 'done' ? 'mdi:check-circle' : it.status === 'doing' ? 'mdi:dots-vertical' : 'mdi:circle-outline'"
+                                      width="14"
+                                      class="todo-bar-mark"
+                                    />
+                                    <span class="todo-bar-text">{{ it.text }}</span>
+                                  </li>
+                                </ul>
+                              </div>
+                            </Transition>
 
               <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
               <QuestionModal
@@ -1097,7 +1097,7 @@ import { Icon } from '@iconify/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
 import 'katex/dist/katex.min.css'
-import { renderMarkdown } from './markdownRenderer.js'
+import { renderMarkdown, renderMermaidIn } from './markdownRenderer.js'
 import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
@@ -2923,6 +2923,30 @@ function highlightAllCodeBlocks() {
   })
 }
 
+// ==================== mermaid 图表渲染 ====================
+// 聊天正文 / agent 意图块里出现 ```mermaid 时，renderMarkdown 已把围栏转成
+// .mermaid-diagram 占位 div。这里用 MutationObserver 盯着聊天容器（覆盖流式
+// 追加 + agent flow 意图块两处），出现未渲染的占位就懒加载 mermaid 转成 SVG。
+// 节流：图渲染是异步重型，多个连续节点用 promise 串行，避免并发卡顿。
+let mermaidObserver = null
+let mermaidRenderQueued = false
+function ensureMermaidObserver() {
+  if (mermaidObserver) return
+  mermaidObserver = new MutationObserver(() => {
+    if (mermaidRenderQueued) return
+    mermaidRenderQueued = true
+    setTimeout(async () => {
+      mermaidRenderQueued = false
+      const root = document.querySelector('.chat-window')
+      if (root) {
+        try { await renderMermaidIn(root) } catch (e) { /* 单次失败不阻塞后续 */ }
+      }
+    }, 80)
+  })
+  const container = document.querySelector('.chat-window')
+  if (container) mermaidObserver.observe(container, { childList: true, subtree: true })
+}
+
 // ==================== AI 消息流式瀑布渐变 ====================
 // 仿主流 AI（ChatGPT/Gemini）流式输出：新到的字符按先后顺序级联淡入
 // （透明度 0→1 + 轻微 blur 消散），形成"瀑布"式的渐变尾巴。
@@ -3047,14 +3071,18 @@ const {
 const todoDoneCount = computed(() =>
   (todoState.items || []).filter(it => it.status === 'done').length
 )
+// todo 条折叠：点击头部切换，折叠后只留一行标题，展开才显示清单明细。
+const todoCollapsed = ref(false)
 
 // 上滑时 todo/askuser 随滚动淡出（仿 Hermes）：透明度来自 useChatWidget 的 inputBarFade。
-// 在底部（≈1）时不写 opacity，避免内联样式压住 todo 全部完成时的 todo-fade 淡出动画；
-// 淡出到阈值以下时禁点击，防止半透明的选项条被误触。
+// 在底部（≈1）时不写 opacity，避免内联样式压住 todo 全部完成时的 todo-fade 淡出动画。
+// ⚠️ 不再用 pointer-events:none——那会让淡出后的条点击不到、也悬浮不到（Hermes 是 hover 即恢复不透明）。
+// 悬浮恢复不透明由 .todo-bar:hover / .question-bar:hover 的 CSS 处理（见 chat-window.css / QuestionModal.vue）。
 const inputBarFadeStyle = computed(() => {
   const s = {}
-  if (inputBarFade.value < 0.999) s.opacity = inputBarFade.value
-  if (inputBarFade.value < 0.5) s.pointerEvents = 'none'
+  // 用 CSS 变量传淡出值：元素 opacity: var(--bar-fade)，:hover 时 CSS 能强制拉回 1
+  // 在底部（≈1）时不设变量（让默认 opacity:1 生效），避免压住 todo-fade 淡出动画
+  if (inputBarFade.value < 0.999) s['--bar-fade'] = String(inputBarFade.value)
   return s
 })
 
@@ -3410,15 +3438,31 @@ function onChatInputKeydown(e) {
 }
 
 // ★ 直连流式模式下的思考区域「瀑布滚动」：思考 text 流式追加时滚到底，避免置顶不动。
+// ⚠️ 性能修复：原版 watch(messages, { deep: true }) 深度监听整个数组，思考流式每 token
+// 都触发一次 → nextTick → 全 DOM querySelectorAll + 滚动，逐 token 全量重查 = 巨卡。
+// 改为监听「流式思考消息对象」this.reasoning 单字段 + 节流滚动，只在该消息思考变长时滚一次。
+function scrollStreamedReasoning() {
+  const list = document.querySelectorAll('.assistant-message.streaming .reasoning-text')
+  if (!list.length) return
+  const el = list[list.length - 1]
+  el.scrollTop = el.scrollHeight
+}
+// 节流：思考每 ~80ms 最多滚一次，避免每 token 全 DOM 重查
+let reasoningScrollTimer = null
 watch(
-  messages,
+  () =>
+    messages.value
+      .map((m) =>
+        m.kind !== 'agentflow' && m.sender === 'assistant' && m.isStreaming ? m.reasoning || '' : ''
+      )
+      .join('|'),
   () => {
-    nextTick(() => {
-      const list = document.querySelectorAll('.assistant-message.streaming .reasoning-text')
-      if (list.length) list[list.length - 1].scrollTop = list[list.length - 1].scrollHeight
-    })
-  },
-  { deep: true }
+    if (reasoningScrollTimer) return
+    reasoningScrollTimer = setTimeout(() => {
+      reasoningScrollTimer = null
+      scrollStreamedReasoning()
+    }, 80)
+  }
 )
 
 function handleSend() {
@@ -3917,7 +3961,24 @@ function buildOutgoingMessage() {
 
 const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.value })
 
-watch(messages, () => { nextTick(() => { streamFadePass(); highlightAllCodeBlocks() }) }, { deep: true })
+// 流式时给新到的助手消息做瀑布渐变 + 高亮代码块。
+// ⚠️ 性能修复：原版 watch(messages, { deep: true }) 每 token 触发 → nextTick → streamFadePass()
+// （重包 span）+ highlightAllCodeBlocks()（全 DOM 高亮）双重全量重做 = 思考流式巨卡。
+// 改为节流合并（~120ms 最多一次）+ 只对「流式中的消息」做，避免逐 token 全量重查。
+let streamPassTimer = null
+watch(
+  () => messages.value.length, // 只监听条数变化（新增/删除消息），不深度监听内容
+  () => {
+    if (streamPassTimer) return
+    streamPassTimer = setTimeout(() => {
+      streamPassTimer = null
+      nextTick(() => {
+        streamFadePass()
+        highlightAllCodeBlocks()
+      })
+    }, 120)
+  }
+)
 watch(
   [activeSession, () => currentWorkDir.value.path],
   () => {
@@ -3951,6 +4012,7 @@ onMounted(() => {
   syncWorkDirFromBackend()
   loadChatHistory()
   refreshAgentFSTimeline()
+  ensureMermaidObserver()
   agentFSPollTimer = window.setInterval(() => {
     if (!sidebarOpen.value) refreshAgentFSTimeline()
   }, 4000)

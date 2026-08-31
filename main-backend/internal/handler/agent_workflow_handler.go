@@ -212,6 +212,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		}
 	}
 	backends := resolveBackends(openID, model)
+	// ⚠️ 归一化（2026-08-31）：工作流路径的 auto 统一走聚合端口那条 aggAutoChain()，
+	// 不再用 resolveBackends 的 auto 分支——后者 180s 单源超时拖死 failover 导致「auto 一直卡住」，
+	// 而 aggAutoChain 排序更完善（探活/真实成功/熔断优先）+ failover 快（断了秒切）。
+	// 精确模型（model != auto）仍走 resolveBackends：保持 per-openID 的 key + 精准单源不 failover 铁律。
+	// token 上报不受影响：streamRouterRound 用 usedBackend.Model 记（与聚合端口同口径，见 aggStatsInc）。
+	if model == "auto" {
+		backends = aggAutoChain()
+	}
 
 	// 生图提供商：前端设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
 	// 不走提示词——跟识图模型路由一个思路
@@ -428,7 +436,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 追加进历史 blocks，刷新页面重放时前端从 blocks 恢复卡片（2026-08-28）。
 		if files := changedFilesPayload(); len(files) > 0 {
 			flowBlocks = append(flowBlocks, FlowBlock{
-				Type:        "changed-files",
+				Type:         "changed-files",
 				ChangedFiles: files,
 			})
 		}
@@ -530,15 +538,20 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		default:
 		}
 
-		// 后台任务完成通知 drain（Hermes completion_queue 语义）：run_task 启动的任务
-		// 可能在 agent 干别的活的中途就退出了，通知先进缓冲 channel。这里每轮开头
+		// 后台任务生命周期通知 drain（Hermes completion_queue 语义）：run_task 启动的任务
+		// 可能在 agent 干别的活的中途就退出，通知先进缓冲 channel。这里每轮开头
 		// 把已完成的全部注入消息历史（一轮至多注入一条，避免一轮塞太多让模型抓瞎；
 		// 多条排队到后续轮次，与 steer 同一节奏）。收尾点等待分支只处理「还在跑」的任务。
+		// start 事件只推给前端面板登记 running 卡片，不注入模型历史（模型已拿到 task_id 返回）。
 		select {
 		case res := <-bgNotifyCh:
-			msgs = append(msgs, bgTaskDoneMessage(res))
-			writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
-			checkpoint(round) // 注入已入历史，断线续跑能接上
+			if res.Stage == "start" {
+				writeCodeSSE(c, "bg_task_start", bgTaskStartPayload(res))
+			} else {
+				msgs = append(msgs, bgTaskDoneMessage(res))
+				writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
+				checkpoint(round) // 注入已入历史，断线续跑能接上
+			}
 		default:
 		}
 
@@ -630,7 +643,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 				// 模型调用失败（429/不可用等）≠ 断线：任务没跑起来，续跑无意义，
 				// 标 resumable:false 免得前端弹续跑条（2026-08-28 用户反馈「没断连也老弹续跑条」）
-				"resumable":           false, "workflow_id": workflowID,
+				"resumable": false, "workflow_id": workflowID,
 				"changed_files": changedFilesPayload(),
 			})
 			return
@@ -938,6 +951,19 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 					"caption": "Agent 已生成视频，可拖动进度条播放。",
 				})
 			}
+			// 文件工件：Agent 用 write/bash 落盘的可交付文件（md/pdf/pptx/docx/xlsx 等）。
+			// 每条落盘即推 artifact(kind:file)，前端交付卡片自动弹右侧预览窗口。
+			for fileIndex, f := range results[i].files {
+				writeCodeSSE(c, "artifact", map[string]any{
+					"id":   fmt.Sprintf("%s_file_%d", tc.ID, fileIndex),
+					"kind": "file",
+					"tool": tc.Function.Name,
+					"path": f.Path,
+					"name": f.Name,
+					"ext":  f.Ext,
+					"size": f.Size,
+				})
+			}
 			status := "ok"
 			if results[i].failed {
 				status = "error"
@@ -1030,6 +1056,9 @@ type codeExecResult struct {
 	failed bool
 	images []mcpImageArtifact
 	videos []mcpVideoArtifact
+	// files 是 Agent 落盘、可作为产物交付的文件（md/pdf/pptx/docx/xlsx 等）。
+	// native 写文件工具填；执行层转成 artifact(kind:file) 推给前端。
+	files []fileDeliverable
 	// urls 是 web_search（Firecrawl 联网搜索）的引用来源，透出给前端来源卡片
 	urls []string
 }
@@ -1231,7 +1260,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
 				out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
 			}
-			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, urls: nativeResult.URLs}
+			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, files: nativeResult.Files, urls: nativeResult.URLs}
 			return
 		}
 		if strings.HasPrefix(name, "mcp__") {

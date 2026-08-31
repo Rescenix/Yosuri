@@ -64,11 +64,37 @@ func (r *WorkflowRunner) persistWorkflowHistory(
 			Role: "assistant", Content: content, Model: model, Blocks: blocks, WorkflowID: workflowID,
 		},
 	)
-	// Extraction is deliberately asynchronous and only sees the user's completed
-	// task text; assistant prose is not treated as a source of user facts.
+	// Extraction is asynchronous and sees both the user's completed task text and
+	// the recent dialog around it, so the resulting picture includes style/preference
+	// signals that only appear in how the user interacts, not in the bare task string.
 	if status == taskStatusCompleted {
-		enqueueAutomaticMemory(workflowID, task)
+		enqueueAutomaticMemory(workflowID, task, recentDialogContext(r.chatHandler.sessionStore, sessionID))
 	}
+}
+
+// recentDialogContext 拼一段最近对话（用户+助手各侧）供自动画像提取。
+// 只取末尾若干条、单条截断，控制喂给提取模型的 token 量；拿不到就返回空。
+func recentDialogContext(store *SessionStore, sessionID string) string {
+	if store == nil {
+		return ""
+	}
+	msgs := store.Get(sessionID)
+	const maxPairs = 8
+	if len(msgs) > maxPairs*2 {
+		msgs = msgs[len(msgs)-maxPairs*2:]
+	}
+	var b strings.Builder
+	for _, m := range msgs {
+		text := strings.TrimSpace(m.Content)
+		if text == "" {
+			continue
+		}
+		if len(text) > 500 {
+			text = text[:500] + "…"
+		}
+		fmt.Fprintf(&b, "[%s] %s\n", m.Role, text)
+	}
+	return b.String()
 }
 
 func workflowFailureText(reason string) string {

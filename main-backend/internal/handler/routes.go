@@ -42,6 +42,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// git 工作树全量 diff（Diff 面板）
 	r.GET("/api/git/working-diff", HandleGitWorkingDiff)
 	r.GET("/api/git/working-diff/file", HandleGitWorkingDiffFile)
+	// 主 Agent 文件交付端点：交付卡片预览/下载（仿公司产物端点）
+	r.GET("/api/agent/file", HandleAgentFile)
 	chatHandler := NewChatHandler(sessionStore)
 	r.GET("/api/file-tree", gin.WrapH(http.HandlerFunc(FileTreeHandler)))
 	r.GET("/api/file", gin.WrapH(http.HandlerFunc(FileReadHandler)))
@@ -101,6 +103,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/preview/cdp", HandlePreviewCDP)
 	// Python Harness (:8001) 集成示例：转发 /run_task
 	r.GET("/api/harness/demo", HandleHarnessDemo)
+	// 后台任务：前端面板直接查状态/日志/终止（无需经 agent 工具）
+	r.GET("/api/bg-task/status", HandleBgTaskStatus)
+	r.GET("/api/bg-task/log", HandleBgTaskLog)
+	r.POST("/api/bg-task/kill", HandleBgTaskKill)
 
 	// 创作工作台：文案成片（曼波视频一键生成 + 产物静态服务）
 	r.POST("/api/studio/mambo", HandleStudioMambo)
@@ -256,6 +262,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 游客持设备指纹换 UID；登录后 bind 把游客号升级为正式账号（永久保留）。
 	r.POST("/api/auth/uid", CloudUidProxy)
 	r.POST("/api/auth/uid/bind", CloudUidBindProxy)
+	// 账号邮箱绑定（老用户注册时没填的补渠道）：登录后发验证码 + 校验绑定，透传 JWT
+	r.POST("/api/auth/bind-send-code", CloudBindEmailSendCodeProxy)
+	r.POST("/api/auth/bind-email", CloudBindEmailProxy)
 	// 游客 JWT 缓存：前端 uid 分发拿到 token 后交给本地后端，供记忆同步鉴权
 	r.POST("/api/auth/guest-token", HandleGuestTokenStore)
 	// 登录 JWT 缓存：前端登录/refresh 成功后交给本地后端，供记忆同步鉴权
@@ -283,10 +292,6 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)
-	// Automatic fact extraction is opt-in; it uses a background free-model route
-	// and persists a correction ledger locally.
-	r.GET("/api/memory/automatic/settings", HandleAutomaticMemorySettings)
-	r.POST("/api/memory/automatic/settings", HandleAutomaticMemorySettingsUpdate)
 	// 新闻标题抓取代理：DS 搜索 open_page 只给 URL，前端要显示标题走这里（防 CORS）
 	r.GET("/api/fetch-title", HandleFetchTitle)
 

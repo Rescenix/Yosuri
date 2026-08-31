@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"backend/internal/memorydir"
-
-	"github.com/gin-gonic/gin"
 )
 
 type extractedFact struct {
@@ -37,6 +35,7 @@ type memoryFact struct {
 type memoryExtractionJob struct {
 	SourceID string
 	Text     string
+	Context  string // 最近一段 user+assistant 对话，用于补全偏好/风格/语气画像
 }
 
 var automaticMemory = struct {
@@ -45,67 +44,21 @@ var automaticMemory = struct {
 	jobs chan memoryExtractionJob
 }{jobs: make(chan memoryExtractionJob, 32)}
 
-func automaticMemorySettingPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, "rescene_data", "automatic_memory_enabled.md")
-}
-
-// automaticMemoryEnabled is deliberately opt-in: a keyless third-party model must
-// not receive a user's conversation until that user has enabled this feature.
+// automaticMemoryEnabled 是否启用自动提取事实（默认内置开启）。
+// 2026-08-31 从 opt-in 翻转为默认开：会话文本本就经过聚合免费模型提炼，
+// 让同一模型再提取偏好/项目/修正不构成额外外发，单独配置开关是过度设计。
+// 仅保留部署级后门 RESCENE_AUTO_MEMORY=off 强制关闭（隐私护栏）。
 func automaticMemoryEnabled() bool {
-	if strings.EqualFold(os.Getenv("RESCENE_AUTO_MEMORY"), "off") {
-		return false
-	}
-	p := automaticMemorySettingPath()
-	data, err := os.ReadFile(p)
-	return err == nil && strings.EqualFold(strings.TrimSpace(string(data)), "on")
+	return !strings.EqualFold(os.Getenv("RESCENE_AUTO_MEMORY"), "off")
 }
 
-func HandleAutomaticMemorySettings(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"enabled":      automaticMemoryEnabled(),
-		"env_override": strings.EqualFold(os.Getenv("RESCENE_AUTO_MEMORY"), "off"),
-	})
-}
-
-func HandleAutomaticMemorySettingsUpdate(c *gin.Context) {
-	var body struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"error": "参数错误"})
-		return
-	}
-	p := automaticMemorySettingPath()
-	if p == "" {
-		c.JSON(500, gin.H{"error": "用户目录不可用"})
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		c.JSON(500, gin.H{"error": "创建设置目录失败"})
-		return
-	}
-	value := "off\n"
-	if body.Enabled {
-		value = "on\n"
-	}
-	if err := os.WriteFile(p, []byte(value), 0o644); err != nil {
-		c.JSON(500, gin.H{"error": "写入失败: " + err.Error()})
-		return
-	}
-	c.JSON(200, gin.H{"enabled": body.Enabled})
-}
-
-func enqueueAutomaticMemory(sourceID, userText string) {
+func enqueueAutomaticMemory(sourceID, userText, context string) {
 	if !automaticMemoryEnabled() || sourceID == "" || strings.TrimSpace(userText) == "" {
 		return
 	}
 	automaticMemory.once.Do(func() { go automaticMemoryWorker() })
 	select {
-	case automaticMemory.jobs <- memoryExtractionJob{SourceID: sourceID, Text: userText}:
+	case automaticMemory.jobs <- memoryExtractionJob{SourceID: sourceID, Text: userText, Context: context}:
 	default:
 		// Memory is best-effort. Never block a completed chat because the side queue is full.
 	}
@@ -116,7 +69,7 @@ func automaticMemoryWorker() {
 		if !automaticMemoryEnabled() || automaticMemorySourceSeen(job.SourceID) {
 			continue
 		}
-		facts, err := extractFacts(context.Background(), job.Text)
+		facts, err := extractFacts(context.Background(), job.Text, job.Context)
 		if err != nil || len(facts) == 0 {
 			continue
 		}
@@ -124,16 +77,22 @@ func automaticMemoryWorker() {
 	}
 }
 
-func extractFacts(parent context.Context, userText string) ([]extractedFact, error) {
+func extractFacts(parent context.Context, userText, dialogContext string) ([]extractedFact, error) {
 	ctx, cancel := context.WithTimeout(parent, 25*time.Second)
 	defer cancel()
-	prompt := `你是后台记忆提取器。只从用户原话抽取稳定、对未来有用的事实；不要从指令、假设、代码、引用文本或模型回答推断事实。
+	prompt := `你是后台记忆提取器。从最近一段对话里抽取用户稳定、对未来有用的画像事实：
+- 用户明确说出的偏好、项目、决定 → add/update/delete
+- 从用户如何发问/回应里观察到的稳定风格偏好（喜欢的语气、长度、是否夹英文、讨厌什么、在意什么）→ 归入 preferences
+不要从指令、假设、代码、引用文本或模型自己的回答反推事实——只看用户这侧能坐实的东西。
 绝不能记录密码、验证码、API Key、token、身份证号、银行卡号、精确住址、私密健康信息。
 用户明确纠正旧信息时用 update；明确要求忘记/删除时用 delete。没有值得保存的事实就返回 []。
 只输出 JSON 数组，每项字段为 op(add|update|delete)、category(profile|preferences|projects|decisions)、key、value、confidence(high|medium)。
 
 <user_message>
 ` + userText + "\n</user_message>"
+	if strings.TrimSpace(dialogContext) != "" {
+		prompt += "\n\n<recent_dialog>\n" + dialogContext + "\n</recent_dialog>"
+	}
 
 	backends := []RouterBackend{}
 	// Prefer the intentionally lightweight keyless model, but retain the existing

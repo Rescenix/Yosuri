@@ -1,61 +1,65 @@
 <template>
   <section class="question-bar" role="group" :aria-label="question.question">
-    <div class="question-bar-head">
+    <div class="question-bar-head" @click="collapsed = !collapsed">
+      <Icon icon="mdi:chevron-down" width="14" class="question-bar-chevron" :class="{ collapsed }" />
       <span class="question-bar-mark">?</span>
       <span class="question-bar-title">{{ question.question }}</span>
-      <span v-if="question.multi" class="question-bar-hint">可多选</span>
-      <button class="question-bar-close" type="button" title="跳过" aria-label="跳过此问题" @click="onCancel">×</button>
+      <span v-if="question.multi && !collapsed" class="question-bar-hint">可多选</span>
+      <button class="question-bar-close" type="button" title="跳过" aria-label="跳过此问题" @click.stop="onCancel">×</button>
     </div>
-    <div v-if="question.options.length" class="question-bar-options">
-      <button
-        v-for="(opt, i) in question.options"
-        :key="opt.value || i"
-        class="question-option"
-        :class="{ checked: isChecked(opt.value) }"
-        type="button"
-        :disabled="question.submitting"
-        @click="onToggle(opt.value)"
+    <template v-if="!collapsed">
+      <div v-if="question.options.length" class="question-bar-options">
+        <button
+          v-for="(opt, i) in question.options"
+          :key="opt.value || i"
+          class="question-option"
+          :class="{ checked: isChecked(opt.value) }"
+          type="button"
+          :disabled="question.submitting"
+          @click="onToggle(opt.value)"
+        >
+          <span class="question-option-key">{{ optionKey(i) }}</span>
+          <span class="question-option-label">{{ optionLabel(opt.label, i) }}</span>
+        </button>
+        <form v-if="question.allowOther" class="question-other-row" @submit.prevent="onConfirm">
+          <span class="question-option-key">{{ optionKey(question.options.length) }}</span>
+          <input
+            ref="freeInput"
+            v-model="freeText"
+            class="question-free-input"
+            placeholder="其他（输入你的答案）"
+          />
+          <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">发送</button>
+        </form>
+        <button
+          v-if="question.multi"
+          class="question-submit"
+          type="button"
+          :disabled="question.submitting || (!selected.length && !freeText.trim())"
+          @click="onConfirm"
+        >确认</button>
+      </div>
+
+      <form
+        v-if="!question.options.length"
+        class="question-bar-free"
+        @submit.prevent="onConfirm"
       >
-        <span class="question-option-key">{{ optionKey(i) }}</span>
-        <span class="question-option-label">{{ optionLabel(opt.label, i) }}</span>
-      </button>
-      <form v-if="question.allowOther" class="question-other-row" @submit.prevent="onConfirm">
-        <span class="question-option-key">{{ optionKey(question.options.length) }}</span>
         <input
           ref="freeInput"
           v-model="freeText"
           class="question-free-input"
-          placeholder="其他（输入你的答案）"
+          :placeholder="question.options.length ? '输入其他回答' : '输入你的回答'"
         />
         <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">发送</button>
       </form>
-      <button
-        v-if="question.multi"
-        class="question-submit"
-        type="button"
-        :disabled="question.submitting || (!selected.length && !freeText.trim())"
-        @click="onConfirm"
-      >确认</button>
-    </div>
-
-    <form
-      v-if="!question.options.length"
-      class="question-bar-free"
-      @submit.prevent="onConfirm"
-    >
-      <input
-        ref="freeInput"
-        v-model="freeText"
-        class="question-free-input"
-        :placeholder="question.options.length ? '输入其他回答' : '输入你的回答'"
-      />
-      <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">发送</button>
-    </form>
-    <div v-if="question.error" class="question-error">{{ question.error }}</div>
+      <div v-if="question.error" class="question-error">{{ question.error }}</div>
+    </template>
   </section>
 </template>
 
 <script setup>
+import { Icon } from '@iconify/vue'
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 const props = defineProps({
@@ -66,6 +70,8 @@ const emit = defineEmits(['answer'])
 const selected = ref([])
 const freeText = ref('')
 const freeInput = ref(null)
+// 提问条折叠：点击头部切换，折叠后只剩一行标题，展开才显示选项/自由输入。
+const collapsed = ref(false)
 
 function optionKey(i) {
   return i < 26 ? String.fromCharCode(65 + i) : String(i + 1)
@@ -128,14 +134,23 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   box-sizing: border-box;
   max-width: 100%;
   color: var(--app-text);
-  /* 背景完全透明（Hermes 实际显示）：question 条纯文字浮在聊天内容上，能看到后面聊天 */
-  background: transparent;
-  border: none;
+  /* 半透明玻璃卡片：透出一点背后内容但保留卡片感 */
+  background: color-mix(in srgb, var(--app-surface, #fff) 78%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   box-shadow: none;
+  /* 淡出值来自 --bar-fade（inputBarFadeStyle 内联变量）；hover 立即恢复不透明（Hermes 同款） */
+  opacity: var(--bar-fade, 1);
   transition: opacity 0.2s ease;
   animation: question-bar-in 0.14s ease-out;
 }
+.question-bar:hover { opacity: 1 !important; }
+/* 头部可点击折叠：加 cursor，折叠态标题不用粗体提示（状态由 chevron 表示） */
+.question-bar-head { cursor: pointer; user-select: none; }
+.question-bar-chevron { color: var(--app-text-faint); transition: transform 0.2s ease; }
+.question-bar-chevron.collapsed { transform: rotate(-90deg); }
 .question-error {
   padding: 7px 9px;
   border-radius: 8px;

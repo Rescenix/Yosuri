@@ -93,6 +93,23 @@ function adjustInputHeight() {
   el.style.height = el.scrollHeight + 'px';
 }
 
+// 动态测量输入区（含 todo/ask 条）真实高度 → 设 --input-clearance 变量，
+// 让消息内容底部留出等量空白，消息能滚到输入区/todo 条底下并从透明背景后面透出来（Hermes 式 overlay）。
+function updateInputClearance() {
+  const area = document.querySelector('.chat-input-area')
+  if (!area) return
+  const h = area.offsetHeight
+  document.documentElement.style.setProperty('--input-clearance', h + 'px')
+}
+// 监听输入区尺寸变化（todo/ask 条出现/消失、输入框增高）动态刷新 clearance
+function watchInputClearance() {
+  const area = document.querySelector('.chat-input-area')
+  if (!area) return
+  const ro = new ResizeObserver(() => updateInputClearance())
+  ro.observe(area)
+  updateInputClearance()
+}
+
   // 四态机 Code 工作流（GET /api/code/workflow，EventSource）
   // 流式期间用 forceScrollToBottom：长工作流流式中持续跟底，无视用户是否上滑，
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
@@ -375,6 +392,11 @@ function adjustInputHeight() {
 // 内容，比闪首页顺眼；竞态由 loadAllHistory 里的 id 守卫兜住。
 async function switchSession(id) {
   if (!id || id === sessionId.value) return
+  // 切换会话前清空上一个会话残留的悬浮条（todo 清单 / 未决提问 / 审批条），
+  // 否则旧会话的条会一直挂在输入框上方，换对话还卡着（2026-08-31 实测）。
+  todoState.items = []
+  questionState.pending = null
+  approvalState.pending = []
   sessionId.value = id
   localStorage.setItem('prism_session_id', id)
   // 切会话时同步恢复该会话持久化的真实 token（横条绑定会话，刷新/切换都不丢）
@@ -389,8 +411,8 @@ async function switchSession(id) {
   // 输入框上方悬浮条（todo / askuser）随上滑淡出：距底部越远越透明（仿 Hermes）。
   // scroll 事件里直接算，离底部 0→FADE_RANGE 线性降到保底值，滚回底部恢复 1。
   const inputBarFade = ref(1)
-  const INPUT_BAR_FADE_RANGE = 160 // px：滚出这么远就淡到底
-  const INPUT_BAR_FADE_MIN = 0.02 // 背景已完全透明 + 上滑内容也淡到近乎消失，符合「上滑透明99%」
+  const INPUT_BAR_FADE_RANGE = 350 // px：滑出这么远才淡到保底值（渐变拉平缓，稍微上滑只轻微变淡）
+  const INPUT_BAR_FADE_MIN = 0.3 // 保底透明度：留 30% 存在感，不完全透明（用户要求不能全透明）
   function updateInputBarFade(el) {
     const maxScroll = el.scrollHeight - el.clientHeight
     const dist = Math.max(0, maxScroll - el.scrollTop)
@@ -411,6 +433,9 @@ async function switchSession(id) {
     // 不再写入占位 token 覆盖 GitHub 真登录换来的 JWT。
     await loadAllHistory()
     fetchBalance()
+    // 动态测量输入区高度 → 设 --input-clearance（Hermes 式 overlay：消息可滚到输入区/todo 条底下）
+    // ❌ 疑似思考流式卡顿元凶，先注释隔离测试（2026-08-31）
+    // watchInputClearance()
     // 初始化时恢复当前会话持久化的真实 token（横条绑定会话，刷新不丢）
     sessionTokenStats.value = loadSessionTokenStats(sessionId.value)
   })
