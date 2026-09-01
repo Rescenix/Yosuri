@@ -232,6 +232,52 @@ const displayAvatar = computed(() => {
 })
 const hasCustomAvatar = computed(() => Boolean(customAvatar.value))
 
+// —— 自定义头像持久化（2026-09-01）——
+// 头像此前只存 localStorage，而 WebView2 数据目录随 exe 路径变化会被清空 →
+// 重开应用头像丢失。参照 login token 模式：写盘到后端 rescene_data/custom_avatar，
+// 启动时从后端恢复，不再依赖浏览器存储。fire-and-forget：落盘失败静默，localStorage 仍兜底。
+let cachedBackendBase = ''
+async function backendBase() {
+  if (cachedBackendBase) return cachedBackendBase
+  try {
+    const binding = globalThis.go?.main?.DesktopApp?.BackendURL
+    if (typeof binding === 'function') cachedBackendBase = String(await binding()).replace(/\/+$/, '')
+  } catch { /* 非 Wails 环境 */ }
+  if (!cachedBackendBase) cachedBackendBase = globalThis.__RESCENE_BACKEND_URL__ || ''
+  return cachedBackendBase
+}
+
+async function persistCustomAvatar(dataUrl) {
+  const b = await backendBase()
+  try {
+    await fetch(b + '/api/profile/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: dataUrl })
+    })
+  } catch { /* 本地后端不可达：头像仍在 localStorage，下次再补 */ }
+}
+
+async function clearPersistedAvatar() {
+  const b = await backendBase()
+  try {
+    await fetch(b + '/api/profile/avatar', { method: 'DELETE' })
+  } catch { /* 忽略 */ }
+}
+
+async function restoreCustomAvatar() {
+  const b = await backendBase()
+  try {
+    const res = await fetch(b + '/api/profile/avatar')
+    if (!res.ok) return
+    const data = await res.json()
+    if (data && data.avatar) {
+      customAvatar.value = data.avatar
+      localStorage.setItem(USER_AVATAR_KEY, data.avatar)
+    }
+  } catch { /* 本地后端不可达：保留 localStorage 兜底 */ }
+}
+
 function setCustomAvatar(dataUrl) {
   const value = typeof dataUrl === 'string' ? dataUrl.trim() : ''
   if (!value) {
@@ -240,11 +286,13 @@ function setCustomAvatar(dataUrl) {
   }
   localStorage.setItem(USER_AVATAR_KEY, value)
   customAvatar.value = value
+  persistCustomAvatar(value)
 }
 
 function clearCustomAvatar() {
   localStorage.removeItem(USER_AVATAR_KEY)
   customAvatar.value = ''
+  clearPersistedAvatar()
 }
 
 async function refresh() {
@@ -337,6 +385,7 @@ restoreLoginToken().then(() => {
     fetchIntimacy()
     pullCloudMemory()
   })
+  restoreCustomAvatar()
 })
 if (typeof window !== 'undefined') {
   window.addEventListener('auth-change', refresh)

@@ -37,7 +37,7 @@
 | --- | --- |
 | **🔄 Five-platform sync** | Sessions and long-term memory continue naturally across Windows / Linux / macOS / Android / CLI. You change screens, not your working context |
 | **🤖 Automation loop** | Browser, terminal and real tools form a verifiable execution chain — tasks don't stop at answers, they run to completion |
-| **🔌 Aggregated API** | 98 free models + custom providers unified behind one OpenAI-compatible endpoint, with smart routing that automatically picks the fastest healthy source |
+| **🔌 Aggregated API** | 98 free models + custom providers unified behind one OpenAI & Anthropic-compatible endpoint, with smart routing that automatically picks the fastest healthy source |
 
 ## ✨ Also free, out of the box
 
@@ -50,10 +50,14 @@
 | **⚙️ Settings fully open** | The agent can analyze and modify your configuration — models, persona, web/image sources, skill toggles — no black box |
 | **🛠️ Self-editing skills & on-demand tools** | Skill library with add/remove/enable/disable; native tools slimmed down and loaded on demand (load_tools) |
 | **🧠 Auto memory extraction** | Background pipeline reads your finished conversations, extracts durable facts (profile / preferences / projects / decisions) into a versioned fact ledger — idempotent, atomic, corrected by `update`/`delete`, injected by task relevance instead of bloating every prompt |
+| **📄 Office file delivery** | Agent produces finished Word / PowerPoint / Excel / PDF / CSV / HTML / Markdown files with preview and download — not just code, complete deliverables |
 | **🖱️ Computer Use** | Screenshots, mouse, keyboard, drag & drop, scrolling — it operates your desktop, not just your code |
 | **🛡️ AgentFS change audit** | Every AI file edit gets a snapshot / diff / rollback; dangerous operations require your approval |
+| **🤝 Follow-up guidance** | When a workflow finishes, the AI reviews the result, points out what to polish, and hands you 2-3 one-click next-step suggestions — you're not working alone, it pushes the project forward with you |
 
 ![Free short-drama studio: templates, reference images and generation params on one screen](./assets/rescene-studio.png)
+
+![Follow-up suggestions: after a workflow finishes, the AI proposes your next steps as one-click buttons](./assets/rescene-followup.png)
 
 ---
 

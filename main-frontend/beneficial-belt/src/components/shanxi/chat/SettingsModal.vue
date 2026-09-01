@@ -1303,6 +1303,17 @@
                 <input class="profile-input" v-model="profile.work" type="text" placeholder="比如 软件工程师" />
               </div>
               <div class="profile-row">
+                <span class="profile-label">性别</span>
+                <div class="seg-control" style="min-width:0">
+                  <button class="seg-btn" :class="{ on: profile.gender === '' }" type="button" @click="profile.gender = ''">不透露</button>
+                  <button class="seg-btn" :class="{ on: profile.gender === 'male' }" type="button" @click="profile.gender = 'male'">男</button>
+                  <button class="seg-btn" :class="{ on: profile.gender === 'female' }" type="button" @click="profile.gender = 'female'">女</button>
+                </div>
+              </div>
+              <div class="settings-section-desc" style="margin-top:-4px">
+                设置后 AI 会用「哥哥/先生」或「妹妹/女士」称呼你；不透露则不改变称呼。
+              </div>
+              <div class="profile-row">
                 <span class="profile-label">账号 UID</span>
                 <span v-if="auth.uid.value" class="profile-uid">UID {{ auth.uid.value }}</span>
                 <span v-else class="profile-uid faint">登录后永久保留</span>
@@ -3120,7 +3131,7 @@ async function removeSkill(skill) {
   } catch (e) { errorMsg.value = e.message }
 }
 // ============ Profile ============
-const profile = ref({ full_name: '', work: '', instructions: '' })
+const profile = ref({ full_name: '', work: '', instructions: '', gender: '' })
 
 // 记忆 tab：直接渲染后端 /api/memory/inject 返回的真实注入段（system / memory 两段），
 // 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
@@ -3287,7 +3298,8 @@ async function loadProfile() {
       profile.value = {
         full_name: data.full_name || '',
         work: data.work || '',
-        instructions: data.instructions || ''
+        instructions: data.instructions || '',
+        gender: data.gender || ''
       }
     }
   } catch (e) {}

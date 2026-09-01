@@ -76,20 +76,16 @@
         </div>
       </div>
 
-      <!-- 截图是工作流中的一条内容：默认紧凑预览，点开才展示完整尺寸。 -->
-      <button
-        v-else-if="group.type === 'image'"
-        type="button"
-        class="flow-screenshot"
-        :class="{ expanded: group.block.expanded }"
-        @click="group.block.expanded = !group.block.expanded"
-      >
-        <span class="flow-screenshot-head">
-          <span><Icon icon="mdi:image-outline" width="14" /> 页面截图</span>
-          <span>{{ group.block.expanded ? '收起' : '展开' }}</span>
-        </span>
-        <img :src="group.block.image" :alt="group.block.content || 'Agent 截图'" />
-      </button>
+      <!-- 截图：不再折叠，默认直接展示完整图片。 -->
+            <div
+              v-else-if="group.type === 'image'"
+              class="flow-screenshot"
+            >
+              <span class="flow-screenshot-head">
+                <span><Icon icon="mdi:image-outline" width="14" /> 页面截图</span>
+              </span>
+              <img :src="group.block.image" :alt="group.block.content || 'Agent 截图'" />
+            </div>
 
       <!-- 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式，默认展开可播） -->
       <div v-else-if="group.type === 'video'" class="flow-video">
@@ -281,9 +277,24 @@
       </TransitionGroup>
     </div>
 
-    <!-- 改动文件：工作流收尾固定内嵌在最底部（像引用来源一样平铺）。
-         列出本次会话改过的文件，逐个预览 diff / 一键回退到工作流前版本。
-         数据源 flow.changedFiles（后端 workflow_done 下发，各收尾分支都有）。 -->
+    <!-- 建议按钮：工作流结束后模型自己觉得有值得一键推进的建议，出一行按钮，点击即填入输入框发送。
+             沿 Hermes 风格轻量悬浮卡片，紧贴 changed-files 上方。 -->
+        <div v-if="flow.suggestions && flow.suggestions.length" class="flow-suggestions">
+          <div class="flow-suggestions-title">要继续吗？</div>
+          <div class="flow-suggestions-row">
+            <button
+              v-for="(s, i) in flow.suggestions"
+              :key="i"
+              type="button"
+              class="flow-suggestion-btn"
+              @click="sendSuggestion(s)"
+            >{{ s }}</button>
+          </div>
+        </div>
+
+        <!-- 改动文件：工作流收尾固定内嵌在最底部（像引用来源一样平铺）。
+             列出本次会话改过的文件，逐个预览 diff / 一键回退到工作流前版本。
+             数据源 flow.changedFiles（后端 workflow_done 下发，各收尾分支都有）。 -->
     <div v-if="flow.changedFiles && flow.changedFiles.length" class="flow-changed-files">
       <div class="flow-refs-title">本次改动 {{ flow.changedFiles.length }} 个文件</div>
       <div class="flow-changed-list">
@@ -436,6 +447,14 @@ function currentProjectName() {
     }
   } catch {}
   return ''
+}
+
+// 建议按钮：把模型给出的 follow-up 建议抛给 ChatWidget，由它填入输入框并发送。
+// 用 window 自定义事件跨组件通信（AgentWorkflowPanel 只有 flow prop，无 emit 通道；
+// ChatWidget 侧监听 'workflow-suggestion' 后填输入框 + handleSend）。
+function sendSuggestion(text) {
+  if (!text || !text.trim()) return
+  window.dispatchEvent(new CustomEvent('workflow-suggestion', { detail: { text: text.trim() } }))
 }
 
 // diff 原始文本 → 行数组（保留行首 +/− 符号作为增删标记，不做红绿双重显示）
@@ -1839,10 +1858,10 @@ function toolBodyText(b) {
 .flow-file-btn.download:hover { border-color: var(--app-accent); color: var(--app-accent); }
 .flow-file-err { font-size: 11px; color: #d94834; }
 
-/* 截图默认只占一行半的紧凑预览，不抢走聊天阅读节奏；点击后才展开全图。 */
+/* 截图：默认直接完整展示（不折叠、不点击展开） */
 .flow-screenshot {
   display: block;
-  width: min(100%, 360px);
+  width: min(100%, 680px);
   margin: 10px 0;
   padding: 0;
   overflow: hidden;
@@ -1850,7 +1869,6 @@ function toolBodyText(b) {
   border-radius: 10px;
   background: var(--app-surface-2);
   color: var(--app-text-soft);
-  cursor: pointer;
   text-align: left;
   transition: border-color .16s ease, box-shadow .16s ease;
 }
@@ -1869,14 +1887,11 @@ function toolBodyText(b) {
 .flow-screenshot img {
   display: block;
   width: 100%;
-  height: 72px;
-  object-fit: cover;
-  object-position: top;
+  height: auto;
+  max-height: 520px;
+  object-fit: contain;
   background: var(--app-surface-3);
-  transition: height .2s ease;
 }
-.flow-screenshot.expanded { width: min(100%, 680px); }
-.flow-screenshot.expanded img { height: auto; max-height: 520px; object-fit: contain; }
 
 /* ---------- 操作行 ---------- */
 /* 收起态就是一行正文：无边框、无底色、无徽章，字号字色跟 .flow-intent 一致，
@@ -2031,6 +2046,42 @@ function toolBodyText(b) {
   color: var(--app-text);
   line-height: 1.5;
   word-break: break-word;
+}
+
+/* ============ 建议按钮（工作流结束后模型 follow-up） ============ */
+.flow-suggestions {
+  margin-top: 8px;
+  padding: 8px 0;
+  border-top: 1px dashed var(--app-border);
+}
+.flow-suggestions-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--app-text-soft);
+  margin-bottom: 6px;
+}
+.flow-suggestions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.flow-suggestion-btn {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--app-accent) 6%, transparent);
+  color: var(--app-accent);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+  max-width: 100%;
+}
+.flow-suggestion-btn:hover {
+  background: color-mix(in srgb, var(--app-accent) 16%, transparent);
+  border-color: var(--app-accent);
 }
 
 /* ============ 改动文件卡片（内嵌工作流底部） ============ */

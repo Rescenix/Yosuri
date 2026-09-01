@@ -631,8 +631,16 @@
               </div>
 
               <!-- 输入框容器：外层改列布局，附件预览条占一整行浮在文字行上方，
-                   原来的横向内容（占位符/textarea/按钮）收进 .input-row 保持不变 -->
-              <div class="input-wrapper" style="position: relative;">
+                                 原来的横向内容（占位符/textarea/按钮）收进 .input-row 保持不变 -->
+                            <div class="input-wrapper" style="position: relative;">
+                                                        <!-- 后台任务/子代理悬浮条：有进行中的任务时显示，紧贴输入框上沿 -->
+                                                        <div v-if="runningTaskCount > 0" class="input-running-tasks-bar" @click.stop="toggleDockPanel('tasks')">
+                                                          <Icon icon="mdi:loading" width="13" class="rt-spin" />
+                                                          <template v-if="runningSubagentCount > 0"><span>{{ runningSubagentCount }} 个子代理进行中</span></template>
+                                                          <template v-if="runningBgTaskCount > 0"><span>{{ runningBgTaskCount }} 个后台任务进行中</span></template>
+                                                          <template v-if="runningSubagentCount === 0 && runningBgTaskCount === 0"><span>{{ runningTaskCount }} 个任务进行中</span></template>
+                                                          <Icon icon="mdi:chevron-up" width="14" class="rt-caret" />
+                                                        </div>
                 <!-- 粘贴图片提示 -->
                 <div v-if="visionStatus" class="vision-status-toast" :class="{ error: visionStatus === 'error' }">
                   <template v-if="visionStatus === 'analyzing'">
@@ -672,16 +680,7 @@
                      真正的文字内容只在发送那一刻才拼进正文（buildOutgoingMessage） -->
                 <AttachmentChipRow :attachments="attachments" removable @remove="removeAttachment" />
 
-                <!-- 后台任务/子代理悬浮条：有进行中的任务时显示在输入框上方，点击展开任务面板 -->
-                <div v-if="runningTaskCount > 0" class="input-running-tasks-bar" @click.stop="toggleDockPanel('tasks')">
-                  <Icon icon="mdi:loading" width="13" class="rt-spin" />
-                  <template v-if="runningSubagentCount > 0"><span>{{ runningSubagentCount }} 个子代理进行中</span></template>
-                  <template v-if="runningBgTaskCount > 0"><span>{{ runningBgTaskCount }} 个后台任务进行中</span></template>
-                  <template v-if="runningSubagentCount === 0 && runningBgTaskCount === 0"><span>{{ runningTaskCount }} 个任务进行中</span></template>
-                  <Icon icon="mdi:chevron-up" width="14" class="rt-caret" />
-                </div>
-
-                <div class="input-row">
+                                <div class="input-row">
                   <!-- 渐变动画的浮动占位符 -->
                   <transition name="fade-placeholder" mode="out-in">
                     <span v-if="!userInput.trim() && attachments.length === 0" :key="randomPlaceholder" class="input-placeholder-text">
@@ -699,8 +698,8 @@
                   <button v-if="flowState.active && !userInput.trim() && attachments.length === 0" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
                     <Icon icon="mdi:stop" width="16" color="#fff" />
                   </button>
-                  <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn input-send-btn" @click="handleSend">
-                    <Icon icon="fluent-mdl2:up" width="18" color="#fff" />
+                  <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn" :class="flowState.active ? 'input-steer-btn' : 'input-send-btn'" @click="handleSend" :title="flowState.active ? '发送插话给工作流（不打断，模型下一轮处理）' : '发送消息'">
+                    <Icon :icon="flowState.active ? 'mdi:send' : 'fluent-mdl2:up'" width="18" color="#fff" />
                   </button>
                 </div>
               </div>
@@ -3419,6 +3418,7 @@ function onChatInputKeydown(e) {
     e.target.value = text
     e.target.dispatchEvent(new Event('input', {bubbles: true}))
     nextTick(adjustInputHeight)
+    flashInputSwap(e.target)
   } else if (e.key === 'ArrowDown') {
     if (chatHistoryIndex.value === -1) return
     e.preventDefault()
@@ -3434,7 +3434,16 @@ function onChatInputKeydown(e) {
     e.target.value = text
     e.target.dispatchEvent(new Event('input', {bubbles: true}))
     nextTick(adjustInputHeight)
+    flashInputSwap(e.target)
   }
+}
+
+// 历史切换（↑/↓）时给输入框做一次轻淡入：先摘掉类 → 强制 reflow → 重新加上，
+// 让 CSS 动画每次切换都重新触发（摘类同一帧内完成，视觉上无闪烁）。
+function flashInputSwap(el) {
+  el.classList.remove('chat-input-swap')
+  void el.offsetWidth
+  el.classList.add('chat-input-swap')
 }
 
 // ★ 直连流式模式下的思考区域「瀑布滚动」：思考 text 流式追加时滚到底，避免置顶不动。
@@ -4031,17 +4040,33 @@ onMounted(() => {
     window.addEventListener('session-title-pending', onSessionTitlePending)
     startNotifPoll()
     // 右键菜单「粘贴」如果剪贴板是图片，DesktopFloatingMenu 会 dispatch paste-image
-    window.addEventListener('paste-image', onPasteImageFromMenu)
-  })
-  onUnmounted(() => {
-    window.removeEventListener('keydown', onGlobalDockShortcut)
-    window.removeEventListener('resize', syncAgentFSTreeViewport)
-    window.clearInterval(agentFSPollTimer)
-    window.removeEventListener('session-title-update', onSessionTitleUpdate)
-    window.removeEventListener('session-title-pending', onSessionTitlePending)
-    window.removeEventListener('paste-image', onPasteImageFromMenu)
-    stopNotifPoll()
-  })
+      window.addEventListener('paste-image', onPasteImageFromMenu)
+      // 工作流建议按钮：AgentWorkflowPanel 点 follow-up 建议时抛事件，这里填入输入框并发送
+      window.addEventListener('workflow-suggestion', onWorkflowSuggestion)
+    })
+    onUnmounted(() => {
+      window.removeEventListener('keydown', onGlobalDockShortcut)
+      window.removeEventListener('resize', syncAgentFSTreeViewport)
+      window.clearInterval(agentFSPollTimer)
+      window.removeEventListener('session-title-update', onSessionTitleUpdate)
+      window.removeEventListener('session-title-pending', onSessionTitlePending)
+      window.removeEventListener('paste-image', onPasteImageFromMenu)
+      window.removeEventListener('workflow-suggestion', onWorkflowSuggestion)
+      stopNotifPoll()
+    })
+    // 工作流建议按钮点击：把建议文本填进输入框并发送，用户不用打字。
+    function onWorkflowSuggestion(e) {
+    const text = e.detail && e.detail.text
+    if (!text || !text.trim()) return
+    userInput.value = text.trim()
+    nextTick(() => {
+      if (chatInputRef.value) {
+        chatInputRef.value.style.height = 'auto'
+        adjustInputHeight()
+      }
+      handleSend()
+    })
+    }
 // 右键菜单粘贴图片：与 Ctrl+V（handlePaste）走同一条附件路
 function onPasteImageFromMenu(e) {
   const file = e.detail && e.detail.file
@@ -4069,22 +4094,31 @@ async function refreshGitGraph() {
    但显式约束一下成本很低，避免任何万一 */
 .chat-widget-root { height: 100%; overflow: hidden; }
 
-/* 后台任务/子代理悬浮条：输入框上方，有进行中任务时显示 */
-.input-running-tasks-bar {
+/* 后台任务/子代理悬浮条：输入框上方，有进行中任务时显示，紧贴输入框上沿 */
+.input-wrapper > .input-running-tasks-bar {
+  position: absolute;
+  /* 全宽 + 居中 + max-width 封顶，跟输入框卡片 / todo-bar 同宽同中线 */
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  bottom: 100%;
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 7px 12px;
-  margin-bottom: 8px;
   font-size: 12.5px;
   color: var(--app-accent);
   background: color-mix(in srgb, var(--app-accent) 10%, var(--app-surface));
   border: 1px solid color-mix(in srgb, var(--app-accent) 35%, transparent);
-  border-radius: 10px;
+  border-bottom: none;
+  border-radius: 0;
   cursor: pointer;
   transition: background 0.2s ease;
 }
-.input-running-tasks-bar:hover { background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface)); }
+.input-wrapper > .input-running-tasks-bar:hover { background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface)); }
 .rt-spin { animation: rt-spin 1s linear infinite; }
 @keyframes rt-spin { to { transform: rotate(360deg); } }
 .rt-sub { color: var(--app-text-faint); font-size: 11px; }

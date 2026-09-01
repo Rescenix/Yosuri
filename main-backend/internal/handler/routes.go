@@ -155,6 +155,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.DELETE("/api/mcp/registry/:name", HandleUninstallRegistryMCP)
 	r.GET("/api/profile", HandleGetProfile)
 	r.POST("/api/profile", HandleSaveProfile)
+	r.GET("/api/profile/avatar", HandleGetAvatar)
+	r.POST("/api/profile/avatar", HandleSaveAvatar)
+	r.DELETE("/api/profile/avatar", HandleClearAvatar)
 
 	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
 	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)

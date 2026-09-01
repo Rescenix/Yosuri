@@ -2373,6 +2373,25 @@ min-height: 90px !important;
 .input-stop-btn { width: 28px; height: 28px; background: #1a1a1a; }
 .input-stop-btn:hover { background: #000000; }
 
+/* 中途插话（steer）导航按钮：区别于发送按钮，用主题色 accent + 斜向右上纸飞机，
+   提示「这是插话/导航」而非「发新消息」；flowState.active 时替换发送按钮。 */
+.input-steer-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--app-accent) 16%, transparent);
+  color: var(--app-accent);
+  box-shadow: none;
+}
+.input-steer-btn:hover { background: color-mix(in srgb, var(--app-accent) 28%, transparent); }
+
+/* 历史切换（↑/↓）轻淡入：文本替换的瞬间做一次短促上移+淡入，避免生硬跳变 */
+.chat-input-swap { animation: chat-input-swap-in 0.16s ease-out; }
+@keyframes chat-input-swap-in {
+  from { opacity: 0.3; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* Context window 用量常驻横条本体样式在上面 .context-bar-widget 那组里；
    这里只剩点开横条后的输入/输出 token 细分弹窗 */
 .token-usage-panel { position: absolute; top: calc(100% - 46px); right: -220px; width: 240px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14); padding: 12px 14px; z-index: 30; }

@@ -665,6 +665,10 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             // 改动文件卡片：工作流收尾固定内嵌在工作流卡片最底部（像引用来源一样）。
             // 无论正常/失败/停止/预算耗尽收尾都展示，可预览 diff / 一键回退。
             flow.changedFiles = Array.isArray(d.changed_files) ? d.changed_files : []
+            // 模型自己提出的 follow-up 建议（workflow_done 附带，模型判断有值得一键推进
+            // 的建议才给，没有就是空）：卡片底部渲染一行按钮，点击即把建议填进输入框发送，
+            // 不用打字。
+            flow.suggestions = Array.isArray(d.suggestions) ? d.suggestions : []
                         currentFlow = null
                         closeStream()
                         // 工作流结束 = 可能改了文件，通知文件树刷新

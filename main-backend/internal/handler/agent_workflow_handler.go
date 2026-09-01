@@ -703,6 +703,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			deleteWorkflowCheckpoint(workflowID)
 			// agent 决定结束对话：跑一次 build + 截图校验（旁路，失败不阻断）
 			verifyOnWorkflowDone(c, workflowID)
+			// follow-up 建议（旁路，失败不阻断）：模型生成的继续推进方向，
+			// 前端渲染成按钮行，用户免打字直接点。和 QuestionModal 无关——那是 ask_user。
+			suggestions := suggestFollowUp(task, content, transcript)
 			// 本次会话改过的文件列表（AgentFS 审计聚合），随 workflow_done 下发，
 			// 前端收到后弹「改动文件卡片」：逐个预览 diff / 一键回退到工作流前版本。
 			// 所有收尾分支（completed/stopped/failed/预算耗尽/上游错误）都带，断联也算。
@@ -711,6 +714,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"input_tokens": inputTokens, "output_tokens": outputTokens,
 				"conversation_tokens": conversationTokens(inputTokens, staticSum),
 				"changed_files":       changedFilesPayload(),
+				"suggestions":         suggestions,
 			})
 			go generateSkillAsync(task, transcript)
 			return

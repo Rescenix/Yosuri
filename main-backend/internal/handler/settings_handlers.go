@@ -120,6 +120,7 @@ type UserProfile struct {
 	FullName     string `json:"full_name"`
 	Work         string `json:"work"`
 	Instructions string `json:"instructions"`
+	Gender       string `json:"gender"` // male / female / ""（未设置）
 }
 
 var profileMu sync.Mutex
@@ -191,6 +192,14 @@ func userInstructionsPrompt() string {
 	if s := strings.TrimSpace(p.FullName); s != "" {
 		b.WriteString("\n用户的昵称是：" + s + "，请用这个称呼他/她。")
 	}
+	if s := strings.TrimSpace(p.Gender); s != "" {
+		switch s {
+		case "male":
+			b.WriteString("\n用户的性别是男，请用「哥哥」或「先生」这类称呼。")
+		case "female":
+			b.WriteString("\n用户的性别是女，请用「妹妹」或「女士」这类称呼。")
+		}
+	}
 	if s := strings.TrimSpace(p.Work); s != "" {
 		b.WriteString("\n用户的职业/身份：" + s + "。")
 	}
@@ -198,4 +207,68 @@ func userInstructionsPrompt() string {
 		b.WriteString("\n\n用户的自定义指令（请始终遵循）：\n" + s)
 	}
 	return b.String()
+}
+
+// ---------------- 自定义头像持久化（2026-09-01） ----------------
+// 头像此前只存前端 localStorage，而 WebView2 数据目录随 exe 路径变化会被清空，
+// 导致重新打开应用头像丢失。参照 login token 落盘模式，把头像 base64 写进
+// rescene_data/custom_avatar，启动时由前端从后端恢复，不再依赖浏览器存储。
+
+func customAvatarPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(homeDir, "rescene_data")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "custom_avatar"), nil
+}
+
+// HandleGetAvatar GET /api/profile/avatar —— 读本地持久化的自定义头像（base64 dataURL）。
+func HandleGetAvatar(c *gin.Context) {
+	p, err := customAvatarPath()
+	if err != nil || p == "" {
+		c.JSON(http.StatusOK, gin.H{"avatar": ""})
+		return
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"avatar": ""})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"avatar": string(data)})
+}
+
+// HandleSaveAvatar POST /api/profile/avatar {data} —— 保存自定义头像到本地文件。
+func HandleSaveAvatar(c *gin.Context) {
+	var req struct {
+		Data string `json:"data"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求体不是合法 JSON"})
+		return
+	}
+	p, err := customAvatarPath()
+	if err != nil || p == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户目录不可用"})
+		return
+	}
+	if err := os.WriteFile(p, []byte(req.Data), 0o644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// HandleClearAvatar DELETE /api/profile/avatar —— 清除本地自定义头像文件。
+func HandleClearAvatar(c *gin.Context) {
+	p, err := customAvatarPath()
+	if err != nil || p == "" {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+	_ = os.Remove(p)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

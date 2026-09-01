@@ -444,13 +444,13 @@ const readSkillToolName = "read_skill"
 
 const skillManageToolName = "skill_manage"
 
-// skill_manage 仅供用户明确要求保存流程时使用；常规自动学习走后台质量门槛，
+// skill_manage 是 Agent 主动沉淀/修正技能的入口；常规自动学习走后台质量门槛，
 // 两者都直接启用，不设置人工审阅台阶。
 var skillManageToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name:        skillManageToolName,
-		Description: "创建或更新一个自研技能。仅在用户明确要求保存工作流经验时使用；技能必须是可复用、可验证的具体流程。action=create 新建（同名拒绝）；action=update 更新已有技能内容。",
+		Description: "创建或更新一个自研技能。技能是你（Agent）自己的资产：复杂任务做完、踩坑改对非平凡流程后主动 create 沉淀；发现已有技能过时/不完整/写错时主动 update 修正（保留使用计数），不用等用户开口。技能必须可复用、可验证。action=create 新建（同名拒绝）；action=update 更新已有技能内容。",
 		Parameters: core.ToolParameters{Type: "object", Properties: map[string]core.ToolProperty{
 			"action":       {Type: "string", Description: "create=新建（默认，同名拒绝）；update=更新已有技能（保留使用计数与创建时间）"},
 			"name":         {Type: "string", Description: "kebab-case 英文技能名"},
