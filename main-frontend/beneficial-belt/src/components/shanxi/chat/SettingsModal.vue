@@ -2156,15 +2156,19 @@ const AGG_ACTIVE_KEY = 'aggActiveTag'
 const customTags = ref([])
 try {
   const saved = JSON.parse(localStorage.getItem(AGG_TAGS_KEY) || '[]')
-  customTags.value = saved.length ? saved.map(t => ({ id: t.id, name: t.name, editing: false })) : [{ id: 'default', name: '用户自定义', editing: false }]
+  // 2026-08-31 修复：每个标签的 modelIds 必须一并持久化。此前 persistTags 只写
+  // {id,name}，重启(开机自启)后各标签勾选模型全丢、面板回退官方。modelIds 未存
+  // 过的旧数据兜底为 []。
+  customTags.value = saved.length ? saved.map(t => ({ id: t.id, name: t.name, editing: false, modelIds: Array.isArray(t.modelIds) ? t.modelIds : [] })) : [{ id: 'default', name: '用户自定义', editing: false, modelIds: [] }]
 } catch (e) {
-  customTags.value = [{ id: 'default', name: '用户自定义', editing: false }]
+  customTags.value = [{ id: 'default', name: '用户自定义', editing: false, modelIds: [] }]
 }
-if (!customTags.value.find(t => t.id)) customTags.value = [{ id: 'default', name: '用户自定义', editing: false }]
+if (!customTags.value.find(t => t.id)) customTags.value = [{ id: 'default', name: '用户自定义', editing: false, modelIds: [] }]
 const activeTagId = ref(localStorage.getItem(AGG_ACTIVE_KEY) || (customTags.value[0] && customTags.value[0].id) || 'default')
 const activeTag = () => customTags.value.find(t => t.id === activeTagId.value) || customTags.value[0]
 function persistTags() {
-  localStorage.setItem(AGG_TAGS_KEY, JSON.stringify(customTags.value.map(t => ({ id: t.id, name: t.name }))))
+  // 2026-08-31 修复：modelIds 一并写进 localStorage，重启后每个标签的勾选可恢复。
+  localStorage.setItem(AGG_TAGS_KEY, JSON.stringify(customTags.value.map(t => ({ id: t.id, name: t.name, modelIds: t.modelIds || [] }))))
   localStorage.setItem(AGG_ACTIVE_KEY, activeTagId.value)
 }
 function loadActiveTagModels() {
