@@ -32,7 +32,7 @@ func main() {
 	app.startTray()
 	app.startOverlay()
 	err := wails.Run(&options.App{
-		Title:             "Rescene Agent",
+		Title:             "Yosuri",
 		Width:             1200,
 		Height:            800,
 		MinWidth:          1024,

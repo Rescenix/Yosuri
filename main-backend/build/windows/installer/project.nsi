@@ -40,7 +40,7 @@ Unicode true
 
 # Keep the installed application name for metadata and migration, while using
 # the shorter customer-facing name for Start menu and desktop shortcuts.
-!define SHORTCUT_NAME "Rescene"
+!define SHORTCUT_NAME "Yosuri"
 
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
