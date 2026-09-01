@@ -1,7 +1,7 @@
 [中文](./README.zh-CN.md) · [English](./README.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
-  <img src="./assets/rescene-icon.png" alt="Ameko" width="96" style="vertical-align: middle; margin-right: 16px;">
+  <img src="./assets/rescene-icon.png" alt="Yosuri" width="96" style="vertical-align: middle; margin-right: 16px;">
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
@@ -13,12 +13,12 @@
 
 ```powershell
 # Windows — 한 줄로 모든 무료 모델 연결 (설치 불필요, API Key 불필요)
-powershell -c "irm https://raw.githubusercontent.com/Rescenix/Ameko/main/agent-os/install.ps1 | iex"
+powershell -c "irm https://raw.githubusercontent.com/Rescenix/Yosuri/main/agent-os/install.ps1 | iex"
 ```
 
 ```bash
 # Linux / macOS / git-bash — 아키텍처 자동 감지
-curl -fsSL https://raw.githubusercontent.com/Rescenix/Ameko/main/agent-os/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Rescenix/Yosuri/main/agent-os/install.sh | sh
 ```
 
 <p align="center">
@@ -34,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/Ameko/main/agent-os/instal
 </p>
 
 <p align="center">
-  <img src="./assets/preview.gif" alt="Ameko 데모" width="100%">
+  <img src="./assets/preview.gif" alt="Yosuri 데모" width="100%">
 </p>
 
 ---
@@ -74,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/Rescenix/Ameko/main/agent-os/instal
 - **초경량** — 브라우저 미포함(미리보기는 시스템 Edge 사용), Node.js / Python 불필요.
 - **자동 업데이트** — 새 버전이 나오면 최신 Setup을 받아 덮어쓰기 설치, 설정은 유지.
 
-👉 **[https://rescene.shanca.me/](https://rescene.shanca.me/)** 👈 최신 릴리스를 가장 빠르게 다운로드.
+👉 **[https://yosuri.com/](https://yosuri.com/)** 👈 최신 릴리스를 가장 빠르게 다운로드.
 
 ## ⚙️ 첫 사용
 
@@ -93,7 +93,7 @@ cd main-frontend/beneficial-belt && npm install && npm run dev   # 프론트엔�
 
 ## 💬 피드백 및 라이선스
 
-- 🐛 버그 / 제안 → [GitHub Issues](https://github.com/Rescenix/Ameko/issues)
+- 🐛 버그 / 제안 → [GitHub Issues](https://github.com/Rescenix/Yosuri/issues)
 - Windows 릴리즈는 CI에서 빌드되고 SignPath로 서명됩니다 ([정책](./docs/CODE_SIGNING_POLICY.md))
 - 코어 코드: [AGPL-3.0 License](./LICENSE)
 

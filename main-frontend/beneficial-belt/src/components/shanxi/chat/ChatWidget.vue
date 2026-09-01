@@ -65,7 +65,7 @@
           <!-- 顶部：品牌标识；搜索与定时任务收进右上角，和 Codex 侧栏保持一致 -->
                     <div class="gem-top">
                                 <div class="gem-brand-wrap">
-                                  <span v-if="sidebarOpen" class="gem-brand-text">Ameko</span>
+                                  <span v-if="sidebarOpen" class="gem-brand-text">Yosuri</span>
                                 </div>
                                 <div v-if="sidebarOpen" class="gem-top-actions">
                                   <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话" aria-label="搜索对话">

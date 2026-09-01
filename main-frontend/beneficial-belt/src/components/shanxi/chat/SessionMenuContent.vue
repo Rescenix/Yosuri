@@ -473,14 +473,14 @@ const auth = useAuth()
 const { t, isZh, setLocale } = useI18n()
 const langMenuOpen = ref(false)
 // 帮助 → 跳官网文档页（AMEKO 官网 docs.html）
-const AMEKO_DOCS_URL = 'https://ameko.shanca.me/docs.html'
+const AMEKO_DOCS_URL = 'https://yosuri.com/docs.html'
 function openHelp() {
   accountMenuOpen.value = false
   langMenuOpen.value = false
   window.open(AMEKO_DOCS_URL, '_blank', 'noopener')
 }
 const avatarFallback = computed(() => {
-  const label = String(auth.displayName.value || 'Ameko').trim()
+  const label = String(auth.displayName.value || 'Yosuri').trim()
   return (label.charAt(0) || 'R').toUpperCase()
 })
 
@@ -806,7 +806,7 @@ function shareCard() {
   })
   // 页脚
   g.fillStyle = '#94a3b8'; g.font = '600 12px sans-serif'; g.textAlign = 'center'
-  g.fillText('数据来自真实使用记录 · Ameko', W / 2, H - 18)
+  g.fillText('数据来自真实使用记录 · Yosuri', W / 2, H - 18)
   g.textAlign = 'left'
   // 下载
   const a = document.createElement('a')

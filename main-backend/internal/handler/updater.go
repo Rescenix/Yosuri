@@ -25,9 +25,9 @@ var AppVersion = "0.0.0-dev"
 
 const (
 	updateRepoOwner = "Rescenix"
-	updateRepoName  = "Ameko"
+	updateRepoName  = "Yosuri"
 	// 官网 update.json 优先（国内可达的 Cloudflare CDN），GitHub API 兜底
-	siteUpdateURL  = "https://rescene.shanca.me/update.json"
+	siteUpdateURL  = "https://yosuri.com/update.json"
 	// 2026-08-28 用户定稿：官网一更新要尽快触发后台自动下载 → 缓存 TTL 30min→60s。
 	// update.json 是静态小 JSON、Cloudflare Pages 项目级缓存已 Disabled，压力可忽略；
 	// GitHub 兜底未认证 API 限 60 次/小时/IP——官网可达时走官网不触发，官网挂了兜底超限也只是静默。
@@ -96,7 +96,7 @@ func sanitizeReleaseNotes(s string) string {
 	out := make([]string, 0, len(lines))
 	for _, ln := range lines {
 		trim := strings.TrimSpace(ln)
-		if strings.Contains(trim, "安装包统一放官网下载") || strings.Contains(trim, "rescene.shanca.me/download") {
+		if strings.Contains(trim, "安装包统一放官网下载") || strings.Contains(trim, "yosuri.com/download") {
 			continue
 		}
 		out = append(out, ln)
@@ -136,7 +136,7 @@ func HandleCheckUpdate(c *gin.Context) {
 }
 
 // checkUpdate 检查最新版本是否比当前版本新。
-// 数据源顺序：官网 update.json（rescene.shanca.me，Cloudflare CDN，国内可达）
+// 数据源顺序：官网 update.json（yosuri.com，Cloudflare CDN，国内可达）
 // → GitHub API 兜底（Release 基准）。两者都失败返回错误，前端静默不打扰。
 func checkUpdate() (*updateInfo, error) {
 	updateMu.Lock()

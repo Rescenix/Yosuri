@@ -1,7 +1,7 @@
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
-  <img src="./assets/rescene-icon.png" alt="Ameko" width="96" style="vertical-align: middle; margin-right: 16px;">
+  <img src="./assets/rescene-icon.png" alt="Yosuri" width="96" style="vertical-align: middle; margin-right: 16px;">
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
@@ -15,11 +15,11 @@
 </p>
 
 <p align="center">
-  <a href="https://rescene.shanca.me/download.html">
+  <a href="https://yosuri.com/download.html">
     <img src="https://img.shields.io/badge/下载-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="下载">
   </a>
-  <a href="https://rescene.shanca.me/">
-    <img src="https://img.shields.io/badge/官网-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="官网">
+  <a href="https://yosuri.com/">
+    <img src="https://img.shields.io/badge/官网-yosuri.com-4FC08D.svg?style=for-the-badge" alt="官网">
   </a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0"></a>
   <img src="https://img.shields.io/badge/Release-v0.2.4-blue" alt="Release v0.2.4">
@@ -27,7 +27,7 @@
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>
 
-![Ameko 工作台概览](./assets/rescene-main.png)
+![Yosuri 工作台概览](./assets/rescene-main.png)
 
 ---
 
@@ -59,7 +59,7 @@
 
 ## 🚀 下载与安装
 
-👉 **[https://rescene.shanca.me/download.html](https://rescene.shanca.me/download.html)** 👈
+👉 **[https://yosuri.com/download.html](https://yosuri.com/download.html)** 👈
 
 | 平台 | 方式 |
 | --- | --- |
@@ -88,6 +88,6 @@ cd main-frontend/beneficial-belt && npm install && npm run dev
 
 ## 💬 反馈与协议
 
-- 🐛 Bug / 建议 → [GitHub Issues](https://github.com/Rescenix/Ameko/issues)
+- 🐛 Bug / 建议 → [GitHub Issues](https://github.com/Rescenix/Yosuri/issues)
 - 💬 交流 → [QQ 群 796474621](https://qm.qq.com/q/796474621)
 - 核心代码：[AGPL-3.0 License](./LICENSE)

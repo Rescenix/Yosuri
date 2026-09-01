@@ -9,7 +9,7 @@
               <Icon icon="mdi:puzzle-outline" width="22" />
               <span>插件市场</span>
             </div>
-            <p class="plugins-market-subtitle">发现并安装插件和技能，扩展 Ameko 的能力。</p>
+            <p class="plugins-market-subtitle">发现并安装插件和技能，扩展 Yosuri 的能力。</p>
           </div>
           <div class="plugins-market-actions">
             <button class="pm-head-btn" @click="onManage">

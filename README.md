@@ -1,7 +1,7 @@
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 
 <p align="center">
-  <img src="./assets/rescene-icon.png" alt="Ameko" width="96" style="vertical-align: middle; margin-right: 16px;">
+  <img src="./assets/rescene-icon.png" alt="Yosuri" width="96" style="vertical-align: middle; margin-right: 16px;">
   <b style="font-size: 26px; letter-spacing: 2px;">"LESS CHAT, MORE AUTOMATIC"</b>
 </p>
 
@@ -15,11 +15,11 @@
 </p>
 
 <p align="center">
-  <a href="https://rescene.shanca.me/download.html">
+  <a href="https://yosuri.com/download.html">
     <img src="https://img.shields.io/badge/Download-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-4FC08D.svg?style=for-the-badge" alt="Download">
   </a>
-  <a href="https://rescene.shanca.me/">
-    <img src="https://img.shields.io/badge/Website-rescene.shanca.me-4FC08D.svg?style=for-the-badge" alt="Website">
+  <a href="https://yosuri.com/">
+    <img src="https://img.shields.io/badge/Website-yosuri.com-4FC08D.svg?style=for-the-badge" alt="Website">
   </a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0"></a>
   <img src="https://img.shields.io/badge/Release-v0.2.4-blue" alt="Release v0.2.4">
@@ -27,7 +27,7 @@
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>
 
-![Ameko workbench overview](./assets/rescene-main.png)
+![Yosuri workbench overview](./assets/rescene-main.png)
 
 ---
 
@@ -59,7 +59,7 @@
 
 ## 🚀 Download & Install
 
-👉 **[https://rescene.shanca.me/download.html](https://rescene.shanca.me/download.html)** 👈
+👉 **[https://yosuri.com/download.html](https://yosuri.com/download.html)** 👈
 
 | Platform | How |
 | --- | --- |
@@ -84,6 +84,6 @@ Visit `http://localhost:4322` for the local dev workbench. Linux build: [`main-b
 
 ## 💬 Feedback & License
 
-- 🐛 Bugs / suggestions → [GitHub Issues](https://github.com/Rescenix/Ameko/issues)
+- 🐛 Bugs / suggestions → [GitHub Issues](https://github.com/Rescenix/Yosuri/issues)
 - 💬 Community → [QQ Group 796474621](https://qm.qq.com/q/796474621)
 - Core code: [AGPL-3.0 License](./LICENSE)
