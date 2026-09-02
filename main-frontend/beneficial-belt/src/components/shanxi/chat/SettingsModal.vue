@@ -666,17 +666,18 @@
                                     </div>
                                     <div v-if="aggOpen[g.vendor] !== false" class="agg-cfg-group-body">
                                       <div v-for="c in g.items" :key="c.id" class="agg-cfg-item-wrap">
-                                        <label class="agg-cfg-item" :class="{ off: !c.key_set }">
-                                          <input type="checkbox" :value="c.id" v-model="aggModelIDs" :disabled="!c.key_set" />
-                                          <span class="agg-cfg-name" :title="c.model">{{ c.name }}</span>
-                                          <span class="agg-cfg-model">{{ c.model }}</span>
-                                          <button v-if="reviewCountId(c.id)" class="agg-cfg-info" type="button" :class="{ on: aggReviewOpen === c.id }" :title="'大众点评（' + reviewCountId(c.id) + ' 条）'" @click="aggReviewOpen = aggReviewOpen === c.id ? '' : c.id">
-                                            <span class="agg-cfg-info-stars">{{ renderStars(avgStarsId(c.id)) }}</span>
-                                            <span class="agg-cfg-info-num">{{ avgStarsId(c.id).toFixed(1) }}</span>
-                                          </button>
-                                          <span v-if="!c.chat" class="agg-cfg-nochat">非对话</span>
-                                          <span v-if="!c.key_set" class="agg-cfg-nokey">未配 key</span>
-                                        </label>
+                                                                              <label class="agg-cfg-item" :class="{ off: !c.key_set, dead: c.disabled }">
+                                                                                <input type="checkbox" :value="c.id" v-model="aggModelIDs" :disabled="!c.key_set" />
+                                                                                <span class="agg-cfg-name" :title="c.model">{{ c.name }}</span>
+                                                                                <span class="agg-cfg-model">{{ c.model }}</span>
+                                                                                <span v-if="c.disabled" class="agg-cfg-dead" title="该模型当前判定不可用，但可选回实验">已淘汰</span>
+                                                                                <button v-if="reviewCountId(c.id)" class="agg-cfg-info" type="button" :class="{ on: aggReviewOpen === c.id }" :title="'大众点评（' + reviewCountId(c.id) + ' 条）'" @click="aggReviewOpen = aggReviewOpen === c.id ? '' : c.id">
+                                                                                  <span class="agg-cfg-info-stars">{{ renderStars(avgStarsId(c.id)) }}</span>
+                                                                                  <span class="agg-cfg-info-num">{{ avgStarsId(c.id).toFixed(1) }}</span>
+                                                                                </button>
+                                                                                <span v-if="!c.chat" class="agg-cfg-nochat">非对话</span>
+                                                                                <span v-if="!c.key_set" class="agg-cfg-nokey">未配 key</span>
+                                                                              </label>
                                         <div v-show="aggReviewOpen === c.id" class="agg-review-card">
                                           <div class="agg-review-card-head">
                                             <span class="agg-review-model">{{ c.name }}</span>
@@ -3824,6 +3825,10 @@ onUnmounted(() => {
 .agg-cfg-name { font-size: 11.5px; color: var(--app-text); flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agg-cfg-model { font-size: 10px; color: var(--app-text-faint); font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agg-cfg-nokey { font-size: 9.5px; color: #d97b4a; flex: none; }
+.agg-cfg-dead { font-size: 9px; color: var(--app-text-faint); background: #e8e8e8; border: 1px solid #d0d0d0; border-radius: 4px; padding: 0 4px; flex: none; }
+.agg-cfg-item.dead .agg-cfg-name { color: var(--app-text-faint); text-decoration: line-through; }
+.agg-cfg-item.dead .agg-cfg-model { opacity: .55; }
+.agg-cfg-item.dead { opacity: .72; }
 .agg-cfg-nochat { font-size: 9px; color: var(--app-text-faint); background: var(--app-surface-2); border: 1px solid var(--app-border-soft); border-radius: 4px; padding: 0 4px; flex: none; }
 /* 模型名右边的「大众点评」信息标签 */
 .agg-cfg-item-wrap { margin-bottom: 2px; }

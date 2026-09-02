@@ -892,6 +892,30 @@ func startCompanyDirectiveDelivery(directive, model string) companyDirectiveRun 
 				break
 			}
 		}
+		// 修复 #12：若用户指定了自定义模型，把 endpoint/key/model 通过环境变量透传给 agent-os，
+		// 避免 agent-os 侧因不理解 custom::provider::model 格式而回退到免费池。
+		if strings.HasPrefix(model, customModelIDPrefix) {
+			if providerID, modelID, ok := parseCustomModelSelectionID(model); ok {
+				if b := resolveExact("default", model); b != nil {
+					_ = providerID
+					_ = modelID
+					env = append(env,
+						"RESCENE_DIRECTIVE_MODEL_ENDPOINT="+b.BaseURL,
+						"RESCENE_DIRECTIVE_MODEL_ID="+b.Model,
+						"RESCENE_DIRECTIVE_MODEL_API_KEY="+b.APIKey,
+					)
+				}
+			}
+		} else if model != "" && model != "auto" && !isFreeCatalogID(model) {
+			// 用户直接选中了某个自定义提供方（非具体模型），同样透传其默认模型配置。
+			if b := resolveExact("default", model); b != nil && b.Source == "user" {
+				env = append(env,
+					"RESCENE_DIRECTIVE_MODEL_ENDPOINT="+b.BaseURL,
+					"RESCENE_DIRECTIVE_MODEL_ID="+b.Model,
+					"RESCENE_DIRECTIVE_MODEL_API_KEY="+b.APIKey,
+				)
+			}
+		}
 		cmd.Env = env
 		output, err := cmd.CombinedOutput()
 		text := strings.TrimSpace(string(output))

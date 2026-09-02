@@ -433,7 +433,7 @@
                 <span class="directive-tip">指令优先于标签/热点，公司立项必须围绕它执行</span>
               </div>
               <div class="directive-input-row">
-                        <input v-model="directiveInput" class="directive-input" placeholder="例：做一个番茄钟+待办小工具，要能运行，限 30 分钟" @keyup.enter="saveDirective" />
+                        <input v-model="directiveInput" class="directive-input" placeholder="例：做一个番茄钟+待办小工具，要能运行，限 30 分钟" @input="directiveInputDirty = true" @keyup.enter="saveDirective" />
                         <select v-model="directiveModel" class="directive-model-select" title="指定公司用哪个模型跑（留空=自动轮换）" @change="directiveModelTouched = true">
                           <option value="">模型：自动轮换</option>
                           <option v-for="m in directiveModelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
@@ -648,6 +648,7 @@ const directiveText = ref('')
 const directiveInput = ref('')
 const directiveModel = ref('')
 const directiveModelTouched = ref(false)
+const directiveInputDirty = ref(false)
 const directiveSaving = ref(false)
 const directiveModelOptions = ref([])
 const directiveRun = ref({ status: 'idle', project: '', error: '', updatedAt: '' })
@@ -739,7 +740,8 @@ async function loadDirective() {
     ])
     if (d.status === 'fulfilled' && d.value) {
       directiveText.value = d.value.directive || ''
-      directiveInput.value = d.value.directive || ''
+      // 用户正在输入时，轮询不能覆盖输入框里的草稿（修复 #10：等待几秒自动清空）。
+      if (!directiveInputDirty.value) directiveInput.value = d.value.directive || ''
       // 轮询只同步已经持久化的值，不能覆盖用户刚在下拉框里做出的选择。
       if (!directiveModelTouched.value && !directiveSaving.value) directiveModel.value = d.value.model || ''
       directiveRun.value = d.value.run || { status: 'idle', project: '', error: '', updatedAt: '' }
@@ -776,6 +778,7 @@ async function saveDirective() {
     if (r && r.ok) {
       directiveText.value = r.directive || ''
       directiveInput.value = r.directive || ''
+      directiveInputDirty.value = false
       directiveModel.value = r.model || ''
       directiveModelTouched.value = false
       directiveRun.value = r.run || { status: 'queued', project: '', error: '', updatedAt: '' }

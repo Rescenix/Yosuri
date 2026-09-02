@@ -301,12 +301,9 @@ func HandleGetModelConfig(c *gin.Context) {
 	freeModels := make([]freeModelView, 0, len(freeModelCatalog))
 	envKeys := userKeysByEnv(userKey)
 	for _, f := range freeModelCatalog {
-		// 死源自动隐藏：Disabled 由每日探活/运行时 401/404/400 自动置位（nim_refresh.go /
-		// free_probe.go），路由侧 resolveExact 已跳过它们；这里同步过滤，否则下拉显示
-		// 「列得出但一选就 404/502」的模型（2026-08-30 实锤：free_zen_* 4 个 + LLM7 2 个）。
-		if f.Disabled {
-			continue
-		}
+		// ⚠️ 死源不再物理抹除（08-31 用户铁律）：Disabled 源仍出现在下拉，前端灰显 + 可勾回。
+		// 之前 `if f.Disabled { continue }` 把死源从下拉过滤——用户看不到也找不回。
+		// Disabled 语义改为：仅影响「默认不选」与「auto 排序沉底」，不隐藏模型。
 		v := freeModelView{FreeModelDef: f}
 		v.Signal = probeSignalByDef(f)
 		if e, ok := entryByID[f.ID]; ok {

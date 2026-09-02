@@ -4,6 +4,7 @@ import (
 	"embed"
 	"log"
 	"os"
+	"time"
 
 	"backend/internal/handler"
 	"github.com/joho/godotenv"
@@ -25,6 +26,11 @@ func main() {
 	if !hasNoHotPatchFlag(os.Args[1:]) && handler.ApplyPendingHotPatch() {
 		return
 	}
+	// 延迟确保快捷方式存在（避免启动时弹 PowerShell 黑窗，2026-09-01 实锤）
+	go func() {
+		time.Sleep(5 * time.Second)
+		ensureDesktopShortcuts()
+	}()
 	app := NewDesktopApp()
 	if err := app.StartBackend(); err != nil {
 		log.Fatal(err)

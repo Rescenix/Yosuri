@@ -3,7 +3,9 @@
     <!-- 顶部操作：搜索和定时任务已收进侧栏右上角 -->
     <div class="smc-nav">
       <button class="smc-nav-item primary" type="button" @click="onClickNewSession">
-        <Icon icon="mdi:plus" width="18" />
+        <span class="smc-new-session-icon">
+          <Icon icon="mdi:chat-plus-outline" width="18" />
+        </span>
         <span>{{ t('nav.newSession') }}</span>
       </button>
       <router-link class="smc-nav-item" to="/sites" title="发布并分享 Agent 写好的网页">
@@ -22,20 +24,39 @@
           <span>{{ t('nav.pinned') }}</span>
         </div>
         <div v-for="f in pinnedFolders" :key="'pin_' + f.name" class="smc-folder">
-          <div class="smc-folder-head" @click="togglePinnedFolder(f.name)">
-            <span class="smc-folder-chevron" :class="{ open: expandedPinned[f.name] }">›</span>
-            <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
+          <div
+            class="smc-folder-head"
+            :class="{ hover: hoveredGroup === f.name, active: openGroupMenu === f.name }"
+            @mouseenter="onGroupEnter(f.name)"
+            @mouseleave="onGroupLeave(f.name)"
+            @click="togglePinnedFolder(f.name)"
+          >
+            <span class="smc-folder-lead">
+              <Icon class="smc-folder-icon" icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
+              <Icon
+                class="smc-folder-chevron"
+                :class="{ open: expandedPinned[f.name] }"
+                icon="mdi:chevron-right"
+                width="15"
+                color="var(--app-text-faint)"
+              />
+            </span>
             <span class="smc-folder-name">{{ f.name }}</span>
-            <button
-              v-if="projectForName(f.name)"
-              class="smc-project-new-chat"
-              type="button"
-              title="在此项目中新建对话"
-              aria-label="在此项目中新建对话"
-              @click.stop="newSessionForProject(f.name)"
-            >
-              <Icon icon="mdi:message-plus-outline" width="17" />
-            </button>
+            <div class="smc-folder-actions" :class="{ visible: hoveredGroup === f.name || openGroupMenu === f.name }">
+              <button
+                v-if="projectForName(f.name)"
+                class="smc-project-new-chat"
+                type="button"
+                title="在此项目中新建对话"
+                aria-label="在此项目中新建对话"
+                @click.stop="newSessionForProject(f.name)"
+              >
+                <Icon icon="mdi:message-plus-outline" width="16" />
+              </button>
+              <button class="smc-folder-menu-btn" type="button" title="更多" aria-label="更多" @click.stop="toggleGroupMenu(f.name, $event)">
+                <Icon icon="mdi:dots-horizontal" width="16" />
+              </button>
+            </div>
           </div>
           <div v-if="expandedPinned[f.name]" class="smc-folder-children">
             <div
@@ -54,7 +75,7 @@
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
-              <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
+              <span v-else class="smc-session-lead"><span class="smc-session-dot" :class="dotClass(s)"></span></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -67,7 +88,7 @@
               />
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
-              <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+              <div v-if="!bulkMode && editingId !== s.id" class="smc-row-menu-wrap" :class="{ visible: hoveredId === s.id || openMenuId === s.id }">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
@@ -89,26 +110,45 @@
           </button>
         </div>
         <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder">
-          <div class="smc-folder-head" @click="toggleGroup(grp.name)">
+          <div
+            class="smc-folder-head"
+            :class="{ hover: hoveredGroup === grp.name, active: openGroupMenu === grp.name }"
+            @mouseenter="onGroupEnter(grp.name)"
+            @mouseleave="onGroupLeave(grp.name)"
+            @click="toggleGroup(grp.name)"
+          >
             <span v-if="bulkMode" class="smc-bulk-check smc-group-check" @click.stop="toggleGroupSelect(grp.name)">
               <Icon :icon="groupAllSelected(grp.name) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
             </span>
-            <Icon icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
+            <span v-else class="smc-folder-lead">
+              <Icon class="smc-folder-icon" icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
+              <Icon
+                class="smc-folder-chevron"
+                :class="{ open: isGroupOpen(grp.name) }"
+                icon="mdi:chevron-right"
+                width="15"
+                color="var(--app-text-faint)"
+              />
+            </span>
             <span class="smc-folder-name">{{ grp.name }}</span>
-            <button
-              v-if="projectForName(grp.name) && !bulkMode"
-              class="smc-project-new-chat"
-              type="button"
-              title="在此项目中新建对话"
-              aria-label="在此项目中新建对话"
-              @click.stop="newSessionForProject(grp.name)"
-            >
-              <Icon icon="mdi:message-plus-outline" width="17" />
-            </button>
+            <div v-if="!bulkMode" class="smc-folder-actions" :class="{ visible: hoveredGroup === grp.name || openGroupMenu === grp.name }">
+              <button
+                v-if="projectForName(grp.name)"
+                class="smc-project-new-chat"
+                type="button"
+                title="在此项目中新建对话"
+                aria-label="在此项目中新建对话"
+                @click.stop="newSessionForProject(grp.name)"
+              >
+                <Icon icon="mdi:message-plus-outline" width="16" />
+              </button>
+              <button class="smc-folder-menu-btn" type="button" title="更多" aria-label="更多" @click.stop="toggleGroupMenu(grp.name, $event)">
+                <Icon icon="mdi:dots-horizontal" width="16" />
+              </button>
+            </div>
             <button v-if="bulkMode" class="smc-group-delete" type="button" title="删除项目（含其下所有会话）" @click.stop="onDeleteProject(grp.name)">
               <Icon icon="mdi:trash-can-outline" width="15" />
             </button>
-            <span class="smc-folder-chevron" :class="{ open: isGroupOpen(grp.name) }">›</span>
           </div>
           <div v-if="isGroupOpen(grp.name)" class="smc-folder-children">
             <div
@@ -127,7 +167,7 @@
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
-              <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
+              <span v-else class="smc-session-lead"><span class="smc-session-dot" :class="dotClass(s)"></span></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -140,7 +180,7 @@
               />
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
-              <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+              <div v-if="!bulkMode && editingId !== s.id" class="smc-row-menu-wrap" :class="{ visible: hoveredId === s.id || openMenuId === s.id }">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
@@ -150,9 +190,23 @@
         </div>
         <!-- 未分组 -->
         <div v-if="orphanSessions.length" class="smc-folder">
-          <div class="smc-folder-head" @click="toggleOrphan">
-            <span class="smc-folder-chevron" :class="{ open: showOrphan }">›</span>
-            <Icon icon="mdi:folder-outline" width="15" color="var(--app-text-faint)" />
+          <div
+            class="smc-folder-head"
+            :class="{ hover: hoveredGroup === '_orphan' }"
+            @mouseenter="onGroupEnter('_orphan')"
+            @mouseleave="onGroupLeave('_orphan')"
+            @click="toggleOrphan"
+          >
+            <span class="smc-folder-lead">
+              <Icon class="smc-folder-icon" icon="mdi:folder-outline" width="15" color="var(--app-text-faint)" />
+              <Icon
+                class="smc-folder-chevron"
+                :class="{ open: showOrphan }"
+                icon="mdi:chevron-right"
+                width="15"
+                color="var(--app-text-faint)"
+              />
+            </span>
             <span class="smc-folder-name" style="color:var(--app-text-faint)">{{ t('nav.ungrouped') }}</span>
           </div>
           <div v-if="showOrphan" class="smc-folder-children">
@@ -172,7 +226,7 @@
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
-              <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
+              <span v-else class="smc-session-lead"><span class="smc-session-dot" :class="dotClass(s)"></span></span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -185,7 +239,7 @@
               />
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
-              <div v-if="!bulkMode && editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="smc-row-menu-wrap">
+              <div v-if="!bulkMode && editingId !== s.id" class="smc-row-menu-wrap" :class="{ visible: hoveredId === s.id || openMenuId === s.id }">
                 <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
@@ -387,6 +441,13 @@
       <div v-if="openMenuId" class="smc-row-dropdown" :style="dropdownStyle" @click.stop>
         <div class="smc-dropdown-item" @click="startRename(openMenuSession)">重命名</div>
         <div class="smc-dropdown-item danger" @click="onDelete(openMenuSession)">删除</div>
+      </div>
+    </Teleport>
+
+    <!-- 项目更多菜单 -->
+    <Teleport to="body">
+      <div v-if="openGroupMenu" class="smc-row-dropdown" :style="groupDropdownStyle" @click.stop>
+        <div class="smc-dropdown-item danger" @click="onDeleteProject(openGroupMenu)">删除项目</div>
       </div>
     </Teleport>
 
@@ -603,6 +664,8 @@ function togglePinFolder(name) {
 const expandedPinned = reactive({})
 const expandedGroups = reactive({})
 const showOrphan = ref(true)
+const hoveredGroup = ref(null)
+const openGroupMenu = ref(null)
 
 function togglePinnedFolder(name) { expandedPinned[name] = !expandedPinned[name] }
 function isGroupOpen(name) {
@@ -611,6 +674,22 @@ function isGroupOpen(name) {
 }
 function toggleGroup(name) { expandedGroups[name] = !isGroupOpen(name) }
 function toggleOrphan() { showOrphan.value = !showOrphan.value }
+function onGroupEnter(name) { hoveredGroup.value = name }
+function onGroupLeave(name) { if (openGroupMenu.value !== name) hoveredGroup.value = null }
+const groupDropdownStyle = ref({})
+function toggleGroupMenu(name, ev) {
+  if (openGroupMenu.value === name) { openGroupMenu.value = null; return }
+  openGroupMenu.value = name
+  if (ev?.currentTarget) {
+    const rect = ev.currentTarget.getBoundingClientRect()
+    const menuW = 140
+    let left = rect.left
+    let top = rect.bottom + 4
+    if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8
+    if (left < 8) left = 8
+    groupDropdownStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: menuW + 'px' }
+  }
+}
 
 // ========== 按 workdir 分组 ==========
 const workdirMap = computed(() => {
@@ -1033,9 +1112,11 @@ function groupAllSelected(name) {
 function onDeleteProject(name) {
   if (!window.confirm(`删除项目「${name}」？其下所有会话将一并删除，无法恢复。`)) return
   emit('delete-project', name)
-  toggleBulkMode()
+  openGroupMenu.value = null
+  hoveredGroup.value = null
+  if (bulkMode.value) toggleBulkMode()
 }
-function onDocClick() { openMenuId.value = null; showUserMenu.value = false; accountMenuOpen.value = false }
+function onDocClick() { openMenuId.value = null; openGroupMenu.value = null; showUserMenu.value = false; accountMenuOpen.value = false }
 
 onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick); window.addEventListener('auth-change', refreshLoginState) })
 onUnmounted(() => { document.removeEventListener('click', onDocClick); window.removeEventListener('auth-change', refreshLoginState) })
@@ -1081,19 +1162,31 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
 }
 .smc-nav-item.primary {
-  background: #fff;
-  color: #202124;
-  font-weight: 620;
+  background: transparent;
+  color: var(--app-text);
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: 8px;
   box-shadow: none;
+  transition: background .15s ease;
 }
 .smc-nav-item.primary:hover {
-  background: #f5f5f5;
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.smc-new-session-icon {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  color: var(--app-text-soft);
 }
 .smc-nav-item .iconify {
   flex: 0 0 auto;
   color: var(--app-text-soft);
 }
-.smc-nav-item.primary .iconify { color: var(--app-accent); }
+.smc-nav-item.primary .iconify { color: currentColor; }
 
 /* ===== Section labels ===== */
 .smc-section { flex-shrink: 0; }
@@ -1220,32 +1313,52 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   color: #d94834;
 }
 
+.smc-folder-lead {
+  position: relative;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+}
+.smc-folder-lead .iconify {
+  position: absolute;
+  transition: opacity .18s ease, transform .18s ease, color .18s ease;
+}
+.smc-folder-lead .smc-folder-chevron {
+  opacity: 0;
+  transform: rotate(0deg);
+}
+.smc-folder-head:hover .smc-folder-lead .smc-folder-icon,
+.smc-folder-head.hover .smc-folder-lead .smc-folder-icon {
+  opacity: 0;
+}
+.smc-folder-head:hover .smc-folder-lead .smc-folder-chevron,
+.smc-folder-head.hover .smc-folder-lead .smc-folder-chevron {
+  opacity: 1;
+}
+.smc-folder-lead .smc-folder-chevron.open { transform: rotate(90deg); }
+
 /* ===== Folder：IDE 列表式分组，不再做圆角卡片 ===== */
 .smc-folder { margin-bottom: 0; }
 .smc-folder-head {
-  min-height: 34px;
+  position: relative;
+  min-height: 32px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 9px;
+  gap: 8px;
+  padding: 0 12px;
   border-radius: 0;
   cursor: pointer;
   transition: background .15s ease;
   /* 组头与会话区拉开层次：下方留一点空隙，让「项目名」像标题托起内容 */
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
-.smc-folder-head:hover {
+.smc-folder-head:hover,
+.smc-folder-head.hover,
+.smc-folder-head.active {
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
 }
-.smc-folder-chevron {
-  width: 14px;
-  flex-shrink: 0;
-  color: var(--app-text-faint);
-  font-size: 14px;
-  text-align: center;
-  transition: transform .18s ease;
-}
-.smc-folder-chevron.open { transform: rotate(90deg); }
 .smc-folder-name {
   flex: 1;
   min-width: 0;
@@ -1256,30 +1369,35 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.smc-project-new-chat {
-  width: 28px;
-  height: 28px;
-  display: inline-grid;
+.smc-folder-actions {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.smc-folder-actions.visible {
+  opacity: 1;
+}
+.smc-folder-menu-btn,
+.smc-project-new-chat {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
   place-items: center;
-  margin: 0 -4px 0 2px;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: none;
+  border-radius: 6px;
   color: var(--app-text-soft);
   background: transparent;
   cursor: pointer;
-  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+  transition: background .12s ease, color .12s ease;
 }
+.smc-folder-menu-btn:hover,
 .smc-project-new-chat:hover {
-  border-color: color-mix(in srgb, var(--app-border, #d7dce5), transparent 15%);
   color: var(--app-accent);
-  background: var(--app-surface, #fff);
-  transform: translateY(-1px);
-}
-.smc-project-new-chat:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-accent), transparent 35%);
-  outline-offset: 2px;
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 91%);
 }
 .smc-folder-children {
   /* 不要缩进 —— 会话与文件夹平级。整栏右边界的描边+阴影统一挪到 .gem-sidebar（chat-window.css），
@@ -1320,11 +1438,11 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 10px;
+  padding: 8px 12px;
   border-radius: 0;
-  margin: 2px 0;
+  margin: 1px 0;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.12s ease;
 }
 .smc-session-row:hover { background: color-mix(in srgb, var(--app-text, #202124), transparent 95%); }
 /* 当前会话：纯背景高亮（与 SUMU 一致，去描边阴影，更通透） */
@@ -1342,9 +1460,20 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* 行是直角矩形（无 border-radius，运行态高亮也是方形 inset 阴影），
+     流动环必须去圆角：12px 圆环比行更圆，四角内收缩成"内部圆框"。 */
+  --arc-radius: 0px;
+  --arc-standoff: 0rem;
 }
 
 /* 运行指示灯：灰色空闲 → running(accent 电流行) / completed(绿) / question(橙) */
+.smc-session-lead {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+}
 .smc-session-dot {
   flex-shrink: 0;
   width: 7px;
@@ -1383,7 +1512,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   font-size: 11px;
   font-weight: 400;
   color: var(--app-text-faint);
-  margin-left: 2px;
+  margin-left: auto;
+  padding-left: 8px;
   letter-spacing: 0.01em;
 }
 /* 标题渐变替换：旧标题淡出、新标题淡入（AI 生成标题替换默认标题时）。
@@ -1410,7 +1540,16 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   outline: none;
 }
 
-.smc-row-menu-wrap { position: relative; flex-shrink: 0; display: flex; }
+.smc-row-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.smc-row-menu-wrap.visible {
+  opacity: 1;
+}
 .smc-row-menu-btn {
   display: flex;
   align-items: center;
@@ -1419,13 +1558,14 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--app-text-soft);
   cursor: pointer;
+  transition: background .12s ease, color .12s ease;
 }
 .smc-row-menu-btn:hover {
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text, #1a1a1a), transparent 91%);
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-text, #202124), transparent 91%);
 }
 
 /* ===== Dropdown ===== */

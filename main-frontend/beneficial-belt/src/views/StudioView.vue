@@ -141,6 +141,7 @@
                                   <div v-if="busy" class="gen-view-loading">
                                     <div class="gen-shimmer-bar"><div class="gen-shimmer"></div></div>
                                     <span class="gen-loading-text">已等待 {{ elapsed }}s（约 1-2 分钟）</span>
+                                    <button class="gen-view-regen" style="margin-top: 14px" @click="busy = false; clearInterval(elapsedTimer); clearInterval(pollTimer); logLines.push('× 已取消生成')">取消生成</button>
                                     <div v-if="logLines.length" class="gen-log">
                                       <div v-for="(l, i) in logLines" :key="i" class="log-line" :class="{ err: l.startsWith('×') }">{{ l }}</div>
                                     </div>
@@ -149,8 +150,8 @@
                                     <video :src="result.video" controls class="gen-video" autoplay></video>
                                     <div class="gen-video-meta">{{ result.name }} · {{ result.size }} · {{ result.seconds }}s</div>
                                     <div class="gen-view-actions">
-                                      <button class="gen-view-regen" @click="result = null; logLines = []"><Icon icon="mdi:arrow-left" width="14" /> 返回创作</button>
-                                      <button class="gen-view-regen" @click="generate"><Icon icon="mdi:refresh" width="14" /> 再生成一次</button>
+                                      <button class="gen-view-regen" @click="result = null; busy = false; clearInterval(elapsedTimer); logLines = []"><Icon icon="mdi:arrow-left" width="14" /> 返回创作</button>
+                                      <button class="gen-view-regen" @click="result = null; logLines = []; generate()"><Icon icon="mdi:refresh" width="14" /> 再生成一次</button>
                                     </div>
                                   </div>
                                 </div>
@@ -172,6 +173,9 @@
                     </div>
 
           <!-- 底部创作输入框（即梦式） -->
+                    <div v-if="logLines.length" class="compose-errors">
+                      <div v-for="(l, i) in logLines.filter(x => x.startsWith('×'))" :key="i" class="compose-error-line">{{ l }}</div>
+                    </div>
                     <div class="compose-box">
                       <div class="compose-ref">
                         <input ref="refInput" type="file" accept="image/*" style="display:none" @change="onRefFile" />
@@ -667,15 +671,29 @@ async function doTranslate() {
   }
 }
 
+// 显示一条临时提示（错误/成功）
+function showToast(msg, duration = 3200) {
+  toastMsg.value = msg
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastMsg.value = '' }, duration)
+}
+
 async function generate() {
   const prompt = text.value.trim()
-  if (!prompt) { pushLog('× 请填写提示词或选个主题'); return }
+  if (!prompt) { showToast('× 请填写提示词或选个主题'); return }
   busy.value = true
   result.value = null
+  logLines.value = []
   // 生成计时
   elapsed.value = 0
   clearInterval(elapsedTimer)
   elapsedTimer = setInterval(() => { elapsed.value++ }, 1000)
+  // 校验 seed：非空且为有效整数时才透传，否则随机
+  let seed = Math.floor(Math.random() * 999999)
+  if (seedInput.value) {
+    const n = parseInt(seedInput.value, 10)
+    if (!isNaN(n)) seed = n
+  }
   const base = {
     prompt,
     ref_image: refMode.value === 'reference' ? (selectedRef.value?.src || '') : '',
@@ -685,7 +703,7 @@ async function generate() {
     seconds: videoSeconds.value,
     ratio: videoSpec.value.startsWith('portrait') ? '9:16' : '16:9',
     size: videoSpec.value.endsWith('1080') ? '1080P' : '720P',
-    seed: seedInput.value ? parseInt(seedInput.value) : Math.floor(Math.random() * 999999),
+    seed,
   }
   // 超长视频：走链式生成（多段递进 + 抽帧接续 + 拼接成片）
   const isChain = refMode.value === 'long'
@@ -703,14 +721,31 @@ async function generate() {
       body: JSON.stringify(isChain ? { ...base, segments: segments.value } : base)
     })
     const data = await resp.json()
-    if (!resp.ok || !data.ok) { pushLog('× ' + (data.error || resp.status)); busy.value = false; clearInterval(elapsedTimer); return }
+    if (!resp.ok || !data.ok) {
+      const err = data.error || `提交失败 (${resp.status})`
+      pushLog('× ' + err)
+      showToast('× ' + err)
+      busy.value = false
+      clearInterval(elapsedTimer)
+      return
+    }
+    if (!data.task_id) {
+      const err = '后端未返回任务 ID'
+      pushLog('× ' + err)
+      showToast('× ' + err)
+      busy.value = false
+      clearInterval(elapsedTimer)
+      return
+    }
     // 异步任务：存 localStorage（跳走聊天回来能恢复），开始轮询
     taskId.value = data.task_id
     localStorage.setItem('studio_agnes_task', JSON.stringify({ task_id: data.task_id, ts: Date.now() }))
     pushLog('已提交后台生成，等待期间可以去和 Ameko 聊天')
     pollTask()
   } catch (e) {
-    pushLog('× 提交失败：' + e.message)
+    const err = '提交失败：' + (e?.message || String(e))
+    pushLog('× ' + err)
+    showToast('× ' + err)
     busy.value = false
     clearInterval(elapsedTimer)
   }
@@ -726,20 +761,25 @@ async function pollTask() {
       const r = await fetch(`${API_BASE_URL}/api/studio/agnes/status/${id}`)
       const d = await r.json()
       if (d.status === 'done') {
-        result.value = { video: d.video, name: d.name, size: d.size, seconds: d.seconds }
-        pushLog(`视频生成完成：${d.name}（用时 ${elapsed.value}s）`)
+        result.value = { video: d.video, name: d.name || '', size: d.size || '', seconds: d.seconds || 0 }
+        pushLog(`视频生成完成：${result.value.name}（用时 ${elapsed.value}s）`)
         clearInterval(elapsedTimer)
         clearInterval(pollTimer)
         busy.value = false
         localStorage.removeItem('studio_agnes_task')
       } else if (d.status === 'failed') {
-        pushLog('× ' + (d.error || '生成失败'))
+        const err = d.error || '生成失败'
+        pushLog('× ' + err)
+        showToast('× ' + err)
         clearInterval(elapsedTimer)
         clearInterval(pollTimer)
         busy.value = false
         localStorage.removeItem('studio_agnes_task')
       }
-    } catch (e) { /* 轮询失败忽略 */ }
+    } catch (e) {
+      // 轮询接口异常时不打断用户，但累计多次后给出提示
+      pushLog('× 轮询状态失败：' + (e?.message || String(e)))
+    }
   }
   check()
   pollTimer = setInterval(check, 10000)
@@ -880,6 +920,14 @@ onUnmounted(() => {
 .template-info { padding: 14px 16px 16px; }
 .template-title { font-size: 14.5px; font-weight: 700; display: block; color: #1f2329; margin-bottom: 6px; }
 .template-desc { font-size: 11.5px; color: #9aa1ab; line-height: 1.5; display: block; }
+.compose-errors {
+  display: flex; flex-direction: column; gap: 6px;
+  background: #fff0f0; border: 1px solid #ffc9c9; border-radius: 12px;
+  padding: 10px 14px; margin-bottom: 12px;
+}
+.compose-error-line {
+  font-size: 12.5px; color: #c23a3a; line-height: 1.5;
+}
 /* 底部输入框 */
 .compose-box {
   display: flex; gap: 14px; align-items: stretch; background: #fff;

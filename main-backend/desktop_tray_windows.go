@@ -66,6 +66,7 @@ var (
 	procPostMessage         = user32.NewProc("PostMessageW")
 	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
 	procRegisterClass       = user32.NewProc("RegisterClassExW")
+	procRegisterWindowMsg   = user32.NewProc("RegisterWindowMessageW")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 	procTrackPopupMenu      = user32.NewProc("TrackPopupMenu")
 	procTranslateMessage    = user32.NewProc("TranslateMessage")
@@ -78,6 +79,10 @@ var (
 
 	trayApplications sync.Map
 	trayWindowProc   = windows.NewCallback(handleTrayWindowMessage)
+
+	// taskbarCreatedMsg 是 RegisterWindowMessage("TaskbarCreated") 的结果。
+	// Explorer 重启后所有托盘图标被清空，必须监听该消息重新注册（2026-09-01 实锤）。
+	taskbarCreatedMsg uint32
 )
 
 type trayPoint struct {
@@ -131,6 +136,39 @@ func (a *DesktopApp) startTray() {
 	a.trayOnce.Do(func() { go a.runTray() })
 }
 
+// addTrayIcon 向通知区注册托盘图标（NIM_ADD + NIM_SET_VERSION + NIM_MODIFY）。
+// runTray 首次调用；TaskbarCreated（explorer 重启）后也会再次调用恢复图标。
+// ⚠️ NIM_DELETE 的 defer 由调用方 runTray 负责，不在本方法内 defer（避免图标立即被删）。
+func (a *DesktopApp) addTrayIcon(hwnd uintptr) bool {
+	instance, _, _ := procGetModuleHandle.Call(0)
+	icon := extractApplicationIcon(instance)
+	iconData := trayNotifyIconData{
+		Size:            uint32(unsafe.Sizeof(trayNotifyIconData{}) - unsafe.Sizeof(uintptr(0))),
+		Window:          hwnd,
+		ID:              100,
+		Flags:           nifMessage | nifState,
+		CallbackMessage: trayCallbackMessage,
+		State:           nisHidden,
+		StateMask:       nisHidden,
+	}
+	if ok, _, notifyErr := procShellNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&iconData))); ok == 0 {
+		log.Printf("⚠️ 创建系统托盘失败：添加通知区图标：%v", notifyErr)
+		return false
+	}
+	iconData.Version = notifyVersion
+	procShellNotifyIcon.Call(nimSetVersion, uintptr(unsafe.Pointer(&iconData)))
+	iconData.Flags = nifIcon | nifTip | nifState
+	iconData.Icon = icon
+	iconData.State = 0
+	iconData.StateMask = nisHidden
+	copy(iconData.Tip[:], windows.StringToUTF16("Ameko Agent"))
+	if ok, _, notifyErr := procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&iconData))); ok == 0 {
+		log.Printf("⚠️ 创建系统托盘失败：显示通知区图标：%v", notifyErr)
+		return false
+	}
+	return true
+}
+
 func (a *DesktopApp) runTray() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -180,33 +218,26 @@ func (a *DesktopApp) runTray() {
 		a.mu.Unlock()
 	}()
 
-	iconData := trayNotifyIconData{
-		Size:            uint32(unsafe.Sizeof(trayNotifyIconData{}) - unsafe.Sizeof(uintptr(0))),
-		Window:          hwnd,
-		ID:              100,
-		Flags:           nifMessage | nifState,
-		CallbackMessage: trayCallbackMessage,
-		State:           nisHidden,
-		StateMask:       nisHidden,
+	// 注册 Explorer 重启通知消息（TaskbarCreated）：重启后托盘图标被清空，
+	// 必须监听并重新注册（2026-09-01 实锤：explorer 重启后图标永久丢失）。
+	taskbarName, _ := windows.UTF16PtrFromString("TaskbarCreated")
+	if msg, _, _ := procRegisterWindowMsg.Call(uintptr(unsafe.Pointer(taskbarName))); msg != 0 {
+		taskbarCreatedMsg = uint32(msg)
 	}
-	if ok, _, notifyErr := procShellNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&iconData))); ok == 0 {
-		log.Printf("⚠️ 创建系统托盘失败：添加通知区图标：%v", notifyErr)
+
+	if !a.addTrayIcon(hwnd) {
 		procDestroyWindow.Call(hwnd)
 		return
 	}
-	defer procShellNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&iconData)))
-	iconData.Version = notifyVersion
-	procShellNotifyIcon.Call(nimSetVersion, uintptr(unsafe.Pointer(&iconData)))
-	iconData.Flags = nifIcon | nifTip | nifState
-	iconData.Icon = icon
-	iconData.State = 0
-	iconData.StateMask = nisHidden
-	copy(iconData.Tip[:], windows.StringToUTF16("Ameko Agent"))
-	if ok, _, notifyErr := procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&iconData))); ok == 0 {
-		log.Printf("⚠️ 创建系统托盘失败：显示通知区图标：%v", notifyErr)
-		procDestroyWindow.Call(hwnd)
-		return
-	}
+	// 消息循环退出时清理通知区图标（NIM_DELETE 只需 Window+ID）
+	defer func() {
+		delData := trayNotifyIconData{
+			Size:   uint32(unsafe.Sizeof(trayNotifyIconData{}) - unsafe.Sizeof(uintptr(0))),
+			Window: hwnd,
+			ID:     100,
+		}
+		procShellNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&delData)))
+	}()
 	trayApplications.Store(hwnd, a)
 	a.mu.Lock()
 	a.trayWindow = hwnd
@@ -256,6 +287,12 @@ func handleTrayWindowMessage(hwnd uintptr, message uint32, wParam, lParam uintpt
 	case wmCommand:
 		if app != nil {
 			handleTrayCommand(uint32(wParam)&0xffff, app)
+		}
+		return 0
+	case taskbarCreatedMsg:
+		// Explorer 重启后通知区图标被清空，重新注册。
+		if app != nil {
+			app.addTrayIcon(hwnd)
 		}
 		return 0
 	case wmClose:

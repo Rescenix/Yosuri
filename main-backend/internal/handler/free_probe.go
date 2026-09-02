@@ -220,7 +220,7 @@ func probeCatalogEntry(f *FreeModelDef) {
 	// 429/5xx/超时属抖动，只降权不标死（防本机 IP 限流误杀全池）。
 	if !ok && (status == 401 || status == 403 || status == 404 ||
 		(status == 400 && isModelUnavailableError(raw))) {
-		disableFreeModel(f.Model)
+		disableFreeModel(f.ID)
 	}
 }
 

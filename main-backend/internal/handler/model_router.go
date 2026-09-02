@@ -717,7 +717,7 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 				if strings.HasPrefix(b.ID, "auto_") {
 					disableAutoModel(b.BaseURL, b.Model)
 				} else {
-					disableFreeModel(b.Model)
+					disableFreeModel(b.ID)
 				}
 				return "", nil, lastErr
 			}
@@ -730,7 +730,7 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 					disableAutoModel(b.BaseURL, b.Model)
 				} else {
 					// 模型不存在 = 永久下架，强制淘汰（绕过 deepseek 系保护）
-					forceDisableFreeModel(b.Model)
+					forceDisableFreeModel(b.ID)
 				}
 				return "", nil, lastErr
 			}
@@ -853,7 +853,7 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 				if strings.HasPrefix(b.ID, "auto_") {
 					disableAutoModel(b.BaseURL, b.Model)
 				} else {
-					disableFreeModel(b.Model)
+					disableFreeModel(b.ID)
 				}
 				return "", nil, lastErr
 			}
@@ -866,7 +866,7 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 					disableAutoModel(b.BaseURL, b.Model)
 				} else {
 					// 模型不存在 = 永久下架，强制淘汰（绕过 deepseek 系保护）
-					forceDisableFreeModel(b.Model)
+					forceDisableFreeModel(b.ID)
 				}
 				return "", nil, lastErr
 			}
@@ -1097,7 +1097,7 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 					if strings.HasPrefix(b.ID, "auto_") {
 						disableAutoModel(b.BaseURL, b.Model)
 					} else {
-						disableFreeModel(b.Model)
+						disableFreeModel(b.ID)
 					}
 					break
 				}
@@ -1402,7 +1402,7 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 				if strings.HasPrefix(b.ID, "auto_") {
 					disableAutoModel(b.BaseURL, b.Model)
 				} else {
-					disableFreeModel(b.Model)
+					disableFreeModel(b.ID)
 				}
 				return "", nil, 0, 0, lastErr
 			}

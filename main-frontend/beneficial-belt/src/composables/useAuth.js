@@ -337,6 +337,8 @@ async function refresh() {
       login.value = name.value = avatar.value = email.value = ''
       isVip.value = false
       authError.value = ''
+      // 后端缓存的登录 token 也过期了，一并清理（避免 memory-sync 用旧 token + 旧 uid 错配 403，2026-09-02 实锤）
+      try { fetch('/api/auth/login-token', { method: 'DELETE' }) } catch {}
     } else {
       // 501/502/503/504 等：ResceneCloud 暂时连不上，不代表 token 无效。
       // 之前这里和 401 一样清 token+退回未登录态，用户会莫名其妙被"登出"且毫无提示；

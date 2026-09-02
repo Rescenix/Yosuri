@@ -7,11 +7,11 @@
         v-for="(m, i) in items"
         :key="m.id"
         class="umr-node-wrap"
-        :class="[{ active: activeIdx === i }, waveClass(i)]"
+        :class="[{ active: activeIdx === i && hoverIdx < 0 }, waveClass(i)]"
       >
         <button
           class="umr-node"
-          :class="{ hovered: hoverIdx === i, active: activeIdx === i }"
+          :class="{ hovered: hoverIdx === i, active: activeIdx === i && hoverIdx < 0 }"
           :aria-label="`跳到第 ${i + 1} 条提问`"
           @mouseenter="hoverIdx = i"
           @click="$emit('jump', m.id)"
@@ -22,7 +22,8 @@
     </div>
 
     <!-- 悬浮时展开完整用户消息列表（多条），点击任意一条跳转；
-         列表内滚轮滚动时选中跟随（hoverIdx 同步），不只依赖刻度 -->
+         列表高亮唯一标准 = 鼠标悬浮（:hover），滚动只滚动不改选中，
+         hoverIdx 只由 track/list 的 mouseenter 驱动，保证刻度 wave 与鼠标同步 -->
     <div
       v-if="hovered"
       ref="listRef"
@@ -35,7 +36,6 @@
         v-for="(m, i) in items"
         :key="m.id"
         class="umr-list-row"
-        :class="{ active: jumpIdx === i, hovered: hoverIdx === i }"
         @mouseenter="hoverIdx = i"
         @click="$emit('jump', m.id)"
       >
@@ -106,21 +106,29 @@ function onWheel(e) {
   el.scrollTop += (e.deltaY || e.deltaX)
 }
 
-// 列表滚动时选中跟随：把 hoverIdx 同步到当前视口顶部那一条，
-// 刻度轴波浪也跟着走——滚动列表就能选中，不必回去点刻度。
-// 设置一个短暂标记，让 watch(hoverIdx) 知道滚动来自列表自身，不强制居中（避免死循环锁死滚动）。
+// 列表滚动时，刻度轨道滚动跟随到对应节点——但【不改 hoverIdx】：
+// 高亮唯一标准是鼠标悬浮（:hover），轨道同步只是为了让你看到列表滚动到了
+// 对话的哪个位置，不产生第二个高亮、也不跟鼠标抢 wave。
 let listScrollGuard = false
 let listScrollGuardTimer = null
 function onListScroll() {
   const el = listRef.value
-  if (!el) return
+  const trk = trackRef.value
+  if (!el || !trk) return
   listScrollGuard = true
   clearTimeout(listScrollGuardTimer)
   listScrollGuardTimer = setTimeout(() => { listScrollGuard = false }, 200)
+  // 找列表视口中线那条，把刻度轨道滚到对应节点（按比例近似，量级正确即可）
   const rows = el.querySelectorAll('.umr-list-row')
+  if (!rows.length) return
+  const midLine = el.scrollTop + el.clientHeight / 2
   for (let i = 0; i < rows.length; i++) {
-    if (rows[i].offsetTop + rows[i].offsetHeight / 2 >= el.scrollTop) {
-      hoverIdx.value = i
+    if (rows[i].offsetTop + rows[i].offsetHeight / 2 >= midLine) {
+      const wrap = trk.children?.[i]
+      if (wrap) {
+        const midNode = wrap.offsetTop + wrap.offsetHeight / 2
+        trk.scrollTop = Math.max(0, midNode - trk.clientHeight / 2)
+      }
       break
     }
   }
@@ -162,20 +170,22 @@ watch(hoverIdx, async (i) => {
   const el = trackRef.value
   const wrap = el?.children?.[i]
   const dot = wrap?.querySelector('.umr-node')
-  if (!el || !dot) return
-  const raw = dot.offsetTop - el.scrollTop + dot.offsetHeight / 2
-  tipTop.value = Math.max(0, Math.min(raw, el.clientHeight))
-  // 刻度选中 → 列表滚动跟随到该行（双向联动）。
-  // ⚠️ 若滚动来自列表自身（用户正在滚列表），跳过强制居中——否则 scrollTop 被
-  // 拉回顶部，与用户滚轮打架，形成死循环锁死滚动（消息多时 30 次滚轮 scrollTop 纹丝不动，实测实锤 2026-08-31）。
-  const lst = listRef.value
-  if (lst && !listScrollGuard) {
-    const row = lst.querySelectorAll('.umr-list-row')[i]
-    if (row) {
-      const mid = row.offsetTop + row.offsetHeight / 2 - lst.clientHeight / 2
-      if (Math.abs(mid - lst.scrollTop) > 4) lst.scrollTop = Math.max(0, mid)
-    }
+  if (!el || !wrap || !dot) return
+  // ⚠️ 必须用 wrap.offsetTop 而不是 dot.offsetTop：dot 的 offsetParent 是 wrap
+  // （position:relative），dot.offsetTop 恒等于 wrap 内的 padding 小值，用它算滚动
+  // 位置会让轨道每次都被拉回顶部，底部节点永远滚不上来（实测实锤 2026-09-02）。
+  // wrap 的 offsetParent 是 .umr（absolute），减掉 el.offsetTop 即节点在轨道内容中的真实位置。
+  const top = wrap.offsetTop - (el.offsetTop || 0)
+  // 轨道自滚到当前节点可见：wave 只跟鼠标（hoverIdx）走，必须把该节点滚进视口，
+  // 否则悬浮在列表深处时刻度 wave 落在轨道滚动区外，看起来「刻度不显示不跟随」。
+  const mid = top + wrap.offsetHeight / 2
+  if (mid < el.scrollTop || mid > el.scrollTop + el.clientHeight) {
+    el.scrollTop = Math.max(0, mid - el.clientHeight / 2 + wrap.offsetHeight / 2)
   }
+  tipTop.value = Math.max(0, Math.min(top - el.scrollTop + wrap.offsetHeight / 2, el.clientHeight))
+  // ⚠️ 不强制列表 scrollTop 居中：列表高亮唯一标准是鼠标 :hover，hoverIdx 只驱动
+  // 刻度 wave；若在此把列表拉到某行居中，就是「鼠标一碰就突然跳到上面某条」的元凶
+  // （实测实锤 2026-09-02：用户滚轮/悬停列表时 scrollTop 被突然改写、感知为乱选中）。
 })
 
 // 新消息进来时自动滚到底，保持最近的提问可见。
@@ -190,18 +200,19 @@ watch(() => items.value.length, async () => {
   position: absolute;
   z-index: 45;
   top: 24px;
-  /* chat-content 紧邻会话列表；留 12px gutter 后开始画刻度。 */
+  bottom: 8px;       /* 撑满聊天区可用高度，不固定死 */
   left: 12px;
   display: flex;
-  align-items: center;
+  align-items: stretch;  /* track 填满容器高度，不居中裁剪 */
 }
 .umr-track {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  min-height: 0;      /* 允许轨道缩到容器高度，内容超了就滚动 */
   width: 48px;
   box-sizing: border-box;
-  max-height: min(42vh, 360px);
+  max-height: 100%;   /* 占满 .umr（=聊天区）高度，超过容器就内部自滚 */
   overflow-y: auto;
   scrollbar-width: none;      /* 轴本身就很细，再挂一条滚动条太吵 */
   padding: 6px 4px;

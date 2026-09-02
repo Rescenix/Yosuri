@@ -404,7 +404,7 @@ func aggregateStreamOnce(ctx context.Context, b RouterBackend, reqBody map[strin
 				if strings.HasPrefix(b.ID, "auto_") {
 					disableAutoModel(b.BaseURL, b.Model)
 				} else {
-					disableFreeModel(b.Model)
+					disableFreeModel(b.ID)
 				}
 				return nil, lastErr
 			}
@@ -945,7 +945,10 @@ next:
 		}
 		// 1. 免费池目录 ID
 		for _, f := range freeModelCatalog {
-			if f.Disabled || f.ID != id {
+			// ⚠️ 不再因 Disabled 跳过（08-31 用户铁律：死源可勾回，不物理抹除）。
+			// custom = 用户显式逐一勾选，勾了死源就是用户主动要它；Disabled 只应
+			// 影响「默认不勾」和「auto 排序沉底」，不该让用户勾选的源静默消失。
+			if f.ID != id {
 				continue
 			}
 			if !f.Keyless && !f.Local && !hasKey(f.ID, f.KeyEnv, entryByID, envKeys) {
@@ -994,14 +997,15 @@ next:
 	return out
 }
 
-// aggCandidate 聚合端口可选模型（设置面板「用户自定义」勾选列表）。
+// aggCandidate 聚合端口可选模型（设置面板勾选列表，官方/自定义共用）。
 type aggCandidate struct {
-	ID     string `json:"id"`      // 对外暴露 ID
-	Name   string `json:"name"`    // 展示名
-	Vendor string `json:"vendor"`  // 厂商分组
-	Model  string `json:"model"`   // 真实模型名
-	KeySet bool   `json:"key_set"` // 已配 key 或免 key（false = 勾了也路由不了，前端禁用）
-	Chat   bool   `json:"chat"`    // 是否聊天模型（false = TTS/ASR/生图/实时等非对话，勾了 chat/completions 必挂）
+	ID       string `json:"id"`       // 对外暴露 ID
+	Name     string `json:"name"`     // 展示名
+	Vendor   string `json:"vendor"`   // 厂商分组
+	Model    string `json:"model"`    // 真实模型名
+	KeySet   bool   `json:"key_set"`  // 已配 key 或免 key（false = 勾了也路由不了，前端禁用）
+	Chat     bool   `json:"chat"`     // 是否聊天模型
+	Disabled bool   `json:"disabled"` // 死源标记（前端灰显，但可选可勾回——不再物理抹除，08-31 用户铁律）
 }
 
 // isChatModel 判断模型是不是聊天模型。排除明显非对话的：
@@ -1030,11 +1034,10 @@ func aggregateCandidates() []aggCandidate {
 	}
 	envKeys := userKeysByEnv("")
 	for _, f := range freeModelCatalog {
-		if f.Disabled {
-			continue
-		}
+		// ⚠️ 死源不再物理抹除（08-31 用户铁律）：Disabled 源仍出现在勾选列表，灰显 + 可勾回。
+		// 之前 `if f.Disabled { continue }` 让被标死源从候选消失，用户找不回（连坐误杀事故）。
 		keySet := f.Keyless || f.Local || hasKey(f.ID, f.KeyEnv, entryByID, envKeys)
-		out = append(out, aggCandidate{ID: f.ID, Name: f.Name, Vendor: f.Vendor, Model: f.Model, KeySet: keySet, Chat: isChatModel(f.Model)})
+		out = append(out, aggCandidate{ID: f.ID, Name: f.Name, Vendor: f.Vendor, Model: f.Model, KeySet: keySet, Chat: isChatModel(f.Model), Disabled: f.Disabled})
 		seen[f.ID] = true
 	}
 	for _, dm := range discoveredFreeModels("") {

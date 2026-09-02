@@ -49,7 +49,7 @@ func suggestFollowUp(task, finalOutput string, transcript []string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), suggestFollowUpTimeout)
 	defer cancel()
 
-	content, _, err := routeChatOnce(ctx, resolveBackends("default", ""), msgs, nil)
+	content, _, err := routeChatOnce(ctx, resolveBackends("", "auto"), msgs, nil)
 	if err != nil {
 		log.Printf("⚠️ follow-up 建议生成失败: %v", err)
 		return nil

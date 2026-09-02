@@ -284,6 +284,7 @@
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
 
+
             <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。 -->
             <div v-if="inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
@@ -683,7 +684,7 @@
                                 <div class="input-row">
                   <!-- 渐变动画的浮动占位符 -->
                   <transition name="fade-placeholder" mode="out-in">
-                    <span v-if="!userInput.trim() && attachments.length === 0" :key="randomPlaceholder" class="input-placeholder-text">
+                    <span v-if="!userInput.trim() && attachments.length === 0 && !historySwapping" :key="randomPlaceholder" class="input-placeholder-text">
                       {{ randomPlaceholder }}
                     </span>
                   </transition>
@@ -3385,6 +3386,8 @@ function jumpToGroup(id) {
 // Claude Code 式：输入框为空时 ↑ 回退上一条，↓ 前进；发送成功后入栈。
 // 仅在「已进入浏览」或「输入为空」时拦截箭头，不干扰多行编辑的光标移动。
 const chatHistory = ref([])
+const historySwapping = ref(false)
+let swapTimer = null
 const chatHistoryIndex = ref(-1) // -1 = 未在浏览（编辑新内容）
 const CHAT_HISTORY_KEY = 'rescene_chat_history'
 const CHAT_HISTORY_MAX = 50
@@ -3441,9 +3444,16 @@ function onChatInputKeydown(e) {
 // 历史切换（↑/↓）时给输入框做一次轻淡入：先摘掉类 → 强制 reflow → 重新加上，
 // 让 CSS 动画每次切换都重新触发（摘类同一帧内完成，视觉上无闪烁）。
 function flashInputSwap(el) {
+  historySwapping.value = true
+  if (swapTimer) clearTimeout(swapTimer)
   el.classList.remove('chat-input-swap')
   void el.offsetWidth
   el.classList.add('chat-input-swap')
+  el.closest('.input-row')?.classList.add('input-swapping')
+  swapTimer = setTimeout(() => {
+    historySwapping.value = false
+    el.closest('.input-row')?.classList.remove('input-swapping')
+  }, 300)
 }
 
 // ★ 直连流式模式下的思考区域「瀑布滚动」：思考 text 流式追加时滚到底，避免置顶不动。
@@ -3974,9 +3984,11 @@ const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.
 // ⚠️ 性能修复：原版 watch(messages, { deep: true }) 每 token 触发 → nextTick → streamFadePass()
 // （重包 span）+ highlightAllCodeBlocks()（全 DOM 高亮）双重全量重做 = 思考流式巨卡。
 // 改为节流合并（~120ms 最多一次）+ 只对「流式中的消息」做，避免逐 token 全量重查。
+// 2026-09-02 修：原 watch 只依赖 messages.value.length，但 useAgentWorkflow 的 appendText
+// 是原地 mutate blocks[].text，不改变数组长度 → 渐变永远不触发。补上 blocks 文本总长度检测。
 let streamPassTimer = null
 watch(
-  () => messages.value.length, // 只监听条数变化（新增/删除消息），不深度监听内容
+  () => messages.value.length + '|' + (flowState.blocks?.reduce((s, b) => s + b.text.length, 0) ?? 0),
   () => {
     if (streamPassTimer) return
     streamPassTimer = setTimeout(() => {
@@ -4124,6 +4136,11 @@ async function refreshGitGraph() {
 .rt-sub { color: var(--app-text-faint); font-size: 11px; }
 .rt-caret { margin-left: auto; opacity: 0.6; }
 
+/* 切换历史时强制隐藏 placeholder（不经过 transition 延时） */
+.input-row.input-swapping .input-placeholder-text {
+  opacity: 0 !important;
+  transition: none !important;
+}
 /* 自适应占位符的绝对定位 */
 .input-placeholder-text {
   position: absolute;
@@ -4487,5 +4504,14 @@ async function refreshGitGraph() {
   padding: 1px 6px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--app-text, #202124), transparent 92%);
+}
+
+/* ★ 历史切换淡入动画（chat-input-swap 类被 JS flashInputSwap 使用，但从未定义过 CSS → 补上） */
+.chat-input-swap {
+  animation: chatInputSwap 0.22s ease-out;
+}
+@keyframes chatInputSwap {
+  from { opacity: 0.35; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 </style>

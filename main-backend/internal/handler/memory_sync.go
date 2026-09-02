@@ -382,7 +382,17 @@ func pullMemorySync(uid int64) bool {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		log.Printf("[memory-sync] 拉取被拒(uid=%d, HTTP %d) —— 404 表示账号还没有云端记忆，正常", uid, res.StatusCode)
+		switch res.StatusCode {
+		case http.StatusNotFound:
+			// 404 = 账号还没有云端记忆，正常
+			log.Printf("[memory-sync] 拉取无云端记忆(uid=%d, HTTP 404) —— 正常", uid)
+		case http.StatusForbidden:
+			log.Printf("[memory-sync] 拉取被拒(uid=%d, HTTP 403) —— JWT uid 与请求 uid 不匹配（token 缓存过期/错源），检查 cloud_login_token 与 cloud_guest_token", uid)
+		case http.StatusUnauthorized:
+			log.Printf("[memory-sync] 拉取被拒(uid=%d, HTTP 401) —— token 无效/过期", uid)
+		default:
+			log.Printf("[memory-sync] 拉取被拒(uid=%d, HTTP %d)", uid, res.StatusCode)
+		}
 		return false // 404 = 账号还没有云端记忆，正常
 	}
 	var parsed struct {
@@ -404,17 +414,30 @@ func pullMemorySync(uid int64) bool {
 	return true
 }
 
-// HandleMemorySyncPull POST /api/memory/sync/pull {uid}
-// 显式触发：从云端拉记忆包写回本地（前端登录/启动后调用，跨设备恢复记忆）。
+// HandleMemorySyncPull 显式触发：从云端拉记忆包写回本地（前端登录/启动后调用，跨设备恢复记忆）。
+// uid 从「实际鉴权 token」解析（登录 token 优先，回退 guest token），而不是信任前端传的 uid：
+// 前端可能残留过期登录 token 的旧 uid（游客号），而后端 readAuthToken 取的是登录 token（账号 uid），
+// 二者不匹配 → 云端 requireUIDMatch 403 → 拉取永远失败（2026-09-02 实锤）。
+// 兼容旧调用方：body 里的 uid 仅作兜底，token 解不出 uid 时用。
 func HandleMemorySyncPull(c *gin.Context) {
-	var req struct {
-		UID int64 `json:"uid"`
+	uid := uidFromToken(mustAuthToken())
+	if uid <= 0 {
+		// 兜底：前端传的 uid（旧调用方/无 token 场景）
+		var req struct {
+			UID int64 `json:"uid"`
+		}
+		if err := c.ShouldBindJSON(&req); err == nil && req.UID > 0 {
+			uid = req.UID
+		}
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.UID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 uid"})
+	if uid <= 0 {
+		uid, _ = memorydir.ReadIntimacy()
+	}
+	if uid <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无法确定 uid"})
 		return
 	}
-	ok := pullMemorySync(req.UID)
+	ok := pullMemorySync(uid)
 	c.JSON(http.StatusOK, gin.H{"ok": ok, "restored": ok})
 }
 
