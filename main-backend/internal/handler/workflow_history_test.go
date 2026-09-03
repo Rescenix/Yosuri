@@ -42,7 +42,7 @@ func TestPersistWorkflowHistoryUpsertsResumeResult(t *testing.T) {
 		"session_1", "workflow_1", "修复登录页", taskStatusFailed,
 		"第一次执行失败", "deepseek-v4-flash", []string{"apply_patch => 已更新 app.ts"}, []FlowBlock{
 			{Type: "tool", Name: "apply_patch", Status: "ok"},
-		},
+		}, 1200, 340,
 	)
 	failed := store.Get("session_1")
 	if len(failed) != 2 || failed[0].Status != taskStatusFailed {
@@ -51,10 +51,13 @@ func TestPersistWorkflowHistoryUpsertsResumeResult(t *testing.T) {
 	if !strings.Contains(failed[1].Content, "apply_patch") {
 		t.Fatalf("失败历史没有部分步骤: %q", failed[1].Content)
 	}
+	if failed[1].TokenUsage != 1540 {
+		t.Fatalf("assistant 应携带真实 token 消耗: %d", failed[1].TokenUsage)
+	}
 
 	runner.persistWorkflowHistory(
 		"session_1", "workflow_1", "修复登录页", taskStatusCompleted,
-		"续跑后完成", "", nil, []FlowBlock{{Type: "intent", Text: "续跑后完成"}},
+		"续跑后完成", "", nil, []FlowBlock{{Type: "intent", Text: "续跑后完成"}}, 0, 0,
 	)
 	completed := store.Get("session_1")
 	if len(completed) != 2 {

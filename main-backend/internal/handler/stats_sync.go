@@ -33,13 +33,18 @@ func reportStatsAsync(msg DSMessage) {
 	if ts.IsZero() {
 		ts = time.Now()
 	}
+	tokens := int64(msg.TokenUsage)
+	if tokens <= 0 {
+		// 取不到真实 usage（旧数据/历史消息）时回退字符估算，口径与本地统计一致
+		tokens = int64(estimateContentTokens(msg.Content))
+	}
 	payload := map[string]any{
 		"uid":      uid,
 		"date":     ts.Format("2006-01-02"),
 		"model":    msg.Model,
 		"hour":     ts.Hour(),
 		"messages": 1,
-		"tokens":   estimateContentTokens(msg.Content),
+		"tokens":   tokens,
 	}
 	body, _ := json.Marshal(payload)
 	go func() {

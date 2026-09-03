@@ -72,7 +72,13 @@ export async function parsePptxPreview(buffer) {
       if (local === 'sp') {
         const text = childrenByLocalName(node, 't').map(item => item.textContent || '').join('\n').trim()
         if (!text) continue
-        const color = first(first(node, 'solidFill'), 'srgbClr')?.getAttribute('val') || '172033'
+        // 文字颜色：优先取 rPr（run 属性）里的文字色，而不是形状的填充色。
+        // 之前取 sp 的 solidFill（形状填充），导致白色卡片上的文字被判成白色 → 白屏。
+        const rPr = first(node, 'rPr')
+        const rPrFill = rPr ? first(rPr, 'solidFill') : null
+        const color = rPrFill
+          ? (first(rPrFill, 'srgbClr')?.getAttribute('val') || '172033')
+          : (first(first(node, 'solidFill'), 'srgbClr')?.getAttribute('val') || '172033')
         const fontSize = Number(first(node, 'rPr')?.getAttribute('sz') || first(node, 'defRPr')?.getAttribute('sz') || 1800) / 100
         elements.push({ type: 'text', text, color: `#${color}`, fontSize, ...box })
       } else if (local === 'pic') {

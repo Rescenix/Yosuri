@@ -253,6 +253,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 	r.POST("/api/title/generate", HandleGenerateTitle)
+	r.POST("/api/theme/name", HandleThemeName)
 
 	r.POST("/api/login", CloudLoginProxy)
 	r.POST("/api/auth/register", CloudRegisterProxy)
@@ -373,7 +374,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 公司管理面板（多 Agent 编排 GUI）
 	r.GET("/api/company/agents", HandleCompanyAgents)
 	r.GET("/api/company/agent", HandleCompanyAgent)
+	r.GET("/api/company/relays", HandleCompanyRelays)
 	r.GET("/api/company/file", HandleCompanyFile)
+	r.GET("/api/company/model-config", HandleCompanyModelConfigGET)
+	r.PUT("/api/company/model-config", HandleCompanyModelConfigPUT)
 	r.GET("/api/company/integrations", HandleCompanyIntegrations)
 	r.GET("/api/company/production-audit", HandleCompanyProductionAudit)
 	r.GET("/api/company/evolve", HandleCompanyEvolve)

@@ -280,8 +280,7 @@
     <!-- 建议按钮：工作流结束后模型自己觉得有值得一键推进的建议，出一行按钮，点击即填入输入框发送。
              沿 Hermes 风格轻量悬浮卡片，紧贴 changed-files 上方。 -->
         <div v-if="flow.suggestions && flow.suggestions.length" class="flow-suggestions">
-          <div class="flow-suggestions-title">要继续吗？</div>
-          <div class="flow-suggestions-row">
+                  <div class="flow-suggestions-row">
             <button
               v-for="(s, i) in flow.suggestions"
               :key="i"
@@ -351,6 +350,7 @@ import RoseParticleLoader from './RoseParticleLoader.vue'
 import RoseIcon from './RoseIcon.vue'
 import { renderMarkdown } from './markdownRenderer.js'
 import { requestPreview } from '../composables/previewBus.js'
+import { pptxToHtml, xlsxToHtml, docxToHtml } from '../../../utils/officePreview.js'
 
 const props = defineProps({
   flow: { type: Object, required: true }
@@ -397,9 +397,18 @@ async function previewDeliveredFile(block) {
         'pre code{background:none;padding:0}table{border-collapse:collapse}th,td{border:1px solid #e2e8f0;padding:6px 10px}img{max-width:100%}' +
         '.katex-display{overflow-x:auto}svg{max-width:100%}</style></head><body>' + body + '</body></html>'
       requestPreview('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+    } else if (ext === 'pdf') {
+      // PDF：预览窗内嵌 raw（浏览器原生渲染 PDF）
+      requestPreview('/api/agent/file?path=' + encodeURIComponent(block.path) + '&raw=1')
     } else {
-      // 二进制类（pdf/pptx/docx/xlsx）：直接新开 raw 文件。
-      window.open('/api/agent/file?path=' + encodeURIComponent(block.path) + '&raw=1', '_blank')
+      // pptx/xlsx/docx：前端解析渲染成 HTML 进右侧预览窗（不再是源码/下载）
+      const binary = await fetch('/api/agent/file?path=' + encodeURIComponent(block.path) + '&raw=1')
+      if (!binary.ok) throw new Error('读取失败 (' + binary.status + ')')
+      const buf = await binary.arrayBuffer()
+      if (ext === 'pptx') requestPreview(await pptxToHtml(buf))
+      else if (ext === 'xlsx') requestPreview(await xlsxToHtml(buf))
+      else if (ext === 'docx' || ext === 'doc') requestPreview(await docxToHtml(buf))
+      else window.open('/api/agent/file?path=' + encodeURIComponent(block.path) + '&raw=1', '_blank')
     }
   } catch (err) {
     block.previewError = err.message || '预览失败'
@@ -2054,20 +2063,14 @@ function toolBodyText(b) {
   padding: 8px 0;
   border-top: 1px dashed var(--app-border);
 }
-.flow-suggestions-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--app-text-soft);
-  margin-bottom: 6px;
-}
 .flow-suggestions-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .flow-suggestion-btn {
-  padding: 4px 10px;
-  font-size: 11.5px;
+  padding: 8px 14px;
+  font-size: 13.5px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--app-accent) 30%, transparent);
   background: color-mix(in srgb, var(--app-accent) 6%, transparent);

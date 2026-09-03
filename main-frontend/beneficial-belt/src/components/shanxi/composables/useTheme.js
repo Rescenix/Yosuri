@@ -3,8 +3,10 @@
 // 不再依赖 CSS 里写死的 :root[data-theme=...] 分组——加一套主题只需往 THEME_PRESETS 加一行。
 import { ref, watch } from 'vue'
 
-const THEME_KEY = 'aurora_theme'      // 色板名：blue/pink/purple/orange
+const THEME_KEY = 'aurora_theme'      // 色板名：blue/pink/purple/orange/custom
 const MODE_KEY = 'aurora_mode'        // 亮度：light/dark/system
+const CUSTOM_COLOR_KEY = 'aurora_theme_custom_color' // 自定义主题色 hex
+const CUSTOM_NAME_KEY = 'aurora_theme_custom_name'   // 自定义主题色语义名（auto 免费模型起名）
 
 // 两套完整皮肤都以专业 IDE 为骨架。二次元感只来自赛璐璐式双强调色，
 // 不再用波点、蕾丝、发光和大圆角破坏教学录屏里的代码可读性。
@@ -50,6 +52,12 @@ export const THEME_PRESETS = {
   pink:   { label: '樱花', accent: '#ec4899', accentHover: '#db2777', accentSoft: 'rgba(236,72,153,0.12)' },
   purple: { label: '薰衣草', accent: '#a855f7', accentHover: '#9333ea', accentSoft: 'rgba(168,85,247,0.12)' },
   orange: { label: '金盏花',  accent: '#c96442', accentHover: '#b85737', accentSoft: 'rgba(201,100,66,0.12)' },
+  // 双色渐变主题：gradFrom/gradTo 生成 --app-accent-gradient（主按钮/明显强调用渐变，
+  // 普通强调仍回落到 accent 单色，保证浅色易读）
+  aurora: {
+    label: '极光', gradient: true, gradFrom: '#6366f1', gradTo: '#ec4899',
+    accent: '#7c6cf0', accentHover: '#6a5ae0', accentSoft: 'rgba(124,108,240,0.13)',
+  },
   witchtrial: {
     label: '原画工房', series: '动画工作台',
     accent: '#df5656', accentHover: '#c84549', accentSoft: 'rgba(223,86,86,0.13)',
@@ -98,12 +106,44 @@ const NEUTRAL_DARK = {
 }
 
 const savedTheme = localStorage.getItem(THEME_KEY)
-const initialTheme = THEME_PRESETS[savedTheme] ? savedTheme : 'orange'
+const initialTheme = (THEME_PRESETS[savedTheme] || savedTheme === 'custom') ? savedTheme : 'orange'
 if (savedTheme && savedTheme !== initialTheme) localStorage.setItem(THEME_KEY, initialTheme)
 
 export const theme = ref(initialTheme)
+// 自定义主题色（custom 色板用）：hex 存 localStorage，起名结果也持久化
+export const customColor = ref(/^#[0-9a-fA-F]{6}$/.test(localStorage.getItem(CUSTOM_COLOR_KEY) || '') ? localStorage.getItem(CUSTOM_COLOR_KEY) : '#c96442')
+export const customThemeName = ref(localStorage.getItem(CUSTOM_NAME_KEY) || '自定义')
 const savedMode = MODE_OPTIONS.some(o => o.value === localStorage.getItem(MODE_KEY)) ? localStorage.getItem(MODE_KEY) : 'light'
 export const mode = ref(savedMode)
+
+// hex → {r,g,b}，非法值回退橙色
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(hex || '')
+  if (!m) return { r: 201, g: 100, b: 66 }
+  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
+}
+// hover 变暗 12%（同现有 preset 的 accentHover 相对 accent 的比例）
+function hoverOf(hex) {
+  const { r, g, b } = hexToRgb(hex)
+  return `rgb(${Math.round(r * 0.88)}, ${Math.round(g * 0.88)}, ${Math.round(b * 0.88)})`
+}
+// soft 半透明底（12% 浓度，同现有 preset 的 accentSoft）
+function softOf(hex) {
+  const { r, g, b } = hexToRgb(hex)
+  return `rgba(${r}, ${g}, ${b}, 0.12)`
+}
+export function setCustomColor(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex || '')) return false
+  customColor.value = hex
+  localStorage.setItem(CUSTOM_COLOR_KEY, hex)
+  return true
+}
+export function setCustomThemeName(name) {
+  const n = String(name || '').trim().slice(0, 12)
+  if (!n) return
+  customThemeName.value = n
+  localStorage.setItem(CUSTOM_NAME_KEY, n)
+}
 
 function systemPrefersDark() {
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -115,7 +155,9 @@ function resolvedMode() {
 // 运行时注入：解析当前 色板×亮度 → 完整 --app-* 变量集写到 <html> inline style。
 // 保留 data-theme 属性供个别依赖属性选择器的样式（如 ChatWidget context 横条）。
 function applyTheme() {
-  const preset = THEME_PRESETS[theme.value] || THEME_PRESETS.orange
+  const preset = theme.value === 'custom'
+    ? { accent: customColor.value, accentHover: hoverOf(customColor.value), accentSoft: softOf(customColor.value) }
+    : (THEME_PRESETS[theme.value] || THEME_PRESETS.orange)
   const dark = resolvedMode() === 'dark'
   const n = preset.fullSkin ? preset.skin[dark ? 'dark' : 'light'] : (dark ? NEUTRAL_DARK : NEUTRAL_LIGHT)
   const root = document.documentElement
@@ -126,30 +168,34 @@ function applyTheme() {
     ? "'Segoe UI Variable', 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif"
     : "'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
   const vars = {
-    '--app-accent': preset.accent,
-    '--app-accent-hover': preset.accentHover,
-    '--app-accent-soft': preset.accentSoft,
-    '--app-accent-2': preset.accent2 || preset.accentHover,
-    '--app-accent-2-soft': preset.accent2Soft || preset.accentSoft,
-    '--app-font': appFont,
-    '--app-bg': n.bg,
-    '--app-surface': n.surface,
-    '--app-surface-2': n.surface2,
-    '--app-surface-3': n.surface3,
-    '--app-text': n.text,
-    '--app-text-soft': n.textSoft,
-    '--app-text-faint': n.textFaint,
-    '--app-border': n.border,
-    '--app-border-soft': n.borderSoft,
-    '--app-code-bg': n.codeBg,
-    '--app-shadow': n.shadow,
-    '--app-surface-rgb': n.surfaceRgb,
-    '--sticky-paper': n.stickyPaper,
-    '--sticky-rule': n.stickyRule,
-    '--sticky-ink': n.stickyInk,
-    '--sticky-ink-soft': n.stickyInkSoft,
-    '--sticky-ink-faint': n.stickyInkFaint,
-  }
+      '--app-accent': preset.accent,
+      '--app-accent-hover': preset.accentHover,
+      '--app-accent-soft': preset.accentSoft,
+      '--app-accent-2': preset.accent2 || preset.accentHover,
+      '--app-accent-2-soft': preset.accent2Soft || preset.accentSoft,
+      // 双色渐变：gradFrom/gradTo 拼 135° 渐变；非渐变主题/自定义色回退单色
+      '--app-accent-gradient': preset.gradient && preset.gradFrom && preset.gradTo
+        ? `linear-gradient(135deg, ${preset.gradFrom}, ${preset.gradTo})`
+        : preset.accent,
+      '--app-font': appFont,
+      '--app-bg': n.bg,
+      '--app-surface': n.surface,
+      '--app-surface-2': n.surface2,
+      '--app-surface-3': n.surface3,
+      '--app-text': n.text,
+      '--app-text-soft': n.textSoft,
+      '--app-text-faint': n.textFaint,
+      '--app-border': n.border,
+      '--app-border-soft': n.borderSoft,
+      '--app-code-bg': n.codeBg,
+      '--app-shadow': n.shadow,
+      '--app-surface-rgb': n.surfaceRgb,
+      '--sticky-paper': n.stickyPaper,
+      '--sticky-rule': n.stickyRule,
+      '--sticky-ink': n.stickyInk,
+      '--sticky-ink-soft': n.stickyInkSoft,
+      '--sticky-ink-faint': n.stickyInkFaint,
+    }
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v)
 }
 

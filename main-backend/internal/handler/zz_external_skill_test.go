@@ -79,18 +79,61 @@ func TestLoadExternalSkillsAndSource(t *testing.T) {
 	}
 }
 
-// read_skill 对外部技能要回 content（正文），对自研技能回 steps。
-func TestHandleReadSkillExternalReturnsContent(t *testing.T) {
+// skill_view 对外部技能要回 content（正文）+ linked_files（关联文件），对自研技能回 steps。
+func TestHandleSkillViewExternalReturnsContent(t *testing.T) {
 	withTempSkillsDir(t)
 	extDir := withTempExtSkillsDir(t)
 	writeExtSkill(t, extDir, "frontend-design", "---\nname: frontend-design\ndescription: 前端设计原则\n---\n\n这里是完整说明文档")
 
-	out := handleReadSkill(`{"names":["frontend-design"]}`, loadSkills())
+	out := handleSkillView(`{"names":["frontend-design"]}`, loadSkills())
 	if !strings.Contains(out, "这里是完整说明文档") {
-		t.Fatalf("read_skill 未回外部技能正文: %s", out)
+		t.Fatalf("skill_view 未回外部技能正文: %s", out)
 	}
 	if !strings.Contains(out, "content") {
 		t.Fatalf("外部技能结果应带 content 字段: %s", out)
+	}
+}
+
+// 外部技能目录下带 tokens/ 等关联子目录时，skill_view 要列出 linked_files。
+func TestHandleSkillViewExternalLinkedFiles(t *testing.T) {
+	withTempSkillsDir(t)
+	extDir := withTempExtSkillsDir(t)
+	sub := filepath.Join(extDir, "frontend-design", "tokens")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("建 tokens 子目录失败: %v", err)
+	}
+	writeExtSkill(t, extDir, "frontend-design", "---\nname: frontend-design\ndescription: 前端设计原则\n---\n正文")
+	if err := os.WriteFile(filepath.Join(sub, "INDEX.md"), []byte("# 色板索引\n"), 0o644); err != nil {
+		t.Fatalf("写关联文件失败: %v", err)
+	}
+
+	out := handleSkillView(`{"names":["frontend-design"]}`, loadSkills())
+	if !strings.Contains(out, "linked_files") || !strings.Contains(out, "tokens/INDEX.md") {
+		t.Fatalf("skill_view 未列出关联文件: %s", out)
+	}
+}
+
+// skill_view 带 name + file_path 时直接返回关联文件正文，越界路径被拒绝。
+func TestHandleSkillViewReadLinkedFile(t *testing.T) {
+	withTempSkillsDir(t)
+	extDir := withTempExtSkillsDir(t)
+	sub := filepath.Join(extDir, "frontend-design", "tokens")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("建 tokens 子目录失败: %v", err)
+	}
+	writeExtSkill(t, extDir, "frontend-design", "---\nname: frontend-design\ndescription: 前端设计原则\n---\n正文")
+	if err := os.WriteFile(filepath.Join(sub, "stripe.tokens.md"), []byte("Stripe 色板：#635BFF\n"), 0o644); err != nil {
+		t.Fatalf("写关联文件失败: %v", err)
+	}
+
+	out := handleSkillView(`{"name":"frontend-design","file_path":"tokens/stripe.tokens.md"}`, loadSkills())
+	if !strings.Contains(out, "#635BFF") {
+		t.Fatalf("skill_view 未回关联文件正文: %s", out)
+	}
+
+	// 越界路径必须被拒
+	if bad := handleSkillView(`{"name":"frontend-design","file_path":"../../etc/passwd"}`, loadSkills()); !strings.Contains(bad, "越界") {
+		t.Fatalf("越界关联文件路径未被拒绝: %s", bad)
 	}
 }
 

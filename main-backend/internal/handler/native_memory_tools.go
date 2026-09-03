@@ -66,6 +66,17 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 		// 云端记忆同步（可选）：交接工作态变了，异步推送（handoff 不进白名单，但推送无害）
 		pushMemorySync()
 		return nativeToolResult{Text: "已更新会话交接工作态（handoff.md）"}, nil
+	case "memory_delete":
+		file := strings.TrimSpace(stringArg(args, "file"))
+		if file == "" {
+			return nativeToolResult{}, fmt.Errorf("file 不能为空（要删除的记忆文件名，如 preferences）")
+		}
+		if err := memorydir.DeleteMemory(file); err != nil {
+			return nativeToolResult{}, fmt.Errorf("删除失败: %w", err)
+		}
+		// 云端记忆同步（可选）：记忆删了，异步推一次保持云端一致
+		pushMemorySync()
+		return nativeToolResult{Text: fmt.Sprintf("已删除记忆 %s（memory/%s.md 已移除，索引已同步）", file, file)}, nil
 	case "workdir_read":
 		path, err := nativeWorkdirNotePath()
 		if err != nil {

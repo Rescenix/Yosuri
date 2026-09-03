@@ -10,6 +10,7 @@ const MESSAGES = {
   zh: {
     // 侧栏 / 账户菜单
     'nav.newSession': '新建会话',
+    'nav.scheduledTasks': '定时任务',
     'nav.sites': '站点',
     'nav.projects': '项目',
     'nav.pinned': '置顶',
@@ -47,6 +48,7 @@ const MESSAGES = {
   },
   en: {
     'nav.newSession': 'New session',
+    'nav.scheduledTasks': 'Scheduled tasks',
     'nav.sites': 'Sites',
     'nav.projects': 'Projects',
     'nav.pinned': 'Pinned',

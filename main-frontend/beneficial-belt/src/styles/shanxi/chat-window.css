@@ -176,7 +176,7 @@ overflow-y: auto;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(107, 99, 89, 0.24);
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
   border-radius: 999px;
 }
 
@@ -592,13 +592,13 @@ min-height: 90px !important;
 /* 编辑态右上角按钮变「发送」：实心主题色、常驻可见（不靠 hover） */
 .message-bubble.user .msg-edit-btn.confirm {
   color: #fff;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   opacity: 1;
   transform: none;
   pointer-events: auto;
 }
 .message-bubble.user .msg-edit-btn.confirm:hover {
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   filter: brightness(1.06);
 }
 
@@ -1189,16 +1189,18 @@ min-height: 90px !important;
   flex: 1;
   overflow-y: auto;
   padding: 0 8px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 30%, transparent) transparent;
 }
 .session-list::-webkit-scrollbar {
   width: 6px;
 }
 .session-list::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.15);
-  border-radius: 4px;
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+  border-radius: 999px;
 }
 .session-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,0,0,0.25);
+  background: color-mix(in srgb, var(--app-accent) 50%, transparent);
 }
 .session-list::-webkit-scrollbar-track {
   background: transparent;
@@ -1708,20 +1710,6 @@ min-height: 90px !important;
   font-style: italic;
 }
 
-.model-menu-dropdown {
-  position: absolute;
-  bottom: 56px;
-  left: 6px;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  padding: 6px 0;
-  min-width: 140px;
-  max-height: 320px;
-  overflow-y: auto;
-  z-index: 9999;
-}
 .model-menu-item {
   display: flex;
   align-items: center;
@@ -1752,7 +1740,7 @@ min-height: 90px !important;
 
 .model-menu-tag-free {
   font-size: 10px; font-weight: 600;
-  color: #fff; background: var(--app-accent);
+  color: #fff; background: var(--app-accent-gradient);
   padding: 1px 6px; border-radius: 999px;
   margin-left: 6px; flex-shrink: 0;
 }
@@ -1785,7 +1773,7 @@ min-height: 90px !important;
   display: inline-flex; align-items: center; gap: 4px; line-height: 1;
 }
 .model-tag-chip.on {
-  background: var(--app-accent); color: #fff; border-color: var(--app-accent);
+  background: var(--app-accent-gradient); color: #fff; border-color: var(--app-accent);
 }
 .model-tag-del {
   font-size: 13px; line-height: 1; opacity: 0.7; margin-left: 2px;
@@ -2098,10 +2086,6 @@ min-height: 90px !important;
 .header-icon-btn { background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: var(--app-text-soft); transition: background 0.15s ease; }
 .header-icon-btn:hover { background: var(--app-surface-3); }
 .header-icon-btn.active { background: var(--app-surface-3); }
-
-/* 不加粗、不带折叠箭头——模型名本身就是可点开的（去掉视觉上的"这是个下拉框"提示） */
-.sch-model { position: relative; display: flex; align-items: center; gap: 4px; background: var(--app-surface); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 400; cursor: pointer; color: var(--app-text); }
-.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; color: var(--app-text); }
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; color: var(--app-text); }
 .model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
@@ -2155,7 +2139,7 @@ min-height: 90px !important;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -2164,7 +2148,7 @@ min-height: 90px !important;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -2196,26 +2180,45 @@ min-height: 90px !important;
   transition: y 0.4s ease, height 0.4s ease;
 }
 
-/* 模型 pill：仿 Yolo 主题色白字 */
+/* 模型名：纯文字 + 下拉箭头，无背景无药丸（Hermes 同款） */
 .sch-model {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 4px 10px;
+  gap: 3px;
+  padding: 2px 4px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  color: #fff;
+  color: var(--app-text-soft);
   white-space: nowrap;
-  transition: filter 0.15s ease;
+  max-width: 140px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  transition: color .15s ease;
 }
-.sch-model:hover { filter: brightness(1.05); }
-.sch-model-caret { color: rgba(255,255,255,0.85); flex-shrink: 0; }
-.model-menu-dropdown { position: absolute; top: 100%; right: 0; margin-top: 6px; background: var(--app-surface); border: 1px solid #d4d4d4; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); padding: 6px 0; min-width: 140px; max-height: 320px; overflow-y: auto; z-index: 9999; color: var(--app-text); }
+.sch-model > span:first-child {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.sch-model:hover { color: var(--app-text); }
+.sch-model-caret { color: var(--app-text-faint); flex-shrink: 0; }
+/* 列布局 + 顶搜索固定/列表滚动/底管理，宽高由 JS 内联 style 提供 */
+.model-menu-dropdown.model-menu-dropdown {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 7px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16), 0 2px 8px rgba(15, 23, 42, .08);
+}
 .model-menu-item { display: flex; align-items: center; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background 0.15s; color: var(--app-text); }
 .model-menu-item:hover { background: var(--app-surface-3); }
 .model-menu-item.active { background: var(--app-surface-3); font-weight: 500; }
@@ -2262,7 +2265,7 @@ min-height: 90px !important;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -2271,7 +2274,7 @@ min-height: 90px !important;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: pointer;
@@ -2304,7 +2307,7 @@ min-height: 90px !important;
    脱离 flex 高度计算 → input-area 高度恒定等于输入框 → ask/todo 出现时消息区
    不再被压缩顶上去，只在最底部被悬浮条盖住一部分（消息区底部有 clearance，可滚到条下面）。
    （不做动态 ResizeObserver 测量——上一版即因它触发思考流式卡顿而废弃。） */
-.chat-input-area { position: relative; flex-shrink: 0; padding: 12px 20px 18px; background: transparent; }
+.chat-input-area { position: relative; flex-shrink: 0; padding: 8px 14px 12px; background: transparent; }
 .chat-input-area > .todo-bar,
 .chat-input-area > .question-bar,
 .chat-input-area > .approval-bar {
@@ -2336,8 +2339,11 @@ min-height: 90px !important;
   padding: 0;
   gap: 0;
   border: 1px solid var(--app-border);
-  border-radius: 0;
+  border-radius: 10px;
   background: var(--app-surface);
+  /* 紧凑精致：内边距收紧，跟 Hermes 输入框一样不臃肿 */
+  margin: 0 auto 8px;
+  max-width: 720px;
   box-shadow: none;
   transition: border-color 0.2s ease;
 }
@@ -2355,35 +2361,41 @@ min-height: 90px !important;
    overflow-y 改回 auto：hidden 时内容超过 max-height(150px) 会把光标那行裁掉、
    看不见输入，配合上面拿掉 scrollTop=0，光标现在能正常跟随滚动。
    line-height 提到 24px，让光标（高度=行高）更饱满，不再显得"太矮"。 */
-.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 4px 0 !important; resize: none; min-height: 40px !important; max-height: 150px; line-height: 24px; font-size: 15px; color: var(--app-text); font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
+.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 8px 0 !important; resize: none; min-height: 34px !important; max-height: 150px; line-height: 20px; font-size: 14px; color: var(--app-text); font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
 .chat-input::-webkit-scrollbar { display: none; }
 .chat-input::placeholder { color: var(--app-text-faint); font-style: italic; }
 
-.input-inner-btn { display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; flex-shrink: 0; width: 28px; height: 28px; padding: 0; color: var(--app-text-soft); border-radius: 50%; transition: background 0.2s; z-index: 10; }
+.input-inner-btn { display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; flex-shrink: 0; width: 30px; height: 30px; padding: 0; color: var(--app-text-soft); border-radius: 50%; transition: background 0.2s; z-index: 10; position: static; }
 .input-inner-btn:hover { background: rgba(0, 0, 0, 0.05); }
+/* 发送按钮：Hermes 同款黑色实心圆，只有黑白色调，无其他彩色 */
 .input-send-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border: 1px solid #171717;
   background: #171717;
   color: #fff;
   box-shadow: none;
 }
 .input-send-btn:hover { background: #000; border-color: #000; }
-.input-stop-btn { width: 28px; height: 28px; background: #1a1a1a; }
+/* 空输入占位态：同款黑色实心圆，仅降一点不透明度提示「可点但暂无内容」 */
+.input-send-idle {
+  border: 1px solid #3a3a3a;
+  background: #3a3a3a;
+}
+.input-send-idle:hover { background: #2a2a2a; border-color: #2a2a2a; }
+.input-stop-btn { width: 30px; height: 30px; background: #171717; }
 .input-stop-btn:hover { background: #000000; }
 
-/* 中途插话（steer）导航按钮：区别于发送按钮，用主题色 accent + 斜向右上纸飞机，
-   提示「这是插话/导航」而非「发新消息」；flowState.active 时替换发送按钮。 */
+/* 中途插话（steer）导航按钮：也用黑色系（同 Hermes），纸飞机图标不变 */
 .input-steer-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 45%, transparent);
-  background: color-mix(in srgb, var(--app-accent) 16%, transparent);
-  color: var(--app-accent);
+  width: 30px;
+  height: 30px;
+  border: 1px solid #2a2a2a;
+  background: #2a2a2a;
+  color: #fff;
   box-shadow: none;
 }
-.input-steer-btn:hover { background: color-mix(in srgb, var(--app-accent) 28%, transparent); }
+.input-steer-btn:hover { background: #000; border-color: #000; }
 
 /* 历史切换（↑/↓）轻淡入：文本替换的瞬间做一次短促上移+淡入，避免生硬跳变 */
 .chat-input-swap { animation: chat-input-swap-in 0.16s ease-out; }
@@ -2640,7 +2652,7 @@ min-height: 90px !important;
 }
 .tool-dock-resize-handle:hover,
 .tool-dock-resize-handle:active {
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   box-shadow: none;
 }
 /* 扁平浏览器式标签条：跟 image2 参考图一个量级——细线分隔、当前标签用色块下划线
@@ -3226,13 +3238,13 @@ min-height: 90px !important;
 .agentfs-node.active .agentfs-node-dot {
   width: 24px;
   height: 24px;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   color: white;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 14%, transparent),
     0 4px 10px color-mix(in srgb, var(--app-accent) 25%, transparent);
 }
 .agentfs-node.latest .agentfs-node-dot {
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 13%, transparent);
 }
 .agentfs-node.latest:not(:hover):not(.active)::after {
@@ -3409,7 +3421,7 @@ min-height: 90px !important;
 .git-graph-node.current .agentfs-node-dot {
   width: 25px;
   height: 25px;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   border-color: #fff;
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-accent) 22%, transparent), 0 0 18px color-mix(in srgb, var(--app-accent) 62%, transparent);
 }
@@ -3419,7 +3431,7 @@ min-height: 90px !important;
   top: -14px;
   padding: 2px 5px;
   border-radius: 4px;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   color: #fff;
   font-size: 9px;
   line-height: 1;
@@ -3459,7 +3471,7 @@ min-height: 90px !important;
   height: 10px;
   border: 2px solid var(--app-surface);
   border-radius: 50%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 14%, transparent);
   animation: none;
 }
@@ -3474,7 +3486,7 @@ min-height: 90px !important;
   height: 10px;
   border: 2px solid var(--app-surface);
   border-radius: 50%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   color: transparent;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent) 38%, transparent);
 }
@@ -3818,7 +3830,7 @@ min-height: 90px !important;
   transition: all 0.15s ease;
 }
 .gem-rail-bar:hover { background: var(--app-text-faint); width: 30px; }
-.gem-rail-bar.active { background: var(--app-accent); width: 30px; }
+.gem-rail-bar.active { background: var(--app-accent-gradient); width: 30px; }
 .gem-rail-bar.running { box-shadow: 0 0 0 3px var(--app-accent-soft); }
 /* 折叠态会话横条入场动画：随主题强调色展开+淡入，带错开时序 */
 @keyframes railBarIn {
@@ -3840,10 +3852,10 @@ min-height: 90px !important;
 .gem-sidebar.collapsed .gem-rail-bar:nth-child(10) { animation-delay: 0.38s; }
 /* 笔记本(置顶)横条：与最近会话同为横条，用主题强调色区分 */
 .gem-rail-bar.pinned {
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
 }
 .gem-rail-bar.pinned:hover { width: 30px; background: var(--app-accent-hover); }
-.gem-rail-bar.pinned.active { background: var(--app-accent); }
+.gem-rail-bar.pinned.active { background: var(--app-accent-gradient); }
 .gem-rail-divider {
   flex-shrink: 0;
   width: 24px;
@@ -3904,9 +3916,9 @@ min-height: 90px !important;
   border-radius: 999px;
   background: var(--app-text-faint);
 }
-.rail-card-mark.pinned { width: 5px; height: 14px; background: var(--app-accent); }
+.rail-card-mark.pinned { width: 5px; height: 14px; background: var(--app-accent-gradient); }
 .rail-card-mark.running { box-shadow: 0 0 0 3px var(--app-accent-soft); }
-.rail-card-row.active .rail-card-mark { background: var(--app-accent); }
+.rail-card-row.active .rail-card-mark { background: var(--app-accent-gradient); }
 .rail-card-name {
   min-width: 0;
   overflow: hidden;
@@ -3976,7 +3988,7 @@ min-height: 90px !important;
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -3993,6 +4005,26 @@ img.gem-rail-avatar {
 
 /* ==================== 右上工具横条 + 聊天内容边缘 blur ==================== */
 .chat-window.expanded .chat-body.studio .chat-content { position: relative; }
+/* 会话标题：聊天滚动区外部顶部的一行标题，靠左；普通文档流，不遮挡不滚动 */
+.chat-session-titlebar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 10px 24px 2px;
+  box-sizing: border-box;
+}
+.chat-session-title-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .floating-tools {
   position: absolute;
   top: 10px;
@@ -4665,7 +4697,7 @@ img.gem-rail-avatar {
 }
 .approval-bar-progress-fill {
   height: 100%;
-  background: var(--app-accent);
+  background: var(--app-accent-gradient);
   transition: width 1s linear;
 }
 .approval-bar-remember {
@@ -4689,7 +4721,7 @@ img.gem-rail-avatar {
   border: 1px solid transparent;
   transition: filter 0.15s ease, background 0.15s ease;
 }
-.approval-bar-btn.allow { color: #fff; background: var(--app-accent); }
+.approval-bar-btn.allow { color: #fff; background: var(--app-accent-gradient); }
 .approval-bar-btn.allow:hover { filter: brightness(1.06); }
 .approval-bar-btn.deny {
   color: var(--app-text-soft);
@@ -4712,32 +4744,22 @@ img.gem-rail-avatar {
   left: auto;
   right: 0;
 }
-.input-toolbar-right .model-menu-dropdown {
-  top: auto;
-  bottom: calc(100% + 6px);
-  left: auto;
-  right: 0;
-  margin-top: 0;
-}
-
 /* 模型选择器：搜索固定在顶端、列表独立滚动、管理入口稳定在底部。 */
-.input-toolbar-right .model-menu-dropdown {
-  display: flex;
-  width: min(360px, calc(100vw - 32px));
-  max-height: min(470px, calc(100vh - 132px));
-  flex-direction: column;
-  overflow: hidden;
-  padding: 7px;
-  border: 1px solid var(--app-border);
-  border-radius: 14px;
-  background: var(--app-surface);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, .16), 0 2px 8px rgba(15, 23, 42, .08);
+/* 定位（向上悬浮）已在 .input-row .sch-model .model-menu-dropdown 处定义 */
+.model-menu-list { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 2px 1px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--app-accent) 30%, transparent) transparent; }
+.model-menu-list::-webkit-scrollbar { width: 6px; }
+.model-menu-list::-webkit-scrollbar-track { background: transparent; }
+.model-menu-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+  border-radius: 999px;
 }
-.model-menu-search { display: flex; align-items: center; gap: 8px; margin: 0 0 5px; padding: 0 10px; min-height: 38px; background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 9px; }
+.model-menu-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 50%, transparent);
+}
+.model-menu-search { display: flex; align-items: center; gap: 8px; margin: 0 0 5px; padding: 0 10px; height: 34px; background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 9px; }
 .model-menu-search:focus-within { border-color: color-mix(in srgb, var(--app-text) 35%, var(--app-border)); box-shadow: 0 0 0 3px rgba(15, 23, 42, .06); }
 .model-menu-search-icon { color: var(--app-text-faint); flex-shrink: 0; }
 .model-menu-search-input { min-width: 0; border: none; background: none; outline: none; flex: 1; font-size: 13px; color: var(--app-text); }
-.model-menu-list { min-height: 0; overflow-y: auto; padding: 2px 1px; scrollbar-color: var(--app-border) transparent; }
 .model-menu-head { display: flex; align-items: center; gap: 6px; margin: 0 0 5px; }
 .model-menu-manage { display: flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 0 10px; height: 34px; border: 1px solid var(--app-border); border-radius: 9px; background: transparent; color: var(--app-text-soft); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .18s; white-space: nowrap; }
 .model-menu-manage:hover { background: var(--app-surface-2); color: var(--app-text); border-color: var(--app-text-3); }
@@ -4749,7 +4771,41 @@ img.gem-rail-avatar {
 .model-menu-group-title { padding: 13px 10px 5px; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--app-text-faint); }
 .model-menu-divider { margin: 4px 2px; background: var(--app-border-soft); }
 .model-menu-check { width: 18px; margin-right: 2px; color: var(--app-text); font-weight: 700; }
+.model-menu-item-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-menu-effort-tag { margin-left: 6px; padding: 1px 6px; color: var(--app-text-faint); background: transparent; border-radius: 5px; font-size: 10px; font-weight: 500; flex-shrink: 0; }
+.model-menu-item.effort-hover { background: var(--app-surface-3); }
 .model-menu-tag-free { margin-left: auto; padding: 2px 6px; color: var(--app-text-soft); background: var(--app-surface-3); border-radius: 5px; font-size: 10px; font-weight: 600; }
+/* hover 思考强度选择卡片（悬浮行右侧，仿 Hermes 选项面板） */
+.model-menu-effort-popup {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .16), 0 2px 8px rgba(15, 23, 42, .08);
+  padding: 8px;
+  font-size: 12px;
+  color: var(--app-text);
+  box-sizing: border-box;
+}
+.mep-header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px; }
+.mep-title { font-weight: 600; font-size: 12px; }
+.mep-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; padding: 2px 8px; border-radius: 999px;
+  background: var(--app-surface-3); color: var(--app-text-faint);
+  font-size: 11px; font-weight: 600; cursor: pointer; user-select: none;
+  transition: all .15s;
+}
+.mep-toggle.on { background: var(--app-accent); color: #fff; }
+.mep-divider { height: 1px; margin: 7px 2px; background: var(--app-border-soft); }
+.mep-section-label { padding: 2px 4px 4px; font-size: 10px; color: var(--app-text-faint); letter-spacing: .04em; }
+.mep-option {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 8px; border-radius: 7px; cursor: pointer;
+  color: var(--app-text-soft); transition: background .12s;
+}
+.mep-option:hover { background: var(--app-surface-3); color: var(--app-text); }
+.mep-option.active { background: var(--app-accent-soft); color: var(--app-accent); font-weight: 600; }
+.mep-opt-check { font-weight: 700; }
 .model-menu-footer { display: flex; align-items: center; gap: 7px; flex-shrink: 0; margin-top: 5px; padding: 9px 10px; border-top: 1px solid var(--app-border); color: var(--app-text-soft); font-size: 12px; cursor: pointer; }
 .model-menu-footer:hover { color: var(--app-text); background: var(--app-surface-3); border-radius: 8px; }
 

@@ -31,6 +31,10 @@ type DSMessage struct {
 	// json:"-"：绝不能进发给上游的请求体（模型自己有 tool_calls/tool 消息那条正路），
 	// 落盘走 persistedMessage.Blocks，出前端走 /api/sessions/:id 的持久化视图。
 	Blocks []FlowBlock `json:"-"`
+	// TokenUsage 上游返回的真实 token 消耗（total_tokens，输入+输出）。
+	// 只填 assistant 消息；无值（旧数据/取不到）时为 0，统计侧回退字符估算。
+	// json:"-"：不发给模型，也不进前端消息体，仅本地落盘后供 reportStatsAsync 使用。
+	TokenUsage int `json:"-"`
 }
 
 // FlowBlock 与前端 agentflow 消息的 blocks 元素一一对应（见 useAgentWorkflow.js），

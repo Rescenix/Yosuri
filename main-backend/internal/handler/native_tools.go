@@ -158,6 +158,9 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"cluster": {Type: "string", Description: "分类标签"},
 			"text":    {Type: "string", Description: "常驻内容"},
 		}, []string{"pid", "text"}),
+		nativeTool("memory_delete", "删除一条记忆（file 为记忆文件名，如 preferences/projects/decisions）：移除 memory/<file>.md 并同步更新记忆索引。用于忘掉错误、过期或已被用户否定的记忆。", map[string]core.ToolProperty{
+			"file": {Type: "string", Description: "要删除的记忆文件名（不含 .md，如 preferences）"},
+		}, []string{"file"}),
 		nativeTool("memory_handoff", "重写会话交接工作态，供下一次对话继续未完成任务。", map[string]core.ToolProperty{
 			"block": {Type: "string", Description: "当前进度、关键事实和下一步"},
 		}, []string{"block"}),
@@ -179,17 +182,19 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, arxivToolDef)
 	// knowledge_search / knowledge_list：外挂知识库 RAG 检索
 	defs = append(defs, knowledgeSearchToolDef, knowledgeListToolDef)
+	// generate_office：纯 Go 原生生成 docx/pptx/xlsx/pdf（零 Python 依赖，开箱即用）
+	defs = append(defs, generateOfficeToolDef)
 	// mambo_video：曼波视频一键生成（配音+字幕+素材匹配+ffmpeg 合成）
 	defs = append(defs, mamboToolDef)
 	// video_watermark_remove：AI 视频去水印（ffmpeg delogo + 清元数据）
 	defs = append(defs, watermarkToolDef)
 	// video_generate：AI 生视频（Agnes 免费 API，$0/秒）
 	defs = append(defs, videoGenToolDef)
-	// 原常驻工具简化为按需加载（2026-08-29 收敛）：update_todo/read_skill/skill_manage/
+	// 原常驻工具简化为按需加载（2026-08-29 收敛）：update_todo/skill_view/skill_manage/
 	// harness_status/open_preview/inject_preview/remember/web_search/session_search
 	// 参数简单，模型一眼就知道怎么调，不需要常驻完整 schema 占 3k+ token。
 	// 常驻只保留 dispatch_agent/apply_patch/load_tools/ask_user 四个复杂/交互控制面。
-	defs = append(defs, updateTodoToolDef, readSkillToolDef, skillManageToolDef,
+	defs = append(defs, updateTodoToolDef, skillViewToolDef, skillManageToolDef,
 		harnessStatusToolDef, openPreviewToolDef, injectPreviewToolDef,
 		rememberToolDef, webSearchToolDef, sessionSearchToolDef)
 	return defs
@@ -270,6 +275,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callNativeMemoryTool(name, argsJSON)
 	case "knowledge_search", "knowledge_list":
 		return callNativeKnowledgeTool(name, argsJSON)
+	case "generate_office":
+		return callGenerateOffice(argsJSON)
 	case "session_search":
 		return callNativeSessionSearch(argsJSON)
 	case "computer_screenshot", "computer_mouse_move", "computer_mouse_click",

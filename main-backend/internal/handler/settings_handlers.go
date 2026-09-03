@@ -117,10 +117,11 @@ func HandleMCPStatus(c *gin.Context) {
 // ---------------- 用户档案 + 自定义指令 ----------------
 
 type UserProfile struct {
-	FullName     string `json:"full_name"`
-	Work         string `json:"work"`
-	Instructions string `json:"instructions"`
-	Gender       string `json:"gender"` // male / female / ""（未设置）
+	FullName         string `json:"full_name"`
+	Work             string `json:"work"`
+	Instructions     string `json:"instructions"`
+	Gender           string `json:"gender"` // male / female / ""（未设置）
+	MemoryTokenBudget int   `json:"memory_token_budget"` // 每次对话记忆注入预算(token)；<=0 用默认 2200
 }
 
 var profileMu sync.Mutex

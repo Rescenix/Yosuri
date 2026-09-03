@@ -72,7 +72,7 @@ func externalSkillsDir() string {
 }
 
 // loadSkills 返回全部可用技能：自研沉淀 + 外部导入。
-// skillLibraryPrompt（索引）和 handleReadSkill（取全文）共用这一份数据源，
+// skillLibraryPrompt（索引）和 handleSkillView（取全文）共用这一份数据源，
 // 就像 mcpToolIndexPrompt 和 handleLoadTools 共用 loadMCPToolDefs 一样。
 func loadSkills() []Skill {
 	skills := loadBuiltinSkills()
@@ -346,7 +346,7 @@ func parseSkillMD(content string) (name, desc, body string) {
 
 // skillLibraryPrompt 把技能库整理成系统提示词片段；库为空时返回空串。
 // 只注入名称+描述，正文步骤不进上下文（token 是成本）——需要完整步骤时
-// 模型调 read_skill 按名字取（见 handleReadSkill），不再像过去那样永远拿不到。
+// 模型调 skill_view 按名字取（见 handleSkillView），不再像过去那样永远拿不到。
 func skillLibraryPrompt() string {
 	skills := loadSkills()
 	if len(skills) == 0 {
@@ -363,11 +363,11 @@ func skillLibraryPrompt() string {
 		lines = append(lines, fmt.Sprintf("- %s%s：%s", tag, s.Name, s.Description))
 	}
 	sort.Strings(lines)
-	return "\n━━━ 技能库索引（按需加载，用 read_skill 取完整内容） ━━━\n" + strings.Join(lines, "\n") + "\n"
+	return "\n━━━ 技能库索引（按需加载，用 skill_view 取完整内容） ━━━\n" + strings.Join(lines, "\n") + "\n"
 }
 
 // autoLoadedSkillsPrompt 是“可发现”之外的确定性保障：宿主先按任务类型匹配，
-// 命中后直接把技能全文放进首轮 system prompt，不再依赖模型主动调用 read_skill。
+// 命中后直接把技能全文放进首轮 system prompt，不再依赖模型主动调用 skill_view。
 // 目前 frontend-design 属于高价值且触发边界清晰的技能；其他技能仍可通过在任务里
 // 显式写出技能名来强制加载，避免对所有技能做含糊的语义猜测和无上限 token 注入。
 func autoLoadedSkillsPrompt(task string) string {
@@ -400,7 +400,7 @@ func autoLoadedSkillsPrompt(task string) string {
 
 	var b strings.Builder
 	b.WriteString("\n━━━ 已自动加载的任务技能（宿主确定性匹配，必须遵循） ━━━\n")
-	b.WriteString("以下内容已由宿主在第一次模型调用前加载，不需要再调用 read_skill，也不得因未主动读取而忽略。\n")
+	b.WriteString("以下内容已由宿主在第一次模型调用前加载，不需要再调用 skill_view，也不得因未主动读取而忽略。\n")
 	for _, skill := range matched {
 		fmt.Fprintf(&b, "\n## %s\n用途：%s\n", skill.Name, skill.Description)
 		if skill.Trigger != "" {
@@ -439,8 +439,9 @@ func isFrontendDesignTask(lowerTask string) bool {
 	return frontendDesignEnglishTokenPattern.MatchString(lowerTask)
 }
 
-// readSkillToolName 是取回技能完整步骤的钥匙，跟 load_tools 一样必须常驻工具集。
-const readSkillToolName = "read_skill"
+// skillViewToolName 是取回技能完整内容（正文 + 关联文件）的钥匙，跟 load_tools 一样必须常驻工具集。
+// 与 Hermes 的 skill_view 对齐：按名字取回完整正文，并可带 file_path 取技能目录下的关联文件。
+const skillViewToolName = "skill_view"
 
 const skillManageToolName = "skill_manage"
 
@@ -516,52 +517,79 @@ func handleSkillManage(argsJSON string) string {
 	return fmt.Sprintf("技能已保存并启用：%s。", skill.Name)
 }
 
-var readSkillToolDef = core.ToolDefinition{
+var skillViewToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
-		Name: readSkillToolName,
+		Name: skillViewToolName,
 		Description: "按名字取回技能库里某个技能的完整内容。系统提示词里的「技能库索引」" +
-			"只给了名字和一句话描述，要看具体怎么做，先用这个取回完整内容（可一次传多个）：" +
-			"自研技能给 steps 步骤，[外部] 技能给 content 说明文档。",
+			"只给了名字和一句话描述，要看具体怎么做，先用这个取回完整内容：" +
+			"自研技能给 steps 步骤，[外部] 技能给 content 正文；返回里带 linked_files" +
+			"（该技能目录下的关联文件，如 tokens/ 子目录）供你按需再取。",
 		Parameters: core.ToolParameters{
 			Type: "object",
 			Properties: map[string]core.ToolProperty{
+				"name": {
+					Type:        "string",
+					Description: "要取回的技能名，必须与索引里的名字完全一致",
+				},
 				"names": {
 					Type:        "array",
-					Description: "要取回的技能名数组，必须与索引里的名字完全一致",
+					Description: "可选：要取回的技能名数组（批量，与 name 二选一，保留旧批量能力）",
 					Items:       &core.ToolProperty{Type: "string"},
 				},
+				"file_path": {
+					Type:        "string",
+					Description: "可选：取该技能目录下的某个关联文件正文（如 tokens/INDEX.md），给出时返回该文件内容而非技能概览",
+				},
 			},
-			Required: []string{"names"},
+			Required: []string{},
 		},
 	},
 }
 
-// handleReadSkill 处理一次 read_skill 调用：按名字查找技能库，把完整
-// {name, description, steps} 作为工具结果回给模型。纯查询，没有 load_tools
-// 那样的"激活"副作用，不影响 tools 数组。
+// handleSkillView 处理一次 skill_view 调用：按名字查找技能库，把完整正文回给模型。
+// 纯查询，没有 load_tools 那样的"激活"副作用，不影响 tools 数组。
+//
+// 与 Hermes 的 skill_view 对齐：
+//   - 不带 file_path：返回技能的 name/description/source + steps（自研）或 content（外部），
+//     且外部技能额外带 linked_files（技能目录下的关联文件相对路径，如 tokens/INDEX.md）；
+//   - 带 file_path + name：直接返回该技能某个关联文件的正文。
 //
 // 不存在的名字不是致命错误——回一句"没有这个技能"，让模型对着索引改。
-func handleReadSkill(argsJSON string, skills []Skill) string {
+func handleSkillView(argsJSON string, skills []Skill) string {
 	var args struct {
-		Names []string `json:"names"`
-		// 容错：模型有时会传单个字符串而不是数组
-		Name string `json:"name"`
+		Names    []string `json:"names"`
+		Name     string   `json:"name"`
+		FilePath string   `json:"file_path"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "参数解析失败，names 应为字符串数组，例如 {\"names\":[\"deploy-frontend\"]}"
+		return "参数解析失败，name 应为字符串，例如 {\"name\":\"deploy-frontend\"}"
+	}
+	byName := map[string]Skill{}
+	for _, s := range skills {
+		byName[s.Name] = s
+	}
+	// file_path 模式：必须指定单个技能名，直接回关联文件正文。
+	if args.FilePath != "" {
+		if args.Name == "" {
+			return "取关联文件时必须同时指定 name（单个技能名）和 file_path"
+		}
+		s, ok := byName[args.Name]
+		if !ok {
+			return "技能名在技能库索引里不存在：" + args.Name
+		}
+		data, err := skillLinkedFile(s, args.FilePath)
+		if err != nil {
+			return "关联文件读取失败：" + err.Error()
+		}
+		return data
 	}
 	names := args.Names
 	if len(names) == 0 && args.Name != "" {
 		names = []string{args.Name}
 	}
 	if len(names) == 0 {
-		return "names 为空，请指定要取回的技能名（见系统提示词里的技能库索引）"
-	}
-
-	byName := map[string]Skill{}
-	for _, s := range skills {
-		byName[s.Name] = s
+		return "name 为空，请指定要取回的技能名（见系统提示词里的技能库索引）"
 	}
 
 	var found []map[string]any
@@ -582,6 +610,10 @@ func handleReadSkill(argsJSON string, skills []Skill) string {
 		if s.Body != "" {
 			entry["content"] = s.Body
 		}
+		// 外部技能才可能带关联文件（tokens/references/scripts 等子目录）
+		if files := skillLinkedFiles(s); len(files) > 0 {
+			entry["linked_files"] = files
+		}
 		if s.Source == "learned" {
 			markSkillUsed(s)
 		}
@@ -591,7 +623,7 @@ func handleReadSkill(argsJSON string, skills []Skill) string {
 	var b strings.Builder
 	if len(found) > 0 {
 		schemas, _ := json.MarshalIndent(found, "", "  ")
-		fmt.Fprintf(&b, "已取回 %d 个技能的完整步骤：\n%s", len(found), schemas)
+		fmt.Fprintf(&b, "已取回 %d 个技能的完整内容：\n%s", len(found), schemas)
 	}
 	if len(missing) > 0 {
 		if b.Len() > 0 {
@@ -601,6 +633,63 @@ func handleReadSkill(argsJSON string, skills []Skill) string {
 			strings.Join(missing, "、"))
 	}
 	return b.String()
+}
+
+// skillLinkedFiles 返回外部技能目录下的关联文件相对路径（/ 分隔），排除 SKILL.md 与安装元数据。
+// 自研（builtin/learned）技能是 JSON 文件、没有附属子目录，返回 nil。
+// 目录文件过多时截断到 100 条，避免把模型上下文刷爆。
+func skillLinkedFiles(s Skill) []string {
+	if s.Source != "external" || s.ExternalID == "" {
+		return nil
+	}
+	root := filepath.Join(externalSkillsDir(), s.ExternalID)
+	var files []string
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "SKILL.md" || rel == ".rescene-skill.json" {
+			return nil
+		}
+		files = append(files, rel)
+		return nil
+	})
+	sort.Strings(files)
+	if len(files) > 100 {
+		files = files[:100]
+	}
+	return files
+}
+
+// skillLinkedFile 读取技能目录下一个关联文件的正文。相对路径必须合法且不越界。
+func skillLinkedFile(s Skill, rel string) (string, error) {
+	if s.Source != "external" || s.ExternalID == "" {
+		return "", fmt.Errorf("该技能没有关联文件（source=%q external_id=%q，仅外部 SKILL.md 技能带子文件）", s.Source, s.ExternalID)
+	}
+	if !safeRelativeSkillPath(rel) {
+		return "", fmt.Errorf("关联文件路径越界：%s", rel)
+	}
+	root := filepath.Join(externalSkillsDir(), s.ExternalID)
+	full := filepath.Join(root, filepath.FromSlash(rel))
+	if p, _ := filepath.Rel(root, full); p == ".." || strings.HasPrefix(p, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("关联文件路径越界：%s", rel)
+	}
+	data, err := os.ReadFile(full)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("关联文件不存在：%s", rel)
+		}
+		return "", err
+	}
+	if len(data) > 1<<20 {
+		return "", fmt.Errorf("关联文件超过 1MB，过大不宜注入上下文")
+	}
+	return string(data), nil
 }
 
 func markSkillUsed(s Skill) {

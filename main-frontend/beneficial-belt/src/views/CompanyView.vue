@@ -144,7 +144,7 @@
       </div>
       <div class="approval-policy">
         <span><Icon icon="mdi:account-multiple-check-outline" width="17" /> {{ approvalProjects.length }} 个团队项目进入验收</span>
-        <span><Icon icon="mdi:account-arrow-right-outline" width="17" /> {{ soloProductionCount }} 个单 Agent 实验留在生产队列</span>
+        <span><Icon icon="mdi:account-arrow-right-outline" width="17" /> {{ soloProductionCount }} 个单 Agent 交付一并进入验收</span>
         <span><Icon icon="mdi:archive-outline" width="17" /> {{ standalonePendingCount }} 份零散产出自动归档</span>
         <span><Icon icon="mdi:shield-check-outline" width="17" /> 批准或退回将作用于整个项目</span>
       </div>
@@ -169,6 +169,7 @@
             <iframe v-if="selectedShowcaseArtifact(project)?.kind === 'html'" sandbox="allow-forms allow-modals allow-scripts" :src="artifactRawUrl(selectedShowcaseArtifact(project))" title="可运行交付物预览"></iframe>
             <video v-else-if="selectedShowcaseArtifact(project)?.kind === 'video'" :src="artifactRawUrl(selectedShowcaseArtifact(project))" controls playsinline preload="metadata"></video>
             <img v-else-if="selectedShowcaseArtifact(project)?.kind === 'image'" :src="artifactRawUrl(selectedShowcaseArtifact(project))" alt="项目交付物预览" />
+            <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'text'" class="artifact-hero report-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:file-document-multiple" width="54" /><span><b>{{ textHeroLabel(selectedShowcaseArtifact(project).stage).en }}</b><strong>{{ textHeroLabel(selectedShowcaseArtifact(project).stage).cn }}</strong><small>{{ selectedShowcaseArtifact(project).name }}</small></span></button>
             <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'spreadsheet'" class="artifact-hero excel-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:microsoft-excel" width="54" /><span><b>RESEARCH DATA</b><strong>打开可复算 Excel</strong><small>真实磁盘数据 · 筛选 · 数值类型 · 冻结表头</small></span></button>
             <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'pptx'" class="artifact-hero ppt-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:microsoft-powerpoint" width="54" /><span><b>INVESTOR DECK</b><strong>逐页播放项目路演</strong><small>真实 PPTX · 16:9 · 站内解析</small></span></button>
             <button v-else-if="selectedShowcaseArtifact(project)" class="artifact-hero receipt-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:certificate-outline" width="54" /><span><b>MACHINE RECEIPT</b><strong>查看机器发布回执</strong><small>渠道 · 时间 · 入口 · SHA-256</small></span></button>
@@ -238,7 +239,7 @@
           <div v-for="(phase, i) in departmentProgress" :key="phase.role" class="department-phase"
             :class="{ done: phase.done, current: phase.current, pending: !phase.done && !phase.current }"
             :style="{ '--dept-color': phase.color, '--dept-rgb': phase.rgb }">
-            <div class="phase-rail"><span></span><i></i></div>
+            <div class="phase-rail"><span :style="{ width: (phase.fill ?? 100) + '%' }"></span><i></i></div>
             <div class="phase-copy">
               <span class="phase-icon"><Icon :icon="phase.icon" width="17" /></span>
               <span><b>{{ phase.name }}</b><small>{{ phase.status }}</small></span>
@@ -286,11 +287,12 @@
                     :style="{ animationDelay: lk.pulseDelay, animationDuration: lk.pulseDuration }" vector-effect="non-scaling-stroke" />
                 </g>
                 <g v-for="n in displayGraphNodes" :key="n.name" class="cm-node"
-                  :class="{ hub: n.hub, sel: selectedNode && selectedNode.name === n.name, dragging: draggingNodeName === n.name }"
+                  :class="{ hub: n.hub, sel: selectedNode && selectedNode.name === n.name, dragging: draggingNodeName === n.name, relay: n.relaying }"
                   @pointerdown.stop.prevent="onNodePointerDown($event, n)" @click="selectNode(n)">
-                  <circle :cx="n.x" :cy="n.y" :r="n.r" :fill="n.hub ? '#22c55e' : '#111c2e'" :stroke="n.hub ? '#86efac' : '#64748b'" stroke-width="2"><title>{{ n.title }}</title></circle>
+                  <circle :cx="n.x" :cy="n.y" :r="n.r" :fill="n.hub ? '#22c55e' : (n.relaying ? '#f59e0b' : (activeDepts.has(n.role) ? n.stroke : '#111c2e'))" :stroke="n.hub ? '#86efac' : (n.relaying ? '#fbbf24' : (activeDepts.has(n.role) ? n.stroke : '#64748b'))" stroke-width="2"><title>{{ n.title }}</title></circle>
                   <text :x="n.x" :y="n.y" text-anchor="middle" dominant-baseline="central" fill="#f8fafc" class="cm-node-id">{{ n.short }}</text>
                   <text :x="n.x" :y="n.y + n.r + 12" text-anchor="middle" class="cm-node-name">{{ n.name }}</text>
+                  <text v-if="n.relaying && n.relayStage" :x="n.x" :y="n.y - n.r - 8" text-anchor="middle" class="cm-node-relay">{{ n.relayStage }}</text>
                 </g>
               </g>
             </svg>
@@ -440,6 +442,12 @@
                         </select>
                         <button class="directive-save-btn" :disabled="directiveSaving" @click="saveDirective">{{ directiveSaving ? '下达中…' : '下达指令' }}</button>
                         <button v-if="directiveText" class="directive-clear-btn" :disabled="directiveSaving" @click="clearDirective">清除</button>
+                      </div>
+                      <div class="directive-output-row">
+                        <label>产出输出 token 数</label>
+                        <input v-model.number="modelMaxTokens" type="number" min="512" max="65536" step="512" class="directive-output-input" @change="saveModelMaxTokens" />
+                        <button class="directive-output-save" :disabled="tokenSaving" @click="saveModelMaxTokens">{{ tokenSaving ? '保存中…' : '保存' }}</button>
+                        <span class="directive-output-hint">较少的 token 预留会导致代码截断、产品无样式或互动；更多 token 让 Agents 更保证产品质量，但耗时更多（范围 512~65536）</span>
                       </div>
                       <div v-if="directiveError" class="directive-error">{{ directiveError }}</div>
                       <div v-if="directiveText" class="directive-current">
@@ -653,6 +661,23 @@ const directiveSaving = ref(false)
 const directiveModelOptions = ref([])
 const directiveRun = ref({ status: 'idle', project: '', error: '', updatedAt: '' })
 const directiveError = ref('')
+// ===== 公司生产设置：产出输出 token 数（用户可填，存后端 config）=====
+const modelMaxTokens = ref(16384)
+const tokenSaving = ref(false)
+async function loadModelMaxTokens() {
+  try {
+    const d = await api('/api/company/model-config')
+    if (d && d.max_tokens) modelMaxTokens.value = Number(d.max_tokens)
+  } catch (e) { /* 后端没起静默 */ }
+}
+async function saveModelMaxTokens() {
+  tokenSaving.value = true
+  try {
+    const v = Math.max(512, Math.min(65536, Number(modelMaxTokens.value) || 16384))
+    modelMaxTokens.value = v
+    await api('/api/company/model-config', { method: 'PUT', body: JSON.stringify({ max_tokens: v }), headers: { 'Content-Type': 'application/json' } })
+  } catch (e) { /* 静默 */ } finally { tokenSaving.value = false }
+}
 const iteratePlans = ref([])
 const iterateCandidates = ref([])
 const iterateStarting = ref(false)
@@ -844,10 +869,27 @@ const recentEvents = computed(() => {
       const line = rawLine.trim()
       if (!line) continue
       const m = line.match(/^\[([^\]]+)\]\s*(.*)$/)
-      const timeText = m ? m[1] : ''
+      let timeText = m ? m[1] : ''
+      // 短时间戳 [23:00] 无日期（live.log 旧行的日级短格式）。若不补日期，它会被字符串排序
+      // 当成当天最晚排到最前、显示也缺日期，导致「时间不对」。用该 agent 的 lastActive 日期补全。
+      if (timeText && timeText.indexOf('-') === -1 && /^\d{1,2}:\d{2}$/.test(timeText)) {
+        const datePart = (a.lastActive || '').split(' ')[0]
+        if (datePart) timeText = datePart + ' ' + timeText
+      }
       let message = (m ? m[2] : line).slice(0, 90)
       events.push({ role: a.role, name: a.name, message, timeText })
     }
+  }
+  // 实时接力事件（/api/company/relays）：真实交接，插到 trace 流最新
+  for (const r of relays.value) {
+    const stage = r.stage || r.artifact || '交接'
+    events.push({
+      role: String(r.to || r.from || '').split('-')[0],
+      name: `${r.from} → ${r.to}`,
+      message: `接力 · ${stage}（${r.status === 'running' ? '进行中' : '已交接'}）`,
+      timeText: formatRelayTime(r.doneAt),
+      relay: true,
+    })
   }
   events.sort((x, y) => (x.timeText < y.timeText ? 1 : -1))
   return events.slice(0, 10)
@@ -901,10 +943,10 @@ const allApprovalProjects = computed(() => {
   }
   return [...grouped.values()].map(project => {
     const missingStages = projectStages.filter(stage => !(project.stageEvidence[stage.key] || []).length).map(stage => stage.key)
-    return { ...project, completedStageCount: projectStages.length - missingStages.length, missingStages, ready: project.agents.length >= 2 && missingStages.length === 0 }
+    return { ...project, completedStageCount: projectStages.length - missingStages.length, missingStages, ready: missingStages.length === 0 }
   }).sort((a, b) => b.agents.length - a.agents.length || b.completedStageCount - a.completedStageCount || a.title.localeCompare(b.title, 'zh-CN'))
 })
-const approvalProjects = computed(() => allApprovalProjects.value.filter(project => project.agents.length >= 2 && !hiddenApprovalProjects.value.has(project.key)))
+const approvalProjects = computed(() => allApprovalProjects.value.filter(project => !hiddenApprovalProjects.value.has(project.key)))
 const soloProductionCount = computed(() => allApprovalProjects.value.filter(project => project.agents.length < 2).length)
 
 const productionDepartmentPlan = [
@@ -948,19 +990,21 @@ const directiveProductionProject = computed(() => {
     ? allApprovalProjects.value.find(project => project.items.some(item => String(item.file || '').replace(/^project\//, '') === run.project))
     : null
   if (delivered) return { ...delivered, directive: true, runStatus: 'completed' }
+  const total = run.totalStages || projectStages.length
+  const done = Math.min(Math.max(run.stagesDone || 0, 0), total)
   return {
     title: directiveText.value,
     directive: true,
     runStatus: run.status || 'queued',
     runError: run.error || '',
-    agents: [], completedStageCount: 0, ready: false, stageEvidence: {},
+    agents: [], completedStageCount: done, totalStages: total, ready: false, stageEvidence: {},
   }
 })
 const currentProductionProject = computed(() => directiveProductionProject.value || currentIterationProject.value || approvalProjects.value[0] || allApprovalProjects.value[0] || latestReviewedProject.value || null)
 const currentProjectTags = computed(() => {
   const project = currentProductionProject.value
   if (!project) return ['尚未排产', '等待真实交付']
-  if (project.directive && !project.ready) return ['用户指令', project.runStatus === 'failed' ? '生产失败' : '多 Agent 生产中', '等待真实交付']
+  if (project.directive && !project.ready) return ['用户指令', project.runStatus === 'failed' ? '生产失败' : project.runStatus === 'completed' ? '已交付 · 等待人类审批' : '多 Agent 生产中', '等待真实交付']
   if (project.iteration) return ['迭代中', '前沿技术调研', project.researchDelivered ? '本轮报告已落盘' : '首轮调研中']
   if (project.reviewed) return [`${project.completedStageCount}/${projectStages.length} 阶段`, '完整交付', '评审留痕']
   return [
@@ -979,6 +1023,7 @@ const productionProgressPercent = computed(() => {
 const productionProgressLabel = computed(() => {
   if (currentProductionProject.value?.directive && !currentProductionProject.value.ready) {
     if (currentProductionProject.value.runStatus === 'failed') return `生产失败 · ${currentProductionProject.value.runError || '请检查交付引擎'}`
+    if (currentProductionProject.value.runStatus === 'completed') return '已交付 · 等待人类审批'
     return currentProductionProject.value.runStatus === 'queued' ? '已立项 · 正在唤醒多 Agent' : '多 Agent 正在生成完整交付'
   }
   if (currentProductionProject.value?.iteration) return currentProductionProject.value.researchDelivered ? '本轮调研已交付 · 迭代继续' : '研究部正在执行首轮调研'
@@ -988,6 +1033,24 @@ const productionProgressLabel = computed(() => {
 })
 const departmentProgress = computed(() => {
   const project = currentProductionProject.value
+  // directive 生产中：用 stagesDone/totalStages 比例驱动部门进度，进度条随顶部数字平滑推进
+  if (project?.directive && project.totalStages && project.runStatus !== 'completed') {
+    const total = project.totalStages || projectStages.length
+    const doneRatio = (project.completedStageCount || 0) / total
+    const n = productionDepartmentPlan.length
+    const deptFrac = 1 / n
+    return productionDepartmentPlan.map((phase, index) => {
+      const done = doneRatio >= (index + 1) * deptFrac
+      const current = !done && doneRatio > index * deptFrac
+      let fill = 0
+      if (done) fill = 100
+      else if (current) fill = Math.round(((doneRatio - index * deptFrac) / deptFrac) * 100)
+      return {
+        ...phase, done, current, fill,
+        status: done ? '已交付' : (current ? '当前阶段' : '等待接力'),
+      }
+    })
+  }
   const audits = new Map(departmentAudits.value.map(dept => [dept.role, dept]))
   if (project?.iteration) {
     return productionDepartmentPlan.map((phase, index) => ({
@@ -1012,7 +1075,17 @@ const departmentProgress = computed(() => {
   }))
 })
 
-const showcaseStageOrder = ['pv', 'runnable', 'ui', 'data', 'ppt', 'promotion']
+const showcaseStageOrder = ['research', 'pv', 'runnable', 'ui', 'data', 'docs', 'ppt', 'promotion']
+// text 类产物（md/json）的卡片文案按阶段区分，不能都叫「调研报告」。
+function textHeroLabel(stage) {
+  switch (stage) {
+    case 'research': return { en: 'RESEARCH REPORT', cn: '查看调研报告' }
+    case 'docs': return { en: 'SOFTWARE DOCS', cn: '查看软件文档' }
+    case 'requirements': return { en: 'REQUIREMENTS', cn: '查看需求计划' }
+    case 'meeting': return { en: 'MEETING MINUTES', cn: '查看会议纪要' }
+    default: return { en: 'TEXT ARTIFACT', cn: '查看文档' }
+  }
+}
 function projectShowcase(project) {
   const artifacts = project?.artifacts || []
   return showcaseStageOrder.map(stage => artifacts.find(artifact => artifact.stage === stage && artifact.previewable)).filter(Boolean)
@@ -1167,12 +1240,63 @@ function computeCollabGraph() {
       pulseDuration: `${1.15 + (pulseIndex % 4) * .18}s`,
     })
   }
+  // 实时接力事件层：把 relays 的 from/to 接入 nodes 标记「正在接力」+ 叠加为强边
+  const relayFrom = new Set()
+  const relayTo = new Set()
+  const relayStage = new Map()
+  for (const r of relays.value) {
+    if (r.from) relayFrom.add(r.from)
+    if (r.to) relayTo.add(r.to)
+    if (r.stage) relayStage.set(`${r.from}->${r.to}`, r.stage)
+  }
+  // 给 relay 相关节点打实时标记（未在 nodeList 里的接力方也补进节点）
+  const relayNames = new Set([...relayFrom, ...relayTo])
+  for (const rn of relayNames) {
+    if (!byName[rn]) {
+      const role = String(rn).split('-')[0]
+      const lane = laneX[role] ? role : 'writer'
+      const i = (idx[lane] = (idx[lane] || 0) + 1)
+      const y = 105 + (i - 1) * 90
+      const n = { name: rn, short: String(rn.split('-')[1] || rn), role: lane, x: laneX[lane], y, r: 11, hub: false, fill: colors[lane] || '#fff', stroke: colors[lane] || colors.writer, title: `${rn}（接力方）`, relaying: true, relayStage: relayStage.get(rn) || '' }
+      nodeList.push(n)
+      pos[rn] = n
+      if (!pos[n.name]) pos[n.name] = n
+    }
+  }
+  for (const n of nodeList) {
+    if (relayFrom.has(n.name) || relayTo.has(n.name)) {
+      n.relaying = true
+      n.relayStage = relayStage.get(`${n.name}->`) || n.relayStage || ''
+      // 找该 agent 最近的接力 stage
+      for (const r of relays.value) {
+        if (r.from === n.name || r.to === n.name) { n.relayStage = r.stage || n.relayStage; break }
+      }
+    }
+  }
+  // 每条 relay 事件叠加成边（来源端→目标端），并在同一对已有边时加粗
+  for (const r of relays.value) {
+    const s = pos[r.from], t = pos[r.to]
+    if (!s || !t) continue
+    const key = r.from + '|' + r.to
+    const existing = links.find(lk => lk.key === key)
+    if (existing) {
+      existing.relay = true
+      existing.w = Math.max(existing.w, 3)
+      existing.stage = r.stage || existing.stage
+    } else {
+      links.push({
+        key, source: r.from, target: r.to, w: 3, relay: true, stage: r.stage || '',
+        color: colors[s.role] || colors.writer, intensity: 0.9, pulseDelay: '0s', pulseDuration: '.9s',
+      })
+    }
+  }
   const deptLabels = laneOrder.map(k => ({ key: k, name: (deptMeta[k] || {}).name || k, x: laneX[k], y: 38 }))
   return { nodes: nodeList, links, deptLabels, viewBox: '0 0 760 500', cx: CX, cy: CY, ring: 0, hub: hub || '—' }
 }
 
 // —— 协作图交互：拖节点、平移、缩放，并在轮询刷新时保留用户布局 ——
 const graphState = ref({ nodes: [], links: [], deptLabels: [], viewBox: '0 0 760 520', cx: 380, cy: 270, ring: 150, hub: '—' })
+const relays = ref([]) // 实时接力事件流（后端 /api/company/relays）
 const graphSvg = ref(null)
 const graphMode = ref('focus')
 const graphZoom = ref(1)
@@ -1313,8 +1437,22 @@ function selectNode(n) {
   if (suppressNodeClick) { suppressNodeClick = false; return }
   selectedNode.value = byNameOf(n.name) || null
 }
+// 手图「按部门高亮」：当前接力部门 = relays 最近一条 from/to 所在的部门，其余部门整体降噪。
+const activeDepts = computed(() => {
+  const r = [...relays.value].sort((a, b) => String(b.doneAt || '').localeCompare(String(a.doneAt || '')))[0]
+  const set = new Set()
+  if (r && r.from) set.add(String(r.from).split('-')[0])
+  if (r && r.to) set.add(String(r.to).split('-')[0])
+  return set
+})
 function linkOpacity(lk) {
   const name = selectedNode.value?.name
+  if (!name && activeDepts.value.size) {
+    // 未手动选节点时：当前接力部门相关的线高亮，其余部门降噪（不是全亮）。
+    const sDept = String(lk.source || '').split('-')[0]
+    const tDept = String(lk.target || '').split('-')[0]
+    return (activeDepts.value.has(sDept) || activeDepts.value.has(tDept)) ? 0.9 : 0.06
+  }
   return !name ? 0.48 : (lk.source === name || lk.target === name ? 0.92 : 0.08)
 }
 function byNameOf(name) {
@@ -1591,6 +1729,13 @@ function formatTime(value) {
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
+function formatRelayTime(value) {
+  if (!value) return '刚刚'
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return '刚刚'
+  return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(d)
+}
+
 async function api(url, options) {
   // 2026-08-09 修复：fetch 无 timeout 会因后端重启间隙永久挂起 → Promise.all 永不 resolve → agents 不赋值（页面全 0）
   const ctrl = new AbortController()
@@ -1635,14 +1780,16 @@ async function directiveApi(url, options) {
 
 async function loadData({ quiet = false } = {}) {
   try {
-    const [goalResult, agentResult, osResult] = await Promise.allSettled([
+    const [goalResult, agentResult, osResult, relayResult] = await Promise.allSettled([
       api('/api/company/goals'),
       api('/api/company/agents'),
-      api('/api/company/os-stats')
+      api('/api/company/os-stats'),
+      api('/api/company/relays')
     ])
     if (goalResult.status === 'fulfilled') goals.value = goalResult.value.goals || []
     if (agentResult.status === 'fulfilled') agents.value = agentResult.value.agents || []
     if (osResult.status === 'fulfilled') osStats.value = osResult.value || osStats.value
+    if (relayResult.status === 'fulfilled') relays.value = relayResult.value.relays || []
     if (!quiet && [goalResult, agentResult, osResult].every(result => result.status === 'rejected')) {
       throw goalResult.reason || agentResult.reason || osResult.reason
     }
@@ -1824,6 +1971,7 @@ onMounted(() => {
   loadProductionAudit()
   loadIterate()
   loadDirective()
+  loadModelMaxTokens()
   loadReviews()
   loadFinance()
   loadMarket()
@@ -1985,6 +2133,11 @@ onUnmounted(() => { clearInterval(timer); stopOfficeWalk() })
 .cm-node:hover circle { filter: brightness(1.1); }
 .cm-node.hub circle { filter: drop-shadow(0 0 8px rgba(236,72,153,.55)); }
 .cm-node.sel circle { stroke-width: 4; filter: drop-shadow(0 0 10px rgba(37,99,235,.45)); }
+.cm-node.relay circle { filter: drop-shadow(0 0 12px rgba(245,158,11,.65)); animation: cmRelayPulse 1.2s ease-in-out infinite; }
+.cm-node-relay { font-size: 9px; font-weight: 800; fill: #f59e0b; text-transform: uppercase; letter-spacing: .06em; }
+.cm-link-relay-pulse { animation: cmRelayDash 1.1s linear infinite; stroke-dasharray: 6 4; }
+@keyframes cmRelayPulse { 0%,100% { filter: drop-shadow(0 0 6px rgba(245,158,11,.4)); } 50% { filter: drop-shadow(0 0 14px rgba(245,158,11,.85)); } }
+@keyframes cmRelayDash { to { stroke-dashoffset: -10; } }
 .cm-node-id { font-size: 10px; font-weight: 800; }
 .cm-node-name { font-size: 10px; fill: #475569; }
 /* 点击节点详情卡 */
@@ -2135,7 +2288,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .pptx-view { padding: 20px; background: #111827; }
 .pptx-slide { position: relative; width: 100%; overflow: hidden; background: #fff; box-shadow: 0 18px 48px rgba(0,0,0,.3); }
 .pptx-element { position: absolute; }
-.pptx-text { overflow: hidden; white-space: pre-wrap; line-height: 1.25; }
+.pptx-text { overflow: hidden; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; }
 .pptx-image { object-fit: contain; }
 .outline-warning { display: grid; gap: 8px; margin: 24px; padding: 22px; border: 1px solid #fdba74; border-radius: 12px; color: #9a3412; background: #fff7ed; }
 .outline-warning strong { font-size: 17px; }
@@ -2314,7 +2467,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .department-progress { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 7px; }
 .department-phase { min-width: 0; }
 .phase-rail { position: relative; height: 7px; margin: 0 1px 12px; border-radius: 999px; background: #e9eeeb; }
-.phase-rail span { position: absolute; inset: 0; border-radius: inherit; background: #e9eeeb; transition: background .3s ease, box-shadow .3s ease; }
+.phase-rail span { position: absolute; left: 0; top: 0; height: 100%; width: 100%; border-radius: inherit; background: #e9eeeb; transition: width .45s ease, background .3s ease, box-shadow .3s ease; }
 .phase-rail i { position: absolute; z-index: 2; top: 50%; right: 0; width: 11px; height: 11px; border: 3px solid #fff; border-radius: 50%; background: #cbd5ce; box-shadow: 0 0 0 1px #d9e0db; transform: translate(2px,-50%); }
 .department-phase.done .phase-rail span { background: var(--dept-color); box-shadow: 0 3px 10px rgba(var(--dept-rgb),.18); }
 .department-phase.done .phase-rail i, .department-phase.current .phase-rail i { background: var(--dept-color); box-shadow: 0 0 0 1px rgba(var(--dept-rgb),.28); }
@@ -2631,6 +2784,33 @@ button:disabled { cursor: not-allowed; opacity: .48; }
     white-space: nowrap;
   }
   .directive-clear-btn:hover { background: #f4f6f5; }
+  /* 产出输出 token 数设置行 */
+  .directive-output-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .directive-output-row label { font-size: 12px; color: #657169; white-space: nowrap; }
+  .directive-output-input {
+    width: 110px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #dbe1dd;
+    background: #fff;
+    font-size: 13px;
+    color: #17291f;
+    outline: none;
+  }
+  .directive-output-input:focus { border-color: #5b9b7d; box-shadow: 0 0 0 2px rgba(91, 155, 125, .15); }
+  .directive-output-save {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: none;
+    background: #17291f;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .directive-output-save:hover { background: #214431; }
+  .directive-output-save:disabled { opacity: .5; cursor: not-allowed; }
+  .directive-output-hint { font-size: 11px; color: #8a938c; flex: 1 1 100%; }
   .directive-current {
     margin-top: 10px;
     display: flex;

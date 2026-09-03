@@ -68,13 +68,13 @@
                                   <span v-if="sidebarOpen" class="gem-brand-text">Yosuri</span>
                                 </div>
                                 <div v-if="sidebarOpen" class="gem-top-actions">
-                                  <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话" aria-label="搜索对话">
-                                    <Icon icon="mdi:magnify" width="18" />
-                                  </button>
-                                  <button class="gem-icon-btn" @click="showScheduledTaskManager = true" title="定时任务" aria-label="定时任务">
-                                    <Icon icon="mdi:clock-outline" width="18" />
-                                  </button>
-                                  <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'" aria-label="折叠边栏">
+                                                                  <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话" aria-label="搜索对话">
+                                                                    <Icon icon="mdi:magnify" width="18" />
+                                                                  </button>
+                                                                  <router-link class="gem-icon-btn" to="/sites" title="发布并分享 Agent 写好的网页" aria-label="网站">
+                                                                    <Icon icon="mdi:web" width="18" />
+                                                                  </router-link>
+                                                                  <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'" aria-label="折叠边栏">
                                     <Icon icon="lucide:sidebar" width="18" />
                                   </button>
                                 </div>
@@ -107,7 +107,8 @@
                         @open-plugins="openPluginsMarket"
                         @open-scheduled-tasks="showScheduledTaskManager = true"
                                                 @create-project="createProject"
-                                                @open-mail="showMailPanel = true"
+                        @open-mail="showMailPanel = true"
+                                                @reorder-sessions="reorderSessionList"
                       />
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
@@ -284,6 +285,10 @@
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
 
+            <!-- 会话标题：消息列上方，靠左，背景透明 -->
+            <div v-if="messages.length && activeSessionObj?.name" class="chat-session-titlebar">
+              <span class="chat-session-title-text">{{ activeSessionObj.name }}</span>
+            </div>
 
             <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。 -->
             <div v-if="inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
@@ -311,8 +316,8 @@
             </div>
 
             <!-- 普通聊天/工作流模式：当有消息时，滚动容器才接管整个区域 -->
-            <div v-else class="chat-messages" ref="messagesContainer">
-              <!-- 顶部边缘 blur（仿 Gemini：内容从模糊里滑入/滑出）。
+                        <div v-else class="chat-messages" ref="messagesContainer">
+                          <!-- 顶部边缘 blur（仿 Gemini：内容从模糊里滑入/滑出）。
                    必须跟底部那条一样待在 .chat-messages 里：原来它是 .chat-content 的
                    绝对定位子节点，而 .chat-content 有右侧补偿 padding，绝对定位按
                    padding box 算，blur 就整体右移、正文左侧压根没被盖住。 -->
@@ -633,7 +638,7 @@
 
               <!-- 输入框容器：外层改列布局，附件预览条占一整行浮在文字行上方，
                                  原来的横向内容（占位符/textarea/按钮）收进 .input-row 保持不变 -->
-                            <div class="input-wrapper" style="position: relative;">
+                            <div ref="inputWrapperRef" class="input-wrapper" style="position: relative;">
                                                         <!-- 后台任务/子代理悬浮条：有进行中的任务时显示，紧贴输入框上沿 -->
                                                         <div v-if="runningTaskCount > 0" class="input-running-tasks-bar" @click.stop="toggleDockPanel('tasks')">
                                                           <Icon icon="mdi:loading" width="13" class="rt-spin" />
@@ -691,6 +696,67 @@
 
                   <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
 
+                  <!-- 模型名 pill：输入框右侧、发送按钮左侧；点击向上弹模型菜单（悬浮在输入框上方） -->
+                  <div class="sch-model" ref="modelPillRef" @click.stop="toggleModelMenu">
+                    <span>{{ selectedModelLabel }}</span>
+                    <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
+                  </div>
+
+                  <Teleport to="body">
+                                      <div v-if="showModelMenu" class="model-menu-dropdown" :style="modelMenuStyle" @click.stop>
+                                        <div class="model-menu-head">
+                                          <div class="model-menu-search">
+                                            <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
+                                            <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
+                                          </div>
+                                          <button class="model-menu-manage" @click.stop="showModelManager = true; showModelMenu = false" title="管理模型">
+                                            <Icon icon="mdi:cog-outline" width="14" />
+                                            <span>管理模型</span>
+                                          </button>
+                                        </div>
+                                        <div v-if="!hasModels" class="model-menu-empty">没有可用模型（去设置填 Key 或选免 Key 模型）</div>
+                                        <div v-if="hasModels" class="model-menu-list">
+                                          <div
+                                            class="model-menu-item model-menu-auto"
+                                            :class="{ active: selectedModel === 'auto' }"
+                                            @click="selectModel('auto')"
+                                          >
+                                            <span class="model-menu-check" v-if="selectedModel === 'auto'">✓</span>
+                                            <span>Auto 智能路由</span>
+                                          </div>
+                                          <div class="model-menu-divider"></div>
+                                          <template v-for="grp in filteredGroupedOptions" :key="grp.vendor">
+                                            <div class="model-menu-group-title">{{ grp.vendor }}</div>
+                                            <div
+                                              v-for="m in grp.items"
+                                              :key="m.value"
+                                              class="model-menu-item"
+                                              :class="{ active: selectedModel === m.value, 'effort-hover': hoveredModel === m.value }"
+                                              @click="selectModel(m.value)"
+                                              @mouseenter="onItemHover(m.value, $event)"
+                                              @mouseleave="onItemLeave"
+                                            ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span class="model-menu-item-label">{{ m.label }}</span><span class="model-menu-effort-tag">{{ effortLabel }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">公益免费</span></div>
+                                          </template>
+                                        </div>
+                                      </div>
+                                      <!-- hover 思考强度选择卡片 -->
+                                      <div v-if="hoveredModel && showModelMenu" class="model-menu-effort-popup" :style="hoverEffortStyle" @click.stop @mouseenter="hoverPopupEnter" @mouseleave="hoverPopupLeave">
+                                        <div class="mep-header">
+                                          <span class="mep-title">思考</span>
+                                          <span class="mep-toggle" :class="{ on: debugReasoning }" @click="toggleThinking">{{ debugReasoning ? '开' : '关' }}</span>
+                                        </div>
+                                        <div class="mep-divider"></div>
+                                        <div class="mep-section-label">推理强度</div>
+                                        <div
+                                          v-for="lv in EFFORT_LEVELS"
+                                          :key="lv"
+                                          class="mep-option"
+                                          :class="{ active: effortLevel === EFFORT_LEVELS.indexOf(lv) }"
+                                          @click="selectEffort(lv)"
+                                        ><span class="mep-opt-label">{{ EFFORT_UI_LABELS[lv] }}</span><span class="mep-opt-check" v-if="effortLevel === EFFORT_LEVELS.indexOf(lv)">✓</span></div>
+                                      </div>
+                                    </Teleport>
+
                   <!-- "追加"菜单用的两个隐藏原生选择器，不占布局，点菜单项时用 .click() 触发 -->
                   <input ref="attachFileInputRef" type="file" multiple style="display:none" @change="onAttachFilesSelected" @click.stop />
                   <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
@@ -699,8 +765,10 @@
                   <button v-if="flowState.active && !userInput.trim() && attachments.length === 0" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
                     <Icon icon="mdi:stop" width="16" color="#fff" />
                   </button>
-                  <button v-else-if="(userInput.trim() || attachments.length) && !hasPendingAttachments" class="input-inner-btn input-right-btn" :class="flowState.active ? 'input-steer-btn' : 'input-send-btn'" @click="handleSend" :title="flowState.active ? '发送插话给工作流（不打断，模型下一轮处理）' : '发送消息'">
-                    <Icon :icon="flowState.active ? 'mdi:send' : 'fluent-mdl2:up'" width="18" color="#fff" />
+                  <!-- 发送按钮常驻占位：即使无输入也显示（灰色向上箭头），保证模型 pill 旁边永远有它，
+                       不因空输入让 pill 沦为最右元素。有输入时高亮为可用态。 -->
+                  <button v-else class="input-inner-btn input-right-btn" :class="flowState.active ? 'input-steer-btn' : (userInput.trim() || attachments.length ? 'input-send-btn' : 'input-send-btn input-send-idle')" @click="handleSend" :title="flowState.active ? '发送插话给工作流（不打断，模型下一轮处理）' : '发送消息'">
+                    <Icon :icon="flowState.active ? 'mdi:send' : 'mdi:arrow-up'" width="18" color="#fff" />
                   </button>
                 </div>
               </div>
@@ -777,47 +845,6 @@
                     </div>
                   </div>
 
-                  <!-- 模型名 pill -->
-                  <div class="sch-model" @click.stop="toggleModelMenu">
-                    <span>{{ selectedModelLabel }}</span>
-                    <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
-                    <div v-if="showModelMenu" class="model-menu-dropdown" @click.stop>
-                      <div class="model-menu-head">
-                        <div class="model-menu-search">
-                          <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
-                          <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
-                        </div>
-                        <button class="model-menu-manage" @click.stop="showModelManager = true; showModelMenu = false" title="管理模型">
-                          <Icon icon="mdi:cog-outline" width="14" />
-                          <span>管理模型</span>
-                        </button>
-                      </div>
-                      <div v-if="!hasModels" class="model-menu-empty">没有可用模型（去设置填 Key 或选免 Key 模型）</div>
-                      <div v-if="hasModels" class="model-menu-list">
-                        <!-- Auto 智能路由：固定置顶，选中后按免费模型池排序逐个尝试 + 熔断 -->
-                        <div
-                          class="model-menu-item model-menu-auto"
-                          :class="{ active: selectedModel === 'auto' }"
-                          @click="selectModel('auto')"
-                        >
-                          <span class="model-menu-check" v-if="selectedModel === 'auto'">✓</span>
-                          <span>Auto 智能路由</span>
-                        </div>
-                        <div class="model-menu-divider"></div>
-                        <template v-for="grp in filteredGroupedOptions" :key="grp.vendor">
-                          <div class="model-menu-group-title">{{ grp.vendor }}</div>
-                          <div
-                            v-for="m in grp.items"
-                            :key="m.value"
-                            class="model-menu-item"
-                            :class="{ active: selectedModel === m.value }"
-                            @click="selectModel(m.value)"
-                          ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span>{{ m.label }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">公益免费</span></div>
-                        </template>
-                      </div>
-                    </div>
-                  </div>
-
                   <!-- 模式 pill（effort） -->
                   <div v-if="currentCapability.reasoning" ref="effortWidgetRef" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
                     <span class="effort-value">{{ effortLabel }}</span>
@@ -832,9 +859,9 @@
                         Effort <b>{{ modelOptions.find(m => m.value === selectedModel)?.label || '' }}</b>
                       </div>
                       <div class="effort-slider-row">
-                        <span class="effort-end">Faster</span>
-                        <input type="range" min="0" max="2" step="1" v-model.number="effortLevel" class="effort-slider" @click.stop @input="onEffortChange" />
-                        <span class="effort-end">Smarter</span>
+                        <span class="effort-end">快</span>
+                                                <input type="range" min="0" max="2" step="1" v-model.number="effortLevel" class="effort-slider" @click.stop @input="onEffortChange" />
+                                                <span class="effort-end">深</span>
                       </div>
                     </div>
                   </Teleport>
@@ -1182,10 +1209,11 @@ async function loadSessionList() {
       // AI 标题生成中：保持当前显示名，等 AI 标题到达由 updateSessionTitle 一次性替换
       if (pendingTitleSessions.has(s.id) && old) name = old.name
       return {
-        id: s.id, name,
-        parentId: s.parent_id || '', forkIndex: s.fork_index || 0, updatedAt: s.updated_at,
-        workdir: getSessionWorkdir(s.id)
-      }
+              id: s.id, name,
+              parentId: s.parent_id || '', forkIndex: s.fork_index || 0, updatedAt: s.updated_at,
+              workdir: getSessionWorkdir(s.id),
+              titleExplicit: !!s.title_explicit
+            }
     })
     // 当前会话哪怕还一条消息都没有（刚新建/刚打开应用）也要出现在列表里，
     // 不然侧栏在"发第一条消息之前"会看不到自己正在哪个会话上。
@@ -1207,6 +1235,16 @@ function selectSession(id) {
   // 切换会话时工作目录跟随该会话所属项目：会话有明确归属且不在当前项目时才切，
   // recordSession:false 只切 cwd 不动会话归属（会话本来就属于目标项目）
   followSessionWorkdir(id)
+}
+// 会话行拖拽排序：本地乐观重排 sessionList（后端按 updatedAt 派生，刷新后恢复时间序；纯前端交互）
+function reorderSessionList({ from, to }) {
+  const list = [...sessionList.value]
+  const fromIdx = list.findIndex(s => s.id === from)
+  const toIdx = list.findIndex(s => s.id === to)
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return
+  const [moved] = list.splice(fromIdx, 1)
+  list.splice(toIdx, 0, moved)
+  sessionList.value = list
 }
 async function followSessionWorkdir(id) {
   const target = sessionList.value.find(s => s.id === id)
@@ -1320,13 +1358,12 @@ function updateSessionTitle(title, fallback, sid) {
   // 精确作用到发起标题生成的会话：用户可能在生成期间切到别的会话，标题不能安错家
   const targetId = sid || sessionId.value
   const current = sessionList.value.find(s => s.id === targetId)
-  // 只覆盖「默认标题」：新对话，或等于用户首条消息原文（后端 SessionTitle 会把
-  // 首条用户消息派生为标题，侧栏刷新后就不是"新对话"了）。用户手动改过的标题
-  // （跟原文不同）绝不覆盖。
-  const name = (current?.name || '').trim()
-  const isDefault = !current
-    || /^(新对话|New conversation)$/i.test(name)
-    || (fallback && name === shortTitle(fallback))
+  // 只覆盖「未显式设置过标题」的会话：新对话、或后端派生标题（用户首条消息原文）。
+  // 2026-09-03 修：原来用 name === shortTitle(fallback) 比对「当前标题是否等于用户消息最后
+  // 一行」来判断是否是默认标题——多行/长消息时侧栏标题是全文截断，永远对不上，AI 标题
+  // 生成了也写不进去（用户实测：短消息如「你好」能生效，其他全原样）。改为后端下发的
+  // title_explicit 标记：用户手动改名过 / AI 标题已写入才算显式，其余一律允许覆盖。
+  const isDefault = !current || !current.titleExplicit
   if (!isDefault) return
   const trimmed = (title || '').trim()
   if (!trimmed) return
@@ -1342,7 +1379,11 @@ function updateSessionTitle(title, fallback, sid) {
 }
 function renameSession({ id, name }) {
   const target = sessionList.value.find(s => s.id === id)
-  if (target) target.name = shortTitle(name)
+  if (target) {
+    target.name = shortTitle(name)
+    // 用户手动改名 = 显式标题：之后 AI 标题生成不得再覆盖它
+    target.titleExplicit = true
+  }
   fetch(`/api/sessions/${encodeURIComponent(id)}/title`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -2703,12 +2744,41 @@ const groupedModelOptions = computed(() => {
 const modelOptions = computed(() => groupedModelOptions.value.flatMap(g => g.items))
 const hasModels = computed(() => modelOptions.value.length > 0)
 const showModelMenu = ref(false)
+const modelPillRef = ref(null)
+const inputWrapperRef = ref(null)
+const modelMenuStyle = ref({})
+// 菜单打开时测量位置：底缘贴输入框上沿（不是贴 pill），右缘对齐 pill，不悬空不顶屏
+function measureModelMenu() {
+  const pill = modelPillRef.value
+  const anchor = inputWrapperRef.value || pill
+  if (!anchor) { modelMenuStyle.value = {}; return }
+  const anchorRect = anchor.getBoundingClientRect()
+  const pillRect = pill ? pill.getBoundingClientRect() : anchorRect
+  const menuW = Math.min(360, window.innerWidth - 32)
+  const gap = 4
+  // 右缘对齐 pill 右缘（下拉菜单惯例）
+  let left = pillRect.right - menuW
+  if (left < 8) left = 8
+  if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8
+  // 上方空间：输入框顶缘到视口顶（菜单最高 400px，超出按空间收缩）
+  const spaceAbove = anchorRect.top - gap
+  const maxH = Math.min(400, spaceAbove)
+  if (spaceAbove < 200) {
+    // 上方空间不够，翻到输入框下方
+    const top = anchorRect.bottom + gap
+    modelMenuStyle.value = { position: 'fixed', top: top + 'px', left: left + 'px', width: menuW + 'px', maxHeight: (window.innerHeight - top - 8) + 'px', zIndex: 9999 }
+  } else {
+    // 向上弹出：bottom 固定，菜单底缘始终紧贴输入框上沿
+    modelMenuStyle.value = { position: 'fixed', bottom: (window.innerHeight - anchorRect.top + gap) + 'px', left: left + 'px', width: menuW + 'px', maxHeight: maxH + 'px', zIndex: 9999 }
+  }
+}
 
 // 打开/关闭模型菜单（打开时定位到当前选中模型，避免 124 个模型列表打开在顶部还要手动拉）
 function toggleModelMenu() {
   showModelMenu.value = !showModelMenu.value
   if (showModelMenu.value) {
     nextTick(() => {
+      measureModelMenu()
       const list = document.querySelector('.model-menu-list')
       const active = list?.querySelector('.model-menu-item.active')
       if (list && active) {
@@ -3135,7 +3205,7 @@ function onSessionTitlePending(e) {
 // 注意：debugReasoning 来自上面的 useChatWidget 解构，本段必须放在解构之后，
 // 否则 setup 阶段会命中暂时性死区（TDZ）报 "Cannot access before initialization"。
 const EFFORT_LEVELS = ['low', 'medium', 'high']
-const EFFORT_UI_LABELS = { low: 'Faster', medium: 'Balanced', high: 'Smarter' }
+const EFFORT_UI_LABELS = { low: '低', medium: '中', high: '高' }
 const showEffortPanel = ref(false)
 const showHeatmapPopup = ref(true)
 const effortWidgetRef = ref(null)
@@ -3182,6 +3252,54 @@ function onEffortChange() {
   localStorage.setItem('debugReasoning', debugReasoning.value)
 }
 if (!debugReasoning.value) onEffortChange() // 首次没设置过时落一个默认值，跟滑块初始位置对齐
+
+// ==================== 模型菜单 hover 思考强度卡片 ====================
+const hoveredModel = ref('')
+const hoverEffortStyle = ref({})
+let hoverLeaveTimer = null
+// 悬停某模型行：把卡片定位到该行右侧（菜单本身是 fixed，取行的视口坐标即可）
+function onItemHover(value, ev) {
+  hoveredModel.value = value
+  clearTimeout(hoverLeaveTimer)
+  const item = ev?.currentTarget
+  const rect = item ? item.getBoundingClientRect() : null
+  if (rect) {
+    const popW = 168
+    // 默认贴行右侧；右缘超视口则翻到行左侧
+    let left = rect.right + 6
+    if (left + popW > window.innerWidth - 8) left = rect.left - popW - 6
+    if (left < 8) left = 8
+    hoverEffortStyle.value = {
+      position: 'fixed',
+      top: Math.max(8, rect.top - 4) + 'px',
+      left: left + 'px',
+      width: popW + 'px',
+      zIndex: 10000
+    }
+  }
+}
+function onItemLeave() {
+  // 延迟关闭，给鼠标从行滑向卡片留时间
+  clearTimeout(hoverLeaveTimer)
+  hoverLeaveTimer = setTimeout(() => { hoveredModel.value = '' }, 120)
+}
+function hoverPopupEnter() { clearTimeout(hoverLeaveTimer) }
+function hoverPopupLeave() { hoveredModel.value = '' }
+// 思考开关：当前有 reasoning 值则关闭（置空），否则落回当前档位
+function toggleThinking() {
+  if (debugReasoning.value) {
+    debugReasoning.value = ''
+    localStorage.setItem('debugReasoning', '')
+  } else {
+    onEffortChange()
+  }
+}
+function selectEffort(lv) {
+  const idx = EFFORT_LEVELS.indexOf(lv)
+  if (idx < 0) return
+  effortLevel.value = idx
+  onEffortChange()
+}
 
 // ==================== UI 状态 ====================
 const showParams = ref(false)
@@ -3986,9 +4104,16 @@ const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.
 // 改为节流合并（~120ms 最多一次）+ 只对「流式中的消息」做，避免逐 token 全量重查。
 // 2026-09-02 修：原 watch 只依赖 messages.value.length，但 useAgentWorkflow 的 appendText
 // 是原地 mutate blocks[].text，不改变数组长度 → 渐变永远不触发。补上 blocks 文本总长度检测。
+// 2026-09-03 修：原来写的 flowState.blocks 是 undefined（flowState 只有 active 字段），
+// 导致依赖恒为 0，watcher 仍只被 length 驱动——工作流流式期间 highlightAllCodeBlocks 永不
+// 触发，代码块没有复制按钮/高亮，直到下一条消息才全量补跑。改为直接统计 messages 里
+// agentflow 消息的 blocks 文本总长度，streaming 期间每个增量都会触发。
 let streamPassTimer = null
 watch(
-  () => messages.value.length + '|' + (flowState.blocks?.reduce((s, b) => s + b.text.length, 0) ?? 0),
+  () => messages.value.length + '|' + messages.value.reduce((s, m) => {
+    if (m?.kind !== 'agentflow' || !Array.isArray(m.blocks)) return s
+    return s + m.blocks.reduce((x, b) => x + (b.text ? b.text.length : 0), 0)
+  }, 0),
   () => {
     if (streamPassTimer) return
     streamPassTimer = setTimeout(() => {

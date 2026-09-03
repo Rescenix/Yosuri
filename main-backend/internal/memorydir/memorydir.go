@@ -206,6 +206,34 @@ func Remember(file, summary, content string) error {
 	return os.WriteFile(idxPath, []byte(idxContent+"\n"), 0644)
 }
 
+// DeleteMemory 删除一条记忆：删 memory/<file>.md + 从 index.md 移除对应 [[file]] 行。
+// file 必须在 SyncableFiles 白名单内（防空手删系统文件/目录穿越）。
+func DeleteMemory(file string) error {
+	file = strings.TrimSpace(file)
+	if file == "" || !SyncableFiles[file] {
+		return fmt.Errorf("不允许删除该记忆文件: %s", file)
+	}
+	// 1. 删除文件
+	if err := os.Remove(filepath.Join(path(), file+".md")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	// 2. 从 index.md 移除对应行，让索引不再指向已删除的记忆
+	data, err := os.ReadFile(indexPath())
+	if err != nil {
+		return nil // 无索引文件，无需改
+	}
+	var lines []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if m := linkRe.FindStringSubmatch(line); m != nil && strings.TrimSpace(m[1]) == file {
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return os.WriteFile(indexPath(), []byte(strings.Join(lines, "\n")+"\n"), 0644)
+}
+
 // ── 常驻 / 交接 / 搜索（SwiftNet 记忆工具的 memorydir 落点） ──
 
 func pinnedPath() string  { return filepath.Join(path(), "pinned.md") }

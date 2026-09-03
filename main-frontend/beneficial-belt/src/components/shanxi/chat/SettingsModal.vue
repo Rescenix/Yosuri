@@ -864,22 +864,34 @@
               <div class="settings-section-title">主题</div>
               <div class="settings-section-desc">选择你喜欢的主题色，设置会立即应用到整个界面。</div>
               <div class="param-row" style="align-items: flex-start;">
-                <span class="param-label">主题色</span>
-                <div class="theme-swatches">
-                  <button
-                    v-for="[key, p] in colorThemes"
-                    :key="key"
-                    class="theme-swatch"
-                    :class="{ on: theme === key }"
-                    type="button"
-                    :title="p.label"
-                    @click="selectTheme(key)"
-                  >
-                    <span class="theme-swatch-dot" :style="{ background: p.accent }"></span>
-                    <span class="theme-swatch-label">{{ p.label }}</span>
-                  </button>
-                </div>
-              </div>
+                            <span class="param-label">主题色</span>
+                            <div class="theme-swatches">
+                              <button
+                                v-for="[key, p] in colorThemes"
+                                :key="key"
+                                class="theme-swatch"
+                                :class="{ on: theme === key }"
+                                type="button"
+                                :title="p.label"
+                                @click="selectTheme(key)"
+                              >
+                                <span class="theme-swatch-dot" :style="swatchDotStyle(p)"></span>
+                                <span class="theme-swatch-label">{{ p.label }}</span>
+                              </button>
+                              <!-- 自定义主题色：点击弹出调色板选色，确定后由 auto 免费模型按色彩语义起名 -->
+                              <label class="theme-swatch custom" :class="{ on: theme === 'custom' }" :title="'自定义主题色 · ' + customThemeName">
+                                <input
+                                  type="color"
+                                  class="custom-color-input"
+                                  :value="customColor"
+                                  @input="onCustomColorPick"
+                                  @change="onCustomColorConfirm"
+                                />
+                                <span class="theme-swatch-dot" :style="{ background: customColor }"></span>
+                                <span class="theme-swatch-label">{{ customNaming ? '起名中…' : customThemeName }}</span>
+                              </label>
+                            </div>
+                          </div>
 
               <div class="settings-section-title appearance-mode-title">皮肤</div>
               <div class="settings-section-desc">动画工作台皮肤保留专业 IDE 布局，只切换成套色板与状态标记。</div>
@@ -936,9 +948,15 @@
               <div class="settings-section-title appearance-preview-title">实时预览</div>
               <div class="settings-section-desc">预览会随当前主题色和显示模式同步更新。</div>
               <div
-                class="theme-live-preview"
-                :style="{ '--preview-accent': selectedTheme.accent, '--preview-accent-soft': selectedTheme.accentSoft }"
-              >
+                              class="theme-live-preview"
+                              :style="{
+                                '--preview-accent': selectedTheme.accent,
+                                '--preview-accent-soft': selectedTheme.accentSoft,
+                                '--preview-gradient': selectedTheme.gradient && selectedTheme.gradFrom && selectedTheme.gradTo
+                                  ? `linear-gradient(135deg, ${selectedTheme.gradFrom}, ${selectedTheme.gradTo})`
+                                  : selectedTheme.accent
+                              }"
+                            >
                 <div class="theme-live-topbar">
                   <span class="theme-live-brand"><Icon icon="lucide:sparkles" width="13" />Yosuri</span>
                   <span class="theme-live-status"><i></i>{{ selectedTheme.label }} · {{ currentModeLabel }}</span>
@@ -1315,6 +1333,10 @@
                 设置后 AI 会用「哥哥/先生」或「妹妹/女士」称呼你；不透露则不改变称呼。
               </div>
               <div class="profile-row">
+                <span class="profile-label">记忆注入预算(token)</span>
+                <input class="profile-input" v-model.number="profile.memory_token_budget" type="number" min="0" step="100" placeholder="默认 2200（0=默认）" />
+              </div>
+              <div class="profile-row">
                 <span class="profile-label">账号 UID</span>
                 <span v-if="auth.uid.value" class="profile-uid">UID {{ auth.uid.value }}</span>
                 <span v-else class="profile-uid faint">登录后永久保留</span>
@@ -1498,7 +1520,7 @@
 <script setup>
 import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { theme, mode, MODE_OPTIONS, THEME_PRESETS } from '../composables/useTheme.js'
+import { theme, mode, MODE_OPTIONS, THEME_PRESETS, customColor, customThemeName, setCustomColor, setCustomThemeName } from '../composables/useTheme.js'
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
 import { DEFAULT_PERSONA } from '../composables/useAgentWorkflow.js'
 
@@ -1816,6 +1838,19 @@ const intimacyProgressPct = computed(() => {
 })
 
 // ============ 界面配色切换 ============
+// hex → rgba 半透明底（12% 浓度，同预设 accentSoft 口径）；非法值回退橙
+function softOf(hex) {
+  const m = /^#?([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(hex || '')
+  if (!m) return 'rgba(201,100,66,0.12)'
+  return `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, 0.12)`
+}
+// 色板圆点：渐变主题显示双色渐变，普通主题单色
+function swatchDotStyle(p) {
+  if (p && p.gradient && p.gradFrom && p.gradTo) {
+    return { background: `linear-gradient(135deg, ${p.gradFrom}, ${p.gradTo})` }
+  }
+  return { background: p?.accent }
+}
 const colorThemes = computed(() => Object.entries(THEME_PRESETS).filter(([, preset]) => !preset.fullSkin))
 const skinThemes = computed(() => {
   const groups = {}
@@ -1828,8 +1863,39 @@ const skinThemes = computed(() => {
     })
   return Object.entries(groups)
 })
-const selectedTheme = computed(() => THEME_PRESETS[theme.value] || THEME_PRESETS.orange)
+const selectedTheme = computed(() => {
+  if (theme.value === 'custom') {
+    return { label: customThemeName.value, accent: customColor.value, accentSoft: softOf(customColor.value) }
+  }
+  return THEME_PRESETS[theme.value] || THEME_PRESETS.orange
+})
 const currentModeLabel = computed(() => MODE_OPTIONS.find(option => option.value === mode.value)?.label || '亮色')
+
+// 自定义主题色：调色板 input@input 实时选色 → 立即切换主题；
+// 用户关闭调色板（change 事件）后调 auto 免费模型按色彩语义起名。
+const customNaming = ref(false)
+function onCustomColorPick(e) {
+  const hex = e.target.value
+  if (!setCustomColor(hex)) return
+  theme.value = 'custom'
+  e.target.blur() // 关掉原生调色板弹层 = 用户「确定颜色」
+}
+// input[type=color] 的 @change 在弹层关闭、颜色已确认时触发（连续拖选只走 @input）
+function onCustomColorConfirm(e) {
+  const hex = e.target.value
+  if (!setCustomColor(hex)) return
+  theme.value = 'custom'
+  if (customNaming.value) return
+  customNaming.value = true
+  fetch('/api/theme/name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ color: hex })
+  }).then(r => r.json()).then(res => {
+    if (res && res.name) setCustomThemeName(res.name)
+  }).catch(() => { /* 起名失败保留「自定义」占位，不阻塞 */ })
+    .finally(() => { customNaming.value = false })
+}
 
 function selectTheme(key) {
   theme.value = key
@@ -3132,7 +3198,7 @@ async function removeSkill(skill) {
   } catch (e) { errorMsg.value = e.message }
 }
 // ============ Profile ============
-const profile = ref({ full_name: '', work: '', instructions: '', gender: '' })
+const profile = ref({ full_name: '', work: '', instructions: '', gender: '', memory_token_budget: 0 })
 
 // 记忆 tab：直接渲染后端 /api/memory/inject 返回的真实注入段（system / memory 两段），
 // 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
@@ -3300,7 +3366,8 @@ async function loadProfile() {
         full_name: data.full_name || '',
         work: data.work || '',
         instructions: data.instructions || '',
-        gender: data.gender || ''
+        gender: data.gender || '',
+        memory_token_budget: data.memory_token_budget || 0
       }
     }
   } catch (e) {}
@@ -3556,6 +3623,17 @@ onUnmounted(() => {
   gap: 4px;
   background: var(--app-surface-2);
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 35%, transparent) transparent;
+}
+.settings-sidebar::-webkit-scrollbar { width: 6px; }
+.settings-sidebar::-webkit-scrollbar-track { background: transparent; }
+.settings-sidebar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-accent) 35%, transparent);
+  border-radius: 999px;
+}
+.settings-sidebar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 55%, transparent);
 }
 .settings-nav-label {
   margin: 14px 10px 6px; color: var(--app-text-faint); font-size: 10px; font-weight: 750;
@@ -3629,12 +3707,47 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 35%, transparent) transparent;
   padding: 24px 30px 28px;
   background: var(--app-surface);
   color: var(--app-text);
 }
+.settings-content::-webkit-scrollbar { width: 6px; }
+.settings-content::-webkit-scrollbar-track { background: transparent; }
+.settings-content::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-accent) 35%, transparent);
+  border-radius: 999px;
+}
+.settings-content::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 55%, transparent);
+}
 .settings-panel { display: block; animation: settings-panel-in 160ms ease; }
 @keyframes settings-panel-in { from { opacity: 0; transform: translateY(3px); } }
+/* 设置内小滚动区（技能说明/记忆/聚合配置等）统一主题色滚轴 */
+.settings-content .skill-body,
+.settings-content .memory-md,
+.settings-content .agg-cfg-list {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 35%, transparent) transparent;
+}
+.settings-content .skill-body::-webkit-scrollbar,
+.settings-content .memory-md::-webkit-scrollbar,
+.settings-content .agg-cfg-list::-webkit-scrollbar { width: 6px; }
+.settings-content .skill-body::-webkit-scrollbar-track,
+.settings-content .memory-md::-webkit-scrollbar-track,
+.settings-content .agg-cfg-list::-webkit-scrollbar-track { background: transparent; }
+.settings-content .skill-body::-webkit-scrollbar-thumb,
+.settings-content .memory-md::-webkit-scrollbar-thumb,
+.settings-content .agg-cfg-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-accent) 35%, transparent);
+  border-radius: 999px;
+}
+.settings-content .skill-body::-webkit-scrollbar-thumb:hover,
+.settings-content .memory-md::-webkit-scrollbar-thumb:hover,
+.settings-content .agg-cfg-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 55%, transparent);
+}
 
 .settings-section-title { font-size: 14px; font-weight: 700; color: var(--app-text); margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
 .settings-section-desc { max-width: 760px; font-size: 12px; color: var(--app-text-faint); margin-bottom: 18px; line-height: 1.65; }
@@ -4068,6 +4181,18 @@ onUnmounted(() => {
 .theme-swatch.on { border-color: var(--app-accent); color: var(--app-text); background: var(--app-accent-soft); font-weight: 600; }
 .theme-swatch-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
 .theme-swatch-label { line-height: 1; }
+/* 自定义主题色：label 承接点击，原生 color input 透明铺满（不可见但可点） */
+.theme-swatch.custom { position: relative; }
+.theme-swatch.custom .custom-color-input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; border: none; padding: 0;
+}
+.theme-swatch.custom .theme-swatch-dot {
+  border: 2px dashed var(--app-text-faint);
+}
+.theme-swatch.custom.on .theme-swatch-dot {
+  border-style: solid; border-color: var(--app-accent);
+}
 
 /* 完整动漫皮肤：像 IDE 配置列表，不再做悬浮圆角卡片。 */
 .skin-groups { width: 100%; max-width: 480px; margin-left: auto; }

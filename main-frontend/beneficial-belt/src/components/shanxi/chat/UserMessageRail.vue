@@ -290,12 +290,23 @@ watch(() => items.value.length, async () => {
   width: min(360px, 42vw);
   max-height: 46vh;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 35%, transparent) transparent;
   background: var(--app-surface);
   border: 1px solid var(--app-border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   padding: 4px;
   z-index: 60;
+}
+.umr-list::-webkit-scrollbar { width: 6px; }
+.umr-list::-webkit-scrollbar-track { background: transparent; }
+.umr-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-accent) 35%, transparent);
+  border-radius: 999px;
+}
+.umr-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 55%, transparent);
 }
 .umr-list-row {
   display: flex;

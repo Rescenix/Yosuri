@@ -1,18 +1,18 @@
 <template>
   <div class="smc-root" :class="{ fill }">
-    <!-- 顶部操作：搜索和定时任务已收进侧栏右上角 -->
+    <!-- 顶部操作：搜索和网站已收进侧栏右上角 -->
     <div class="smc-nav">
-      <button class="smc-nav-item primary" type="button" @click="onClickNewSession">
-        <span class="smc-new-session-icon">
-          <Icon icon="mdi:chat-plus-outline" width="18" />
-        </span>
-        <span>{{ t('nav.newSession') }}</span>
-      </button>
-      <router-link class="smc-nav-item" to="/sites" title="发布并分享 Agent 写好的网页">
-        <Icon icon="mdi:web" width="18" />
-        <span>{{ t('nav.sites') }}</span>
-      </router-link>
-    </div>
+          <button class="smc-nav-item primary" type="button" @click="onClickNewSession">
+            <span class="smc-new-session-icon">
+              <Icon icon="mdi:chat-plus-outline" width="18" />
+            </span>
+            <span>{{ t('nav.newSession') }}</span>
+          </button>
+          <button class="smc-nav-item" type="button" @click="emit('open-scheduled-tasks')" title="定时任务">
+            <Icon icon="mdi:clock-outline" width="18" />
+            <span>{{ t('nav.scheduledTasks') }}</span>
+          </button>
+        </div>
 
     <!-- 会话列表区 -->
     <div class="smc-session-area">
@@ -63,7 +63,13 @@
               v-for="s in f.sessions"
               :key="s.id"
               class="smc-session-row"
-              :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+              :class="{ active: s.id === activeSession, running: s.id === runningSession, 'menu-open': openMenuId === s.id }"
+              :draggable="!bulkMode && editingId !== s.id"
+              @dragstart="onDragStart(s, $event)"
+              @dragover.prevent="onDragOver(s)"
+              @drop.prevent="onDrop(s)"
+              @dragend="onDragEnd"
+              @contextmenu.prevent="openContextMenu(s, $event)"
               @mouseenter="hoveredId = s.id"
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
@@ -100,15 +106,12 @@
 
       <!-- 项目：按工作目录分组 -->
       <div class="smc-section">
-        <div class="smc-section-label">
-          <span>{{ t('nav.projects') }}</span>
-          <button class="smc-project-bulk" type="button" :title="bulkMode ? '退出批量管理' : '批量管理会话'" :class="{ active: bulkMode }" @click="toggleBulkMode">
-            <Icon icon="mdi:playlist-edit" width="18" />
-          </button>
-          <button class="smc-project-add" type="button" title="创建项目" @click="openCreateProject">
-            <Icon icon="mdi:plus" width="18" />
-          </button>
-        </div>
+        <div class="smc-section-label smc-section-projects">
+                  <span>{{ t('nav.projects') }}</span>
+                  <button class="smc-project-add" type="button" title="新建对话" aria-label="新建对话" @click="onClickNewSession">
+                    <Icon icon="mdi:chat-plus-outline" width="18" />
+                  </button>
+                </div>
         <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder">
           <div
             class="smc-folder-head"
@@ -155,7 +158,13 @@
               v-for="s in grp.sessions"
               :key="s.id"
               class="smc-session-row"
-              :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+              :class="{ active: s.id === activeSession, running: s.id === runningSession, 'menu-open': openMenuId === s.id }"
+              :draggable="!bulkMode && editingId !== s.id"
+              @dragstart="onDragStart(s, $event)"
+              @dragover.prevent="onDragOver(s)"
+              @drop.prevent="onDrop(s)"
+              @dragend="onDragEnd"
+              @contextmenu.prevent="openContextMenu(s, $event)"
               @mouseenter="hoveredId = s.id"
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
@@ -214,7 +223,13 @@
               v-for="s in orphanSessions"
               :key="s.id"
               class="smc-session-row"
-              :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+              :class="{ active: s.id === activeSession, running: s.id === runningSession, 'menu-open': openMenuId === s.id }"
+              :draggable="!bulkMode && editingId !== s.id"
+              @dragstart="onDragStart(s, $event)"
+              @dragover.prevent="onDragOver(s)"
+              @drop.prevent="onDrop(s)"
+              @dragend="onDragEnd"
+              @contextmenu.prevent="openContextMenu(s, $event)"
               @mouseenter="hoveredId = s.id"
               @mouseleave="onRowLeave(s.id)"
               @click="onRowClick(s)"
@@ -263,21 +278,17 @@
 
     <!-- footer -->
     <div class="fm-footer" ref="footerRef">
-      <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" title="点击查看账户">
-        <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
-        <span v-else class="fm-user-avatar fm-user-avatar-fallback">{{ avatarFallback }}</span>
-        <span class="fm-user-id">
-          <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : t('account.notLoggedIn') }}</span>
-        </span>
-      </div>
-      <button class="fm-footer-mail" type="button" title="通知" @click.stop="$emit('open-mail')">
-              <Icon icon="mdi:email-outline" width="18" />
-              <span v-if="notifCount > 0" class="fm-mail-badge">{{ notifCount > 99 ? '99+' : notifCount }}</span>
-            </button>
-      <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
-        <Icon icon="mdi:cog-outline" width="18" />
-      </button>
-    </div>
+          <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" title="点击查看账户">
+            <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
+            <span v-else class="fm-user-avatar fm-user-avatar-fallback">{{ avatarFallback }}</span>
+            <span class="fm-user-id">
+              <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : t('account.notLoggedIn') }}</span>
+            </span>
+          </div>
+          <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
+            <Icon icon="mdi:cog-outline" width="18" />
+          </button>
+        </div>
 
     <!-- 用户卡片菜单 -->
     <Teleport to="body">
@@ -349,9 +360,15 @@
           </div>
           <div v-else class="smc-profile-loading"><i></i><span>正在读取成长档案…</span></div>
           <footer class="smc-profile-actions">
-            <span><Icon icon="mdi:shield-check-outline" width="15" /> 数据来自真实使用记录</span>
-            <button v-if="isLoggedIn" class="smc-user-card-item danger" @click="logout"><Icon icon="mdi:logout-variant" width="16" />退出登录</button>
-          </footer>
+                      <span><Icon icon="mdi:shield-check-outline" width="15" /> 数据来自真实使用记录</span>
+                      <div class="smc-profile-actions-right">
+                        <button class="smc-user-card-item" @click="showProfileCard = false; $emit('open-mail')">
+                          <Icon icon="mdi:email-outline" width="16" />通知
+                          <span v-if="notifCount > 0" class="fm-mail-badge">{{ notifCount > 99 ? '99+' : notifCount }}</span>
+                        </button>
+                        <button v-if="isLoggedIn" class="smc-user-card-item danger" @click="logout"><Icon icon="mdi:logout-variant" width="16" />退出登录</button>
+                      </div>
+                    </footer>
       </div>
       </template>
     </Teleport>
@@ -439,8 +456,10 @@
     <!-- 会话三点菜单 -->
     <Teleport to="body">
       <div v-if="openMenuId" class="smc-row-dropdown" :style="dropdownStyle" @click.stop>
-        <div class="smc-dropdown-item" @click="startRename(openMenuSession)">重命名</div>
-        <div class="smc-dropdown-item danger" @click="onDelete(openMenuSession)">删除</div>
+        <div class="smc-dropdown-item" @click="startRename(openMenuSession)"><Icon icon="mdi:pencil-outline" width="15" /><span>重命名</span></div>
+        <div class="smc-dropdown-item" @click="copySessionId(openMenuSession)"><Icon icon="mdi:content-copy-outline" width="15" /><span>复制 ID</span></div>
+        <div class="smc-dropdown-sep"></div>
+        <div class="smc-dropdown-item danger" @click="onDelete(openMenuSession)"><Icon icon="mdi:trash-can-outline" width="15" /><span>删除</span></div>
       </div>
     </Teleport>
 
@@ -563,7 +582,7 @@ const props = defineProps({
     notifCount: { type: Number, default: 0 },
     currentWorkdir: { type: String, default: '' }
   })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'delete-project', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks', 'open-mail'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'delete-project', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks', 'open-mail', 'reorder-sessions'])
 
 // ========== 创建项目 ==========
 // 项目名不可编辑：只能来自所选文件夹的名字，避免用户手改后跟已有项目撞名、
@@ -1037,6 +1056,23 @@ function toggleMenu(s, ev) {
   if (left < 8) left = 8
   dropdownStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: menuW + 'px' }
 }
+// 右键会话行：在鼠标位置弹出 Hermes 风格悬浮菜单
+function openContextMenu(s, ev) {
+  openMenuId.value = s.id
+  openMenuSession.value = s
+  const menuW = 180
+  let left = ev.clientX
+  let top = ev.clientY
+  const menuH = 320
+  if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 8
+  if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 8
+  dropdownStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: menuW + 'px' }
+}
+function onDelete(s) {
+  openMenuId.value = null
+  hoveredId.value = null
+  emit('delete-session', s.id)
+}
 function onRowLeave(id) { if (openMenuId.value !== id) hoveredId.value = null }
 function onRowClick(s) {
   if (editingId.value === s.id) return
@@ -1060,13 +1096,37 @@ function commitRename() {
   editingId.value = null
 }
 function cancelRename() { editingId.value = null }
-function onDelete(s) {
-  openMenuId.value = null
-  hoveredId.value = null
-  emit('delete-session', s.id)
+
+// ========== 会话行菜单项：复制 ID ==========
+function closeMenu() { openMenuId.value = null }
+function copySessionId(s) {
+  closeMenu()
+  const id = s.id || s.session_id || ''
+  if (!id) return
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(id).catch(() => fallbackCopy(id))
+  else fallbackCopy(id)
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+  document.body.appendChild(ta); ta.select(); try { document.execCommand('copy') } catch {}
+  document.body.removeChild(ta)
 }
 
-// ========== 批量管理 ==========
+// ========== 会话行拖动排序 ==========
+const dragSessionId = ref('')
+function onDragStart(s, ev) {
+  dragSessionId.value = s.id
+  ev.dataTransfer.effectAllowed = 'move'
+  try { ev.dataTransfer.setData('text/plain', s.id) } catch {}
+  ev.target.classList.add('dragging')
+}
+function onDragOver(s) { /* 给目标行一个高亮提示 */ }
+function onDrop(s) {
+  const from = dragSessionId.value
+  if (from && from !== s.id) emit('reorder-sessions', { from, to: s.id })
+  dragSessionId.value = ''
+}
+function onDragEnd(ev) { dragSessionId.value = ''; ev?.target?.classList?.remove('dragging') }
 const bulkMode = ref(false)
 const bulkSelected = ref(new Set())
 
@@ -1191,19 +1251,20 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 /* ===== Section labels ===== */
 .smc-section { flex-shrink: 0; }
 .smc-section-label {
-  min-height: 32px;
+  min-height: 24px;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 16px 16px 6px;
+  padding: 8px 16px 2px;
   color: var(--app-text-soft);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 650;
   letter-spacing: .015em;
 }
 .smc-project-add {
   width: 28px;
   height: 28px;
+  margin-left: auto;
   margin-right: -6px;
   display: inline-flex;
   align-items: center;
@@ -1213,37 +1274,18 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: transparent;
   color: var(--app-text-soft);
   cursor: pointer;
-  transition: background .15s ease, color .15s ease, transform .15s ease;
+  opacity: 0;
+  transition: background .15s ease, color .15s ease, opacity .15s ease;
+  pointer-events: none;
+}
+.smc-section-projects:hover .smc-project-add {
+  opacity: 1;
+  pointer-events: auto;
 }
 .smc-project-add:hover {
   background: color-mix(in srgb, var(--app-text, #202124), transparent 93%);
   color: var(--app-text);
-  transform: rotate(90deg);
 }
-.smc-project-bulk {
-  width: 28px;
-  height: 28px;
-  margin-left: auto;
-  margin-right: -5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--app-text-soft);
-  cursor: pointer;
-  transition: background .15s ease, color .15s ease;
-}
-.smc-project-bulk:hover {
-  background: color-mix(in srgb, var(--app-text, #202124), transparent 93%);
-  color: var(--app-text);
-}
-.smc-project-bulk.active {
-  background: color-mix(in srgb, var(--app-accent), transparent 88%);
-  color: var(--app-accent);
-}
-
 /* ===== 批量管理 ===== */
 .smc-bulk-bar {
   flex-shrink: 0;
@@ -1343,16 +1385,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-folder { margin-bottom: 0; }
 .smc-folder-head {
   position: relative;
-  min-height: 32px;
+  min-height: 26px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 8px;
   border-radius: 0;
   cursor: pointer;
   transition: background .15s ease;
-  /* 组头与会话区拉开层次：下方留一点空隙，让「项目名」像标题托起内容 */
-  margin-bottom: 1px;
+  margin-bottom: 0;
 }
 .smc-folder-head:hover,
 .smc-folder-head.hover,
@@ -1400,10 +1441,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   background: color-mix(in srgb, var(--app-text, #202124), transparent 91%);
 }
 .smc-folder-children {
-  /* 不要缩进 —— 会话与文件夹平级。整栏右边界的描边+阴影统一挪到 .gem-sidebar（chat-window.css），
-     不在这里单独做，避免只有展开的文件夹局部带框、和其余会话列表割裂。 */
-  margin: 1px 2px 7px 0;
-  padding: 1px 3px 4px 0;
+  margin: 0 2px 4px 0;
+  padding: 0 3px 2px 0;
 }
 
 /* ===== Session list area ===== */
@@ -1438,7 +1477,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 12px;
   border-radius: 0;
   margin: 1px 0;
   cursor: pointer;
@@ -1506,7 +1545,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   white-space: nowrap;
   color: var(--app-text);
 }
-/* 会话时间锚点：右对齐、浅灰、靠右不占宽，像 SUMU 给每行一个轻量视觉锚 */
+/* 会话时间锚点：右对齐、浅灰、靠右不占宽，像 SUMU 给每行一个轻量视觉锚。
+   hover 时淡出，把位置让给右侧「⋯」菜单按钮（时间↔三点切换）。 */
 .smc-session-time {
   flex-shrink: 0;
   font-size: 11px;
@@ -1515,6 +1555,25 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   margin-left: auto;
   padding-left: 8px;
   letter-spacing: 0.01em;
+  transition: opacity .12s ease;
+}
+.smc-session-row:hover .smc-session-time,
+.smc-session-row.menu-open .smc-session-time {
+  opacity: 0;
+}
+/* 行内 ⋯ 菜单：默认藏在时间槽位，hover 行/菜单打开时淡入 */
+.smc-row-menu-wrap {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.smc-row-menu-wrap.visible {
+  opacity: 1;
 }
 /* 标题渐变替换：旧标题淡出、新标题淡入（AI 生成标题替换默认标题时）。
    纯透明度渐变，不加位移——之前的 translateY 会让标题看起来在跳 */
@@ -1540,16 +1599,6 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   outline: none;
 }
 
-.smc-row-menu-wrap {
-  position: relative;
-  flex-shrink: 0;
-  display: inline-flex;
-  opacity: 0;
-  transition: opacity .12s ease;
-}
-.smc-row-menu-wrap.visible {
-  opacity: 1;
-}
 .smc-row-menu-btn {
   display: flex;
   align-items: center;
@@ -1578,14 +1627,33 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   z-index: 9999;
 }
 .smc-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   padding: 7px 14px;
   font-size: 12.5px;
   font-weight: 500;
   color: var(--app-text);
   cursor: pointer;
+  white-space: nowrap;
 }
+.smc-dropdown-item svg { flex: 0 0 auto; color: var(--app-text-soft); }
 .smc-dropdown-item:hover { background: var(--app-surface-3); }
+.smc-dropdown-item:hover svg { color: var(--app-accent); }
 .smc-dropdown-item.danger { color: #d94834; }
+.smc-dropdown-item.danger svg { color: #d94834; }
+.smc-dropdown-item.danger:hover { background: rgba(217, 72, 52, 0.08); }
+.smc-dropdown-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--app-border-soft);
+}
+/* 拖动中的会话行：半透明 + 虚线框，提示会插到哪 */
+.smc-session-row.dragging {
+  opacity: .45;
+  outline: 1px dashed var(--app-accent);
+  outline-offset: 1px;
+}
 
 /* ===== Footer ===== */
 .fm-footer {
@@ -1606,6 +1674,7 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  margin-left: auto;
   border: 0;
   border-radius: 10px;
   color: var(--app-text-soft);
@@ -1613,43 +1682,25 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   cursor: pointer;
   transition: background .15s ease, color .15s ease;
 }
-.fm-footer-settings:hover,
-.fm-footer-mail:hover {
+.fm-footer-settings:hover {
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-text, #202124), transparent 94%);
 }
-.fm-footer-mail {
-  width: 36px;
-  height: 36px;
-  margin-left: auto;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 10px;
-  color: var(--app-text-soft);
-  background: transparent;
-  cursor: pointer;
-  position: relative;
-  transition: background .15s ease, color .15s ease;
-}
+/* 通知徽标：邮件入口已收进用户卡片，这里只做卡片内按钮的角标 */
 .fm-mail-badge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: #ef4444;
+  background: var(--app-accent);
   color: #fff;
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  pointer-events: none;
 }
 .fm-user {
   min-width: 0;

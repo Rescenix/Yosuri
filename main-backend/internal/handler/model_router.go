@@ -118,6 +118,11 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_bai_deepseek_v4_flash", Vendor: "B.AI", Name: "DeepSeek V4 Flash（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "deepseek-v4-flash", KeyEnv: "BAI_API_KEY", ParamsB: 284, Note: "B.AI 限时 0 Credits·工具调用·文本模型·1M 上下文", KeyURL: "https://b.ai", Reasoning: true, ContextWindow: 1048576},
 	{ID: "free_bai_deepseek_v4_flash_vision", Vendor: "B.AI", Name: "DeepSeek V4 Flash Vision Exp（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "deepseek-v4-flash-vision-exp", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI API 限时 0 Credits·实验视觉模型·1M 上下文", KeyURL: "https://b.ai", Vision: true, Reasoning: true, ContextWindow: 1048576},
 	{ID: "free_bai_hy3", Vendor: "B.AI", Name: "Tencent Hy3（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "hy3", KeyEnv: "BAI_API_KEY", ParamsB: 295, Note: "B.AI 限时 0 Credits·295B MoE·工具调用·256K", KeyURL: "https://b.ai", Reasoning: true, ContextWindow: 262144},
+	// 2026-09-03 实测新增（B.AI 新免费档，deepseek 下架后顶上）：均经 api.b.ai/v1 逐模型
+	// 最小 chat 请求验证 200 可用；MiniMax 系实测全不能加（m2.5 404 不存在 / m2.7 400 余额不足 / m3 403 付费墙），故未收录。
+	{ID: "free_bai_mimo_v2_5", Vendor: "B.AI", Name: "Mimo 2.5（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "mimo-v2.5", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI 限时 0 Credits·MixAI·agent 可用（实测 2026-09-03）", KeyURL: "https://b.ai", Reasoning: true},
+	{ID: "free_bai_glm_5_3_flash", Vendor: "B.AI", Name: "GLM 5.3 Flash（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "glm-5.3-flash", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI 限时 0 Credits·思考模型（需足量 max_tokens 才有正文）·agent 可用（实测 2026-09-03）", KeyURL: "https://b.ai", Reasoning: true},
+	{ID: "free_bai_qwen3_8_flash", Vendor: "B.AI", Name: "Qwen 3.8 Flash（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "qwen3.8-flash", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI 限时 0 Credits·Agent 可用·实测快（2026-09-03）", KeyURL: "https://b.ai", Reasoning: true},
 
 	// —— OpenRouter（openrouter.ai/api/v1，OpenAI 兼容）——
 	// 2026-08-23 公共 /models 实测：openrouter/free 为零价格自动路由；Ox Alpha
@@ -168,7 +173,7 @@ var freeModelCatalog = []FreeModelDef{
 	// 而下架，只有「重新出现在列表里」才会把 Disabled 拨回 false，所以这次标记可能在它
 	// 被列表重探判定"仍存在"时被自动复位；如果之后发现又被派上场但还是 400，需要再手动查一次。
 	{ID: "free_zen_deepseek_v4_flash", Vendor: "OpenCode Zen", Name: "DeepSeek V4 Flash（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "deepseek-v4-flash-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true, Disabled: true},
-	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用）", Keyless: true, Reasoning: true},
+	{ID: "free_zen_mimo_v2_5", Vendor: "OpenCode Zen", Name: "Mimo 2.5（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "mimo-v2.5-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·识图）", Keyless: true, Reasoning: true, Vision: true},
 	{ID: "free_zen_north_mini_code", Vendor: "OpenCode Zen", Name: "North Mini Code（免费）", Endpoint: "https://opencode.ai/zen/v1", Model: "north-mini-code-free", KeyEnv: "", ParamsB: 0, Note: "Zen 免 key 网关（免费档·agent 可用·最快）", Keyless: true, Reasoning: true},
 	// 2026-08-08 重新爬取 Zen /v1/models（61 模型，8 个 free 档）实测新增：
 	// Nemotron 3 Ultra 已移除：免费档思考 4 分钟级超时（2026-08-13 用户清理）

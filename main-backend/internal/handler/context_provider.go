@@ -151,14 +151,14 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
 			{key: "skill", content: skillLibraryPrompt() + autoLoadedSkillsPrompt(task)}, // 索引 + 当前任务确定性预加载
-			{key: "memory", content: memorySection},                                      // 每写一次记忆就变
-			{key: "memory", content: pinnedSection},                                      // 常驻记忆：memory_pin 写入，跨对话常驻
-			{key: "memory", content: handoffSection},                                     // 会话交接工作态：memory_handoff 写入
-			{key: "memory", content: intimacySection},                                    // 亲密等级：关系等级注入，驱动语气与记忆行为
-			{key: "memory", content: prefSection},                                        // 偏好自动回填：亲密度 ≥100 无条件注入
-			{key: "memory", content: workdirSection},                                     // 项目级 workdir.md，会话开始即注入，跨对话不失业
-			{key: "memory", content: taskMemory},                                         // 反向链接联想召回：命中 + 1跳展开
-			{key: "memory", content: knowledgeSection},                                   // 外挂知识库 RAG：检索召回相关片段
+			// memory 主体：预算内注入"最重要的记忆"（常驻/亲密/偏好/项目/工作态/联想），
+			// 超出预算的低优先块直接丢弃；index 单独作尾部索引，始终完整保留供反向链接展开。
+			{key: "memory", content: combineMemoryWithBudget([]memPart{
+				{0, pinnedSection}, {1, intimacySection}, {2, prefSection},
+				{3, workdirSection}, {4, handoffSection}, {5, taskMemory},
+			})},
+			{key: "memory", content: memorySection},   // 尾部记忆索引（agent 按需反向链接展开）
+			{key: "memory", content: knowledgeSection}, // 外挂知识库 RAG：检索召回相关片段
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},
@@ -182,6 +182,37 @@ func (p *contextProvider) WithPersona(persona string) *contextProvider {
 // OnInvoked 注册每轮收尾的落状态回调。
 func (p *contextProvider) OnInvoked(fn func(round int, st roundState)) {
 	p.onInvoked = fn
+}
+
+// memPart 一个待合并进记忆主体的分段，pri 越小优先级越高（越先保留）。
+type memPart struct {
+	pri     int
+	content string
+}
+
+// combineMemoryWithBudget 按 token 预算把多个记忆分段拼成一个主体。
+// 预算读用户档案 memory_token_budget（<=0 用默认 2200）；parts 构造时已按 pri 升序，
+// 依次累加，超出预算的低优先段直接丢弃（宁缺毋滥，不硬塞）。
+func combineMemoryWithBudget(parts []memPart) string {
+	profile := loadUserProfile()
+	budget := profile.MemoryTokenBudget
+	if budget <= 0 {
+		budget = 2200
+	}
+	var b strings.Builder
+	used := 0
+	for _, p := range parts {
+		if strings.TrimSpace(p.content) == "" {
+			continue
+		}
+		t := estimateTokenCount(p.content)
+		if used > 0 && used+t > budget {
+			break
+		}
+		b.WriteString("\n\n" + p.content)
+		used += t
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // SystemPrompt 按声明顺序拼出系统提示词（稳定段已在构造时排在前面）。

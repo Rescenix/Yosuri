@@ -43,7 +43,7 @@ func workflowHistoryContent(status, final string, transcript []string, blocks []
 
 func (r *WorkflowRunner) persistWorkflowHistory(
 	sessionID, workflowID, task, status, final, model string,
-	transcript []string, blocks []FlowBlock,
+	transcript []string, blocks []FlowBlock, inTok, outTok int,
 ) {
 	if sessionID == "" || workflowID == "" || r.chatHandler == nil || r.chatHandler.sessionStore == nil {
 		return
@@ -62,6 +62,7 @@ func (r *WorkflowRunner) persistWorkflowHistory(
 		},
 		DSMessage{
 			Role: "assistant", Content: content, Model: model, Blocks: blocks, WorkflowID: workflowID,
+			TokenUsage: inTok + outTok,
 		},
 	)
 	// Extraction is asynchronous and sees both the user's completed task text and

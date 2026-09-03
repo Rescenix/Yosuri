@@ -22,7 +22,7 @@
     <img src="https://img.shields.io/badge/Website-yosuri.com-4FC08D.svg?style=for-the-badge" alt="Website">
   </a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0"></a>
-  <img src="https://img.shields.io/badge/Release-v0.2.4-blue" alt="Release v0.2.4">
+  <img src="https://img.shields.io/badge/Release-v0.2.9-blue" alt="Release v0.2.9">
   <img src="https://img.shields.io/badge/Backend-Go-00ADD8" alt="Go">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>
@@ -51,6 +51,7 @@
 | **🛠️ Self-editing skills & on-demand tools** | Skill library with add/remove/enable/disable; native tools slimmed down and loaded on demand (load_tools) |
 | **🧠 Auto memory extraction** | Background pipeline reads your finished conversations, extracts durable facts (profile / preferences / projects / decisions) into a versioned fact ledger — idempotent, atomic, corrected by `update`/`delete`, injected by task relevance instead of bloating every prompt |
 | **📄 Office file delivery** | Agent produces finished Word / PowerPoint / Excel / PDF / CSV / HTML / Markdown files with preview and download — not just code, complete deliverables |
+| **🏢 AI company mode** | One instruction spawns a whole agent company — meeting → research → data → UI → docs → code → PPT → promo video → release receipt, each stage a real worker chained off the last, verified with SHA-256 before approval. Empty you go in, finished product out |
 | **🖱️ Computer Use** | Screenshots, mouse, keyboard, drag & drop, scrolling — it operates your desktop, not just your code |
 | **🛡️ AgentFS change audit** | Every AI file edit gets a snapshot / diff / rollback; dangerous operations require your approval |
 | **🤝 Follow-up guidance** | When a workflow finishes, the AI reviews the result, points out what to polish, and hands you 2-3 one-click next-step suggestions — you're not working alone, it pushes the project forward with you |
@@ -58,6 +59,16 @@
 ![Free short-drama studio: templates, reference images and generation params on one screen](./assets/rescene-studio.png)
 
 ![Follow-up suggestions: after a workflow finishes, the AI proposes your next steps as one-click buttons](./assets/rescene-followup.png)
+
+**One instruction, a whole agent company ships it** — a real Pomodoro focus app delivered end to end: research report with live web sources, structured Excel, working UI, and the promo video.
+
+![AI company mode: research report with real Bing sources](./assets/company-report.png)
+
+![AI company mode: research data as a clean structured Excel](./assets/company-xlsx.png)
+
+![AI company mode: working product UI — a Pomodoro focus app](./assets/company-ui.png)
+
+![AI company mode: the finished promo video](./assets/company-pv.png)
 
 ---
 

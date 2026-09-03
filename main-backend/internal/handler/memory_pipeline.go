@@ -81,7 +81,10 @@ func extractFacts(parent context.Context, userText, dialogContext string) ([]ext
 	ctx, cancel := context.WithTimeout(parent, 25*time.Second)
 	defer cancel()
 	prompt := `你是后台记忆提取器。从最近一段对话里抽取用户稳定、对未来有用的画像事实：
-- 用户明确说出的偏好、项目、决定 → add/update/delete
+值得长期记住的判据（只记这两类）：
+- 稳定偏好、风格与画像：你偏好的语气、长度、称呼、语言、忌讳、在意什么、个人属性（如职业/语言/爱好）→ preferences
+- 项目与决定：你在做的项目、长期目标、明确的决策 → projects / decisions
+- 不记：一句带过的临时请求、一次性任务、演示/测试/mock/示例/假设场景、闲聊、已过期信息；拿不准的宁可返回 []，别硬记。
 - 从用户如何发问/回应里观察到的稳定风格偏好（喜欢的语气、长度、是否夹英文、讨厌什么、在意什么）→ 归入 preferences
 不要从指令、假设、代码、引用文本或模型自己的回答反推事实——只看用户这侧能坐实的东西。
 绝不能记录密码、验证码、API Key、token、身份证号、银行卡号、精确住址、私密健康信息。
@@ -142,6 +145,9 @@ func normalizedFacts(in []extractedFact) []extractedFact {
 	for _, f := range in {
 		f.Op, f.Category = strings.ToLower(strings.TrimSpace(f.Op)), strings.ToLower(strings.TrimSpace(f.Category))
 		f.Key, f.Value = cleanFactText(f.Key, 80), cleanFactText(f.Value, 500)
+		if sensitiveFactKey(f.Key) {
+			continue
+		}
 		if (f.Op != "add" && f.Op != "update" && f.Op != "delete") || f.Key == "" ||
 			(f.Category != "profile" && f.Category != "preferences" && f.Category != "projects" && f.Category != "decisions") ||
 			(f.Op != "delete" && f.Value == "") {
@@ -284,41 +290,71 @@ func appendLedger(path string, entry []byte) error {
 }
 
 func renderAutomaticFacts(facts []memoryFact) error {
-	sections := map[string][]memoryFact{}
+	// 把自动提取的事实按输出文件归类：profile 并入 preferences（用户画像即偏好）。
+	byFile := map[string][]memoryFact{}
 	for _, f := range facts {
-		sections[f.Category] = append(sections[f.Category], f)
+		cat := f.Category
+		if cat == "profile" {
+			cat = "preferences"
+		}
+		byFile[cat] = append(byFile[cat], f)
 	}
+	// 自动事实写进独立 facts.md（分类用 ## 分区），与手动维护的
+	// preferences/projects/decisions 文件完全隔离——自动提取绝不覆盖手动记忆。
 	var b strings.Builder
-	b.WriteString("# 自动结构化记忆\n")
-	for _, category := range []string{"profile", "preferences", "projects", "decisions"} {
-		if len(sections[category]) == 0 {
+	b.WriteString("# 自动提取记忆\n")
+	for _, category := range []string{"preferences", "projects", "decisions"} {
+		items := byFile[category]
+		if len(items) == 0 {
 			continue
 		}
 		fmt.Fprintf(&b, "\n## %s\n", category)
-		for _, f := range sections[category] {
+		for _, f := range items {
 			fmt.Fprintf(&b, "- **%s** %s\n", f.Key, f.Value)
 		}
 	}
-	// Keep automatic facts separate from user-written preferences/project notes.
-	// That preserves manual edits and makes every generated assertion auditable.
 	if err := memorydir.WriteRaw("facts", strings.TrimSpace(b.String())); err != nil {
 		return err
 	}
-
-	// Add one small, truthful index entry. Full facts stay on disk and are retrieved
-	// by the existing task-matching mechanism instead of bloating every prompt.
+	// 索引行自描述：[[facts]] + 内容概要，让 agent 一看就知道里面存了什么，按需点开。
 	idx := memorydir.ReadRaw("index")
 	var lines []string
 	for _, line := range strings.Split(idx, "\n") {
-		if !strings.Contains(line, "[[facts]]") && strings.TrimSpace(line) != "" {
-			lines = append(lines, line)
+		if strings.TrimSpace(line) == "" {
+			continue
 		}
+		if strings.Contains(line, "[[facts]]") {
+			continue // 去掉旧的 facts 条目，下面统一追加最新一条
+		}
+		lines = append(lines, line)
 	}
 	if len(facts) > 0 {
-		lines = append(lines, "- [[facts]] 自动提取的用户画像、偏好、项目与决策；最新明确表达优先。")
+		lines = append(lines, "- [[facts]] 自动提取的用户偏好、项目与决策（最新明确表达优先）。")
 	}
 	if len(lines) == 0 {
 		lines = []string{"# 记忆索引"}
 	}
 	return memorydir.WriteRaw("index", strings.Join(lines, "\n")+"\n")
+}
+
+// sensitiveFactKey 命中的字段直接丢弃：位置/IP/设备/证件/电话/卡号等。这类
+// 信息对 agent 执行任务几乎无价值，却直接暴露用户隐私；不依赖提取模型遵守
+// prompt 黑名单，在归一化层统一兜底过滤（2026-09-02 实锤：某号被记录了
+// location，且该用户已在对话中表达过位置隐私担忧）。
+func sensitiveFactKey(key string) bool {
+	k := strings.ToLower(strings.TrimSpace(key))
+	switch k {
+	case "location", "address", "city", "region", "province", "state", "home", "house",
+		"ip", "ip_address", "ipaddr", "device", "device_id", "deviceid", "fingerprint",
+		"mac", "mac_address", "sn", "serial", "id_card", "idcard", "identity", "identity_no",
+		"phone", "phone_number", "mobile", "tel", "bank_card", "bankcard", "credit_card", "card_no":
+		return true
+	}
+	// 前缀命中：location=xxx / device_xxx / 精确住址 / 身份证 / 银行卡等常见写法
+	for _, p := range []string{"location", "address", "device", "fingerprint", "ip", "phone", "住址", "身份证", "银行卡", "地址"} {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return false
 }

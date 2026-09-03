@@ -38,9 +38,9 @@ type companyAgentInfo struct {
 	// 协作引用（2026-08-09：真实接力证据，非剧本）
 	CollabRefs []CollabRef `json:"collabRefs,omitempty"`
 	// 实时状态（2026-08-26：开罗式"每个 agent 正在干什么"）
-	Status     string `json:"status"`      // 工作中 / 空闲中 / 停摆 N 天 / 未知
-	Task       string `json:"task"`        // 正在做什么（从 live.log 尾部解析）
-	LastActive string `json:"lastActive"`  // 最后活动时间（MM-DD HH:mm）
+	Status     string `json:"status"`     // 工作中 / 空闲中 / 停摆 N 天 / 未知
+	Task       string `json:"task"`       // 正在做什么（从 live.log 尾部解析）
+	LastActive string `json:"lastActive"` // 最后活动时间（MM-DD HH:mm）
 }
 
 // liveLogTimeRe 匹配 live.log 行首时间戳：完整 [2026-08-13 14:10] 或当天 [14:05]
@@ -429,6 +429,20 @@ func HandleCompanyAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, info)
 }
 
+// HandleCompanyRelays GET /api/company/relays — 实时接力事件流（最近 N 条，新→旧）
+// 数据源是接力链每段完成时真正写入的 relay-events.json，而非事后扫文本猜引用。
+func HandleCompanyRelays(c *gin.Context) {
+	evs := loadCompanyRelays()
+	// 倒序：最近交接在前
+	for i, j := 0, len(evs)-1; i < j; i, j = i+1, j-1 {
+		evs[i], evs[j] = evs[j], evs[i]
+	}
+	if len(evs) > 30 {
+		evs = evs[:30]
+	}
+	c.JSON(http.StatusOK, gin.H{"relays": evs})
+}
+
 // HandleCompanyOSStats GET /api/company/os-stats — Agent OS 总控统计（2026-08-08）
 func HandleCompanyOSStats(c *gin.Context) {
 	dir := companyDir()
@@ -794,12 +808,14 @@ func directiveFilePath() string {
 }
 
 type companyDirectiveRun struct {
-	Directive string `json:"directive"`
-	Model     string `json:"model,omitempty"`
-	Project   string `json:"project,omitempty"`
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
-	UpdatedAt string `json:"updatedAt"`
+	Directive   string `json:"directive"`
+	Model       string `json:"model,omitempty"`
+	Project     string `json:"project,omitempty"`
+	Status      string `json:"status"`
+	Error       string `json:"error,omitempty"`
+	StagesDone  int    `json:"stagesDone,omitempty"`  // 生产中已完成阶段数（不再只有 0/100）
+	TotalStages int    `json:"totalStages,omitempty"` // 该指令完整交付总阶段数
+	UpdatedAt   string `json:"updatedAt"`
 }
 
 var companyDirectiveRunMu sync.Mutex
@@ -823,35 +839,19 @@ func saveCompanyDirectiveRun(state companyDirectiveRun) {
 	_ = os.WriteFile(directiveRunFilePath(), data, 0o644)
 }
 
-func findDirectiveDeliveryExecutable() (string, string) {
-	if configured := strings.TrimSpace(os.Getenv("RESCENE_AGENT_OS_PATH")); configured != "" {
-		if _, err := os.Stat(configured); err == nil {
-			return configured, filepath.Dir(configured)
-		}
+// companySetDirectiveProgress 生产中更新已完成阶段数，让前端进度条显示中间值（不再 0/100 跳变）。
+// 若已 completed/failed 则不再覆盖（防止完成后被旧进度回写）。
+func companySetDirectiveProgress(done, total int) {
+	companyDirectiveRunMu.Lock()
+	defer companyDirectiveRunMu.Unlock()
+	st := loadCompanyDirectiveRun()
+	if st.Status == "completed" || st.Status == "failed" {
+		return
 	}
-	var roots []string
-	if wd, err := os.Getwd(); err == nil {
-		for dir := wd; ; dir = filepath.Dir(dir) {
-			roots = append(roots, dir)
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-		}
-	}
-	if exe, err := os.Executable(); err == nil {
-		roots = append(roots, filepath.Dir(exe))
-	}
-	for _, root := range roots {
-		for _, name := range []string{"rescene-demo.exe", "rescene.exe", "rescene-demo", "rescene"} {
-			for _, candidate := range []string{filepath.Join(root, "agent-os", name), filepath.Join(root, name)} {
-				if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-					return candidate, filepath.Dir(candidate)
-				}
-			}
-		}
-	}
-	return "", ""
+	st.Status = "running"
+	st.StagesDone = done
+	st.TotalStages = total
+	saveCompanyDirectiveRun(st)
 }
 
 func startCompanyDirectiveDelivery(directive, model string) companyDirectiveRun {
@@ -863,79 +863,23 @@ func startCompanyDirectiveDelivery(directive, model string) companyDirectiveRun 
 		return state
 	}
 	go func() {
-		exe, dir := findDirectiveDeliveryExecutable()
-		if exe == "" {
+		// 指令生产完全走 main-backend 内部的完整交付引擎（company_delivery.go）：
+		// 真实落盘 xlsx/pptx/html/视频/回执 + delivery.manifest.json，供审批队列扫描收录。
+		// 彻底不依赖外部 agent-os 可执行文件。
+		projectName := deliveryProjectName(directive)
+		projectDir, buildErr := deliveryBuildProject(projectName, directive)
+		if buildErr != nil {
 			companyDirectiveRunMu.Lock()
-			saveCompanyDirectiveRun(companyDirectiveRun{Directive: directive, Model: model, Status: "failed", Error: "找不到公司交付引擎，请重新安装或构建 Agent OS"})
+			saveCompanyDirectiveRun(companyDirectiveRun{Directive: directive, Model: model, Status: "failed", Error: "生产失败: " + buildErr.Error()})
 			companyDirectiveRunMu.Unlock()
 			return
 		}
 		companyDirectiveRunMu.Lock()
-		saveCompanyDirectiveRun(companyDirectiveRun{Directive: directive, Model: model, Status: "running"})
+		saveCompanyDirectiveRun(companyDirectiveRun{Directive: directive, Model: model, Status: "completed", Project: projectName, Error: ""})
 		companyDirectiveRunMu.Unlock()
-		args := []string{"directive-delivery"}
-		if model != "" {
-			args = append(args, "--model", model)
-		}
-		args = append(args, "--", directive)
-		cmd := hiddenCommand(exe, args...)
-		cmd.Dir = dir
-		// Development builds can reuse a colocated ffmpeg without requiring the
-		// user to open a terminal and edit PATH before clicking the button.
-		env := os.Environ()
-		for _, ffmpegDir := range []string{
-			filepath.Join(filepath.Dir(filepath.Dir(dir)), "nachobot-ref", "NachoBot", "plugins", "bilibili_video_sender_plugin", "ffmpeg", "bin"),
-			filepath.Join(filepath.Dir(dir), "ffmpeg", "bin"),
-		} {
-			if _, err := os.Stat(filepath.Join(ffmpegDir, "ffmpeg.exe")); err == nil {
-				env = append(env, "PATH="+ffmpegDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-				break
-			}
-		}
-		// 修复 #12：若用户指定了自定义模型，把 endpoint/key/model 通过环境变量透传给 agent-os，
-		// 避免 agent-os 侧因不理解 custom::provider::model 格式而回退到免费池。
-		if strings.HasPrefix(model, customModelIDPrefix) {
-			if providerID, modelID, ok := parseCustomModelSelectionID(model); ok {
-				if b := resolveExact("default", model); b != nil {
-					_ = providerID
-					_ = modelID
-					env = append(env,
-						"RESCENE_DIRECTIVE_MODEL_ENDPOINT="+b.BaseURL,
-						"RESCENE_DIRECTIVE_MODEL_ID="+b.Model,
-						"RESCENE_DIRECTIVE_MODEL_API_KEY="+b.APIKey,
-					)
-				}
-			}
-		} else if model != "" && model != "auto" && !isFreeCatalogID(model) {
-			// 用户直接选中了某个自定义提供方（非具体模型），同样透传其默认模型配置。
-			if b := resolveExact("default", model); b != nil && b.Source == "user" {
-				env = append(env,
-					"RESCENE_DIRECTIVE_MODEL_ENDPOINT="+b.BaseURL,
-					"RESCENE_DIRECTIVE_MODEL_ID="+b.Model,
-					"RESCENE_DIRECTIVE_MODEL_API_KEY="+b.APIKey,
-				)
-			}
-		}
-		cmd.Env = env
-		output, err := cmd.CombinedOutput()
-		text := strings.TrimSpace(string(output))
-		finished := companyDirectiveRun{Directive: directive, Model: model, Status: "completed"}
-		if match := regexp.MustCompile(`(?m)DEMO_PROJECT=([^\r\n]+)`).FindStringSubmatch(text); len(match) > 1 {
-			finished.Project = strings.TrimSpace(match[1])
-		}
-		if err != nil || finished.Project == "" {
-			finished.Status = "failed"
-			finished.Error = text
-			if finished.Error == "" && err != nil {
-				finished.Error = err.Error()
-			}
-			if len(finished.Error) > 700 {
-				finished.Error = finished.Error[len(finished.Error)-700:]
-			}
-		}
-		companyDirectiveRunMu.Lock()
-		saveCompanyDirectiveRun(finished)
-		companyDirectiveRunMu.Unlock()
+		// 触发一次审批队列刷新（由前端轮询 /api/company/approvals 自然看到）。projectDir 仅用于
+		// 留痕，交付物已落在 company/<agent>/projects/<projectName>/。
+		_ = projectDir
 	}()
 	return state
 }

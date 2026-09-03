@@ -442,6 +442,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		}
 		r.persistWorkflowHistory(
 			sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
+			finalIn, finalOut,
 		)
 		// 用户通过 remember 工具主动写入 MEMORY.md，此处不自动写
 		historyPersisted = true
@@ -784,9 +785,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				}
 				continue
 			}
-			// read_skill 是纯查询（取技能库全文），没有 load_tools 那样的激活副作用
-			if tc.Function.Name == readSkillToolName {
-				handled[i] = handleReadSkill(tc.Function.Arguments, loadSkills())
+			// skill_view 是纯查询（取技能库正文 + 关联文件），没有 load_tools 那样的激活副作用
+			if tc.Function.Name == skillViewToolName {
+				handled[i] = handleSkillView(tc.Function.Arguments, loadSkills())
 				continue
 			}
 			// skill_manage 是显式 /learn 的候选箱；不进普通执行链，也不自动启用。

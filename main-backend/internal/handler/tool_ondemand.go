@@ -44,7 +44,7 @@ var loadToolsToolDef = core.ToolDefinition{
 	},
 }
 
-// nativeWorkflowToolDefs 常驻工具：编排类的 dispatch_agent + load_tools/read_skill 这类
+// nativeWorkflowToolDefs 常驻工具：编排类的 dispatch_agent + load_tools/skill_view 这类
 // 按需取全文的钥匙 + update_todo。文件读写/命令/检索/记忆由 Go 内置工具提供，
 // 同样通过 load_tools 按需激活；真正的外部能力仍可由 MCP 扩展。
 // 这几个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
@@ -57,7 +57,7 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// ask_user：让 agent 在工作流中途向用户提问并暂停等待回答（human-in-the-loop）。
 		// 常驻是因为它是交互控制面工具，需要用时再 load_tools 就打断节奏了。
 		askUserToolDef,
-		// 其余参数简单的常驻工具（update_todo/read_skill/skill_manage/harness_status/
+		// 其余参数简单的常驻工具（update_todo/skill_view/skill_manage/harness_status/
 		// web_search/session_search/remember/open_preview/inject_preview）已简化为按需
 		// 加载（见 native_tools.go）——模型直接调即自动带 schema，无需常驻占 token。
 	}

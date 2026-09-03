@@ -769,10 +769,10 @@ func (s *SessionStore) SearchSessions(query string, limit int) []SearchResult {
 // RecentSessionItem 最近对话浏览条目：会话摘要 + 最近几条消息内容
 // （Hermes session_search 的 BROWSE 模式：无关键词直接看最近聊了什么）。
 type RecentSessionItem struct {
-	SessionID string    `json:"session_id"`
-	Title     string    `json:"title"`
-	UpdatedAt time.Time `json:"updated_at"`
-	MessageCount int    `json:"message_count"`
+	SessionID    string    `json:"session_id"`
+	Title        string    `json:"title"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	MessageCount int       `json:"message_count"`
 	// Recent 最近几条消息（按时间正序，最多 preview 条）
 	Recent []SearchResult `json:"recent"`
 }
@@ -893,12 +893,14 @@ func (s *SessionStore) List() []SessionInfo {
 			continue
 		}
 		fm := s.forkMeta[id]
+		_, titleSet := s.sessionTitles[id]
 		infos = append(infos, SessionInfo{
-			ID:        id,
-			Title:     s.sessionTitleLocked(id),
-			UpdatedAt: msgs[len(msgs)-1].Timestamp,
-			ParentID:  fm.ParentID,
-			ForkIndex: fm.ForkIndex,
+			ID:            id,
+			Title:         s.sessionTitleLocked(id),
+			UpdatedAt:     msgs[len(msgs)-1].Timestamp,
+			ParentID:      fm.ParentID,
+			ForkIndex:     fm.ForkIndex,
+			TitleExplicit: titleSet && s.sessionTitles[id] != "",
 		})
 	}
 	return infos
@@ -912,6 +914,10 @@ type SessionInfo struct {
 	// 分支血缘：根会话两个字段都是零值，omitempty 保证它们的 wire 格式不变
 	ParentID  string `json:"parent_id,omitempty"`
 	ForkIndex int    `json:"fork_index,omitempty"`
+	// 该会话是否有「显式设置」的标题（用户手动改名过 / AI 标题已写入）。
+	// 前端据此决定是否允许 AI 标题覆盖：没显式设置过才能覆盖，
+	// 否则用户手改的标题会被 AI 生成结果顶掉。
+	TitleExplicit bool `json:"title_explicit,omitempty"`
 }
 
 // AllMessage 所有会话的扁平消息

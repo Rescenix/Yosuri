@@ -40,6 +40,7 @@ type projectDeliveryGate struct {
 	Status      string                    `json:"status"`
 	GeneratedAt string                    `json:"generatedAt,omitempty"`
 	Evidence    []projectDeliveryEvidence `json:"evidence"`
+	Missing     []string                  `json:"missing,omitempty"` // 尽力而为阶段缺省（如 pv 视频）时记录，门禁据此放宽
 }
 
 func zipContains(content []byte, required string) bool {
@@ -85,7 +86,12 @@ func validateProjectEvidenceFormat(projectPath string, evidence projectDeliveryE
 			return fmt.Errorf("演示稿不是有效 PPTX")
 		}
 	case "pv":
-		if len(content) < 12 || !bytes.Equal(content[4:8], []byte("ftyp")) {
+		if strings.HasSuffix(lower, ".json") {
+			// 无视频引擎时的生图兜底：必须是含 pv-fallback-images 标记的 JSON（06-宣传PV.manifest.json）
+			if !json.Valid(content) || !strings.Contains(strings.ToLower(string(content)), "pv-fallback-images") {
+				return fmt.Errorf("宣传素材兜底不是有效清单")
+			}
+		} else if len(content) < 12 || !bytes.Equal(content[4:8], []byte("ftyp")) {
 			return fmt.Errorf("宣传片不是有效 MP4 容器")
 		}
 	case "promotion":
@@ -138,10 +144,26 @@ func verifyProjectDeliveryGate(projectPath string) (projectDeliveryGate, error) 
 	}
 	for _, stage := range projectStageOrder {
 		if !stages[stage] {
+			// 视频（pv）是尽力而为阶段：仅在 manifest 明确标记 Missing 含 "pv" 时放行，
+			// 其余阶段一律必须齐全。这让没装 ffmpeg 的用户也能完成其余 10 阶段交付，
+			// 同时不放松第三方项目（其 Missing 为空）的严格门禁。
+			if stage == "pv" && containsString(gate.Missing, "pv") {
+				continue
+			}
 			return gate, fmt.Errorf("缺少阶段: %s", stage)
 		}
 	}
 	return gate, nil
+}
+
+// containsString 判断切片是否包含目标字符串。
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 func projectArtifactStage(agent, name string) string {

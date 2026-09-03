@@ -25,69 +25,69 @@ func writeSkillFile(t *testing.T, dir string, s Skill) {
 	}
 }
 
-// read_skill 从常驻工具改为按需工具（2026-08-29 收敛）：
+// skill_view 从常驻工具改为按需工具（2026-08-29 收敛）：
 // 参数简单，模型直接调即自动带 schema。它必须在按需池里（索引可见）且
 // 可被 load_tools 激活——否则技能全文将永远不可达。
-func TestNativeToolsAlwaysIncludeReadSkill(t *testing.T) {
-	if !isOnDemandTool(readSkillToolName) {
-		t.Fatalf("%s 不在按需池里，技能全文将永远不可达", readSkillToolName)
+func TestNativeToolsAlwaysIncludeSkillView(t *testing.T) {
+	if !isOnDemandTool(skillViewToolName) {
+		t.Fatalf("%s 不在按需池里，技能全文将永远不可达", skillViewToolName)
 	}
 	activated := map[string]bool{}
-	out, changed := handleLoadTools(`{"names":["`+readSkillToolName+`"]}`, activated)
-	if !changed || !activated[readSkillToolName] {
-		t.Fatalf("%s 不能被 load_tools 激活: %s", readSkillToolName, out)
+	out, changed := handleLoadTools(`{"names":["`+skillViewToolName+`"]}`, activated)
+	if !changed || !activated[skillViewToolName] {
+		t.Fatalf("%s 不能被 load_tools 激活: %s", skillViewToolName, out)
 	}
 	found := false
 	for _, tl := range buildCodeWorkflowTools(activated) {
 		fn := tl["function"].(map[string]any)
-		if fn["name"] == readSkillToolName {
+		if fn["name"] == skillViewToolName {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("%s 激活后没进 tools 数组", readSkillToolName)
+		t.Fatalf("%s 激活后没进 tools 数组", skillViewToolName)
 	}
 }
 
-// 核心诉求：read_skill 必须能拿到 steps——这是过去 skillLibraryPrompt 里
+// 核心诉求：skill_view 必须能拿到 steps——这是过去 skillLibraryPrompt 里
 // 被解析出来又直接丢弃、模型永远拿不到的那部分内容。
-func TestHandleReadSkillReturnsSteps(t *testing.T) {
+func TestHandleSkillViewReturnsSteps(t *testing.T) {
 	dir := withTempSkillsDir(t)
 	writeSkillFile(t, dir, Skill{
 		Name: "deploy-frontend", Description: "部署前端到生产环境",
 		Steps: []string{"运行 npm build", "上传 dist 到 CDN", "刷新缓存"},
 	})
 
-	out := handleReadSkill(`{"names":["deploy-frontend"]}`, loadSkills())
+	out := handleSkillView(`{"names":["deploy-frontend"]}`, loadSkills())
 	if !strings.Contains(out, "运行 npm build") || !strings.Contains(out, "刷新缓存") {
-		t.Fatalf("read_skill 结果里没有完整 steps，实得: %s", out)
+		t.Fatalf("skill_view 结果里没有完整 steps，实得: %s", out)
 	}
 }
 
-func TestHandleReadSkillUnknownName(t *testing.T) {
+func TestHandleSkillViewUnknownName(t *testing.T) {
 	withTempSkillsDir(t)
-	out := handleReadSkill(`{"names":["不存在的技能"]}`, loadSkills())
+	out := handleSkillView(`{"names":["不存在的技能"]}`, loadSkills())
 	if !strings.Contains(out, "不存在") {
 		t.Errorf("应提示名字不存在让模型自己纠正，实得: %s", out)
 	}
 }
 
-func TestHandleReadSkillBadArgs(t *testing.T) {
+func TestHandleSkillViewBadArgs(t *testing.T) {
 	withTempSkillsDir(t)
-	if out := handleReadSkill(`{`, nil); !strings.Contains(out, "解析失败") {
+	if out := handleSkillView(`{`, nil); !strings.Contains(out, "解析失败") {
 		t.Errorf("坏 JSON 应回可读提示而不是空串: %q", out)
 	}
-	if out := handleReadSkill(`{"names":[]}`, nil); !strings.Contains(out, "为空") {
+	if out := handleSkillView(`{"names":[]}`, nil); !strings.Contains(out, "为空") {
 		t.Errorf("空 names 应回提示: %q", out)
 	}
 }
 
 // 已知+未知名字混在一次调用里，应该各自正确归类，互不影响。
-func TestHandleReadSkillMixedNames(t *testing.T) {
+func TestHandleSkillViewMixedNames(t *testing.T) {
 	dir := withTempSkillsDir(t)
 	writeSkillFile(t, dir, Skill{Name: "a-skill", Description: "d1", Steps: []string{"s1"}})
 
-	out := handleReadSkill(`{"names":["a-skill","b-skill"]}`, loadSkills())
+	out := handleSkillView(`{"names":["a-skill","b-skill"]}`, loadSkills())
 	if !strings.Contains(out, "s1") {
 		t.Errorf("已知技能 a-skill 的步骤应出现在结果里: %s", out)
 	}
@@ -97,7 +97,7 @@ func TestHandleReadSkillMixedNames(t *testing.T) {
 }
 
 // 索引（skillLibraryPrompt）依然只给名称+描述，不该把 steps 也塞进去——
-// 否则又变回一次性全量注入，read_skill 的按需加载就没有意义了。
+// 否则又变回一次性全量注入，skill_view 的按需加载就没有意义了。
 func TestSkillLibraryPromptIsIndexOnly(t *testing.T) {
 	dir := withTempSkillsDir(t)
 	writeSkillFile(t, dir, Skill{

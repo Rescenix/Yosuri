@@ -565,12 +565,12 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.18);
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
   border-radius: 999px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,0,0,0.28);
+  background: color-mix(in srgb, var(--app-accent) 50%, transparent);
 }
 
 
@@ -582,12 +582,12 @@ overflow-y: visible;     /* ⭐ 这里滚动 */
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.12);
+  background: color-mix(in srgb, var(--app-accent) 22%, transparent);
   border-radius: 999px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,0,0,0.22);
+  background: color-mix(in srgb, var(--app-accent) 40%, transparent);
 }
 
 .chat-messages::-webkit-scrollbar-track {

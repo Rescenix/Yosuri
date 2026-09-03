@@ -118,8 +118,26 @@ type reviewerDecision struct {
 var (
 	companyWorkflowMu sync.Mutex
 	companyRuns       sync.Map
-	companyModelCall  = callLocalAggregate
+	companyModelCall  = companyModelRace // 公司专用智能 auto + 并发竞速负载均衡（见 company_model_router.go）
 )
+
+// callCompanyModelRetry 对模型调用做有限重试：公司智能路由本身已并发竞速（快源赢、坏源淘汰），
+// 这里最多补 1 次重试，防「所有源同一瞬间抖动」的偶发失败。失败后由上层 delivery* 回退到基础模板，
+// 不阻塞整条生产。
+func callCompanyModelRetry(prompt string) (string, error) {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		content, err := companyModelCall(prompt)
+		if err == nil {
+			return content, nil
+		}
+		lastErr = err
+		if attempt < 1 {
+			time.Sleep(1 * time.Second)
+		}
+	}
+	return "", lastErr
+}
 
 func companyWorkflowDir() string {
 	if override := strings.TrimSpace(os.Getenv("RESCENE_COMPANY_WORKFLOW_DIR")); override != "" {
@@ -481,7 +499,7 @@ func runCompanyContentWorkflow(goalID string) {
 			_ = saveCompanyGoal(g)
 			companyWorkflowMu.Unlock()
 
-			content, err := companyModelCall(prompt)
+			content, err := callCompanyModelRetry(prompt)
 			if err != nil {
 				markWorkflowFailure(goalID, taskID, fmt.Errorf("%s调用模型失败: %w", task.Title, err))
 				return
@@ -510,7 +528,7 @@ func runCompanyContentWorkflow(goalID string) {
 			if err := deterministicArtifactCheck(task, content); err != nil {
 				decision = reviewerDecision{Verdict: "reject", Score: 0, Issues: []string{err.Error()}, Summary: "确定性质量门未通过"}
 			} else {
-				reviewText, reviewErr := companyModelCall(reviewPrompt(g, task, content))
+				reviewText, reviewErr := callCompanyModelRetry(reviewPrompt(g, task, content))
 				if reviewErr != nil {
 					markWorkflowFailure(goalID, taskID, fmt.Errorf("%s验收模型失败: %w", task.Title, reviewErr))
 					return
