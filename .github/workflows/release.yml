@@ -69,15 +69,13 @@ jobs:
         run: |
           $v = (Get-Content main-backend/wails.json -Raw | ConvertFrom-Json).info.productVersion
           cd main-backend
-          wails build -platform windows/amd64 -o rescene-package.exe -s -ldflags "-X backend/internal/handler.AppVersion=$v"
+          wails build -platform windows/amd64 -o rescene-package.exe -s -nsis -installscope user -webview2 embed -ldflags "-X backend/internal/handler.AppVersion=$v"
 
-      - name: 组装 Windows 便携版 zip
+      - name: 组装 Windows 便携版 zip + NSIS 安装器
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item main-backend/build/bin/rescene-package.exe dist/rescene.exe -Force
-          Compress-Archive -Path dist/rescene.exe -DestinationPath "dist/${{ matrix.asset }}" -Force
+          ./scripts/package-windows-ci.ps1
 
       - name: Wails 构建 + 打包 (Linux)
         if: runner.os == 'Linux'
@@ -129,6 +127,7 @@ jobs:
             dist/SHA256SUMS.txt
             dist/*.zip
             dist/*.tar.gz
+            dist/Rescene-windows-amd64-setup.exe
 
   sync-r2:
     needs: build
@@ -149,6 +148,13 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: r2 object put rescene-downloads/Rescene-windows-amd64-portable.zip --file assets/Rescene-windows-amd64-portable.zip
+
+      - name: 同步 Windows setup.exe → R2
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: r2 object put rescene-downloads/Rescene-windows-amd64-setup.exe --file assets/Rescene-windows-amd64-setup.exe
 
       - name: 同步 Linux tar.gz → R2
         uses: cloudflare/wrangler-action@v3
@@ -175,5 +181,5 @@ jobs:
           curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
             -H "Authorization: Bearer $CF_TOKEN" \
             -H "Content-Type: application/json" \
-            --data '{"files":["https://download.shanca.me/Rescene-windows-amd64-portable.zip","https://download.shanca.me/Rescene-linux-amd64.tar.gz","https://download.shanca.me/Rescene-darwin-amd64.tar.gz"]}'
+            --data '{"files":["https://download.shanca.me/Rescene-windows-amd64-portable.zip","https://download.shanca.me/Rescene-windows-amd64-setup.exe","https://download.shanca.me/Rescene-linux-amd64.tar.gz","https://download.shanca.me/Rescene-darwin-amd64.tar.gz"]}'
           echo "purge done"
