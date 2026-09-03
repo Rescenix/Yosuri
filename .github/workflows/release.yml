@@ -63,6 +63,12 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install nsis -y --no-progress
 
+      - name: 设置 NSIS 到 PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "C:\Program Files (x86)\NSIS\Bin" >> $env:GITHUB_PATH
+
       - name: Wails 构建 (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
