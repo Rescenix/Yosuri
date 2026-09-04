@@ -254,8 +254,8 @@ function openUpdateModal() {
 }
 
 // 更新检查 + 触发后台下载。
-// 2026-08-25 秒弹定稿：检测到新版本 → 立刻弹轻量横幅（同一版本 3 天节流），
-// 同时后台静默下载；安装包就绪后下次启动再确认弹窗。不再等下载完才提示。
+// 2026-08-25 秒弹定稿：检测到新版本 → 立刻弹轻量横幅（同一版本 4 小时节流，
+// 一天最多 6 次），同时后台静默下载；安装包就绪后下次启动再确认弹窗。不再等下载完才提示。
 async function checkAndDownload(silent) {
   if (isUpdateNotifyDisabled()) return
   let res
