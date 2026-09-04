@@ -371,6 +371,9 @@ type updateDownloadState struct {
 	Path       string  `json:"path"`
 	ErrMsg     string  `json:"error"`
 	Applying   bool    `json:"-"`
+	// TargetVersion 是本次更新目标版本，用于校验本地缓存补丁是否匹配
+	//（2026-09-04：本地残留旧包时按版本强制重下，不再复用）
+	TargetVersion string `json:"-"`
 }
 
 var updateDL = &updateDownloadState{State: "idle"}
@@ -432,6 +435,9 @@ func HandleAutoDownload(c *gin.Context) {
 	updateDL.Percent = 0
 	updateDL.ErrMsg = ""
 	updateDL.Path = ""
+	if info != nil {
+		updateDL.TargetVersion = info.LatestVersion
+	}
 	updateDL.mu.Unlock()
 
 	go func() {
@@ -467,19 +473,35 @@ func downloadHotPatchZip(zipURL, dest, version string) error {
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		return err
 	}
-	// 已下载完成 → 复用
-	if isLikelyWindowsExecutable(dest) {
+	// 已下载完成且版本匹配 → 复用
+	// ⚠️ 2026-09-04 实锤：缓存按目标版本命名，但本地残留旧包（同一版本号
+	// 线上覆盖重传、或 CDN 缓存窗下载到旧包）时，exe 已存在且 >1MB 就直接复用
+	// → 解压出的永远是旧 exe →「一键安装好几次还是旧版本」死循环。
+	// 复用前必须校验补丁 exe 内版本串 == 目标版本，不匹配强制重下。
+	if isLikelyWindowsExecutable(dest) && exeContainsVersion(dest, version) {
 		updateDL.mu.Lock()
 		updateDL.Path = dest
 		updateDL.mu.Unlock()
 		return nil
+	}
+	// 缓存不匹配目标版本：清掉，走重新下载
+	if isLikelyWindowsExecutable(dest) {
+		_ = os.Remove(dest)
 	}
 	zipName := "rescene-update.zip"
 	if version != "" {
 		zipName = fmt.Sprintf("rescene-update-%s.zip", sanitizeVersionForFilename(version))
 	}
 	zipPath := filepath.Join(localDir, zipName)
-	fi, err := os.Stat(zipPath)
+	var fi os.FileInfo
+	var err error
+	fi, err = os.Stat(zipPath)
+	// ⚠️ zip 复用同样要校验版本：本地残留旧包（同一版本号线上覆盖重传 /
+	// CDN 缓存窗下载到旧包）时，zip 存在且 >1MB 就解压 → 又解出旧 exe。
+	if err == nil && fi.Size() >= 1024*1024 && !zipContainsVersion(zipPath, version) {
+		_ = os.Remove(zipPath)
+		err = os.ErrNotExist
+	}
 	if err != nil || fi.Size() < 1024*1024 {
 		// 下载 zip（带进度）
 		client := &http.Client{Timeout: 10 * time.Minute}
@@ -621,6 +643,63 @@ func isLikelyWindowsExecutable(path string) bool {
 	return err == nil && magic == [2]byte{'M', 'Z'}
 }
 
+// exeContainsVersion 检查补丁 exe 二进制里是否含有目标版本串。
+// 复用的前置校验：本地缓存（rescene-new.exe / zip）存在不代表内容对，
+// 同一版本号线上覆盖重传或 CDN 缓存窗下载到旧包时，必须校验版本再复用。
+func exeContainsVersion(path, want string) bool {
+	if want == "" {
+		return true
+	}
+	want = strings.TrimPrefix(want, "v")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	for _, m := range versionRe.FindAll(data, -1) {
+		if strings.TrimPrefix(string(m), "v") == want {
+			return true
+		}
+	}
+	return false
+}
+
+// zipContainsVersion 检查缓存 zip 里的 rescene.exe 是否含目标版本串。
+func zipContainsVersion(zipPath, want string) bool {
+	if want == "" {
+		return true
+	}
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return false
+	}
+	defer zr.Close()
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() || !strings.EqualFold(filepath.Base(f.Name), "rescene.exe") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return false
+		}
+		defer rc.Close()
+		tmp, err := os.CreateTemp("", "rescene-vercheck-*.exe")
+		if err != nil {
+			return false
+		}
+		tmpName := tmp.Name()
+		defer os.Remove(tmpName)
+		if _, err := io.Copy(tmp, rc); err != nil {
+			tmp.Close()
+			return false
+		}
+		if err := tmp.Close(); err != nil {
+			return false
+		}
+		return exeContainsVersion(tmpName, want)
+	}
+	return false
+}
+
 // HandleUpdateDownloadStatus 返回下载进度。
 // idle 时检查磁盘：后台已自动下载的补丁（重启后内存态丢失）→ 报 done，
 // 让版本 tab / 弹窗能识别「后台已下好」并直接提供一键安装（2026-08-16 用户定稿）。
@@ -630,7 +709,9 @@ func HandleUpdateDownloadStatus(c *gin.Context) {
 	if updateDL.State == "idle" {
 		localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
 		dest := filepath.Join(localDir, updateHotPatchFileName)
-		if isLikelyWindowsExecutable(dest) {
+		// 磁盘上已就绪的补丁必须是版本匹配的新 exe，否则视为没有就绪
+		// （2026-09-04：本地残留旧包时不能报 done，否则前端显示一键安装、装的还是旧版）
+		if isLikelyWindowsExecutable(dest) && exeContainsVersion(dest, updateDL.TargetVersion) {
 			updateDL.State = "done"
 			updateDL.Path = dest
 		}
