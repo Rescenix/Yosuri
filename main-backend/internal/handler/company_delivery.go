@@ -159,12 +159,7 @@ func deliverySanitize(s string) string {
 	return strings.TrimSpace(replacer.Replace(s))
 }
 
-// deliveryAgentHome 公司交付落盘的 agent 目录（与项目目录约定一致）。
-func deliveryAgentHome(role, name string) string {
-	return filepath.Join(companyDir(), name)
-}
-
-// deliveryShellEscape 简单转义，避免文件名含特殊字符破坏 zip/路径。
+// deliverySHA256 计算交付物哈希，供门禁复算。
 func deliverySHA256(data []byte) string {
 	sum := sha256.Sum256(data)
 	return fmt.Sprintf("%x", sum[:])
@@ -312,7 +307,54 @@ func deliveryLLMContent(role, brief, stage, criteria, upstream string) (string, 
 - 中文输出，结构清晰，可直接落盘为交付物
 - 不要声称访问了没有访问的网页，不要编造链接、数字或引用
 - 直接输出交付物正文，不要解释过程`, role, stage, stage, brief, netBlock, upstreamBlock, stage, criteria)
-	return callCompanyModelRetry(prompt)
+	return companyLiveModelCall(role, stage, prompt)
+}
+
+// companyLiveModelCall 走流式竞速，把模型正在写的字实时推给生产大屏；
+// 流式失败时退回非流式重试，保证生产不因流式协议差异而中断。
+func companyLiveModelCall(role, stage, prompt string) (string, error) {
+	project := companyLiveProject()
+	emit := companyLiveDeltaEmitter(project, role, stage)
+	content, err := companyModelRaceStream(prompt, emit)
+	if err == nil && strings.TrimSpace(content) != "" {
+		emit("") // 收尾：把缓冲区剩余内容推出去
+		// 竞速下「先出字接管大屏的源」未必是「先写完被采纳的源」，流式碎片可能只覆盖正文一角。
+		// 补一帧 replaced：前端用它整块替换本阶段文字，保证大屏最终显示的是真正交付的正文。
+		companyLivePublish(companyLiveEvent{Kind: "delta", Stage: stage, Role: role, Replaced: true, Text: deliveryTruncate(content, 6000), Project: project})
+		return content, nil
+	}
+	// 回退：非流式重试（部分免费源不支持 stream，或流中途断开）
+	out, retryErr := callCompanyModelRetry(prompt)
+	if retryErr == nil {
+		companyLivePublish(companyLiveEvent{Kind: "delta", Stage: stage, Role: role, Replaced: true, Text: deliveryTruncate(out, 6000), Project: project})
+		return out, nil
+	}
+	return "", err
+}
+
+// companyLiveDeltaEmitter 返回一个增量回调：按 ~80 字或 ~150ms 聚合成一条事件，
+// 避免每个 token 都发一帧把大屏和磁盘日志刷爆。传空串表示收尾冲刷。
+func companyLiveDeltaEmitter(project, role, stage string) func(string) {
+	var mu sync.Mutex
+	pending := strings.Builder{}
+	last := time.Now()
+	return func(delta string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if delta == "" {
+			if pending.Len() > 0 {
+				companyLivePublish(companyLiveEvent{Kind: "delta", Stage: stage, Role: role, Text: pending.String(), Project: project})
+				pending.Reset()
+			}
+			return
+		}
+		pending.WriteString(delta)
+		if pending.Len() >= 80 || time.Since(last) > 150*time.Millisecond {
+			companyLivePublish(companyLiveEvent{Kind: "delta", Stage: stage, Role: role, Text: pending.String(), Project: project})
+			pending.Reset()
+			last = time.Now()
+		}
+	}
 }
 
 // deliveryTruncate 截断长文本到指定 rune 数，供交接时防上下文爆炸。
@@ -448,31 +490,6 @@ func deliveryRoleAgentDirs(role string) string {
 	return ""
 }
 
-// deliveryMirrorToRoleDirs 把项目目录里各阶段的交付物按角色镜像落一份到对应 agent 目录的
-// outputs/，供审批台拾取多个角色（形成 agents>=2 的团队项目）。镜像失败不影响门禁——项目目录
-// 内的完整交付仍是主依据。
-func deliveryMirrorToRoleDirs(projectDir string, ev []struct{ stage, role, file, kind, verification string }) {
-	seen := map[string]bool{}
-	for _, def := range ev {
-		if def.role == "" || def.file == "" {
-			continue
-		}
-		roleDir := deliveryRoleAgentDirs(def.role)
-		if roleDir == "" || seen[roleDir] {
-			continue
-		}
-		src := filepath.Join(projectDir, def.file)
-		data, err := os.ReadFile(src)
-		if err != nil || len(data) == 0 {
-			continue
-		}
-		outDir := filepath.Join(roleDir, "outputs")
-		_ = os.MkdirAll(outDir, 0o755)
-		_ = os.WriteFile(filepath.Join(outDir, def.file), data, 0o644)
-		seen[roleDir] = true
-	}
-}
-
 // cleanPPTText 剥离模型输出里的 markdown 结构符（**、###、行首 - 等），避免原样进 PPT 页面。
 func cleanPPTText(s string) string {
 	s = strings.ReplaceAll(s, "**", "")
@@ -549,7 +566,7 @@ func deliveryPPTFromBrief(project, brief, upstream string) []officeSlide {
 // deliveryBuildProject 把一条指令真实生产为一份完整交付物。
 // 返回项目目录名（形如 001-<name>-<timestamp>）与产物路径；任何硬门禁失败返回 error。
 func deliveryBuildProject(projectName, brief string) (string, error) {
-	projectDir := filepath.Join(companyDir(), "coder-03", "projects", projectName)
+	projectDir := companyProjectDir(projectName)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return "", err
 	}
@@ -560,16 +577,43 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 	var missing []string
 	// 重置本指令的阶段进度计数器（writeDeliveryFile 每阶段 +1）
 	companyResetDeliveryStage()
+	companyLiveResetForProject(projectName)
+	// 工程选型：需要状态与存储的产品走多文件（index/app.js/styles.css/data.js），
+	// 无状态小工具走单文件快车道。选型理由写进项目身份供复盘。
+	plan := companyDecidePlan(brief)
 
-	// 1. meeting —— 结构化 kickoff 会议证据（JSON 合法）
+	// 1. meeting —— 结构化 kickoff 会议证据（JSON 合法，零模型调用，秒级完成）
 	meetingContent := fmt.Sprintf(`{"topic":%q,"kind":"evidence_kickoff","participants":["researcher","writer","designer","coder","promoter","publisher"],"decision":"所有硬门槛通过后才能进入审批"}`, projectName)
 	if _, err := writeDeliveryFile(projectDir, "00-项目会议.meeting.json", []byte(meetingContent)); err != nil {
 		return "", err
 	}
+	companyLiveStage(projectName, "meeting", "ceo", "ceo-01", "立项会议完成，直接进入最小原型")
 
-	// 2. requirements —— 需求计划（需求分析师 agent，起始环节无上游）
+	// 2. MVP —— 一开始就产出可运行的最小原型（v1）。
+	// 此前链路要跑完会议/需求/调研/数据四个文本阶段才见到能操作的东西，
+	// 用户全程只看进度条。现在第一条指令几十秒内就有真页面，后续阶段全部围着它迭代。
+	companyLiveStage(projectName, "mvp", "coder", "coder-03", "最小可运行原型 v1 生成中（"+plan.Reason+"）")
+	var mvpHTML string
+	if plan.MultiFile {
+		mvpFiles := deliveryMultiProject(projectName, brief, "")
+		for name, content := range mvpFiles {
+			if _, err := writeDeliveryFile(projectDir, name, []byte(content)); err != nil {
+				return "", err
+			}
+		}
+		mvpHTML = companyInlineMulti(mvpFiles)
+	} else {
+		mvpHTML = deliveryProductHTML(projectName, brief, true, "")
+	}
+	if _, err := writeDeliveryFile(projectDir, "output-app.html", []byte(mvpHTML)); err != nil {
+		return "", err
+	}
+	companyLiveArtifact(projectName, "mvp", "coder", "output-app.html", "v1")
+	prevContent := mvpHTML // 接力链：最小原型就是后续所有环节的底座
+
+	// 3. requirements —— 需求计划（需求分析师 agent，基于最小原型补全需求与验收标准）
 	reqContent := ""
-	if c, err := deliveryLLMContent("需求分析师", brief, "需求计划", "把用户指令拆成具体、可验收的需求与验收标准，含功能点", ""); err == nil && strings.TrimSpace(c) != "" {
+	if c, err := deliveryLLMContent("需求分析师", brief, "需求计划", "产品已有一版可运行最小原型，把用户指令拆成具体、可验收的需求与验收标准，含功能点", prevContent); err == nil && strings.TrimSpace(c) != "" {
 		reqContent = c
 	} else {
 		// 模型不可用时回退到基础模板，保证门禁不因外部服务挂死
@@ -578,10 +622,11 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 	if _, err := writeDeliveryFile(projectDir, "00-需求计划.md", []byte(reqContent)); err != nil {
 		return "", err
 	}
-	prevContent := reqContent // 接力链：需求产物交给下一环节
+	prevContent = reqContent // 接力链：需求产物交给下一环节
 	appendCompanyRelay(companyRelayEvent{From: "writer-15", To: "researcher-04", Stage: "requirements", Artifact: "00-需求计划.md", Status: "done", DoneAt: time.Now().Format(time.RFC3339)})
 
-	// 3. research —— 调研报告（研究员 agent，基于需求产物往下接力）
+	// 4. research —— 调研报告（研究员 agent，基于最小原型与需求往下接力）
+	companyLiveStage(projectName, "research", "researcher", "researcher-04", "调研报告撰写中（Bing 联网取真实来源）")
 	researchContent := ""
 	if c, err := deliveryLLMContent("研究员", brief, "调研报告", "给出该产品要解决的核心问题、目标用户、同类对比与关键实现要点", prevContent); err == nil && strings.TrimSpace(c) != "" {
 		researchContent = c
@@ -630,12 +675,14 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 		return "", err
 	}
 
-	// 5. ui —— UI 原型 html（设计师 agent，基于需求+调研产物往下接力）
-	uiHTML := deliveryProductHTML(projectName, brief, false, prevContent)
+	// 5. ui —— 设计迭代（设计师 agent 在最小原型 v1 上改出 v2，大屏实时换页）
+	companyLiveStage(projectName, "ui", "designer", "designer-04", "UI 设计迭代：在最小原型上重做视觉与布局")
+	uiHTML := deliveryProductHTML(projectName, brief, false, "已上线的最小可运行原型（在此基础上做设计升级，保留全部已有功能）:\n"+deliveryTruncate(mvpHTML, 2500)+"\n\n调研结论:\n"+deliveryTruncate(researchContent, 1500))
 	if _, err := writeDeliveryFile(projectDir, "03-UI原型.html", []byte(uiHTML)); err != nil {
 		return "", err
 	}
-	prevContent = uiHTML // 接力链：UI 原型交给编码环节
+	companyLiveArtifact(projectName, "ui", "designer", "03-UI原型.html", "v2")
+	prevContent = uiHTML // 接力链：设计稿交给编码环节
 	appendCompanyRelay(companyRelayEvent{From: "designer-04", To: "coder-03", Stage: "ui", Artifact: "03-UI原型.html", Status: "done", DoneAt: time.Now().Format(time.RFC3339)})
 
 	// 6. docs —— 软件文档（文档工程师 agent，基于 UI 原型产物往下接力）
@@ -649,11 +696,26 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 		return "", err
 	}
 
-	// 7+8. code + runnable —— 可运行程序（前端工程师 agent，基于 UI 原型产物往下接力）
-	runnableHTML := deliveryProductHTML(projectName, brief, true, prevContent)
+	// 7+8. code + runnable —— 终版迭代（把设计稿 v2 落成最终可运行程序）
+	companyLiveStage(projectName, "code", "coder", "coder-03", "终版迭代：设计稿落地为最终可运行程序")
+	upstream := "最小原型 v1（功能基线，必须全部保留）:\n" + deliveryTruncate(mvpHTML, 2000) + "\n\n设计稿 v2（视觉与布局以此为准）:\n" + deliveryTruncate(uiHTML, 2500)
+	var runnableHTML string
+	if plan.MultiFile {
+		// 多文件项目：终版重新产出 4 个源文件（覆盖 v1），再内联成 output-app.html 供预览与门禁。
+		finalFiles := deliveryMultiProject(projectName, brief, upstream)
+		for name, content := range finalFiles {
+			if _, err := writeDeliveryFile(projectDir, name, []byte(content)); err != nil {
+				return "", err
+			}
+		}
+		runnableHTML = companyInlineMulti(finalFiles)
+	} else {
+		runnableHTML = deliveryProductHTML(projectName, brief, true, upstream)
+	}
 	if _, err := writeDeliveryFile(projectDir, "output-app.html", []byte(runnableHTML)); err != nil {
 		return "", err
 	}
+	companyLiveArtifact(projectName, "runnable", "coder", "output-app.html", "final")
 	prevContent = runnableHTML // 接力链：可运行程序交给路演环节
 	appendCompanyRelay(companyRelayEvent{From: "coder-03", To: "promoter-18", Stage: "code", Artifact: "output-app.html", Status: "done", DoneAt: time.Now().Format(time.RFC3339)})
 
@@ -714,11 +776,8 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 		evidenceDefs = append(evidenceDefs, pvKV)
 	}
 
-	// 接力产物镜像：把每个阶段的交付物按角色落一份到对应 agent 目录的 outputs/，
-	// 让审批台遍历各 agent 目录时能拾取多个角色（agents>=2 的团队项目自然成立），
-	// 这是「真多 Agent 接力」在审批侧的关键——产物按角色归位，而非全塞在单个 coder-03。
-	deliveryMirrorToRoleDirs(projectDir, evidenceDefs)
-
+	// 项目身份落盘：参与角色来自上面的证据分工，审批台直接读这份索引，
+	// 不再把产物复制到各角色目录去凑「多 Agent」。
 	for _, def := range evidenceDefs {
 		data, err := os.ReadFile(filepath.Join(projectDir, def.file))
 		if err != nil || len(data) == 0 {
@@ -742,6 +801,8 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 	if err := os.WriteFile(filepath.Join(projectDir, "delivery.manifest.json"), encoded, 0o644); err != nil {
 		return "", err
 	}
+	_ = writeCompanyProjectIndex(projectDir, projectName, brief, manifest)
+	companyLivePublish(companyLiveEvent{Kind: "done", Text: "完整交付已落盘 · 进入人类审批", Project: projectName})
 
 	return projectDir, nil
 }

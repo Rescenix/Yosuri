@@ -43,6 +43,10 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 		}
 		// 云端记忆同步（可选）：记忆变了，异步推送
 		pushMemorySync()
+		// 性格蒸馏（防抖 30s）：记忆变更可能影响语气/偏好，异步触发重蒸馏
+		schedulePersonalityDistill()
+		// 记忆摘要蒸馏（防抖 30s）：事实变了，前端视图要跟着更新
+		scheduleSummaryDistill()
 		return nativeToolResult{Text: fmt.Sprintf("已写入记忆 %s（memory/%s.md）", file, file)}, nil
 	case "memory_pin":
 		pid, text := stringArg(args, "pid"), stringArg(args, "text")

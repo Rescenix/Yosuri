@@ -756,25 +756,40 @@ async function pollTask() {
   const id = taskId.value
   if (!id) return
   clearInterval(pollTimer)
+  const stopAll = () => {
+    clearInterval(elapsedTimer)
+    clearInterval(pollTimer)
+    busy.value = false
+    localStorage.removeItem('studio_agnes_task')
+  }
   const check = async () => {
     try {
       const r = await fetch(`${API_BASE_URL}/api/studio/agnes/status/${id}`)
-      const d = await r.json()
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || d.status === 'lost') {
+        // 任务记录丢失（应用重启/热更新换过进程）：必须明确报错并退出「生成中」，
+        // 否则界面永远停在等待态，用户看到的就是点了没反应、也没有任何错误反馈。
+        const err = d.error || `任务查询失败 (${r.status})`
+        pushLog('× ' + err)
+        showToast('× ' + err)
+        stopAll()
+        return
+      }
       if (d.status === 'done') {
         result.value = { video: d.video, name: d.name || '', size: d.size || '', seconds: d.seconds || 0 }
         pushLog(`视频生成完成：${result.value.name}（用时 ${elapsed.value}s）`)
-        clearInterval(elapsedTimer)
-        clearInterval(pollTimer)
-        busy.value = false
-        localStorage.removeItem('studio_agnes_task')
+        stopAll()
       } else if (d.status === 'failed') {
         const err = d.error || '生成失败'
         pushLog('× ' + err)
         showToast('× ' + err)
-        clearInterval(elapsedTimer)
-        clearInterval(pollTimer)
-        busy.value = false
-        localStorage.removeItem('studio_agnes_task')
+        stopAll()
+      } else if (elapsed.value > 720) {
+        // 兜底超时：后端单次生成上限 6 分钟，超过 12 分钟仍 pending 视为已中断。
+        const err = '生成超时，任务可能已中断，请重新生成'
+        pushLog('× ' + err)
+        showToast('× ' + err)
+        stopAll()
       }
     } catch (e) {
       // 轮询接口异常时不打断用户，但累计多次后给出提示

@@ -88,9 +88,10 @@
       <iframe
         v-else-if="!isCDPPreview"
         ref="frameRef"
+        :key="isPdfTarget ? 'pdf' : 'sandboxed'"
         :src="frameSrc"
         class="pb-frame"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+        :sandbox="isPdfTarget ? undefined : 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads'"
         @load="loading = false"
       ></iframe>
       <div v-if="loading" class="pb-loading-bar"></div>
@@ -103,7 +104,6 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { previewRequest } from '../composables/previewBus.js'
 import { backendURL } from '../../../desktopTransport.js'
-
 const servers = ref([])
 const serversLoading = ref(true)
 const history = ref([])
@@ -129,6 +129,10 @@ const displayedUrl = computed(() => {
   if (!addressHidden.value) return urlInput.value
   return urlInput.value ? '地址已隐藏' : ''
 })
+
+// Edge/WebView2 内建 PDF 查看器是插件，带 sandbox 的 iframe 会禁用全部插件，
+// 于是 PDF 直接「已被 Microsoft Edge 阻止」。PDF 目标去掉 sandbox 让原生查看器渲染。
+const isPdfTarget = computed(() => /\.pdf(\?|&|$)/i.test(currentUrl.value) || /path=[^&]*\.pdf/i.test(currentUrl.value))
 
 function isFrontend(s) {
   if (s.category) return s.category === 'frontend'
@@ -259,6 +263,10 @@ function normalizeUrl(raw) {
   if (!raw) return ''
   if (hasScheme(raw)) return raw
   if (raw.startsWith('//')) return 'https:' + raw
+  // 单斜杠开头是同源相对路径（dev 模式 vite 代理 /api 到后端），原样交给浏览器
+  // 按当前页面 origin 解析。不拦这一条的话下面会被当成缺 scheme 的域名补成
+  // https:///api/... —— 主机名解析成 "api"，预览窗直接「已重置连接」。
+  if (raw.startsWith('/')) return raw
   if (looksLikeLocalAddress(raw)) return 'http://' + raw
   return 'https://' + raw
 }
@@ -275,7 +283,10 @@ function toggleAddressVisibility() {
 }
 
 function navigateTo(raw, cdpWs, cdpStartupError) {
-  const url = normalizeUrl(raw)
+  // 后端交付端点（/api/agent/file）传进来的是相对路径：iframe 的 src 不走 fetch
+  // 桥接，normalizeUrl 又会把它当缺 scheme 的域名补成 https:///api/... —— 主机名
+  // 解析成 "api" 直接连不上。这里先补成后端绝对地址再进归一化。
+  const url = normalizeUrl(backendURL(raw))
   if (!url) return
   if (cdpStartupError) {
     disconnectCDP()

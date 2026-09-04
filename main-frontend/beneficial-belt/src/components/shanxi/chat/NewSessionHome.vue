@@ -9,6 +9,17 @@
         <span class="home-greeting-text" :key="currentGreeting">{{ displayGreeting }}</span>
       </Transition>
     </div>
+    <!-- follow-up 建议卡片（ChatGPT 首页风格，语义生成） -->
+    <div v-if="followupCards.length" class="home-followups">
+      <div
+        v-for="(card, i) in followupCards"
+        :key="i"
+        class="home-followup-card"
+        @click="$emit('send-followup', card)"
+      >
+        <span class="home-followup-label">{{ card.label }}</span>
+      </div>
+    </div>
     <div class="home-stats-card">
       <div class="home-stats-header">
         <div class="home-tabs">
@@ -82,36 +93,35 @@ const greetingMessages = [
   "PrismD 已就绪，{name}。"
 ]
 
-const currentGreeting = ref(greetingMessages[0])
-const greetingIconRef = ref(null) // 用来获取图标的 DOM
+const currentGreeting = ref('')  // 由后端主动生成
+const followupCards = ref([])    // follow-up 建议卡片
 
 const displayGreeting = computed(() => {
-  return currentGreeting.value.replace('{name}', auth.displayName.value)
+  if (currentGreeting.value) return currentGreeting.value
+  return '欢迎回来，' + auth.displayName.value
 })
-
-// 触发图标动画的函数
-// 触发图标动画的函数（兜底 DOM 查找）
-
 
 onMounted(() => {
   fetchOverview()
   fetchDailyStats()
 
-  // 确保初始化前 DOM 已存在
-  setTimeout(() => {
-    const randomIndex = Math.floor(Math.random() * greetingMessages.length)
-    currentGreeting.value = greetingMessages[randomIndex]
-  
-  }, 100)
+  // 后端主动生成欢迎语（性格 + 亲密度驱动）
+  fetch('/api/chat/proactive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trigger: 'new_session' })
+  }).then(r => r.ok ? r.json() : null)
+    .then(data => { if (data?.message) currentGreeting.value = data.message })
+    .catch(() => {})
 
-  // 每隔 20 秒切换，并带动画
-  setInterval(async () => {
-    const nextIndex = Math.floor(Math.random() * greetingMessages.length)
-    currentGreeting.value = greetingMessages[nextIndex]
-    // 等待 Vue 更新 DOM 后再触发图标特效
-    await nextTick()
-  
-  }, 20000)
+  // 后端语义生成 follow-up 卡片
+  fetch('/api/chat/followups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }).then(r => r.ok ? r.json() : null)
+    .then(data => { if (data?.followups) followupCards.value = data.followups })
+    .catch(() => {})
 })
 const homeTab = ref('overview')
 const homeRange = ref('all')
@@ -310,6 +320,33 @@ const heatmapCaption = computed(() => {
   /* ✅ 加这两行，确保卡片内部的模型列表能撑满或顶对齐 */
   display: flex;
   flex-direction: column;
+}
+
+.home-followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.home-followup-card {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-surface-2);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.home-followup-card:hover {
+  border-color: var(--app-accent);
+  background: var(--app-accent-soft, rgba(79,124,255,0.08));
+}
+.home-followup-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-text);
+  white-space: nowrap;
 }
 
 .home-stats-header {

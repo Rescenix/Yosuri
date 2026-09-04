@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -236,6 +237,22 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 		sessions := sessionStore.List()
 		c.JSON(200, sessions)
 	})
+	// recall：关键字 → 命中会话（按会话聚合，带命中片段）。
+	// 独立路径而非 /api/sessions/search：/api/sessions/:id 已注册，gin 同层静态+通配符会冲突。
+	r.GET("/api/sessions-search", func(c *gin.Context) {
+		q := strings.TrimSpace(c.Query("q"))
+		limit := 20
+		if v := c.Query("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		hits := sessionStore.SearchSessionsBySession(q, limit)
+		if hits == nil {
+			hits = []SessionSearchHit{}
+		}
+		c.JSON(200, gin.H{"query": q, "sessions": hits})
+	})
 	r.POST("/api/sessions", func(c *gin.Context) {
 		id := fmt.Sprintf("sess_%d", time.Now().UnixNano())
 		c.JSON(200, gin.H{"session_id": id})
@@ -296,6 +313,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 暴露 ResceneCloud 基址给前端，供其直接发起 GitHub 登录跳转
 	r.GET("/api/auth/cloud-config", CloudAuthConfig)
 	r.GET("/api/memory/inject", HandleMemoryInject)
+	r.GET("/api/memory/list", HandleMemoryList)
+	r.GET("/api/memory/summary", HandleMemorySummary)
+	r.POST("/api/chat/proactive", HandleProactiveMessage)
+	r.POST("/api/chat/followups", HandleFollowUps)
 	// 新闻标题抓取代理：DS 搜索 open_page 只给 URL，前端要显示标题走这里（防 CORS）
 	r.GET("/api/fetch-title", HandleFetchTitle)
 
@@ -308,6 +329,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/update/download/status", HandleUpdateDownloadStatus)
 	r.POST("/api/update/install", HandleInstallUpdate)
 	r.DELETE("/api/update/pending", HandleClearPendingHotPatch) // 跳过此版本：删待应用热补丁 exe
+
+	// 桌面行为偏好：开机自启开关（设置面板「常规」用，issue #14）
+	r.GET("/api/desktop/autostart", HandleGetAutoStart)
+	r.POST("/api/desktop/autostart", HandleSetAutoStart)
 
 	// 定时任务：前端 ScheduledTaskModal 创建 → 调度器到点弹 Windows 原生通知（右下角）
 	r.POST("/api/cron/create", HandleCronCreate)
@@ -376,6 +401,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/company/agent", HandleCompanyAgent)
 	r.GET("/api/company/relays", HandleCompanyRelays)
 	r.GET("/api/company/file", HandleCompanyFile)
+	r.GET("/api/company/projects", HandleCompanyProjects)
+	r.GET("/api/company/project-file", HandleCompanyProjectFile)
+	r.GET("/api/company/package", HandleCompanyProjectPackage)
+	r.GET("/api/company/live", HandleCompanyLive)
 	r.GET("/api/company/model-config", HandleCompanyModelConfigGET)
 	r.PUT("/api/company/model-config", HandleCompanyModelConfigPUT)
 	r.GET("/api/company/integrations", HandleCompanyIntegrations)
@@ -414,6 +443,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/ai/project", HandleAIProject)
 	// 漫画创作 Agent（宇宙第一画面Agent）
 	r.GET("/api/comic/status", HandleComicStatus)
+	r.GET("/api/comic/sd-download", HandleComicSDDownload)
 	r.POST("/api/comic/start-sd", HandleComicStartSD)
 	r.POST("/api/comic/breakdown", HandleComicBreakdown)
 	r.POST("/api/comic/generate", HandleComicGenerate)

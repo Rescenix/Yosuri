@@ -41,7 +41,7 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"depth":   {Type: "integer", Description: "可选：path 为目录时递归列目录的深度，默认 4，最大 8"},
 			"info":    {Type: "boolean", Description: "可选：只返回文件/目录的大小、修改时间、类型"},
 		}, []string{"path"}),
-		nativeTool("write", "写文件系统：默认写入完整文件内容（自动创建父目录）；action=create_dir 建目录；action=move 移动/重命名（需 source）；action=delete 删除文件或目录（不可逆）。", map[string]core.ToolProperty{
+		nativeTool("write", "写文件系统：默认写入完整文件内容（自动创建父目录）；action=create_dir 建目录；action=move 移动/重命名（需 source）；action=delete 删除文件或目录（不可逆）。仅限文本文件：pdf/docx/pptx/xlsx 是二进制容器，写入必坏，一律改用 generate_office。", map[string]core.ToolProperty{
 			"path":    {Type: "string", Description: "目标路径"},
 			"content": {Type: "string", Description: "文件完整内容（action=write 时必填）"},
 			"action":  {Type: "string", Description: "操作类型：write(默认)/create_dir/move/delete"},

@@ -102,6 +102,99 @@ func comicSDOnline() (bool, string) {
 	return false, ""
 }
 
+// comicLauncherNames 整合包/源码安装常见的启动入口，按友好度排序。
+// 绘世启动器是图形程序，需要用户在界面里开启 API 开关，因此排在原生 bat 之后。
+var comicLauncherNames = []string{"webui-user.bat", "webui-user.sh", "A绘世启动器.exe", "绘世启动器.exe", "run.bat", "webui.bat"}
+
+// comicSDSearchRoots 用户最常把整合包解压到的位置。
+func comicSDSearchRoots() []string {
+	home, _ := os.UserHomeDir()
+	roots := []string{}
+	if home != "" {
+		roots = append(roots, home, filepath.Join(home, "Downloads"), filepath.Join(home, "Desktop"), filepath.Join(home, "Programs"))
+	}
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		roots = append(roots, filepath.Join(filepath.Dir(filepath.Dir(localAppData)), "Programs"))
+	}
+	for _, drive := range []string{`C:\`, `D:\`, `E:\`, `F:\`} {
+		for _, name := range []string{"SD", "SDWebUI", "stable-diffusion-webui", "AI", "Program"} {
+			roots = append(roots, filepath.Join(drive, name))
+		}
+	}
+	seen := map[string]bool{}
+	unique := make([]string, 0, len(roots))
+	for _, root := range roots {
+		if root == "" || seen[root] {
+			continue
+		}
+		seen[root] = true
+		unique = append(unique, root)
+	}
+	return unique
+}
+
+// scanComicLauncherDir 在单个目录里找启动入口，只认文件不认目录。
+func scanComicLauncherDir(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	names := map[string]string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		names[strings.ToLower(entry.Name())] = filepath.Join(dir, entry.Name())
+	}
+	for _, want := range comicLauncherNames {
+		if found, ok := names[strings.ToLower(want)]; ok {
+			return found
+		}
+	}
+	return ""
+}
+
+// locateComicLauncher 在常见解压位置向下找两层目录，兼容「SD整合包/解压目录/启动器」这类嵌套。
+func locateComicLauncher() string {
+	for _, root := range comicSDSearchRoots() {
+		if found := scanComicLauncherDir(root); found != "" {
+			return found
+		}
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			sub := filepath.Join(root, entry.Name())
+			if found := scanComicLauncherDir(sub); found != "" {
+				return found
+			}
+			nested, nestedErr := os.ReadDir(sub)
+			if nestedErr != nil {
+				continue
+			}
+			for _, second := range nested {
+				if !second.IsDir() {
+					continue
+				}
+				if found := scanComicLauncherDir(filepath.Join(sub, second.Name())); found != "" {
+					return found
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// comicLauncherNeedsManualAPI 图形启动器无法通过命令行注入 API 参数，需要用户在界面里开启。
+func comicLauncherNeedsManualAPI(launcher string) bool {
+	base := strings.ToLower(filepath.Base(launcher))
+	return strings.HasSuffix(base, ".exe")
+}
+
 func findComicSDLauncher() (string, error) {
 	if configured := strings.TrimSpace(os.Getenv("RESCENE_SD_LAUNCHER")); configured != "" {
 		if info, err := os.Stat(configured); err == nil && !info.IsDir() {
@@ -110,21 +203,17 @@ func findComicSDLauncher() (string, error) {
 		return "", fmt.Errorf("配置的绘图引擎启动文件不存在: %s", configured)
 	}
 	home, _ := os.UserHomeDir()
-	candidates := []string{
-		`C:\Pro2026\SDWebUI\webui-user.bat`,
-		filepath.Join(home, "stable-diffusion-webui", "webui-user.bat"),
-		filepath.Join(home, "SDWebUI", "webui-user.bat"),
-	}
-	if runtime.GOOS != "windows" {
-		candidates = []string{
-			filepath.Join(home, "stable-diffusion-webui", "webui-user.sh"),
-			filepath.Join(home, "SDWebUI", "webui-user.sh"),
-		}
+	candidates := []string{`C:\Pro2026\SDWebUI\webui-user.bat`}
+	if home != "" {
+		candidates = append(candidates, filepath.Join(home, "stable-diffusion-webui", "webui-user.bat"))
 	}
 	for _, candidate := range candidates {
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			return candidate, nil
 		}
+	}
+	if found := locateComicLauncher(); found != "" {
+		return found, nil
 	}
 	return "", fmt.Errorf("未找到本地绘图引擎，请设置 RESCENE_SD_LAUNCHER")
 }
@@ -173,6 +262,26 @@ func findComicPython(sdDir string) (string, error) {
 	return "", fmt.Errorf("本地 SD 缺少可用的 Python 3.10/3.11 环境，无法自动启动")
 }
 
+// comicDownloadLink 绘图引擎下载引导条目
+type comicDownloadLink struct {
+	Name   string `json:"name"`
+	Desc   string `json:"desc"`
+	URL    string `json:"url"`
+	Kind   string `json:"kind"` // package=整合包 mirror=镜像直链 page=教程页
+	Primary bool  `json:"primary"`
+}
+
+// HandleComicSDDownload GET /api/comic/sd-download —— 返回国内可达的绘图引擎下载链接
+func HandleComicSDDownload(c *gin.Context) {
+	links := []comicDownloadLink{
+		{Name: "秋叶整合包（推荐）", Desc: "解压即用，自带 Python 与模型管理，中文界面，对新手最友好", URL: "https://space.bilibili.com/12566101", Kind: "package", Primary: true},
+		{Name: "整合包下载导航帖", Desc: "秋叶官方长期维护的下载导航（夸克/百度盘直链）", URL: "https://www.bilibili.com/opus/897873624905547794", Kind: "page"},
+		{Name: "GitHub 源码加速直链", Desc: "ghfast 加速镜像，下载 stable-diffusion-webui 源码包（需自备 Python 3.10）", URL: "https://ghfast.top/https://github.com/AUTOMATIC1111/stable-diffusion-webui/archive/refs/heads/master.zip", Kind: "mirror"},
+		{Name: "官方仓库", Desc: "AUTOMATIC1111/stable-diffusion-webui，网络通畅时使用", URL: "https://github.com/AUTOMATIC1111/stable-diffusion-webui", Kind: "page"},
+	}
+	c.JSON(http.StatusOK, gin.H{"links": links})
+}
+
 // HandleComicStatus GET /api/comic/status —— 探测本地 SD WebUI API。
 func HandleComicStatus(c *gin.Context) {
 	online, model := comicSDOnline()
@@ -198,7 +307,7 @@ func HandleComicStartSD(c *gin.Context) {
 	if err != nil {
 		comicSDState.lastErr = err.Error()
 		comicSDState.Unlock()
-		c.JSON(http.StatusNotFound, gin.H{"online": false, "starting": false, "error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"online": false, "starting": false, "needInstall": true, "error": err.Error()})
 		return
 	}
 	logPath := filepath.Join(comicOutputDir(), "sd-webui.log")
@@ -215,15 +324,24 @@ func HandleComicStartSD(c *gin.Context) {
 	}
 	var cmdArgs []string
 	command := launcher
-	pythonPath, err := findComicPython(filepath.Dir(launcher))
-	if err != nil {
-		_ = logFile.Close()
-		comicSDState.lastErr = err.Error()
-		comicSDState.Unlock()
-		c.JSON(http.StatusServiceUnavailable, gin.H{"online": false, "starting": false, "error": err.Error()})
-		return
+	manualAPI := comicLauncherNeedsManualAPI(launcher)
+	pythonPath := ""
+	if !manualAPI {
+		// 图形启动器自带 Python 环境，不需要也无法注入解释器路径。
+		pythonPath, err = findComicPython(filepath.Dir(launcher))
+		if err != nil {
+			_ = logFile.Close()
+			comicSDState.lastErr = err.Error()
+			comicSDState.Unlock()
+			c.JSON(http.StatusServiceUnavailable, gin.H{"online": false, "starting": false, "error": err.Error()})
+			return
+		}
 	}
-	if runtime.GOOS == "windows" {
+	if manualAPI {
+		// 整合包图形启动器：直接拉起程序，参数由启动器自己的设置决定。
+		command = launcher
+		cmdArgs = nil
+	} else if runtime.GOOS == "windows" {
 		// 部分 webui-user.bat 不转发参数；直接调用同目录 webui.bat 才能确保 --api 生效。
 		if strings.EqualFold(filepath.Base(launcher), "webui-user.bat") {
 			webuiBat := filepath.Join(filepath.Dir(launcher), "webui.bat")
@@ -239,7 +357,9 @@ func HandleComicStartSD(c *gin.Context) {
 	}
 	cmd := hiddenCommand(command, cmdArgs...)
 	cmd.Dir = filepath.Dir(launcher)
-	cmd.Env = append(os.Environ(), `PYTHON="`+pythonPath+`"`)
+	if pythonPath != "" {
+		cmd.Env = append(os.Environ(), `PYTHON="`+pythonPath+`"`)
+	}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -262,7 +382,19 @@ func HandleComicStartSD(c *gin.Context) {
 		}
 		comicSDState.Unlock()
 	}()
-	c.JSON(http.StatusAccepted, gin.H{"online": false, "starting": true, "message": "绘图引擎正在后台启动"})
+	c.JSON(http.StatusAccepted, gin.H{
+		"online": false, "starting": true,
+		"needManualApi": manualAPI,
+		"launcher":      launcher,
+		"message":       comicStartMessage(manualAPI),
+	})
+}
+
+func comicStartMessage(manualAPI bool) string {
+	if manualAPI {
+		return "已打开绘图引擎启动器，请在其中开启 API 开关后再开始出图"
+	}
+	return "绘图引擎正在后台启动"
 }
 
 // HandleComicBreakdown POST /api/comic/breakdown — LLM 把小说章节拆成漫画分镜

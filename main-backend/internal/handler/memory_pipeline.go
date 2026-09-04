@@ -337,6 +337,80 @@ func renderAutomaticFacts(facts []memoryFact) error {
 	return memorydir.WriteRaw("index", strings.Join(lines, "\n")+"\n")
 }
 
+// mockNoiseKey 检测一条事实是不是 mock/演示/测试噪音。
+func mockNoiseKey(key, value string) bool {
+	k := strings.ToLower(key + " " + value)
+	for _, noise := range []string{"mock", "demo", "测试", "test", "示例", "演示", "flowup", "子代理", "后台任务", "pdf_delivery"} {
+		if strings.Contains(k, noise) {
+			return true
+		}
+	}
+	return false
+}
+
+// consolidateFacts 一次性存量清洗：去掉 mock/演示/测试噪音 + key 归一合并。
+// 启动时跑一次，幂等（跑过 clean 的文件不会再产生相同噪音，因为提取 prompt 已挡新增）。
+func consolidateFacts() {
+	if !automaticMemoryEnabled() {
+		return
+	}
+	automaticMemory.Lock()
+	defer automaticMemory.Unlock()
+
+	facts, err := loadAutomaticFacts()
+	if err != nil || len(facts) == 0 {
+		return
+	}
+
+	// key 归一表：别名 → 标准 key
+	aliases := map[string]string{
+		"preferred_language":      "language",
+		"preferred_output_format": "output_format",
+		"preferred_message_length": "message_length",
+		"response_length":         "message_length",
+		"use_of_emoji":            "emoji_usage",
+		"formality":               "tone",
+		"mock_backend_task_length": "duration_preference",
+	}
+
+	byID := make(map[string]memoryFact, len(facts))
+	for _, f := range facts {
+		if mockNoiseKey(f.Key, f.Value) {
+			continue
+		}
+		normKey := strings.ToLower(f.Key)
+		if alias, ok := aliases[normKey]; ok {
+			normKey = alias
+			f.Key = alias
+		}
+		id := f.Category + "\x00" + normKey
+		if old, exists := byID[id]; !exists || f.Updated.After(old.Updated) {
+			byID[id] = f
+		}
+	}
+
+	if len(byID) == len(facts) {
+		return
+	}
+
+	next := make([]memoryFact, 0, len(byID))
+	for _, f := range byID {
+		next = append(next, f)
+	}
+	for i := 0; i < len(next); i++ {
+		for j := i + 1; j < len(next); j++ {
+			if next[j].Category < next[i].Category || (next[j].Category == next[i].Category && next[j].Key < next[i].Key) {
+				next[i], next[j] = next[j], next[i]
+			}
+		}
+	}
+	os.MkdirAll(automaticMemoryDir(), 0o755)
+	encoded, _ := json.MarshalIndent(next, "", "  ")
+	atomicWriteNative(automaticMemoryFactsPath(), encoded, 0o644)
+	renderAutomaticFacts(next)
+	pushMemorySync()
+}
+
 // sensitiveFactKey 命中的字段直接丢弃：位置/IP/设备/证件/电话/卡号等。这类
 // 信息对 agent 执行任务几乎无价值，却直接暴露用户隐私；不依赖提取模型遵守
 // prompt 黑名单，在归一化层统一兜底过滤（2026-09-02 实锤：某号被记录了

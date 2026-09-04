@@ -224,13 +224,16 @@ const displayName = computed(() => {
   return u ? 'UID ' + u : '未登录'
 })
 
-// 展示头像：本机自定义头像优先，其次是登录账号头像；都没有时由 UI 统一回退到首字母。
+// 展示头像：仅登录账号可见（本机自定义头像优先，其次账号头像）。
+// 2026-09-04 修复：退出登录后必须回到游客态——此前自定义头像不受登录态约束，
+// 登出后头像仍显示，看起来像"没退出去"。自定义头像数据本身保留在本地与后端，
+// 重新登录即恢复，不做删除。
 const displayAvatar = computed(() => {
+  if (!isLoggedIn.value) return ''
   if (customAvatar.value) return customAvatar.value
-  if (isLoggedIn.value) return avatar.value || ''
-  return ''
+  return avatar.value || ''
 })
-const hasCustomAvatar = computed(() => Boolean(customAvatar.value))
+const hasCustomAvatar = computed(() => isLoggedIn.value && Boolean(customAvatar.value))
 
 // —— 自定义头像持久化（2026-09-01）——
 // 头像此前只存 localStorage，而 WebView2 数据目录随 exe 路径变化会被清空 →

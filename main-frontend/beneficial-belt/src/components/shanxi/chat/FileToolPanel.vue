@@ -212,6 +212,8 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, defineAsyncComponent } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
+import { requestPreview } from '../composables/previewBus.js'
+import { pptxToHtml, xlsxToHtml, docxToHtml } from '../../../utils/officePreview.js'
 
 // CodeEditor 是 Monaco 编辑器（5MB+ JS + 4 个 worker），默认按需加载（懒加载），
 // 用户关闭懒加载时应用启动后后台预取，打开文件面板秒开。
@@ -438,6 +440,12 @@ async function onSelectNode(node) {
 
 async function openFile(node) {
   openError.value = ''
+  // 二进制/office/pdf 不进 Monaco 编辑器——走右侧预览窗（PDF 浏览器原生渲染，
+  // pptx/xlsx/docx 前端转 HTML），跟交付卡片同一个预览总线，自动打开 preview dock。
+  if (isPreviewFileExt(node.name)) {
+    await previewFile(node)
+    return
+  }
   // 去重：已经开着就切过去，不再新开一个标签
   const existing = tabs.value.find(t => t.path === node.path)
   if (existing) {
@@ -453,6 +461,34 @@ async function openFile(node) {
   } catch (e) {
     openError.value = e.message || '打开文件失败'
     window.alert('打开失败：' + openError.value)
+  }
+}
+
+// 走预览窗的文件类型：pdf / pptx / xlsx / xls / docx / doc，以及常见图片。
+// 图片直接交给浏览器 `<img>` 也能渲染，所以一并走预览窗而不是当文本乱码打开。
+const PREVIEW_EXTS = new Set(['pdf', 'pptx', 'xlsx', 'xls', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'])
+
+function isPreviewFileExt(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase()
+  return PREVIEW_EXTS.has(ext)
+}
+
+async function previewFile(node) {
+  const ext = (node.name.split('.').pop() || '').toLowerCase()
+  try {
+    if (ext === 'pptx' || ext === 'xlsx' || ext === 'xls' || ext === 'docx' || ext === 'doc') {
+      const binary = await fetch('/api/agent/file?path=' + encodeURIComponent(node.path) + '&raw=1')
+      if (!binary.ok) throw new Error('读取失败 (' + binary.status + ')')
+      const buf = await binary.arrayBuffer()
+      if (ext === 'pptx') requestPreview(await pptxToHtml(buf))
+      else if (ext === 'xlsx' || ext === 'xls') requestPreview(await xlsxToHtml(buf))
+      else requestPreview(await docxToHtml(buf))
+      return
+    }
+    // pdf / 图片：直接让预览窗以 raw URL 渲染（浏览器原生 PDF / <img>）。
+    requestPreview('/api/agent/file?path=' + encodeURIComponent(node.path) + '&raw=1')
+  } catch (e) {
+    window.alert('预览失败：' + (e.message || '未知错误'))
   }
 }
 

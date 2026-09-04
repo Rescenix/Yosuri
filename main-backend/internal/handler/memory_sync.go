@@ -6,10 +6,11 @@ package handler
 // 换设备登录后拉回 —— 记忆跟账号走，与亲密等级/统计同一套"珍惜账号"语义。
 //
 //   - 可选开关：环境变量 RESCENE_MEMORY_SYNC=off 关闭（默认开启）。关闭后不推不拉。
-//   - 推送（2026-08-28 用户定稿：开启即自动同步，不再等记忆写工具）：
+//   - 推送＝云端备份，仅登录用户（2026-09-04 定稿）：游客不再向云端写记忆包。
 //     ① StartMemorySyncLoop 定时全量推送（启动 2s 后立即推一次，此后每 60s 一次）；
 //     ② 记忆写工具（remember / memory_pin / memory_append / memory_handoff）
 //       写完后异步补推一次（fire-and-forget，不阻塞）。
+//     兼容旧版：游客期已上传的记忆包不删除，UID 并入正式账号后照样能拉回。
 //   - 拉取：re0 启动时（有 uid 缓存）自动拉一次；前端也可在登录/启动后显式调
 //     POST /api/memory/sync/pull 触发。
 //   - 合并策略：拉取时云端文件写回本地（同名覆盖），本地独有文件保留 —— 换设备
@@ -175,6 +176,13 @@ func readAuthToken() (token string, isLogin bool) {
 	return readGuestToken(), false
 }
 
+// syncIdentity 云端记忆同步用的当前身份：token、uid、是否登录账号。
+// uid 一律从「实际鉴权 token」解，保证与云端 requireUIDMatch 同源。
+func syncIdentity() (token string, uid int64, isLogin bool) {
+	tok, login := readAuthToken()
+	return tok, uidFromToken(tok), login
+}
+
 // HandleLoginTokenStore POST /api/auth/login-token {token}
 // 前端登录成功后（refresh / login）把 member JWT 缓存到本地，供 push 鉴权。
 func HandleLoginTokenStore(c *gin.Context) {
@@ -224,12 +232,15 @@ func HandleLoginTokenDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
-// HandleMemorySyncSettings GET /api/memory/sync/settings → {enabled, env_override}
+// HandleMemorySyncSettings GET /api/memory/sync/settings → {enabled, env_override, logged_in}
 // env_override=true 表示部署级 RESCENE_MEMORY_SYNC=off 强制关闭，前端开关应禁用。
+// logged_in=false 表示当前是游客身份：云端备份只对登录账号开放，前端开关同样禁用。
 func HandleMemorySyncSettings(c *gin.Context) {
+	_, _, isLogin := syncIdentity()
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":      memorySyncEnabled(),
 		"env_override": strings.ToLower(os.Getenv("RESCENE_MEMORY_SYNC")) == "off",
+		"logged_in":    isLogin,
 	})
 }
 
@@ -303,10 +314,13 @@ func applyMemorySyncPayload(payload string, cloudUpdatedAt time.Time) {
 	}
 }
 
-// pushMemorySync 异步把本地记忆全量推送到云端。
+// pushMemorySync 异步把本地记忆全量推送到云端（备份）。
+//
+// 2026-09-04 定稿：只给登录用户备份。游客（未登录）不再向云端写记忆包——
+// 游客号无人认领、换设备即失效，写上去既占云端存储也谈不上"跟账号走"，
+// 记忆留在本地即可。登录判定只看 login token（member JWT），游客 token 一律不推。
+//
 // uid 与 token 必须同源（云端 requireUIDMatch 校验 JWT uid == 请求 uid）：
-//   - 登录用户：login token（uid=登录账号）
-//   - 游客：guest token（uid=游客号）
 // 统一从「实际鉴权 token」解 uid，杜绝 body uid 与 JWT uid 错配导致 403。
 // 带重试（网络抖动/云端冷启动）与失败日志——之前 fire-and-forget 连日志都没有，
 // 401/超时全吞掉，「零上传」时无从排查（2026-08-30 实锤）。
@@ -314,15 +328,9 @@ func pushMemorySync() {
 	if !memorySyncEnabled() {
 		return
 	}
-	tok, _ := readAuthToken()
-	uid := uidFromToken(tok)
-	if uid <= 0 {
-		// 兼容旧版：无 token 时回退 intimacy.md 缓存（能推但 uid 可能非账号 uid）
-		uid, _ = memorydir.ReadIntimacy()
-	}
-	if uid <= 0 {
-		log.Printf("[memory-sync] 跳过推送：本地无可用 token 且 intimacy 缓存无 uid（未登录或未分发 UID）")
-		return
+	tok, uid, isLogin := syncIdentity()
+	if !isLogin || uid <= 0 {
+		return // 未登录（游客）：不备份，静默跳过
 	}
 	payload := memorySyncPayload()
 	if payload == "" {
@@ -443,9 +451,15 @@ func HandleMemorySyncPull(c *gin.Context) {
 
 // HandleMemorySyncPush POST /api/memory/sync/push {uid}
 // 显式触发：把本地记忆全量推送到云端（前端手动同步按钮）。
+// 与自动备份同规则：仅登录用户可备份，游客返回明确提示。
 func HandleMemorySyncPush(c *gin.Context) {
 	var req struct {
 		UID int64 `json:"uid"`
+	}
+	tok, tokenUID, isLogin := syncIdentity()
+	if !isLogin || tokenUID <= 0 {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "reason": "登录账号后才提供云端记忆备份"})
+		return
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.UID <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 uid"})
@@ -456,7 +470,8 @@ func HandleMemorySyncPush(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": false, "reason": "本地暂无记忆"})
 		return
 	}
-	body, _ := json.Marshal(map[string]any{"uid": req.UID, "payload": payload})
+	// uid 以鉴权 token 为准，忽略前端传值（防错配 403）
+	body, _ := json.Marshal(map[string]any{"uid": tokenUID, "payload": payload})
 	client := &http.Client{Timeout: 5 * time.Second}
 	r, err := http.NewRequest(http.MethodPost, cloudAuthBase()+"/api/memory/sync", bytes.NewReader(body))
 	if err != nil {
@@ -465,7 +480,7 @@ func HandleMemorySyncPush(c *gin.Context) {
 	}
 	r.Header.Set("Content-Type", "application/json")
 	// 鉴权头：云端要求 JWT uid == 请求 uid，不带会 401
-	if tok, _ := readAuthToken(); tok != "" {
+	if tok != "" {
 		r.Header.Set("Authorization", "Bearer "+tok)
 	}
 	res, err := client.Do(r)
@@ -507,17 +522,22 @@ const memorySyncLoopInterval = 60 * time.Second
 // 开关关闭或 uid 未就绪时静默跳过；每次 tick 都重新检查开关，随时生效。
 // uid 从「实际鉴权 token」解析（2026-08-30 修复：登录用户用 login token、游客用
 // guest token，二者 uid 与云端 requireUIDMatch 匹配，杜绝零上传）。
+// 2026-09-04：备份（push）只对登录用户生效；拉取仍按当前身份走，旧版游客期已备份
+// 的记忆在 UID 并入账号后照样能拉回。
 func StartMemorySyncLoop() {
 	go func() {
 		time.Sleep(2 * time.Second) // 等 uid 缓存 / 前端 guest-token/login-token 落盘 / 网络就绪
 		for {
 			if memorySyncEnabled() {
-				uid := uidFromToken(mustAuthToken())
+				_, uid, isLogin := syncIdentity()
 				if uid <= 0 {
+					// 兼容旧版：无 token 缓存时回退 intimacy.md 里的 uid（只用于拉取）
 					uid, _ = memorydir.ReadIntimacy()
 				}
-				if uid > 0 {
+				if isLogin {
 					pushMemorySync()
+				}
+				if uid > 0 {
 					pullMemorySync(uid)
 				}
 			}

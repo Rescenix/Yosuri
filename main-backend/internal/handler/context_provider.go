@@ -103,6 +103,12 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 	if intimacyVal > 0 {
 		intimacySection = fmt.Sprintf("\n\n# 亲密等级（与用户的关系等级，无上限）\n你和当前用户的亲密等级是 Lv.%d。\n等级反映你们相处的时间与互动积累：等级越高代表你们越熟、越有默契（升级会越来越慢，但永不封顶）。\n- 低等级：保持礼貌、简洁、专业。\n- 高等级：可以更自然、亲切、体贴，像熟悉的朋友一样主动分享想法。\n自然地融入语气即可，不要刻意提及等级数字。", level)
 	}
+	// 性格档案：从记忆蒸馏的语气/长度/忌讳，千人千面。
+	// 归 system 桶（同属"给模型的指令"），排在亲密度后面。
+	personalitySection := memorydir.ReadRaw("personality")
+	if strings.TrimSpace(personalitySection) != "" {
+		personalitySection = "\n\n# 性格档案（从你的记忆蒸馏，千人千面）\n" + strings.TrimSpace(personalitySection) + "\n"
+	}
 	prefSection := ""
 	if level >= 2 {
 		if pref := memorydir.ReadRaw("preferences"); pref != "" {
@@ -162,6 +168,8 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},
+			// 性格档案归 system 桶（从记忆蒸馏，千人千面），优先级最低（可被 persona 覆盖）。
+			{key: "system", content: personalitySection},
 		},
 	}
 }

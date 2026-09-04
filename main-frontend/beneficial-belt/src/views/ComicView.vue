@@ -67,6 +67,25 @@
       </div>
       <div v-if="assembledImage" class="assembled-result"><span>最终漫画页</span><img :src="assetUrl(assembledImage)" alt="最终漫画页" /></div>
     </section>
+    <div v-if="showSdGuide" class="comic-modal" @click.self="showSdGuide = false">
+      <section class="sd-guide">
+        <button class="modal-close" @click="showSdGuide = false"><Icon icon="mdi:close" width="19" /></button>
+        <h2>还没有检测到绘图引擎</h2>
+        <p class="sd-guide-sub">漫画工坊用本机的 Stable Diffusion 出图。选一种方式装好绘图引擎，装完回到这里点「启动绘图引擎」即可。</p>
+        <div class="sd-guide-list">
+          <a v-for="link in sdLinks" :key="link.url" class="sd-guide-item" :class="{ primary: link.primary }" :href="link.url" target="_blank" rel="noopener">
+            <span class="sd-guide-name">{{ link.name }}</span>
+            <span class="sd-guide-desc">{{ link.desc }}</span>
+            <span class="sd-guide-open">打开<Icon icon="mdi:arrow-top-right" width="13" /></span>
+          </a>
+        </div>
+        <p class="sd-guide-tip">装好后回到这里点「启动绘图引擎」会自动识别。用秋叶整合包的话，请在启动器设置里打开「启用 API」开关，否则无法出图。装在非常见位置时，可设置环境变量 RESCENE_SD_LAUNCHER 指向启动文件。</p>
+        <div class="sd-guide-actions">
+          <button class="primary" @click="retrySDFromGuide"><Icon icon="mdi:refresh" width="15" /> 我装好了，重新检测</button>
+          <button class="ghost" @click="showSdGuide = false">暂不安装</button>
+        </div>
+      </section>
+    </div>
     <div v-if="showCharCreator" class="comic-modal" @click.self="showCharCreator = false">
       <section class="char-creator">
         <button class="modal-close" @click="showCharCreator = false"><Icon icon="mdi:close" width="19" /></button>
@@ -122,6 +141,8 @@ const selectedChapterId = ref('')
 const statusText = ref('等待输入')
 const showCharCreator = ref(false)
 const showPanelDetail = ref(false)
+const showSdGuide = ref(false)
+const sdLinks = ref([])
 const detailPanel = ref({ index: 0, scene: '', dialogue: '', character: '', action: '', camera: '', promptEn: '' })
 const charCount = computed(() => characters.value.length)
 const renderedCount = computed(() => panels.value.filter(panel => panel.imageUrl).length)
@@ -154,13 +175,33 @@ async function checkSD() {
 }
 
 function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)) }
+async function loadSdLinks() {
+  try { const res = await apiFetch('/api/comic/sd-download'); const data = await res.json(); sdLinks.value = data.links || [] } catch {}
+}
+
+async function retrySDFromGuide() {
+  const state = await checkSD()
+  if (state?.online) { showSdGuide.value = false; statusText.value = '绘图引擎已就绪'; return }
+  statusText.value = '仍未检测到绘图引擎，确认已安装并启动后再试'
+}
+
 async function ensureSD() {
   const current = await checkSD()
   if (current?.online) return true
   engineStarting.value = true; statusText.value = '正在自动启动绘图引擎，首次加载模型可能需要几分钟…'
   try {
     const start = await apiFetch('/api/comic/start-sd', { method: 'POST' }); const started = await readAPIResponse(start, '绘图引擎启动失败')
-    if (!start.ok) throw new Error(started.error || '绘图引擎启动失败')
+    if (!start.ok) {
+      // needInstall = 本机没装绘图引擎：拉取下载引导并弹窗，让用户选择国内直达链接安装
+      if (start.status === 404 || started.needInstall) { await loadSdLinks(); showSdGuide.value = true; throw new Error('本机未安装绘图引擎') }
+      throw new Error(started.error || '绘图引擎启动失败')
+    }
+    if (started.needManualApi) {
+      // 图形启动器（如秋叶整合包）需要用户手动开启 API 开关
+      statusText.value = started.message || '请在绘图引擎启动器中开启 API 开关'
+      engineStarting.value = false
+      return false
+    }
     for (let attempt = 0; attempt < 180; attempt++) {
       await wait(2000)
       const state = await checkSD()
@@ -343,6 +384,21 @@ function resetPage() { panels.value = []; pageTitle.value = ''; pageId.value = '
 .char-creator input, .char-creator select { height: 36px; }
 .char-creator textarea { padding: 8px 10px; min-height: 60px; resize: vertical; }
 .char-creator .primary, .panel-detail .primary { margin-top: 10px; min-height: 38px; padding: 0 14px; border: 0; border-radius: 9px; color: #fff; background: linear-gradient(135deg,#5a7d8a,#3d5f6b); font-size: 11px; font-weight: 800; cursor: pointer; }
+.sd-guide { position: relative; width: min(560px, 92vw); max-height: 86vh; overflow-y: auto; padding: 28px; border-radius: 20px; background: #fff; box-shadow: 0 24px 60px rgba(0,0,0,.18); }
+.sd-guide h2 { margin: 0 0 8px; font: 500 20px Georgia,'Noto Serif SC',serif; color: #2c3a32; }
+.sd-guide-sub { margin: 0 0 16px; color: #6a7a70; font-size: 12px; line-height: 1.7; }
+.sd-guide-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.sd-guide-item { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; padding: 12px 14px; border: 1px solid #e2e6e3; border-radius: 12px; background: #fafbfa; text-decoration: none; transition: border-color .15s, background .15s; }
+.sd-guide-item:hover { border-color: #8b7a9e; background: #f5f0fa; }
+.sd-guide-item.primary { border-color: #8b7a9e; background: #f5f0fa; }
+.sd-guide-name { color: #2c3a32; font-size: 13px; font-weight: 800; }
+.sd-guide-desc { grid-column: 1; color: #8a9a90; font-size: 11px; line-height: 1.6; margin-top: 3px; }
+.sd-guide-open { grid-column: 2; grid-row: 1 / 3; align-self: center; display: inline-flex; align-items: center; gap: 3px; color: #8b7a9e; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.sd-guide-tip { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: #f4f6f4; color: #59685e; font-size: 11px; line-height: 1.7; }
+.sd-guide-actions { display: flex; gap: 10px; }
+.sd-guide-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 16px; border-radius: 9px; font-size: 11px; font-weight: 800; cursor: pointer; }
+.sd-guide-actions .primary { border: 0; color: #fff; background: linear-gradient(135deg,#5a7d8a,#3d5f6b); }
+.sd-guide-actions .ghost { border: 1px solid #d6dce0; color: #596870; background: #fff; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
 .detail-grid label { display: block; color: #8a9a90; font-size: 9px; margin-bottom: 2px; }
 .detail-grid span { color: #2c3a32; font-size: 12px; }

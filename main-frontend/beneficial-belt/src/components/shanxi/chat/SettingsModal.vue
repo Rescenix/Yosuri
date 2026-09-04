@@ -97,7 +97,7 @@
                           <div class="settings-nav-label">账户与产品</div>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion()">
+            <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion(); loadAutoStart()">
               <Icon icon="mdi:update" width="16" />版本</button>
           </div>
 
@@ -1246,17 +1246,23 @@
             <!-- ========== 记忆（当前注入上下文的内容，仿 Claude Memory） ========== -->
             <div v-show="activeTab === 'memory'" class="settings-panel">
               <div class="settings-section-title">记忆</div>
-              <div class="param-row" style="align-items: center;">
-                <span class="param-label">云端记忆同步</span>
-                <label class="param-switch">
-                  <input type="checkbox" v-model="memorySyncEnabled" :disabled="memorySyncEnvOverride" @change="saveMemorySyncSetting" />
-                  <span class="param-switch-track"></span>
+              <div class="param-row mem-sync-row" style="align-items: center;">
+                <span class="param-label">云端记忆备份</span>
+                <label class="param-switch" :class="{ 'is-locked': memorySyncLocked }" @click.prevent="onMemorySyncToggle">
+                  <input type="checkbox" v-model="memorySyncEnabled" :disabled="memorySyncEnvOverride" />
+                  <span class="param-switch-track" :class="{ 'is-denied': memorySyncDenied }"></span>
                 </label>
                 <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
-                                  开启后，记忆（偏好 / 决策 / 索引）会随账号存到云端，换设备登录自动恢复。
+                                  开启后，记忆（偏好 / 决策 / 索引）会备份到云端，换设备登录自动恢复。
                                   <template v-if="memorySyncEnvOverride">（当前被部署环境变量 RESCENE_MEMORY_SYNC=off 强制关闭）</template>
                                 </span>
-                              </div>
+                <!-- 气泡浮在开关下方，不占面板版面 -->
+                <Transition name="mem-guard">
+                  <span v-if="memorySyncToast" class="mem-guard-tip" role="status" aria-live="polite">
+                    <Icon icon="mdi:lock-outline" width="14" />云端备份仅对登录账号开放，登录后即可开启
+                  </span>
+                </Transition>
+              </div>
                               <div v-if="memoryLoading" class="settings-loading">加载中…</div>
               <template v-else-if="humanReadableMemoryMarkdown">
                 <div class="memory-md markdown-body" v-html="renderMarkdown(humanReadableMemoryMarkdown)"></div>
@@ -1452,6 +1458,17 @@
                 </label>
                 <span class="param-value">不提示版本更新</span>
               </div>
+
+              <div class="settings-section-title" style="margin-top: 18px;">启动</div>
+              <div class="profile-actions" style="margin-top: 6px; align-items: center;">
+                <label class="param-switch" title="关闭后开机不再自动启动 Yosuri（下次开机生效）">
+                  <input type="checkbox" v-model="autoStartOn" :disabled="!autoStartSupported" @change="onAutoStartChange" />
+                  <span class="param-switch-track"></span>
+                </label>
+                <span class="param-value">开机自动启动</span>
+                <span v-if="autoStartHint" class="param-value" style="opacity:.65; font-size:12px;">{{ autoStartHint }}</span>
+              </div>
+              <div class="settings-section-desc">关闭后不再随 Windows 开机启动；已开机的本次会话不受影响。</div>
             </div>
           </div>
 
@@ -3204,9 +3221,11 @@ const profile = ref({ full_name: '', work: '', instructions: '', gender: '', mem
 // 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
 const memorySegments = ref([])
 const memoryLoading = ref(false)
-// 云端记忆同步开关（记忆 tab）：默认开；env_override 时禁用（部署级强制关闭）
+// 云端记忆同步开关（记忆 tab）：默认开；env_override 时禁用（部署级强制关闭）。
+// 2026-09-04：云端备份只对登录账号开放，未登录（游客）时禁用开关。
 const memorySyncEnabled = ref(true)
 const memorySyncEnvOverride = ref(false)
+const memorySyncLocked = computed(() => memorySyncEnvOverride.value || !auth.isLoggedIn.value)
 const humanReadableMemoryMarkdown = computed(() => {
   const parts = []
   for (const seg of memorySegments.value) {
@@ -3216,13 +3235,22 @@ const humanReadableMemoryMarkdown = computed(() => {
   }
   return parts.join('\n\n').trim() || ''
 })
+// 记忆 tab：直接渲染后端 /api/memory/inject 返回的真实注入段（system / memory 两段），
+// 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
 async function loadMemoryInject() {
   memoryLoading.value = true
   loadMemorySyncSetting()
   try {
-    const res = await fetch('/api/memory/inject')
+    // 优先读派生摘要（LLM 整理的高可读视图）；404（尚未生成）回退旧注入段
+    const res = await fetch('/api/memory/summary')
     if (res.ok) {
       const data = await res.json()
+      memorySegments.value = [{ key: 'memory', title: '记忆概览', raw: data.summary || '', enabled: !!data.summary }]
+      return
+    }
+    const res2 = await fetch('/api/memory/inject')
+    if (res2.ok) {
+      const data = await res2.json()
       memorySegments.value = Array.isArray(data.segments) ? data.segments : []
     } else {
       memorySegments.value = []
@@ -3328,6 +3356,30 @@ async function saveMemorySyncSetting() {
       body: JSON.stringify({ enabled: memorySyncEnabled.value })
     })
   } catch (e) {}
+}
+
+// 未登录点开关：不直接禁用（禁用点不动、没反馈），而是让开关「弹一下又弹回去」
+// —— 旋钮先滑到开启位再抖回关闭位，同时浮出提示，明确告诉用户差在哪一步。
+const memorySyncDenied = ref(false)   // 触发回弹动画
+const memorySyncToast = ref(false)    // 提示条
+let memorySyncDeniedTimer = null
+let memorySyncToastTimer = null
+function onMemorySyncToggle() {
+  if (memorySyncEnvOverride.value) return // 部署级强制关闭：不给任何操作反馈
+  if (auth.isLoggedIn.value) {
+    memorySyncEnabled.value = !memorySyncEnabled.value
+    saveMemorySyncSetting()
+    return
+  }
+  // 游客：开→回弹关
+  memorySyncEnabled.value = false
+  memorySyncDenied.value = false
+  requestAnimationFrame(() => { memorySyncDenied.value = true })
+  clearTimeout(memorySyncDeniedTimer)
+  memorySyncDeniedTimer = setTimeout(() => { memorySyncDenied.value = false }, 520)
+  memorySyncToast.value = true
+  clearTimeout(memorySyncToastTimer)
+  memorySyncToastTimer = setTimeout(() => { memorySyncToast.value = false }, 2400)
 }
 // 局域网同步开关（局域网 tab）：默认关，按需开启才监听 0.0.0.0（避免每次启动触发防火墙弹窗）
 const lanSyncEnabled = ref(false)
@@ -3501,6 +3553,40 @@ async function pollDownloadStatus() {
 
 function onNotifyDisabledChange() {
   setUpdateNotifyDisabled(notifyDisabled.value)
+}
+
+// ============ 开机自启（issue #14：之前只有注册表写入、UI 上没有任何开关） ============
+const autoStartOn = ref(true)
+const autoStartSupported = ref(true)
+const autoStartHint = ref('')
+async function loadAutoStart() {
+  try {
+    const res = await fetch('/api/desktop/autostart')
+    if (!res.ok) return
+    const d = await res.json()
+    if (!d || d.ok !== true) return
+    autoStartOn.value = !!d.enabled
+    autoStartSupported.value = d.supported !== false
+    // 用户没关但注册表里没有（例如被安全软件清掉）：提示一下，避免以为开了其实没开
+    autoStartHint.value = (d.enabled && d.supported && !d.registered) ? '（系统启动项未生效，点一下开关重新登记）' : ''
+  } catch (e) { /* 非桌面环境/后端未就绪：保持默认 */ }
+}
+async function onAutoStartChange() {
+  autoStartHint.value = ''
+  const want = autoStartOn.value
+  try {
+    const res = await fetch('/api/desktop/autostart', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: want }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok || d.ok === false) throw new Error(d.error || `设置失败 (${res.status})`)
+    autoStartOn.value = d.enabled !== undefined ? !!d.enabled : want
+    autoStartHint.value = want && d.registered === false ? '（未生效：可能被安全软件拦截）' : ''
+  } catch (err) {
+    autoStartOn.value = !want
+    autoStartHint.value = err.message || '设置失败'
+  }
 }
 
 // 一键安装：后台已下好的热补丁 exe → 调后端安装接口，3 秒后自动替换 exe 并重启进新版
@@ -4164,6 +4250,33 @@ onUnmounted(() => {
 .param-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--app-surface); box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.15s ease; }
 .param-switch input:checked + .param-switch-track { background: var(--app-accent); }
 .param-switch input:checked + .param-switch-track::after { transform: translateX(16px); }
+/* 云端备份未登录回弹：旋钮滑到开启位停一下再弹回，轨道同步闪一下警示色 */
+.param-switch.is-locked { cursor: pointer; }
+.param-switch-track.is-denied { animation: mem-switch-deny-bg .52s ease; }
+.param-switch-track.is-denied::after { animation: mem-switch-deny-knob .52s cubic-bezier(.34, 1.4, .64, 1); }
+@keyframes mem-switch-deny-knob {
+  0% { transform: translateX(0); }
+  30% { transform: translateX(16px); }
+  62% { transform: translateX(16px); }
+  100% { transform: translateX(0); }
+}
+@keyframes mem-switch-deny-bg {
+  0%, 100% { background: var(--app-border); }
+  30%, 62% { background: color-mix(in srgb, #dc4c4c, transparent 58%); }
+}
+.mem-sync-row { position: relative; }
+.mem-guard-tip {
+  position: absolute; top: 100%; left: 128px; z-index: 20;
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: -8px; padding: 6px 11px; white-space: nowrap;
+  font-size: 12px; font-weight: 600; color: #b42323;
+  background: color-mix(in srgb, #fff1f1 96%, transparent);
+  border: 1px solid color-mix(in srgb, #dc4c4c, transparent 72%);
+  border-radius: 9px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .14);
+}
+.mem-guard-enter-active, .mem-guard-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.mem-guard-enter-from, .mem-guard-leave-to { opacity: 0; transform: translateY(-4px); }
 /* 主题分段控件（仿图1 的 Small/Medium/Large 分段） */
 .seg-control { margin-left: auto; display: inline-flex; background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 2px; }
 .seg-btn { border: none; background: transparent; color: var(--app-text-soft); font-size: 12.5px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: all 0.12s; }
@@ -4585,3 +4698,4 @@ onUnmounted(() => {
   .settings-tab, .vendor-head { transition: none; }
 }
 </style>
+

@@ -25,6 +25,13 @@ func NewAPIRouter() *gin.Engine {
 	}))
 	sessionStore := NewSessionStore(ChatSessionsDomain)
 	RegisterRoutes(r, sessionStore)
+	// 启动时跑一次存量清洗（幂等）：去掉 mock/演示噪音 + key 归一合并。
+	// 异步不阻塞启动——清洗在后台跑，前端刷新记忆 tab 时已是干净数据。
+	go consolidateFacts()
+	// 启动时跑一次性格蒸馏（异步）：从已有记忆淬炼性格档案。
+	go distillPersonality()
+	// 启动时蒸馏一次记忆摘要（异步）：生成前端高可读派生视图 summary.md。
+	go distillSummary()
 	// 局域网同步服务：独立 0.0.0.0 端口 + token 鉴权，只暴露 /lan/ 端点，
 	// re0 主服务继续只听 127.0.0.1，零额外暴露面。
 	// 默认不启动（避免每次启动触发 Windows 防火墙弹窗），由前端 /api/lan/enable 按需开启。

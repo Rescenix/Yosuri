@@ -56,6 +56,8 @@
 | **🛡️ AgentFS change audit** | Every AI file edit gets a snapshot / diff / rollback; dangerous operations require your approval |
 | **🤝 Follow-up guidance** | When a workflow finishes, the AI reviews the result, points out what to polish, and hands you 2-3 one-click next-step suggestions — you're not working alone, it pushes the project forward with you |
 
+![Office file delivery: the agent's finished report rendered live in the built-in preview — chat on the left, document on the right](./assets/office-delivery.png)
+
 ![Free short-drama studio: templates, reference images and generation params on one screen](./assets/rescene-studio.png)
 
 ![Follow-up suggestions: after a workflow finishes, the AI proposes your next steps as one-click buttons](./assets/rescene-followup.png)

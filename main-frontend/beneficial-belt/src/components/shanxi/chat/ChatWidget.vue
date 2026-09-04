@@ -44,12 +44,13 @@
                 </div>
               </div>
               <div class="gem-search-body">
-                <div class="gem-search-section-label">近期对话</div>
-                <div v-if="filteredSearchSessions.length === 0" class="gem-search-empty">
-                  未找到匹配对话
+                <div class="gem-search-section-label">{{ searchQuery.trim() ? '命中会话' : '近期对话' }}</div>
+                <div v-if="searchLoading" class="gem-search-empty">搜索中…</div>
+                <div v-else-if="searchResults.length === 0" class="gem-search-empty">
+                  {{ searchQuery.trim() ? '未找到匹配会话' : '还没有会话' }}
                 </div>
                 <button
-                  v-for="s in filteredSearchSessions"
+                  v-for="s in searchResults"
                   :key="s.id"
                   class="gem-search-row"
                   :class="{ active: s.id === activeSession }"
@@ -57,6 +58,7 @@
                 >
                   <span class="gem-search-row-name">{{ s.name }}</span>
                   <span class="gem-search-row-date">{{ formatSearchDate(s.updatedAt) }}</span>
+                  <span v-if="s.hits && s.hits.length" class="gem-search-row-snippet" v-html="highlightHits(s.hits)"></span>
                 </button>
               </div>
             </div>
@@ -312,7 +314,10 @@
             <!-- 重构：将 Home 组件从 `chat-messages` 中剥离，作为 `chat-content` 的直接子节点。
                  当 `messages` 为空时，它独占整个 Flex 空间，把输入区推到最底部。 -->
             <div v-if="messages.length === 0" class="home-container-for-layout">
-              <NewSessionHome :show-content="showHeatmapPopup" />
+              <NewSessionHome
+                :show-content="showHeatmapPopup"
+                @send-followup="onFollowUpClick"
+              />
             </div>
 
             <!-- 普通聊天/工作流模式：当有消息时，滚动容器才接管整个区域 -->
@@ -387,6 +392,10 @@
                         <button class="tool-btn" @click="copyText(flowFinalText(item))" title="复制">
                           <Icon icon="mdi:content-copy" width="16" />
                         </button>
+                        <span class="tools-spacer"></span>
+                        <button class="tool-btn speak-btn" @click="speakMessage(item, flowFinalText(item))" :title="speakState(item.id)" :class="{ 'speaking': speakingId === item.id, 'loading': loadingId === item.id }">
+                          <Icon :icon="speakIcon(item.id)" width="18" :class="{ 'spin': loadingId === item.id }" />
+                        </button>
                       </div>
                     </div>
                     <div v-else class="assistant-message" :class="{ streaming: item.isStreaming }">
@@ -405,6 +414,10 @@
                       <div class="assistant-tools">
                         <button class="tool-btn" @click="copyText(item.content)" title="复制">
                           <Icon icon="mdi:content-copy" width="16" />
+                        </button>
+                        <span class="tools-spacer"></span>
+                        <button class="tool-btn speak-btn" @click="speakMessage(item, item.content)" :title="speakState(item.id)" :class="{ 'speaking': speakingId === item.id, 'loading': loadingId === item.id }">
+                          <Icon :icon="speakIcon(item.id)" width="18" :class="{ 'spin': loadingId === item.id }" />
                         </button>
                       </div>
                     </div>
@@ -1351,6 +1364,8 @@ async function newSession(project) {
   recordSessionWorkdir(id)
   switchSession(id)
 }
+
+
 function updateSessionTitle(title, fallback, sid) {
   // 标题请求已结算（成功/失败/超时），解除「AI 标题生成中保持显示名」的保护
   if (sid) pendingTitleSessions.delete(sid)
@@ -2698,6 +2713,77 @@ async function copyText(text) {
   }
 }
 
+// ==================== 消息朗读（Edge TTS 晓依，前端直连，零成本） ====================
+// 走 wss://speech.platform.bing.com WebSocket，浏览器直连无跨域问题（2026-09-04 实测）。
+// 三态反馈：空闲=volume-low，加载中=spinner 旋转+「正在合成语音」，播放中=volume-high+脉冲动画。
+// 音频实时拉流播放，不落盘；同一时间只播一条，点另一条自动切；再点当前条停止。
+import { EdgeTTSBrowser } from 'edge-tts-universal/browser'
+const TTS_VOICE = 'zh-CN-XiaoyiNeural'
+const speakingId = ref(null)
+const loadingId = ref(null)
+let speakAudio = null
+let speakToken = 0
+
+function speakIcon(id) {
+  if (loadingId.value === id) return 'mdi:loading'
+  if (speakingId.value === id) return 'mdi:volume-high'
+  return 'mdi:volume-low'
+}
+function speakState(id) {
+  if (loadingId.value === id) return '正在合成语音…'
+  if (speakingId.value === id) return '停止朗读'
+  return '朗读'
+}
+
+function stripMarkdownForTTS(md) {
+  return String(md || '')
+    .replace(/```[\s\S]*?```/g, '，代码块已省略，')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_~>|]/g, '')
+    .replace(/\n{2,}/g, '。')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 600)
+}
+
+async function speakMessage(item, rawText) {
+  const text = stripMarkdownForTTS(rawText)
+  if (!text) return
+  // 再点当前这条：加载中=取消，播放中=停止
+  if (loadingId.value === item.id || speakingId.value === item.id) { stopSpeaking(); return }
+  stopSpeaking()
+  const myToken = ++speakToken
+  loadingId.value = item.id
+  try {
+    const tts = new EdgeTTSBrowser(text, TTS_VOICE)
+    const res = await tts.synthesize()
+    if (myToken !== speakToken) return // 期间用户已切走/取消
+    loadingId.value = null
+    speakingId.value = item.id
+    const url = URL.createObjectURL(res.audio)
+    speakAudio = new Audio(url)
+    speakAudio.onended = () => { if (myToken === speakToken) { speakingId.value = null; URL.revokeObjectURL(url) } }
+    speakAudio.onerror = () => { if (myToken === speakToken) { speakingId.value = null; URL.revokeObjectURL(url) } }
+    await speakAudio.play()
+  } catch (e) {
+    if (myToken === speakToken) { loadingId.value = null; speakingId.value = null }
+  }
+}
+
+function stopSpeaking() {
+  speakToken++
+  if (speakAudio) {
+    try { speakAudio.pause(); } catch (e) {}
+    speakAudio = null
+  }
+  loadingId.value = null
+  speakingId.value = null
+}
+onUnmounted(stopSpeaking)
+
 // ==================== 模型选择 ====================
 // 下拉展示后端内置目录与自定义提供方目录中「免 key 或已配 Key」的全部模型，按提供方分组；
 // 不再有「选为可用」手动门控——填了 Key（或模型本身免 key）就自动出现。
@@ -3334,16 +3420,64 @@ const filteredSearchSessions = computed(() => {
   return list.filter(s => (s.name || '').toLowerCase().includes(q))
 })
 
+// recall 真实搜索：空查询=近期对话（本地列表），非空=防抖调 /api/sessions-search
+// 后端按会话聚合返回命中会话 + 片段，替代原来只按标题过滤本地列表的假搜索。
+const searchResults = ref([])
+const searchLoading = ref(false)
+let searchTimer = null
+
+function highlightHits(hits) {
+  if (!hits || !hits.length) return ''
+  const q = searchQuery.value.trim()
+  let text = (hits[0].content || '').replace(/[<>&]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch]))
+  if (q) {
+    try {
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      text = text.replace(new RegExp('(' + esc + ')', 'gi'), '<mark>$1</mark>')
+    } catch (e) { /* 非法正则保持原样 */ }
+  }
+  return text
+}
+
+async function runSessionSearch(q) {
+  if (!q) {
+    searchResults.value = filteredSearchSessions.value.map(s => ({ id: s.id, name: s.name, updatedAt: s.updatedAt, hits: [] }))
+    return
+  }
+  searchLoading.value = true
+  try {
+    const res = await fetch('/api/sessions-search?q=' + encodeURIComponent(q) + '&limit=20')
+    const data = await res.json()
+    searchResults.value = (data.sessions || []).map(s => ({
+      id: s.session_id,
+      name: s.title || '新对话',
+      updatedAt: s.updated_at,
+      hits: s.hits || []
+    }))
+  } catch (e) {
+    searchResults.value = []
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+watch(searchQuery, (q) => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => runSessionSearch((q || '').trim()), 250)
+})
+
 function openSearchPanel() {
   sidebarOpen.value = true
   localStorage.setItem('sidebarOpen', '1')
   showSearchPanel.value = true
+  runSessionSearch((searchQuery.value || '').trim())
   nextTick(() => searchPanelInput.value?.focus())
 }
 
 function closeSearchPanel() {
   showSearchPanel.value = false
   searchQuery.value = ''
+  clearTimeout(searchTimer)
 }
 
 function onSearchSelect(id) {
@@ -3601,6 +3735,13 @@ watch(
     }, 80)
   }
 )
+
+// 点击 follow-up 卡片 → 填入输入框并发送
+function onFollowUpClick(card) {
+  userInput.value = card.label
+  nextTick(() => adjustInputHeight())
+  handleSend()
+}
 
 function handleSend() {
   if (hasPendingAttachments.value) return

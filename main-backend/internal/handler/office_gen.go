@@ -54,7 +54,7 @@ var generateOfficeToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name:        "generate_office",
-		Description: "生成办公文档(PDF/DOCX/PPTX/XLSX)，纯内置生成，无需任何外部库。输入结构化 JSON，输出文件直接出现在聊天交付卡片。format 必填(docx/pptx/xlsx/pdf)；filename 可选(默认自动生成)；title 文档标题；blocks 是通用块列表(支持 heading/paragraph/bullets/table)；slides 是 pptx 专用(每页标题+要点)；sheets 是 xlsx 专用(表名+表头+行数据)。",
+		Description: "生成办公文档(PDF/DOCX/PPTX/XLSX)，纯内置生成，无需任何外部库。输入结构化 JSON，输出文件直接出现在聊天交付卡片。format 必填(docx/pptx/xlsx/pdf)；filename 可选(默认自动生成)；title 文档标题；blocks 是通用块列表(支持 heading/paragraph/bullets/table)；slides 是 pptx 专用(每页标题+要点)；sheets 是 xlsx 专用(表名+表头+行数据)。注意：这些格式是二进制容器，严禁用 write/write_file 写或改它们，文本写入会把字节流写坏导致文件损坏——生成与修改一律用本工具。",
 		Parameters: core.ToolParameters{
 			Type: "object",
 			Properties: map[string]core.ToolProperty{

@@ -33,6 +33,7 @@
     "d3": "^7.9.0",
     "diff": "^8.0.4",
     "easymde": "^2.21.0",
+    "edge-tts-universal": "^1.4.0",
     "github-markdown-css": "^5.9.0",
     "gsap": "^3.15.0",
     "highlight.js": "^11.11.1",

@@ -13,10 +13,12 @@ package handler
 // 这保证：一次指令生产的每个阶段都尽量命中「当前最快、最健康」的模型，坏源自动退场，不会卡死。
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,6 +34,16 @@ var companyRaceN = 3
 
 // companyRaceTimeout 单源超时：并发竞速下，慢源超时不会拖累整体（快的先回就赢了）。
 const companyRaceTimeout = 20 * time.Second
+
+// companyStreamTimeout 流式源超时：出字比整段返回慢，给更长的窗口，但仍有上限防挂死。
+const companyStreamTimeout = 90 * time.Second
+
+// newLineScanner SSE 行读取器（响应体按行切 data: 帧）。
+func newLineScanner(r io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	return scanner
+}
 
 // companySysPrompt 公司生产的系统身份提示（与聚合池同类，保证输出真实有温度的中文）。
 const companySysPrompt = "你是 Rescene AI 公司的作者，写真实有温度的中文内容。"
@@ -157,6 +169,133 @@ func chatBackend(ctx context.Context, b RouterBackend, prompt string) (string, e
 		return "", fmt.Errorf("%s 空响应", b.Name)
 	}
 	return out.Choices[0].Message.Content, nil
+}
+
+// chatBackendStream 对单个 backend 发一次流式 chat/completions，把增量文本回调给 onDelta。
+// 直播大屏靠它看到模型正在写什么，而不是等 20 秒后整段砸出来。
+func chatBackendStream(ctx context.Context, b RouterBackend, prompt string, onDelta func(string)) (string, error) {
+	body := map[string]any{
+		"model": b.Model,
+		"messages": []map[string]any{
+			{"role": "system", "content": companySysPrompt},
+			{"role": "user", "content": prompt},
+		},
+		"max_tokens":  companyMaxTokens(),
+		"temperature": 0.8,
+		"stream":      true,
+	}
+	reqBytes, _ := json.Marshal(body)
+	srcCtx, cancel := context.WithTimeout(ctx, companyStreamTimeout)
+	defer cancel()
+
+	base := strings.TrimRight(b.BaseURL, "/")
+	req, _ := http.NewRequestWithContext(srcCtx, "POST", base+"/chat/completions", bytes.NewReader(reqBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if b.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+b.APIKey)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("%s 流式 API HTTP %d", b.Name, resp.StatusCode)
+	}
+
+	var full strings.Builder
+	scanner := newLineScanner(resp.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "[DONE]" {
+			break
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal([]byte(payload), &chunk) != nil || len(chunk.Choices) == 0 {
+			continue
+		}
+		delta := chunk.Choices[0].Delta.Content
+		if delta == "" {
+			continue
+		}
+		full.WriteString(delta)
+		if onDelta != nil {
+			onDelta(delta)
+		}
+	}
+	out := full.String()
+	if strings.TrimSpace(out) == "" {
+		return "", fmt.Errorf("%s 空响应", b.Name)
+	}
+	return out, nil
+}
+
+// companyModelRaceStream 并发竞速 + 流式直播：谁先出字，大屏就跟着谁的字往外长。
+// 与 companyModelRace 同样的取舍——快源赢，慢源被 cancel；全部失败才报错。
+func companyModelRaceStream(prompt string, onDelta func(string)) (string, error) {
+	backends := companyModelBackends()
+	if len(backends) == 0 {
+		return "", fmt.Errorf("公司模型池无可用健康源")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type result struct {
+		content string
+		err     error
+	}
+	ch := make(chan result, len(backends))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	winner := ""
+	for _, b := range backends {
+		wg.Add(1)
+		go func(bk RouterBackend) {
+			defer wg.Done()
+			content, err := chatBackendStream(ctx, bk, prompt, func(delta string) {
+				mu.Lock()
+				if winner == "" {
+					winner = bk.Name // 第一个出字的源接管大屏
+				}
+				lead := winner == bk.Name
+				mu.Unlock()
+				if lead && onDelta != nil {
+					onDelta(delta)
+				}
+			})
+			select {
+			case ch <- result{content, err}:
+			case <-ctx.Done():
+			}
+		}(b)
+	}
+	var firstValid string
+	done := 0
+	for firstValid == "" && done < len(backends) {
+		r := <-ch
+		done++
+		if r.err == nil && strings.TrimSpace(r.content) != "" {
+			firstValid = r.content
+		}
+	}
+	cancel()
+	wg.Wait()
+	if firstValid != "" {
+		return firstValid, nil
+	}
+	return "", fmt.Errorf("公司模型池所有源调用均失败")
 }
 
 // companyModelConfig 公司生产模型配置（前端「公司设置」可改，存 ~/rescene_data/company/config.json）。

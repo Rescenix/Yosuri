@@ -426,9 +426,33 @@ func nativeGetFileInfo(args map[string]any) (nativeToolResult, error) {
 	)}, nil
 }
 
+// binaryOfficeExts 是 zip/OLE 容器类文档扩展名。这类文件是二进制，用文本通道
+// 写入会把非法 UTF-8 字节逐个替换成 U+FFFD，产出的文件必然损坏（打不开/预览报
+// "Corrupted zip"）。生成它们必须走 generate_office 工具。
+var binaryOfficeExts = map[string]string{
+	".pdf": "pdf", ".docx": "docx", ".pptx": "pptx", ".xlsx": "xlsx",
+	".doc": "doc", ".xls": "xls", ".ppt": "ppt",
+}
+
+// rejectBinaryOfficeWrite 拦住对二进制文档的文本写入/编辑，返回引导性错误。
+func rejectBinaryOfficeWrite(path string) error {
+	ext := strings.ToLower(filepath.Ext(path))
+	format, ok := binaryOfficeExts[ext]
+	if !ok {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s 是二进制文档，不能用文本方式写入（会把字节流写坏，文件打不开）。"+
+			"请改用 generate_office 工具生成，format 填 %q，内容用 blocks/slides/sheets 结构化字段传。",
+		ext, format)
+}
+
 func nativeWriteFile(args map[string]any) (nativeToolResult, error) {
 	path, err := nativeAbsPath(stringArg(args, "path"))
 	if err != nil {
+		return nativeToolResult{}, err
+	}
+	if err := rejectBinaryOfficeWrite(path); err != nil {
 		return nativeToolResult{}, err
 	}
 	content, ok := args["content"].(string)
@@ -469,6 +493,9 @@ func deliverableFromPath(path string) []fileDeliverable {
 func nativeEditFile(args map[string]any) (nativeToolResult, error) {
 	path, err := nativeAbsPath(stringArg(args, "path"))
 	if err != nil {
+		return nativeToolResult{}, err
+	}
+	if err := rejectBinaryOfficeWrite(path); err != nil {
 		return nativeToolResult{}, err
 	}
 	oldText, oldOK := args["old_string"].(string)

@@ -299,6 +299,9 @@ func canonicalApprovalProject(file string) string {
 	}
 	name := strings.TrimPrefix(clean, "project/")
 	name = filepath.Base(filepath.FromSlash(name))
+	// 与审批台展示的项目标题同一套规范化：去序号前缀与交付时间戳后缀，
+	// 保证「前端看到的标题」和「后端记录的已决定项目」是同一个身份。
+	name = deliveryProjectTitle(name)
 	name = strings.TrimLeft(name, "0123456789-_")
 	return strings.ToLower(strings.TrimSpace(name))
 }
@@ -346,8 +349,39 @@ func saveApprovals(recs []approvalRecord) {
 	os.WriteFile(approvalsFilePath(), data, 0o644)
 }
 
+// companyProjectRoots 项目扫描位置：真身根目录优先，历史遗留的 agent 内 projects/ 目录
+// 作为只读兼容（老版本把项目写在 coder-03/projects/ 下），不迁移、不删除用户数据。
+func companyProjectRoots() []string {
+	roots := []string{companyProjectsRoot()}
+	if entries, err := os.ReadDir(companyDir()); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			legacy := filepath.Join(companyDir(), e.Name(), "projects")
+			if info, statErr := os.Stat(legacy); statErr == nil && info.IsDir() {
+				roots = append(roots, legacy)
+			}
+		}
+	}
+	return roots
+}
+
+// companyProjectAgentOf 从项目路径推断归属 agent 目录名（用于文件读取参数）。
+func companyProjectAgentOf(root string) string {
+	rel, err := filepath.Rel(companyDir(), root)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) >= 2 {
+		return parts[0]
+	}
+	return ""
+}
+
 // HandleCompanyApprovals GET /api/company/approvals
-// 返回：各 agent 未审批的最近产出物（待审批队列）
+// 返回：各 agent 未审批的最近产出物（待审批队列）+ 项目真身交付
 func HandleCompanyApprovals(c *gin.Context) {
 	decided := loadApprovals()
 	decidedKey, decidedProjects := approvalDecisionIndex(decided)
@@ -381,71 +415,7 @@ func HandleCompanyApprovals(c *gin.Context) {
 				}
 			}
 		}
-		// 2. projects 下的可运行项目（源程序/需求/计划/执行/自检）
-		projDir := filepath.Join(agentDir, "projects")
-		if projEntries, err := os.ReadDir(projDir); err == nil {
-			for _, p := range projEntries {
-				if !p.IsDir() {
-					continue
-				}
-				if decidedProjects[canonicalApprovalProject("project/"+p.Name())] {
-					continue
-				}
-				// 项目里找需求计划 + 可运行源文件
-				projPath := filepath.Join(projDir, p.Name())
-				gate, gateErr := verifyProjectDeliveryGate(projPath)
-				if gateErr != nil {
-					// 硬门禁未通过的项目留在生产区，绝不进入人类审批队列。
-					continue
-				}
-				files, _ := os.ReadDir(projPath)
-				var srcCode string
-				var reqPlan string
-				for _, f := range files {
-					if f.IsDir() {
-						continue
-					}
-					switch {
-					case strings.HasPrefix(f.Name(), "00-需求计划"):
-						reqPlan = f.Name()
-					case strings.HasPrefix(f.Name(), "output-") && (strings.HasSuffix(f.Name(), ".py") || strings.HasSuffix(f.Name(), ".js") || strings.HasSuffix(f.Name(), ".go") || strings.HasSuffix(f.Name(), ".html") || strings.HasSuffix(f.Name(), ".ts") || strings.HasSuffix(f.Name(), ".java")):
-						srcCode = f.Name()
-					}
-				}
-				// 项目作为「可运行项目」待审批
-				projKey := e.Name() + "|project/" + p.Name()
-				if !decidedKey[projKey] {
-					artifacts, preview, previewFile, previewKind, stages := inspectProjectDelivery(e.Name(), projPath, files)
-					gateByFile := map[string]projectDeliveryEvidence{}
-					for _, evidence := range gate.Evidence {
-						gateByFile[evidence.File] = evidence
-					}
-					for _, artifact := range artifacts {
-						name, _ := artifact["name"].(string)
-						if evidence, ok := gateByFile[name]; ok {
-							artifact["producerRole"] = evidence.ProducerRole
-							artifact["sha256"] = evidence.SHA256
-							artifact["verification"] = evidence.Verification
-						}
-					}
-					pendItem := gin.H{
-						"agent":       e.Name(),
-						"file":        "project/" + p.Name(),
-						"score":       92,
-						"kind":        "project",
-						"requirement": reqPlan,
-						"source":      srcCode,
-						"artifacts":   artifacts,
-						"preview":     preview,
-						"previewFile": previewFile,
-						"previewKind": previewKind,
-						"stages":      stages,
-						"gateStatus":  gate.Status,
-					}
-					pending = append(pending, pendItem)
-				}
-			}
-		}
+		// 2. 项目交付统一从项目根目录扫描，见 collectCompanyProjectPending。
 		if best != "" {
 			pending = append(pending, gin.H{
 				"agent": e.Name(),
@@ -455,6 +425,7 @@ func HandleCompanyApprovals(c *gin.Context) {
 			})
 		}
 	}
+	pending = append(pending, collectCompanyProjectPending(decidedKey, decidedProjects)...)
 	// 按分数降序（会议/项目/需求/设计优先）
 	sort.Slice(pending, func(i, j int) bool {
 		si, _ := pending[i]["score"].(int)
@@ -530,8 +501,13 @@ func HandleCompanyApprove(c *gin.Context) {
 		Decision string `json:"decision"` // approve | reject
 		Feedback string `json:"feedback"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || body.Agent == "" || body.File == "" {
+	if err := c.ShouldBindJSON(&body); err != nil || body.File == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	// 项目级审批以项目真身为单位，不绑定某个 agent 目录，此时 agent 允许为空。
+	if body.Agent != "" && (strings.Contains(body.Agent, "..") || strings.ContainsAny(body.Agent, `/\`)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法 agent"})
 		return
 	}
 	if body.Decision != "approve" && body.Decision != "reject" {

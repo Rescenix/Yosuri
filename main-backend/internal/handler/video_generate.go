@@ -651,6 +651,13 @@ func agnesTaskSet(id string, t *agnesTask) {
 	agnesTasksMu.Lock()
 	agnesTasks[id] = t
 	agnesTasksMu.Unlock()
+	persistAgnesTask(id, t)
+}
+
+// agnesTaskFinish 在生成 goroutine 结束（成功或失败）时调用：写终态并落盘，
+// 这样即使应用随后重启，前端轮询也能拿到明确结果而不是 404。
+func agnesTaskFinish(id string, t *agnesTask) {
+	persistAgnesTask(id, t)
 }
 
 func agnesTaskGet(id string) *agnesTask {
@@ -771,16 +778,29 @@ func HandleStudioAgnesSubmit(c *gin.Context) {
 			Ratio: req.Ratio, Size: req.Size, ImageURL: imageURL,
 			FirstFrame: firstFrame, LastFrame: lastFrame,
 		})
+		// 兜底：生成链路里任何意外 panic 都必须变成任务失败态，
+		// 否则整个进程被 panic 带走（gin.Recovery 不覆盖自建 goroutine），
+		// 用户看到的就是「点了直接闪退、什么错误都没有」（issue #13）。
+		defer func() {
+			if r := recover(); r != nil {
+				task.Mu.Lock()
+				task.Status = "failed"
+				task.Err = truncateStr("生成过程异常中断: "+fmt.Sprint(r), 300)
+				task.Mu.Unlock()
+				agnesTaskFinish(taskID, task)
+			}
+		}()
 		task.Mu.Lock()
-		defer task.Mu.Unlock()
 		if err != nil {
 			task.Status = "failed"
 			task.Err = err.Error()
-			return
+		} else {
+			task.Status = "done"
+			task.Video = res.URL
+			task.Name = filepath.Base(res.File)
 		}
-		task.Status = "done"
-		task.Video = res.URL
-		task.Name = filepath.Base(res.File)
+		task.Mu.Unlock()
+		agnesTaskFinish(taskID, task)
 	}()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "task_id": taskID})
 }
@@ -829,6 +849,16 @@ func HandleStudioAgnesChain(c *gin.Context) {
 	task := &agnesTask{Status: "pending", Size: req.Size, Seconds: req.Seconds}
 	agnesTaskSet(taskID, task)
 	go func() {
+		// 兜底：链式生成任何意外 panic 都转成任务失败态，绝不带走进程（issue #13）。
+		defer func() {
+			if r := recover(); r != nil {
+				task.Mu.Lock()
+				task.Status = "failed"
+				task.Err = truncateStr("生成过程异常中断: "+fmt.Sprint(r), 300)
+				task.Mu.Unlock()
+				agnesTaskFinish(taskID, task)
+			}
+		}()
 		// 每段生成 + 抽尾帧接续
 		root, _ := backendRoot()
 		workDir := filepath.Join(root, studioOutputDir, "chain_"+taskID)
@@ -857,11 +887,12 @@ func HandleStudioAgnesChain(c *gin.Context) {
 				}
 			}
 		}
-		task.Mu.Lock()
-		defer task.Mu.Unlock()
 		if errMsg != "" {
+			task.Mu.Lock()
 			task.Status = "failed"
 			task.Err = errMsg
+			task.Mu.Unlock()
+			agnesTaskFinish(taskID, task)
 			return
 		}
 		// ffmpeg 拼接
@@ -874,24 +905,50 @@ func HandleStudioAgnesChain(c *gin.Context) {
 		finalName := "chain_" + strconv.FormatInt(time.Now().UnixNano(), 36) + ".mp4"
 		finalPath := filepath.Join(videoOutputDir(), finalName)
 		concatArgs := []string{"-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", finalPath}
+		var concatErr error
 		if _, err := exec.Command("ffmpeg", concatArgs...).CombinedOutput(); err != nil {
-			task.Status = "failed"
-			task.Err = "拼接失败: " + err.Error()
-			return
+			concatErr = err
 		}
-		task.Status = "done"
-		task.Video = "/api/video/file/" + finalName
-		task.Name = finalName
+		task.Mu.Lock()
+		if concatErr != nil {
+			task.Status = "failed"
+			task.Err = "拼接失败: " + concatErr.Error()
+		} else {
+			task.Status = "done"
+			task.Video = "/api/video/file/" + finalName
+			task.Name = finalName
+		}
+		task.Mu.Unlock()
+		agnesTaskFinish(taskID, task)
 	}()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "task_id": taskID, "segments": req.Segments})
 }
 
 // HandleStudioAgnesStatus GET /api/studio/agnes/status/:id
 func HandleStudioAgnesStatus(c *gin.Context) {
-	task := agnesTaskGet(c.Param("id"))
+	id := c.Param("id")
+	task := agnesTaskGet(id)
 	if task == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
-		return
+		// 内存没有（应用重启/热更新换过进程）→ 回读磁盘快照，
+		// 让前端至少能拿到终态或一个可解释的错误，而不是永远停在「生成中」。
+		if disk := loadAgnesTaskFromDisk(id); disk != nil {
+			if disk.Status == "pending" {
+				// 磁盘上是 pending 而内存没有 → 生成进程已经不在了（重启/热更新），
+				// 这个任务永远不会完成，直接判丢失，别让前端无限轮询。
+				c.JSON(http.StatusNotFound, gin.H{
+					"ok": false, "status": "lost",
+					"error": "生成任务已中断（应用重启），请重新生成",
+				})
+				return
+			}
+			task = disk
+		} else {
+			c.JSON(http.StatusNotFound, gin.H{
+				"ok": false, "status": "lost",
+				"error": "任务记录已丢失（应用可能已重启），请重新生成",
+			})
+			return
+		}
 	}
 	task.Mu.Lock()
 	defer task.Mu.Unlock()

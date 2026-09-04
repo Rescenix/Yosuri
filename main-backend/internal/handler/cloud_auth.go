@@ -238,6 +238,7 @@ func proxyIntimacyToCloud(c *gin.Context, targetPath string) {
 		}
 		if json.Unmarshal(respBody, &parsed) == nil && parsed.UID > 0 {
 			memorydir.WriteIntimacy(parsed.UID, parsed.Intimacy)
+			TriggerPersonalityOnIntimacyLevelUp()
 		}
 	}
 }

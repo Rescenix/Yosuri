@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# ⚠️ 仅作本地测试参考。正式发布统一走 GitHub Actions CI（push tag 触发），
+#    请勿用本脚本执行发布。保持 CI 自动化是唯一发布通道。
 # Rescene Agent 桌面版 — Linux 一键构建脚本
 # 用法: bash scripts/build-linux.sh [arch]
 #   arch: amd64 (默认) | arm64

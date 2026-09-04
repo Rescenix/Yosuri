@@ -900,8 +900,13 @@ min-height: 90px !important;
 .assistant-tools {
   position: absolute;
   left: 0;
+  right: 0;
   bottom: 0;
   display: flex;
+}
+/* 喇叭推到工具栏最右端：复制留在原位（左下角），语音按钮贴消息右侧 */
+.tools-spacer {
+  flex: 1;
 }
 
 /* agentflow 一条消息 = 工作流面板 + 底部工具栏，竖着排。
@@ -951,6 +956,37 @@ min-height: 90px !important;
 .tool-btn:hover {
   opacity: 1 !important;
   background: rgba(0, 0, 0, 0.06);
+}
+
+/* 语音按钮跟复制按钮同一套 hover 出现逻辑（Hermes 同款），hover 时蓝色强化识别 */
+.tool-btn.speak-btn:hover {
+  opacity: 1 !important;
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.08);
+}
+.tool-btn.speak-btn:active {
+  transform: scale(0.92);
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.14);
+}
+
+/* 朗读按钮三态反馈：加载中图标旋转，播放中按钮脉冲呼吸 */
+.tool-btn.loading,
+.tool-btn.speaking {
+  opacity: 1 !important;   /* 加载/播放期间鼠标挪走也保持可见，不用悬浮消息 */
+}
+.tool-btn .spin {
+  animation: tts-spin 0.9s linear infinite;
+}
+@keyframes tts-spin {
+  to { transform: rotate(360deg); }
+}
+.tool-btn.speaking {
+  animation: tts-pulse 1.4s ease-in-out infinite;
+}
+@keyframes tts-pulse {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(0, 0, 0, 0.08); }
 }
 
 .copy-toast {
@@ -3087,6 +3123,26 @@ min-height: 90px !important;
   margin-left: 10px;
 }
 .gem-search-row.active .gem-search-row-date { color: var(--app-accent); opacity: 0.8; }
+/* recall 命中片段：独立一行，最多两行截断；关键词 <mark> 高亮 */
+.gem-search-row-snippet {
+  flex-basis: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--app-text-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+.gem-search-row-snippet mark {
+  background: rgba(255, 180, 0, 0.28);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
 
 /* 搜索面板进入/离开动画 */
 .search-panel-enter-active,

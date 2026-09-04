@@ -285,3 +285,67 @@ func TestForkClonesApprovalRules(t *testing.T) {
 		t.Error("改分支的规则把父会话的也改了——说明是共享引用而非克隆")
 	}
 }
+
+// recall：关键字搜索应按会话聚合返回命中会话 + 片段，且大小写不敏感。
+func TestSearchSessionsBySessionGroupsHits(t *testing.T) {
+	withIsolatedSessionDir(t)
+	s := NewSessionStore(ChatSessionsDomain)
+	t.Cleanup(func() { settle(s) })
+
+	// 会话 A：两条命中（合并到同一个会话）
+	appendPair(t, s, "a", "我们讨论过 Rescene 的鉴权方案", "鉴权走 JWT 更安全")
+	// 会话 B：无命中
+	appendPair(t, s, "b", "今天天气不错", "嗯嗯")
+	// 会话 C：一条命中（英文大小写不同）
+	appendPair(t, s, "c", "Tell me about the memory system", "memory 分两层架构")
+
+	hits := s.SearchSessionsBySession("鉴权", 10)
+	if len(hits) != 1 {
+		t.Fatalf("应只命中 1 个会话，实际 %d 个", len(hits))
+	}
+	if hits[0].SessionID != "a" {
+		t.Errorf("命中会话应为 a，实际 %s", hits[0].SessionID)
+	}
+	if len(hits[0].Hits) != 2 {
+		t.Errorf("会话 a 应有 2 条命中片段，实际 %d", len(hits[0].Hits))
+	}
+
+	// 大小写不敏感：memory 应命中 c（英文原句）而非 a
+	hits2 := s.SearchSessionsBySession("MEMORY", 10)
+	if len(hits2) != 1 || hits2[0].SessionID != "c" {
+		t.Fatalf("MEMORY 应命中会话 c，实际 %+v", hits2)
+	}
+
+	// 无命中返回空切片（非 nil）
+	hits3 := s.SearchSessionsBySession("不存在的词xyz", 10)
+	if hits3 == nil || len(hits3) != 0 {
+		t.Errorf("无命中应返回空切片，实际 %+v", hits3)
+	}
+
+	// 会话内命中数封顶 3 条
+	appendPair(t, s, "a", "鉴权方案一", "鉴权方案二")
+	appendPair(t, s, "a", "鉴权方案三", "鉴权方案四")
+	hits4 := s.SearchSessionsBySession("鉴权方案", 10)
+	if len(hits4) != 1 || len(hits4[0].Hits) > 3 {
+		t.Errorf("每会话命中片段应封顶 3 条，实际 %d 条", len(hits4[0].Hits))
+	}
+}
+
+// bigram 召回：查询词与原文不完全相同也能命中（BM25 相关度排序）。
+// FTS5 按字面切词做不到这一点——这是自建索引的核心优势。
+func TestSearchBigramRecall(t *testing.T) {
+	withIsolatedSessionDir(t)
+	s := NewSessionStore(ChatSessionsDomain)
+	t.Cleanup(func() { settle(s) })
+
+	// 原文只有「token 鉴权」，查询「鉴权方案」：bigram「鉴权」命中
+	appendPair(t, s, "a", "我们讨论了 token 鉴权的实现", "好的")
+	// 无关会话
+	appendPair(t, s, "b", "晚饭吃什么", "火锅")
+
+	hits := s.SearchSessionsBySession("鉴权方案", 10)
+	if len(hits) != 1 || hits[0].SessionID != "a" {
+		t.Fatalf("「鉴权方案」应经 bigram 命中会话 a，实际 %+v", hits)
+	}
+}
+

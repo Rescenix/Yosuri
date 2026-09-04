@@ -210,6 +210,7 @@
             </button>
           </details>
           <div class="project-actions">
+            <a v-if="project.project" class="package-project" :href="'/api/company/package?project=' + encodeURIComponent(project.project)" download><Icon icon="mdi:folder-zip-outline" width="16" /> 下载完整交付包</a>
             <button class="reject-project" :disabled="decidingProject === project.key" @click="approveProject(project, 'reject')"><Icon icon="mdi:backup-restore" width="16" /> 整体退回</button>
             <button class="approve-project" :disabled="decidingProject === project.key || !project.ready" :title="project.ready ? '批准整个项目' : '阶段未齐全，不能批准'" @click="approveProject(project, 'approve')"><Icon icon="mdi:check-bold" width="16" /> {{ decidingProject === project.key ? '处理中…' : (project.ready ? '批准整个项目' : '等待完整交付') }}</button>
           </div>
@@ -245,6 +246,30 @@
               <span><b>{{ phase.name }}</b><small>{{ phase.status }}</small></span>
               <em>0{{ i + 1 }}</em>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 生产大屏：SSE 实时直播 报告 → UI 设计 → 原型迭代 -->
+      <section class="live-screen" :class="{ idle: !liveActive }">
+        <div class="live-screen-head">
+          <span class="live-screen-eyebrow"><i></i> LIVE SCREEN · 生产大屏</span>
+          <div class="live-screen-stages">
+            <span v-for="s in liveStageChips" :key="s.key" :class="{ on: s.on, done: s.done }">{{ s.label }}</span>
+          </div>
+          <strong class="live-screen-version" v-if="livePrototype.version">{{ livePrototype.version }}</strong>
+        </div>
+        <div class="live-screen-grid">
+          <div class="live-screen-proto">
+            <iframe v-if="livePrototype.src" :key="livePrototype.src" :src="livePrototype.src" sandbox="allow-forms allow-modals allow-scripts" title="原型实时预览"></iframe>
+            <div v-else class="live-screen-wait"><Icon icon="mdi:monitor-share" width="34" /><span>最小原型生成后自动出现在这里</span></div>
+          </div>
+          <div class="live-screen-feed" ref="liveFeedEl" @scroll="onLiveFeedScroll">
+            <div v-for="block in liveFeedBlocks" :key="block.id" class="live-feed-block" :class="{ cur: block.cur }">
+              <div class="live-feed-head"><Icon :icon="liveStageIcon(block.stage)" width="14" /><b>{{ block.role }}</b><span>{{ block.stageLabel }}</span><em>{{ block.time }}</em></div>
+              <pre>{{ block.text }}</pre>
+            </div>
+            <div v-if="!liveFeedBlocks.length" class="live-screen-wait"><Icon icon="mdi:text-box-search-outline" width="34" /><span>下达指令后，报告与设计的每个字都会实时流到这里</span></div>
           </div>
         </div>
       </section>
@@ -915,18 +940,18 @@ const allApprovalProjects = computed(() => {
   const grouped = new Map()
   for (const item of pendingApprovals.value) {
     if (item.kind !== 'project') continue
-    const rawName = String(item.file || '').replace(/^project\//, '')
-    const title = rawName.replace(/^\d+[-_]/, '') || rawName || '未命名项目'
+    // 项目身份由后端交付清单给出（标题、参与部门、产物路径），前端不再按目录名/文件名反推。
+    const rawName = String(item.project || String(item.file || '').replace(/^project\//, ''))
+    const title = String(item.title || rawName.replace(/^\d+[-_]/, '')) || rawName || '未命名项目'
     const key = title.toLocaleLowerCase()
-    if (!grouped.has(key)) grouped.set(key, { key, title, items: [], agents: [], roles: [], score: 0, sourceCount: 0, artifacts: [], stageEvidence: {}, preview: '', previewKind: '', previewFile: null })
+    if (!grouped.has(key)) grouped.set(key, { key, title, project: rawName, items: [], agents: [], roles: [], score: 0, sourceCount: 0, artifacts: [], stageEvidence: {}, preview: '', previewKind: '', previewFile: null, packageUrl: item.packageUrl || '' })
     const project = grouped.get(key)
     project.items.push(item)
-    if (!project.agents.includes(item.agent)) project.agents.push(item.agent)
-    const role = String(item.agent || '').split('-')[0]
-    if (role && !project.roles.includes(role)) project.roles.push(role)
+    for (const name of (item.agents || [])) if (!project.agents.includes(name)) project.agents.push(name)
+    for (const role of (item.roles || [])) if (!project.roles.includes(role)) project.roles.push(role)
     project.score = Math.max(project.score, Number(item.score) || 0)
     if (item.source) project.sourceCount++
-    const artifacts = (item.artifacts || []).map(artifact => ({ ...artifact, agent: item.agent, path: `${item.file}/${artifact.name}` }))
+    const artifacts = (item.artifacts || []).map(artifact => ({ ...artifact, agent: item.agent, project: rawName, path: artifact.path || artifact.name }))
     project.artifacts.push(...artifacts)
     for (const stage of (item.stages || [])) {
       if (!project.stageEvidence[stage]) project.stageEvidence[stage] = []
@@ -934,11 +959,14 @@ const allApprovalProjects = computed(() => {
       // 只接受可点击的真实文件；项目目录名、角色名和日志话术不能作为完成证据。
       project.stageEvidence[stage].push(...evidence)
     }
+    // 兜底首屏：按产物类型挑最有分量的一份作为默认展示，不再依赖后端二次推断的 preview 字段。
     const previewRank = { video: 7, pptx: 6, spreadsheet: 5, html: 4, image: 3, code: 2, text: 1 }
-    if (item.previewFile && (previewRank[item.previewKind] || 0) > (previewRank[project.previewKind] || 0)) {
-      project.preview = item.preview
-      project.previewKind = item.previewKind
-      project.previewFile = { agent: item.agent, name: item.previewFile, path: `${item.file}/${item.previewFile}` }
+    for (const artifact of artifacts) {
+      const rank = previewRank[artifact.kind] || 0
+      if (rank > (previewRank[project.previewKind] || 0)) {
+        project.previewKind = artifact.kind
+        project.previewFile = artifact
+      }
     }
   }
   return [...grouped.values()].map(project => {
@@ -1580,6 +1608,59 @@ async function previewFile(agent, f, cacheKey = '') {
   }
 }
 
+// previewProjectFile 从项目真身目录预览产物（xlsx/pptx 需二次取二进制解析）。
+async function previewProjectFile(project, path, cacheKey = '') {
+  const projectName = typeof project === 'string' ? project : (project?.project || project?.title || '')
+  const fileName = String(path || '').split('/').pop()
+  try {
+    const query = 'project=' + encodeURIComponent(projectName) + '&path=' + encodeURIComponent(path)
+    artifactModal.open = true
+    artifactModal.loading = true
+    artifactModal.content = ''
+    artifactModal.agent = projectName
+    artifactModal.file = fileName
+    artifactModal.kind = ''
+    artifactModal.mime = ''
+    artifactModal.truncated = false
+    artifactModal.rawUrl = '/api/company/project-file?' + query + '&raw=1'
+    pptDeck.slides = []
+    spreadsheetRows.value = []
+    slideIndex.value = 0
+    const r = await fetch('/api/company/project-file?' + query)
+    const d = await r.json()
+    if (!r.ok) throw new Error(d.error || '读取失败')
+    const lower = fileName.toLowerCase()
+    if (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov')) artifactModal.kind = 'video'
+    else if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.svg')) artifactModal.kind = 'image'
+    else if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv') || lower.endsWith('.tsv')) artifactModal.kind = 'spreadsheet'
+    else if (lower.endsWith('.pptx')) artifactModal.kind = 'pptx'
+    else if (lower.endsWith('.html') || lower.endsWith('.htm')) artifactModal.kind = 'html'
+    else artifactModal.kind = 'text'
+    artifactModal.mime = d.mime || ''
+    artifactModal.content = d.content || ''
+    if (artifactModal.kind === 'pptx') {
+      const binary = await fetch(artifactModal.rawUrl)
+      if (!binary.ok) throw new Error('PPTX 文件读取失败')
+      const parsed = await parsePptxPreview(await binary.arrayBuffer())
+      pptDeck.size = parsed.size
+      pptDeck.slides = parsed.slides
+    } else if (artifactModal.kind === 'spreadsheet') {
+      const binary = await fetch(artifactModal.rawUrl)
+      if (!binary.ok) throw new Error('电子表格读取失败')
+      const parsed = lower.endsWith('.xlsx')
+        ? await parseXlsxPreview(await binary.arrayBuffer())
+        : parseDelimitedPreview(await binary.text(), lower.endsWith('.tsv') ? '\t' : ',')
+      spreadsheetRows.value = parsed.rows
+      artifactModal.truncated = parsed.truncated
+    }
+  } catch (e) {
+    artifactModal.content = e?.message || '读取失败'
+    if (!artifactModal.kind) artifactModal.kind = 'text'
+  } finally {
+    artifactModal.loading = false
+  }
+}
+
 function stageLabel(key) {
   return projectStages.find(stage => stage.key === key)?.label || '过程'
 }
@@ -1588,17 +1669,22 @@ function stageTitle(project, stage) {
   return evidence.length ? `${stage.label}：${evidence.map(item => `${item.agent} / ${item.name}`).join('；')}` : `${stage.label}：缺失`
 }
 function previewProjectArtifact(project, artifact) {
-  if (!artifact?.agent || !artifact?.path || artifact.path.split('/').length < 3) return
-  previewFile({ name: artifact.agent }, artifact.path, artifact.sha256 || '')
+  if (!artifact?.path) return
+  previewProjectFile(project, artifact.path, artifact.sha256 || '')
 }
 function artifactRawUrl(artifact) {
-  if (!artifact?.agent || !artifact?.path) return ''
+  if (!artifact?.path) return ''
   const versionQuery = artifact.sha256 ? '&v=' + encodeURIComponent(artifact.sha256) : ''
-  return '/api/company/file?agent=' + encodeURIComponent(artifact.agent) + '&name=' + encodeURIComponent(artifact.path) + '&raw=1' + versionQuery
+  return '/api/company/project-file?project=' + encodeURIComponent(artifact.project || '') + '&path=' + encodeURIComponent(artifact.path) + '&raw=1' + versionQuery
+}
+function projectPackageUrl(project) {
+  const name = project?.project || project?.title || ''
+  if (!name) return ''
+  return '/api/company/package?project=' + encodeURIComponent(name)
 }
 function openStageEvidence(project, stage) {
   const evidence = project.stageEvidence[stage] || []
-  const artifact = evidence.find(item => item.path?.split('/').length >= 3)
+  const artifact = evidence.find(item => item.path)
   if (artifact) previewProjectArtifact(project, artifact)
 }
 
@@ -1962,6 +2048,88 @@ function personStyle(p) {
 
 watch(agents, () => { rebuildOfficePeople() }, { deep: true })
 
+// ===== 生产大屏（SSE 实时直播：报告 → UI 设计 → 原型迭代）=====
+const liveFeedEl = ref(null)
+const liveEvents = ref([])
+const livePrototype = reactive({ src: '', version: '' })
+const liveFollow = ref(true)
+let liveSource = null
+
+const liveStageNames = {
+  kickoff: '立项', meeting: '会议', mvp: '最小原型', requirements: '需求', research: '调研报告',
+  data: '研究数据', ui: 'UI 设计', docs: '文档', code: '编码', runnable: '终版程序',
+  ppt: '路演', pv: '宣传片', promotion: '发布',
+}
+function liveStageIcon(stage) {
+  return ({ kickoff: 'mdi:flag-outline', meeting: 'mdi:account-group-outline', mvp: 'mdi:rocket-launch-outline', requirements: 'mdi:clipboard-text-outline', research: 'mdi:microscope', data: 'mdi:microsoft-excel', ui: 'mdi:palette-outline', docs: 'mdi:file-document-outline', code: 'mdi:code-tags', runnable: 'mdi:play-box-outline', ppt: 'mdi:presentation', pv: 'mdi:movie-open-play-outline', promotion: 'mdi:bullhorn-outline' })[stage] || 'mdi:robot-outline'
+}
+const liveActive = computed(() => liveEvents.value.some(e => e.kind === 'stage' || e.kind === 'delta' || e.kind === 'iteration'))
+const liveStageChips = computed(() => {
+  const order = ['kickoff', 'mvp', 'research', 'ui', 'runnable']
+  const seen = new Set(liveEvents.value.filter(e => e.kind === 'stage' || e.kind === 'iteration').map(e => e.stage))
+  const last = [...liveEvents.value].reverse().find(e => e.kind === 'stage' || e.kind === 'iteration')
+  return order.map((key, i) => ({ key, label: liveStageNames[key] || key, on: last?.stage === key, done: seen.has(key) && last?.stage !== key || (i < order.indexOf(last?.stage)) }))
+})
+// 文字流按「阶段」聚成块：同一阶段的增量拼在一起，新阶段开新块。
+const liveFeedBlocks = computed(() => {
+  const blocks = []
+  for (const ev of liveEvents.value) {
+    if (ev.kind !== 'delta') continue
+    const id = ev.stage + '|' + ev.seq
+    const cur = blocks[blocks.length - 1]
+    if (ev.replaced) {
+      // 整块替换帧：竞速下先出字的源可能被中途取消，流式碎片不完整；
+      // 后端在阶段完成时补发完整正文，前端直接替换该阶段当前块。
+      const idx = blocks.map(b => b.stage).lastIndexOf(ev.stage)
+      if (idx >= 0) { blocks[idx].text = ev.text; blocks[idx].cur = true }
+      else blocks.push({ id: ev.stage + '|' + ev.seq, stage: ev.stage, stageLabel: liveStageNames[ev.stage] || ev.stage, role: ev.role || 'Agent', time: (ev.time || '').slice(11), text: ev.text, cur: true })
+      continue
+    }
+    if (cur && cur.stage === ev.stage && cur.role === ev.role) {
+      cur.text += ev.text
+      cur.cur = true
+      if (blocks.length > 1) blocks.forEach((b, i) => { if (i < blocks.length - 1) b.cur = false })
+      continue
+    }
+    blocks.push({ id, stage: ev.stage, stageLabel: liveStageNames[ev.stage] || ev.stage, role: ev.role || 'Agent', time: (ev.time || '').slice(11), text: ev.text, cur: true })
+    if (blocks.length > 1) blocks[blocks.length - 2].cur = false
+  }
+  return blocks.slice(-12)
+})
+function onLiveFeedScroll() {
+  const el = liveFeedEl.value
+  if (!el) return
+  liveFollow.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 60
+}
+function scrollLiveFeed() {
+  if (!liveFollow.value) return
+  const el = liveFeedEl.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+function liveApplyEvent(ev) {
+  if (!ev || !ev.kind) return
+  if (ev.stage === 'kickoff') { liveEvents.value = []; livePrototype.src = ''; livePrototype.version = '' }
+  if (ev.kind === 'delta') liveEvents.value.push(ev)
+  else {
+    liveEvents.value.push(ev)
+    if (ev.kind === 'iteration' && ev.file) {
+      livePrototype.version = ev.version || ''
+      livePrototype.src = '/api/company/project-file?project=' + encodeURIComponent(ev.project || '') + '&path=' + encodeURIComponent(ev.file) + '&raw=1&v=' + encodeURIComponent(ev.version + '-' + ev.seq)
+    }
+  }
+  if (liveEvents.value.length > 600) liveEvents.value.splice(0, liveEvents.value.length - 600)
+  scrollLiveFeed()
+}
+function startLiveStream() {
+  if (liveSource) { try { liveSource.close() } catch (e) { /* noop */ } }
+  try {
+    liveSource = new EventSource('/api/company/live')
+    liveSource.onmessage = (m) => { try { liveApplyEvent(JSON.parse(m.data)) } catch (e) { /* 忽略坏帧 */ } }
+    liveSource.onerror = () => { /* EventSource 自动重连 */ }
+  } catch (e) { /* 不支持 SSE 时大屏静默闲置 */ }
+}
+function stopLiveStream() { if (liveSource) { try { liveSource.close() } catch (e) { /* noop */ } liveSource = null } }
+
 onMounted(() => {
   document.title = '杉汐 | 公司目标'
   loadData()
@@ -1977,6 +2145,7 @@ onMounted(() => {
   loadMarket()
   rebuildOfficePeople()
   startOfficeWalk()
+  startLiveStream()
   // 2026-08-09 修复：防重入——后端重启间隙请求会挂 8s（api 超时），3s 轮询若叠加上一轮挂起请求会耗尽连接
   timer = setInterval(() => {
     if (polling) return
@@ -1984,10 +2153,39 @@ onMounted(() => {
     Promise.allSettled([loadData({ quiet: true }), loadApprovals(), loadMeetings(), loadIterate(), loadDirective(), loadReviews(), loadFinance(), loadMarket()]).finally(() => { polling = false })
   }, 3000)
 })
-onUnmounted(() => { clearInterval(timer); stopOfficeWalk() })
+onUnmounted(() => { clearInterval(timer); stopOfficeWalk(); stopLiveStream() })
 </script>
 
 <style scoped>
+/* ===== 生产大屏（LIVE SCREEN）===== */
+.live-screen { margin: 0 24px 20px; border: 1px solid var(--line, #dce3de); border-radius: 14px; background: #fff; overflow: hidden; }
+.live-screen.idle { opacity: .85; }
+.live-screen-head { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line, #dce3de); background: #f7faf8; }
+.live-screen-eyebrow { display: inline-flex; align-items: center; gap: 7px; font: 800 10px/1 monospace; letter-spacing: .14em; color: #16824f; white-space: nowrap; }
+.live-screen-eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: #16a34a; animation: live-pulse 1.6s infinite; }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.live-screen-stages { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+.live-screen-stages span { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line, #dce3de); font-size: 10px; font-weight: 700; color: #97a19b; background: #fff; }
+.live-screen-stages span.done { color: #16824f; border-color: #bfe3cf; background: #f0faf4; }
+.live-screen-stages span.on { color: #fff; border-color: #17291f; background: #17291f; }
+.live-screen-version { font: 800 11px/1 monospace; color: #b76f92; border: 1px solid #e6cfdb; border-radius: 6px; padding: 4px 8px; background: #faf5f8; }
+.live-screen-grid { display: grid; grid-template-columns: 1.25fr 1fr; min-height: 380px; }
+.live-screen-proto { border-right: 1px solid var(--line, #dce3de); background: #101827; position: relative; min-height: 380px; }
+.live-screen-proto iframe { display: block; width: 100%; height: 100%; min-height: 380px; border: 0; background: #fff; }
+.live-screen-feed { max-height: 480px; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.live-screen-wait { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #647069; font-size: 12px; }
+.live-screen-feed .live-screen-wait { position: static; padding: 60px 0; }
+.live-feed-block { border: 1px solid var(--line, #dce3de); border-radius: 10px; background: #fbfdfb; overflow: hidden; }
+.live-feed-block.cur { border-color: #bfe3cf; }
+.live-feed-head { display: flex; align-items: center; gap: 8px; padding: 7px 11px; border-bottom: 1px dashed var(--line, #dce3de); font-size: 10px; color: #647069; }
+.live-feed-head b { color: #17291f; font-size: 11px; }
+.live-feed-head span { color: #16824f; font-weight: 700; }
+.live-feed-head em { margin-left: auto; font-style: normal; font-family: monospace; color: #97a19b; }
+.live-feed-block pre { margin: 0; padding: 10px 12px; font: 11px/1.7 'Cascadia Code', Consolas, monospace; white-space: pre-wrap; word-break: break-word; color: #2c3831; max-height: 200px; overflow-y: auto; }
+.live-feed-block.cur pre::after { content: '▍'; color: #16a34a; animation: live-caret 1s steps(1) infinite; }
+@keyframes live-caret { 50% { opacity: 0; } }
+@media (max-width: 1100px) { .live-screen-grid { grid-template-columns: 1fr; } .live-screen-proto { border-right: 0; border-bottom: 1px solid var(--line, #dce3de); } }
+
 .company-view {
   --ink: #17201c;
   --muted: #647069;
@@ -2680,8 +2878,10 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .project-deliveries > button:hover { color: #176b47; }
 .project-deliveries code { overflow: hidden; color: #526158; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .project-deliveries em { color: #16824f; font-size: 8px; font-style: normal; text-align: right; }
-.project-actions { display: grid; grid-template-columns: .75fr 1.25fr; gap: 7px; margin-top: auto; }
-.project-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; border-radius: 9px; font-size: 10px; font-weight: 800; cursor: pointer; }
+.project-actions { display: grid; grid-template-columns: 1fr .75fr 1.25fr; gap: 7px; margin-top: auto; }
+.project-actions button, .project-actions a.package-project { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; border-radius: 9px; font-size: 10px; font-weight: 800; cursor: pointer; text-decoration: none; }
+.package-project { border: 1px solid #dbe1dd; color: #17291f; background: #f3f5f2; }
+.package-project:hover { border-color: #17291f; }
 .reject-project { border: 1px solid #dbe1dd; color: #657169; background: #fff; }
 .approve-project { border: 1px solid #17291f; color: #fff; background: #17291f; }
 .approve-project:hover { background: #214431; }

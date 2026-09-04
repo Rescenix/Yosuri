@@ -177,9 +177,6 @@ func TestKeyedFreeProviderCatalog(t *testing.T) {
 		keyEnv   string
 		endpoint string
 	}{
-		"free_google_gemini_2_5_flash":      {"Google AI Studio", "gemini-2.5-flash", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai"},
-		"free_groq_llama_3_3_70b":           {"Groq Cloud", "llama-3.3-70b-versatile", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
-		"free_groq_qwen3_32b":               {"Groq Cloud", "qwen/qwen3-32b", "GROQ_API_KEY", "https://api.groq.com/openai/v1"},
 		"free_openrouter_router":            {"OpenRouter", "openrouter/free", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
 		"free_openrouter_ox_alpha":          {"OpenRouter", "stealth/ox-alpha", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
 		"free_bai_deepseek_v4_flash":        {"B.AI", "deepseek-v4-flash", "BAI_API_KEY", "https://api.b.ai/v1"},

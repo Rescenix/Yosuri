@@ -47,6 +47,11 @@ type SessionStore struct {
 	recentIndex []string
 	updatedAt   map[string]time.Time
 
+	// ── recall 倒排索引（纯内存，BM25）──
+	// 写路径增量维护（Append/UpsertWorkflowPair/Fork/Delete），loadFromFile 全量重建。
+	// 只存 token→会话统计不存原文，崩溃重启由消息重建，与 recentIndex 同一生存策略。
+	searchIx *SessionSearchIndex
+
 	fileMu sync.Mutex // 串行化本地文件写入，避免并发重写互相踩踏
 }
 
@@ -150,6 +155,7 @@ func NewSessionStore(domain string) *SessionStore {
 		forkMeta:            make(map[string]forkInfo),
 		sessionTitles:       make(map[string]string),
 		updatedAt:           make(map[string]time.Time),
+		searchIx:            newSessionSearchIndex(),
 		domain:              domain,
 		path:                sessionsFilePath(domain),
 	}
@@ -295,6 +301,13 @@ func (s *SessionStore) loadFromFile() error {
 	}
 	// 加载完重建最近对话索引（ZSET：sessionID → 最后消息时间，降序）
 	s.rebuildRecentIndex()
+	// 重建 recall 倒排索引（BM25）：全量灌一遍，之后写路径增量维护
+	if s.searchIx == nil {
+		s.searchIx = newSessionSearchIndex()
+	}
+	for sid, msgs := range s.sessions {
+		s.searchIx.addDoc(sid, msgs)
+	}
 	return nil
 }
 
@@ -403,6 +416,9 @@ func (s *SessionStore) Append(sessionID string, msg DSMessage) {
 	s.sessions[sessionID] = append(s.sessions[sessionID], msg)
 	// 最近对话索引：这条消息是新的最后活动
 	s.touchRecent(sessionID, msg.Timestamp)
+	// recall 倒排索引：增量灌这条消息（addDoc 全量替换该会话，消息量小可接受；
+	// 若以后会话上千条消息再换纯增量 append）
+	s.searchIx.addDoc(sessionID, s.sessions[sessionID])
 	s.mu.Unlock()
 
 	if err := s.persistAll(); err != nil {
@@ -463,6 +479,8 @@ func (s *SessionStore) UpsertWorkflowPair(sessionID, workflowID string, user, as
 	s.sessions[sessionID] = filtered
 	// 最近对话索引：工作流收尾即最后活动
 	s.touchRecent(sessionID, now)
+	// recall 倒排索引：工作流对子替换后重灌该会话
+	s.searchIx.addDoc(sessionID, filtered)
 	s.mu.Unlock()
 
 	// 工作流已经进入终态，停止接口会等待这里完成后再返回；同步落盘确保用户随后
@@ -521,6 +539,8 @@ func (s *SessionStore) Fork(parentID string, keep int) (string, bool) {
 	}
 	// 最近对话索引：新分支立即进入索引（时间 = 分叉时刻，最新）
 	s.touchRecent(newID, time.Now())
+	// recall 倒排索引：分支内容 = 拷贝的前缀，一并灌进索引
+	s.searchIx.addDoc(newID, copied)
 	s.mu.Unlock()
 
 	// 同步落盘（不像 Append 起 goroutine）：分叉正是"原分支得以保全"这个承诺
@@ -542,6 +562,8 @@ func (s *SessionStore) Delete(sessionID string) {
 	delete(s.forkMeta, sessionID)
 	// 最近对话索引：删除即移除
 	s.removeRecent(sessionID)
+	// recall 倒排索引：删除即摘除
+	s.searchIx.removeDoc(sessionID)
 	for childID, fm := range s.forkMeta {
 		if fm.ParentID == sessionID {
 			// 只清掉父指针（ParentID 空即为根），ForkIndex 要留着：
@@ -680,6 +702,125 @@ type SearchResult struct {
 	Role      string    `json:"role"`
 	Timestamp time.Time `json:"timestamp"`
 	Model     string    `json:"model,omitempty"`
+}
+
+// SessionSearchHit 一个命中会话（recall 前端展示用）：
+// 按会话聚合的搜索结果，含会话信息 + 命中消息片段列表。
+type SessionSearchHit struct {
+	SessionID    string         `json:"session_id"`
+	Title        string         `json:"title"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	MessageCount int            `json:"message_count"`
+	Hits         []SearchResult `json:"hits"` // 命中的消息片段，最多 3 条
+}
+
+// SearchSessionsBySession 搜索全部会话并按会话聚合返回命中会话。
+// 走内存倒排索引（BM25 打分）：中文 bigram 分词，搜「鉴权」命中「鉴权方案」，
+// 相关度降序。O(命中) 复杂度，不扫全量消息。每会话最多 3 条命中片段；
+// limit 限制返回的会话数。
+func (s *SessionStore) SearchSessionsBySession(query string, limit int) []SessionSearchHit {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// BM25 打分出候选会话（相关度降序）
+	scores := s.searchIx.search(q)
+	if len(scores) == 0 {
+		return make([]SessionSearchHit, 0)
+	}
+	type scored struct {
+		sid   string
+		score float64
+	}
+	cands := make([]scored, 0, len(scores))
+	for sid, sc := range scores {
+		if msgs := s.sessions[sid]; len(msgs) == 0 {
+			continue
+		}
+		cands = append(cands, scored{sid, sc})
+	}
+	sort.Slice(cands, func(i, j int) bool { return cands[i].score > cands[j].score })
+
+	// 排序后回查原文取片段。优先用查询原句做字面定位；
+	// bigram 召回（原句不连续出现）时退回最长命中词元定位。
+	qLower := strings.ToLower(q)
+	out := make([]SessionSearchHit, 0, limit)
+	for _, cd := range cands {
+		if len(out) >= limit {
+			break
+		}
+		sid := cd.sid
+		msgs := s.sessions[sid]
+		title := s.sessionTitleLocked(sid)
+		if len([]rune(title)) > 40 {
+			title = string([]rune(title)[:40]) + "…"
+		}
+		hit := SessionSearchHit{
+			SessionID:    sid,
+			Title:        title,
+			UpdatedAt:    s.updatedAt[sid],
+			MessageCount: len(msgs),
+		}
+		// 该会话的片段定位词：优先查询原句；原句不连续出现（bigram 召回）
+		// 时退回查询分词里最长的、在该会话原文里真实命中的词元。
+		matchQ := qLower
+		if !containsAllText(msgs, matchQ) {
+			for _, t := range tokenize(q) {
+				if len([]rune(t)) >= 2 && containsAllText(msgs, t) {
+					matchQ = t
+					break
+				}
+			}
+		}
+		for _, msg := range msgs {
+			content := msg.Content
+			if content == "" || !strings.Contains(strings.ToLower(content), matchQ) {
+				continue
+			}
+			idx := strings.Index(strings.ToLower(content), matchQ)
+			start := idx - 60
+			if start < 0 {
+				start = 0
+			}
+			end := idx + len(q) + 60
+			if end > len(content) {
+				end = len(content)
+			}
+			snippet := content[start:end]
+			if start > 0 {
+				snippet = "…" + snippet
+			}
+			if end < len(content) {
+				snippet = snippet + "…"
+			}
+			hit.Hits = append(hit.Hits, SearchResult{
+				SessionID: sid,
+				Title:     title,
+				Content:   snippet,
+				Role:      msg.Role,
+				Timestamp: msg.Timestamp,
+				Model:     msg.Model,
+			})
+			if len(hit.Hits) >= 3 {
+				break
+			}
+		}
+		if len(hit.Hits) == 0 {
+			continue
+		}
+		out = append(out, hit)
+	}
+	return out
 }
 
 // sessionTitleLocked 返回会话标题（调用方需持有读锁）。

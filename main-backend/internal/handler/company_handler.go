@@ -869,6 +869,7 @@ func startCompanyDirectiveDelivery(directive, model string) companyDirectiveRun 
 		projectName := deliveryProjectName(directive)
 		projectDir, buildErr := deliveryBuildProject(projectName, directive)
 		if buildErr != nil {
+			companyLivePublish(companyLiveEvent{Kind: "error", Text: "生产失败: " + buildErr.Error(), Project: projectName})
 			companyDirectiveRunMu.Lock()
 			saveCompanyDirectiveRun(companyDirectiveRun{Directive: directive, Model: model, Status: "failed", Error: "生产失败: " + buildErr.Error()})
 			companyDirectiveRunMu.Unlock()
