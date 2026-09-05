@@ -4,7 +4,7 @@
 import { reactive, watch } from 'vue'
 
 export const STREAM_FADE_DEFAULTS = {
-  enabled: true,   // 总开关
+  enabled: false,  // 总开关（默认关：09-02 watch 修复后渐变真正触发，每个 chunk 淡入=闪；以前流畅是因为它没跑）
   fadeMs: 180,     // 单字符淡入时长（ms）
   staggerMs: 8,    // 相邻字符的级联延迟（ms/字符）
   maxSweepMs: 250, // 单批 chunk 的最大扫过时长（ms）

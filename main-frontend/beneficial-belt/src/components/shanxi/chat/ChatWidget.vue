@@ -3231,16 +3231,14 @@ function streamFadePass() {
   // 只处理带 .streaming 的助手消息（isStreaming=true，即正在 SSE 输出的那条）。
   // 历史消息（切会话加载、刷新恢复）一律不做渐变：既没必要，还会因为整段包 span
   // 让含表格的消息反复触发列宽重算——就是"切会话时表格抖动"的来源。
-  // 主聊天现已走四态机 agentflow（/api/code/workflow），回答渲染在
-  // AgentWorkflowPanel 的 .agent-flow 里：意图块 .flow-intent.markdown-body、
-  // 思考块 .flow-thinking-text。它们没有 .assistant-message.streaming 外层，
-  // 故原选择器命中不了——补充命中，并用 .agent-flow.streaming（running 时挂）
-  // 作为"正在流式"的标识，让瀑布渐变接到主链路。
+  // 注意：主聊天现已走四态机 agentflow（/api/code/workflow），回答渲染在
+  // AgentWorkflowPanel 的 .agent-flow 里。09-02 曾把 .agent-flow.streaming 加入
+  // 选择器让瀑布渐变接到主链路——但那正是"每个 chunk 一闪一闪"的根源
+  // （每 120ms 重包 span 淡入）。主链路恢复无渐变（同 09-02 之前），
+  // 瀑布渐变只对旧的纯文本流式消息生效。
   document.querySelectorAll(
     '.chat-messages .assistant-message.streaming .markdown-body, ' +
-    '.chat-messages .assistant-message.streaming .reasoning-text, ' +
-    '.agent-flow.streaming .flow-intent.markdown-body, ' +
-    '.agent-flow.streaming .flow-thinking-text'
+    '.chat-messages .assistant-message.streaming .reasoning-text'
   ).forEach(applyStreamFade)
   const t1 = performance.now()
   if (t1 - t0 > 16) console.warn('[perf] streamFadePass', (t1 - t0).toFixed(1), 'ms')
