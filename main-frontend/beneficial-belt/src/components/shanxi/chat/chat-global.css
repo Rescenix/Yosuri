@@ -214,9 +214,11 @@
   animation: reasonShimmer 5s linear infinite;
 }
 /* 白光掠过字形的扫描动画（全局，供 reasoning / flow-thinking 共用） */
+/* 对称循环：250% → -250% → 250%，首尾位置一致 = 无缝、不闪 */
 @keyframes reasonShimmer {
   0% { background-position: 250% 0; }
-  100% { background-position: -250% 0; }
+  50% { background-position: -250% 0; }
+  100% { background-position: 250% 0; }
 }
 
 .tool-call-indicator {
