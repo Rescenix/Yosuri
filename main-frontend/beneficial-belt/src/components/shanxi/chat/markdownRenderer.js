@@ -87,15 +87,30 @@ const INVISIBLE_CHARS_RE = new RegExp('[' + [0x200B, 0x00A0, 0x200E, 0x200F].map
 // 撇号问题（$...$ 内含 r' 时 inline 规则不触发）是旧版 markdown-it-katex 的 bug，
 // @neilsustc 分支已根治——枚举测试 p01_apostrophe_inline 验证通过，无需再做占位符保护。
 
+// 缓存：同一段文本不重复 markdown-it 解析（流式输出时同一个块反复重渲染会卡）
+const _mdCache = new Map()
+const _MD_CACHE_MAX = 500
+function cachedRender(text, skipSanitize) {
+  const key = skipSanitize ? text : text + '|s'
+  if (_mdCache.has(key)) return _mdCache.get(key)
+  const raw = md.render(text)
+  const out = skipSanitize ? raw : DOMPurify.sanitize(raw)
+  _mdCache.set(key, out)
+  if (_mdCache.size > _MD_CACHE_MAX) {
+    const first = _mdCache.keys().next().value
+    _mdCache.delete(first)
+  }
+  return out
+}
+
 export function renderMarkdown(text, skipSanitize = false) {
   if (!text) return ''
   text = text.replace(INVISIBLE_CHARS_RE, '')
   text = text.replace(/\\dots/g, '\\ldots')
-  text = text.replace(/(?<!\$)\\implies(?!\$)/g, ' $\\implies$ ')
-  text = text.replace(/(?<!\$)(\\bbox\[[^\]]*\])(?!\$)/g, function (match) { return '$' + match + '$' })
+  text = text.replace(/(?<!\\$)\\implies(?!\\$)/g, ' $\\implies$ ')
+  text = text.replace(/(?<!\\$)(\\bbox\\[[^\\]]*\\])(?!\\$)/g, function (match) { return '$' + match + '$' })
   if (/\\bbox/.test(text)) text = '\\require{bbox}\n' + text
-  const raw = md.render(text)
-  return skipSanitize ? raw : DOMPurify.sanitize(raw)
+  return cachedRender(text, skipSanitize)
 }
 
 // ── mermaid 图表（嵌入聊天正文，不算交付文件）──

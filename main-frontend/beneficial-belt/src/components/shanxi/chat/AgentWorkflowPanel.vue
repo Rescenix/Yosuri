@@ -15,7 +15,7 @@
         v-if="group.type === 'visible'"
         class="flow-intent markdown-body"
         :class="{ 'flow-retry-note': group.retryNote }"
-        v-html="renderMarkdown(group.text, true)"
+        v-html="group.html"
       ></div>
 
       <!-- 单步思考：不收束，直接平铺 -->
@@ -566,8 +566,12 @@ const blockGroups = computed(() => {
         current = null
       }
       if (b.type === 'intent') {
-        // retryNote = 免费模型重试提示（「重新尝试连接神经网络 (n/3)」），小字彩虹扫描样式
-        groups.push({ type: 'visible', text: b.text, retryNote: !!b.retryNote })
+        // 缓存：只在 text 变化时重算 renderMarkdown（流式输出时避免 O(n²) 全量重解析）
+        if (b.text !== b._cachedText) {
+          b._cachedHtml = renderMarkdown(b.text, true)
+          b._cachedText = b.text
+        }
+        groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
       } else if (b.type === 'thinking') {
         // 思考：单步平铺，不收束（推理轨迹全程可见）
         groups.push({ type: 'single-thinking', block: b })
