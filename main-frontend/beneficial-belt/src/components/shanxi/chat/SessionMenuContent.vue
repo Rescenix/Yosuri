@@ -386,13 +386,21 @@
             <button class="smc-profile-close" type="button" aria-label="关闭登录" @click="showUserMenu = false"><Icon icon="mdi:close" width="18" /></button>
           </header>
           <div class="smc-rc-login">
-            <input v-model="rcUser" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.account') : t('login.username')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
-            <input v-model="rcPwd" type="password" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.password') : t('login.passwordHint')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
-            <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? (isZh ? '处理中…' : 'Loading…') : (rcMode === 'login' ? t('login.submit') : t('login.registerSubmit')) }}</button>
+                      <input v-model="rcUser" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.account') : t('login.username')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+                      <input v-model="rcPwd" type="password" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.password') : t('login.passwordHint')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+                      <input v-if="rcMode === 'register'" v-model="rcPwd2" type="password" class="smc-rc-input" :placeholder="t('login.confirmPasswordHint')" @keyup.enter="registerResceneCloud()" />
+                      <div v-if="rcMode === 'login'" class="smc-rc-captcha">
+                        <input v-model="rcCaptchaCode" class="smc-rc-input" style="flex:1" :placeholder="t('login.captcha')" maxlength="4" @keyup.enter="loginResceneCloud()" />
+                        <div class="smc-rc-captcha-img" :title="t('login.captchaRefresh')" @click="loadCaptcha">
+                          <img v-if="rcCaptchaImg" :src="rcCaptchaImg" alt="captcha" />
+                          <span v-else class="smc-rc-captcha-loading">{{ t('login.captchaLoadFail') }}</span>
+                        </div>
+                      </div>
+                      <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? (isZh ? '处理中…' : 'Loading…') : (rcMode === 'login' ? t('login.submit') : t('login.registerSubmit')) }}</button>
             <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
             <div class="smc-rc-hint">
               <template v-if="rcMode === 'login'">{{ t('login.noAccount') }}<a class="smc-rc-link" @click="rcMode = 'register'; rcError = ''">{{ t('login.registerLink') }}</a></template>
-              <template v-else>{{ t('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''">{{ t('login.loginLink') }}</a></template>
+                            <template v-else>{{ t('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; loadCaptcha()">{{ t('login.loginLink') }}</a></template>
             </div>
           </div>
           <div class="smc-login-footer">
@@ -917,9 +925,30 @@ function shareCard() {
 // 开放注册（2026-08-17 用户定稿：邀请码已废弃），注册即签发 JWT 直接登录。
 const rcUser = ref('')
 const rcPwd = ref('')
+const rcPwd2 = ref('')
 const rcLoading = ref(false)
 const rcError = ref('')
 const rcMode = ref('login') // 'login' | 'register'
+// 登录图形验证码（2026-09-05）：拉取图片 + id，登录时带回校验
+const rcCaptchaId = ref('')
+const rcCaptchaCode = ref('')
+const rcCaptchaImg = ref('')
+
+// loadCaptcha 拉取登录验证码（GET /api/auth/captcha → {id, image_base64}）。
+// 打开登录面板和点击图片都会触发；失败显示占位文案，点击可重试。
+async function loadCaptcha() {
+  rcCaptchaImg.value = ''
+  rcCaptchaCode.value = ''
+  try {
+    const res = await fetch('/api/auth/captcha')
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.id || !data.image_base64) throw new Error('bad')
+    rcCaptchaId.value = data.id
+    rcCaptchaImg.value = 'data:image/png;base64,' + data.image_base64
+  } catch (e) {
+    rcCaptchaId.value = ''
+  }
+}
 
 // 登录/注册成功后广播「欢迎回来」：App.vue 顶部轻量横幅监听这个事件来显示，
 // 和更新完成横幅同一套样式/时序（2026-08-20 用户定稿）。用输入框里的用户名即可——
@@ -932,16 +961,25 @@ function announceWelcome(username) {
 async function loginResceneCloud() {
   rcError.value = ''
   if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = t('login.emptyInput'); return }
+  if (!rcCaptchaId.value || !rcCaptchaCode.value.trim()) { rcError.value = t('login.captchaInput'); return }
   rcLoading.value = true
   try {
     const username = rcUser.value.trim()
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password: rcPwd.value, fingerprint: computeHardwareFingerprint() })
+      body: JSON.stringify({
+        username, password: rcPwd.value, fingerprint: computeHardwareFingerprint(),
+        captcha_id: rcCaptchaId.value, captcha_code: rcCaptchaCode.value.trim()
+      })
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.token) { rcError.value = data.error || t('login.fail'); return }
+    if (!res.ok || !data.token) {
+      rcError.value = data.error || t('login.fail')
+      // 验证码一次性：失败后刷新新图，防止复用同一张暴力重试
+      loadCaptcha()
+      return
+    }
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
     announceWelcome(username)
@@ -953,6 +991,7 @@ async function loginResceneCloud() {
 async function registerResceneCloud() {
   rcError.value = ''
   if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = t('login.emptyRegister'); return }
+  if (!rcPwd2.value || rcPwd.value !== rcPwd2.value) { rcError.value = t('login.pwdMismatch'); return }
   rcLoading.value = true
   try {
     const username = rcUser.value.trim()
@@ -966,7 +1005,7 @@ async function registerResceneCloud() {
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
     announceWelcome(username)
-    rcUser.value = ''; rcPwd.value = ''
+    rcUser.value = ''; rcPwd.value = ''; rcPwd2.value = ''
     rcMode.value = 'login'
     showUserMenu.value = false
   } catch (e) { rcError.value = t('login.netError') } finally { rcLoading.value = false }
@@ -1000,6 +1039,7 @@ function openLoginPanel() {
   showUserMenu.value = true
   refreshLoginState()
   userMenuStyle.value = {}
+  loadCaptcha()
 }
 // 打开注册面板（独立入口，注册/登录分开）
 function openRegisterPanel() {
@@ -1809,6 +1849,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   transition: border-color 0.15s ease;
 }
 .smc-rc-input:focus { border-color: var(--app-accent); }
+.smc-rc-captcha { display: flex; gap: 8px; align-items: center; }
+.smc-rc-captcha-img { flex: 0 0 auto; width: 150px; height: 50px; border: 1px solid var(--app-border, #e3e9f2); border-radius: 8px; overflow: hidden; cursor: pointer; background: #fff; display: flex; align-items: center; justify-content: center; }
+.smc-rc-captcha-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.smc-rc-captcha-loading { font-size: 10.5px; color: var(--app-text-faint); text-align: center; line-height: 1.3; padding: 0 2px; }
 .smc-rc-btn {
   width: 100%; height: 42px; margin-top: 2px;
   font-size: 14px; font-weight: 600; font-family: inherit;
@@ -2018,6 +2062,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-rc-login { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
 .smc-rc-input { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid #e3e9f2; border-radius: 8px; font-size: 12.5px; outline: none; background: #fff; }
 .smc-rc-input:focus { border-color: #4f7cff; }
+.smc-rc-captcha { display: flex; gap: 8px; align-items: center; }
+.smc-rc-captcha-img { flex: 0 0 auto; width: 150px; height: 50px; border: 1px solid #e3e9f2; border-radius: 8px; overflow: hidden; cursor: pointer; background: #fff; display: flex; align-items: center; justify-content: center; }
+.smc-rc-captcha-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.smc-rc-captcha-loading { font-size: 10.5px; color: #9aa3b2; text-align: center; line-height: 1.3; padding: 0 2px; }
 .smc-rc-btn { padding: 7px 0; border: 0; border-radius: 8px; background: #4f7cff; color: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; }
 .smc-rc-btn:disabled { opacity: 0.6; }
 .smc-rc-link { color: #4f7cff; cursor: pointer; text-decoration: underline; }

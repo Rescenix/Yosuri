@@ -36,6 +36,10 @@ export function useAgentWorkflow({ messages, onNewMessage, onStreamUpdate, onTit
     let es = null
     let currentFlow = null
     let titleTimer = null
+    // 群聊点名收尾回调：startCodeWorkflow 里按 opts.onDone 赋值，closeStream
+    // 在收尾时读取并置空（防一次收尾被多条路径各调一遍）。放函数作用域是因为
+    // closeStream 与 startCodeWorkflow 是平级函数，闭包必须共享同一变量。
+    let onDone = null
     // 免费模型调用失败自动重试计数（模块级，跨 flow 持久）：flow_error 触发的 resume 会
     // 新建 flow 对象，计数放 flow 上会被清零导致无限循环（永远 1/3）。放这里跨 flow 累计。
     let transientRetryCount = 0
@@ -110,6 +114,8 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             flowState.active = false
             clearAllApprovals() // 流结束清掉残留审批条与倒计时
             onStreamUpdate?.()
+            // 群聊点名收尾：一条流结束就通知编排方（可能点名下一位同事发言）
+            if (onDone) { const fn = onDone; onDone = null; fn() }
         }
 
     // display 可选：{ text, attachments } —— 气泡展示用的"用户实际打的字 + 附件 chip"，
@@ -122,13 +128,24 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             if (!task || flowState.active) return
             flowState.active = true
 
+            // 多 Agent 群聊：这条消息由哪个角色卡发出（agent_id）。
+            // 有 agent 时人设由后端注册表注入，persona query 不再传。
+            const agentId = opts.agentId || ''
+            // 群聊编排：workflow 结束后（成功/失败/停止都会走到 closeStream）
+            // 若 opts.onDone 存在则回调它，由编排方决定是否点名下一位同事。
+            // 不放 promise：closeStream 在若干分支里调用，回调最不容易漏。
+            // 赋值而非声明：onDone 是函数作用域变量，closeStream 才能读到。
+            onDone = typeof opts.onDone === 'function' ? opts.onDone : null
+
             // 捕获用户原始提问（display.text 优先，回退到 task），用于首个 intent 到达时设标题
             // 只在非 resume、且会话标题仍为默认时生效
             const userQuestionForTitle = (!opts.resumeId && (display?.text || task)) ? (display?.text ?? task) : null
             let titleTimer = null
             let titleEmitted = false
 
-            if (!opts.resumeId) {
+            // 群聊点名第 2、3 位同事时，用户气泡已经由第一位插过了，
+            // skipUserBubble 防同一条用户消息在屏幕上重复出现。
+            if (!opts.resumeId && !opts.skipUserBubble) {
                 messages.value.push({
                     id: `afu_${Date.now()}_${msgSeq++}`,
                     sender: 'user',
@@ -142,6 +159,9 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             id: `af_${Date.now()}_${msgSeq++}`,
             kind: 'agentflow',
             sender: 'bot',
+            // 群聊：这条回复属于哪个 Agent（角色卡 id）。空=单 Agent 老链路，
+            // 面板据此显示头像/名牌；刷新后由后端持久化的 message.agent 还原。
+            agentId: agentId,
             status: 'running', // running | completed | failed | stopped
             task,
             // 后端 workflow_start 事件回填的 workflow_id，中途插话（sendSteerMessage）
@@ -182,9 +202,12 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         // 续跑：带 resume=<workflow_id>，并带上当前选中的 model——
                 // 若用户续跑前切了模型，后端尊重前端传参缩短/改用新模型（无缝衔接）；
                 // 不传 model 时后端才回退到检查点里的旧模型（2026-08-28 修「续跑用旧模型」）。
+                // 群聊：agent_id 命中后端角色卡时人设由注册表注入，persona 参数不再传
+                const agentQs = agentId ? `&agent_id=${encodeURIComponent(agentId)}` : ''
+                const personaQs = agentId ? '' : `&persona=${encodeURIComponent(_personaParam())}`
                 const url = opts.resumeId
                     ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`
-                    : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}&persona=${encodeURIComponent(_personaParam())}`
+                    : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}${personaQs}${agentQs}`
         // 人设随每次新工作流发送（续跑分支不传：检查点 msgs[0] 已含当初完整系统提示词）。
         es = new EventSource(url)
 

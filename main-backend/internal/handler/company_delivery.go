@@ -716,6 +716,17 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 		return "", err
 	}
 	companyLiveArtifact(projectName, "runnable", "coder", "output-app.html", "final")
+	// 真机质检：用受管浏览器把产品真正打开，实测渲染/交互 + 免费识图评审视觉；
+	// 不合格则带缺陷清单返修一轮。返修会改写 output-app.html，故 prevContent 与
+	// 后续发布回执 SHA256 都以质检后的最终版为准。质检能力缺失时降级放行不卡死。
+	companyLiveStage(projectName, "qa", "qa", "qa-01", "质检员正在真机打开产品实测（渲染 / 交互 / 视觉）")
+	finalEntry, qaReport := companyQAAudit(projectDir, projectName, brief, "output-app.html", plan.MultiFile, upstream)
+	if strings.TrimSpace(finalEntry) != "" {
+		runnableHTML = finalEntry
+	}
+	if qaFile := saveCompanyQAReport(projectDir, qaReport); qaFile != "" {
+		companyLiveArtifact(projectName, "qa", "qa", qaFile, "")
+	}
 	prevContent = runnableHTML // 接力链：可运行程序交给路演环节
 	appendCompanyRelay(companyRelayEvent{From: "coder-03", To: "promoter-18", Stage: "code", Artifact: "output-app.html", Status: "done", DoneAt: time.Now().Format(time.RFC3339)})
 

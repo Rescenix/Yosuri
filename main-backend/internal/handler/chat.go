@@ -35,6 +35,10 @@ type DSMessage struct {
 	// 只填 assistant 消息；无值（旧数据/取不到）时为 0，统计侧回退字符估算。
 	// json:"-"：不发给模型，也不进前端消息体，仅本地落盘后供 reportStatsAsync 使用。
 	TokenUsage int `json:"-"`
+	// Agent 多 Agent 群聊：这条消息是哪个 Agent 说的（角色卡 id）。
+	// json:"-"：不进上游请求体；落盘走 persistedMessage.Agent，装配历史时
+	// 由 buildChatMessages 转成「【某某 说】」前缀，让每个 Agent 分得清谁说的。
+	Agent string `json:"-"`
 }
 
 // FlowBlock 与前端 agentflow 消息的 blocks 元素一一对应（见 useAgentWorkflow.js），

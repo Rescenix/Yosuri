@@ -145,13 +145,15 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"height":   {Type: "integer", Description: "高度，默认 1024，范围 256-1536"},
 			"seed":     {Type: "integer", Description: "可选随机种子；同 seed + 同 prompt 出图稳定，用于保持角色一致"},
 		}, []string{"prompt"}),
-		nativeTool("memory_search", "搜索本地长期记忆中的相关事实。", map[string]core.ToolProperty{
+		nativeTool("memory_search", "搜索长期记忆中的相关事实。默认同时查「通用记忆」（所有 Agent 共享）和你自己的「私有记忆」，结果会标明来源。", map[string]core.ToolProperty{
 			"query": {Type: "string", Description: "检索问题或关键词"},
+			"scope": {Type: "string", Description: "可选：shared 只查通用记忆 / private 只查我的私有记忆 / 不传=两层都查"},
 		}, []string{"query"}),
-		nativeTool("memory_append", "向本地长期记忆写入一条可复用事实；SwiftNet 会自动做相似项防重。", map[string]core.ToolProperty{
+		nativeTool("memory_append", "向长期记忆写入一条可复用事实；会自动做相似项防重。scope=shared 写通用记忆（用户层面的事实，所有 Agent 共享），scope=private 写我自己的私有记忆（只有我这个 Agent 记得）。", map[string]core.ToolProperty{
 			"text":     {Type: "string", Description: "要记住的事实"},
 			"cluster":  {Type: "string", Description: "分类，如 UserBase/CodeWork/Decisions"},
 			"keywords": {Type: "string", Description: "可选同义关键词，用 / 分隔"},
+			"scope":    {Type: "string", Description: "shared（默认）=通用记忆；private=只进我的私有记忆"},
 		}, []string{"text"}),
 		nativeTool("memory_pin", "写入或更新一条每轮无条件注入的常驻记忆。", map[string]core.ToolProperty{
 			"pid":     {Type: "string", Description: "稳定编号，如 P03；同编号会覆盖"},
@@ -272,7 +274,7 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callNativeVideoGenerate(ctx, argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
 		"workdir_read", "workdir_write", "workdir_append":
-		return callNativeMemoryTool(name, argsJSON)
+		return callNativeMemoryTool(ctx, name, argsJSON)
 	case "knowledge_search", "knowledge_list":
 		return callNativeKnowledgeTool(name, argsJSON)
 	case "generate_office":

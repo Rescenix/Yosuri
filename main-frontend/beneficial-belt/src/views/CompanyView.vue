@@ -199,6 +199,31 @@
           </div>
           <p v-if="!project.ready" class="project-gap"><Icon icon="mdi:alert-circle-outline" width="15" /> 还缺 {{ project.missingStages.map(stageLabel).join('、') }}，未达到项目审批条件。</p>
 
+          <!-- 真机质检证据：质检员真的打开过这个产品，不是只看文件存在 -->
+          <div v-if="project.qa" class="project-qa" :class="{ fail: !project.qa.passed }">
+            <span class="qa-badge">
+              <Icon :icon="project.qa.passed ? 'mdi:shield-check-outline' : 'mdi:shield-alert-outline'" width="15" />
+              {{ project.qa.passed ? '真机质检通过' : '质检未通过' }}
+              <em v-if="project.qa.repaired">· 已返修一轮</em>
+            </span>
+            <span class="qa-metrics">
+                          <b v-if="project.qa.visualScore >= 0">视觉 {{ project.qa.visualScore }}/10</b>
+                          <b>{{ project.qa.visibleElements }} 个可见元素</b>
+                          <b v-if="project.qa.buttons && project.qa.interactMeasured">交互 {{ project.qa.clicked }}/{{ project.qa.buttons }} 有响应</b>
+                          <b v-if="project.qa.journeyMeasured">{{ project.qa.journeyPassed ? '数据持久化 ✓' : '刷新丢数据 ✗' }}</b>
+                          <b v-if="project.qa.blank">白屏</b>
+                          <b v-if="project.qa.topicHits <= 1">指令覆盖 {{ project.qa.topicHits }}（离题）</b>
+                        </span>
+            <p v-if="project.qa.summary" class="qa-summary">{{ project.qa.summary }}</p>
+            <ul v-if="project.qa.issues && project.qa.issues.length" class="qa-issues">
+                          <li v-for="(iss, i) in project.qa.issues.slice(0, 3)" :key="i">{{ iss }}</li>
+                        </ul>
+                        <div v-if="project.qa.missingFeatures && project.qa.missingFeatures.length" class="qa-missing">
+                          <b>缺失核心功能：</b>
+                          <ul><li v-for="(m, i) in project.qa.missingFeatures" :key="i">❌ {{ m }}</li></ul>
+                        </div>
+          </div>
+
           <div class="project-agents">
             <span v-for="agent in project.agents.slice(0, 6)" :key="agent">{{ agent }}</span>
             <span v-if="project.agents.length > 6">+{{ project.agents.length - 6 }}</span>
@@ -944,7 +969,7 @@ const allApprovalProjects = computed(() => {
     const rawName = String(item.project || String(item.file || '').replace(/^project\//, ''))
     const title = String(item.title || rawName.replace(/^\d+[-_]/, '')) || rawName || '未命名项目'
     const key = title.toLocaleLowerCase()
-    if (!grouped.has(key)) grouped.set(key, { key, title, project: rawName, items: [], agents: [], roles: [], score: 0, sourceCount: 0, artifacts: [], stageEvidence: {}, preview: '', previewKind: '', previewFile: null, packageUrl: item.packageUrl || '' })
+    if (!grouped.has(key)) grouped.set(key, { key, title, project: rawName, items: [], agents: [], roles: [], score: 0, sourceCount: 0, artifacts: [], stageEvidence: {}, preview: '', previewKind: '', previewFile: null, packageUrl: item.packageUrl || '', qa: item.qa && item.qa.checked ? item.qa : null })
     const project = grouped.get(key)
     project.items.push(item)
     for (const name of (item.agents || [])) if (!project.agents.includes(name)) project.agents.push(name)
@@ -2058,10 +2083,10 @@ let liveSource = null
 const liveStageNames = {
   kickoff: '立项', meeting: '会议', mvp: '最小原型', requirements: '需求', research: '调研报告',
   data: '研究数据', ui: 'UI 设计', docs: '文档', code: '编码', runnable: '终版程序',
-  ppt: '路演', pv: '宣传片', promotion: '发布',
+  qa: '真机质检', ppt: '路演', pv: '宣传片', promotion: '发布',
 }
 function liveStageIcon(stage) {
-  return ({ kickoff: 'mdi:flag-outline', meeting: 'mdi:account-group-outline', mvp: 'mdi:rocket-launch-outline', requirements: 'mdi:clipboard-text-outline', research: 'mdi:microscope', data: 'mdi:microsoft-excel', ui: 'mdi:palette-outline', docs: 'mdi:file-document-outline', code: 'mdi:code-tags', runnable: 'mdi:play-box-outline', ppt: 'mdi:presentation', pv: 'mdi:movie-open-play-outline', promotion: 'mdi:bullhorn-outline' })[stage] || 'mdi:robot-outline'
+  return ({ kickoff: 'mdi:flag-outline', meeting: 'mdi:account-group-outline', mvp: 'mdi:rocket-launch-outline', requirements: 'mdi:clipboard-text-outline', research: 'mdi:microscope', data: 'mdi:microsoft-excel', ui: 'mdi:palette-outline', docs: 'mdi:file-document-outline', code: 'mdi:code-tags', runnable: 'mdi:play-box-outline', qa: 'mdi:shield-check-outline', ppt: 'mdi:presentation', pv: 'mdi:movie-open-play-outline', promotion: 'mdi:bullhorn-outline' })[stage] || 'mdi:robot-outline'
 }
 const liveActive = computed(() => liveEvents.value.some(e => e.kind === 'stage' || e.kind === 'delta' || e.kind === 'iteration'))
 const liveStageChips = computed(() => {
@@ -2869,6 +2894,17 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .stage-node.done small { color: #176b47; font-weight: 800; }
 .stage-node.missing { cursor: default; }
 .project-gap { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; color: #98621d; background: #fff7e8; font-size: 9px; line-height: 1.45; }
+/* 真机质检证据条：与审批卡同密度，亮蓝白 */
+.project-qa { margin: 0 0 12px; padding: 9px 11px; border-radius: 9px; border: 1px solid #d8e6ff; background: #f5f8ff; }
+.project-qa.fail { border-color: #ffd6d6; background: #fff5f5; }
+.qa-badge { display: inline-flex; align-items: center; gap: 5px; font-weight: 800; font-size: 10px; color: #1950BE; }
+.project-qa.fail .qa-badge { color: #c0392b; }
+.qa-badge em { font-style: normal; font-weight: 700; color: #7b8aa8; }
+.qa-metrics { display: inline-flex; gap: 8px; margin-left: 10px; flex-wrap: wrap; vertical-align: middle; }
+.qa-metrics b { font-size: 9px; font-weight: 700; color: #425048; }
+.qa-summary { margin: 6px 0 0; font-size: 9px; line-height: 1.5; color: #334155; }
+.qa-issues { margin: 6px 0 0; padding-left: 15px; }
+.qa-issues li { font-size: 9px; line-height: 1.5; color: #98621d; }
 .project-agents { display: flex; gap: 5px; flex-wrap: wrap; margin: 14px 0; }
 .project-agents span { padding: 4px 7px; border-radius: 6px; color: #425048; background: #edf1ee; font: 700 8px ui-monospace,monospace; }
 .project-deliveries { margin-bottom: 16px; border-top: 1px solid #e6eae7; border-bottom: 1px solid #e6eae7; }

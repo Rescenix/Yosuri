@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -175,7 +176,7 @@ func HandleFollowUps(c *gin.Context) {
 	b.WriteString(ctx.String())
 	b.WriteString("\n要求：\n")
 	b.WriteString("- 每条建议不超过 15 字\n")
-	b.WriteString("- 用问句或祈使用户直接行动\n")
+	b.WriteString("- 必须是用户视角：第一人称祈使句，像用户自己打的字（比如「帮我分析这个文件」「继续上次的重构」），绝不能用「我可以帮你」「让我来」这种 AI 视角\n")
 	b.WriteString("- 基于最近对话的上下文，不要泛泛而谈\n")
 	b.WriteString("- 只输出 JSON 数组：[{\"label\":\"...\"},{\"label\":\"...\"},{\"label\":\"...\"}]\n")
 
@@ -223,7 +224,16 @@ func parseFollowUps(raw string) []followupItem {
 			}
 		}
 	}
-	return items
+	// 视角硬过滤：卡片文字会以用户身份发出，AI 口吻的直接丢
+	filtered := items[:0]
+	for _, it := range items {
+		if isAiVoiceSuggestion(it.Label) {
+			log.Printf("ℹ️ 首页 follow-up 非用户视角，已丢弃: %q", it.Label)
+			continue
+		}
+		filtered = append(filtered, it)
+	}
+	return filtered
 }
 
 // fallbackFollowUps 兜底建议（基于最近对话标题直接拼）。

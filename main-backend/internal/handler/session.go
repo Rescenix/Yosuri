@@ -79,6 +79,9 @@ type persistedMessage struct {
 	Status string `json:"status,omitempty"`
 	// WorkflowID 用于失败/停止后的续跑幂等更新；老存档没有时为空，继续按追加语义处理。
 	WorkflowID string `json:"workflow_id,omitempty"`
+	// Agent 多 Agent 群聊：这条消息由哪个 Agent 发出（角色卡 id）。
+	// omitempty：单 Agent 老会话根本不产生这个字段，存档格式不变。
+	Agent string `json:"agent,omitempty"`
 }
 
 // sessionRecord 是单个会话在本地文件里的完整存储形态：
@@ -111,6 +114,7 @@ func toPersistedMessages(msgs []DSMessage) []persistedMessage {
 			Blocks:           m.Blocks,
 			Status:           m.Status,
 			WorkflowID:       m.WorkflowID,
+			Agent:            m.Agent,
 		}
 	}
 	return out
@@ -130,6 +134,7 @@ func fromPersistedMessages(msgs []persistedMessage) []DSMessage {
 			Blocks:           m.Blocks,
 			Status:           m.Status,
 			WorkflowID:       m.WorkflowID,
+			Agent:            m.Agent,
 		}
 	}
 	return out

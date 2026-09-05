@@ -353,6 +353,15 @@ func norm(s string) []string {
 	return toks
 }
 
+// Norm 导出版 norm，供 agent_memory.go 等兄弟文件复用同一套中文 bigram 分词。
+func Norm(s string) []string { return norm(s) }
+
+// Bigrams 导出版 bigrams。
+func Bigrams(s string) map[[2]string]bool { return bigrams(s) }
+
+// Overlap 导出版 overlap（contain 优先的相似度打分）。
+func Overlap(a, b string) float64 { return overlap(a, b) }
+
 func bigrams(s string) map[[2]string]bool {
 	t := norm(s)
 	out := map[[2]string]bool{}

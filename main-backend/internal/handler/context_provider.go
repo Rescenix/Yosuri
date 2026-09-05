@@ -69,6 +69,19 @@ type roundState struct {
 // system/subagent/工具索引在进程内基本不动，skill 每完成一个任务就可能变，
 // memory 每写一次记忆就变，把后两者放在最后，前面那一大段的缓存才活得下来。
 func newWorkflowContextProvider(tasks ...string) *contextProvider {
+	return newWorkflowContextProviderFor("", tasks...)
+}
+
+// newWorkflowContextProviderFor 按 agent 装配上下文。agentID 为空时行为与
+// 改造前完全一致（只有通用记忆）——单 Agent 的老链路零影响。
+//
+// agentID 非空时额外挂上该 Agent 的私有记忆：
+//   - 私有记忆索引（无条件注入，等价通用 index）
+//   - 私有记忆联想召回（按任务 bigram 命中，与通用召回同一预算策略）
+//
+// 通用记忆（~/rescene_data/memory/）照旧注入：所有 Agent 共享同一份用户画像、
+// 偏好、项目笔记；私有记忆是「这个 Agent 自己经历出来的东西」。
+func newWorkflowContextProviderFor(agentID string, tasks ...string) *contextProvider {
 	memorySection := ""
 	inject := memorydir.ReadIndex()
 	if inject != "" {
@@ -139,6 +152,27 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 		}
 	}
 
+	// ── 该 Agent 的私有记忆（agentID 为空则整段跳过）──
+	// AgentReadWithLinks 的返回值本身已带私有索引，所以命中时只注入召回段，
+	// 未命中（空串）才退回只注入索引，避免同一份索引出现两遍。
+	agentID = memorydir.SanitizeAgentID(agentID)
+	agentMemorySection := ""
+	if agentID != "" {
+		maxFiles := 3
+		if level >= 5 {
+			maxFiles = 5
+		}
+		recall := ""
+		if task != "" {
+			recall = memorydir.AgentReadWithLinks(agentID, task, maxFiles)
+		}
+		if strings.TrimSpace(recall) != "" {
+			agentMemorySection = "\n\n# 我的私有记忆（只属于我这个 Agent，按任务联想读取）\n" + strings.TrimSpace(recall)
+		} else if m := memorydir.AgentReadIndex(agentID); m != "" {
+			agentMemorySection = "\n\n# 我的私有记忆索引（只属于我这个 Agent）\n" + m
+		}
+	}
+
 	return &contextProvider{
 		activated: map[string]bool{},
 		sections: []contextSection{
@@ -165,6 +199,8 @@ func newWorkflowContextProvider(tasks ...string) *contextProvider {
 			})},
 			{key: "memory", content: memorySection},   // 尾部记忆索引（agent 按需反向链接展开）
 			{key: "memory", content: knowledgeSection}, // 外挂知识库 RAG：检索召回相关片段
+			// 私有记忆：只属于当前 Agent 的经历（agentID 为空时是空串，不占 token）
+			{key: "memory", content: agentMemorySection},
 			// 自定义指令归到 system 桶（同属"给模型的指令"，且只有十几 tok，
 			// 单开一个桶不值得改前端契约）。原来它根本没进 breakdown，是个漏登记。
 			{key: "system", content: userInstructionsPrompt()},

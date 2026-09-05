@@ -384,6 +384,15 @@
                     <!-- 必须包一层竖向容器：.message-row 是 flex-direction:row，
                          面板和工具栏平铺进去的话工具栏会变成"面板右边被拉满高的一竖条" -->
                     <div v-else-if="item.kind === 'agentflow'" class="agentflow-wrap">
+                      <!-- 群聊名牌：这条回复是哪个 Agent 说的。单 Agent（无 agentId）不渲染，
+                           界面与改造前一致。头像走角色卡，没设头像时用名牌色 + 首字。 -->
+                      <div v-if="flowAgent(item)" class="flow-agent-badge">
+                        <img v-if="flowAgent(item).avatar" :src="flowAgent(item).avatar" class="flow-agent-avatar" alt="" />
+                        <span v-else class="flow-agent-avatar flow-agent-avatar-text" :style="{ background: flowAgent(item).color || '#8b5e7c' }">
+                          {{ (flowAgent(item).name || '?').charAt(0) }}
+                        </span>
+                        <span class="flow-agent-name">{{ flowAgent(item).name }}</span>
+                      </div>
                       <AgentWorkflowPanel :id="'group-' + item.id" :flow="item" />
                       <!-- 复制栏：以前只挂在纯文本 assistant 气泡上，而现在所有回复
                            都走四态机(agentflow)，等于这一栏彻底消失了。跑完再显示，跑的过程中
@@ -394,7 +403,10 @@
                         </button>
                         <span class="tools-spacer"></span>
                         <button class="tool-btn speak-btn" @click="speakMessage(item, flowFinalText(item))" :title="speakState(item.id)" :class="{ 'speaking': speakingId === item.id, 'loading': loadingId === item.id }">
-                          <Icon :icon="speakIcon(item.id)" width="18" :class="{ 'spin': loadingId === item.id }" />
+                          <svg class="speak-btn-icon" :class="{ 'spin': loadingId === item.id }" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                            <circle cx="9" cy="9" r="9" class="speak-btn-disc" />
+                            <path class="speak-wave" d="M2.6 10.4 C4.4 5.8, 6.6 5.8, 8 9 C9.4 12.2, 11.6 12.2, 13 9 C13.8 7.2, 14.8 6.6, 15.4 6.9" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -417,7 +429,10 @@
                         </button>
                         <span class="tools-spacer"></span>
                         <button class="tool-btn speak-btn" @click="speakMessage(item, item.content)" :title="speakState(item.id)" :class="{ 'speaking': speakingId === item.id, 'loading': loadingId === item.id }">
-                          <Icon :icon="speakIcon(item.id)" width="18" :class="{ 'spin': loadingId === item.id }" />
+                          <svg class="speak-btn-icon" :class="{ 'spin': loadingId === item.id }" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                            <circle cx="9" cy="9" r="9" class="speak-btn-disc" />
+                            <path class="speak-wave" d="M2.6 10.4 C4.4 5.8, 6.6 5.8, 8 9 C9.4 12.2, 11.6 12.2, 13 9 C13.8 7.2, 14.8 6.6, 15.4 6.9" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -433,88 +448,102 @@
 
             <div v-if="copiedVisible" class="copy-toast">✓ 已复制</div>
 
-            <div class="chat-input-area">
-              <!-- 回到底部：紧贴在输入框卡片正上方 -->
-              <button v-show="showScrollButton" class="scroll-to-bottom-btn" :class="{ 'wf-running': flowState.active }" @click="forceScrollToBottom" title="回到底部">
-                <Icon icon="mdi:chevron-down" width="20" color="#555" />
-              </button>
-
-              <!-- ===== 任务清单条（TODO）=====
-                   仿 Hermes：贴在输入框正上方，agent 调 update_todo 时实时勾选。
-                   后端推 todo 事件 → todoState.items 全量覆盖。全部完成后延迟 3.5s 淡出，
-                   让用户先看到 N/N 再整条消失；中途出现新/未完成项则取消淡出。 -->
-              <Transition name="todo-fade">
-                              <div v-if="todoState.items.length" class="todo-bar" :style="inputBarFadeStyle">
-                                <div class="todo-bar-head" :class="{ collapsed: todoCollapsed }" @click="todoCollapsed = !todoCollapsed">
-                                  <Icon :icon="todoCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="14" class="todo-bar-chevron" />
-                                  <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
-                                  <span class="todo-bar-title">任务</span>
-                                  <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
-                                </div>
-                                <ul v-show="!todoCollapsed" class="todo-bar-list">
-                                  <li
-                                    v-for="(it, i) in todoState.items"
-                                    :key="i"
-                                    class="todo-bar-item"
-                                    :class="'todo-' + it.status"
-                                  >
-                                    <Icon
-                                      :icon="it.status === 'done' ? 'mdi:check-circle' : it.status === 'doing' ? 'mdi:dots-vertical' : 'mdi:circle-outline'"
-                                      width="14"
-                                      class="todo-bar-mark"
-                                    />
-                                    <span class="todo-bar-text">{{ it.text }}</span>
-                                  </li>
-                                </ul>
-                              </div>
-                            </Transition>
-
-              <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
-              <QuestionModal
-                v-if="questionState.pending"
-                :question="questionState.pending"
-                :style="inputBarFadeStyle"
-                @answer="answerQuestion"
-              />
-
-              <!-- ===== 工具审批轻量条（Ask 模式）=====
-                   贴在输入框正上方，不打断视线；每条 60s 倒计时，归零自动同意
-                   （后端另有 65s 兜底，防前端整个挂掉时工作流永久阻塞）。 -->
-              <div
-                v-for="item in approvalState.pending"
-                :key="item.id"
-                class="approval-bar"
-              >
-                <span class="approval-bar-countdown" :title="item.remain + ' 秒后自动同意'">{{ item.remain }}</span>
-                <div class="approval-bar-main">
-                  <div class="approval-bar-line">
-                    <span class="approval-bar-tool">{{ item.tool }}</span>
-                    <!-- 越界访问单独标一下：不然只看工具名会以为是普通的写盘确认 -->
-                    <span
-                      v-if="item.reason === 'path_outside_workdir'"
-                      class="approval-bar-badge"
-                      :title="'工作目录：' + item.workdir"
-                    >工作目录之外</span>
-                    <span class="approval-bar-args">{{ approvalArgsPreview(item.args) }}</span>
-                  </div>
-                  <div class="approval-bar-progress">
-                    <div class="approval-bar-progress-fill" :style="{ width: (item.remain / item.total * 100) + '%' }"></div>
-                  </div>
+            <!-- ===== 悬浮条（todo / ask / approval）：移出 input-area 成为正常流，
+                 物理上把输入区顶下去，消息区 flex:1 自动收缩不被遮挡 ===== -->
+            <Transition name="todo-fade">
+              <div v-if="todoState.items.length" class="todo-bar floating-bar" :style="inputBarFadeStyle">
+                <div class="todo-bar-head" :class="{ collapsed: todoCollapsed }" @click="todoCollapsed = !todoCollapsed">
+                  <Icon :icon="todoCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="14" class="todo-bar-chevron" />
+                  <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
+                  <span class="todo-bar-title">任务</span>
+                  <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
                 </div>
-                <label
-                  class="approval-bar-remember"
-                  :title="item.reason === 'path_outside_workdir'
-                    ? '本次会话内不再询问该目录下的操作'
-                    : '本次会话内不再询问此工具'"
+                <ul v-show="!todoCollapsed" class="todo-bar-list">
+                  <li
+                    v-for="(it, i) in todoState.items"
+                    :key="i"
+                    class="todo-bar-item"
+                    :class="'todo-' + it.status"
+                  >
+                    <Icon
+                      :icon="it.status === 'done' ? 'mdi:check-circle' : it.status === 'doing' ? 'mdi:dots-vertical' : 'mdi:circle-outline'"
+                      width="14"
+                      class="todo-bar-mark"
+                    />
+                    <span class="todo-bar-text">{{ it.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </Transition>
+
+            <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
+            <QuestionModal
+              v-if="questionState.pending"
+              :question="questionState.pending"
+              :style="inputBarFadeStyle"
+              class="floating-bar"
+              @answer="answerQuestion"
+            />
+
+            <!-- ===== 工具审批轻量条（Ask 模式）===== -->
+            <div
+              v-for="item in approvalState.pending"
+              :key="item.id"
+              class="approval-bar floating-bar"
+            >
+              <span class="approval-bar-countdown" :title="item.remain + ' 秒后自动同意'">{{ item.remain }}</span>
+              <div class="approval-bar-main">
+                <div class="approval-bar-line">
+                  <span class="approval-bar-tool">{{ item.tool }}</span>
+                  <span
+                    v-if="item.reason === 'path_outside_workdir'"
+                    class="approval-bar-badge"
+                    :title="'工作目录：' + item.workdir"
+                  >工作目录之外</span>
+                  <span class="approval-bar-args">{{ approvalArgsPreview(item.args) }}</span>
+                </div>
+                <div class="approval-bar-progress">
+                  <div class="approval-bar-progress-fill" :style="{ width: (item.remain / item.total * 100) + '%' }"></div>
+                </div>
+              </div>
+              <label
+                class="approval-bar-remember"
+                :title="item.reason === 'path_outside_workdir'
+                  ? '本次会话内不再询问该目录下的操作'
+                  : '本次会话内不再询问此工具'"
+              >
+                <input type="checkbox" v-model="item.remember" />
+                <span>不再问</span>
+              </label>
+              <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
+              <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
+            </div>
+
+            <div class="chat-input-area">
+              <!-- 群聊成员选择弹层：多选，点选即在/移出群聊 -->
+              <div v-if="agentPickerOpen" class="agent-picker-pop">
+                <div class="agent-picker-title">群聊成员</div>
+                <div class="agent-picker-desc">选中的 Agent 按顺序依次发言，各自带角色卡、头像和私有记忆。</div>
+                <div v-if="!agentStore.agents.value.length" class="agent-picker-empty">
+                  还没有角色卡，去「设置 → 人设 → 我的 Agent」创建吧～
+                </div>
+                <button
+                  v-for="a in agentStore.agents.value"
+                  :key="a.id"
+                  class="agent-picker-item"
+                  :class="{ on: currentGroup.includes(a.id) }"
+                  type="button"
+                  @click.stop="pickAgent(a.id)"
                 >
-                  <input type="checkbox" v-model="item.remember" />
-                  <span>不再问</span>
-                </label>
-                <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
-                <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
+                  <img v-if="a.avatar" :src="a.avatar" class="agent-picker-avatar" alt="" />
+                  <span v-else class="agent-picker-avatar agent-picker-avatar-text" :style="{ background: a.color || '#8b5e7c' }">
+                    {{ (a.name || '?').charAt(0) }}
+                  </span>
+                  <span class="agent-picker-name">{{ a.name }}</span>
+                  <Icon v-if="currentGroup.includes(a.id)" icon="mdi:check-circle" width="16" class="agent-picker-check" />
+                </button>
               </div>
 
-              <!-- 输入框上方工具栏三态切换 -->
               <div v-if="inputTopBarMode === 'dir'" class="input-dir-bar">
                 <div class="toolbar-dropdown-wrap input-dir-menu-wrap">
                   <div class="input-dir-left">
@@ -702,7 +731,7 @@
                                 <div class="input-row">
                   <!-- 渐变动画的浮动占位符 -->
                   <transition name="fade-placeholder" mode="out-in">
-                    <span v-if="!userInput.trim() && attachments.length === 0 && !historySwapping" :key="randomPlaceholder" class="input-placeholder-text">
+                    <span v-if="!userInput.trim() && attachments.length === 0 && !historySwapping && !inputFocused" :key="randomPlaceholder" class="input-placeholder-text">
                       {{ randomPlaceholder }}
                     </span>
                   </transition>
@@ -727,7 +756,7 @@
                     </div>
                   </div>
 
-                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
+                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
 
                   <!-- 模型名 pill：点击向上弹模型菜单（悬浮在输入框上方） -->
                   <div class="sch-model" ref="modelPillRef" @click.stop="toggleModelMenu">
@@ -742,10 +771,12 @@
                     <Icon :icon="voiceListening ? 'mdi:microphone' : 'mdi:microphone-outline'" width="18" />
                   </button>
 
-                  <!-- 语音输出开关：喇叭静音 = 关闭 AI 自动朗读 -->
+                  <!-- 语音输出开关：深色圆+声波线 = 开启 AI 自动朗读；灰化 = 关闭 -->
                   <button class="input-inner-btn speak-toggle-btn" :class="{ muted: !ttsOn }" @click="toggleTts"
                     :title="ttsOn ? '关闭语音朗读' : '开启语音朗读（AI 回复自动朗读）'">
-                    <Icon :icon="ttsOn ? 'mdi:volume-high' : 'mdi:volume-mute'" width="18" :color="ttsOn ? '#171717' : undefined" />
+                    <svg class="speak-btn-icon" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                      <path class="speak-wave" d="M2.6 10.4 C4.4 5.8, 6.6 5.8, 8 9 C9.4 12.2, 11.6 12.2, 13 9 C13.8 7.2, 14.8 6.6, 15.4 6.9" />
+                    </svg>
                   </button>
 
                   <Teleport to="body">
@@ -819,10 +850,10 @@
                 </div>
               </div>
 
-              <!-- ========== 底部工具条（本次漏掉的部分已精准补全） ========== -->
+              <!-- ========== 底部工具条 ========== -->
               <div class="input-bottom-toolbar">
                   <div class="input-toolbar-left">
-                  <!-- git 工具栏开关：点亮时上方展开分支/PR 状态条，只在有会话时出现 -->
+                  <!-- git 工具栏开关 -->
                   <button
                     v-if="inputTopBarMode === 'git'"
                     class="toolbar-icon-pill-btn"
@@ -831,6 +862,43 @@
                   >
                     <Icon icon="mdi:source-branch" width="15" />
                   </button>
+                  <!-- 知识库抽屉开关 -->
+                  <button
+                    class="toolbar-icon-pill-btn"
+                    :class="{ active: kbOpen }"
+                    @click.stop="toggleKb"
+                    title="知识库（拖拽文件放入）"
+                  >
+                    <Icon icon="mdi:bookshelf" width="15" />
+                    <span v-if="kbFiles.length" class="kb-badge">{{ kbFiles.length }}</span>
+                  </button>
+                  <!-- 群聊成员开关：本对话挂哪几个二次元 Agent -->
+                  <button
+                    class="toolbar-icon-pill-btn"
+                    :class="{ active: agentPickerOpen || currentGroup.length > 0 }"
+                    @click.stop="toggleAgentPicker"
+                    title="群聊成员（可多选，按顺序依次发言）"
+                  >
+                    <Icon icon="mdi:account-group-outline" width="15" />
+                    <span v-if="currentGroup.length" class="kb-badge">{{ currentGroup.length }}</span>
+                  </button>
+                  <!-- 当前发言者名牌（单选时显示；多选时显示第一位） -->
+                  <span v-if="currentGroup.length" class="agent-chip-row">
+                    <span
+                      v-for="id in currentGroup"
+                      :key="id"
+                      class="agent-chip"
+                      :title="'点击移出群聊'"
+                      @click.stop="removeFromGroup(id)"
+                    >
+                      <img v-if="agentStore.agentById(id)?.avatar" :src="agentStore.agentById(id).avatar" class="agent-chip-avatar" alt="" />
+                      <span v-else class="agent-chip-avatar agent-chip-avatar-text" :style="{ background: agentStore.agentById(id)?.color || '#8b5e7c' }">
+                        {{ (agentStore.agentById(id)?.name || '?').charAt(0) }}
+                      </span>
+                      <span class="agent-chip-name">{{ agentStore.agentById(id)?.name || id }}</span>
+                      <Icon icon="mdi:close" width="12" />
+                    </span>
+                  </span>
                 </div>
 
                                 <div class="input-toolbar-right">
@@ -886,6 +954,74 @@
                   </Teleport>
                 </div>
               </div>
+
+              <!-- ===== 知识库抽屉：短剧剪辑 ref-slot 风格 + 整体倾斜 ===== -->
+              <Transition name="kb-slide">
+                <div
+                  v-if="kbOpen"
+                  class="kb-drawer"
+                  :class="{ 'drag-over': kbDragOver }"
+                  @dragover.prevent="kbDragOver = true"
+                  @dragleave.prevent="kbDragOver = false"
+                  @drop.prevent="onKbDrop"
+                >
+                  <div class="kb-drawer-head">
+                    <div class="kb-drawer-title">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="var(--app-accent)"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--app-accent)" stroke-width="2" stroke-linecap="round"/></svg>
+                      <span>知识库</span>
+                      <span v-if="kbFiles.length" class="kb-drawer-count">{{ kbFiles.length }}</span>
+                    </div>
+                    <button class="kb-icon-btn" @click.stop="kbOpen = false" title="收起">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
+                  </div>
+
+                  <div class="kb-drawer-body">
+                    <!-- 加载中 -->
+                    <div v-if="kbLoading" class="kb-empty-slot">
+                      <div class="kb-slot-box">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" class="kb-spin"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z" stroke="currentColor" stroke-width="2" opacity="0.25"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                      </div>
+                      <span>加载中…</span>
+                    </div>
+
+                    <!-- 空态：ref-slot 风格，倾斜 -->
+                    <div v-else-if="!kbFiles.length" class="kb-empty-slot" @click.stop="triggerKbUpload">
+                      <div class="kb-slot-box">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                      </div>
+                      <span>添加文件</span>
+                    </div>
+
+                    <!-- 文件列表：ref-slot 倾斜卡片 -->
+                    <div v-else class="kb-slot-grid">
+                      <div
+                        v-for="file in kbFiles"
+                        :key="file.id"
+                        class="kb-slot-item"
+                        @click="insertKbRef(file)"
+                      >
+                        <div class="kb-slot-box">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="var(--app-text-faint)" stroke-width="1.5"/><path d="M14 2v6h6" stroke="var(--app-text-faint)" stroke-width="1.5"/></svg>
+                          <button class="kb-slot-remove" @click.stop="removeKbFile(file.id)" title="移除">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                          </button>
+                        </div>
+                        <span class="kb-slot-name" :title="file.name">{{ file.name }}</span>
+                        <span v-if="file.chunks" class="kb-slot-meta">{{ file.chunks }} 段</span>
+                      </div>
+                      <!-- 添加更多 -->
+                      <div class="kb-slot-item kb-slot-add" @click.stop="triggerKbUpload">
+                        <div class="kb-slot-box">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </div>
+                        <span>添加</span>
+                      </div>
+                    </div>
+                  </div>
+                  <input ref="kbUploadInputRef" type="file" multiple style="display:none" @change="onKbUploadSelected" @click.stop />
+                </div>
+              </Transition>
             </div>
           </div>
 
@@ -2721,7 +2857,7 @@ async function copyText(text) {
 
 // ==================== 消息朗读（Edge TTS 晓依，前端直连，零成本） ====================
 // 走 wss://speech.platform.bing.com WebSocket，浏览器直连无跨域问题（2026-09-04 实测）。
-// 三态反馈：空闲=volume-low，加载中=spinner 旋转+「正在合成语音」，播放中=volume-high+脉冲动画。
+// 三态反馈：空闲=静态声波圆钮，加载中=图标旋转+「正在合成语音」，播放中=声波跳动+圆底转蓝。
 // 音频实时拉流播放，不落盘；同一时间只播一条，点另一条自动切；再点当前条停止。
 import { EdgeTTSBrowser } from 'edge-tts-universal/browser'
 const speakingId = ref(null)
@@ -2733,11 +2869,6 @@ function ttsVoiceNow() {
   return localStorage.getItem('rescene_tts_voice') || 'zh-CN-XiaoyiNeural'
 }
 
-function speakIcon(id) {
-  if (loadingId.value === id) return 'mdi:loading'
-  if (speakingId.value === id) return 'mdi:volume-high'
-  return 'mdi:volume-low'
-}
 function speakState(id) {
   if (loadingId.value === id) return '正在合成语音…'
   if (speakingId.value === id) return '停止朗读'
@@ -2767,12 +2898,28 @@ async function speakMessage(item, rawText) {
   const myToken = ++speakToken
   loadingId.value = item.id
   try {
-    const tts = new EdgeTTSBrowser(text, ttsVoiceNow())
-    const res = await tts.synthesize()
-    if (myToken !== speakToken) return // 期间用户已切走/取消
+    let audioBlob = null
+    // 自定义云端语音优先
+    const cc = localGetTTSConfig()
+    if (cc && cc.enabled && cc.api_key) {
+      const res = await fetch('/api/tts/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, model: cc.model, voice: cc.voice, speed: cc.speed }),
+      })
+      if (res.ok) {
+        audioBlob = await res.blob()
+      }
+    }
+    if (!audioBlob) {
+      const tts = new EdgeTTSBrowser(text, ttsVoiceNow())
+      const res = await tts.synthesize()
+      audioBlob = res.audio
+    }
+    if (myToken !== speakToken) return
     loadingId.value = null
     speakingId.value = item.id
-    const url = URL.createObjectURL(res.audio)
+    const url = URL.createObjectURL(audioBlob)
     speakAudio = new Audio(url)
     speakAudio.onended = () => { if (myToken === speakToken) { speakingId.value = null; URL.revokeObjectURL(url) } }
     speakAudio.onerror = () => { if (myToken === speakToken) { speakingId.value = null; URL.revokeObjectURL(url) } }
@@ -2780,6 +2927,10 @@ async function speakMessage(item, rawText) {
   } catch (e) {
     if (myToken === speakToken) { loadingId.value = null; speakingId.value = null }
   }
+}
+
+function localGetTTSConfig() {
+  try { return JSON.parse(localStorage.getItem('tts_custom_config') || 'null') } catch { return null }
 }
 
 function stopSpeaking() {
@@ -3231,14 +3382,17 @@ function streamFadePass() {
   // 只处理带 .streaming 的助手消息（isStreaming=true，即正在 SSE 输出的那条）。
   // 历史消息（切会话加载、刷新恢复）一律不做渐变：既没必要，还会因为整段包 span
   // 让含表格的消息反复触发列宽重算——就是"切会话时表格抖动"的来源。
-  // 注意：主聊天现已走四态机 agentflow（/api/code/workflow），回答渲染在
-  // AgentWorkflowPanel 的 .agent-flow 里。09-02 曾把 .agent-flow.streaming 加入
-  // 选择器让瀑布渐变接到主链路——但那正是"每个 chunk 一闪一闪"的根源
-  // （每 120ms 重包 span 淡入）。主链路恢复无渐变（同 09-02 之前），
-  // 瀑布渐变只对旧的纯文本流式消息生效。
+  // 注意：主聊天已走四态机 agentflow（/api/code/workflow），回答渲染在
+  // AgentWorkflowPanel 的 .agent-flow 里，v-html 整段重渲染（chunk 间隔 ~120ms）。
+  // 09-02 曾把 .agent-flow.streaming 加入选择器让瀑布渐变接到主链路——结果是每个
+  // chunk 重包 span、动画对象重建=肉眼闪烁；fadeMs 压短、负 delay 恢复都救不回来
+  // （09-05 实测）。结论：主链路不做渐变（同 09-02 之前行为），瀑布渐变只对旧的
+  // 纯文本流式消息生效。若真要主链路渐变，必须改成增量 DOM 渲染，v-html 路不通。
   document.querySelectorAll(
     '.chat-messages .assistant-message.streaming .markdown-body, ' +
-    '.chat-messages .assistant-message.streaming .reasoning-text'
+    '.chat-messages .assistant-message.streaming .reasoning-text, ' +
+    '.agent-flow.streaming .flow-intent.markdown-body, ' +
+    '.agent-flow.streaming .flow-thinking-text'
   ).forEach(applyStreamFade)
   const t1 = performance.now()
   if (t1 - t0 > 16) console.warn('[perf] streamFadePass', (t1 - t0).toFixed(1), 'ms')
@@ -3259,9 +3413,48 @@ const {
   flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   todoState, sendSteerMessage,
   questionState, answerQuestion,
+  agentStore,
   toggleChat, updateParams,
-  groupedMessages, formatChatTime
+  groupedMessages, formatChatTime,
+  kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,
+  toggleKb, triggerKbUpload, onKbUploadSelected, onKbDrop, loadKb,
+  addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize
 } = useChatWidget(props, { renderMarkdown })
+
+// 群聊名牌：按 flow 上的 agentId 查角色卡。刷新后 agentId 由后端持久化的
+// message.agent 还原（loadAllHistory 里映射）。查不到卡（角色卡已删）返回 null，
+// 名牌自然不渲染，不会显示一个空头像。
+function flowAgent(item) {
+  const id = item && (item.agentId || item.agent)
+  if (!id) return null
+  return agentStore.agentById(id)
+}
+
+// ── 群聊成员选择器 ──
+// currentGroup：当前会话挂了哪几个 Agent（按序发言）。持久化在 localStorage
+// （agentGroup:<sessionId>），后端不存——会话归属前端管，切 Agent 不改历史。
+const agentPickerOpen = ref(false)
+const currentGroup = ref([])
+function syncGroup() {
+  currentGroup.value = agentStore.groupOf(sessionId.value)
+}
+syncGroup()
+watch(() => sessionId.value, syncGroup)
+function toggleAgentPicker() {
+  agentPickerOpen.value = !agentPickerOpen.value
+  if (agentPickerOpen.value && !agentStore.agentsLoaded.value) agentStore.loadAgents()
+}
+function pickAgent(id) {
+  const ids = [...currentGroup.value]
+  const i = ids.indexOf(id)
+  if (i >= 0) ids.splice(i, 1)
+  else ids.push(id)
+  agentStore.setGroup(sessionId.value, ids)
+  syncGroup()
+}
+function removeFromGroup(id) {
+  pickAgent(id) // 同样的 toggle 语义
+}
 
 // ==================== 语音输出开关（喇叭按钮，Hermes 布局） ====================
 // ⚠️ 必须放在 useChatWidget 解构之后：watch(messages) 在 setup 同步执行，解构前引用会 TDZ 白屏
@@ -3719,6 +3912,8 @@ function jumpToGroup(id) {
 // 仅在「已进入浏览」或「输入为空」时拦截箭头，不干扰多行编辑的光标移动。
 const chatHistory = ref([])
 const historySwapping = ref(false)
+// 输入框聚焦状态：聚焦时隐藏浮动占位符（用户已把注意力放进来，占位提示让位）
+const inputFocused = ref(false)
 let swapTimer = null
 const chatHistoryIndex = ref(-1) // -1 = 未在浏览（编辑新内容）
 const CHAT_HISTORY_KEY = 'rescene_chat_history'
@@ -4863,5 +5058,157 @@ async function refreshGitGraph() {
 @keyframes chatInputSwap {
   from { opacity: 0.35; transform: translateY(-3px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 多 Agent 群聊：名牌 / 成员 chips / 选择弹层 ===== */
+.flow-agent-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.flow-agent-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.flow-agent-avatar-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+}
+.flow-agent-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b5e7c;
+}
+
+.agent-chip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 3px;
+  border-radius: 999px;
+  background: rgba(183, 111, 146, 0.1);
+  color: #8b5e7c;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.agent-chip:hover {
+  background: rgba(183, 111, 146, 0.2);
+}
+.agent-chip-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.agent-chip-avatar-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+.agent-chip-name {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-picker-pop {
+  position: absolute;
+  left: 16px;
+  bottom: calc(100% - 4px);
+  z-index: 60;
+  width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid rgba(25, 80, 190, 0.12);
+  box-shadow: 0 8px 28px rgba(25, 80, 190, 0.14);
+}
+.chat-input-area {
+  position: relative;
+}
+.agent-picker-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1950be;
+  margin-bottom: 2px;
+}
+.agent-picker-desc {
+  font-size: 11px;
+  color: #8a94a6;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.agent-picker-empty {
+  font-size: 12px;
+  color: #8a94a6;
+  padding: 8px 0;
+}
+.agent-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.agent-picker-item:hover {
+  background: rgba(25, 80, 190, 0.06);
+}
+.agent-picker-item.on {
+  background: rgba(183, 111, 146, 0.12);
+}
+.agent-picker-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.agent-picker-avatar-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+}
+.agent-picker-name {
+  flex: 1;
+  font-size: 13px;
+  color: #2b3446;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-picker-check {
+  color: #b76f92;
+  flex: none;
 }
 </style>

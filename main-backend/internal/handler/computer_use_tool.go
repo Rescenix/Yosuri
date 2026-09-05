@@ -14,6 +14,7 @@ import (
 	"image"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -70,7 +71,12 @@ func computerUseToolDefs() []core.ToolDefinition {
 				"direction": {Type: "string", Description: `滚动方向： "down"（向下，默认）、"up"（向上）`},
 				"amount":    {Type: "integer", Description: "滚动步数，默认 1，越大滚动越多"},
 			}, nil),
-	}
+		nativeTool("computer_open_url",
+			"在系统浏览器（Edge）中打开指定网址，用于开始网页任务（点外卖/抢票/填表/搜索等）。打开后需 computer_screenshot 查看页面再操作。",
+			map[string]core.ToolProperty{
+				"url": {Type: "string", Description: "要打开的完整网址，如 https://www.meituan.com"},
+			}, []string{"url"}),
+		}
 }
 
 // ---------- 调度入口 ----------
@@ -93,6 +99,8 @@ func callComputerUseTool(ctx context.Context, name string, argsJSON string) (nat
 		return callComputerScreenSize()
 	case "computer_scroll":
 		return callComputerScroll(argsJSON)
+	case "computer_open_url":
+		return callComputerOpenURL(argsJSON)
 	default:
 		return nativeToolResult{}, fmt.Errorf("未知的 computer_use 工具: %s", name)
 	}
@@ -415,6 +423,28 @@ var robotgoKeyTap = func(key string) {}
 var robotgoGetScreenSize = func() (int, int) { return 1920, 1080 }
 var robotgoGetDisplayCount = func() int { return 1 }
 var robotgoScroll = func(x, y int) {}
+
+// ---------- computer_open_url：系统 Edge 打开网址 ----------
+
+type openURLArgs struct {
+	URL string `json:"url"`
+}
+
+func callComputerOpenURL(argsJSON string) (nativeToolResult, error) {
+	var a openURLArgs
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil {
+		return nativeToolResult{}, fmt.Errorf("computer_open_url 参数错误: %v", err)
+	}
+	if a.URL == "" {
+		return nativeToolResult{}, fmt.Errorf("computer_open_url 需要 url 参数")
+	}
+	// 用系统默认浏览器打开（Windows: cmd start）。Edge 是默认浏览器时即走 Edge。
+	cmd := exec.Command("cmd", "/c", "start", "", a.URL)
+	if err := cmd.Start(); err != nil {
+		return nativeToolResult{}, fmt.Errorf("打开网址失败: %v", err)
+	}
+	return nativeToolResult{Text: "已用系统浏览器打开 " + a.URL + "。等待页面加载后，调用 computer_screenshot 查看页面内容。"}, nil
+}
 
 type robotgoBitmap struct {
 	Width  int

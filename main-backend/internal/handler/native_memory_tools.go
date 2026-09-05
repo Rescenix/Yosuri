@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,22 +12,37 @@ import (
 	"backend/internal/memorydir"
 )
 
-func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
+func callNativeMemoryTool(ctx context.Context, name, argsJSON string) (nativeToolResult, error) {
 	var args map[string]any
 	if err := json.Unmarshal([]byte(defaultJSONObject(argsJSON)), &args); err != nil {
 		return nativeToolResult{}, fmt.Errorf("参数解析失败: %w", err)
 	}
+	// 当前 Agent 身份：决定 scope=private 写到哪、memory_search 查哪几层。
+	// 空串（单 Agent 老链路 / 子代理 / 后台任务）时 private 自动退回通用记忆，
+	// 行为与改造前一致。
+	agentID := agentIDFromCtx(ctx)
 	switch name {
 	case "memory_search":
 		query := stringArg(args, "query")
 		if query == "" {
 			return nativeToolResult{}, fmt.Errorf("query 不能为空")
 		}
-		hits := memorydir.Search(query)
-		if hits == "" {
+		scope := strings.ToLower(strings.TrimSpace(stringArg(args, "scope")))
+		var parts []string
+		if scope != "private" {
+			if hits := memorydir.Search(query); hits != "" {
+				parts = append(parts, "【通用记忆（所有 Agent 共享）】\n"+hits)
+			}
+		}
+		if scope != "shared" && agentID != "" {
+			if hits := memorydir.AgentSearch(agentID, query); hits != "" {
+				parts = append(parts, "【我的私有记忆】\n"+hits)
+			}
+		}
+		if len(parts) == 0 {
 			return nativeToolResult{Text: fmt.Sprintf("未找到与 %q 相关的记忆。", query)}, nil
 		}
-		return nativeToolResult{Text: hits}, nil
+		return nativeToolResult{Text: strings.Join(parts, "\n\n")}, nil
 	case "memory_append":
 		text := strings.TrimSpace(stringArg(args, "text"))
 		if text == "" {
@@ -37,6 +53,14 @@ func callNativeMemoryTool(name, argsJSON string) (nativeToolResult, error) {
 		summary := text
 		if runes := []rune(text); len(runes) > 40 {
 			summary = string(runes[:40]) + "…"
+		}
+		scope := strings.ToLower(strings.TrimSpace(stringArg(args, "scope")))
+		if scope == "private" && agentID != "" {
+			if err := memorydir.AgentRemember(agentID, file, summary, text); err != nil {
+				return nativeToolResult{}, fmt.Errorf("写入私有记忆失败: %w", err)
+			}
+			// 私有记忆不进云端同步白名单，也不参与通用性格蒸馏：只属于这个 Agent。
+			return nativeToolResult{Text: fmt.Sprintf("已写入我的私有记忆 %s（agents/%s/memory/%s.md）", file, agentID, file)}, nil
 		}
 		if err := memorydir.Remember(file, summary, text); err != nil {
 			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)

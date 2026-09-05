@@ -9,17 +9,6 @@
         <span class="home-greeting-text" :key="currentGreeting">{{ displayGreeting }}</span>
       </Transition>
     </div>
-    <!-- follow-up 建议卡片（ChatGPT 首页风格，语义生成） -->
-    <div v-if="followupCards.length" class="home-followups">
-      <div
-        v-for="(card, i) in followupCards"
-        :key="i"
-        class="home-followup-card"
-        @click="$emit('send-followup', card)"
-      >
-        <span class="home-followup-label">{{ card.label }}</span>
-      </div>
-    </div>
     <div class="home-stats-card">
       <div class="home-stats-header">
         <div class="home-tabs">
@@ -70,6 +59,24 @@
         </div>
         <div v-else class="home-model-empty">暂无模型使用数据</div>
       </template>
+
+    </div>
+    <!-- follow-up 建议：加载中先出骨架屏占位，生成完再换成真实卡片。
+         骨架与卡片同尺寸同行，容器高度恒定 → 垂直居中不会重算，日历不被顶上去 -->
+    <div class="home-followups">
+      <template v-if="followupLoading">
+        <div v-for="n in 3" :key="`sk-${n}`" class="home-followup-card is-skeleton"></div>
+      </template>
+      <template v-else>
+        <div
+          v-for="(card, i) in followupCards"
+          :key="i"
+          class="home-followup-card"
+          @click="$emit('send-followup', card)"
+        >
+          <span class="home-followup-label">{{ card.label }}</span>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -95,6 +102,7 @@ const greetingMessages = [
 
 const currentGreeting = ref('')  // 由后端主动生成
 const followupCards = ref([])    // follow-up 建议卡片
+const followupLoading = ref(true) // 建议加载中：先出骨架屏占位，避免生成后顶动日历
 
 const displayGreeting = computed(() => {
   if (currentGreeting.value) return currentGreeting.value
@@ -122,6 +130,7 @@ onMounted(() => {
   }).then(r => r.ok ? r.json() : null)
     .then(data => { if (data?.followups) followupCards.value = data.followups })
     .catch(() => {})
+    .finally(() => { followupLoading.value = false })
 })
 const homeTab = ref('overview')
 const homeRange = ref('all')
@@ -290,7 +299,7 @@ const heatmapCaption = computed(() => {
 <style scoped>
 .session-home {
   max-width: 640px;
-  margin: 28px auto 0;
+  margin: 0 auto;
   padding: 0 24px;
   font-family: "Inter", system-ui, sans-serif;
   transform: scale(0.88);
@@ -324,9 +333,14 @@ const heatmapCaption = computed(() => {
 
 .home-followups {
   display: flex;
-  flex-wrap: wrap;
+  /* 单行不换行：高度恒定，异步加载前后总高不变，日历不被顶上去 */
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  /* 与日历卡片上下等距：不贴卡片边 */
+  margin: 16px 0;
+  height: 38px;
+  overflow: hidden;
 }
 .home-followup-card {
   display: flex;
@@ -337,6 +351,27 @@ const heatmapCaption = computed(() => {
   background: var(--app-surface-2);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
+  animation: followup-in 0.28s ease both;
+}
+/* 骨架屏占位：与真实卡片同尺寸，加载期间顶住高度，生成完成替换不跳动 */
+.home-followup-card.is-skeleton {
+  width: 120px;
+  height: 36px;
+  flex-shrink: 0;
+  cursor: default;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--app-surface-2), var(--app-surface-3), var(--app-surface-2));
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+  border-color: transparent;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+@keyframes followup-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .home-followup-card:hover {
   border-color: var(--app-accent);

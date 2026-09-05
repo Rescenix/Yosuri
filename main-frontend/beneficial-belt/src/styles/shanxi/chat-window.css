@@ -261,20 +261,18 @@ min-height: 90px !important;
  padding: 16px 48px 24px 48px !important;
   font-size: 15px;
   line-height: 1.6;
-  border: 1px solid var(--chat-border-strong);
-  border-radius: 24px;
-  background: var(--app-surface);
-  color: var(--chat-text);
+  border: none;
+  background: transparent;
+  color: var(--app-text);
   outline: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
   font-family: var(--app-font);
 }
 
 .chat-input:focus {
   outline: none;
-  border-color: var(--chat-border-strong);
-  background: var(--app-surface);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  background: transparent;
+  box-shadow: none;
 }
 
 .chat-input::placeholder {
@@ -283,9 +281,6 @@ min-height: 90px !important;
   letter-spacing: 0.2px;
   transition: color 0.3s ease;
 }
-.chat-input:focus::placeholder {
-  color: rgba(255, 255, 255, 0.25);
-} 
 
 
 .input-inner-btn {
@@ -958,17 +953,29 @@ min-height: 90px !important;
   background: rgba(0, 0, 0, 0.06);
 }
 
-/* 语音按钮跟复制按钮同一套 hover 出现逻辑（Hermes 同款），hover 时蓝色强化识别 */
+/* 语音按钮：深色圆底 + 白色声波线（用户设计 09-05）；hover 圆底转品牌蓝强化识别 */
+.speak-btn-icon { display: block; }
+.speak-btn-icon .speak-btn-disc { fill: #22272e; transition: fill 0.15s ease; }
+.speak-btn-icon .speak-wave {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform-origin: 9px 9px;
+}
 .tool-btn.speak-btn:hover {
   opacity: 1 !important;
   color: #1677ff;
-  background: rgba(22, 119, 255, 0.08);
+  background: transparent;
 }
+.tool-btn.speak-btn:hover .speak-btn-disc { fill: #1677ff; }
 .tool-btn.speak-btn:active {
   transform: scale(0.92);
   color: #1677ff;
-  background: rgba(22, 119, 255, 0.14);
+  background: transparent;
 }
+.tool-btn.speak-btn:active .speak-btn-disc { fill: #1677ff; }
 
 /* 朗读按钮三态反馈：加载中图标旋转，播放中按钮脉冲呼吸 */
 .tool-btn.loading,
@@ -981,13 +988,15 @@ min-height: 90px !important;
 @keyframes tts-spin {
   to { transform: rotate(360deg); }
 }
-.tool-btn.speaking {
-  animation: tts-pulse 1.4s ease-in-out infinite;
+/* 播放中：声波线上下跳动（声波律动），圆底转蓝 */
+.tool-btn.speak-btn.speaking .speak-wave {
+  animation: speak-wave-jump 0.55s ease-in-out infinite;
 }
-@keyframes tts-pulse {
-  0%, 100% { background: transparent; }
-  50% { background: rgba(0, 0, 0, 0.08); }
+@keyframes speak-wave-jump {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.62); }
 }
+.tool-btn.speak-btn.speaking .speak-btn-disc { fill: #1677ff; }
 
 .copy-toast {
   position: fixed;
@@ -2244,6 +2253,28 @@ min-height: 90px !important;
 }
 .sch-model:hover { color: var(--app-text); }
 .sch-model-caret { color: var(--app-text-faint); flex-shrink: 0; }
+/* 语音输入按钮：按住说话，识别中高亮 */
+.voice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color .15s ease, background .15s ease;
+}
+.voice-btn:hover { color: var(--app-text); background: var(--app-bg-hover, rgba(128,128,128,.08)); }
+.voice-btn.listening { color: #fff; background: #E74C3C; animation: voice-pulse 1s ease infinite; }
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, .5); }
+  50% { box-shadow: 0 0 0 6px rgba(231, 76, 60, 0); }
+}
 /* 列布局 + 顶搜索固定/列表滚动/底管理，宽高由 JS 内联 style 提供 */
 .model-menu-dropdown.model-menu-dropdown {
   display: flex;
@@ -2337,30 +2368,33 @@ min-height: 90px !important;
    盖住的最底部消息可由滚动刷出（Hermes 原版行为）。旧版 90px 是输入框 absolute
    悬浮时代才需要的 clearance，现在已不需要。 */
 
+
+
+/* 主页容器：占满消息区剩余高度并垂直居中。
+   建议行高度恒定（见 NewSessionHome .home-followups：单行不换行），
+   异步加载前后总高不变，居中重算不会把日历顶上去 */
+.home-container-for-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+}
+
 /* ==================== 输入框：悬浮卡片风格（无硬顶边框，柔和投影） ==================== */
-/* 输入区回到 flex 列正常文档流（flex-shrink:0）：chat-messages flex:1 自动让位给输入框高度。
-   todo/ask/approval 三种条在这里 absolute 悬浮在输入框正上方（bottom:100%），
-   脱离 flex 高度计算 → input-area 高度恒定等于输入框 → ask/todo 出现时消息区
-   不再被压缩顶上去，只在最底部被悬浮条盖住一部分（消息区底部有 clearance，可滚到条下面）。
-   （不做动态 ResizeObserver 测量——上一版即因它触发思考流式卡顿而废弃。） */
+/* 悬浮条（todo / ask / approval）：正常流，不再 absolute。
+   物理占据空间把输入区顶下去，消息区 flex:1 自动收缩不被遮挡。
+   不做动态 ResizeObserver 测量——上一版即因它触发思考流式卡顿而废弃。 */
 .chat-input-area { position: relative; flex-shrink: 0; padding: 8px 14px 12px; background: transparent; }
-.chat-input-area > .todo-bar,
-.chat-input-area > .question-bar,
-.chat-input-area > .approval-bar {
-  position: absolute;
-  /* 全宽 + 居中 + max-width 封顶，跟输入框卡片 / 阅读列同宽同中线 */
-  left: 0;
-  right: 0;
+
+.floating-bar {
   width: 100%;
   max-width: 720px;
   margin: 0 auto 8px;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
-/* 换行修复：绝对定位下 bottom:100% 相对 .chat-input-area（已是 relative），
-   margin-bottom 8px 提供条与输入框卡片的间距 */
-.chat-input-area > .todo-bar,
-.chat-input-area > .question-bar,
-.chat-input-area > .approval-bar { bottom: 100%; }
 /* 这条规则故意把每个相关属性都显式写一遍（哪怕跟视觉上想要的值一样）——文件里
    还有好几处历史遗留的 .input-wrapper{...} 重复定义（align-items/padding/width 等），
    CSS 级联是按属性各自比较优先级，不是整条规则一起比，少写一个属性就可能被前面
@@ -2403,6 +2437,10 @@ min-height: 90px !important;
 
 .input-inner-btn { display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; flex-shrink: 0; width: 30px; height: 30px; padding: 0; color: var(--app-text-soft); border-radius: 50%; transition: background 0.2s; z-index: 10; position: static; }
 .input-inner-btn:hover { background: rgba(0, 0, 0, 0.05); }
+/* 输入栏语音输出开关：无框裸声波线（同麦克风风格），开启深色、关闭灰化、hover 蓝 */
+.speak-toggle-btn .speak-wave { fill: none; stroke: #171717; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.speak-toggle-btn.muted .speak-wave { stroke: #9a9a9a; }
+.speak-toggle-btn:hover .speak-wave { stroke: #1677ff; }
 /* 发送按钮：Hermes 同款黑色实心圆，只有黑白色调，无其他彩色 */
 .input-send-btn {
   width: 30px;
@@ -2433,11 +2471,12 @@ min-height: 90px !important;
 }
 .input-steer-btn:hover { background: #000; border-color: #000; }
 
-/* 历史切换（↑/↓）轻淡入：文本替换的瞬间做一次短促上移+淡入，避免生硬跳变 */
+/* 历史切换（↑/↓）淡入：纯 opacity，不做位移——textarea 是 flex:1，
+   位移只挪文本区不挪旁边按钮，底边会跳。 */
 .chat-input-swap { animation: chat-input-swap-in 0.16s ease-out; }
 @keyframes chat-input-swap-in {
-  from { opacity: 0.3; transform: translateY(3px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0.35; }
+  to { opacity: 1; }
 }
 
 /* Context window 用量常驻横条本体样式在上面 .context-bar-widget 那组里；
@@ -3936,6 +3975,18 @@ min-height: 90px !important;
   border-radius: 12px;
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
   animation: rail-card-in 0.12s ease-out;
+  /* 细滚动条：与模型菜单/会话列表同款主题色窄条 */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 30%, transparent) transparent;
+}
+.rail-card::-webkit-scrollbar { width: 6px; }
+.rail-card::-webkit-scrollbar-track { background: transparent; }
+.rail-card::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+  border-radius: 999px;
+}
+.rail-card::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 50%, transparent);
 }
 @keyframes rail-card-in {
   from { opacity: 0; transform: translateX(-4px); }
@@ -4580,7 +4631,205 @@ img.gem-rail-avatar {
   /* 两侧按内容撑开，由外层 space-between 分列贴边。 */
   flex: 0 0 auto;
 }
-.input-toolbar-right { justify-content: flex-end; }
+.input-toolbar-right { justify-content: flex-end }
+
+/* ===== 知识库抽屉：短剧剪辑 ref-slot 倾斜风格 ===== */
+.toolbar-icon-pill-btn.active {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+  color: #fff;
+}
+.toolbar-icon-pill-btn.active:hover { filter: brightness(1.1) }
+
+.kb-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--app-accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  pointer-events: none;
+}
+
+.kb-drawer {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 45vh;
+  /* 整体微倾斜，像随手扔在桌上的卡片 */
+  transform: rotate(-0.8deg);
+  transform-origin: bottom center;
+  transition: transform 0.25s ease;
+}
+.kb-drawer:hover { transform: rotate(0deg) }
+.kb-drawer.drag-over {
+  border-color: var(--app-accent);
+  box-shadow: 0 -4px 24px rgba(var(--app-accent-rgb, 25, 80, 190), 0.2);
+  transform: rotate(0deg);
+}
+.kb-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--app-border-soft);
+  flex-shrink: 0;
+}
+.kb-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-text);
+}
+.kb-drawer-count {
+  color: var(--app-text-faint);
+  font-weight: 400;
+  font-size: 12px;
+}
+.kb-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--app-text-soft);
+  transition: background 0.15s;
+}
+.kb-icon-btn:hover { background: var(--app-surface-3) }
+
+.kb-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  min-height: 80px;
+}
+
+/* 空态：单个 ref-slot 大方块 */
+.kb-empty-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  cursor: pointer;
+  color: var(--app-text-faint);
+  font-size: 12px;
+}
+.kb-empty-slot .kb-slot-box {
+  width: 80px;
+  height: 80px;
+  border: 2px dashed var(--app-border);
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  transform: rotate(-3deg);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.kb-empty-slot:hover .kb-slot-box {
+  border-color: var(--app-accent);
+  transform: rotate(0deg) scale(1.05);
+}
+
+/* 文件列表：ref-slot 倾斜网格 */
+.kb-slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+.kb-slot-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+/* 交替倾斜角度，像随手贴的便签。
+   注意：calc() 不支持 % 取模和三元运算，必须用 nth-child 写死两个角度 */
+.kb-slot-item:nth-child(odd) { transform: rotate(2deg) }
+.kb-slot-item:nth-child(even) { transform: rotate(-2.5deg) }
+.kb-slot-item:hover { transform: rotate(0deg) scale(1.08) }
+.kb-slot-box {
+  width: 72px;
+  height: 72px;
+  border: 1.5px dashed var(--app-border);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--app-surface);
+  color: var(--app-text-faint);
+  position: relative;
+  transition: border-color 0.15s;
+}
+.kb-slot-item:hover .kb-slot-box { border-color: var(--app-accent) }
+.kb-slot-add .kb-slot-box { border-style: dashed }
+.kb-slot-add:hover .kb-slot-box { border-color: var(--app-accent); color: var(--app-accent) }
+.kb-slot-name {
+  font-size: 10px;
+  color: var(--app-text);
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.kb-slot-meta {
+  font-size: 9px;
+  color: var(--app-text-faint);
+}
+.kb-spin { animation: kb-rotate 1s linear infinite }
+@keyframes kb-rotate { to { transform: rotate(360deg) } }
+.kb-slot-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--app-border);
+  background: var(--app-surface);
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--app-text-faint);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.kb-slot-item:hover .kb-slot-remove { opacity: 1 }
+.kb-slot-remove:hover { color: #d94834; border-color: #d94834 }
+
+/* 抽屉上滑动画 */
+.kb-slide-enter-active,
+.kb-slide-leave-active {
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.kb-slide-enter-from,
+.kb-slide-leave-to {
+  transform: translateY(100%) rotate(-0.8deg);
+  opacity: 0;
+}
 .dhs-whale-shortcut {
   position: relative;
   width: 30px;

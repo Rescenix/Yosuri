@@ -36,6 +36,9 @@ type workflowCheckpoint struct {
 	Mode       string `json:"mode"`
 	Model      string `json:"model"`
 	Effort     string `json:"effort"`
+	// AgentID 多 Agent 群聊：这条工作流属于哪个 Agent（角色卡 id）。
+	// 续跑时必须沿用——人设和私有记忆都挂在它身上，丢了就变成中性助手。
+	AgentID string `json:"agent_id,omitempty"`
 	// Round 已完成的轮数，续跑从这里接着算。终止条件是轮次上限（codeWorkflowMaxRounds，
 	// 兜底值）和 token 预算（codeWorkflowTokenBudget）任一先触顶，见 codeWorkflowExhausted；
 	// 两者都可以在单次请求上用 ?max_rounds=/?max_tokens= 覆盖。

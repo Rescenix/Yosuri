@@ -2,6 +2,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 
 import { useWelcome } from '../composables/useWelcome.js'
 import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
+import { useAgentsStore } from '../composables/useAgents.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 import { loadContextBreakdown } from '../composables/contextBreakdown.js'
@@ -130,9 +131,41 @@ function watchInputClearance() {
     })
   // display 透传给 startFlow——之前这里漏了第二个参数，附件 chip/纯文本气泡的展示信息
   // 全部在这层被吞掉，气泡又会退回显示拍平后的 task 全文
+  //
+  // ── 多 Agent 群聊编排 ──
+  // 当前会话挂了 N 个 Agent 时，一条用户消息按成员顺序依次点名：
+  // 第一位说完（工作流收尾）才轮到第二位，第二位能看到第一位的发言
+  // （后端历史里带「【某某 说】」标记）。串行而不是并发：免费模型池并发
+  // 会互相抢源拖慢，而且群聊里"接话"本来就该有先后。
+  const agentStore = useAgentsStore()
+  onMounted(() => { if (!agentStore.agentsLoaded.value) agentStore.loadAgents() })
+
   function startCodeWorkflow(task, display, opts) {
-    startFlow(task, display, opts)
     userInput.value = ''
+    const sid = localStorage.getItem('prism_session_id') || sessionId.value
+    const members = (opts && opts.groupIds) || agentStore.groupOf(sid)
+    // 没挂群聊成员：单 Agent 老链路，行为完全不变。
+    if (!members || members.length <= 1) {
+      startFlow(task, display, {
+        ...opts,
+        agentId: (members && members[0]) || agentStore.currentAgentId.value || '',
+      })
+      return
+    }
+    let idx = 0
+    const next = () => {
+      if (idx >= members.length) return
+      const id = members[idx]
+      idx += 1
+      startFlow(task, display, {
+        ...opts,
+        agentId: id,
+        // 第一位插用户气泡，后面的只出自己的回复
+        skipUserBubble: idx > 1,
+        onDone: next,
+      })
+    }
+    next()
   }
 
   function toggleExpand() {
@@ -313,6 +346,8 @@ function watchInputClearance() {
              id: idx,
              kind: 'agentflow',
              sender: 'bot',
+             // 群聊：还原说话人（后端 persistedMessage.agent）
+             agentId: item.agent || '',
              status: 'completed',
              blocks: kept.map(b => ({
                ...b,
@@ -336,6 +371,7 @@ function watchInputClearance() {
                        id: idx,
                        kind: 'agentflow',
                        sender: 'bot',
+                       agentId: item.agent || '',
                        status: 'completed',
                        blocks: parsed.blocks,
                        subagents: [],
@@ -351,6 +387,7 @@ function watchInputClearance() {
                                       id: idx,
                                       kind: 'agentflow',
                                       sender: 'bot',
+                                      agentId: item.agent || '',
                                       status: 'completed',
                                       blocks: item.tool_calls.map((tc, ti) => ({
                                         type: 'tool',
@@ -571,6 +608,122 @@ async function switchSession(id) {
     return n
   })
 
+  // ===== 知识库抽屉 =====
+  const kbOpen = ref(localStorage.getItem('kb_open') === '1')
+  const kbFiles = ref([])
+  const kbLoading = ref(false)
+  const kbDragOver = ref(false)
+  const kbUploadInputRef = ref(null)
+
+  function toggleKb() {
+    kbOpen.value = !kbOpen.value
+    localStorage.setItem('kb_open', kbOpen.value ? '1' : '0')
+    if (kbOpen.value) loadKb()
+  }
+
+  // 从后端拉真实知识库清单
+  async function loadKb() {
+    kbLoading.value = true
+    try {
+      const res = await fetch('/api/knowledge/list')
+      if (!res.ok) throw new Error('加载失败')
+      const data = await res.json()
+      kbFiles.value = (data.files || []).map(f => ({
+        id: f.name,
+        name: f.name,
+        size: formatKbSize(f.size),
+        chunks: f.chunks,
+      }))
+    } catch (e) {
+      kbFiles.value = []
+    } finally {
+      kbLoading.value = false
+    }
+  }
+
+  function triggerKbUpload() {
+    kbUploadInputRef.value?.click()
+  }
+
+  async function onKbUploadSelected(e) {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    await uploadKbFiles(files)
+  }
+
+  async function onKbDrop(e) {
+    kbDragOver.value = false
+    const files = Array.from(e.dataTransfer?.files || [])
+    await uploadKbFiles(files)
+  }
+
+  async function uploadKbFiles(files) {
+    for (const f of files) {
+      const fd = new FormData()
+      fd.append('file', f)
+      try {
+        const res = await fetch('/api/knowledge/upload', { method: 'POST', body: fd })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          window.alert('上传失败：' + (err.error || f.name))
+        }
+      } catch (e) {
+        window.alert('上传失败：' + f.name)
+      }
+    }
+    await loadKb()
+  }
+
+  async function addKbFiles(files) {
+    await uploadKbFiles(files)
+  }
+
+  async function removeKbFile(id) {
+    try {
+      await fetch('/api/knowledge/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: id }),
+      })
+      await loadKb()
+    } catch (e) {
+      window.alert('删除失败')
+    }
+  }
+
+  function insertKbRef(file) {
+    // 插入文件引用到输入框，格式如 [📎 文件名]
+    const ref = ` [📎 ${file.name}] `
+    userInput.value += ref
+  }
+
+  function fileIcon(name) {
+    const ext = (name.split('.').pop() || '').toLowerCase()
+    const map = {
+      pdf: 'mdi:file-pdf-box',
+      doc: 'mdi:file-word-box', docx: 'mdi:file-word-box',
+      xls: 'mdi:file-excel-box', xlsx: 'mdi:file-excel-box',
+      ppt: 'mdi:file-powerpoint-box', pptx: 'mdi:file-powerpoint-box',
+      png: 'mdi:file-image-box', jpg: 'mdi:file-image-box', jpeg: 'mdi:file-image-box', gif: 'mdi:file-image-box', webp: 'mdi:file-image-box',
+      mp4: 'mdi:file-video-box', mov: 'mdi:file-video-box',
+      mp3: 'mdi:file-music-box', wav: 'mdi:file-music-box',
+      zip: 'mdi:file-archive-box', rar: 'mdi:file-archive-box',
+      txt: 'mdi:file-document-outline',
+      md: 'mdi:language-markdown',
+      json: 'mdi:code-json',
+      py: 'mdi:language-python',
+      js: 'mdi:language-javascript',
+      go: 'mdi:language-go',
+    }
+    return map[ext] || 'mdi:file-outline'
+  }
+
+  function formatKbSize(bytes) {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+  }
+
   return {
     isOpen, isExpanded, userInput, messages, sessionId,
     isLoggedIn, debugTemp, debugTopP, debugReasoning, debugMaxTokens, balance,
@@ -584,7 +737,11 @@ async function switchSession(id) {
     flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     todoState, sendSteerMessage,
     questionState, answerQuestion,
+    agentStore,
     toggleExpand, toggleChat, updateParams,
-    groupedMessages, formatChatTime
+    groupedMessages, formatChatTime,
+    kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,
+    toggleKb, triggerKbUpload, onKbUploadSelected, onKbDrop, loadKb,
+    addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize
   }
 }

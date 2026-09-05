@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -43,6 +44,10 @@ var rememberToolDef = core.ToolDefinition{
 					Type:        "string",
 					Description: "index.md 中该条目的摘要，一句话说清本条关联什么。例如「用户偏好：简短回复，常用 deepseek」。不提供则自动从 text 截取前 40 字。",
 				},
+				"scope": {
+					Type:        "string",
+					Description: "shared（默认）=通用长期记忆，所有 Agent 共享；private=只属于我当前这个 Agent 的私有记忆（我的经历、我跟用户之间的默契）。",
+				},
 			},
 			Required: []string{"text", "file"},
 		},
@@ -50,11 +55,13 @@ var rememberToolDef = core.ToolDefinition{
 }
 
 // handleRemember 处理 remember 工具调用，写入 memory/ 目录。
-func handleRemember(argsJSON string) string {
+// ctx 带 agent id 且 scope=private 时写该 Agent 的私有记忆，而非通用记忆。
+func handleRemember(ctx context.Context, argsJSON string) string {
 	var args struct {
 		Text    string `json:"text"`
 		File    string `json:"file"`
 		Summary string `json:"summary"`
+		Scope   string `json:"scope"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return "参数解析失败: " + err.Error()
@@ -85,6 +92,15 @@ func handleRemember(argsJSON string) string {
 		}
 	}
 
+	if strings.EqualFold(strings.TrimSpace(args.Scope), "private") {
+		if agentID := agentIDFromCtx(ctx); agentID != "" {
+			if err := memorydir.AgentRemember(agentID, args.File, args.Summary, args.Text); err != nil {
+				return "写入私有记忆失败: " + err.Error()
+			}
+			return "已写入我的私有记忆 agents/" + agentID + "/memory/" + args.File + ".md，下次我还会记得。"
+		}
+		// 没有 Agent 身份（单 Agent 老链路）：private 退回通用记忆，不报错打断任务
+	}
 	if err := memorydir.Remember(args.File, args.Summary, args.Text); err != nil {
 		return "写入失败: " + err.Error()
 	}

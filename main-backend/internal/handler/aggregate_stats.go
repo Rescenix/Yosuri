@@ -24,23 +24,29 @@ type aggStat struct {
 
 var (
 	aggStatsMu   sync.Mutex
-	aggStatsBuf  = map[string]*aggStat{} // 累计未上报的计数（model → 计数）
+	aggStatsBuf  = map[string]map[string]*aggStat{} // 外层 model → 内层 uid → 计数
 	aggStatsStop = make(chan struct{})
 )
 
 // aggStatsInc 记录一次聚合端口调用（成功分支调用）。内存计数，异步上报，零阻塞。
 // tokens 用请求 JSON 长度估算（不读响应，避免多一次解析）。
 // model 传 catalog ID（b.ID），与应用内 user_stats 同口径——云端才能按模型合并进排行榜。
-func aggStatsInc(b RouterBackend, reqTokens int64) {
+// uid 从请求上下文取，游客传空字符串。
+func aggStatsInc(b RouterBackend, reqTokens int64, uid string) {
 	model := b.ID
 	if model == "" {
 		model = b.Model // 兜底：上游模型名
 	}
 	aggStatsMu.Lock()
-	st := aggStatsBuf[model]
+	byUID, ok := aggStatsBuf[model]
+	if !ok {
+		byUID = map[string]*aggStat{}
+		aggStatsBuf[model] = byUID
+	}
+	st := byUID[uid]
 	if st == nil {
 		st = &aggStat{}
-		aggStatsBuf[model] = st
+		byUID[uid] = st
 	}
 	st.calls++
 	st.tokens += reqTokens
@@ -89,6 +95,7 @@ func flushAggStatsNow() {
 	}
 	type row struct {
 		Model  string `json:"model"`
+		UID    string `json:"uid"`
 		Calls  int64  `json:"calls"`
 		Tokens int64  `json:"tokens"`
 		Date   string `json:"date"`
@@ -96,10 +103,12 @@ func flushAggStatsNow() {
 	rows := make([]row, 0, len(aggStatsBuf))
 	// 北京时间当天（与云端排行 range 过滤口径一致，自然日）
 	date := time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02")
-	for m, st := range aggStatsBuf {
-		rows = append(rows, row{Model: m, Calls: st.calls, Tokens: st.tokens, Date: date})
+	for m, byUID := range aggStatsBuf {
+		for uid, st := range byUID {
+			rows = append(rows, row{Model: m, UID: uid, Calls: st.calls, Tokens: st.tokens, Date: date})
+		}
 	}
-	aggStatsBuf = map[string]*aggStat{}
+	aggStatsBuf = map[string]map[string]*aggStat{}
 	aggStatsMu.Unlock()
 
 	body, _ := json.Marshal(map[string]any{"rows": rows})

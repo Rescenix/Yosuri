@@ -127,6 +127,12 @@ func CloudRegisterProxy(c *gin.Context) {
 	proxyToCloud(c, "/api/auth/register")
 }
 
+// CloudCaptchaProxy 登录图形验证码（2026-09-05）：GET 转发到 ResceneCloud
+// 拉取自绘验证码图片（{id, image_base64}），无需鉴权。返回的 id 随登录请求带回。
+func CloudCaptchaProxy(c *gin.Context) {
+	proxyToCloud(c, "/api/auth/captcha")
+}
+
 // CloudUidProxy 游客 UID 分发：转发到 ResceneCloud 统一验证并签发（前端不可伪造）。
 // 同一 device_id 恒定返回同一 UID；换设备/清缓存 = 新游客号，登录 bind 后永久保留。
 func CloudUidProxy(c *gin.Context) {

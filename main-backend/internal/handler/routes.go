@@ -53,6 +53,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/file/rename", gin.WrapH(http.HandlerFunc(FileRenameHandler)))
 	r.DELETE("/api/file", gin.WrapH(http.HandlerFunc(FileDeleteHandler)))
 	r.GET("/api/file/changes", gin.WrapH(http.HandlerFunc(FileChangesHandler)))
+	// 外挂知识库抽屉：列出/上传/删除用户外部文档（复用 knowledge 包的 RAG 检索链路）
+	r.GET("/api/knowledge/list", HandleKnowledgeList)
+	r.POST("/api/knowledge/upload", HandleKnowledgeUpload)
+	r.POST("/api/knowledge/delete", HandleKnowledgeDelete)
 	// agent 实际工具执行的工作目录：GET 读当前值，POST 真正切换 + 落盘持久化
 	r.GET("/api/workdir", GetWorkdir)
 	r.POST("/api/workdir/pick", PickWorkdir)
@@ -159,6 +163,19 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/profile/avatar", HandleGetAvatar)
 	r.POST("/api/profile/avatar", HandleSaveAvatar)
 	r.DELETE("/api/profile/avatar", HandleClearAvatar)
+
+	// 多 Agent：角色卡注册表 + 各自头像 + 各自私有记忆（通用记忆全 Agent 共享）
+	r.GET("/api/agents", HandleListAgents)
+	r.POST("/api/agents", HandleSaveAgent)
+	r.DELETE("/api/agents/:id", HandleDeleteAgent)
+	r.POST("/api/agents/:id/avatar", HandleSaveAgentAvatar)
+	r.GET("/api/agents/:id/memory", HandleAgentMemory)
+
+	// 自定义语音：云端/外部 TTS 代理（MiniMax / OpenAI 兼容）
+	r.GET("/api/tts/config", HandleGetTTSConfig)
+	r.POST("/api/tts/config", HandleSaveTTSConfig)
+	r.POST("/api/tts/speak", HandleTTSSpeak)
+	r.POST("/api/tts/test", HandleTTSTest)
 
 	// Aether 视觉预处理（Gemini Interactions REST，纯 net/http，不依赖 SDK）
 	r.POST("/api/aether/vision-preprocess", HandleAetherVisionPreprocess)
@@ -273,7 +290,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/theme/name", HandleThemeName)
 
 	r.POST("/api/login", CloudLoginProxy)
-	r.POST("/api/auth/register", CloudRegisterProxy)
+		r.POST("/api/auth/register", CloudRegisterProxy)
+		// 登录图形验证码（2026-09-05，自绘零依赖）：前端拉取图片，登录时带回校验
+		r.GET("/api/auth/captcha", CloudCaptchaProxy)
 	// token 校验直接代理到 ResceneCloud 云端验签（透传 Authorization 头）。
 	// re0 开源侧不持有任何密钥，验签全由云端完成（与签发同源），
 	// 既修了「打包版无 .env → 本地默认密钥与云端不符 → auth/me 401」的登不上问题，

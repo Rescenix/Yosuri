@@ -1002,19 +1002,14 @@ func loadRealReviews(projDir, project string) realReviewsFile {
 
 // findProjectDir 按项目名（目录名）定位真实项目目录，防路径穿越
 func findProjectDir(project string) (string, bool) {
-	if project == "" || strings.ContainsAny(project, `/\`) {
+	if project == "" || strings.ContainsAny(project, `/\`) || strings.Contains(project, "..") {
 		return "", false
 	}
-	companyRoot := companyDir()
-	entries, err := os.ReadDir(companyRoot)
-	if err != nil {
-		return "", false
-	}
-	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "coder-") {
-			continue
-		}
-		projDir := filepath.Join(companyRoot, e.Name(), "projects", project)
+	// 项目真身根目录优先，历史 coder-*/projects 只读兼容。
+	// 此前只扫 coder-* 目录，09-04 项目真身层落地后新交付全部落在
+	// company/projects/ 下，导致真实评分提交一律 404「项目不存在」、销量永远不入账。
+	for _, root := range companyProjectRoots() {
+		projDir := filepath.Join(root, project)
 		if st, err := os.Stat(projDir); err == nil && st.IsDir() {
 			return projDir, true
 		}
@@ -1109,7 +1104,6 @@ func round1(v float64) float64 {
 // HandleCompanyReviews GET /api/company/reviews — 真实用户评分/评奖列表
 // 扫描公司各 coder 项目目录的 reviews-real.json，只返回有真实评分的产品
 func HandleCompanyReviews(c *gin.Context) {
-	companyRoot := companyDir()
 	type userReviewView struct {
 		Nickname  string `json:"nickname"`
 		Score     int    `json:"score"`
@@ -1125,25 +1119,19 @@ func HandleCompanyReviews(c *gin.Context) {
 		Users    []userReviewView `json:"users"`
 	}
 	var all []reviewsPayload
-	entries, err := os.ReadDir(companyRoot)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"reviews": []reviewsPayload{}})
-		return
-	}
-	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "coder-") {
-			continue
-		}
-		projDir := filepath.Join(companyRoot, e.Name(), "projects")
-		projs, err := os.ReadDir(projDir)
+	// 遍历所有项目根：真身目录 company/projects/ 优先，历史 coder-*/projects 兼容。
+	// 此前只扫 coder-* 目录，09-04 之后的新交付永远不出现在评分列表里，用户想打分也找不到产品。
+	for _, root := range companyProjectRoots() {
+		projs, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
+		agent := companyProjectAgentOf(root)
 		for _, p := range projs {
 			if !p.IsDir() {
 				continue
 			}
-			rb := loadRealReviews(filepath.Join(projDir, p.Name()), p.Name())
+			rb := loadRealReviews(filepath.Join(root, p.Name()), p.Name())
 			if len(rb.Reviews) == 0 {
 				continue // 只展示有真实用户评分的产品
 			}
@@ -1159,7 +1147,7 @@ func HandleCompanyReviews(c *gin.Context) {
 				})
 			}
 			all = append(all, reviewsPayload{
-				Project: p.Name(), Agent: e.Name(),
+				Project: p.Name(), Agent: agent,
 				AvgScore: round1(avg), Count: len(rb.Reviews),
 				Award: reviewAwardFor(avg, len(rb.Reviews)), Users: users,
 			})

@@ -33,6 +33,7 @@ import (
 
 	"backend/internal/agent"
 	"backend/internal/ai/core"
+	"backend/internal/memorydir"
 
 	"github.com/gin-gonic/gin"
 )
@@ -191,6 +192,19 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		mode = "yolo"
 	}
 
+	// ── 多 Agent：当前发言者身份 ──
+	// agent_id 决定三件事：①人设从角色卡注册表取（覆盖 persona query）
+	// ②记忆工具 scope=private 写到哪 ③私有记忆注入上下文。
+	// 空 = 单 Agent 老链路，一切行为与改造前一致。
+	agentID := memorydir.SanitizeAgentID(c.Query("agent_id"))
+	if agentID == "" && resumed != nil {
+		agentID = resumed.AgentID
+	}
+	if agentID != "" {
+		// 工具执行链（executeCodeCalls → callNativeTool → 记忆工具）经 ctx 取身份。
+		c.Request = c.Request.WithContext(withAgentID(c.Request.Context(), agentID))
+	}
+
 	// 模型路由链：前端选了具体模型就精确路由到那一个；否则走用户配置>env DeepSeek>
 	// 免费池的全链。注意本地兜底已移除（8186699e），一个 Key 都没配时链会是空的，
 	// 由 streamRouterRound 给出"去配 Key"的明确报错。
@@ -333,10 +347,15 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 上下文装配全部交给 ContextProvider（见 context_provider.go）：
 	// 系统提示词分段声明、稳定段排前面（前缀缓存友好）、分类占用与提示词同源、
 	// 按需加载的工具激活集也归它管。SwiftNet 的无条件记忆注入是其中一段。
-	provider := newWorkflowContextProvider(task)
-	// 人设由前端默认预设/用户自定义经 persona 参数传入；空则保持中性基底。
-	// 续跑时 msgs[0] 已含当初的完整系统提示词（含人设），整体 replay，不在此重建。
-	provider.WithPersona(c.Query("persona"))
+	// agentID 非空时额外注入该 Agent 的私有记忆（通用记忆照旧共享）。
+	provider := newWorkflowContextProviderFor(agentID, task)
+	// 人设优先级：角色卡（agent_id 命中注册表）> 前端 persona query > 中性基底。
+	// 群聊里每个 Agent 的人设存在后端角色卡上，前端只传 id，避免把长文案塞进 URL。
+	if persona := AgentPersona(agentID); persona != "" {
+		provider.WithPersona(persona)
+	} else {
+		provider.WithPersona(c.Query("persona"))
+	}
 	contextBreakdown := provider.Breakdown()
 	staticSum := provider.StaticSum()
 	tools := provider.Tools()
@@ -442,7 +461,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		}
 		r.persistWorkflowHistory(
 			sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
-			finalIn, finalOut,
+			finalIn, finalOut, agentID,
 		)
 		// 用户通过 remember 工具主动写入 MEMORY.md，此处不自动写
 		historyPersisted = true
@@ -464,7 +483,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	provider.OnInvoked(func(round int, st roundState) {
 		saveWorkflowCheckpoint(&workflowCheckpoint{
 			WorkflowID: workflowID, SessionID: sessionID, OpenID: openID,
-			Task: task, Mode: mode, Model: model, Effort: effort,
+			Task: task, Mode: mode, Model: model, Effort: effort, AgentID: agentID,
 			Round: round, Msgs: st.msgs, Transcript: st.transcript,
 			CallSigCount: st.callSigCount, CallSeq: st.callSeq,
 			ActivatedTools: provider.ActivatedTools(),
@@ -724,6 +743,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 这一轮模型在调工具之前说的话，也是轨迹的一部分（"我先看看这个文件"）
 		if content != "" {
 			flowBlocks = append(flowBlocks, FlowBlock{Type: "intent", Text: content})
+			// 意图同样进 transcript：只有裸工具日志时，下游（技能提炼、follow-up 建议）
+			// 看得见"执行了什么"却看不见"想干什么"，容易推断出脱离语境的结论。
+			transcript = append(transcript, "意图: "+truncateChars(content, 200))
 		}
 
 		// action 事件（args 为真实 JSON）
@@ -820,7 +842,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			}
 			// remember：用户说「记住」时写入长期记忆。
 			if tc.Function.Name == rememberToolName {
-				handled[i] = handleRemember(tc.Function.Arguments)
+				handled[i] = handleRemember(c.Request.Context(), tc.Function.Arguments)
 				continue
 			}
 			toRun = append(toRun, calls[i])

@@ -5,14 +5,20 @@ import { reactive, watch } from 'vue'
 
 export const STREAM_FADE_DEFAULTS = {
   enabled: false,  // 总开关（默认关：09-02 watch 修复后渐变真正触发，每个 chunk 淡入=闪；以前流畅是因为它没跑）
-  fadeMs: 180,     // 单字符淡入时长（ms）
+  fadeMs: 100,     // 单字符淡入时长（ms）
   staggerMs: 8,    // 相邻字符的级联延迟（ms/字符）
   maxSweepMs: 250, // 单批 chunk 的最大扫过时长（ms）
   blurPx: 0,       // 淡入起始模糊强度（px）
 }
 
+// 渐变开关 09-05 才上线：默认关优先，历史持久化的 enabled 一律不采信（避免调试期坏值残留）
 function loadPersisted() {
-  try { return JSON.parse(localStorage.getItem('streamFadeConfig') || '{}') } catch (e) { return {} }
+  try {
+    const raw = JSON.parse(localStorage.getItem('streamFadeConfig') || '{}')
+    delete raw.enabled
+    delete raw.__v
+    return raw
+  } catch (e) { return {} }
 }
 
 export const streamFadeConfig = reactive({ ...STREAM_FADE_DEFAULTS, ...loadPersisted() })

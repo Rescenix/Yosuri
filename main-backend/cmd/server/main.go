@@ -25,6 +25,9 @@ func main() {
 	// 开销提前到启动阶段，减少用户点「登录」时撞上冷启动超时（2026-08-20）。
 	handler.WarmCloudAuth()
 
+	// 自定义语音：加载上一次的云端配置（未配=回落到 Edge 直连）
+	handler.LoadTTSConfigFile()
+
 	r := handler.NewAPIRouter()
 
 	// 云端记忆同步：启动后自动拉取一次（换设备恢复记忆）+ 定时双向循环

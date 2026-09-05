@@ -2,6 +2,8 @@
 
 package handler
 
+import "strings"
+
 // 任务生命周期状态（DSMessage.Status，只对 role=="user" 有意义）。
 const (
 	taskStatusCompleted   = "completed"
@@ -70,6 +72,10 @@ func truncateHistory(history []DSMessage, maxHistory int) []DSMessage {
 
 // 构建消息列表。history 里的已完成任务会被打上前缀，与末尾这条真正待办的
 // userMessage 区分开——后者是唯一需要执行的任务。
+//
+// 多 Agent 群聊：带 Agent 标记的历史消息前面加「【某某 说】」，让当前发言的
+// Agent 分得清哪些话是同事说的、哪些是用户说的（role 只有 user/assistant 两种，
+// 光靠 role 区分不了多个助手）。
 func buildChatMessages(systemPrompt string, history []DSMessage, userMessage string) []map[string]string {
 	msgs := []map[string]string{
 		{"role": "system", "content": systemPrompt},
@@ -79,8 +85,24 @@ func buildChatMessages(systemPrompt string, history []DSMessage, userMessage str
 		if prefix := historyTaskPrefix(msg); prefix != "" && content != "" {
 			content = prefix + content
 		}
+		if tag := agentSpeechTag(msg); content != "" && tag != "" {
+			content = tag + content
+		}
 		msgs = append(msgs, map[string]string{"role": msg.Role, "content": content})
 	}
 	msgs = append(msgs, map[string]string{"role": "user", "content": userMessage})
 	return msgs
+}
+
+// agentSpeechTag 给群聊历史消息生成说话人标记。单 Agent（无标记）返回空串，
+// 行为与改造前逐字节一致——不破坏前缀缓存。
+func agentSpeechTag(m DSMessage) string {
+	if strings.TrimSpace(m.Agent) == "" {
+		return ""
+	}
+	name := m.Agent
+	if card := GetAgentCard(m.Agent); card != nil && card.Name != "" {
+		name = card.Name
+	}
+	return "【" + name + " 说】"
 }

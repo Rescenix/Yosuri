@@ -94,7 +94,7 @@ func HandleAggregateResponses(c *gin.Context) {
 				lastErr = err
 				continue
 			}
-			aggStatsInc(b, estimateJSONTokens(rawBody))
+			aggStatsInc(b, estimateJSONTokens(rawBody), "")
 			aggregateForwardResponsesSSE(c, b, resp)
 			return
 		}
@@ -103,7 +103,7 @@ func HandleAggregateResponses(c *gin.Context) {
 			lastErr = err
 			continue
 		}
-		aggStatsInc(b, estimateJSONTokens(rawBody))
+		aggStatsInc(b, estimateJSONTokens(rawBody), "")
 		c.JSON(http.StatusOK, buildAggregateResponses(b, content, calls))
 		return
 	}

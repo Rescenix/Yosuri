@@ -157,6 +157,18 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   overflow-x: hidden;
   min-height: 0;
   padding: 2px 6px 10px;
+  /* 细滚动条：与模型菜单一致的主题色窄条 */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--app-accent) 30%, transparent) transparent;
+}
+.session-list-body::-webkit-scrollbar { width: 6px; }
+.session-list-body::-webkit-scrollbar-track { background: transparent; }
+.session-list-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+  border-radius: 999px;
+}
+.session-list-body::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--app-accent) 50%, transparent);
 }
 
 .session-row {

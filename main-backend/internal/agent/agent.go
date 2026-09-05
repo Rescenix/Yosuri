@@ -26,6 +26,12 @@ const SoulTemplateCodeProtocol = `
 - 日常操作只用四个核心工具：read（读取+搜索）、write（写入+建目录+移动+删除）、patch（定点替换）、bash（执行命令+后台任务）。
 - read_file/grep/glob/write_file/edit_file/run_command 等旧工具名已被 read/write/patch/bash 吸收，不要直接调用，统一用四个核心工具。
 - 扩展能力（搜索/识图/生图/记忆/视频/检索）是自研内置，工具名不带前缀，直接调；索引里列出的名字都可直接使用。
+- 用户要求「打开/操作某个网站、点外卖、抢票、填表、下单、查某个网页内容」这类网页任务时，自动进入 computer use 流程，不要只给文字建议：
+  1. 先 computer_open_url 打开目标网址（用户给了网址直接用；没给就打开用户提到的网站或搜索引擎）；
+  2. computer_screenshot 截图看页面，识别输入框/按钮位置；
+  3. 用 computer_mouse_click 点击、computer_type 输入、computer_key 回车/切换，循环「截图 → 看清 → 操作 → 再截图确认」直到任务完成；
+  4. 完成或失败都要 computer_screenshot 确认最终状态再回复用户。
+  操作浏览器以外的桌面任务（移动鼠标、滚动、复制粘贴等）同样优先用 computer_* 工具完成。
 - read 用 path 读文件（offset/limit 分段，最多 400 行），给 pattern 是内容搜索，给 glob 是文件名匹配；patch 用 old_string/new_string 做唯一替换（old_string 从 read 结果原样复制）。
 - **必须按行读取文件**：用 read 的 offset/limit 分段读取，offset 从 1 开始，一次最多 400 行；禁止无目的地把大文件全文塞进上下文。
 - 先在需要改动的文件上用 read 或 grep 定位再动手，避免重复劳动。

@@ -22,6 +22,9 @@
         <div class="settings-modal-body">
           <!-- 左侧边栏 -->
           <div class="settings-sidebar">
+            <div class="settings-nav-label">通用</div>
+            <button class="settings-tab" :class="{ on: activeTab === 'general' }" @click="activeTab = 'general'">
+              <Icon icon="mdi:translate" width="16" />语言</button>
             <div class="settings-nav-label">模型与连接</div>
             <button class="settings-tab" :class="{ on: activeTab === 'models' }" @click="activeTab = 'models'">
               <Icon icon="mdi:brain" width="16" />模型</button>
@@ -103,6 +106,20 @@
 
           <!-- 右侧内容区 -->
           <div class="settings-content">
+            <!-- ========== 语言（通用） ========== -->
+            <div v-show="activeTab === 'general'" class="settings-panel">
+              <div class="settings-section-title">通用</div>
+              <div class="settings-section-desc">界面语言切换，立即生效。</div>
+              <div class="param-row">
+                <span class="param-label">界面语言</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: isZh }" type="button" @click="setLocale('zh')">简体中文</button>
+                  <button class="seg-btn" :class="{ on: !isZh }" type="button" @click="setLocale('en')">English</button>
+                </div>
+              </div>
+              <div class="settings-section-desc">当前仅覆盖侧栏、账户菜单、登录等核心界面，其余界面陆续接入。</div>
+            </div>
+
             <!-- ========== 模型 ========== -->
             <div v-show="activeTab === 'models'" class="settings-panel">
               <div class="settings-section-title">基础配置</div>
@@ -113,7 +130,7 @@
 
               <div class="param-row">
                 <span class="param-label">语音音色</span>
-                <select class="model-select" :value="ttsVoice" @change="saveTtsVoice($event.target.value)">
+                <select class="model-select" :value="ttsVoice" @change="saveTtsVoice($event.target.value)" :disabled="ttsConfig.enabled">
                   <option value="zh-CN-XiaoyiNeural">晓依 · 软萌少女</option>
                   <option value="zh-CN-XiaoxiaoNeural">晓晓 · 温柔女声</option>
                   <option value="zh-CN-XiaomoNeural">晓墨 · 元气活力</option>
@@ -121,6 +138,59 @@
                   <option value="ja-JP-NanamiNeural">七海 · 日系少女</option>
                   <option value="ja-JP-AoiNeural">葵 · 日系轻声</option>
                 </select>
+              </div>
+
+              <!-- 自定义语音：云端/外部 TTS 代理 -->
+              <div class="tts-custom-block">
+                <div class="tts-custom-head">
+                  <span class="param-label">自定义云端语音</span>
+                  <label class="tts-switch">
+                    <input type="checkbox" :checked="ttsConfig.enabled" @change="toggleTts($event.target.checked)" />
+                    <span class="tts-switch-track"></span>
+                  </label>
+                </div>
+                <div v-if="ttsConfig.enabled" class="tts-custom-body">
+                  <div class="tts-hint">启用后，消息朗读走你配的云端 TTS（MiniMax / OpenAI 兼容），Edge 直连自动停用。</div>
+                  <div class="param-row">
+                    <span class="param-label">提供商</span>
+                    <select class="model-select" v-model="ttsConfig.provider" @change="saveTtsConfig()">
+                      <option value="openai">OpenAI 兼容</option>
+                      <option value="minimax">MiniMax t2a_v2</option>
+                    </select>
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">Base URL</span>
+                    <input class="model-input" v-model="ttsConfig.base_url" @blur="saveTtsConfig()" placeholder="https://api.minimax.chat/v1 或 OpenAI 兼容根" />
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">API Key</span>
+                    <input class="model-input" v-model="ttsConfig.api_key" @blur="saveTtsConfig()" type="password" placeholder="sk-... 或 MiniMax Key" />
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">模型</span>
+                    <input class="model-input" v-model="ttsConfig.model" @blur="saveTtsConfig()" placeholder="minimax-tts 或 gpt-4o-mini-tts" />
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">音色/语音 ID</span>
+                    <input class="model-input" v-model="ttsConfig.voice" @blur="saveTtsConfig()" placeholder="male-qn-qingse / nova / shimmer" />
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">语速</span>
+                    <input class="model-input" v-model.number="ttsConfig.speed" @blur="saveTtsConfig()" type="number" step="0.1" min="0.5" max="2.0" />
+                  </div>
+                  <div class="param-row">
+                    <span class="param-label">展示名</span>
+                    <input class="model-input" v-model="ttsConfig.voice_name" @blur="saveTtsConfig()" placeholder="自定义·云端少女" />
+                  </div>
+                  <div class="tts-test-row">
+                    <button class="tts-test-btn" @click="testTts()" :disabled="ttsTesting">
+                      {{ ttsTesting ? '测试中…' : '连通性测试' }}
+                    </button>
+                    <span v-if="ttsTestResult" class="tts-test-status" :class="ttsTestResult.ok ? 'ok' : 'fail'">
+                      {{ ttsTestResult.ok ? `✓ 通（${ttsTestResult.bytes} 字节）` : `✗ ${ttsTestResult.error}` }}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div class="param-row">
@@ -869,6 +939,64 @@
                               <span>{{ personaToast.message }}</span>
                             </div>
                           </Transition>
+
+                          <div class="persona-divider"></div>
+
+                          <!-- ========== 我的 Agent（多角色卡：各自人设/头像/私有记忆） ========== -->
+                          <div class="settings-section-title settings-section-title-row">
+                            <span>我的 Agent</span>
+                            <button class="vendor-key-save" type="button" @click="startNewAgent">新建角色卡</button>
+                          </div>
+                          <div class="settings-section-desc">
+                            每个 Agent 有自己的角色卡、头像和私有记忆；用户偏好等通用记忆所有 Agent 共享。
+                            在聊天输入框的「群聊成员」里勾选，一个对话可以让多个 Agent 依次发言。
+                          </div>
+                          <div class="agent-card-grid">
+                            <div v-for="a in agentStore.agents.value" :key="a.id" class="agent-card">
+                              <img v-if="a.avatar" :src="a.avatar" class="agent-card-avatar" alt="" />
+                              <span v-else class="agent-card-avatar agent-card-avatar-text" :style="{ background: a.color || '#8b5e7c' }">
+                                {{ (a.name || '?').charAt(0) }}
+                              </span>
+                              <div class="agent-card-body">
+                                <div class="agent-card-name">{{ a.name }}</div>
+                                <div class="agent-card-persona">{{ (a.persona || '（未写角色卡）').slice(0, 40) }}…</div>
+                              </div>
+                              <div class="agent-card-ops">
+                                <button class="profile-avatar-action" type="button" @click="editAgent(a)">编辑</button>
+                                <button class="profile-avatar-action muted" type="button" @click="removeAgent(a.id)">删除</button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- 角色卡编辑表单 -->
+                          <div v-if="agentEditing" class="agent-edit-form">
+                            <div class="profile-row">
+                              <span class="profile-label">名字</span>
+                              <input class="profile-input" v-model="agentDraft.name" maxlength="16" placeholder="比如：小雪" />
+                            </div>
+                            <div class="profile-row">
+                              <span class="profile-label">头像</span>
+                              <div class="profile-avatar-editor">
+                                <img v-if="agentDraft.avatar" :src="agentDraft.avatar" class="profile-avatar" alt="" />
+                                <span v-else class="profile-avatar">{{ (agentDraft.name || '?').charAt(0) }}</span>
+                                <div class="profile-avatar-actions">
+                                  <button class="profile-avatar-action" type="button" @click="agentAvatarInputRef?.click()">选择图片</button>
+                                  <button v-if="agentDraft.avatar" class="profile-avatar-action muted" type="button" @click="agentDraft.avatar = ''">移除</button>
+                                </div>
+                                <input ref="agentAvatarInputRef" class="profile-avatar-input" type="file"
+                                  accept="image/png,image/jpeg,image/webp,image/gif" @change="onAgentAvatarFile" />
+                              </div>
+                            </div>
+                            <div class="profile-row">
+                              <span class="profile-label">角色卡</span>
+                              <textarea class="persona-textarea" rows="6" v-model="agentDraft.persona"
+                                placeholder="写下这个 Agent 是谁：自称、语气、性格、口头禅、忌讳……"></textarea>
+                            </div>
+                            <div class="agent-edit-actions">
+                              <button class="vendor-key-save" type="button" @click="saveAgentDraft">保存</button>
+                              <button class="vendor-key-cancel" type="button" @click="agentEditing = false">取消</button>
+                            </div>
+                          </div>
                         </div>
 
                         <!-- ========== 外观 ========== -->
@@ -1600,10 +1728,12 @@ import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS, customColor, customThemeName, setCustomColor, setCustomThemeName } from '../composables/useTheme.js'
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
 import { DEFAULT_PERSONA } from '../composables/useAgentWorkflow.js'
+import { useAgentsStore } from '../composables/useAgents.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
 import { useAuth } from '../../../composables/useAuth.js'
+import { useI18n } from '../../../composables/useI18n.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import FreeOrderModal from './FreeOrderModal.vue'
 import PersonaReportModal from './PersonaReportModal.vue'
@@ -1614,6 +1744,8 @@ const props = defineProps({
   defaultDhsSubTab: { type: String, default: '' }
 })
 const emit = defineEmits(['close'])
+
+const { isZh, setLocale } = useI18n()
 
 // 左侧边栏当前 tab
 const activeTab = ref(props.defaultTab || 'models')
@@ -1857,6 +1989,70 @@ const avatarFallback = computed(() => {
   const label = String(auth.displayName.value || 'Yosuri').trim()
   return (label.charAt(0) || 'R').toUpperCase()
 })
+
+// ===== 我的 Agent（多角色卡管理）=====
+const agentStore = useAgentsStore()
+const agentEditing = ref(false)
+const agentAvatarInputRef = ref(null)
+const agentDraft = reactive({ id: '', name: '', persona: '', avatar: '', color: '', character: '' })
+
+onMounted(() => { if (!agentStore.agentsLoaded.value) agentStore.loadAgents() })
+
+watch(activeTab => { if (activeTab === 'models') loadTtsConfig() })
+
+function startNewAgent() {
+  Object.assign(agentDraft, { id: '', name: '', persona: '', avatar: '', color: '', character: '' })
+  agentEditing.value = true
+}
+
+function editAgent(a) {
+  Object.assign(agentDraft, {
+    id: a.id, name: a.name, persona: a.persona || '',
+    avatar: a.avatar || '', color: a.color || '', character: a.character || '',
+  })
+  agentEditing.value = true
+}
+
+async function onAgentAvatarFile(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    personaToast.value = { ok: false, message: '头像超过 2 MB，换张小一点的' }
+    setTimeout(() => { personaToast.value = null }, 2500)
+    return
+  }
+  agentDraft.avatar = await readAvatarFile(file)
+}
+
+async function saveAgentDraft() {
+  if (!agentDraft.name.trim()) {
+    personaToast.value = { ok: false, message: '先给 Agent 起个名字' }
+    setTimeout(() => { personaToast.value = null }, 2500)
+    return
+  }
+  try {
+    const saved = await agentStore.saveAgent({ ...agentDraft })
+    // 头像单独落盘（注册表只存元信息）
+    await agentStore.saveAgentAvatar(saved.id, agentDraft.avatar || '')
+    agentEditing.value = false
+    personaToast.value = { ok: true, message: '已保存角色卡「' + saved.name + '」' }
+  } catch (e) {
+    personaToast.value = { ok: false, message: '保存失败：' + e.message }
+  }
+  setTimeout(() => { personaToast.value = null }, 2500)
+}
+
+async function removeAgent(id) {
+  try {
+    await agentStore.deleteAgent(id)
+    personaToast.value = { ok: true, message: '已删除（含它的私有记忆）' }
+  } catch (e) {
+    personaToast.value = { ok: false, message: '删除失败：' + e.message }
+  }
+  setTimeout(() => { personaToast.value = null }, 2500)
+}
 
 function chooseAvatar() {
   avatarError.value = ''
@@ -2765,9 +2961,71 @@ const MODEL_MODE_KEY = 'modelMode'
 const VISION_MODEL_KEY = 'visionModel'
 const modelMode = ref(localStorage.getItem(MODEL_MODE_KEY) === 'split' ? 'split' : 'unified')
 const ttsVoice = ref(localStorage.getItem('rescene_tts_voice') || 'zh-CN-XiaoyiNeural')
+const ttsConfig = ref({
+  enabled: false,
+  provider: 'openai',
+  base_url: '',
+  api_key: '',
+  model: '',
+  voice: '',
+  speed: 1.0,
+  voice_name: '',
+  test_ok: false,
+})
+const ttsTesting = ref(false)
+const ttsTestResult = ref(null)
+let ttsConfigLoaded = false
+
 function saveTtsVoice(v) {
   ttsVoice.value = v
   localStorage.setItem('rescene_tts_voice', v)
+}
+
+async function loadTtsConfig() {
+  if (ttsConfigLoaded) return
+  ttsConfigLoaded = true
+  try {
+    const res = await fetch('/api/tts/config')
+    if (res.ok) {
+      const data = await res.json()
+      ttsConfig.value = { ...ttsConfig.value, ...data }
+    }
+  } catch {}
+}
+
+async function saveTtsConfig() {
+  const cfg = { ...ttsConfig.value }
+  if (cfg.api_key === '****') cfg.api_key = ''
+  try {
+    await fetch('/api/tts/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    })
+  } catch {}
+  localStorage.setItem('tts_custom_config', JSON.stringify(cfg))
+}
+
+function toggleTts(on) {
+  ttsConfig.value.enabled = on
+  if (on && !ttsConfig.value.provider) {
+    ttsConfig.value.provider = 'openai'
+  }
+  saveTtsConfig()
+}
+
+async function testTts() {
+  ttsTesting.value = true
+  ttsTestResult.value = null
+  try {
+    const res = await fetch('/api/tts/test', { method: 'POST' })
+    const data = await res.json()
+    ttsTestResult.value = data
+  } catch (e) {
+    ttsTestResult.value = { ok: false, error: e.message }
+  } finally {
+    ttsTesting.value = false
+  }
 }
 // 统一模式复用 selectedModel（跟 ChatWidget 顶部模型下拉同一个 key，改这里 = 改那里）；
 // 分开模式下文字模型也是 selectedModel，只是识图另配一个 visionModel。
@@ -4763,5 +5021,102 @@ onUnmounted(() => {
   .settings-modal-card, .settings-panel { animation: none; }
   .settings-tab, .vendor-head { transition: none; }
 }
+
+/* ===== 自定义云端语音 ===== */
+.tts-custom-block {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgba(var(--app-surface-rgb), 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+}
+.tts-custom-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.tts-custom-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tts-hint {
+  font-size: 11.5px;
+  color: var(--app-text-secondary, #888);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+.tts-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.tts-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.tts-switch-track {
+  position: absolute;
+  inset: 0;
+  background: #ccc;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.tts-switch-track::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.tts-switch input:checked + .tts-switch-track {
+  background: var(--app-accent, #1950be);
+}
+.tts-switch input:checked + .tts-switch-track::before {
+  transform: translateX(16px);
+}
+.tts-test-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.tts-test-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: var(--app-surface, #fff);
+  color: var(--app-text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tts-test-btn:hover { background: rgba(var(--app-accent-rgb, 25, 80, 190), 0.08); }
+.tts-test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tts-test-status { font-size: 12px; }
+.tts-test-status.ok { color: #16a34a; }
+.tts-test-status.fail { color: #dc2626; }
+.model-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  background: var(--app-surface, #fff);
+  color: var(--app-text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.model-input:focus { border-color: var(--app-accent, #1950be); }
 </style>
 
