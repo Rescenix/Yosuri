@@ -112,6 +112,18 @@
               </div>
 
               <div class="param-row">
+                <span class="param-label">语音音色</span>
+                <select class="model-select" :value="ttsVoice" @change="saveTtsVoice($event.target.value)">
+                  <option value="zh-CN-XiaoyiNeural">晓依 · 软萌少女</option>
+                  <option value="zh-CN-XiaoxiaoNeural">晓晓 · 温柔女声</option>
+                  <option value="zh-CN-XiaomoNeural">晓墨 · 元气活力</option>
+                  <option value="zh-CN-XiaoxuanNeural">晓萱 · 清亮少女</option>
+                  <option value="ja-JP-NanamiNeural">七海 · 日系少女</option>
+                  <option value="ja-JP-AoiNeural">葵 · 日系轻声</option>
+                </select>
+              </div>
+
+              <div class="param-row">
                 <span class="param-label">配置方式</span>
                 <div class="seg-control">
                   <button class="seg-btn" :class="{ on: modelMode === 'unified' }" type="button" @click="setModelMode('unified')">统一模型</button>
@@ -1000,6 +1012,54 @@
                   >开启</button>
                 </div>
               </div>
+
+              <div class="settings-section-title">流式输出</div>
+              <div class="settings-section-desc">
+                AI 回复时新到的文字逐字符级联淡入（瀑布渐变）。如果看起来一闪一闪，先关掉这个开关。
+              </div>
+              <div class="param-row">
+                <span class="param-label">瀑布渐变</span>
+                <label class="param-switch">
+                  <input type="checkbox" v-model="streamFadeConfig.enabled" />
+                  <span class="param-switch-track"></span>
+                </label>
+              </div>
+              <div class="param-row">
+                <span class="param-label">淡入时长</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs <= 120 }" type="button" @click="streamFadeConfig.fadeMs = 100">快</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs > 120 && streamFadeConfig.fadeMs <= 240 }" type="button" @click="streamFadeConfig.fadeMs = 180">中</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs > 240 }" type="button" @click="streamFadeConfig.fadeMs = 300">慢</button>
+                </div>
+              </div>
+              <div class="param-row">
+                <span class="param-label">级联间隔</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs <= 5 }" type="button" @click="streamFadeConfig.staggerMs = 4">紧凑</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs > 5 && streamFadeConfig.staggerMs <= 12 }" type="button" @click="streamFadeConfig.staggerMs = 8">标准</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs > 12 }" type="button" @click="streamFadeConfig.staggerMs = 16">宽松</button>
+                </div>
+              </div>
+              <div class="param-row">
+                <span class="param-label">扫过时长</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs <= 180 }" type="button" @click="streamFadeConfig.maxSweepMs = 150">快</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs > 180 && streamFadeConfig.maxSweepMs <= 300 }" type="button" @click="streamFadeConfig.maxSweepMs = 250">标准</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs > 300 }" type="button" @click="streamFadeConfig.maxSweepMs = 400">慢</button>
+                </div>
+              </div>
+              <div class="param-row">
+                <span class="param-label">模糊消散</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx === 0 }" type="button" @click="streamFadeConfig.blurPx = 0">无</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx === 1 }" type="button" @click="streamFadeConfig.blurPx = 1">轻</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx >= 2 }" type="button" @click="streamFadeConfig.blurPx = 2">中</button>
+                </div>
+              </div>
+              <div class="param-row" style="border-bottom: none;">
+                <span class="param-label"></span>
+                <button class="seg-btn" type="button" @click="resetStreamFadeConfig" style="font-size: 11.5px; color: var(--app-text-soft);">恢复默认</button>
+              </div>
             </div>
 
                         <!-- ========== 编辑器 ========== -->
@@ -1544,6 +1604,7 @@ import { DEFAULT_PERSONA } from '../composables/useAgentWorkflow.js'
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
 import { useAuth } from '../../../composables/useAuth.js'
+import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import FreeOrderModal from './FreeOrderModal.vue'
 import PersonaReportModal from './PersonaReportModal.vue'
 
@@ -2703,6 +2764,11 @@ const chatList = computed(() => {
 const MODEL_MODE_KEY = 'modelMode'
 const VISION_MODEL_KEY = 'visionModel'
 const modelMode = ref(localStorage.getItem(MODEL_MODE_KEY) === 'split' ? 'split' : 'unified')
+const ttsVoice = ref(localStorage.getItem('rescene_tts_voice') || 'zh-CN-XiaoyiNeural')
+function saveTtsVoice(v) {
+  ttsVoice.value = v
+  localStorage.setItem('rescene_tts_voice', v)
+}
 // 统一模式复用 selectedModel（跟 ChatWidget 顶部模型下拉同一个 key，改这里 = 改那里）；
 // 分开模式下文字模型也是 selectedModel，只是识图另配一个 visionModel。
 const unifiedModelDraft = ref(localStorage.getItem('selectedModel') || '')

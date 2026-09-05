@@ -707,13 +707,46 @@
                     </span>
                   </transition>
 
+                  <div class="toolbar-dropdown-wrap">
+                    <button class="input-left-plus" @click.stop="showAddMenu = !showAddMenu" title="添加">
+                      <Icon icon="mdi:plus" width="16" />
+                    </button>
+                    <div v-if="showAddMenu" class="add-menu-dropdown" @click.stop>
+                      <div class="add-menu-item" @click="triggerAttachFiles">
+                        <Icon icon="mdi:paperclip" width="14" color="#6b6b6b" />
+                        <span>添加文件或照片</span>
+                      </div>
+                      <div class="add-menu-item" @click="triggerAttachVideo">
+                        <Icon icon="mdi:video-outline" width="14" color="#6b6b6b" />
+                        <span>添加视频</span>
+                      </div>
+                      <div class="add-menu-item" @click="triggerAttachFolder">
+                        <Icon icon="mdi:folder-outline" width="14" color="#6b6b6b" />
+                        <span>添加文件夹</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" rows="1"></textarea>
 
-                  <!-- 模型名 pill：输入框右侧、发送按钮左侧；点击向上弹模型菜单（悬浮在输入框上方） -->
+                  <!-- 模型名 pill：点击向上弹模型菜单（悬浮在输入框上方） -->
                   <div class="sch-model" ref="modelPillRef" @click.stop="toggleModelMenu">
                     <span>{{ selectedModelLabel }}</span>
                     <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
                   </div>
+
+                  <!-- 语音输入：按住说话（Edge 原生语音识别） -->
+                  <button class="voice-btn" :class="{ listening: voiceListening }"
+                    @mousedown.prevent="voiceStart" @mouseup.prevent="voiceStop" @mouseleave="voiceStop"
+                    :title="voiceListening ? '松开结束并发送' : '按住说话'">
+                    <Icon :icon="voiceListening ? 'mdi:microphone' : 'mdi:microphone-outline'" width="18" />
+                  </button>
+
+                  <!-- 语音输出开关：喇叭静音 = 关闭 AI 自动朗读 -->
+                  <button class="input-inner-btn speak-toggle-btn" :class="{ muted: !ttsOn }" @click="toggleTts"
+                    :title="ttsOn ? '关闭语音朗读' : '开启语音朗读（AI 回复自动朗读）'">
+                    <Icon :icon="ttsOn ? 'mdi:volume-high' : 'mdi:volume-mute'" width="18" :color="ttsOn ? '#171717' : undefined" />
+                  </button>
 
                   <Teleport to="body">
                                       <div v-if="showModelMenu" class="model-menu-dropdown" :style="modelMenuStyle" @click.stop>
@@ -788,7 +821,7 @@
 
               <!-- ========== 底部工具条（本次漏掉的部分已精准补全） ========== -->
               <div class="input-bottom-toolbar">
-                <div class="input-toolbar-left">
+                  <div class="input-toolbar-left">
                   <!-- git 工具栏开关：点亮时上方展开分支/PR 状态条，只在有会话时出现 -->
                   <button
                     v-if="inputTopBarMode === 'git'"
@@ -798,25 +831,6 @@
                   >
                     <Icon icon="mdi:source-branch" width="15" />
                   </button>
-                  <div class="toolbar-dropdown-wrap">
-                    <button class="toolbar-icon-pill-btn" @click.stop="showAddMenu = !showAddMenu" title="添加">
-                      <Icon icon="mdi:plus" width="16" />
-                    </button>
-                    <div v-if="showAddMenu" class="add-menu-dropdown" @click.stop>
-                      <div class="add-menu-item" @click="triggerAttachFiles">
-                        <Icon icon="mdi:paperclip" width="14" color="#6b6b6b" />
-                        <span>添加文件或照片</span>
-                      </div>
-                      <div class="add-menu-item" @click="triggerAttachVideo">
-                        <Icon icon="mdi:video-outline" width="14" color="#6b6b6b" />
-                        <span>添加视频</span>
-                      </div>
-                      <div class="add-menu-item" @click="triggerAttachFolder">
-                        <Icon icon="mdi:folder-outline" width="14" color="#6b6b6b" />
-                        <span>添加文件夹</span>
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
                                 <div class="input-toolbar-right">
@@ -858,14 +872,6 @@
                     </div>
                   </div>
 
-                  <!-- 模式 pill（effort） -->
-                  <div v-if="currentCapability.reasoning" ref="effortWidgetRef" class="effort-widget" @click.stop="showEffortPanel = !showEffortPanel">
-                    <span class="effort-value">{{ effortLabel }}</span>
-                  </div>
-                  <!-- 热力图日历按钮（仅在主页显示） -->
-                  <button v-if="messages.length === 0" class="toolbar-icon-pill-btn" @click.stop="showHeatmapPopup = !showHeatmapPopup" title="活动热力图">
-                    <Icon icon="mdi:calendar-month-outline" width="15" />
-                  </button>
                   <Teleport to="body">
                     <div v-if="showEffortPanel" class="effort-panel" :style="effortPanelPos" @click.stop>
                       <div class="effort-panel-title">
@@ -2718,11 +2724,14 @@ async function copyText(text) {
 // 三态反馈：空闲=volume-low，加载中=spinner 旋转+「正在合成语音」，播放中=volume-high+脉冲动画。
 // 音频实时拉流播放，不落盘；同一时间只播一条，点另一条自动切；再点当前条停止。
 import { EdgeTTSBrowser } from 'edge-tts-universal/browser'
-const TTS_VOICE = 'zh-CN-XiaoyiNeural'
 const speakingId = ref(null)
 const loadingId = ref(null)
 let speakAudio = null
 let speakToken = 0
+// 音色由设置面板「语音音色」选择（localStorage: rescene_tts_voice），朗读时读取最新值
+function ttsVoiceNow() {
+  return localStorage.getItem('rescene_tts_voice') || 'zh-CN-XiaoyiNeural'
+}
 
 function speakIcon(id) {
   if (loadingId.value === id) return 'mdi:loading'
@@ -2758,7 +2767,7 @@ async function speakMessage(item, rawText) {
   const myToken = ++speakToken
   loadingId.value = item.id
   try {
-    const tts = new EdgeTTSBrowser(text, TTS_VOICE)
+    const tts = new EdgeTTSBrowser(text, ttsVoiceNow())
     const res = await tts.synthesize()
     if (myToken !== speakToken) return // 期间用户已切走/取消
     loadingId.value = null
@@ -2775,12 +2784,42 @@ async function speakMessage(item, rawText) {
 
 function stopSpeaking() {
   speakToken++
-  if (speakAudio) {
-    try { speakAudio.pause(); } catch (e) {}
-    speakAudio = null
-  }
-  loadingId.value = null
+  if (speakAudio) { speakAudio.pause(); speakAudio = null }
   speakingId.value = null
+  loadingId.value = null
+}
+
+// ==================== 语音输入（Edge 原生 Web Speech，按住说话） ====================
+const voiceListening = ref(false)
+let voiceRec = null
+function voiceStart() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SR) { alert('当前浏览器不支持语音输入，请用 Edge/Chrome'); return }
+  if (voiceListening.value) return
+  try {
+    const rec = new SR()
+    voiceRec = rec
+    rec.lang = 'zh-CN'
+    rec.interimResults = true
+    rec.continuous = false
+    rec.onresult = (e) => {
+      let t = ''
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript
+      userInput.value = t
+      adjustInputHeight()
+    }
+    rec.onend = () => { voiceListening.value = false }
+    rec.onerror = () => { voiceListening.value = false }
+    rec.start()
+    voiceListening.value = true
+  } catch (e) { console.warn('语音识别启动失败', e); voiceListening.value = false }
+}
+function voiceStop() {
+  if (!voiceListening.value) return
+  try { voiceRec?.stop() } catch (e) { /* 忽略 */ }
+  voiceListening.value = false
+  const t = (userInput.value || '').trim()
+  if (t) handleSend()
 }
 onUnmounted(stopSpeaking)
 
@@ -3188,6 +3227,7 @@ function applyStreamFade(el) {
 
 function streamFadePass() {
   if (!streamFadeConfig.enabled) return
+  const t0 = performance.now()
   // 只处理带 .streaming 的助手消息（isStreaming=true，即正在 SSE 输出的那条）。
   // 历史消息（切会话加载、刷新恢复）一律不做渐变：既没必要，还会因为整段包 span
   // 让含表格的消息反复触发列宽重算——就是"切会话时表格抖动"的来源。
@@ -3202,6 +3242,8 @@ function streamFadePass() {
     '.agent-flow.streaming .flow-intent.markdown-body, ' +
     '.agent-flow.streaming .flow-thinking-text'
   ).forEach(applyStreamFade)
+  const t1 = performance.now()
+  if (t1 - t0 > 16) console.warn('[perf] streamFadePass', (t1 - t0).toFixed(1), 'ms')
 }
 
 // ==================== useChatWidget ====================
@@ -3222,6 +3264,46 @@ const {
   toggleChat, updateParams,
   groupedMessages, formatChatTime
 } = useChatWidget(props, { renderMarkdown })
+
+// ==================== 语音输出开关（喇叭按钮，Hermes 布局） ====================
+// ⚠️ 必须放在 useChatWidget 解构之后：watch(messages) 在 setup 同步执行，解构前引用会 TDZ 白屏
+const ttsOn = ref(localStorage.getItem('rescene_tts_on') === '1')
+function toggleTts() {
+  ttsOn.value = !ttsOn.value
+  localStorage.setItem('rescene_tts_on', ttsOn.value ? '1' : '0')
+  if (!ttsOn.value) stopSpeaking()
+}
+let autoSpeakToken = 0
+async function autoSpeak(text) {
+  if (!ttsOn.value || !text) return
+  const t = stripMarkdownForTTS(text)
+  if (!t) return
+  stopSpeaking()
+  const myToken = ++autoSpeakToken
+  try {
+    const tts = new EdgeTTSBrowser(t, ttsVoiceNow())
+    const res = await tts.synthesize()
+    if (myToken !== autoSpeakToken) return
+    const url = URL.createObjectURL(res.audio)
+    const a = new Audio(url)
+    a.onended = () => { if (myToken === autoSpeakToken) URL.revokeObjectURL(url) }
+    a.onerror = () => { if (myToken === autoSpeakToken) URL.revokeObjectURL(url) }
+    await a.play()
+  } catch (e) { /* 自动朗读失败不打扰用户 */ }
+}
+// AI 回复完成后自动朗读（仅新回复）
+let lastSpeakSig = ''
+watch(messages, (list) => {
+  if (!ttsOn.value || !list.length) return
+  const last = list[list.length - 1]
+  if (last && last.sender === 'assistant' && !last.isStreaming && last.content) {
+    const sig = (last.id || '') + ':' + String(last.content).length
+    if (sig !== lastSpeakSig) {
+      lastSpeakSig = sig
+      autoSpeak(String(last.content))
+    }
+  }
+}, { deep: true })
 
 // 任务清单完成数（输入框上方 todo-bar 用），仿 Hermes 勾选清单。
 const todoDoneCount = computed(() =>
@@ -3668,44 +3750,30 @@ function onChatInputKeydown(e) {
     e.preventDefault()
     if (chatHistoryIndex.value === -1) chatHistoryIndex.value = 0
     else chatHistoryIndex.value = Math.min(chatHistoryIndex.value + 1, chatHistory.value.length - 1)
-    const text = chatHistory.value[chatHistoryIndex.value]
-    userInput.value = text
-    e.target.value = text
-    e.target.dispatchEvent(new Event('input', {bubbles: true}))
-    nextTick(adjustInputHeight)
-    flashInputSwap(e.target)
+    applyHistoryText(e.target, chatHistory.value[chatHistoryIndex.value])
   } else if (e.key === 'ArrowDown') {
     if (chatHistoryIndex.value === -1) return
     e.preventDefault()
     chatHistoryIndex.value -= 1
-    let text
-    if (chatHistoryIndex.value < 0) {
-      chatHistoryIndex.value = -1
-      text = ''
-    } else {
-      text = chatHistory.value[chatHistoryIndex.value]
-    }
-    userInput.value = text
-    e.target.value = text
-    e.target.dispatchEvent(new Event('input', {bubbles: true}))
-    nextTick(adjustInputHeight)
-    flashInputSwap(e.target)
+    const text = chatHistoryIndex.value < 0 ? '' : chatHistory.value[chatHistoryIndex.value]
+    if (chatHistoryIndex.value < 0) chatHistoryIndex.value = -1
+    applyHistoryText(e.target, text)
   }
 }
 
-// 历史切换（↑/↓）时给输入框做一次轻淡入：先摘掉类 → 强制 reflow → 重新加上，
-// 让 CSS 动画每次切换都重新触发（摘类同一帧内完成，视觉上无闪烁）。
-function flashInputSwap(el) {
+// 历史切换：替换文本 + 重算高度 + 纯 opacity 淡入。
+// 不做位移动画——textarea 是 flex:1，位移只挪文本区不挪旁边按钮，底边会跳。
+function applyHistoryText(el, text) {
+  userInput.value = text
+  el.value = text
   historySwapping.value = true
   if (swapTimer) clearTimeout(swapTimer)
+  swapTimer = setTimeout(() => { historySwapping.value = false }, 150)
+  // 摘类 → 强制 reflow → 加回，让 opacity 动画每次切换都重触发（同帧内完成，无闪烁）
   el.classList.remove('chat-input-swap')
   void el.offsetWidth
   el.classList.add('chat-input-swap')
-  el.closest('.input-row')?.classList.add('input-swapping')
-  swapTimer = setTimeout(() => {
-    historySwapping.value = false
-    el.closest('.input-row')?.classList.remove('input-swapping')
-  }, 300)
+  nextTick(adjustInputHeight)
 }
 
 // ★ 直连流式模式下的思考区域「瀑布滚动」：思考 text 流式追加时滚到底，避免置顶不动。
@@ -4410,7 +4478,7 @@ async function refreshGitGraph() {
 /* 自适应占位符的绝对定位 */
 .input-placeholder-text {
   position: absolute;
-  left: 16px;             /* 和 input-wrapper 的 padding-left 保持一致 */
+  left: 44px;             /* 16px 容器内边距 + 22px 左侧加号按钮宽度 + 6px 间距，避开加号不重叠 */
   top: 10px;              /* 和 textarea 的 padding-top 保持一致 */
   pointer-events: none;   /* 确保鼠标点击能直接穿透进 textarea */
   color: var(--app-text-faint);
@@ -4422,6 +4490,24 @@ async function refreshGitGraph() {
   text-overflow: ellipsis;
   max-width: 80%;         /* 防止占位符太长时覆盖到右侧的按钮 */
 }
+
+/* 输入栏左侧加号：裸图标，无圆框无背景（Hermes 布局） */
+.input-left-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 0;
+  transition: color .15s ease;
+}
+.input-left-plus:hover { color: var(--app-text); }
 
 /* 过渡动画的核心 */
 .fade-placeholder-enter-active,

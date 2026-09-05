@@ -5,10 +5,10 @@ import { reactive, watch } from 'vue'
 
 export const STREAM_FADE_DEFAULTS = {
   enabled: true,   // 总开关
-  fadeMs: 500,     // 单字符淡入时长（ms）
-  staggerMs: 14,   // 相邻字符的级联延迟（ms/字符）
-  maxSweepMs: 350, // 单批 chunk 的最大扫过时长（ms）
-  blurPx: 2,       // 淡入起始模糊强度（px）
+  fadeMs: 180,     // 单字符淡入时长（ms）
+  staggerMs: 8,    // 相邻字符的级联延迟（ms/字符）
+  maxSweepMs: 250, // 单批 chunk 的最大扫过时长（ms）
+  blurPx: 0,       // 淡入起始模糊强度（px）
 }
 
 function loadPersisted() {
