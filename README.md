@@ -38,6 +38,7 @@
 | **🔄 Five-platform sync** | Sessions and long-term memory continue naturally across Windows / Linux / macOS / Android / CLI. You change screens, not your working context |
 | **🤖 Automation loop** | Browser, terminal and real tools form a verifiable execution chain — tasks don't stop at answers, they run to completion |
 | **🔌 Aggregated API** | 98 free models + custom providers unified behind one OpenAI & Anthropic-compatible endpoint, with smart routing that automatically picks the fastest healthy source |
+| **♾️ Unlimited concurrent workflows** | Every session runs its own workflow on its own goroutine, with its own live stream and its own message buffer — no thread pool, no queue, no artificial cap. Open ten tasks in ten sessions and switch freely: each stream keeps writing only to its own session |
 
 ## ✨ Also free, out of the box
 
