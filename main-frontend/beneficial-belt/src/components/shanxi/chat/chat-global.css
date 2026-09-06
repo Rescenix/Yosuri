@@ -164,25 +164,18 @@
 
 .reasoning-text {
   margin-top: 6px;
-  /* 固定高度窗口 + 文字自动下流（瀑布），不随内容撑高、不依赖拖动滚动轴 */
+  /* 固定高度窗口 + 文字自动下流（瀑布），不随内容撑高；滚动条隐藏，仍可滚轮/触控滚动 */
   height: 240px;
   overflow-y: auto;
   padding-right: 10px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--app-text-faint) 45%, transparent) transparent;
+  scrollbar-width: none;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.reasoning-text::-webkit-scrollbar { width: 6px; }
+.reasoning-text::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .reasoning-text::-webkit-scrollbar-track { background: transparent; }
-.reasoning-text::-webkit-scrollbar-thumb {
-  border-radius: 0;
-  background: color-mix(in srgb, var(--app-text-faint) 45%, transparent);
-}
-.reasoning-text::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--app-text-soft) 58%, transparent);
-}
+.reasoning-text::-webkit-scrollbar-thumb { background: transparent; }
 
 .reasoning-stream {
   margin-bottom: 10px;

@@ -298,6 +298,11 @@ const heatmapCaption = computed(() => {
 
 <style scoped>
 .session-home {
+  /* 必须显式 width:100%：外层 .home-container-for-layout 是 flex 列容器，
+     本元素带 margin:0 auto 时 auto 边距会顶掉 stretch，flex item 退化成
+     shrink-to-fit —— 热力图是 26 列空 div，max-content≈0 撑不住宽度，
+     整块会被最宽的子元素（建议胶囊行）挤窄。补 width:100% 后由 max-width 封顶。 */
+  width: 100%;
   max-width: 640px;
   margin: 0 auto;
   padding: 0 24px;

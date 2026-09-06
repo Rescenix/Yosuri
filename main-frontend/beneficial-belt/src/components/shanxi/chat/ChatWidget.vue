@@ -93,9 +93,9 @@
                                 :projects="projects"
                                 :recent-projects="workDirRecents"
                                 :active-session="activeSession"
-                                :running-session="runningSession"
+                                :running-sessions="runningSessions"
                                 :completed-sessions="completedSessions"
-                                :question-session="questionSession"
+                                :question-sessions="questionSessions"
                                 :notif-count="notifCount"
                                 :current-workdir="currentProjectName"
                       @select-session="selectSession"
@@ -134,7 +134,7 @@
                   v-for="s in railProject"
                   :key="s.id"
                   class="gem-rail-bar"
-                  :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+                  :class="{ active: s.id === activeSession, running: runningSessions.has(s.id) }"
                   @click="selectSession(s.id)"
                 ></button>
                 <div class="gem-rail-divider"></div>
@@ -143,7 +143,7 @@
                 v-for="s in railRecent"
                 :key="s.id"
                 class="gem-rail-bar"
-                :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+                :class="{ active: s.id === activeSession, running: runningSessions.has(s.id) }"
                 @click="selectSession(s.id)"
               ></button>
             </div>
@@ -263,7 +263,7 @@
                   :class="{ active: s.id === activeSession }"
                   @click="onRailCardSelect(s.id)"
                 >
-                  <span class="rail-card-mark" :class="{ running: s.id === runningSession }"></span>
+                  <span class="rail-card-mark" :class="{ running: runningSessions.has(s.id) }"></span>
                   <span class="rail-card-name">{{ s.name }}</span>
                 </button>
                 <div v-if="railRecent.length" class="rail-card-divider"></div>
@@ -275,7 +275,7 @@
                   :class="{ active: s.id === activeSession }"
                   @click="onRailCardSelect(s.id)"
                 >
-                  <span class="rail-card-mark" :class="{ running: s.id === runningSession }"></span>
+                  <span class="rail-card-mark" :class="{ running: runningSessions.has(s.id) }"></span>
                   <span class="rail-card-name">{{ s.name }}</span>
                 </button>
               </div>
@@ -490,8 +490,11 @@
               v-for="item in approvalState.pending"
               :key="item.id"
               class="approval-bar floating-bar"
+              :style="inputBarFadeStyle"
             >
-              <span class="approval-bar-countdown" :title="item.remain + ' 秒后自动同意'">{{ item.remain }}</span>
+              <span class="approval-bar-countdown" :title="'等待回应：' + item.remain + ' 秒'">{{ item.remain }}</span>
+              <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
+              <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
               <div class="approval-bar-main">
                 <div class="approval-bar-line">
                   <span class="approval-bar-tool">{{ item.tool }}</span>
@@ -515,8 +518,6 @@
                 <input type="checkbox" v-model="item.remember" />
                 <span>不再问</span>
               </label>
-              <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
-              <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
             </div>
 
             <div class="chat-input-area">
@@ -839,19 +840,20 @@
                   <input ref="attachFolderInputRef" type="file" webkitdirectory multiple style="display:none" @change="onAttachFolderSelected" @click.stop />
                   <input ref="attachVideoInputRef" type="file" accept="video/*" multiple style="display:none" @change="onAttachVideoSelected" @click.stop />
 
-                  <button v-if="flowState.active && !userInput.trim() && attachments.length === 0" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
+                  <!-- 停止按钮：只在本会话自己有工作流在跑时才显示；切到别的会话（流在别处跑）不占用输入框 -->
+                  <button v-if="flowState.active && runningSessions.has(activeSession) && !userInput.trim() && attachments.length === 0" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
                     <Icon icon="mdi:stop" width="16" color="#fff" />
                   </button>
                   <!-- 发送按钮常驻占位：即使无输入也显示（灰色向上箭头），保证模型 pill 旁边永远有它，
-                       不因空输入让 pill 沦为最右元素。有输入时高亮为可用态。 -->
-                  <button v-else class="input-inner-btn input-right-btn" :class="flowState.active ? 'input-steer-btn' : (userInput.trim() || attachments.length ? 'input-send-btn' : 'input-send-btn input-send-idle')" @click="handleSend" :title="flowState.active ? '发送插话给工作流（不打断，模型下一轮处理）' : '发送消息'">
-                    <Icon :icon="flowState.active ? 'mdi:send' : 'mdi:arrow-up'" width="18" color="#fff" />
+                       不因空输入让 pill 沦为最右元素。有输入时高亮为可用态。插话态只对「本会话的流」成立 -->
+                  <button v-else class="input-inner-btn input-right-btn" :class="flowState.active && runningSessions.has(activeSession) ? 'input-steer-btn' : (userInput.trim() || attachments.length ? 'input-send-btn' : 'input-send-btn input-send-idle')" @click="handleSend" :title="flowState.active && runningSessions.has(activeSession) ? '发送插话给工作流（不打断，模型下一轮处理）' : '发送消息'">
+                    <Icon :icon="flowState.active && runningSessions.has(activeSession) ? 'mdi:send' : 'mdi:arrow-up'" width="18" color="#fff" />
                   </button>
                 </div>
               </div>
 
-              <!-- ========== 底部工具条 ========== -->
-              <div class="input-bottom-toolbar">
+              <!-- ========== 底部工具条（空态首页隐藏，开始对话后显示） ========== -->
+              <div v-if="messages.length > 0" class="input-bottom-toolbar">
                   <div class="input-toolbar-left">
                   <!-- git 工具栏开关 -->
                   <button
@@ -870,7 +872,6 @@
                     title="知识库（拖拽文件放入）"
                   >
                     <Icon icon="mdi:bookshelf" width="15" />
-                    <span v-if="kbFiles.length" class="kb-badge">{{ kbFiles.length }}</span>
                   </button>
                   <!-- 群聊成员开关：本对话挂哪几个二次元 Agent -->
                   <button
@@ -880,7 +881,6 @@
                     title="群聊成员（可多选，按顺序依次发言）"
                   >
                     <Icon icon="mdi:account-group-outline" width="15" />
-                    <span v-if="currentGroup.length" class="kb-badge">{{ currentGroup.length }}</span>
                   </button>
                   <!-- 当前发言者名牌（单选时显示；多选时显示第一位） -->
                   <span v-if="currentGroup.length" class="agent-chip-row">
@@ -991,6 +991,7 @@
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                       </div>
                       <span>添加文件</span>
+                      <span class="kb-empty-tip">也可以直接把文件拖拽进来哦</span>
                     </div>
 
                     <!-- 文件列表：ref-slot 倾斜卡片 -->
@@ -1048,9 +1049,6 @@
               @mousedown="dockLocation === 'right' ? startDockWidthDrag($event) : startDockHeightDrag($event)"
             ></div>
             <div class="tool-dock-tabs">
-              <div class="tool-dock-location-mark" :title="dockLocation === 'right' ? '右侧工具区' : '底部工具区'">
-                <Icon :icon="dockLocation === 'right' ? 'mdi:dock-right' : 'mdi:dock-bottom'" width="14" />
-              </div>
               <button
                 v-for="panelKey in dockPanelsFor(dockLocation)"
                 :key="panelKey"
@@ -1081,7 +1079,6 @@
                 </button>
               </div>
               <div class="tool-dock-global-actions">
-                <span class="tool-dock-drag-tip">拖动标签可重新布局</span>
                 <button class="tool-dock-tab-add" @click.stop="toggleDockExpanded(dockLocation)" :title="dockIsExpanded(dockLocation) ? '还原' : '最大化工具区'">
                   <Icon :icon="dockIsExpanded(dockLocation) ? 'mdi:arrow-collapse' : 'mdi:arrow-expand'" width="15" />
                 </button>
@@ -1329,19 +1326,12 @@ const activeSession = computed(() => sessionId.value)
 const activeSessionObj = computed(
   () => sessionList.value.find(s => s.id === activeSession.value) || sessionList.value[0] || null
 )
-// 当前正在跑 agent 的会话 id：工作流活跃时就是当前选中的会话，否则为空。
-// 会话列表据此在对应会话左侧点亮蓝色指示灯。
-const runningSession = computed(() => (flowState.active ? activeSession.value : ''))
+// 多会话并行：运行灯/黄灯由 useChatWidget 的 runningSessions / questionSessions 集合驱动
+//（每个会话自己的工作流实例维护自己的灯，互不覆盖）。这里只留集合类的派生别名，
+// 供模板 has 判断与列表组件传参。
 
 // 已完成的工作流会话：工作流从活跃 → 停止时把当时活跃的会话记入集合
 const completedSessions = ref(new Set())
-// 有未决问题的会话：approval/resume/question 任一 pending 即认为该会话在提问
-const questionSession = computed(() => {
-  if (approvalState.pending.length > 0 || questionState.pending) {
-    return activeSession.value
-  }
-  return ''
-})
 
 function shortTitle(title) {
   title = (title || '新对话').trim()
@@ -2740,7 +2730,7 @@ const editDraft = ref('')
 function editTextareaEl() { return document.querySelector('.msg-edit-input') }
 
 function editUserMessage(item) {
-  if (flowState.active) return // 工作流进行中不打断
+  if (flowState.value.active) return // 工作流进行中不打断
   editingMsgId.value = item.id
   editDraft.value = item.content || ''
   nextTick(() => {
@@ -2774,7 +2764,7 @@ function autoGrowEdit() {
 // 编辑重发 = 开新分支，不再是截断。原来那条线索完整保留在侧栏里，
 // 用户可以在"原来那版"和"改过的这版"之间来回切。
 async function confirmEdit(item) {
-  if (flowState.active) return
+  if (flowState.value.active) return
   const text = editDraft.value.trim()
   if (!text) return
   const i = messages.value.findIndex(m => m.id === item.id)
@@ -3410,7 +3400,7 @@ const {
   runningTaskCount,
   runningSubagentCount,
   runningBgTaskCount,
-  flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
+  flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   todoState, sendSteerMessage,
   questionState, answerQuestion,
   agentStore,
@@ -3498,7 +3488,7 @@ watch(messages, (list) => {
 
 // 任务清单完成数（输入框上方 todo-bar 用），仿 Hermes 勾选清单。
 const todoDoneCount = computed(() =>
-  (todoState.items || []).filter(it => it.status === 'done').length
+  (todoState.value.items || []).filter(it => it.status === 'done').length
 )
 // todo 条折叠：点击头部切换，折叠后只留一行标题，展开才显示清单明细。
 const todoCollapsed = ref(false)
@@ -3519,11 +3509,11 @@ const inputBarFadeStyle = computed(() => {
 // agent 每次 update_todo 会全量覆盖 items，所以中途插入新/未完成项要取消定时。
 let todoClearTimer = null
 watch(
-  () => todoState.items.length > 0 && todoDoneCount.value === todoState.items.length,
+  () => (todoState.value.items || []).length > 0 && todoDoneCount.value === todoState.value.items.length,
   (allDone) => {
     if (todoClearTimer) { clearTimeout(todoClearTimer); todoClearTimer = null }
     if (allDone) {
-      todoClearTimer = setTimeout(() => { todoState.items = [] }, 3500)
+      todoClearTimer = setTimeout(() => { todoState.value.items = [] }, 3500)
     }
   }
 )
@@ -3539,15 +3529,16 @@ watch(lastUserMessageId, () => { manualActiveId.value = null })
 
 // 工作流跑完后重新拉一次会话列表：把分叉时乐观插入的分支名跟后端算出的标题对齐，
 // 也顺带修掉"新会话标题要切走再切回才出现"的老毛病（以前只在挂载/切会话时拉）。
-// 必须放在上面的解构之后：watch 的 getter 是立即求值的，写在解构之前会命中 TDZ
-// （同一文件里 runningSession 那个 computed 能放在前面，只是因为 computed 是惰性的）。
-watch(() => flowState.active, (now, was) => {
-  if (was && !now) {
-    completedSessions.value.add(activeSession.value)
-    completedSessions.value = new Set(completedSessions.value)
-    loadSessionList()
-  }
-})
+// 09-06 改事件驱动：原先 watch flowState（当前显示实例的 computed），切会话时
+// computed 从 true 跳到 false 会被误判成「流结束」，把刚切进去的会话当场标成
+// 已完成（绿灯）。现在由工作流实例自己发 session-flow-ended 带 sid，只认真收尾。
+function onSessionFlowEnded(e) {
+  const sid = e?.detail?.sid
+  if (!sid) return
+  completedSessions.value.add(sid)
+  completedSessions.value = new Set(completedSessions.value)
+  loadSessionList()
+}
 
 function onSessionTitleUpdate(e) {
   const d = e?.detail
@@ -4008,8 +3999,10 @@ function handleSend() {
   if (hasPendingAttachments.value) return
   // 亲密度 +1（fire-and-forget，失败静默不阻断发送）
   railAuth.incIntimacy()
-  // 工作流跑着的时候，回车不再是"发一条新消息"
-  if (flowState.active) {
+  // 工作流跑着且是本会话的流：回车是「插话」。
+  // 流在别的会话（切会话后旧会话还在跑）：先停掉它再发本会话的新消息，
+  // 否则输入会被误当插话喂给别的会话的流（2026-09-06 重大 bug）。
+  if (flowState.value.active && runningSessions.value.has(activeSession.value)) {
       const steerText = userInput.value.trim()
       if (!steerText) return
       userInput.value = ''
@@ -4029,6 +4022,7 @@ function handleSend() {
       }
       return
     }
+  // 本会话没有自己的流：正常发送，直接起本会话的新工作流（多会话并行，无需停别的会话）。
   const combined = buildOutgoingMessage()
   if (!combined) return
   const displayText = userInput.value.trim()
@@ -4343,7 +4337,7 @@ function handlePaste(e) {
   const file = imageFile || videoFile
   if (!file) return
   e.preventDefault()
-  if (flowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片/视频'); return }
+  if (flowState.value.active) { showVisionError('工作流运行中，请稍后再粘贴图片/视频'); return }
   if (file.type.startsWith('video/')) attachVideoFile(file)
   else attachImageFile(file)
 }
@@ -4548,7 +4542,7 @@ watch(agentFSTimeline, () => nextTick(syncAgentFSTreeViewport), { flush: 'post' 
 watch(inputTopBarMode, (mode) => { if (mode === 'git') fetchGitStatus() })
 // 工作流（四态机）结束时，停止按钮消失，立刻把输入框高度塌回单行——
 // 直接交回 CSS（auto + min-height 兜底），不靠 scrollHeight 测量
-watch(() => flowState.active, (active, wasActive) => {
+watch(() => flowState.value.active, (active, wasActive) => {
   if (wasActive && !active) nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
 })
 
@@ -4575,6 +4569,8 @@ onMounted(() => {
   nextTick(syncAgentFSTreeViewport)
   // 监听会话标题更新事件（来自 useAgentWorkflow 的 onTitleUpdate）
   window.addEventListener('session-title-update', onSessionTitleUpdate)
+  // 监听工作流真收尾事件（来自 useChatWidget 实例 watch）：标已完成灯 + 拉列表
+  window.addEventListener('session-flow-ended', onSessionFlowEnded)
   // 监听 AI 标题生成中事件：列表刷新时保持「新对话」，避免后端派生的原文标题抢先替换
     window.addEventListener('session-title-pending', onSessionTitlePending)
     startNotifPoll()
@@ -4588,6 +4584,7 @@ onMounted(() => {
       window.removeEventListener('resize', syncAgentFSTreeViewport)
       window.clearInterval(agentFSPollTimer)
       window.removeEventListener('session-title-update', onSessionTitleUpdate)
+      window.removeEventListener('session-flow-ended', onSessionFlowEnded)
       window.removeEventListener('session-title-pending', onSessionTitlePending)
       window.removeEventListener('paste-image', onPasteImageFromMenu)
       window.removeEventListener('workflow-suggestion', onWorkflowSuggestion)
@@ -4610,7 +4607,7 @@ onMounted(() => {
 function onPasteImageFromMenu(e) {
   const file = e.detail && e.detail.file
   if (!file) return
-  if (flowState.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
+  if (flowState.value.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
   attachImageFile(file)
 }
 async function refreshGitGraph() {

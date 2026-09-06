@@ -12,13 +12,13 @@
         v-for="s in sessions"
         :key="s.id"
         class="session-row"
-        :class="{ active: s.id === activeSession, running: s.id === runningSession }"
+        :class="{ active: s.id === activeSession, running: runningSessions.has(s.id) }"
         @mouseenter="hoveredId = s.id"
         @mouseleave="onRowLeave(s.id)"
         @click="onRowClick(s)"
       >
         <!-- 运行指示灯：跑 agent 的会话蓝色呼吸，其余灰色常亮 -->
-        <span class="session-dot" :class="{ on: s.id === runningSession }"></span>
+        <span class="session-dot" :class="{ on: runningSessions.has(s.id) }"></span>
 
         <input
           v-if="editingId === s.id"
@@ -53,8 +53,8 @@ import { Icon } from '@iconify/vue'
 defineProps({
   sessions: { type: Array, default: () => [] },
   activeSession: { type: String, default: '' },
-  // 正在跑 agent 的会话 id：该会话左侧指示灯变蓝呼吸、整行蓝边高亮
-  runningSession: { type: String, default: '' }
+  // 正在跑 agent 的会话集合：该会话左侧指示灯变蓝呼吸、整行蓝边高亮（多会话并行）
+  runningSessions: { type: Set, default: () => new Set() }
 })
 const emit = defineEmits(['select', 'new-session', 'rename', 'delete'])
 

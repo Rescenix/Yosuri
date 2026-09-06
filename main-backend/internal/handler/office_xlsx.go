@@ -99,9 +99,11 @@ func genXlsx(title string, sheets []officeSheet) ([]byte, error) {
 				cellRef := colLetter + strconv.Itoa(ri+1)
 				style := "0"
 				if ri == 0 && len(sh.Headers) > 0 {
-					style = "1" // 加粗表头样式
+					style = "1" // 品牌色表头（白字+深色底+细边框）
+				} else if len(sh.Headers) > 0 && ri%2 == 0 {
+					style = "2" // 斑马纹行（浅灰底+细边框）
 				}
-				wb.WriteString(`<c r="` + cellRef + `" t="s" s="` + style + `"><v>` + strconv.Itoa(ssi) + `</v></c>`)
+				wb.WriteString(`<c r="` + cellRef + `"` + ` t="s" s="` + style + `"><v>` + strconv.Itoa(ssi) + `</v></c>`)
 			}
 			wb.WriteString("</row>")
 		}
@@ -123,14 +125,14 @@ func genXlsx(title string, sheets []officeSheet) ([]byte, error) {
 	}
 	wbXML.WriteString("</sheets></workbook>")
 
-	// styles.xml（带加粗表头样式）
+	// styles.xml（品牌色表头 + 斑马纹 + 细边框：白字深底表头、浅灰偶数行、四周 hair 边框）
 	stylesXML := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="2"><font><sz val="11"/><name val="Microsoft YaHei"/></font><font><b/><sz val="11"/><name val="Microsoft YaHei"/></font></fonts>
-<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
-<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<fonts count="2"><font><sz val="11"/><name val="Microsoft YaHei"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Microsoft YaHei"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F5C45"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F7F4"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD9E2DC"/></left><right style="thin"><color rgb="FFD9E2DC"/></right><top style="thin"><color rgb="FFD9E2DC"/></top><bottom style="thin"><color rgb="FFD9E2DC"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/></cellXfs>
+<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf></cellXfs>
 </styleSheet>`
 
 	// 构建 zip

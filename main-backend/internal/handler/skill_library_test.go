@@ -25,27 +25,22 @@ func writeSkillFile(t *testing.T, dir string, s Skill) {
 	}
 }
 
-// skill_view 从常驻工具改为按需工具（2026-08-29 收敛）：
-// 参数简单，模型直接调即自动带 schema。它必须在按需池里（索引可见）且
-// 可被 load_tools 激活——否则技能全文将永远不可达。
+// skill_view 是任务开始前的第一道工序（先扫技能库索引、命中取全文），
+// 2026-09-06 从按需池提回常驻：未激活也必须直接出现在 tools 数组里，
+// 不能依赖模型先 load_tools 或首次调用自动激活——否则技能全文仍然可能不可达。
 func TestNativeToolsAlwaysIncludeSkillView(t *testing.T) {
-	if !isOnDemandTool(skillViewToolName) {
-		t.Fatalf("%s 不在按需池里，技能全文将永远不可达", skillViewToolName)
-	}
-	activated := map[string]bool{}
-	out, changed := handleLoadTools(`{"names":["`+skillViewToolName+`"]}`, activated)
-	if !changed || !activated[skillViewToolName] {
-		t.Fatalf("%s 不能被 load_tools 激活: %s", skillViewToolName, out)
+	if isOnDemandTool(skillViewToolName) {
+		t.Fatalf("%s 应常驻，不应在按需池里", skillViewToolName)
 	}
 	found := false
-	for _, tl := range buildCodeWorkflowTools(activated) {
+	for _, tl := range buildCodeWorkflowTools(nil) {
 		fn := tl["function"].(map[string]any)
 		if fn["name"] == skillViewToolName {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("%s 激活后没进 tools 数组", skillViewToolName)
+		t.Fatalf("%s 未进常驻 tools 数组，技能全文将永远不可达", skillViewToolName)
 	}
 }
 

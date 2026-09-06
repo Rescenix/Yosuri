@@ -57,7 +57,9 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// ask_user：让 agent 在工作流中途向用户提问并暂停等待回答（human-in-the-loop）。
 		// 常驻是因为它是交互控制面工具，需要用时再 load_tools 就打断节奏了。
 		askUserToolDef,
-		// 其余参数简单的常驻工具（update_todo/skill_view/skill_manage/harness_status/
+		// skill_view：技能库是任务开始前的第一道工序，必须常驻——模型随时能按名取全文。
+		skillViewToolDef,
+		// 其余参数简单的常驻工具（update_todo/skill_manage/harness_status/
 		// web_search/session_search/remember/open_preview/inject_preview）已简化为按需
 		// 加载（见 native_tools.go）——模型直接调即自动带 schema，无需常驻占 token。
 	}
@@ -110,7 +112,7 @@ func mcpToolIndexPrompt() string {
 		lines = append(lines, fmt.Sprintf("- %s：%s", t.Function.Name, firstSentence(t.Function.Description)))
 	}
 	sort.Strings(lines)
-	return "\n━━━ 工具索引（核心 read/write/patch/bash + 自研扩展，动态按需加载） ━━━\n" +
+	return "\n━━━ 工具索引（核心 read/write/patch/remove/bash + 自研扩展，动态按需加载） ━━━\n" +
 		"下列工具默认不在你的可用工具列表里，但**直接调用即可**：系统会在你首次调用时自动加载其完整参数说明，" +
 		"之后该工具就一直可用。若想批量预加载（或先看一眼参数再决定），也可用 load_tools 主动加载。\n" +
 		"截图/页面自检/浏览器快照成功时会直接作为图片插入当前聊天消息流；不要声称无法贴图、不要要求用户另存文件。\n" +
@@ -139,7 +141,7 @@ func nativeToolIndexPrompt() string {
 // buildCodeWorkflowTools 组装本轮要发给模型的 tools 数组：
 // 常驻工具 + 已被 load_tools 激活的 Go 内置/MCP 工具。activated 为 nil 时就只有常驻工具。
 // 激活段用 coreToolIndexDefs —— legacy 文件/命令类工具即使被激活也不进 tools 数组，
-// 保证模型可见的工具面始终收敛在 read/write/patch/bash + 扩展。
+// 保证模型可见的工具面始终收敛在 read/write/patch/remove/bash + 扩展。
 func buildCodeWorkflowTools(activated map[string]bool) []map[string]any {
 	defs := nativeWorkflowToolDefs()
 	if len(activated) > 0 {

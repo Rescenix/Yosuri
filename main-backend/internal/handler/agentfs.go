@@ -288,7 +288,7 @@ func opName(fullName string) string {
 // 都必须在落盘前后捕获 before/after，否则改动不进快照、无法回滚。
 func isWriteAuditTool(fullName string) bool {
 	switch fullName {
-	case "write", "patch",
+	case "write", "remove", "patch",
 		"write_file", "edit_file", "apply_patch",
 		"mcp__fs__write_file", "mcp__fs__edit_file":
 		return true

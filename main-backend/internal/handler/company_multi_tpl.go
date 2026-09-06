@@ -67,21 +67,30 @@ func companyAppJSTemplate(project string) string {
 })();`
 }
 
-// companyCSSFallback 样式兜底：亮色响应式。
+// companyCSSFallback 样式兜底：亮色响应式 + 品牌质感（模型挂了也不掉档）。
 func companyCSSFallback() string {
-	return `:root{--bg:#f5f8ff;--card:#fff;--ink:#1a2b3c;--accent:#1950be;--line:#e2e8f5}
+	return `:root{--bg:#f4f8f6;--card:#ffffff;--ink:#1a2b3c;--muted:#64748b;--accent:#1f7a55;--accent-deep:#155c40;--accent-soft:#e6f4ec;--line:#dfe7e2;--shadow-sm:0 1px 2px rgba(15,23,42,.05);--shadow-md:0 4px 14px rgba(15,23,42,.08)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Microsoft YaHei","PingFang SC",system-ui,sans-serif}
-.shell{max-width:720px;margin:0 auto;padding:32px 20px}
-.topbar h1{margin:0 0 6px;font-size:26px}
-.topbar .sub{margin:0 0 24px;color:#5b6b7d;font-size:14px}
-#f{display:flex;gap:8px;margin-bottom:18px}
-#inp{flex:1;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--card)}
-#f button{padding:0 20px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+body{margin:0;background:linear-gradient(180deg,#f7fbf9,#eef4f1);color:var(--ink);font:16px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+.shell{max-width:860px;margin:0 auto;padding:36px 22px 64px}
+.topbar{padding:26px 0 20px;border-bottom:2px solid var(--accent);margin-bottom:6px}
+.topbar h1{margin:0 0 8px;font-size:28px;font-weight:900;letter-spacing:-.02em}
+.topbar .sub{margin:0;color:var(--muted);font-size:14px}
+#f{display:flex;gap:10px;margin:22px 0 20px}
+#inp{flex:1;padding:13px 15px;border:1.5px solid var(--line);border-radius:12px;font:inherit;background:var(--card);box-shadow:var(--shadow-sm);transition:border-color .18s,box-shadow .18s}
+#inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#f button{padding:0 24px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;font:inherit;font-weight:700;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .18s,box-shadow .18s,filter .18s}
+#f button:hover{transform:translateY(-1px);box-shadow:var(--shadow-md);filter:brightness(1.05)}
+#f button:active{transform:translateY(0)}
 ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
-.row .txt{flex:1;word-break:break-word}
-.row .del{border:1px solid var(--line);background:#fff;color:#b04a4a;border-radius:8px;padding:6px 12px;cursor:pointer}
-.empty{color:#8a97a8;text-align:center;padding:24px;background:var(--card);border:1px dashed var(--line);border-radius:12px}
-@media(max-width:520px){.shell{padding:20px 14px}.topbar h1{font-size:22px}}`
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 18px;box-shadow:var(--shadow-sm);transition:transform .18s,box-shadow .18s;animation:row-in .28s ease}
+.row:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+@keyframes row-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.row .txt{flex:1;word-break:break-word;font-variant-numeric:tabular-nums}
+.row .del{border:1px solid var(--line);background:#fff;color:#b04a4a;border-radius:9px;padding:7px 14px;cursor:pointer;transition:background .18s,border-color .18s}
+.row .del:hover{background:#fef2f2;border-color:#fecaca}
+.empty{display:flex;flex-direction:column;align-items:center;gap:10px;color:#8a97a8;text-align:center;padding:44px 24px;background:var(--card);border:1.5px dashed var(--line);border-radius:16px}
+.empty::before{content:"🗂️";font-size:34px}
+@media(max-width:640px){.shell{padding:22px 14px 48px}.topbar h1{font-size:22px}#f{flex-direction:column}#f button{padding:12px}}
+@media(min-width:961px){.shell{padding:44px 32px 80px}}`
 }

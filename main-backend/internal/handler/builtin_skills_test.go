@@ -15,13 +15,14 @@ func TestCuratedSkillsAreEmbedded(t *testing.T) {
 		"create-vue3-base-component",
 		"frontend-design",
 		"frontend-self-check",
+		"yosuri-doctor",
 	} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("发布包漏掉内置技能 %s", name)
 		}
 	}
-	if len(got) != 4 {
-		t.Errorf("应只内置 4 个精选技能，实得 %d: %v", len(got), got)
+	if len(got) != 5 {
+		t.Errorf("应只内置 5 个精选技能，实得 %d: %v", len(got), got)
 	}
 	if skill := got["frontend-design"]; skill.Body == "" {
 		t.Error("frontend-design 的完整设计规范未随发布包内置")

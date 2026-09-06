@@ -239,6 +239,9 @@ func qaViewForDir(projectDir string) gin.H {
 		"journeyMeasured": qa.JourneyOK, "journeyPassed": qa.JourneyPass, "topicHits": qa.TopicHits,
 		"browserOk": qa.BrowserOK, "visionOk": qa.VisionOK, "issues": qa.Issues,
 		"summary": qa.Summary, "checkedAt": qa.CheckedAt,
+		// 新增质检维度：多帧评审帧数、布局充实度、返修轮数（前端审批卡展示用）
+		"framesReviewed": qa.FramesReviewed, "layoutMeasured": qa.LayoutOK,
+		"pageHeightRatio": qa.PageHeightRatio, "repairRounds": qa.RepairRounds,
 	}
 }
 

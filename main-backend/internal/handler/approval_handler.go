@@ -192,6 +192,10 @@ func projectArtifactStage(agent, name string) string {
 		return "promotion"
 	case strings.HasSuffix(lower, ".receipt") || strings.HasSuffix(lower, ".har"):
 		return "promotion"
+	case strings.Contains(name, "质量验收") || strings.Contains(lower, "qa.json") || strings.Contains(name, "质检"):
+		// 质检报告是独立证据，不算任何交付阶段（stage 为空则不进 stageSet），
+		// 但 kind=text 让它仍可预览——审批者能直接打开看质检结论。
+		return ""
 	case strings.HasPrefix(lower, "output-") || strings.HasSuffix(lower, ".py") || strings.HasSuffix(lower, ".js") || strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".go") || strings.HasSuffix(lower, ".java") || strings.HasSuffix(lower, ".html"):
 		return "code"
 	case strings.HasPrefix(agent, "designer-"):

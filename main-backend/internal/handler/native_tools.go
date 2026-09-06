@@ -41,10 +41,14 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"depth":   {Type: "integer", Description: "可选：path 为目录时递归列目录的深度，默认 4，最大 8"},
 			"info":    {Type: "boolean", Description: "可选：只返回文件/目录的大小、修改时间、类型"},
 		}, []string{"path"}),
-		nativeTool("write", "写文件系统：默认写入完整文件内容（自动创建父目录）；action=create_dir 建目录；action=move 移动/重命名（需 source）；action=delete 删除文件或目录（不可逆）。仅限文本文件：pdf/docx/pptx/xlsx 是二进制容器，写入必坏，一律改用 generate_office。", map[string]core.ToolProperty{
+		nativeTool("write", "写文件：写入完整文件内容（自动创建父目录，整文件覆盖旧内容）；action=create_dir 只建目录。仅限文本文件：pdf/docx/pptx/xlsx 是二进制容器，写入必坏，一律改用 generate_office。删除/移动文件是独立操作，用 remove，不要塞进 write。", map[string]core.ToolProperty{
 			"path":    {Type: "string", Description: "目标路径"},
 			"content": {Type: "string", Description: "文件完整内容（action=write 时必填）"},
-			"action":  {Type: "string", Description: "操作类型：write(默认)/create_dir/move/delete"},
+			"action":  {Type: "string", Description: "操作类型：write(默认)/create_dir"},
+		}, []string{"path"}),
+		nativeTool("remove", "删除或移动文件/目录（不可逆）：默认删除 path 指向的文件或目录；action=move 时把 source 移动/重命名到 path。删除前请确认目标，内容不会进回收站。", map[string]core.ToolProperty{
+			"path":    {Type: "string", Description: "要删除的目标路径；action=move 时是目的地"},
+			"action":  {Type: "string", Description: "操作类型：delete(默认)/move"},
 			"source":  {Type: "string", Description: "action=move 时的源路径"},
 		}, []string{"path"}),
 		nativeTool("patch", "在文本文件中做一次定点替换；old_string 应从 read 结果原样复制（含缩进/空白/换行）。", map[string]core.ToolProperty{
@@ -192,11 +196,11 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, watermarkToolDef)
 	// video_generate：AI 生视频（Agnes 免费 API，$0/秒）
 	defs = append(defs, videoGenToolDef)
-	// 原常驻工具简化为按需加载（2026-08-29 收敛）：update_todo/skill_view/skill_manage/
-	// harness_status/open_preview/inject_preview/remember/web_search/session_search
-	// 参数简单，模型一眼就知道怎么调，不需要常驻完整 schema 占 3k+ token。
-	// 常驻只保留 dispatch_agent/apply_patch/load_tools/ask_user 四个复杂/交互控制面。
-	defs = append(defs, updateTodoToolDef, skillViewToolDef, skillManageToolDef,
+	// 原常驻工具简化为按需加载（2026-08-29 收敛）：skill_view 提回常驻
+	// （任务开始前的第一道工序），update_todo/skill_manage/harness_status/
+	// open_preview/inject_preview/remember/web_search/session_search 保持按需——
+	// 参数简单，模型直接调即自动带 schema。
+	defs = append(defs, updateTodoToolDef, skillManageToolDef,
 		harnessStatusToolDef, openPreviewToolDef, injectPreviewToolDef,
 		rememberToolDef, webSearchToolDef, sessionSearchToolDef)
 	return defs
@@ -241,6 +245,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callNativeReadTool(argsJSON)
 	case "write":
 		return callNativeWriteTool(argsJSON)
+	case "remove":
+		return callNativeRemoveTool(argsJSON)
 	case "patch":
 		return callNativePatchTool(argsJSON)
 	case "bash":
@@ -316,9 +322,9 @@ func coreToolIndexDefs() []core.ToolDefinition {
 	return out
 }
 
-// isCoreTool 判断名字是否是 read/write/patch/bash 之一。
+// isCoreTool 判断名字是否是 read/write/remove/patch/bash 之一。
 func isCoreTool(name string) bool {
-	return name == "read" || name == "write" || name == "patch" || name == "bash"
+	return name == "read" || name == "write" || name == "remove" || name == "patch" || name == "bash"
 }
 
 // callNativeReadTool 把 read 的多种模式分发到底层文件/检索实现：
@@ -377,19 +383,52 @@ func callNativeWriteTool(argsJSON string) (nativeToolResult, error) {
 	switch strings.ToLower(strings.TrimSpace(a.Action)) {
 	case "create_dir":
 		return callNativeFileTool("create_directory", jsonMap("path", a.Path))
+	case "move", "delete":
+		// 09-06 起删除/移动独立成 remove 工具。这里保留兼容分支：历史会话
+		// 与续跑检查点里仍有 write(action=delete) 的调用，执行层照旧转发，
+		// 但模型可见面与审批闸门只认 remove。
+		return callNativeRemoveTool(withAction(argsJSON, a.Action))
+	default:
+		return callNativeFileTool("write_file", jsonMap("path", a.Path, "content", a.Content))
+	}
+}
+
+// callNativeRemoveTool 分发 remove 到 delete_file / delete_directory / move_file。
+func callNativeRemoveTool(argsJSON string) (nativeToolResult, error) {
+	var a struct {
+		Path   string `json:"path"`
+		Action string `json:"action"`
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil || strings.TrimSpace(a.Path) == "" {
+		return nativeToolResult{}, fmt.Errorf("remove 需要 path 参数")
+	}
+	switch strings.ToLower(strings.TrimSpace(a.Action)) {
 	case "move":
 		if strings.TrimSpace(a.Source) == "" {
-			return nativeToolResult{}, fmt.Errorf("write action=move 需要 source 参数")
+			return nativeToolResult{}, fmt.Errorf("remove action=move 需要 source 参数")
 		}
 		return callNativeFileTool("move_file", jsonMap("source", a.Source, "destination", a.Path))
-	case "delete":
+	default:
 		if info, err := os.Stat(absAgainstRoot(a.Path)); err == nil && info.IsDir() {
 			return callNativeFileTool("delete_directory", jsonMap("path", a.Path))
 		}
 		return callNativeFileTool("delete_file", jsonMap("path", a.Path))
-	default:
-		return callNativeFileTool("write_file", jsonMap("path", a.Path, "content", a.Content))
 	}
+}
+
+// withAction 把 write 的 action 透传给 remove 分发（兼容旧调用）。
+func withAction(argsJSON, action string) string {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(argsJSON), &m); err != nil {
+		return argsJSON
+	}
+	m["action"] = action
+	out, err := json.Marshal(m)
+	if err != nil {
+		return argsJSON
+	}
+	return string(out)
 }
 
 // callNativePatchTool 把 patch 分发到底层 edit_file（定点替换）。

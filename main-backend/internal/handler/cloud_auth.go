@@ -267,18 +267,6 @@ func CloudNotificationProxy(c *gin.Context) {
 	proxyToCloudAuth(c, c.Request.URL.Path)
 }
 
-// CloudDHSAuditsProxy 透传 /api/dhs/audits 到 ResceneCloud（带 Authorization）。
-// GET 公开读（社区共享可信标签），POST 上报审计结果（云端验 JWT，游客 401 前端静默）。
-func CloudDHSAuditsProxy(c *gin.Context) {
-	proxyToCloudAuth(c, "/api/dhs/audits")
-}
-
-// CloudDHSFavoritesProxy 透传 /api/dhs/favorites* 到 ResceneCloud（带 Authorization）。
-// 爱心收藏按 uid 存云端：GET 拉我的收藏，POST /toggle 收藏/取消（云端验 JWT）。
-func CloudDHSFavoritesProxy(c *gin.Context) {
-	proxyToCloudAuth(c, c.Request.URL.Path)
-}
-
 // CloudAuthConfig 把 ResceneCloud 基址暴露给前端，供其发起账号登录（/api/login）。
 func CloudAuthConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{

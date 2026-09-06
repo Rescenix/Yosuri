@@ -9,7 +9,7 @@
       v-for="item in railItems"
       :key="item.id"
       class="app-tool-btn"
-      :class="[{ active: item.to === route.path, 'dhs-whale-shortcut': item.id === 'dhs', 'agg-api-shortcut': item.id === 'agg' }, { 'is-dragging-item': railItemDragging === item.id }]"
+      :class="[{ active: item.to === route.path, 'agg-api-shortcut': item.id === 'agg' }, { 'is-dragging-item': railItemDragging === item.id }]"
       type="button"
       :title="item.label"
       :aria-label="item.label"
@@ -21,7 +21,6 @@
       @dragend="onRailItemDragEnd"
     >
       <Icon :icon="item.icon" width="16" />
-      <span v-if="item.id === 'dhs'" class="dhs-whale-shield"><Icon icon="mdi:shield-check" width="9" /></span>
     </button>
     <button class="app-tool-rail-edit" type="button" title="编辑导航" aria-label="编辑导航" @click="railEditorOpen = !railEditorOpen">
       <Icon icon="mdi:pencil-outline" width="15" />
@@ -53,7 +52,6 @@
   <SettingsModal v-if="showAggApi" default-tab="aggapi" @close="showAggApi = false" />
           <router-view />
           <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
-          <DHSCommunityModal v-if="showDHSCommunity" @close="showDHSCommunity = false" />
     <!-- 顶部轻量更新提示：15s 自动消失，点击才弹全窗（2026-08-17 用户定稿：堵塞弹窗破坏体验） -->
     <button v-if="showUpdateBanner" class="update-banner" type="button" @click="openUpdateModal">
       <span class="update-banner-dot" />
@@ -84,7 +82,6 @@ import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 import DesktopFloatingMenu from './components/shanxi/chat/DesktopFloatingMenu.vue'
-import DHSCommunityModal from './components/shanxi/chat/DHSCommunityModal.vue'
 import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
 
 const auth = useAuth()
@@ -92,8 +89,6 @@ const route = useRoute()
 const router = useRouter()
 const showUpdate = ref(false)
 const updateInfo = ref(null)
-// DHS 安全插件生态：鲸鱼入口从输入工具栏移到底部工具条右端（2026-08-18）
-const showDHSCommunity = ref(false)
 // 聚合 API 快捷入口：点开直接跳到设置弹窗的「聚合 API」tab。
 const showAggApi = ref(false)
 const RAIL_POSITION_KEY = 'app_tool_rail_position_v1'
@@ -106,7 +101,6 @@ const railItemDefinitions = [
   { id: 'publish', label: '网文创作', icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
   { id: 'comic', label: '漫画创作', icon: 'mdi:brush', to: '/comic' },
   { id: 'studio', label: '视频剪辑', icon: 'mdi:movie-edit-outline', to: '/studio' },
-  { id: 'dhs', label: 'DHS 安全插件生态', icon: 'simple-icons:deepseek' },
   { id: 'agg', label: '聚合 API', icon: 'mdi:api' }
 ]
 const railItems = ref([...railItemDefinitions])
@@ -125,7 +119,6 @@ function saveRailItems() {
 }
 function activateRailItem(item) {
   if (item.to) router.push(item.to)
-  else if (item.id === 'dhs') showDHSCommunity.value = true
   else if (item.id === 'agg') showAggApi.value = true
 }
 function onRailItemDragStart(event, id) {
@@ -458,9 +451,8 @@ onMounted(async () => {
 .app-tool-rail.dragging { cursor: grabbing; box-shadow: 0 12px 28px rgba(15,23,42,.18); }
 .app-tool-rail.is-elbow > .app-tool-btn:nth-child(-n+7) { grid-row: 2; }
 .app-tool-rail.is-elbow > .app-tool-btn:nth-child(8) { grid-column: 7; grid-row: 1; }
-.app-tool-rail.is-elbow > .app-tool-btn:nth-child(9) { grid-column: 6; grid-row: 1; }
-.app-tool-rail.is-elbow > .app-tool-rail-edit { grid-column: 5; grid-row: 1; }
-.app-tool-rail.is-elbow > .app-tool-rail-grip { grid-column: 4; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-rail-edit { grid-column: 6; grid-row: 1; }
+.app-tool-rail.is-elbow > .app-tool-rail-grip { grid-column: 5; grid-row: 1; }
 .app-tool-rail.is-elbow.compact {
   display: flex;
   width: max-content;
@@ -529,44 +521,6 @@ onMounted(async () => {
 .rail-editor-add > span { width: 100%; color: var(--app-text-faint); font-size: 11px; }
 .rail-editor-add button { display: inline-flex; align-items: center; gap: 4px; min-height: 27px; padding: 0 7px; border: 1px solid var(--app-border); border-radius: 7px; color: var(--app-text-soft); background: var(--app-surface); font: inherit; font-size: 11px; cursor: pointer; }
 .rail-editor-add button:hover { color: var(--app-accent); border-color: var(--app-accent); }
-/* DHS 鲸鱼入口（自 chat-window.css 的 dhs-whale-shortcut，移入底部工具条右端后样式随附） */
-.dhs-whale-shortcut {
-  position: relative;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 30px;
-  padding: 0;
-  color: #8750ff;
-  background: color-mix(in srgb, #8750ff 9%, var(--app-surface));
-  border: 1px solid color-mix(in srgb, #8750ff 28%, var(--app-border));
-  border-radius: 10px;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(126, 73, 255, 0.10);
-  transition: transform .16s ease, color .16s ease, background .16s ease, box-shadow .16s ease;
-}
-.dhs-whale-shortcut:hover {
-  color: #fff;
-  background: linear-gradient(135deg, #7548ff, #a245ff);
-  box-shadow: 0 7px 18px rgba(126, 73, 255, 0.24);
-  transform: translateY(-1px);
-}
-.dhs-whale-shortcut:focus-visible { outline: 2px solid color-mix(in srgb, #8750ff 55%, transparent); outline-offset: 2px; }
-.dhs-whale-shield {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 14px;
-  height: 14px;
-  display: grid;
-  place-items: center;
-  color: #087a57;
-  background: #e6fff5;
-  border: 2px solid var(--app-surface);
-  border-radius: 50%;
-}
-.dhs-whale-shortcut:hover .dhs-whale-shield { color: #067647; background: #d7ffef; }
 html:has(.company-view),html:has(.publish-view) { scrollbar-width: thin; scrollbar-color: #aa8fa0 #f4f1f3; }
 html:has(.company-view)::-webkit-scrollbar,html:has(.publish-view)::-webkit-scrollbar { width: 9px; }
 html:has(.company-view)::-webkit-scrollbar-track,html:has(.publish-view)::-webkit-scrollbar-track { background: #f4f1f3; }
@@ -577,7 +531,7 @@ html:has(.publish-view)::-webkit-scrollbar-thumb:hover { background: linear-grad
 @media (max-width: 620px) {
   .app-tool-rail { right: 22px; bottom: 10px; padding: 3px; gap: 1px; }
   .app-tool-rail.is-elbow { grid-template-columns: repeat(7, 26px); grid-template-rows: repeat(2, 26px); }
-  .app-tool-btn,.app-tool-rail-grip,.app-tool-rail-edit,.dhs-whale-shortcut { width: 26px; height: 26px; flex-basis: 26px; }
+  .app-tool-btn,.app-tool-rail-grip,.app-tool-rail-edit { width: 26px; height: 26px; flex-basis: 26px; }
   .rail-editor { right: 10px; bottom: 76px; width: min(238px, calc(100vw - 20px)); }
 }
 </style>

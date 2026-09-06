@@ -188,9 +188,12 @@ func newWorkflowContextProviderFor(agentID string, tasks ...string) *contextProv
 			// system/subagent/skill/memory/tools 五个桶，索引归到工具桶里，
 			// 免得凭空多一个前端会丢掉的 key，害「分类之和 ≈ prompt_tokens」对不上。
 			{key: "tools", content: mcpToolIndexPrompt() + nativeToolIndexPrompt(), stable: true},
+			// 技能库索引：进程内极少变，放稳定段保证每轮都在（模型先扫索引再决定
+			// 要不要 skill_view 取全文）；当前任务命中技能的全文预加载是易变的，留在易变段。
+			{key: "skill", content: skillLibraryPrompt(), stable: true},
 
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
-			{key: "skill", content: skillLibraryPrompt() + autoLoadedSkillsPrompt(task)}, // 索引 + 当前任务确定性预加载
+			{key: "skill", content: autoLoadedSkillsPrompt(task)}, // 当前任务命中技能的全文预加载
 			// memory 主体：预算内注入"最重要的记忆"（常驻/亲密/偏好/项目/工作态/联想），
 			// 超出预算的低优先块直接丢弃；index 单独作尾部索引，始终完整保留供反向链接展开。
 			{key: "memory", content: combineMemoryWithBudget([]memPart{

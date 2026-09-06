@@ -23,8 +23,8 @@
           <!-- 左侧边栏 -->
           <div class="settings-sidebar">
             <div class="settings-nav-label">通用</div>
-            <button class="settings-tab" :class="{ on: activeTab === 'general' }" @click="activeTab = 'general'">
-              <Icon icon="mdi:translate" width="16" />语言</button>
+                        <button class="settings-tab" :class="{ on: activeTab === 'general' }" @click="activeTab = 'general'; loadAutoStart()">
+                                                  <Icon icon="mdi:cog-outline" width="16" />通用</button>
             <div class="settings-nav-label">模型与连接</div>
             <button class="settings-tab" :class="{ on: activeTab === 'models' }" @click="activeTab = 'models'">
               <Icon icon="mdi:brain" width="16" />模型</button>
@@ -52,8 +52,10 @@
               </div>
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'aggapi' }" @click="activeTab = 'aggapi'">
-              <Icon icon="mdi:api" width="16" />聚合 API</button>
-            <div class="settings-nav-label">体验与能力</div>
+                          <Icon icon="mdi:api" width="16" />聚合 API</button>
+                        <button class="settings-tab" :class="{ on: activeTab === 'lan' }" @click="activeTab = 'lan'; loadLanSyncSetting()">
+                          <Icon icon="mdi:lan-connect" width="16" />局域网</button>
+                        <div class="settings-nav-label">体验与能力</div>
             <button class="settings-tab" :class="{ on: activeTab === 'persona' }" @click="activeTab = 'persona'">
               <Icon icon="mdi:heart-cog-outline" width="16" />人设</button>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
@@ -62,19 +64,6 @@
               <Icon icon="mdi:code-tags" width="16" />编辑器</button>
             <button class="settings-tab" :class="{ on: activeTab === 'safety' }" @click="activeTab = 'safety'; loadProtectedWorkspace()">
               <Icon icon="mdi:shield-lock-outline" width="16" />安全</button>
-            <div class="settings-tab-group">
-              <button class="settings-tab" :class="{ on: activeTab === 'dhs' }" @click="activeTab = 'dhs'; loadDHS()">
-                <Icon icon="simple-icons:deepseek" width="16" />DHS
-              </button>
-              <div v-show="activeTab === 'dhs'" class="settings-subtabs">
-                <button class="settings-subtab" :class="{ on: dhsSubTab === 'installed' }" type="button" @click="dhsSubTab = 'installed'; loadDHS()">
-                  <Icon icon="mdi:puzzle-check-outline" width="15" />已安装
-                </button>
-                <button class="settings-subtab" :class="{ on: dhsSubTab === 'ecosystem' }" type="button" @click="dhsSubTab = 'ecosystem'; loadDHSRegistry()">
-                  <Icon icon="mdi:storefront-outline" width="15" />生态
-                </button>
-              </div>
-            </div>
             <!-- Skills tab 暂时隐藏(2026-08-22 用户反馈"绝对有 bug", 先下线避免用户碰到,
                  代码原样保留在下面 settings-panel 里没删, 只是没有入口可以点进去了) -->
             <div class="settings-tab-group" v-if="false">
@@ -94,10 +83,8 @@
               </div>
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'memory' }" @click="activeTab = 'memory'; loadMemoryInject()">
-              <Icon icon="mdi:notebook-outline" width="16" />记忆</button>
-                          <button class="settings-tab" :class="{ on: activeTab === 'lan' }" @click="activeTab = 'lan'; loadLanSyncSetting()">
-                            <Icon icon="mdi:lan-connect" width="16" />局域网</button>
-                          <div class="settings-nav-label">账户与产品</div>
+                          <Icon icon="mdi:notebook-outline" width="16" />记忆</button>
+                                      <div class="settings-nav-label">账户与产品</div>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
             <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion(); loadAutoStart()">
@@ -118,7 +105,18 @@
                 </div>
               </div>
               <div class="settings-section-desc">当前仅覆盖侧栏、账户菜单、登录等核心界面，其余界面陆续接入。</div>
-            </div>
+
+                            <div class="settings-section-title" style="margin-top: 18px;">启动</div>
+                            <div class="profile-actions" style="margin-top: 6px; align-items: center;">
+                              <label class="param-switch" title="关闭后开机不再自动启动 Yosuri（下次开机生效）">
+                                <input type="checkbox" v-model="autoStartOn" :disabled="!autoStartSupported" @change="onAutoStartChange" />
+                                <span class="param-switch-track"></span>
+                              </label>
+                              <span class="param-value">开机自动启动</span>
+                              <span v-if="autoStartHint" class="param-value" style="opacity:.65; font-size:12px;">{{ autoStartHint }}</span>
+                            </div>
+                            <div class="settings-section-desc">关闭后不再随 Windows 开机启动；已开机的本次会话不受影响。</div>
+                          </div>
 
             <!-- ========== 模型 ========== -->
             <div v-show="activeTab === 'models'" class="settings-panel">
@@ -268,12 +266,8 @@
                   </select>
                 </div>
 
-                <!-- 联网：Bing（默认，免 key） -->
-                <div v-if="websearchMode === 'bing'" class="cap-card">
-                  <div class="cap-card-title">Bing 免 key 联网</div>
-                  <div class="cap-card-desc">零配置即可联网搜索（国内可达），无需任何 API Key。</div>
-                  <span class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</span>
-                </div>
+                <!-- 联网：Bing（默认，免 key）——无需配置，选中即用，不展开说明 -->
+                                <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</div>
 
                 <!-- 联网：Firecrawl 配置 -->
                 <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
@@ -429,12 +423,8 @@
                   </select>
                 </div>
 
-                <!-- 联网：Bing（默认，免 key） -->
-                <div v-if="websearchMode === 'bing'" class="cap-card">
-                  <div class="cap-card-title">Bing 免 key 联网</div>
-                  <div class="cap-card-desc">零配置即可联网搜索（国内可达），无需任何 API Key。</div>
-                  <span class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</span>
-                </div>
+                <!-- 联网：Bing（默认，免 key）——无需配置，选中即用，不展开说明 -->
+                                <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</div>
 
                 <!-- 联网：Firecrawl 配置 -->
                 <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
@@ -1222,71 +1212,6 @@
               <div v-if="protectedWorkspaceError" class="settings-error">{{ protectedWorkspaceError }}</div>
             </div>
 
-            <!-- ========== DeepSeek Harness ecosystem ========== -->
-            <div v-show="activeTab === 'dhs'" class="settings-panel">
-              <template v-if="dhsSubTab === 'installed'">
-                <div class="settings-section-title">
-                  已安装的 DHS 插件
-                  <button class="inline-refresh" type="button" @click="loadDHS(true)" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: dhsLoading }" /></button>
-                </div>
-                <div class="settings-section-desc">
-                  DHS 插件是会被 Agent Harness 直接加载的能力包。Go 内置工具保持常驻，插件只扩展工作流、知识与交付规范。
-                </div>
-                <div v-if="dhsLoading" class="settings-loading">加载中...</div>
-                <template v-else>
-                  <div v-if="!dhsInstalled.length" class="settings-empty">还没有 DHS 插件。可到「生态」选择能力包。</div>
-                  <div v-for="plugin in dhsInstalled" :key="plugin.name" class="entity-card">
-                    <div class="entity-head">
-                      <Icon icon="simple-icons:deepseek" width="15" />
-                      <span class="entity-name">{{ plugin.name }}</span>
-                      <span class="entity-badge dhs-state">Harness 已加载</span>
-                      <span v-if="plugin.provider" class="entity-badge">{{ plugin.provider }}</span>
-                    </div>
-                    <div class="entity-meta">{{ plugin.description || 'DHS Harness 能力包' }}</div>
-                    <div class="skill-actions">
-                      <button class="danger" type="button" :disabled="catalogBusy === 'dhs-remove:' + plugin.name" @click="uninstallDHS(plugin)">
-                        {{ catalogBusy === 'dhs-remove:' + plugin.name ? '移除中…' : '移除' }}
-                      </button>
-                    </div>
-                  </div>
-                </template>
-              </template>
-              <template v-else>
-                <div class="settings-section-title">DeepSeek Harness 插件生态</div>
-                <div class="settings-section-desc">浏览 DHS 能力包。安装内容会先经过文件数、体积和路径安全校验，再原子写入本地 Harness 目录。</div>
-                <div class="catalog-toolbar">
-                  <label class="catalog-search">
-                    <Icon icon="mdi:magnify" width="16" />
-                    <input v-model="dhsRegistryQuery" type="search" placeholder="搜索 DHS 插件" @keyup.enter="loadDHSRegistry(true)" />
-                  </label>
-                  <button class="catalog-search-btn" type="button" @click="loadDHSRegistry(true)">搜索</button>
-                </div>
-                <div v-if="dhsRegistryLoading" class="settings-loading">正在连接 DHS 插件目录…</div>
-                <template v-else>
-                  <div v-if="!dhsRegistryItems.length" class="settings-empty">没有找到 DHS 插件。</div>
-                  <div v-for="item in dhsRegistryItems" :key="item.path" class="catalog-card">
-                    <div class="catalog-card-main">
-                      <div class="entity-head">
-                        <Icon icon="simple-icons:deepseek" width="15" />
-                        <span class="entity-name">{{ item.name }}</span>
-                        <span class="entity-badge">DHS</span>
-                      </div>
-                      <div class="catalog-id">{{ item.path }}</div>
-                      <div class="catalog-desc">可安装的 DeepSeek Harness 能力包；安装后随 Agent 工作流自动加载。</div>
-                      <div class="entity-meta">{{ item.url }}</div>
-                    </div>
-                    <button
-                      class="catalog-install-btn"
-                      :class="{ installed: item.installed }"
-                      type="button"
-                      :disabled="item.installed || catalogBusy === 'dhs-install:' + item.path"
-                      @click="installDHS(item)"
-                    >{{ item.installed ? '已安装' : (catalogBusy === 'dhs-install:' + item.path ? '安装中…' : '安装') }}</button>
-                  </div>
-                </template>
-              </template>
-            </div>
-
             <!-- ========== Skills ========== -->
             <div v-show="activeTab === 'skills'" class="settings-panel">
               <template v-if="skillsSubTab === 'local'">
@@ -1643,22 +1568,11 @@
                 <label class="param-switch" title="关闭后启动不再检查/弹窗提示更新">
                   <input type="checkbox" v-model="notifyDisabled" @change="onNotifyDisabledChange" />
                   <span class="param-switch-track"></span>
-                </label>
-                <span class="param-value">不提示版本更新</span>
-              </div>
-
-              <div class="settings-section-title" style="margin-top: 18px;">启动</div>
-              <div class="profile-actions" style="margin-top: 6px; align-items: center;">
-                <label class="param-switch" title="关闭后开机不再自动启动 Yosuri（下次开机生效）">
-                  <input type="checkbox" v-model="autoStartOn" :disabled="!autoStartSupported" @change="onAutoStartChange" />
-                  <span class="param-switch-track"></span>
-                </label>
-                <span class="param-value">开机自动启动</span>
-                <span v-if="autoStartHint" class="param-value" style="opacity:.65; font-size:12px;">{{ autoStartHint }}</span>
-              </div>
-              <div class="settings-section-desc">关闭后不再随 Windows 开机启动；已开机的本次会话不受影响。</div>
-            </div>
-          </div>
+                                  </label>
+                                  <span class="param-value">不提示版本更新</span>
+                                </div>
+                              </div>
+                            </div>
 
           <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
         </div>
@@ -1740,17 +1654,15 @@ import PersonaReportModal from './PersonaReportModal.vue'
 
 const props = defineProps({
   openid: { type: String, default: '' },
-  defaultTab: { type: String, default: '' },
-  defaultDhsSubTab: { type: String, default: '' }
+  defaultTab: { type: String, default: '' }
 })
 const emit = defineEmits(['close'])
 
 const { isZh, setLocale } = useI18n()
 
-// 左侧边栏当前 tab
-const activeTab = ref(props.defaultTab || 'models')
+// 左侧边栏当前 tab：默认落在第一个 tab「通用/语言」，不再写死模型页
+const activeTab = ref(props.defaultTab || 'general')
 const providerSubTab = ref('free')
-const dhsSubTab = ref(props.defaultDhsSubTab || 'installed')
 const skillsSubTab = ref('local')
 
 // ── 人设预设 ─────────────────────────────────────────────
@@ -3283,78 +3195,7 @@ watch(visionCapableChatList, (list) => {
   }
 }, { immediate: true })
 
-// ============ DeepSeek Harness plugins ============
-const dhsLoading = ref(false)
-const dhsRegistryItems = ref([])
-const dhsRegistryLoading = ref(false)
-const dhsRegistryQuery = ref('')
 const catalogBusy = ref('')
-const DHS_SOURCE = 'dhs'
-const DHS_PROVIDERS = new Set(['anthropics/skills', 'openai/skills', 'vercel-labs/skills'])
-const dhsInstalled = computed(() => skills.value.filter(skill => {
-  if (skill.source !== 'external') return false
-  return DHS_PROVIDERS.has(skill.provider) || skill.provider?.startsWith('dhs-community:')
-}))
-
-async function loadDHS(force = false) {
-  dhsLoading.value = true
-  try { await loadSkills(force) } finally { dhsLoading.value = false }
-}
-
-async function loadDHSRegistry(force = false) {
-  if (dhsRegistryLoading.value) return
-  if (dhsRegistryItems.value.length && !force) return
-  dhsRegistryLoading.value = true
-  errorMsg.value = ''
-  try {
-    const params = new URLSearchParams({ source: DHS_SOURCE })
-    if (dhsRegistryQuery.value.trim()) params.set('q', dhsRegistryQuery.value.trim())
-    const res = await fetch('/api/skills/registry?' + params)
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'DHS 插件目录加载失败')
-    dhsRegistryItems.value = data.items || []
-  } catch (e) {
-    dhsRegistryItems.value = []
-    errorMsg.value = e.message
-  } finally {
-    dhsRegistryLoading.value = false
-  }
-}
-
-async function installDHS(item) {
-  catalogBusy.value = 'dhs-install:' + item.path
-  errorMsg.value = ''
-  try {
-    const res = await fetch('/api/skills/registry/install', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: item.source, path: item.path })
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'DHS 插件安装失败')
-    await Promise.all([loadDHS(true), loadDHSRegistry(true)])
-  } catch (e) {
-    errorMsg.value = e.message
-  } finally {
-    catalogBusy.value = ''
-  }
-}
-
-async function uninstallDHS(plugin) {
-  if (!window.confirm(`移除 DHS 插件「${plugin.name}」？`)) return
-  catalogBusy.value = 'dhs-remove:' + plugin.name
-  errorMsg.value = ''
-  try {
-    const res = await fetch('/api/skills/external/' + encodeURIComponent(plugin.name), { method: 'DELETE' })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'DHS 插件移除失败')
-    await Promise.all([loadDHS(true), loadDHSRegistry(true)])
-  } catch (e) {
-    errorMsg.value = e.message
-  } finally {
-    catalogBusy.value = ''
-  }
-}
-
 // ============ Skills ============
 const skills = ref([])
 const skillsLoading = ref(false)
@@ -4069,8 +3910,9 @@ onUnmounted(() => {
 .settings-tab :deep(svg) { flex: none; opacity: .78; }
 .settings-tab:hover { color: var(--app-text); background: var(--app-surface-3); }
 .settings-tab.on {
-  color: var(--app-accent); background: var(--app-accent-soft);
-  border-color: color-mix(in srgb, var(--app-accent) 18%, transparent); box-shadow: inset 3px 0 0 var(--app-accent);
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+  font-weight: 650;
 }
 .settings-tab.on :deep(svg) { opacity: 1; }
 .settings-tab-group {
@@ -4667,7 +4509,7 @@ onUnmounted(() => {
 .skin-card-info small { overflow: hidden; color: var(--app-text-faint); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
 .skin-card-check { margin-left: auto; flex: none; color: var(--app-accent); }
 
-/* DHS / Skills 实体卡片 */
+/* Skills 实体卡片 */
 .entity-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; background: var(--app-surface-2); }
 .entity-head { display: flex; align-items: center; gap: 8px; color: var(--app-text); }
 .entity-name { font-size: 13px; font-weight: 700; }
@@ -4675,7 +4517,6 @@ onUnmounted(() => {
 .entity-meta { margin-top: 5px; font-size: 11.5px; color: var(--app-text-faint); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; line-height: 1.5; word-break: break-all; }
 .entity-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .entity-tag { font-size: 10.5px; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 7px; font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
-.dhs-state { color: #047857; background: #d1fae5; }
 .catalog-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .catalog-search {
   flex: 1; min-width: 150px; height: 36px; box-sizing: border-box;

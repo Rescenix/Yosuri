@@ -1,4 +1,4 @@
-/* 聊天窗主题：颜色全部引用 <html> inline style 注入的 --app-*（由 useTheme.js 运行时写入），
+﻿/* 聊天窗主题：颜色全部引用 <html> inline style 注入的 --app-*（由 useTheme.js 运行时写入），
    跟随多主题色板×明暗。不再在此定义 --chat-*（scoped 下 :root 取不到 <html> 值）。
    仅保留纯几何变量。 */
 :root {
@@ -2796,16 +2796,6 @@ min-height: 90px !important;
   background: linear-gradient(90deg, var(--app-accent) 0 72%, var(--app-accent-2, var(--app-accent-hover)) 72% 100%);
   box-shadow: none;
 }
-.tool-dock-location-mark {
-  width: 25px;
-  height: 26px;
-  flex: 0 0 25px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--app-accent-2, var(--app-accent));
-  border-right: 1px solid color-mix(in srgb, var(--app-accent), transparent 84%);
-}
 .tool-dock-tab-grip {
   flex-shrink: 0;
   opacity: 0;
@@ -2990,13 +2980,6 @@ min-height: 90px !important;
   min-width: 0;
   min-height: 0;
   position: relative;
-}
-.tool-dock-drag-tip {
-  margin-right: 4px;
-  color: var(--app-text-faint);
-  font-size: 10.5px;
-  white-space: nowrap;
-  opacity: 0.72;
 }
 .chat-window.expanded .chat-body.studio > .chat-content {
   grid-column: 1;
@@ -4750,6 +4733,11 @@ img.gem-rail-avatar {
   border-color: var(--app-accent);
   transform: rotate(0deg) scale(1.05);
 }
+.kb-empty-tip {
+  font-size: 11px;
+  color: var(--app-text-faint);
+  opacity: 0.85;
+}
 
 /* 文件列表：ref-slot 倾斜网格 */
 .kb-slot-grid {
@@ -4830,43 +4818,6 @@ img.gem-rail-avatar {
   transform: translateY(100%) rotate(-0.8deg);
   opacity: 0;
 }
-.dhs-whale-shortcut {
-  position: relative;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 30px;
-  padding: 0;
-  color: #8750ff;
-  background: color-mix(in srgb, #8750ff 9%, var(--app-surface));
-  border: 1px solid color-mix(in srgb, #8750ff 28%, var(--app-border));
-  border-radius: 10px;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(126, 73, 255, 0.10);
-  transition: transform .16s ease, color .16s ease, background .16s ease, box-shadow .16s ease;
-}
-.dhs-whale-shortcut:hover {
-  color: #fff;
-  background: linear-gradient(135deg, #7548ff, #a245ff);
-  box-shadow: 0 7px 18px rgba(126, 73, 255, 0.24);
-  transform: translateY(-1px);
-}
-.dhs-whale-shortcut:focus-visible { outline: 2px solid color-mix(in srgb, #8750ff 55%, transparent); outline-offset: 2px; }
-.dhs-whale-shield {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 14px;
-  height: 14px;
-  display: grid;
-  place-items: center;
-  color: #087a57;
-  background: #e6fff5;
-  border: 2px solid var(--app-surface);
-  border-radius: 50%;
-}
-.dhs-whale-shortcut:hover .dhs-whale-shield { color: #067647; background: #d7ffef; }
 .toolbar-pill-btn {
   display: flex;
   align-items: center;
@@ -4927,15 +4878,18 @@ img.gem-rail-avatar {
   gap: 10px;
   margin: 0 0 -1px;
   padding: 7px 10px 7px 8px;
-  background: var(--app-surface);
+  /* 与 todo/ask 条一致的白色简洁玻璃底：半透明 + 毛玻璃，无左侧强调条 */
+  background: color-mix(in srgb, var(--app-surface, #fff) 78%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  backdrop-filter: blur(12px) saturate(1.3);
   border: 1px solid var(--app-border);
-  border-left: 3px solid var(--app-accent);
   border-radius: 0;
   box-shadow: none;
   animation: approval-bar-in 0.16s ease-out;
   box-sizing: border-box;
   max-width: 100%;
   overflow: hidden;
+  opacity: var(--bar-fade, 1);
 }
 @keyframes approval-bar-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -5216,7 +5170,6 @@ img.gem-rail-avatar {
   translate: -50% 0;
 }
 @media (max-width: 1280px) {
-  .tool-dock-drag-tip { display: none; }
   .tool-dock-tab { padding-right: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {

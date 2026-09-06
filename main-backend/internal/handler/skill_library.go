@@ -363,7 +363,9 @@ func skillLibraryPrompt() string {
 		lines = append(lines, fmt.Sprintf("- %s%s：%s", tag, s.Name, s.Description))
 	}
 	sort.Strings(lines)
-	return "\n━━━ 技能库索引（按需加载，用 skill_view 取完整内容） ━━━\n" + strings.Join(lines, "\n") + "\n"
+	return "\n━━━ 技能库索引（任务开始前必须先扫描；命中就调 skill_view 取完整内容） ━━━\n" +
+		"规则：每次任务开始前，先逐条核对下面的技能，凡描述与本任务相关的，一律先用 skill_view 取回全文再动手，不要凭常识跳过。\n" +
+		strings.Join(lines, "\n") + "\n"
 }
 
 // autoLoadedSkillsPrompt 是“可发现”之外的确定性保障：宿主先按任务类型匹配，
@@ -383,8 +385,10 @@ func autoLoadedSkillsPrompt(task string) string {
 		if name == "" || seen[name] {
 			continue
 		}
+		// 命中两种：任务里显式写出技能名；或任务的词命中技能 trigger 关键词。
+		// 后者对所有内置技能通用，不再给单个技能写特例（原 frontend-design 特例已并入）。
 		explicit := len(name) >= 4 && strings.Contains(lowerTask, name)
-		typed := name == "frontend-design" && isFrontendDesignTask(lowerTask)
+		typed := matchesSkillTrigger(lowerTask, skill)
 		if !explicit && !typed {
 			continue
 		}
@@ -425,18 +429,27 @@ func autoLoadedSkillsPrompt(task string) string {
 	return b.String()
 }
 
-var frontendDesignEnglishTokenPattern = regexp.MustCompile(`(^|[^a-z0-9])(ui|ux|css|html|vue|react|svelte|tailwind)([^a-z0-9]|$)`)
-
-func isFrontendDesignTask(lowerTask string) bool {
-	for _, keyword := range []string{
-		"前端", "界面", "网页", "网站", "页面设计", "组件设计", "视觉设计", "交互设计", "响应式",
-		"frontend", "front-end", "web app", "landing page", ".vue", ".tsx", ".jsx", ".css", ".html",
-	} {
-		if strings.Contains(lowerTask, keyword) {
+// matchesSkillTrigger 判定任务是否命中技能 trigger：把 trigger 字段按常见分隔符
+// 拆成关键词（去掉 1 字短词防噪音），任务文本包含任一关键词即命中。
+// 所有内置/自研技能共用这一套，不需要给单个技能写硬编码特例。
+func matchesSkillTrigger(lowerTask string, skill Skill) bool {
+	trigger := strings.ToLower(skill.Trigger)
+	if trigger == "" {
+		return false
+	}
+	for _, sep := range []string{"、", "，", "；", "。", "：", "/", " ", "　"} {
+		trigger = strings.ReplaceAll(trigger, sep, "\x00")
+	}
+	for _, kw := range strings.Split(trigger, "\x00") {
+		kw = strings.TrimSpace(kw)
+		if len(kw) < 2 {
+			continue
+		}
+		if strings.Contains(lowerTask, kw) {
 			return true
 		}
 	}
-	return frontendDesignEnglishTokenPattern.MatchString(lowerTask)
+	return false
 }
 
 // skillViewToolName 是取回技能完整内容（正文 + 关联文件）的钥匙，跟 load_tools 一样必须常驻工具集。
@@ -716,6 +729,27 @@ func markSkillUsed(s Skill) {
 
 var skillNameSanitizer = regexp.MustCompile(`[^a-z0-9\-]+`)
 
+// skillDedupIndex 生成技能库现有清单（name：description），注入提炼 prompt，
+// 让模型在判断「值不值得沉淀」时知道库里已有什么，避免近义技能反复生成。
+// 只取 learned + builtin（外部技能是说明文档，不作为重复基准），超长截断防 token 爆炸。
+func skillDedupIndex() string {
+	skills := loadSkills()
+	var b strings.Builder
+	count := 0
+	for _, s := range skills {
+		if count >= 25 {
+			break
+		}
+		desc := truncateChars(s.Description, 80)
+		b.WriteString("- " + s.Name + "：" + desc + "\n")
+		count++
+	}
+	if b.Len() == 0 {
+		return "（技能库为空）"
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
 // generateSkillAsync 在工作流成功后异步抽象技能。失败只打日志，绝不影响主流程。
 func generateSkillAsync(task string, transcript []string) {
 	defer func() {
@@ -730,23 +764,34 @@ func generateSkillAsync(task string, transcript []string) {
 		return
 	}
 
+	skillList := skillDedupIndex()
+
 	prompt := fmt.Sprintf(`以下是一次成功完成的 Agent 编程任务的动作记录。
-如果这个工作流对未来同类任务有复用价值，把它抽象成一个技能；如果只是一次性的琐碎操作，输出 {"name":""}。
+
+先判断这条记录是否值得沉淀成技能，只有同时满足三条才输出技能 JSON，否则输出 {"name":""}：
+1. 可复用：未来会出现同类任务，会再次用到这套步骤；一次性琐碎操作（改个颜色、替换一段文本这种）不算。
+2. 不重复：技能库已有清单如下，凡与其近义、场景重叠或可被其覆盖的，一律视为已有同类，不得再建。
+3. 值得长期维护：步骤稳定、可验证、不写死临时路径/密钥/项目专属信息；演示、测试、mock 类内容一律不沉淀。
+
+技能库已有技能（name：description）：
+%s
 
 任务：%s
 
 动作序列：
 %s
 
-只输出一个 JSON 对象，不要任何解释和代码块包裹。技能必须有明确触发条件、可验证结果，且只保留 3–6 个可执行步骤；不得写入临时路径、密钥或项目专属垃圾信息：
+只输出一个 JSON 对象，不要任何解释和代码块包裹。技能保留 3–6 个可执行步骤：
 {"name":"kebab-case英文技能名","description":"一句话中文描述什么场景用这个技能","trigger":"何时调用","verification":"如何验证成功","steps":["步骤1","步骤2","步骤3"]}`,
-		truncateChars(task, 500), strings.Join(transcript, "\n"))
+		skillList, truncateChars(task, 500), strings.Join(transcript, "\n"))
 
 	msgs := []map[string]any{{"role": "user", "content": prompt}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	content, _, err := routeChatOnce(ctx, resolveBackends("default", ""), msgs, nil)
+	// 与 follow-up 建议同通道：免费聚合池 auto 链（探活/真实成功/熔断排序，断了秒切），
+	// 后台提炼不占用用户的 default 配置链，成本零、质量取免费池最优。
+	content, _, err := routeChatOnce(ctx, aggAutoChain(), msgs, nil)
 	if err != nil {
 		log.Printf("⚠️ 技能生成调用失败: %v", err)
 		return
@@ -781,6 +826,11 @@ func generateSkillAsync(task string, transcript []string) {
 	skill.CreatedAt = time.Now()
 	skill.UpdatedAt = skill.CreatedAt
 	path := filepath.Join(skillsDir(), skill.Name+".json")
+	// 重名保护：已有同名技能（含归档）绝不覆盖，让给 skill_manage 的 update 流程。
+	if _, err := os.Stat(path); err == nil {
+		log.Printf("⚠️ 自动沉淀跳过：技能 %s 已存在，不覆盖", skill.Name)
+		return
+	}
 	data, _ := json.MarshalIndent(skill, "", "  ")
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		log.Printf("⚠️ 写入技能文件失败: %v", err)

@@ -1,0 +1,17 @@
+{
+  "name": "yosuri-doctor",
+  "description": "被用户问 Yosuri 配置、模型不工作、同步失败或要求自检修复时，拉诊断快照定位并给出可转发的结论",
+  "status": "active",
+  "trigger": "模型不工作、一直429、没有模型、登录失败、记忆不同步、同步失败、怎么配置、怎么修、诊断、配置",
+  "verification": "诊断快照取到且问题定位明确；报告里 key 全部为脱敏形式；没有改动用户数据与后端进程",
+  "steps": [
+    "你是 Yosuri 的 AI 助手。用户问配置或故障时，先拉诊断再回答，结论直接给「原因 + 怎么解决」。",
+    "拉诊断快照：curl -s http://127.0.0.1:8080/api/diagnose，优先读 summary.problems（后端已自动生成问题清单），再对照 summary 明细字段。",
+    "读配置（只读，安全）：curl -s http://127.0.0.1:8080/api/models/config 看提供方 key 是否已配（APIKeySet）、默认模型与排序；curl -s http://127.0.0.1:8080/api/memory/sync/settings 看记忆同步开关。接口返回的 key 已脱敏，不要试图从中还原明文。",
+    "若 /api/diagnose 返回 404：说明当前版本过旧，告诉用户更新到新版即可。",
+    "summary 信号对照（模型）：auto_chain_total 与 auto_chain_healthy 不相等 → 部分候选挂了，auto 会自动跳过，报「该厂商临时不可用，已自动切换」；两者都为 0 → 模型池全灭，报「检查网络或稍后再试」；providers_with_key 为 0 → 没配任何 key，全靠免费池兜底。",
+    "summary 信号对照（开关）：memory_sync 为 false → 云端记忆同步关着；lan_sync 为 false → 局域网同步未开（手机同步对话才需要开）。",
+    "配置路径（用户可操作）：模型提供方 Key 在「设置 → 模型/提供方」填写；记忆同步在「设置 → 记忆」；局域网同步在「设置 → 局域网」。",
+    "安全红线：key 只能出现脱敏形式（sk-...abcd）或只说已配置/未配置；不读用户记忆/会话内容；不重启、不强杀后端进程。"
+  ]
+}

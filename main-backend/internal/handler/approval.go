@@ -19,7 +19,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -37,6 +36,7 @@ var dangerousToolSet = map[string]bool{
 	"write":             true,
 	"patch":             true,
 	"bash":              true,
+	"remove":            true,
 	"create_directory":  true,
 	"move_file":         true,
 	"delete_file":       true,
@@ -131,6 +131,7 @@ var irreversibleToolSet = map[string]bool{
 	"delete_file":               true,
 	"delete_directory":          true,
 	"move_file":                 true,
+	"remove":                    true,
 	"mcp__fs__delete_file":      true,
 	"mcp__fs__delete_directory": true,
 	"mcp__fs__move_file":        true,
@@ -158,6 +159,19 @@ func isIrreversibleToolCall(name, argsJSON string) bool {
 	if isIrreversibleTool(name) {
 		return true
 	}
+	// write 在 09-06 之前把删除/移动塞在 action 参数里；历史会话与续跑检查点
+	// 仍可能发来 write(action=delete)，这里照旧按不可逆拦，别让它静默漏网。
+	if name == "write" {
+		var a struct {
+			Action string `json:"action"`
+		}
+		if json.Unmarshal([]byte(argsJSON), &a) == nil {
+			switch strings.ToLower(strings.TrimSpace(a.Action)) {
+			case "delete", "move":
+				return true
+			}
+		}
+	}
 	return name == "apply_patch" && nativePatchContainsDelete(argsJSON)
 }
 
@@ -175,6 +189,7 @@ func isIrreversibleToolCall(name, argsJSON string) bool {
 // sensitiveWriteToolSet 整文件覆写/新建类写工具。
 var sensitiveWriteToolSet = map[string]bool{
 	"write_file":              true,
+	"write":                   true,
 	"apply_patch":             true,
 	"create_file":             true,
 	"mcp__fs__write_file":     true,
@@ -264,8 +279,9 @@ var destructiveCommandPatterns = []struct {
 	{"git reset --hard", regexp.MustCompile(`git\s+reset\s+--hard`)},
 	{"git clean 清除文件", regexp.MustCompile(`git\s+clean\b`)},
 	{"git rm 删除", regexp.MustCompile(`git\s+rm\b`)},
-	{"rm 强制/递归删除", regexp.MustCompile(`\brm\s+(?:-{1,2}[a-z]*[rf][a-z]*|--recursive|--force)\b`)},
-	{"Remove-Item 递归删除", regexp.MustCompile(`remove-item[^\n]*-(?:r|recurse|force)` )},
+	{"rm 删除（含裸 rm）", regexp.MustCompile(`\brm\s+[\w.\-"'/*\$]`)},
+	{"del/erase 删除（含裸 del）", regexp.MustCompile(`\b(?:del|erase)\s+[\w.\-"'/*\$]`)},
+	{"Remove-Item 删除（含裸调用）", regexp.MustCompile(`\bremove-item\s+[\w.\-"'/*\$]`)},
 	{"rd/rmdir 递归删除", regexp.MustCompile(`\b(?:rd|rmdir)\s+/s\b`)},
 	{"del 强制/递归删除", regexp.MustCompile(`\bdel\s+/(?:f|s|q)` )},
 	{"git push 强推", regexp.MustCompile(`git\s+push\s+[^\n]*?(?:--force|-f\b)`)},
@@ -283,9 +299,11 @@ func isDestructiveCommand(command string) bool {
 }
 
 // isDestructiveToolCall 判定一次工具调用是否为破坏性 shell 命令
-// （run_command / mcp__shell__run 专用，YOLO 模式也强制审批）。
+// （bash / run_command / mcp__shell__run 专用，YOLO 模式也强制审批）。
+// bash 是四件套收敛后的命令工具名（2026-08-29 起模型实际用的是它），
+// 漏掉它等于 git checkout -- / git restore / rm -rf 在 YOLO 模式畅通。
 func isDestructiveToolCall(name, argsJSON string) bool {
-	if name != "run_command" && name != "mcp__shell__run" {
+	if name != "bash" && name != "run_command" && name != "mcp__shell__run" {
 		return false
 	}
 	var args struct {
@@ -405,30 +423,24 @@ func newApprovalWaiter() *approvalWaiter {
 	}
 }
 
-// approvalBackendTimeout 是后端侧的兜底超时：比前端的 60s 倒计时长 5s，
-// 正常情况下前端会先发 approve 请求；只有前端整个挂掉（标签页关了、JS 崩了、
-// 断网）时才由它兜底放行，避免工作流 goroutine 永久阻塞、SSE 连接一直挂着。
-const approvalBackendTimeout = 65 * time.Second
-
-// wait 阻塞直到该 id 收到批准决定 / 超时 / ctx 取消。返回是否允许执行。
+// wait 阻塞直到该 id 收到批准决定 / ctx 取消。返回是否允许执行。
+// 语义（2026-09-06 定稿）：没有「超时自动放行」，也没有「超时自动拒绝」——
+// 审批弹出来没人理就是「没回应」，继续等用户表态，绝不代替用户做决定；
+// 只有用户点了允许/拒绝，或客户端断开（SSE 取消）才结束等待。
 // 调用前务必先 register 好 id（用 expect），否则无法被 approve 唤醒。
 func (w *approvalWaiter) wait(id string, done <-chan struct{}) bool {
 	w.mu.Lock()
 	ch, ok := w.chans[id]
 	w.mu.Unlock()
 	if !ok {
-		// 没登记就当允许（不应发生，防御性）
-		return true
+		// 没登记 = 这个审批从未真正挂起过（id 对不上、waiter 已被清理、
+		// 或前端伪造/漏传 workflowID 拼出了错 id）。一律按拒绝处理：
+		// 只有人明确点过「允许」才放行，绝不因查不到就默认放行。
+		return false
 	}
-	timer := time.NewTimer(approvalBackendTimeout)
-	defer timer.Stop()
 	select {
 	case dec := <-ch:
 		return dec.allow
-	case <-timer.C:
-		// 超时默认放行，与前端 60s 自动同意语义保持一致（不是"拒绝"，
-		// 否则用户走开一会儿回来会发现任务被判死，比放行更难受）
-		return true
 	case <-done:
 		return false // 客户端断开，中止执行
 	}

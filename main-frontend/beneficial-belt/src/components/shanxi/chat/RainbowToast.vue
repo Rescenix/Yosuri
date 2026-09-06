@@ -3,7 +3,7 @@
     <div class="rainbow-toasts">
       <TransitionGroup name="rb-pop">
         <div v-for="t in toasts" :key="t.id" class="rb-toast" :class="{ 'rb-dark': isDark }">
-          <!-- 星星线稿图标（lucide sparkles 标准路径，紫罗兰描边）+ 动态扫描线 -->
+          <!-- 星星线稿图标（lucide sparkles 标准路径，紫罗兰描边） -->
           <span class="rb-icon-wrap">
             <svg class="rb-icon" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -13,7 +13,6 @@
               <path d="M4 17v2" />
               <path d="M5 18H3" />
             </svg>
-            <span class="rb-scanline"></span>
           </span>
 
           <div class="rb-body">
@@ -156,30 +155,6 @@ const titleChars = computed(() => {
   display: block;
 }
 .rb-dark .rb-icon { stroke: #c4b5fd; }
-
-/* 动态扫描线：暖橙→淡紫 渐变光带，自上而下循环扫描（正是截图里那个动态效果） */
-.rb-scanline {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  height: 3px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 154, 92, 0.85), rgba(179, 157, 219, 0.85), transparent);
-  filter: blur(0.3px);
-  box-shadow: 0 0 6px rgba(255, 154, 92, 0.5), 0 0 12px rgba(179, 157, 219, 0.35);
-  pointer-events: none;
-  animation: rb-scan 1.8s ease-in-out infinite;
-}
-.rb-dark .rb-scanline {
-  background: linear-gradient(90deg, transparent, rgba(255, 170, 110, 0.9), rgba(190, 165, 235, 0.9), transparent);
-  box-shadow: 0 0 6px rgba(255, 170, 110, 0.55), 0 0 12px rgba(190, 165, 235, 0.4);
-}
-@keyframes rb-scan {
-  0%   { top: 6%;  opacity: 0; }
-  12%  { opacity: 1; }
-  88%  { opacity: 1; }
-  100% { top: 88%; opacity: 0; }
-}
 
 .rb-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 

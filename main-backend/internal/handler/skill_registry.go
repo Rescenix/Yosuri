@@ -46,13 +46,10 @@ var hostedSkillSources = []struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 }{
-	{ID: "dhs", Label: "DeepSeek Harness（DHS）"},
 	{ID: "anthropics/skills", Label: "Anthropic Skills"},
 	{ID: "openai/skills", Label: "OpenAI Skills"},
 	{ID: "vercel-labs/skills", Label: "Vercel Labs Skills"},
 }
-
-var dhsHarnessSources = []string{"anthropics/skills", "openai/skills", "vercel-labs/skills"}
 
 type githubTreeEntry struct {
 	Path string `json:"path"`
@@ -189,28 +186,6 @@ func isHostedSkillSource(source string) bool {
 func listHostedSkills(source, query string) ([]hostedSkillItem, error) {
 	if !isHostedSkillSource(source) {
 		return nil, fmt.Errorf("不支持的技能托管源")
-	}
-	if source == "dhs" {
-		items := make([]hostedSkillItem, 0)
-		var failures []string
-		for _, upstream := range dhsHarnessSources {
-			part, err := listHostedSkills(upstream, query)
-			if err != nil {
-				failures = append(failures, upstream+": "+err.Error())
-				continue
-			}
-			items = append(items, part...)
-		}
-		if len(items) == 0 && len(failures) == len(dhsHarnessSources) {
-			return nil, fmt.Errorf("DHS 目录暂不可用: %s", strings.Join(failures, "; "))
-		}
-		sort.Slice(items, func(i, j int) bool {
-			if items[i].Name == items[j].Name {
-				return items[i].Source < items[j].Source
-			}
-			return items[i].Name < items[j].Name
-		})
-		return items, nil
 	}
 	tree, _, err := loadGitHubSkillTree(source)
 	if err != nil {

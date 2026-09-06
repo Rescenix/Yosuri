@@ -31,6 +31,10 @@ func TestIsSensitiveOverwrite(t *testing.T) {
 		{"write_file", `{"path": "main-backend/go.sum", "content": "x"}`},
 		{"write_file", `{"path": "main-frontend/beneficial-belt/package.json", "content": "{}"}`},
 		{"write_file", `{"path": "C:/Pro2026/re0/README.md", "content": "# 模板"}`},
+		// 09-06 工具面收敛后的核心写工具名：闸门必须同样认，漏了等于 README 惨案重演
+		{"write", `{"path": "README.md", "content": "# 项目初始化"}`},
+		{"write", `{"path": "main-backend/go.mod", "content": "module x"}`},
+		{"write", `{"path": "main-frontend/beneficial-belt/package.json", "content": "{}"}`},
 		{"mcp__fs__write_file", `{"path": "README.md", "content": "x"}`},
 		// apply_patch 的路径藏在 patch 头里
 		{"apply_patch", "*** Begin Patch\n*** Update File: README.md\n@@\n-# 旧内容\n+# 新内容\n*** End Patch"},
@@ -91,6 +95,18 @@ func TestIsDestructiveCommand(t *testing.T) {
 		"rm -rf node_modules",
 		"rm -r build/",
 		"rm -f main.go",
+		// 09-06 补：裸 rm / del / Remove-Item 不带任何标志，删单个文件最常见，
+		// 旧正则要求带 -r/-f 全部漏网——这是 agent 删文件不弹条的直接原因。
+		"rm main.go",
+		"rm README.md",
+		"rm a.txt b.txt",
+		"rm \"C:/Pro2026/re0/x.go\"",
+		"rm *.tmp",
+		"rm $HOME/x",
+		"del main.go",
+		"erase build.txt",
+		"Remove-Item main.go",
+		"Remove-Item .\\build",
 		"cd x && rm -rf dist",
 		"Remove-Item -Recurse -Force .\\build",
 		"rd /s /q build",
@@ -124,6 +140,60 @@ func TestIsDestructiveCommand(t *testing.T) {
 		if isDestructiveCommand(cmd) {
 			t.Errorf("命令 %q 是只读/无害操作，不该被 isDestructiveCommand 判定为破坏性，实际返回 true", cmd)
 		}
+	}
+}
+
+// TestIsIrreversibleToolCall 验证删除/移动类调用的判定：remove 工具（09-06 起
+// 独立成名）、旧 write(action=delete/move) 兼容路径、legacy delete_file/move_file
+// 都必须返回 true；普通 write 返回 false。
+func TestIsIrreversibleToolCall(t *testing.T) {
+	mustBlock := []struct {
+		name string
+		args string
+	}{
+		{"remove", `{"path": "a.txt"}`},
+		{"remove", `{"path": "build", "action": "delete"}`},
+		{"remove", `{"path": "b.txt", "action": "move", "source": "a.txt"}`},
+		{"remove", `{"path": "a.txt", "action": "DELETE"}`},
+		// 旧调用形态：删除曾塞在 write 的 action 里，闸门不能因改名漏网
+		{"write", `{"path": "a.txt", "action": "delete"}`},
+		{"write", `{"path": "b.txt", "action": "move", "source": "a.txt"}`},
+		{"delete_file", `{"path": "a.txt"}`},
+		{"delete_directory", `{"path": "build"}`},
+		{"move_file", `{"source": "a", "destination": "b"}`},
+		{"mcp__fs__delete_file", `{"path": "a.txt"}`},
+		{"mcp__fs__rename", `{"path": "a.txt"}`},
+	}
+	for _, c := range mustBlock {
+		if !isIrreversibleToolCall(c.name, c.args) {
+			t.Errorf("%s %s 是不可逆操作，YOLO 下应强制拦截（isIrreversibleToolCall 应为 true）", c.name, c.args)
+		}
+	}
+	shouldPass := []struct {
+		name string
+		args string
+	}{
+		{"write", `{"path": "a.txt", "content": "x"}`},
+		{"write", `{"path": "d", "action": "create_dir"}`},
+		{"write", `{"path": "a.txt"}`}, // action 缺省 = 普通写入
+		{"patch", `{"path": "a.txt", "old_string": "x", "new_string": "y"}`},
+		{"read", `{"path": "a.txt"}`},
+		{"write", `{invalid json`}, // 解析失败不误判（Ask 模式 write 本身仍危险）
+	}
+	for _, c := range shouldPass {
+		if isIrreversibleToolCall(c.name, c.args) {
+			t.Errorf("%s %s 不是不可逆操作，不该被判定为 true", c.name, c.args)
+		}
+	}
+}
+
+// TestApprovalWaiterUnknownIDDenies 锁死方向：审批 id 查不到时必须拒绝。
+// 曾经的「防御性 return true」等于让伪造/错位 id 旁路整个审批闸门。
+func TestApprovalWaiterUnknownIDDenies(t *testing.T) {
+	w := newApprovalWaiter()
+	done := make(chan struct{})
+	if w.wait("wf1::never-registered", done) {
+		t.Error("未登记的审批 id 应判定为拒绝（false），实际放行")
 	}
 }
 

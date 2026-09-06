@@ -481,9 +481,11 @@ def make_still_segment(ffmpeg: str, img_path: str, voice: str, dur: float,
     is_video = not img_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"))
     if font and not mute:
         safe = big_text.replace(":", "\\:").replace("'", "")
+        # 大字卡点字幕：白字 + 半透明黑底条（box）+ 描边双层保险，比裸描边更清晰有质感
         text_vf = (f",drawtext=fontfile={font}:text='{safe}':x=(w-text_w)/2:y=h-text_h-240:"
-                   f"fontsize=72:fontcolor={font_color}:borderw=6:bordercolor=black@0.6:"
-                   f"shadowx=4:shadowy=4:shadowcolor=black@0.5")
+                   f"fontsize=72:fontcolor={font_color}:borderw=5:bordercolor=black@0.55:"
+                   f"box=1:boxcolor=black@0.32:boxborderw=22:"
+                   f"shadowx=3:shadowy=3:shadowcolor=black@0.4")
     else:
         text_vf = ""
     if is_video:
@@ -536,9 +538,11 @@ def make_gradient_segment(ffmpeg: str, voice: str, dur: float, big_text: str,
           f"format=yuv420p")
     if font and not mute:
         safe = big_text.replace(":", "\\:").replace("'", "")
+        # 渐变背景段大字：同样加半透明底条，与素材段字幕风格统一
         vf += (f",drawtext=fontfile={font}:text='{safe}':x=(w-text_w)/2:y=h-text_h-240:"
-               f"fontsize=76:fontcolor=white:borderw=8:bordercolor=black@0.7:"
-               f"shadowx=5:shadowy=5:shadowcolor=black@0.6")
+               f"fontsize=76:fontcolor=white:borderw=6:bordercolor=black@0.6:"
+               f"box=1:boxcolor=black@0.32:boxborderw=24:"
+               f"shadowx=4:shadowy=4:shadowcolor=black@0.5")
     cmd = [ffmpeg, "-y",
            "-f", "lavfi", "-i", f"color=c={color}:s={width}x{height}:d={dur:.2f}"]
     if not mute:

@@ -118,6 +118,52 @@ func inferFeaturesFromBrief(brief string) []struct {
 			terms: []string{"计时", "倒计时", "开始", "暂停"},
 		})
 	}
+	// 值日/排班/轮值 → 必须有分组展示与添加
+	if strings.Contains(low, "值日") || strings.Contains(low, "排班") || strings.Contains(low, "轮值") || strings.Contains(low, "值班") {
+		out = append(out, struct{ name string; terms []string }{
+			name:  "值日/排班分组展示",
+			terms: []string{"周一", "周二", "周三", "周四", "周五", "星期", "周次", "分组"},
+		})
+		out = append(out, struct{ name string; terms []string }{
+			name:  "添加值日/排班安排",
+			terms: []string{"添加", "新增", "安排"},
+		})
+	}
+	// 日历/日程/提醒 → 必须有日期展示与事件
+	if strings.Contains(low, "日历") || strings.Contains(low, "日程") || strings.Contains(low, "提醒") || strings.Contains(low, "预约") {
+		out = append(out, struct{ name string; terms []string }{
+			name:  "日历/日程事件管理",
+			terms: []string{"日期", "日程", "事件", "提醒", "calendar"},
+		})
+	}
+	// 笔记/便签/备忘 → 必须有创建与列表
+	if strings.Contains(low, "笔记") || strings.Contains(low, "便签") || strings.Contains(low, "备忘") || strings.Contains(low, "手帐") {
+		out = append(out, struct{ name string; terms []string }{
+			name:  "笔记创建与列表",
+			terms: []string{"新建", "笔记", "便签", "保存"},
+		})
+	}
+	// 密码/生成器 → 必须有生成逻辑与选项
+	if strings.Contains(low, "密码") || strings.Contains(low, "生成器") {
+		out = append(out, struct{ name string; terms []string }{
+			name:  "生成逻辑与选项",
+			terms: []string{"生成", "长度", "随机", "选项", "复制"},
+		})
+	}
+	// 购物/清单 → 必须有勾选与合计
+	if strings.Contains(low, "购物") || strings.Contains(low, "采购") || strings.Contains(low, "清单") {
+		out = append(out, struct{ name string; terms []string }{
+			name:  "清单勾选与合计",
+			terms: []string{"勾选", "完成", "合计", "数量"},
+		})
+	}
+	// 习惯/打卡 → 必须有打卡与连续记录
+	if strings.Contains(low, "习惯") || strings.Contains(low, "打卡") || strings.Contains(low, "签到") {
+		out = append(out, struct{ name string; terms []string }{
+			name:  "打卡与连续记录",
+			terms: []string{"打卡", "签到", "连续", "记录", "天数"},
+		})
+	}
 	return out
 }
 

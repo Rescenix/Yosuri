@@ -1243,24 +1243,17 @@ function toolBodyText(b) {
   min-width: 0;
 }
 .flow-thinking-detail {
-  /* 思考窗口：高度随内容自适应（少内容不白占留白），超出 max-height 才滚动（右侧竖线） */
+  /* 思考窗口：高度随内容自适应（少内容不白占留白），超出 max-height 才滚动；滚动条隐藏，仍可滚轮/触控滚动 */
   height: auto;
   max-height: 240px;
   overflow-y: auto;
   padding-right: 10px;
   border-right: 2px solid var(--app-border);
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--app-text-faint) 45%, transparent) transparent;
+  scrollbar-width: none;
 }
-.flow-thinking-detail::-webkit-scrollbar { width: 6px; }
+.flow-thinking-detail::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .flow-thinking-detail::-webkit-scrollbar-track { background: transparent; }
-.flow-thinking-detail::-webkit-scrollbar-thumb {
-  border-radius: 0;
-  background: color-mix(in srgb, var(--app-text-faint) 45%, transparent);
-}
-.flow-thinking-detail::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--app-text-soft) 58%, transparent);
-}
+.flow-thinking-detail::-webkit-scrollbar-thumb { background: transparent; }
 .flow-tool-detail { margin-top: 6px; }
 
 /* ---------- 首条回复前的「正在思考」扫描线（不可折叠，首字到即隐藏） ---------- */

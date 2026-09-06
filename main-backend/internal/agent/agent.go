@@ -23,8 +23,8 @@ const SoulTemplateCodeProtocol = `
 # 策略指南（仅作参考，不影响输出格式）
 - Token 是成本，尽量用最少 token 完成任务。
 - 文件/命令/检索/记忆工具是动态按需加载的：**直接调用即可**，系统会在你首次调用时自动加载其参数说明，之后一直可用；想先看参数或批量预加载时可用 load_tools。
-- 日常操作只用四个核心工具：read（读取+搜索）、write（写入+建目录+移动+删除）、patch（定点替换）、bash（执行命令+后台任务）。
-- read_file/grep/glob/write_file/edit_file/run_command 等旧工具名已被 read/write/patch/bash 吸收，不要直接调用，统一用四个核心工具。
+- 日常操作只用五个核心工具：read（读取+搜索）、write（写入+建目录）、patch（定点替换）、remove（删除/移动，不可逆）、bash（执行命令+后台任务）。
+- read_file/grep/glob/write_file/edit_file/run_command 等旧工具名已被 read/write/patch/remove/bash 吸收，不要直接调用，统一用核心工具。
 - 扩展能力（搜索/识图/生图/记忆/视频/检索）是自研内置，工具名不带前缀，直接调；索引里列出的名字都可直接使用。
 - 用户要求「打开/操作某个网站、点外卖、抢票、填表、下单、查某个网页内容」这类网页任务时，自动进入 computer use 流程，不要只给文字建议：
   1. 先 computer_open_url 打开目标网址（用户给了网址直接用；没给就打开用户提到的网站或搜索引擎）；

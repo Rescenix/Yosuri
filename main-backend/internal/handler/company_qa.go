@@ -46,6 +46,12 @@ type companyQAReport struct {
 	Repaired    bool     `json:"repaired"` // 是否经过一轮返修
 	BrowserOK   bool     `json:"browserOk"`
 	VisionOK    bool     `json:"visionOk"`
+	// 布局充实度：页面总高度 / 视口高度。实测抓过「内容只占顶部 15%、下部 85% 空白塌陷」的产物，
+	// 白屏判据抓不住它（有内容、有交互），必须用高度比单独卡。
+	PageHeightRatio float64 `json:"pageHeightRatio"` // scrollHeight / viewportHeight（<1.2 视为塌陷）
+	LayoutOK        bool    `json:"layoutMeasured"`  // 是否真测到了高度比
+	FramesReviewed  int     `json:"framesReviewed"`  // 视觉评审实际覆盖的帧数（首屏+滚动帧，1=只看了首屏）
+	RepairRounds    int     `json:"repairRounds"`    // 实际执行的返修轮数（0=一次过，1/2=返修轮数）
 }
 
 // cdpScreenshot 在已打开的 target 上截当前帧（PNG 字节）。
@@ -276,8 +282,9 @@ func companyQAApplyTopic(report *companyQAReport, brief, content string) {
 }
 
 // companyQAProbeBrowser 用受管 headless Chromium 真实打开产品入口并实测。
+// 返回多帧截图（首屏 + 滚动中部 + 滚动底部），供多帧视觉评审。
 // 浏览器不可用时返回 error（调用方降级为「只跑识图」，不阻塞交付）。
-func companyQAProbeBrowser(entryPath string) (companyQAReport, []byte, error) {
+func companyQAProbeBrowser(entryPath string) (companyQAReport, [][]byte, error) {
 	report := companyQAReport{Entry: filepath.Base(entryPath), VisualScore: -1, CheckedAt: time.Now().Format("2006-01-02 15:04")}
 	fileURL := "file:///" + strings.ReplaceAll(filepath.ToSlash(entryPath), " ", "%20")
 	tabWS, _, err := cdpOpenTarget(fileURL)
@@ -295,6 +302,18 @@ func companyQAProbeBrowser(entryPath string) (companyQAReport, []byte, error) {
 		var st companyQAProbeStats
 		if json.Unmarshal([]byte(raw), &st) == nil {
 			report.TextLength, report.JSVisible, report.Buttons = st.Text, st.Vis, st.Btn
+		}
+	}
+	// 布局充实度：页面总高度 / 视口高度。抓「内容只占顶部一小条、下半页整体塌陷」的产物
+	// ——这类页面有内容有交互，白屏判据抓不住，但观感是「没加载完」。
+	if raw, e := cdpEval(tabWS, `(function(){return JSON.stringify({h:document.documentElement.scrollHeight,v:window.innerHeight||900})})()`); e == nil {
+		var d struct {
+			H float64 `json:"h"`
+			V float64 `json:"v"`
+		}
+		if json.Unmarshal([]byte(raw), &d) == nil && d.V > 0 && d.H > 0 {
+			report.PageHeightRatio = d.H / d.V
+			report.LayoutOK = true
 		}
 	}
 	// 白屏判据：几乎没有可见元素，或可读文字极少且无图片/控件。
@@ -320,26 +339,76 @@ func companyQAProbeBrowser(entryPath string) (companyQAReport, []byte, error) {
 	if pngErr != nil {
 		return report, nil, fmt.Errorf("页面截图失败: %w", pngErr)
 	}
+	// 滚动到页面中部与底部再各截一帧：识图评审不能只看首屏——
+	// 实测过「首屏精致、滚动后大片占位空白/样式断裂」的产物，多帧评审才能抓住。
+	// 三帧独立评审取最低分与合并缺陷：任何一帧丑都算丑，防止「首屏撑门面、内页糊弄」。
+	var frames [][]byte
+	frames = append(frames, png)
+	if png2, err2 := companyQAScreenshotScrolled(tabWS, 0.5); err2 == nil && len(png2) > 0 {
+		frames = append(frames, png2)
+	}
+	if png3, err3 := companyQAScreenshotScrolled(tabWS, 1.0); err3 == nil && len(png3) > 0 {
+		frames = append(frames, png3)
+	}
+	report.FramesReviewed = len(frames)
 	report.BrowserOK = true
-	return report, png, nil
+	return report, frames, nil
+}
+
+// companyQAScreenshotScrolled 把页面滚到指定比例（0=顶,0.5=中,1=底）再截一帧。
+// 用于多帧视觉评审：首屏之外的界面（列表深处/统计区/页脚）也要有人看。
+func companyQAScreenshotScrolled(tabWS string, ratio float64) ([]byte, error) {
+	script := fmt.Sprintf(`(function(){var h=document.documentElement.scrollHeight-window.innerHeight;window.scrollTo(0,Math.max(0,Math.round(h*%f)));return 'ok'})()`, ratio)
+	if _, err := cdpEval(tabWS, script); err != nil {
+		return nil, err
+	}
+	time.Sleep(400 * time.Millisecond) // 等滚动触发的懒加载/过渡完成
+	return cdpScreenshot(tabWS)
 }
 
 // companyQAVisualReview 把真机截图交给免费识图模型评审（多模型负载均衡，挂一个自动切）。
-// 返回 0-10 视觉分与具体缺陷；识图不可用时 score=-1（不阻塞交付）。
-func companyQAVisualReview(png []byte, brief string) (int, []string, string, bool) {
-	if len(png) == 0 {
+// frames 为多帧（首屏+滚动中部+滚动底部），逐帧独立评审：取最低分为总分，缺陷合并去重。
+// 任何一帧丑都算丑——防「首屏撑门面、内页糊弄」。识图不可用时 score=-1（不阻塞交付）。
+func companyQAVisualReview(frames [][]byte, brief string) (int, []string, string, bool) {
+	best := -1
+	var allIssues []string
+	summary := ""
+	anyOK := false
+	seen := map[string]bool{}
+	for fi, png := range frames {
+		if len(png) == 0 {
+			continue
+		}
+		question := fmt.Sprintf("这是公司刚交付的产品的真实运行截图（第 %d/%d 帧，可能是页面顶部/中部/底部）。用户指令：%s",
+			fi+1, len(frames), deliveryTruncate(brief, 300)) +
+			"\n请严格评审这个界面，只输出 JSON（不要代码围栏）：" +
+			`{"score":0到10的整数,"issues":["最多3条具体缺陷，按「视觉→布局→质感」顺序指出：配色是否和谐、层次是否分明、留白是否得当、控件是否精致、是否像模板壳"],"summary":"一句话结论"}` +
+			"\n评分标准：9-10=可直接上线的商业产品（有品牌感、细节精致）；7-8=干净可用且有一定设计感；5-6=能看但平淡、像通用模板；3-4=明显模板感、配色粗糙、层次混乱；1-2=白屏/乱码/不可用。" +
+			"\n重点扣分项：默认浏览器蓝紫配色、纯黑白大面积对撞、无 hover 反馈的按钮、行高过密的中文段落、生成感强的占位内容、大片无意义空白。别因为「看起来是个网页」就给高分，也别漏掉做得好的细节。"
+		text, err := AnalyzeImage(base64.StdEncoding.EncodeToString(png), question, nil)
+		if err != nil || strings.TrimSpace(text) == "" {
+			continue
+		}
+		anyOK = true
+		score, issues, sum := parseCompanyQAVerdict(text)
+		if score >= 0 && (best < 0 || score < best) {
+			best = score // 多帧取最低分：最丑的一帧决定产品下限
+		}
+		for _, is := range issues {
+			is = strings.TrimSpace(is)
+			if is != "" && !seen[is] {
+				seen[is] = true
+				allIssues = append(allIssues, is)
+			}
+		}
+		if sum != "" && summary == "" {
+			summary = sum
+		}
+	}
+	if !anyOK || best < 0 {
 		return -1, nil, "", false
 	}
-	question := "这是公司刚交付的产品的真实运行截图。用户指令：" + deliveryTruncate(brief, 300) +
-		"\n请严格评审这个界面，只输出 JSON（不要代码围栏）：" +
-		`{"score":0到10的整数,"issues":["最多3条具体缺陷，指出哪里丑/看不清/布局问题/像模板壳"],"summary":"一句话结论"}` +
-		"\n评分标准：10=可直接上线的商业产品；7=干净可用但平淡；4=明显模板感或布局粗糙；1=白屏/乱码/不可用。别因为「看起来是个网页」就给高分。"
-	text, err := AnalyzeImage(base64.StdEncoding.EncodeToString(png), question, nil)
-	if err != nil || strings.TrimSpace(text) == "" {
-		return -1, nil, "", false
-	}
-	score, issues, summary := parseCompanyQAVerdict(text)
-	return score, issues, summary, true
+	return best, allIssues, summary, true
 }
 
 // parseCompanyQAVerdict 解析评审模型输出的 JSON（容忍代码围栏与前后废话）。
@@ -373,13 +442,15 @@ func companyQAText(entryPath string) string {
 	return string(data)
 }
 
-// companyQAAudit 产品真机质检 + 一轮自动返修。
+// companyQAAudit 产品真机质检 + 最多两轮自动返修。
 // 在 runnable 落盘之后、路演/发布回执之前调用：返修会改写入口文件，
 // 后面的 PPT 要点与发布回执 SHA256 必须基于返修后的版本。
 // 返回（最终入口内容, 质检报告）。质检能力不可用时降级放行，绝不因外部服务挂死交付。
+// 返修策略：第一轮带全量缺陷清单重做；复检仍挂 → 第二轮只带剩余缺陷精修（保留第一轮成果）；
+// 两轮后仍挂 → 带病放行但报告如实记录（不阻塞交付，人类审批时可见）。
 func companyQAAudit(projectDir, projectName, brief string, entry string, multi bool, upstream string) (string, companyQAReport) {
 	entryPath := filepath.Join(projectDir, entry)
-	report, png, err := companyQAProbeBrowser(entryPath)
+	report, frames, err := companyQAProbeBrowser(entryPath)
 	if err != nil {
 		// 浏览器不可用：没有真机证据就不假装质检，记录原因后放行。
 		report.Summary = "真机质检未执行：" + err.Error()
@@ -391,7 +462,7 @@ func companyQAAudit(projectDir, projectName, brief string, entry string, multi b
 	// 核心功能缺失检测：指令明确要求的功能，产物里有没有真正实现。
 	report.MissingFeatures = companyQAMissingFeatures(brief, companyQAText(entryPath), "", projectDir)
 	report.MissingFeatureCount = len(report.MissingFeatures)
-	score, issues, summary, visionOK := companyQAVisualReview(png, brief)
+	score, issues, summary, visionOK := companyQAVisualReview(frames, brief)
 	report.VisualScore, report.VisionOK = score, visionOK
 	if summary != "" {
 		report.Summary = summary
@@ -399,14 +470,18 @@ func companyQAAudit(projectDir, projectName, brief string, entry string, multi b
 	report.Issues = append(report.Issues, issues...)
 	report.Passed = companyQAPass(report)
 
-	// 不合格 → 带缺陷清单返修一轮，再实测一次。
-	if !report.Passed {
+	// 不合格 → 带缺陷清单返修，最多两轮（每轮复检，以最新结论为准）。
+	for round := 1; round <= 2 && !report.Passed; round++ {
 		report.Repaired = true
-		companyLiveStage(projectName, "qa", "qa", "qa-01", "质检未通过，按缺陷清单返修中")
+		report.RepairRounds = round
+		companyLiveStage(projectName, "qa", "qa", "qa-01", fmt.Sprintf("质检未通过（第 %d 轮返修），按缺陷清单修整中", round))
 		feedback := companyQAFeedbackBlock(report)
 		var repaired string
 		if multi {
 			files := deliveryMultiProject(projectName, brief, upstream+"\n\n"+feedback)
+			if len(files) == 0 {
+				break // 返修产出为空：保留当前版本，别把好文件覆盖没
+			}
 			for name, content := range files {
 				if _, werr := writeDeliveryFile(projectDir, name, []byte(content)); werr != nil {
 					return companyQAText(entryPath), report
@@ -417,26 +492,30 @@ func companyQAAudit(projectDir, projectName, brief string, entry string, multi b
 			repaired = deliveryProductHTML(projectName, brief, true, upstream+"\n\n"+feedback)
 		}
 		if strings.TrimSpace(repaired) == "" {
-			return companyQAText(entryPath), report
+			break // 返修失败：保留当前版本
 		}
 		if _, werr := writeDeliveryFile(projectDir, entry, []byte(repaired)); werr != nil {
 			return companyQAText(entryPath), report
 		}
-		companyLiveArtifact(projectName, "qa", "qa", entry, "v2-repaired")
+		companyLiveArtifact(projectName, "qa", "qa", entry, fmt.Sprintf("v%d-repaired", round+1))
 		// 返修后复检：以复检结论为准。
 		report2, png2, err2 := companyQAProbeBrowser(entryPath)
-		if err2 == nil {
-			s2, i2, sum2, v2 := companyQAVisualReview(png2, brief)
-			companyQAApplyTopic(&report2, brief, companyQAText(entryPath))
-			report2.MissingFeatures = companyQAMissingFeatures(brief, companyQAText(entryPath), "", projectDir)
-			report2.MissingFeatureCount = len(report2.MissingFeatures)
-			report2.VisualScore, report2.VisionOK = s2, v2
-			report2.Issues = append(report2.Issues, i2...)
-			if sum2 != "" {
-				report2.Summary = sum2
-			}
-			report2.Passed = companyQAPass(report2)
-			report2.Repaired = true
+		if err2 != nil {
+			break // 复检环境挂了：保留当前版本与上一轮结论
+		}
+		s2, i2, sum2, v2 := companyQAVisualReview(png2, brief)
+		companyQAApplyTopic(&report2, brief, companyQAText(entryPath))
+		report2.MissingFeatures = companyQAMissingFeatures(brief, companyQAText(entryPath), "", projectDir)
+		report2.MissingFeatureCount = len(report2.MissingFeatures)
+		report2.VisualScore, report2.VisionOK = s2, v2
+		report2.Issues = append(report2.Issues, i2...)
+		if sum2 != "" {
+			report2.Summary = sum2
+		}
+		report2.Passed = companyQAPass(report2)
+		report2.Repaired = true
+		report = report2
+		if report2.Passed {
 			return repaired, report2
 		}
 	}
@@ -463,6 +542,9 @@ func companyQAPass(r companyQAReport) bool {
 	}
 	if r.MissingFeatureCount > 0 {
 		return false // 指令明确要求的功能没实现 = 不合格（这是最核心的判据）
+	}
+	if r.LayoutOK && r.PageHeightRatio < 1.2 {
+		return false // 页面高度不足 1.2 屏 = 下半页塌陷（实测抓过「内容占 15%、85% 空白」的产物）
 	}
 	if r.VisionOK && r.VisualScore >= 0 && r.VisualScore < 6 {
 		return false
@@ -491,8 +573,11 @@ func companyQAFeedbackBlock(r companyQAReport) string {
 			lines = append(lines, "  · "+m)
 		}
 	}
+	if r.LayoutOK && r.PageHeightRatio < 1.2 {
+		lines = append(lines, fmt.Sprintf("- 页面充实度不足：总高度仅 %.1f 屏，下半页大面积空白塌陷。必须用统计卡片区、使用说明区、分类汇总区把页面填到至少 1.5 屏；空状态也要有图标+文案+引导按钮占位，不允许下半页整体空白。", r.PageHeightRatio))
+	}
 	if r.VisualScore >= 0 && r.VisualScore < 6 {
-		lines = append(lines, fmt.Sprintf("- 视觉评审仅 %d/10：需重做排版层次与配色，去掉模板感。", r.VisualScore))
+		lines = append(lines, fmt.Sprintf("- 视觉评审仅 %d/10：需重做排版层次与配色，去掉模板感。具体要求：①:root 定义 CSS 变量配色体系（主色+辅色+灰阶），禁默认蓝紫；②hero/功能区/统计区三层结构分明；③卡片圆角 12-16px+多层阴影；④按钮 hover/active 过渡 ≥.18s；⑤中文行高 ≥1.6、数字 tabular-nums。", r.VisualScore))
 	}
 	for _, iss := range r.Issues {
 		if strings.TrimSpace(iss) != "" {

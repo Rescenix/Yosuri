@@ -12,7 +12,19 @@ export function useChatWidget(props) {
   const isOpen = ref(false)
   const isExpanded = ref(false)
   const userInput = ref('')
-  const messages = ref([])
+  // 消息按会话隔离：每个会话一份独立数组（Map<sid, ref[]>）。显示层永远只读
+  // 「当前会话」那份，后台会话的工作流继续写它自己的数组，切换显示零污染——
+  // 多会话并行跑的基石（2026-09-06）。
+  const messagesMap = new Map()
+  const ensureMessages = (sid) => {
+    let r = messagesMap.get(sid)
+    if (!r) { r = ref([]); messagesMap.set(sid, r) }
+    return r
+  }
+  const messages = computed({
+    get: () => ensureMessages(sessionId.value).value,
+    set: (v) => { ensureMessages(sessionId.value).value = v },
+  })
   const sessionId = ref(
   localStorage.getItem('prism_session_id') || 
   'sess_' + Date.now().toString(36)
@@ -20,6 +32,11 @@ export function useChatWidget(props) {
 if (!localStorage.getItem('prism_session_id')) {
   localStorage.setItem('prism_session_id', sessionId.value)
 }
+
+// 正在跑工作流的会话集合 + 有未决提问/审批的会话集合（多会话并行，各自独立亮灯）。
+// 由每个 workflow 实例自己的 watch 维护：流启动 add、结束 delete；审批/提问 pending 类似。
+const runningSessions = ref(new Set())
+const questionSessions = ref(new Set())
 
   watch(() => props.sessionId, (newVal) => {
     if (newVal) sessionId.value = newVal
@@ -114,21 +131,64 @@ function watchInputClearance() {
   // 四态机 Code 工作流（GET /api/code/workflow，EventSource）
   // 流式期间用 forceScrollToBottom：长工作流流式中持续跟底，无视用户是否上滑，
   // 避免 smartScrollToBottom 因 userScrolledUp 被置 true 后永远不滚（原本的卡死缺陷）
-  const {
-      flowState, approvalState, respondApproval, startCodeWorkflow: startFlow, stopCodeWorkflow,
-      todoState, sendSteerMessage,
-      questionState, answerQuestion
-    } = useAgentWorkflow({
-      messages,
+  // ── 工作流实例按会话隔离（多会话并行） ──
+  // useAgentWorkflow 每次调用返回独立实例（flowState/ES/todo/approval/question 全独立），
+  // 按会话懒创建并缓存：每个会话一条自己的 SSE 流 + 自己的悬浮条状态。
+  // 后台会话的流继续跑、写自己的 messages（ensureMessages(sid)），显示零污染。
+  const workflows = new Map() // sid -> 实例
+  const currentWorkflow = ref(null) // 当前显示会话的实例
+  function workflowOf(sid) {
+    let wf = workflows.get(sid)
+    if (wf) return wf
+    wf = useAgentWorkflow({
+      messages: ensureMessages(sid),
       onNewMessage: forceScrollToBottom,
-      // 流式增量用 smartScrollAndRefresh：尊重 userScrolledUp，用户上滑时不再被强制拉回底部
       onStreamUpdate: smartScrollAndRefresh,
       onTitleUpdate: (title) => {
-        // 这里直接调用 ChatWidget 里的 updateSessionTitle（通过 props 或全局）
-        // 由于 useChatWidget 不暴露 updateSessionTitle，改为发事件供 ChatWidget 监听
         window.dispatchEvent(new CustomEvent('session-title-update', { detail: title }))
+      },
+    })
+    workflows.set(sid, wf)
+    // 本实例自己的灯维护：流结束 / 提问审批消退时，把自己的会话从对应集合摘掉
+    watch(() => wf.flowState.active, (v, was) => {
+      const s = runningSessions.value
+      if (v) s.add(sid); else s.delete(sid)
+      runningSessions.value = new Set(s)
+      // 流真正收尾才标「已完成」：必须带本实例的 sid。之前挂在 ChatWidget 的
+      // flowState（= 当前显示实例的 computed）上，切会话会让 computed 从 true
+      // 跳到 false，被误判成「流结束」，于是刚切进去的会话当场变绿灯（09-06）。
+      if (was && !v) {
+        window.dispatchEvent(new CustomEvent('session-flow-ended', { detail: { sid } }))
       }
     })
+    watch(() => (wf.approvalState.pending.length > 0 || !!wf.questionState.pending), (v) => {
+      const s = questionSessions.value
+      if (v) s.add(sid); else s.delete(sid)
+      questionSessions.value = new Set(s)
+    })
+    return wf
+  }
+  function currentWF() {
+    if (!currentWorkflow.value || currentWorkflow.value._sid !== sessionId.value) {
+      const wf = workflowOf(sessionId.value)
+      wf._sid = sessionId.value
+      currentWorkflow.value = wf
+    }
+    return currentWorkflow.value
+  }
+
+  // 暴露给 ChatWidget 的当前会话工作流状态/操作（切换会话即切换视图）
+  const flowState = computed(() => currentWF().flowState)
+  const approvalState = computed(() => currentWF().approvalState)
+  const todoState = computed(() => currentWF().todoState)
+  const questionState = computed(() => currentWF().questionState)
+  const respondApproval = (...a) => currentWF().respondApproval(...a)
+  const answerQuestion = (...a) => currentWF().answerQuestion(...a)
+  const sendSteerMessage = (...a) => currentWF().sendSteerMessage(...a)
+  function stopCodeWorkflow() { currentWF().stopCodeWorkflow() }
+
+  // 当前会话的流结束等灯维护已由每个 workflow 实例各自的 watch 负责（见 workflowOf）
+
   // display 透传给 startFlow——之前这里漏了第二个参数，附件 chip/纯文本气泡的展示信息
   // 全部在这层被吞掉，气泡又会退回显示拍平后的 task 全文
   //
@@ -143,10 +203,13 @@ function watchInputClearance() {
   function startCodeWorkflow(task, display, opts) {
     userInput.value = ''
     const sid = localStorage.getItem('prism_session_id') || sessionId.value
+    // 灯由实例 watch 维护：流启动即点亮（workflowOf 内 watch flowState.active→add）
+    // 启动「目标会话」自己的工作流实例（并行：别的会话的流不受影响）
+    const wf = workflowOf(sid)
     const members = (opts && opts.groupIds) || agentStore.groupOf(sid)
     // 没挂群聊成员：单 Agent 老链路，行为完全不变。
     if (!members || members.length <= 1) {
-      startFlow(task, display, {
+      wf.startCodeWorkflow(task, display, {
         ...opts,
         agentId: (members && members[0]) || agentStore.currentAgentId.value || '',
       })
@@ -157,7 +220,7 @@ function watchInputClearance() {
       if (idx >= members.length) return
       const id = members[idx]
       idx += 1
-      startFlow(task, display, {
+      wf.startCodeWorkflow(task, display, {
         ...opts,
         agentId: id,
         // 第一位插用户气泡，后面的只出自己的回复
@@ -424,18 +487,19 @@ function watchInputClearance() {
  }
 
 // 真正切换到另一个后端会话（不只是改左侧列表的高亮）。
+// 多会话并行后：每个会话的悬浮条状态（todo/提问/审批）跟着自己的 workflow 实例走，
+// 切会话只是换「当前显示实例」（currentWF），旧实例状态天然保留，无需存档/清空。
 // 不预先清空 messages：清空会让 messages.length===0 的首页视图闪一下再跳到
 // 新会话（"闪烁 bug"）。改为等新历史拿到后一次性替换——期间短暂显示旧会话
 // 内容，比闪首页顺眼；竞态由 loadAllHistory 里的 id 守卫兜住。
 async function switchSession(id) {
   if (!id || id === sessionId.value) return
-  // 切换会话前清空上一个会话残留的悬浮条（todo 清单 / 未决提问 / 审批条），
-  // 否则旧会话的条会一直挂在输入框上方，换对话还卡着（2026-08-31 实测）。
-  todoState.items = []
-  questionState.pending = null
-  approvalState.pending = []
   sessionId.value = id
   localStorage.setItem('prism_session_id', id)
+  // 目标会话已有本地工作流实例时跳过 loadAllHistory：内存数组里就是最全的
+  // 轨迹（含尚未落盘的实时块），后端历史覆盖它 = 切回来「工作流记录丢失」，
+  // 等后端持久化完再刷新才显示——正是 09-06 用户报的现象。
+  if (workflows.has(id)) { sessionTokenStats.value = loadSessionTokenStats(id); loadContextBreakdown(id); return }
   // 切会话时同步恢复该会话持久化的真实 token（横条绑定会话，刷新/切换都不丢）
   sessionTokenStats.value = loadSessionTokenStats(id)
   // 上下文分类明细同样要跟着会话走。之前只在 ChatWidget setup 时 load 过一次，
@@ -734,7 +798,7 @@ async function switchSession(id) {
     runningTaskCount,
     runningSubagentCount,
     runningBgTaskCount,
-    flowState, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
+    flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     todoState, sendSteerMessage,
     questionState, answerQuestion,
     agentStore,

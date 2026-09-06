@@ -153,11 +153,11 @@ func pptxSlideXML(idx int, slideTitle string, bullets []string) string {
 	sb.WriteString(xmlEscape(slideTitle))
 	sb.WriteString(`</a:t></a:r></a:p></p:txBody></p:sp>`)
 
-	// 要点列表（bullet •，自动换行不截断）—— markdown 文本渲染
+	// 要点列表（bullet •，自动换行不截断）—— markdown 文本渲染 + 段间距（lnSpc 130% 纯可读性）
 	shapeID := 5 // 供页脚 shape 使用
 	sb.WriteString(`<p:sp><p:nvSpPr><p:cNvPr id="4" name="要点"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1500000"/><a:ext cx="11277600" cy="4900000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>`)
 	for _, b := range bullets {
-		sb.WriteString(`<a:p><a:pPr><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="zh-CN" sz="1800"><a:solidFill><a:srgbClr val="333333"/></a:solidFill></a:rPr><a:t>`)
+		sb.WriteString(`<a:p><a:pPr><a:lnSpc><a:spcPct val="130000"/></a:lnSpc><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="zh-CN" sz="1800"><a:solidFill><a:srgbClr val="333333"/></a:solidFill></a:rPr><a:t>`)
 		sb.WriteString(xmlEscape(b))
 		sb.WriteString(`</a:t></a:r></a:p>`)
 	}

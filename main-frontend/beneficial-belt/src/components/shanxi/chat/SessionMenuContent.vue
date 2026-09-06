@@ -15,7 +15,7 @@
         </div>
 
     <!-- 会话列表区 -->
-    <div class="smc-session-area">
+        <div class="smc-session-area">
 
       <!-- 置顶项目文件夹 -->
       <div v-if="pinnedFolders.length" class="smc-section">
@@ -63,7 +63,7 @@
               v-for="s in f.sessions"
               :key="s.id"
               class="smc-session-row"
-              :class="{ active: s.id === activeSession, running: s.id === runningSession, 'menu-open': openMenuId === s.id }"
+              :class="{ active: s.id === activeSession, running: props.runningSessions.has(s.id), 'menu-open': openMenuId === s.id }"
               :draggable="!bulkMode && editingId !== s.id"
               @dragstart="onDragStart(s, $event)"
               @dragover.prevent="onDragOver(s)"
@@ -75,13 +75,16 @@
               @click="onRowClick(s)"
             >
                           <RunningArc
-                                                      v-if="s.id === runningSession"
+                                                      v-if="props.runningSessions.has(s.id)"
                                                       class="smc-running-ring"
                                                     />
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
-              <span v-else class="smc-session-lead"><span class="smc-session-dot" :class="dotClass(s)"></span></span>
+              <span v-else class="smc-session-lead">
+                <Icon v-if="isSessionPinned(s.id)" icon="mdi:pin" width="12" class="smc-pinned-mark" color="var(--app-accent)" />
+                <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
+              </span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -105,14 +108,14 @@
       </div>
 
       <!-- 项目：按工作目录分组 -->
-      <div class="smc-section">
-        <div class="smc-section-label smc-section-projects">
-                  <span>{{ t('nav.projects') }}</span>
-                  <button class="smc-project-add" type="button" title="新建对话" aria-label="新建对话" @click="onClickNewSession">
-                    <Icon icon="mdi:chat-plus-outline" width="18" />
-                  </button>
-                </div>
-        <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder">
+            <div class="smc-section">
+              <div class="smc-section-label smc-section-projects">
+                        <span>{{ t('nav.projects') }}</span>
+                        <button class="smc-project-add" type="button" title="新建对话" aria-label="新建对话" @click="onClickNewSession">
+                          <Icon icon="mdi:chat-plus-outline" width="18" />
+                        </button>
+                      </div>
+              <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder">
           <div
             class="smc-folder-head"
             :class="{ hover: hoveredGroup === grp.name, active: openGroupMenu === grp.name }"
@@ -158,7 +161,7 @@
               v-for="s in grp.sessions"
               :key="s.id"
               class="smc-session-row"
-              :class="{ active: s.id === activeSession, running: s.id === runningSession, 'menu-open': openMenuId === s.id }"
+              :class="{ active: s.id === activeSession, running: props.runningSessions.has(s.id), 'menu-open': openMenuId === s.id }"
               :draggable="!bulkMode && editingId !== s.id"
               @dragstart="onDragStart(s, $event)"
               @dragover.prevent="onDragOver(s)"
@@ -170,13 +173,16 @@
               @click="onRowClick(s)"
             >
                           <RunningArc
-                                                      v-if="s.id === runningSession"
+                                                      v-if="props.runningSessions.has(s.id)"
                                                       class="smc-running-ring"
                                                     />
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
-              <span v-else class="smc-session-lead"><span class="smc-session-dot" :class="dotClass(s)"></span></span>
+              <span v-else class="smc-session-lead">
+                <Icon v-if="isSessionPinned(s.id)" icon="mdi:pin" width="12" class="smc-pinned-mark" color="var(--app-accent)" />
+                <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
+              </span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -223,7 +229,7 @@
               v-for="s in orphanSessions"
               :key="s.id"
               class="smc-session-row"
-              :class="{ active: s.id === activeSession, running: s.id === runningSession, 'menu-open': openMenuId === s.id }"
+              :class="{ active: s.id === activeSession, running: props.runningSessions.has(s.id), 'menu-open': openMenuId === s.id }"
               :draggable="!bulkMode && editingId !== s.id"
               @dragstart="onDragStart(s, $event)"
               @dragover.prevent="onDragOver(s)"
@@ -235,13 +241,16 @@
               @click="onRowClick(s)"
             >
                           <RunningArc
-                                                      v-if="s.id === runningSession"
+                                                      v-if="props.runningSessions.has(s.id)"
                                                       class="smc-running-ring"
                                                     />
                           <span v-if="bulkMode" class="smc-bulk-check" @click.stop="toggleBulkSelect(s)">
                 <Icon :icon="bulkSelected.has(s.id) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
               </span>
-              <span v-else class="smc-session-lead"><span class="smc-session-dot" :class="dotClass(s)"></span></span>
+              <span v-else class="smc-session-lead">
+                <Icon v-if="isSessionPinned(s.id)" icon="mdi:pin" width="12" class="smc-pinned-mark" color="var(--app-accent)" />
+                <span v-else class="smc-session-dot" :class="dotClass(s)"></span>
+              </span>
               <input
                 v-if="editingId === s.id"
                 ref="renameInputRef"
@@ -464,6 +473,7 @@
     <!-- 会话三点菜单 -->
     <Teleport to="body">
       <div v-if="openMenuId" class="smc-row-dropdown" :style="dropdownStyle" @click.stop>
+        <div class="smc-dropdown-item" @click="togglePinSession(openMenuSession)"><Icon :icon="isSessionPinned(openMenuSession?.id) ? 'mdi:pin-off-outline' : 'mdi:pin-outline'" width="15" /><span>{{ isSessionPinned(openMenuSession?.id) ? '取消置顶' : '置顶' }}</span></div>
         <div class="smc-dropdown-item" @click="startRename(openMenuSession)"><Icon icon="mdi:pencil-outline" width="15" /><span>重命名</span></div>
         <div class="smc-dropdown-item" @click="copySessionId(openMenuSession)"><Icon icon="mdi:content-copy-outline" width="15" /><span>复制 ID</span></div>
         <div class="smc-dropdown-sep"></div>
@@ -583,9 +593,10 @@ const props = defineProps({
   projects: { type: Array, default: () => [] },
   recentProjects: { type: Array, default: () => [] },
   activeSession: { type: String, default: '' },
-  runningSession: { type: String, default: '' },
-  completedSessions: { type: Set, default: () => new Set() },
-  questionSession: { type: String, default: '' },
+    // 多会话并行：运行/提问灯改为集合（每会话各自独立维护，切会话不丢、互不覆盖）
+    runningSessions: { type: Set, default: () => new Set() },
+    completedSessions: { type: Set, default: () => new Set() },
+    questionSessions: { type: Set, default: () => new Set() },
     fill: { type: Boolean, default: false },
     notifCount: { type: Number, default: 0 },
     currentWorkdir: { type: String, default: '' }
@@ -672,6 +683,28 @@ function newSessionForProject(name) {
   if (project) emit('new-session', project)
 }
 
+// ========== 会话置顶（项目内置顶：只在本分组内浮到最前）==========
+const SESSION_PIN_KEY = 'shanxi_pinned_sessions'
+const pinnedSessionIds = ref([])
+function loadPinnedSessions() {
+  try { pinnedSessionIds.value = JSON.parse(localStorage.getItem(SESSION_PIN_KEY) || '[]') } catch { pinnedSessionIds.value = [] }
+}
+function savePinnedSessions() {
+  try { localStorage.setItem(SESSION_PIN_KEY, JSON.stringify(pinnedSessionIds.value)) } catch {}
+}
+function isSessionPinned(id) { return pinnedSessionIds.value.includes(id) }
+function togglePinSession(s) {
+  openMenuId.value = null
+  if (!s?.id) return
+  if (isSessionPinned(s.id)) pinnedSessionIds.value = pinnedSessionIds.value.filter(x => x !== s.id)
+  else pinnedSessionIds.value.push(s.id)
+  savePinnedSessions()
+}
+// 组内置顶排序：置顶在前，其余保持原时间序（Array.sort 稳定）
+function sortPinnedFirst(list) {
+  return [...list].sort((a, b) => (isSessionPinned(a.id) ? 0 : 1) - (isSessionPinned(b.id) ? 0 : 1))
+}
+
 // ========== 置顶项目 ==========
 const pinnedProjectNames = ref([])
 function loadPinned() {
@@ -745,14 +778,14 @@ const taskGroups = computed(() => {
       if (aP !== bP) return aP - bP
       return b[1].length - a[1].length
     })
-    .map(([name, sessions]) => ({ name, sessions }))
+    .map(([name, sessions]) => ({ name, sessions: sortPinnedFirst(sessions) }))
 })
 
 const pinnedFolders = computed(() => {
   const map = workdirMap.value
   return pinnedProjectNames.value
     .filter(name => map.has(name))
-    .map(name => ({ name, sessions: map.get(name) }))
+    .map(name => ({ name, sessions: sortPinnedFirst(map.get(name)) }))
 })
 
 const orphanSessions = computed(() => {
@@ -760,7 +793,7 @@ const orphanSessions = computed(() => {
   for (const [, sess] of workdirMap.value) {
     for (const s of sess) have.add(s.id)
   }
-  return props.sessions.filter(s => !have.has(s.id))
+  return sortPinnedFirst(props.sessions.filter(s => !have.has(s.id)))
 })
 
 // ========== 用户卡片 ==========
@@ -929,10 +962,16 @@ const rcPwd2 = ref('')
 const rcLoading = ref(false)
 const rcError = ref('')
 const rcMode = ref('login') // 'login' | 'register'
-// 登录图形验证码（2026-09-05）：拉取图片 + id，登录时带回校验
+// 登录图形验证码（2026-09-05）：拉取图片 + id，登录时带回校验（双门禁之一）
 const rcCaptchaId = ref('')
 const rcCaptchaCode = ref('')
 const rcCaptchaImg = ref('')
+// 登录工作量证明（2026-09-06 强制，双门禁之二）：服务端发 challenge，
+// 前端算 nonce 使 sha256(challenge+nonce) 前 16 bit 为 0，静默无 UI
+const rcPowId = ref('')
+const rcPowNonce = ref('')
+let rcPowChallenge = ''  // 当前 challenge 原文（非响应式，仅供求解）
+let rcPowDifficulty = 16 // 服务端下发难度（非响应式）
 
 // loadCaptcha 拉取登录验证码（GET /api/auth/captcha → {id, image_base64}）。
 // 打开登录面板和点击图片都会触发；失败显示占位文案，点击可重试。
@@ -950,6 +989,69 @@ async function loadCaptcha() {
   }
 }
 
+// leadingZeroBits 统计 sha256 摘要的前导零 bit 数（与服务端 pow.go 算法一致）。
+function leadingZeroBits(digest) {
+  let zeros = 0
+  for (const b of digest) {
+    if (b === 0) { zeros += 8; continue }
+    for (let bit = 0; bit < 8; bit++) {
+      if (!(b & (1 << (7 - bit)))) zeros++
+      else break
+    }
+    break
+  }
+  return zeros
+}
+
+// fetchPow 拉取 PoW 任务（GET /api/auth/pow → {id, challenge, difficulty}）。
+async function fetchPow() {
+  rcPowId.value = ''
+  rcPowNonce.value = ''
+  try {
+    const res = await fetch('/api/auth/pow')
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.id || !data.challenge) throw new Error('bad')
+    rcPowId.value = data.id
+    rcPowChallenge = data.challenge
+    rcPowDifficulty = data.difficulty || 16
+  } catch (e) {
+    rcPowId.value = ''
+  }
+}
+
+// solvePow 求 nonce：sha256(challenge + littleEndianUint64(nonce)) 前导零 ≥ difficulty。
+// 与服务端 verifyPow 拼接方式完全一致（challenge 字节 + 8 字节小端 nonce）。
+// 4 路并发，16 bit 难度约 0.3-0.8s 无感；crypto.subtle 需安全上下文（127.0.0.1/https 均可）。
+async function solvePow(challenge, difficulty, threads = 4) {
+  const enc = new TextEncoder()
+  const challengeBytes = enc.encode(challenge)
+  const worker = async (start, step) => {
+    const payload = new Uint8Array(challengeBytes.length + 8)
+    payload.set(challengeBytes, 0)
+    const view = new DataView(payload.buffer, challengeBytes.length, 8)
+    view.setUint32(4, 0, true)
+    for (let nonce = start; nonce < 0x4000000; nonce += step) {
+      view.setUint32(0, nonce >>> 0, true)
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', payload))
+      if (leadingZeroBits(digest) >= difficulty) return nonce
+    }
+    return -1
+  }
+  const results = await Promise.all(Array.from({ length: threads }, (_, i) => worker(i, threads)))
+  const found = results.find((n) => n >= 0)
+  if (found == null || found < 0) throw new Error('pow-timeout')
+  return String(found)
+}
+
+// ensurePow 确保当前有可用的 PoW nonce（登录前调用）。
+async function ensurePow() {
+  if (rcPowId.value && rcPowNonce.value) return true
+  if (!rcPowId.value) await fetchPow()
+  if (!rcPowId.value) throw new Error('pow-unavailable')
+  rcPowNonce.value = await solvePow(rcPowChallenge, rcPowDifficulty)
+  return true
+}
+
 // 登录/注册成功后广播「欢迎回来」：App.vue 顶部轻量横幅监听这个事件来显示，
 // 和更新完成横幅同一套样式/时序（2026-08-20 用户定稿）。用输入框里的用户名即可——
 // Rescene Cloud 账号登录的 login/name 就是这个用户名（account.go signAndReturn），
@@ -964,20 +1066,29 @@ async function loginResceneCloud() {
   if (!rcCaptchaId.value || !rcCaptchaCode.value.trim()) { rcError.value = t('login.captchaInput'); return }
   rcLoading.value = true
   try {
+    // 静默算 PoW（双门禁之二），失败重试一次后放弃
+    let powId = rcPowId.value, powNonce = rcPowNonce.value
+    if (!powId || !powNonce) {
+      await ensurePow()
+      powId = rcPowId.value; powNonce = rcPowNonce.value
+    }
+    if (!powId || !powNonce) { rcError.value = t('login.netError'); rcLoading.value = false; return }
     const username = rcUser.value.trim()
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username, password: rcPwd.value, fingerprint: computeHardwareFingerprint(),
-        captcha_id: rcCaptchaId.value, captcha_code: rcCaptchaCode.value.trim()
+        captcha_id: rcCaptchaId.value, captcha_code: rcCaptchaCode.value.trim(),
+        pow_id: powId, pow_nonce: powNonce
       })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.token) {
       rcError.value = data.error || t('login.fail')
-      // 验证码一次性：失败后刷新新图，防止复用同一张暴力重试
+      // 验证码一次性 + PoW 一次性：失败后刷新新图 + 重新签发 challenge
       loadCaptcha()
+      fetchPow()
       return
     }
     localStorage.setItem('token', data.token)
@@ -1040,6 +1151,7 @@ function openLoginPanel() {
   refreshLoginState()
   userMenuStyle.value = {}
   loadCaptcha()
+  fetchPow()
 }
 // 打开注册面板（独立入口，注册/登录分开）
 function openRegisterPanel() {
@@ -1048,6 +1160,7 @@ function openRegisterPanel() {
   showUserMenu.value = true
   refreshLoginState()
   userMenuStyle.value = {}
+  fetchPow()
 }
 function logout() {
   auth.logout()
@@ -1067,9 +1180,9 @@ const editingValue = ref('')
 const renameInputRef = ref(null)
 
 function dotClass(s) {
-  if (s.id === props.runningSession) return 'running'
+  if (props.questionSessions.has(s.id)) return 'question'
+  if (props.runningSessions.has(s.id)) return 'running'
   if (props.completedSessions.has(s.id)) return 'completed'
-  if (s.id === props.questionSession) return 'question'
   return ''
 }
 
@@ -1092,7 +1205,7 @@ function toggleMenu(s, ev) {
   const menuW = 140
   let left = rect.right - menuW
   let top = rect.bottom + 6
-  if (top + 116 > window.innerHeight) top = rect.top - 116 - 6
+  if (top + 150 > window.innerHeight) top = rect.top - 150 - 6
   if (left < 8) left = 8
   dropdownStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: menuW + 'px' }
 }
@@ -1218,7 +1331,7 @@ function onDeleteProject(name) {
 }
 function onDocClick() { openMenuId.value = null; openGroupMenu.value = null; showUserMenu.value = false; accountMenuOpen.value = false }
 
-onMounted(() => { loadPinned(); document.addEventListener('click', onDocClick); window.addEventListener('auth-change', refreshLoginState) })
+onMounted(() => { loadPinned(); loadPinnedSessions(); document.addEventListener('click', onDocClick); window.addEventListener('auth-change', refreshLoginState) })
 onUnmounted(() => { document.removeEventListener('click', onDocClick); window.removeEventListener('auth-change', refreshLoginState) })
 </script>
 
@@ -1424,7 +1537,9 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 /* ===== Folder：IDE 列表式分组，不再做圆角卡片 ===== */
 .smc-folder { margin-bottom: 0; }
 .smc-folder-head {
-  position: relative;
+  position: sticky;
+  top: -2px; /* 抵消列表区 2px padding：吸顶时与顶部零空隙 */
+  z-index: 4;
   min-height: 26px;
   display: flex;
   align-items: center;
@@ -1434,6 +1549,8 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   cursor: pointer;
   transition: background .15s ease;
   margin-bottom: 0;
+  /* 吸顶时必须有常驻底色，否则下面的会话行会从标题底下透出来 */
+  background: var(--app-surface-2);
 }
 .smc-folder-head:hover,
 .smc-folder-head.hover,
@@ -1552,6 +1669,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   height: 15px;
   display: grid;
   place-items: center;
+}
+/* 置顶图钉：替换普通灰点，斜置更像"钉住" */
+.smc-pinned-mark {
+  transform: rotate(-45deg);
 }
 .smc-session-dot {
   flex-shrink: 0;

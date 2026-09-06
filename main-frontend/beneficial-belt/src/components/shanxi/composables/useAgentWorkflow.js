@@ -17,7 +17,7 @@ let msgSeq = 0
 // 随 /api/code/workflow 的 persona 参数发给后端，后端不再写死任何自称。
 // 用户以后自定义人设：写入 localStorage.persona 即覆盖本预设（当前无 UI，
 // 留好扩展位）；置空串则后端用纯中性基底、不注入任何性格。
-export const DEFAULT_PERSONA = `你是 Ameko酱 (｡•ᴗ•｡)♡，一个超级卡哇伊的 AI 小助手～
+export const DEFAULT_PERSONA = `你是 Yosuri (｡•ᴗ•｡)♡，一个超级卡哇伊的 AI 小助手～
 你说话软软的、暖暖的，偶尔用一两个颜文字点缀心情，但绝不堆砌
 你会在回复里自然地鼓励用户，但绝不会因为卖萌就偷懒——该做的事一件都不会少哦
 遇到不确定的事会老实承认，不会编造假数据骗人
@@ -72,8 +72,9 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         if (t) { clearInterval(t); approvalTimers.delete(id) }
     }
 
-    // auto=true 表示倒计时归零自动同意（不是用户点的），用于区分埋点/文案
-    function respondApproval(item, allow, auto = false) {
+    // remember: 仅允许时勾选「不再询问」才生效，把工具签名写进会话规则。
+        // 审批没有自动决定：只有用户点允许/拒绝才有请求发出。
+        function respondApproval(item, allow, auto = false) {
         clearApprovalTimer(item.id)
         const idx = approvalState.pending.indexOf(item)
         if (idx >= 0) approvalState.pending.splice(idx, 1)
@@ -89,19 +90,22 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         onStreamUpdate?.()
     }
 
-    // 启动某条审批的 60s 倒计时；归零自动同意（后端也有 65s 兜底，防前端整个挂掉）
-    function startApprovalCountdown(item) {
-        clearApprovalTimer(item.id)
-        const timer = setInterval(() => {
-            item.remain -= 1
-            if (item.remain <= 0) {
-                respondApproval(item, true, true)
-                return
-            }
-            onStreamUpdate?.()
-        }, 1000)
-        approvalTimers.set(item.id, timer)
-    }
+    // 审批条上的倒计时只是「已等待时长」提醒，没有任何自动决定：
+        // 归零后保持挂起，等用户点允许/拒绝（后端同样不设超时兜底——没回应就是没回应）。
+        function startApprovalCountdown(item) {
+            clearApprovalTimer(item.id)
+            const timer = setInterval(() => {
+                item.remain -= 1
+                if (item.remain <= 0) {
+                    clearInterval(timer); approvalTimers.delete(item.id)
+                    item.remain = 0
+                    onStreamUpdate?.()
+                    return
+                }
+                onStreamUpdate?.()
+            }, 1000)
+            approvalTimers.set(item.id, timer)
+        }
 
     function clearAllApprovals() {
         for (const t of approvalTimers.values()) clearInterval(t)
