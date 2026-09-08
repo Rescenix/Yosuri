@@ -255,6 +255,10 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 		defs = append(defs, videoGenToolDef)
 		// music_generate：AI 生成音乐并内嵌聊天（云端代理，用户零 key 零配置）
 		defs = append(defs, musicGenToolDef)
+		// speak：本地 TTS 语音合成，内嵌播放条（edge-tts，零 key）
+		defs = append(defs, speakVoiceToolDef)
+		// fetch_media：网络素材（图/音/视/文件）抓取落盘，聊天内嵌展示
+		defs = append(defs, fetchMediaToolDef)
 	// chart：数学建模图表渲染（前端 ECharts 直出，零后端依赖）
 	defs = append(defs, chartToolDef)
 	// 原常驻工具简化为按需加载（2026-08-29 收敛）：skill_view 提回常驻
@@ -347,6 +351,10 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 			return callNativeVideoGenerate(ctx, argsJSON)
 		case "music_generate":
 			return callNativeMusicGenerate(ctx, argsJSON)
+		case "speak":
+			return callNativeSpeakVoice(ctx, argsJSON)
+		case "fetch_media":
+			return callNativeFetchMedia(ctx, argsJSON)
 	case "chart":
 		return callNativeChartTool(argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
