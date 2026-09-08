@@ -8,6 +8,8 @@ const routes = [
   { path: '/sites', name: 'sites', component: () => import('./views/SitesView.vue') },
     { path: '/publish', name: 'publish', component: () => import('./views/PublishView.vue') },
         { path: '/comic', name: 'comic', component: () => import('./views/ComicView.vue') },
+  { path: '/arena', name: 'arena', component: () => import('./views/ArenaView.vue') },
+  { path: '/game', name: 'game', component: () => import('./views/GameView.vue') },
           { path: '/company', name: 'company', component: () => import('./views/CompanyView.vue') },
         { path: '/sync', redirect: '/company' },
         { path: '/:pathMatch(.*)*', redirect: '/chat' },

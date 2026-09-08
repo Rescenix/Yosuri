@@ -100,6 +100,8 @@ const railItemDefinitions = [
   { id: 'sites', label: '站点', icon: 'mdi:web', to: '/sites' },
   { id: 'publish', label: '网文创作', icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
   { id: 'comic', label: '漫画创作', icon: 'mdi:brush', to: '/comic' },
+  { id: 'arena', label: 'Agent 竞技场', icon: 'mdi:sword-cross', to: '/arena' },
+  { id: 'game', label: '星迹游戏', icon: 'mdi:gamepad-variant', to: '/game' },
   { id: 'studio', label: '视频剪辑', icon: 'mdi:movie-edit-outline', to: '/studio' },
   { id: 'agg', label: '聚合 API', icon: 'mdi:api' }
 ]
@@ -310,6 +312,10 @@ onMounted(() => {
         .filter(id => typeof id === 'string' && !seen.has(id) && seen.add(id))
         .map(id => railItemDefinitions.find(item => item.id === id))
         .filter(Boolean)
+      // 新版本新增的工具自动补到末尾，老用户也能看到
+      for (const def of railItemDefinitions) {
+        if (!railItems.value.some(item => item.id === def.id)) railItems.value.push(def)
+      }
     }
   } catch { /* 本地偏好不可用时使用默认折角布局 */ }
   const params = new URLSearchParams(window.location.search)
