@@ -3681,8 +3681,10 @@ async function startAutoDownload() {
         pollDownloadStatus()
       }
     } else {
+      // 透传后端具体原因（无法读取更新清单/缺 ZIP 地址等），别写死（2026-09-09 修）
+      const d = await res.json().catch(() => ({}))
       dlState.value = 'error'
-      dlError.value = '触发下载失败'
+      dlError.value = d.error || '触发下载失败'
     }
   } catch (e) {
     dlState.value = 'error'

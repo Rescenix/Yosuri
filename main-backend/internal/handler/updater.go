@@ -49,7 +49,15 @@ type githubRelease struct {
 	DownloadURL string           `json:"download_url"`     // 官网 JSON 提供，GitHub 无此字段
 	DownloadExe string           `json:"download_url_exe"` // 热补丁通道：新版 rescene.exe 直链（官网 JSON 提供）
 	DownloadZip string           `json:"download_url_zip"` // 热补丁通道的新字段名；兼容旧 download_url_exe
+	Assets      []githubAsset    `json:"assets"`           // GitHub release 资产（官网 JSON 无此字段）
 	Changelog   []changelogEntry `json:"changelog"`        // 官网 update.json 提供：按版本分列的更新日志
+}
+
+// githubAsset 是 GitHub /releases 响应里的 release 资产子集。
+// 官网 update.json 被墙/抖动时走 GitHub 兜底，热补丁 zip 地址从这里捞，不再依赖官网私有字段。
+type githubAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
 // changelogEntry 是官网 update.json 的 changelog 数组元素。
@@ -243,6 +251,16 @@ func resolveHotPatchURL(rel *githubRelease, fromSite bool) string {
 	}
 	if rel.DownloadExe != "" {
 		return rel.DownloadExe
+	}
+	// GitHub 兜底：官网 update.json 的 download_url_zip 是私有字段，GitHub release JSON
+	// 里没有——此时从 release assets 里找 portable zip（2026-09-09 修「触发下载失败」：
+	// 官网抖动走 GitHub 兜底时 DownloadExe 恒空 → 503 缺 ZIP 地址 → 前端报触发下载失败）。
+	if !fromSite {
+		for _, a := range rel.Assets {
+			if strings.Contains(a.Name, "portable") && strings.HasSuffix(strings.ToLower(a.Name), ".zip") {
+				return a.BrowserDownloadURL
+			}
+		}
 	}
 	// 兼容已经部署但缺少下载字段的 update.json。官网 portable.zip 是稳定的
 	// “当前版本”地址；GitHub 兜底不能这样猜，否则 CDN 尚未同步时可能装错版本。
