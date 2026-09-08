@@ -90,15 +90,24 @@ func callNativeSpeakVoice(ctx context.Context, argsJSON string) (nativeToolResul
 	}
 
 	url := "/api/media/" + name
-	return nativeToolResult{
-		Text: fmt.Sprintf("已生成语音（%s）\n本地路径: %s\n预览地址: %s", voice, outPath, url),
+	res := nativeToolResult{
+		Text: fmt.Sprintf("已生成配音（%s）\n本地文件: %s\n预览: %s", voice, outPath, url),
 		Audios: []mcpAudioArtifact{{
 			URL:  url,
 			File: outPath,
 			Mime: "audio/mpeg",
 			Size: fmt.Sprintf("%d", info.Size()),
 		}},
-	}, nil
+	}
+	// 配音是交付物：同时挂到文件交付卡（可下载、可复用到视频/剪辑），
+	// 而不仅仅是聊天里的播放条——用户要的是「配音成品」，不是「听一下」。
+	res.Files = []fileDeliverable{{
+		Path: outPath,
+		Name: name,
+		Ext:  ".mp3",
+		Size: info.Size(),
+	}}
+	return res, nil
 }
 
 // findEdgeTTSPython 定位能跑 edge_tts 的 python：hermes venv → 系统 python → uv。

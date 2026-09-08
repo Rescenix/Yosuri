@@ -122,23 +122,29 @@ func callNativeFetchMedia(ctx context.Context, argsJSON string) (nativeToolResul
 		}, nil
 	case "video":
 		return nativeToolResult{
-			Text: fmt.Sprintf("已获取视频素材\n本地路径: %s\n预览地址: %s\n%s", path, url, caption),
+			Text: fmt.Sprintf("已获取视频素材\n本地文件: %s\n预览: %s\n%s", path, url, caption),
 			Videos: []mcpVideoArtifact{{
 				URL: url, File: path, Mime: ct, Size: fmt.Sprintf("%d", len(data)),
+			}},
+			Files: []fileDeliverable{{
+				Path: path, Name: name, Ext: ext, Size: int64(len(data)),
 			}},
 		}, nil
 	case "audio":
 		return nativeToolResult{
-			Text: fmt.Sprintf("已获取音频素材\n本地路径: %s\n预览地址: %s\n%s", path, url, caption),
+			Text: fmt.Sprintf("已获取音频素材\n本地文件: %s\n预览: %s\n%s", path, url, caption),
 			Audios: []mcpAudioArtifact{{
 				URL: url, File: path, Mime: ct, Size: fmt.Sprintf("%d", len(data)),
+			}},
+			Files: []fileDeliverable{{
+				Path: path, Name: name, Ext: ext, Size: int64(len(data)),
 			}},
 		}, nil
 	default:
 		return nativeToolResult{
 			Text: fmt.Sprintf("已获取文件素材\n本地路径: %s\n%s", path, caption),
 			Files: []fileDeliverable{{
-				Path: path, Name: name, Ext: ext,
+				Path: path, Name: name, Ext: ext, Size: int64(len(data)),
 			}},
 		}, nil
 	}
