@@ -126,12 +126,12 @@ func newWorkflowContextProviderFor(agentID string, tasks ...string) *contextProv
 	if strings.TrimSpace(personalitySection) != "" {
 		personalitySection = "\n\n# 性格档案（从你的记忆蒸馏，千人千面）\n" + strings.TrimSpace(personalitySection) + "\n"
 	}
-	prefSection := ""
-	if level >= 2 {
+	// 用户偏好：无条件注入（2026-09-08 用户拍板：跟 Hermes 画像同待遇，不设亲密度门槛）。
+		// 之前 Lv≥2 才回填——新用户前 100 互动看不到偏好，等于画像白攒。现在每轮常驻。
+		prefSection := ""
 		if pref := memorydir.ReadRaw("preferences"); pref != "" {
-			prefSection = "\n\n# 用户偏好（亲密等级解锁自动回填）\n" + pref
+			prefSection = "\n\n# 用户偏好（自动提取，常驻）\n" + pref
 		}
-	}
 
 	// 反向链接联想召回：根据当前任务匹配 index.md 中的行，
 	// 命中的 [[文件]] 自动读取对应文件内容（亲密等级越高召回越深）
