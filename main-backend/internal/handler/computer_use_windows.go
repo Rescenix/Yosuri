@@ -19,56 +19,56 @@ var (
 	gdi32  = syscall.NewLazyDLL("gdi32.dll")
 
 	// GDI
-	getDC           = gdi32.NewProc("GetDC")
-	releaseDC       = gdi32.NewProc("ReleaseDC")
-	createDC        = gdi32.NewProc("CreateDCW")
-	deleteDC        = gdi32.NewProc("DeleteDC")
-	createCompatibleDC   = gdi32.NewProc("CreateCompatibleDC")
-	deleteDC2       = gdi32.NewProc("DeleteDC")
-	deleteObject    = gdi32.NewProc("DeleteObject")
+	getDC                  = gdi32.NewProc("GetDC")
+	releaseDC              = gdi32.NewProc("ReleaseDC")
+	createDC               = gdi32.NewProc("CreateDCW")
+	deleteDC               = gdi32.NewProc("DeleteDC")
+	createCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
+	deleteDC2              = gdi32.NewProc("DeleteDC")
+	deleteObject           = gdi32.NewProc("DeleteObject")
 	createCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
-	selectObject    = gdi32.NewProc("SelectObject")
-	bitBlt          = gdi32.NewProc("BitBlt")
-	getDIBits       = gdi32.NewProc("GetDIBits")
-	getDeviceCaps   = gdi32.NewProc("GetDeviceCaps")
-	createDIBSection = gdi32.NewProc("CreateDIBSection")
+	selectObject           = gdi32.NewProc("SelectObject")
+	bitBlt                 = gdi32.NewProc("BitBlt")
+	getDIBits              = gdi32.NewProc("GetDIBits")
+	getDeviceCaps          = gdi32.NewProc("GetDeviceCaps")
+	createDIBSection       = gdi32.NewProc("CreateDIBSection")
 
 	// User32
-	getDC2          = user32.NewProc("GetDC")
-	releaseDC2       = user32.NewProc("ReleaseDC")
-	getSystemMetrics = user32.NewProc("GetSystemMetrics")
-	getDesktopWindow = user32.NewProc("GetDesktopWindow")
-	getWindowDC     = user32.NewProc("GetWindowDC")
+	getDC2              = user32.NewProc("GetDC")
+	releaseDC2          = user32.NewProc("ReleaseDC")
+	getSystemMetrics    = user32.NewProc("GetSystemMetrics")
+	getDesktopWindow    = user32.NewProc("GetDesktopWindow")
+	getWindowDC         = user32.NewProc("GetWindowDC")
 	getForegroundWindow = user32.NewProc("GetForegroundWindow")
-	getWindowRect   = user32.NewProc("GetWindowRect")
-	getWindowTextW  = user32.NewProc("GetWindowTextW")
-	sendInput       = user32.NewProc("SendInput")
+	getWindowRect       = user32.NewProc("GetWindowRect")
+	getWindowTextW      = user32.NewProc("GetWindowTextW")
+	sendInput           = user32.NewProc("SendInput")
 )
 
 const (
-	SRCCOPY          = 0x00CC0020
-	DIB_RGB_COLORS   = 0
-	BI_RGB           = 0
-	SM_CXSCREEN      = 0
-	SM_CYSCREEN      = 1
-	SM_CMONITORS     = 80
+	SRCCOPY        = 0x00CC0020
+	DIB_RGB_COLORS = 0
+	BI_RGB         = 0
+	SM_CXSCREEN    = 0
+	SM_CYSCREEN    = 1
+	SM_CMONITORS   = 80
 
-	INPUT_MOUSE      = 0
-	INPUT_KEYBOARD   = 1
+	INPUT_MOUSE    = 0
+	INPUT_KEYBOARD = 1
 
-	MOUSEEVENTF_MOVE        = 0x0001
-	MOUSEEVENTF_ABSOLUTE    = 0x8000
-	MOUSEEVENTF_LEFTDOWN    = 0x0002
-	MOUSEEVENTF_LEFTUP      = 0x0004
-	MOUSEEVENTF_RIGHTDOWN   = 0x0008
-	MOUSEEVENTF_RIGHTUP     = 0x0010
-	MOUSEEVENTF_MIDDLEDOWN  = 0x0020
-	MOUSEEVENTF_MIDDLEUP    = 0x0040
-	MOUSEEVENTF_WHEEL       = 0x0800
+	MOUSEEVENTF_MOVE       = 0x0001
+	MOUSEEVENTF_ABSOLUTE   = 0x8000
+	MOUSEEVENTF_LEFTDOWN   = 0x0002
+	MOUSEEVENTF_LEFTUP     = 0x0004
+	MOUSEEVENTF_RIGHTDOWN  = 0x0008
+	MOUSEEVENTF_RIGHTUP    = 0x0010
+	MOUSEEVENTF_MIDDLEDOWN = 0x0020
+	MOUSEEVENTF_MIDDLEUP   = 0x0040
+	MOUSEEVENTF_WHEEL      = 0x0800
 
-	KEYEVENTF_KEYDOWN       = 0x0000
-	KEYEVENTF_KEYUP         = 0x0002
-	KEYEVENTF_SCANCODE      = 0x0008
+	KEYEVENTF_KEYDOWN  = 0x0000
+	KEYEVENTF_KEYUP    = 0x0002
+	KEYEVENTF_SCANCODE = 0x0008
 )
 
 type BITMAPINFOHEADER struct {
@@ -91,26 +91,26 @@ type BITMAPINFO struct {
 }
 
 type MOUSEINPUT struct {
-	Dx          int32
-	Dy          int32
-	MouseData   uint32
-	Flags       uint32
-	Time        uint32
-	ExtraInfo   uintptr
+	Dx        int32
+	Dy        int32
+	MouseData uint32
+	Flags     uint32
+	Time      uint32
+	ExtraInfo uintptr
 }
 
 type KEYBDINPUT struct {
-	WVk         uint16
-	WScan       uint16
-	Flags       uint32
-	Time        uint32
-	ExtraInfo   uintptr
+	WVk       uint16
+	WScan     uint16
+	Flags     uint32
+	Time      uint32
+	ExtraInfo uintptr
 }
 
 type HARDWAREINPUT struct {
 	UMsg    uint32
-	WParamL  uint16
-	WParamH  uint16
+	WParamL uint16
+	WParamH uint16
 }
 
 type INPUT struct {
@@ -203,10 +203,10 @@ func captureRect(x, y, w, h int) *robotgoBitmap {
 	// 构建 BITMAPINFO
 	bmi := BITMAPINFO{
 		Header: BITMAPINFOHEADER{
-			Size:    uint32(unsafe.Sizeof(BITMAPINFOHEADER{})),
-			Width:   int32(w),
-			Height:  int32(-h), // 负值 = 从上到下，不翻转
-			Planes:  1,
+			Size:     uint32(unsafe.Sizeof(BITMAPINFOHEADER{})),
+			Width:    int32(w),
+			Height:   int32(-h), // 负值 = 从上到下，不翻转
+			Planes:   1,
 			BitCount: 32,
 		},
 	}
@@ -256,9 +256,9 @@ func winMoveMouse(x, y int) {
 	inp := INPUT{
 		Type: INPUT_MOUSE,
 		Mi: MOUSEINPUT{
-			Dx:        int32(absX),
-			Dy:        int32(absY),
-			Flags:     MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
+			Dx:    int32(absX),
+			Dy:    int32(absY),
+			Flags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
 		},
 	}
 	sendInput.Call(1, uintptr(unsafe.Pointer(&inp)), unsafe.Sizeof(inp))

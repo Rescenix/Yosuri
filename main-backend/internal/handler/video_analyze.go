@@ -185,7 +185,7 @@ func analyzeVideoFramesWithBackends(ctx context.Context, backends []RouterBacken
 	content := []map[string]any{{"type": "text", "text": question}}
 	for _, f := range frames {
 		content = append(content, map[string]any{
-			"type": "image_url",
+			"type":      "image_url",
 			"image_url": map[string]any{"url": "data:image/jpeg;base64," + f},
 		})
 	}

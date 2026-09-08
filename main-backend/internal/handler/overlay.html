@@ -112,6 +112,23 @@
   .entry.sep { color: #cfd3ee; text-align: center; font-size: 10.5px; margin: 10px 0 8px; padding-left: 0; letter-spacing: 0.5px; opacity: 0.75; }
   .entry.sep::before { display: none; }
 
+  /* ---------------- 看板娘 Live2D 舞台(展开态顶部) ---------------- */
+  #stage {
+    position: relative;
+    flex: none;
+    height: 56%;
+    min-height: 180px;
+    overflow: hidden;
+    background: transparent;
+  }
+  #stage canvas { display: block; }
+  #stage .hint {
+    position: absolute; left: 0; right: 0; bottom: 6px; text-align: center;
+    font-size: 10px; color: #c3c9f2; opacity: 0.7; pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  #stage.failed .hint { color: #ffc2c2; opacity: 1; }
+
   /* 缩放热区(展开态才存在) */
   .rz { position: absolute; z-index: 5; }
   .rz-n  { top: 0; left: 8px; right: 8px; height: 5px; cursor: ns-resize; }
@@ -158,6 +175,7 @@
       <div class="spacer"></div>
       <div class="collapse-btn" id="collapseBtn" title="收起">&#8211;</div>
     </div>
+    <div id="stage"><div class="hint" id="stageHint">看板娘加载中…</div></div>
     <div class="log" id="log"><div class="empty">还没有任务在跑。<br>让 Agent 干点什么，这里会实时显示它的意图和操作。</div></div>
   </div>
 
@@ -167,6 +185,8 @@
   var head = document.getElementById('head');
   var collapseBtn = document.getElementById('collapseBtn');
   var log = document.getElementById('log');
+  var stage = document.getElementById('stage');
+  var stageHint = document.getElementById('stageHint');
   var statusEl = document.getElementById('status');
   var statusText = document.getElementById('statusText');
 
@@ -177,6 +197,8 @@
   function toggle() {
     body.classList.toggle('expanded');
     post({ action: 'toggle' });
+    // 展开时才拉起看板娘（懒加载，见文件底部 Live2D 段）；收起不销毁，留着下次直接显示。
+    if (body.classList.contains('expanded')) initLive2D();
   }
 
   // 按下但没怎么移动 = 点击(展开/收起)；按下且移动超过阈值 = 拖动，交给系统原生拖动接管。
@@ -302,9 +324,11 @@
         flushIntent();
         appendLine('sep', '── 任务开始 · ' + esc(truncate(data.task, 36)) + ' ──');
         statusText.textContent = '进行中';
+        setExpression('Surprised'); // 接到新任务：精神一振
         break;
       case 'intent':
         intentBuf += data.content || '';
+        setSpeaking(true);
         break;
       case 'action':
         flushIntent();
@@ -320,11 +344,15 @@
         break;
       case 'workflow_done':
         flushIntent();
+        setSpeaking(false);
+        l2d.lastSpeech = 0;
+        setExpression('Smile'); // 任务完成：笑
         appendLine('sep', '── 完成 ──');
         statusText.textContent = '空闲';
         break;
       case 'flow_error':
         flushIntent();
+        setExpression('Sad'); // 出错了：难过
         appendLine('result-fail', '✗ ' + esc(data.message || data.error || '出错'));
         break;
       default:
@@ -337,6 +365,187 @@
       try { handle(t, JSON.parse(ev.data)); } catch (e) {}
     });
   });
+
+  /* ================= 看板娘 Live2D =================
+     懒加载：只有用户第一次展开面板才拉 pixi/cubism 运行时并建模型——收起态的
+     64x64 球用不着它，不能让悬浮球功能白背一个 WebGL 上下文。
+     资源全部走本机 /overlay/live2d/（内嵌进二进制），断网可用，不碰任何 CDN。 */
+  var L2D = '/overlay/live2d/';
+  var l2d = { state: 'idle', app: null, model: null, speaking: false, lastSpeech: 0, expr: null, exprDefs: null };
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src; s.onload = resolve;
+      s.onerror = function () { reject(new Error('加载失败 ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function stageSize() {
+    var r = stage.getBoundingClientRect();
+    return { w: Math.max(1, Math.round(r.width)), h: Math.max(1, Math.round(r.height)) };
+  }
+
+  // 把模型等比缩放到刚好贴合舞台。Live2DModel 是左上角锚点(anchor 0,0)，
+  // 所以居中/贴底要自己减掉半个/一个模型尺寸——直接设 x=w/2 会把角色推到右下角。
+  function fitModel() {
+    if (!l2d.model) return;
+    var sz = stageSize();
+    var src = l2d.model.internalModel;
+    var mw = src.width || l2d.model.width, mh = src.height || l2d.model.height;
+    var s = Math.min(sz.w / mw, sz.h / mh) * 0.98;
+    l2d.model.scale.set(s);
+    var dw = mw * s, dh = mh * s;
+    l2d.model.x = (sz.w - dw) / 2;
+    l2d.model.y = sz.h - dh;
+  }
+
+  function setSpeaking(on) {
+    l2d.speaking = on;
+    if (on) l2d.lastSpeech = Date.now();
+  }
+
+  // 表情：Hiyori 的 idle 动作逐帧覆写全部表情参数，官方 expression() 淡出机制
+  // 会跟它打架（实测 Sad 被盖回去）。改为在 motion 更新之后自己按权重叠加目标值，
+  // 数据源仍是 expressions/*.exp3.json（加载进 l2d.exprDefs）。3 秒后自动淡出。
+  var exprTimer = 0;
+  function setExpression(name) {
+    if (!l2d.exprDefs || !l2d.exprDefs[name]) return;
+    l2d.expr = { name: name, w: 0 };
+    clearTimeout(exprTimer);
+    exprTimer = setTimeout(function () { if (l2d.expr && l2d.expr.name === name) l2d.expr = null; }, 3000);
+  }
+
+  function applyExpression(core, dt) {
+    if (!l2d.expr) return;
+    var def = l2d.exprDefs[l2d.expr.name];
+    if (!def) { l2d.expr = null; return; }
+    l2d.expr.w = Math.min(1, l2d.expr.w + dt / 0.25); // 0.25s 淡入
+    var w = l2d.expr.w;
+    for (var i = 0; i < def.length; i++) {
+      var p = def[i];
+      var cur = core.getParameterValueById(p.Id) || 0;
+      // Add 语义：目标值 = idle 当前值 + 表情偏移*权重；Mult 语义：按比例压
+      var next = p.Blend === 'Mult' ? cur * (1 - w + w * p.Value) : cur + p.Value * w;
+      core.setParameterValueById(p.Id, next);
+    }
+  }
+
+  function loadExpressionDefs() {
+    fetch(L2D + 'Hiyori/Hiyori.model3.json').then(function (r) { return r.json(); }).then(function (m3) {
+      var list = (m3.FileReferences || {}).Expressions || [];
+      return Promise.all(list.map(function (e) {
+        return fetch(L2D + 'Hiyori/' + e.File).then(function (r) { return r.json(); })
+          .then(function (d) { return [e.Name, d.Parameters || []]; });
+      }));
+    }).then(function (pairs) {
+      var defs = {};
+      pairs.forEach(function (kv) { defs[kv[0]] = kv[1]; });
+      l2d.exprDefs = defs;
+    }).catch(function () { /* 表情加载失败不影响主体，静默 */ });
+  }
+
+  async function initLive2D() {
+    if (l2d.state !== 'idle') return;
+    l2d.state = 'loading';
+    try {
+      await loadScript(L2D + 'vendor/pixi.min.js');
+      await loadScript(L2D + 'vendor/live2dcubismcore.min.js');
+      await loadScript(L2D + 'vendor/cubism4.min.js');
+      var live2d = window.PIXI.live2d;
+      live2d.Live2DModel.registerTicker(window.PIXI.Ticker);
+
+      var sz = stageSize();
+      var app = new window.PIXI.Application({
+        width: sz.w, height: sz.h,
+        backgroundAlpha: 0, antialias: true,
+        autoStart: false, // 由 rAF 统一驱动，收起态可以整帧停掉
+      });
+      app.view.style.position = 'absolute';
+      app.view.style.left = '0'; app.view.style.top = '0';
+      stage.appendChild(app.view);
+      l2d.app = app;
+
+      var model = await live2d.Live2DModel.from(L2D + 'Hiyori/Hiyori.model3.json', {
+        autoInteract: false, // 自己接管视线/点击，避免和面板拖动打架
+        motionGroups: ['Idle', 'TapBody'],
+      });
+      app.stage.addChild(model);
+      l2d.model = model;
+      fitModel();
+
+      // 视线跟随鼠标（看板娘会看着你），点击身体触发 TapBody 动作。
+      model.on('modelTap', function () {
+        model.motion('TapBody');
+        setExpression('Blushing'); // 被戳会脸红
+      });
+      window.addEventListener('mousemove', function (e) {
+        if (!l2d.model) return;
+        var r = stage.getBoundingClientRect();
+        l2d.model.focus(e.clientX - r.left, e.clientY - r.top);
+      }, { passive: true });
+
+      model.motion('Idle');
+      stageHint.remove();
+      l2d.state = 'ready';
+      startLoop();
+
+      // 异步加载表情定义（不阻塞首帧渲染）：从 model3.json 的 Expressions 列表读，
+      // 换模型时只要它带 expressions/ 就自动生效。
+      loadExpressionDefs();
+    } catch (err) {
+      l2d.state = 'failed';
+      stage.classList.add('failed');
+      stageHint.textContent = '看板娘加载失败：' + (err && err.message ? err.message : err);
+    }
+  }
+
+  // 口型：没有 TTS 音频流可取 RMS，这里用「事件驱动 + 程序化包络」——
+  // Agent 在吐字(intent/thinking)时说话，嘴部按 ~5.5Hz 抖动并带随机包络；
+  // 停止吐字 400ms 后自然收嘴。眨眼/呼吸交给模型自带 physics + idle motion。
+  var mouthPhase = 0;
+  function driveMouth(dt) {
+    if (!l2d.model) return;
+    var im = l2d.model.internalModel;
+    var core = im && im.coreModel;
+    if (!core || typeof core.setParameterValueById !== 'function') return;
+    if (l2d.speaking && Date.now() - l2d.lastSpeech < 400) {
+      mouthPhase += dt * 5.5;
+      var env = 0.55 + 0.45 * Math.sin(mouthPhase * 0.37);
+      core.setParameterValueById('ParamMouthOpenY', Math.abs(Math.sin(mouthPhase)) * env * 0.9);
+      core.setParameterValueById('ParamMouthForm', 0.4);
+    } else {
+      var cur = core.getParameterValueById('ParamMouthOpenY') || 0;
+      core.setParameterValueById('ParamMouthOpenY', cur * 0.8); // 平滑收嘴
+    }
+  }
+
+  var lastT = 0;
+  function loop(t) {
+    requestAnimationFrame(loop);
+    if (l2d.state !== 'ready') return;
+    if (!body.classList.contains('expanded')) return; // 收起态不烧 GPU
+    var dt = Math.min(0.05, (t - lastT) / 1000 || 0.016);
+    lastT = t;
+    l2d.app.ticker.update(t); // motion 先写全部参数
+    var core = l2d.model.internalModel.coreModel;
+    driveMouth(dt);          // 口型覆盖 motion
+    applyExpression(core, dt); // 表情叠加在 motion 之上，赢过 idle 覆写
+    l2d.app.render();
+  }
+  function startLoop() { if (!lastT) { lastT = performance.now(); requestAnimationFrame(loop); } }
+
+  // 展开时才初始化/重算尺寸；面板缩放后重新贴合。
+  var ro = new ResizeObserver(function () {
+    if (l2d.state === 'ready') {
+      var sz = stageSize();
+      l2d.app.renderer.resize(sz.w, sz.h);
+      fitModel();
+    }
+  });
+  ro.observe(stage);
+
 </script>
 </body>
 </html>

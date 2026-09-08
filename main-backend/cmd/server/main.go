@@ -30,17 +30,29 @@ func main() {
 
 	r := handler.NewAPIRouter()
 
-	// 云端记忆同步：启动后自动拉取一次（换设备恢复记忆）+ 定时双向循环
-	// （2026-08-30：cmd/server 之前漏掉这两个调用，纯后端模式永远不同步记忆）
-	handler.StartupMemorySyncPull()
-	handler.StartMemorySyncLoop()
+		// 云端记忆同步：启动后自动拉取一次（换设备恢复记忆）+ 定时双向循环
+		// （2026-08-30：cmd/server 之前漏掉这两个调用，纯后端模式永远不同步记忆）
+		handler.StartupMemorySyncPull()
+		handler.StartMemorySyncLoop()
 
-	log.Println("🚀 Rescene 引擎已启动，监听端口 :8080")
-	addr := os.Getenv("PORT")
-	if addr == "" {
-		addr = "8080"
+	log.Println("🚀 Rescene 引擎已启动")
+	// 本地默认只听回环：这套 API 能起终端进程、读写工作区文件，
+	// 绑 0.0.0.0 等于让同 WiFi 下任何设备直接驱动它。局域网同步是
+	// 另一套独立服务（0.0.0.0 + token 鉴权，只暴露 /lan/），不依赖这里。
+	// 云端 PaaS 注入 PORT 时保持绑全网卡，否则平台流量进不来。
+	// RE0_BIND 可显式覆盖（测试或特殊部署用）。
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
-	if err := r.Run(":" + addr); err != nil {
+	bind := "127.0.0.1"
+	if os.Getenv("PORT") != "" {
+		bind = ""
+	}
+	if v, ok := os.LookupEnv("RE0_BIND"); ok {
+		bind = v
+	}
+	if err := r.Run(bind + ":" + port); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
 }

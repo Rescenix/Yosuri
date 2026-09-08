@@ -38,11 +38,20 @@
                 </div>
                 <div class="stm-item-prompt">{{ t.prompt }}</div>
                 <div class="stm-item-meta">
-                  <span class="stm-item-schedule">🕐 {{ formatSchedule(t) }}</span>
+                  <span class="stm-item-schedule"><Icon icon="mdi:clock-outline" width="13" /> {{ formatSchedule(t) }}</span>
                   <span v-if="t.lastFired" class="stm-item-last">上次触发 {{ formatLast(t.lastFired) }}</span>
                 </div>
               </div>
               <div class="stm-item-actions">
+                <button
+                  class="stm-item-toggle"
+                  :class="{ off: !t.enabled }"
+                  :disabled="togglingId === t.id"
+                  @click="onToggle(t)"
+                  :title="t.enabled ? '点击停用' : '点击启用'"
+                >
+                  <Icon :icon="t.enabled ? 'mdi:pause-circle-outline' : 'mdi:play-circle-outline'" width="16" />
+                </button>
                 <button
                   class="stm-item-del"
                   :class="{ confirm: confirmId === t.id }"
@@ -75,12 +84,13 @@
 import { ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
-const emit = defineEmits(['close', 'create'])
+const emit = defineEmits(['close', 'create', 'toast'])
 
 const tasks = ref([])
 const loading = ref(true)
 const deletingId = ref(null)
 const confirmId = ref(null)
+const togglingId = ref(null)
 
 // 频率 → 中文描述（与 ScheduledTaskModal 的 FREQ_MAP 保持一致）
 const FREQ_TEXT = {
@@ -136,6 +146,25 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function onToggle(t) {
+  togglingId.value = t.id
+  fetch('/api/cron/toggle/' + t.id, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: !t.enabled })
+  })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(data => {
+      t.enabled = !!data.enabled
+      emit('toast', (t.enabled ? '已启用：' : '已停用：') + (t.name || '定时任务'))
+    })
+    .catch(e => {
+      console.log('切换定时任务状态失败:', e)
+      emit('toast', '❌ 操作失败：' + (e.message || '网络错误'))
+    })
+    .finally(() => { togglingId.value = null })
 }
 
 function onDelete(t) {
@@ -314,7 +343,21 @@ onMounted(load)
 .stm-item-schedule { font-size: 12px; font-weight: 600; color: #3b82f6; }
 .stm-item-last { font-size: 11px; color: #aaa; }
 
-.stm-item-actions { flex-shrink: 0; display: flex; align-items: center; }
+.stm-item-actions { flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
+.stm-item-toggle {
+  display: flex;
+  align-items: center;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: #16a34a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.stm-item-toggle:hover { background: #eef2f7; }
+.stm-item-toggle.off { color: #999; }
+.stm-item-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 .stm-item-del {
   display: flex;
   align-items: center;

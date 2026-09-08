@@ -77,4 +77,3 @@ func wsCall(wsURL string, payload []byte) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("CDP 响应超时（事件流无命令响应）")
 }
-

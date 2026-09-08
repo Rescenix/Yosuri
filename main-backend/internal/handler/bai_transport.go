@@ -283,6 +283,33 @@ func baiProxy(req *http.Request) (*url.URL, error) {
 	return nil, nil
 }
 
+// B.AI 专用 Transport 按 streaming 维度缓存复用：旧版每次 .Clone() 新建 Transport
+// = 新建连接池，每轮请求都付 TCP+TLS+代理 CONNECT 握手（~100-300ms）。
+// 代理配置热更新不受影响：baiProxy 是每次请求动态求值的函数，缓存 Transport 不冻结它。
+var (
+	baiTransportOnce  [2]sync.Once
+	baiTransportCache [2]*http.Transport
+)
+
+func baiTransport(streaming bool) *http.Transport {
+	idx := 0
+	if streaming {
+		idx = 1
+	}
+	baiTransportOnce[idx].Do(func() {
+		t := http.DefaultTransport.(*http.Transport).Clone()
+		t.Proxy = baiProxy
+		t.DialContext = baiAwareDialContext(15 * time.Second)
+		t.TLSHandshakeTimeout = 15 * time.Second
+		if streaming {
+			t.ResponseHeaderTimeout = 30 * time.Second
+			t.IdleConnTimeout = 90 * time.Second
+		}
+		baiTransportCache[idx] = t
+	})
+	return baiTransportCache[idx]
+}
+
 func backendHTTPClient(b RouterBackend, timeout time.Duration, streaming bool) *http.Client {
 	if !isBAIEndpoint(b.BaseURL) {
 		if streaming {
@@ -290,14 +317,9 @@ func backendHTTPClient(b RouterBackend, timeout time.Duration, streaming bool) *
 		}
 		return &http.Client{Timeout: timeout}
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = baiProxy
-	transport.DialContext = baiAwareDialContext(15 * time.Second)
-	transport.TLSHandshakeTimeout = 15 * time.Second
+	// http.Client 本身构造极廉价，照旧新建；省的是 Transport/连接池。
 	if streaming {
-		transport.ResponseHeaderTimeout = 30 * time.Second
-		transport.IdleConnTimeout = 90 * time.Second
-		return &http.Client{Transport: transport}
+		return &http.Client{Transport: baiTransport(true)}
 	}
-	return &http.Client{Timeout: timeout, Transport: transport}
+	return &http.Client{Timeout: timeout, Transport: baiTransport(false)}
 }

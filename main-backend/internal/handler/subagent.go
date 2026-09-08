@@ -21,6 +21,11 @@ const subAgentMaxRounds = 6
 const subAgentResultMaxChars = 8000
 const subAgentMaxDepth = 3 // 代理嵌套深度上限：主(0)→子(1)→孙(2)→重孙(3 禁派)（2026-08-16 加，对齐 Codex 孙代理能力）
 
+// 子代理 token 预算：单个子代理一轮内可并行派多个工具，每个结果最多
+// subAgentResultMaxChars，6 轮叠起来最坏情况能把几十万字符灌回主 Agent 上下文。
+// 这里给「子代理自己累计吃进的历史」设上限，超了就停止执行工具、逼它当场收敛出结论。
+const subAgentBudgetChars = 24000
+
 const subAgentUsagePrompt = `
 ━━━ 子代理（调研代理） ━━━
 遇到需要大量阅读/检索的复杂任务，可用 dispatch_agent 把独立的只读调研子任务
@@ -113,6 +118,27 @@ func subAgentToolsWire() []map[string]any {
 	return out
 }
 
+// subAgentHistoryChars 估算子代理当前消息历史的字符量（content + tool_calls 参数）。
+// 只用于预算判定，不追求精确 token 数——字符量级足够反映膨胀趋势。
+func subAgentHistoryChars(msgs []map[string]any) int {
+	n := 0
+	for _, m := range msgs {
+		if c, ok := m["content"].(string); ok {
+			n += len(c)
+		}
+		if tcs, ok := m["tool_calls"].([]map[string]any); ok {
+			for _, tc := range tcs {
+				if fn, ok := tc["function"].(map[string]any); ok {
+					if a, ok := fn["arguments"].(string); ok {
+						n += len(a)
+					}
+				}
+			}
+		}
+	}
+	return n
+}
+
 // runSubAgent 跑一个完整的子代理循环，返回其最终结论文本。
 // 走完整模型路由链（与主 Agent 同一条链，失败秒切）。
 // id 用主 Agent 的 tool_call ID，前端据此把生命周期事件挂到对应的后台任务卡片；
@@ -156,6 +182,21 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 			emit("subagent_done", map[string]any{"id": id, "ok": false, "rounds": round, "output": "已取消"})
 			return "", ctx.Err()
 		}
+		// 预算闸门：历史膨胀超上限时，不再给它工具（tools=nil），只让它基于已读到的
+		// 内容当场收敛出结论。防止 6 轮 × 每轮多工具结果把几十万字符灌回主上下文。
+		if subAgentHistoryChars(msgs) > subAgentBudgetChars {
+			forceMsgs := append(append([]map[string]any{}, msgs...), map[string]any{
+				"role":    "user",
+				"content": "调研预算已用尽，禁止再调用任何工具。请立即基于目前已获取的信息输出简明结论（要点式）。",
+			})
+			content, _, err := routeChatOnce(ctx, backends, forceMsgs, nil)
+			if err != nil {
+				emit("subagent_done", map[string]any{"id": id, "ok": false, "rounds": round, "output": err.Error()})
+				return "", err
+			}
+			emit("subagent_done", map[string]any{"id": id, "ok": true, "rounds": round, "output": truncateChars(content, 500), "budget_capped": true})
+			return content, nil
+		}
 		content, calls, err := routeChatOnce(ctx, backends, msgs, tools)
 		if err != nil {
 			emit("subagent_done", map[string]any{"id": id, "ok": false, "rounds": round, "output": err.Error()})
@@ -191,7 +232,10 @@ func runSubAgent(ctx context.Context, backends []RouterBackend, id, argsJSON str
 		}
 		var agentCalls []agentCall
 		var agentWG sync.WaitGroup
-		agentOuts := make(map[int]string)
+		// 按下标预分配的 slice：每个 goroutine 只写自己那个下标，天然无竞争。
+		// 之前是 map[int]string 被多个 goroutine 并发写 → Go runtime 直接
+		// fatal error: concurrent map writes，recover() 拦不住，整个进程崩。
+		agentOuts := make([]string, len(calls))
 		for i, tc := range calls {
 			if tc.Function.Name == "dispatch_agent" {
 				agentCalls = append(agentCalls, agentCall{tc, i})

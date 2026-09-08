@@ -110,6 +110,11 @@ func nativeReadFile(args map[string]any) (nativeToolResult, error) {
 	if err != nil {
 		return nativeToolResult{}, err
 	}
+	// 敏感文件读取拦截：.env/.pem/.ssh 等密钥文件禁止 Agent 直读。
+	// 教训：写保护只防改不防读，Agent 被注入时一个 read 就能把 API key 全吸进上下文。
+	if isSensitiveFile(path) {
+		return nativeToolResult{}, fmt.Errorf("⛔ 安全闸门：%s 是敏感文件（密钥/凭据），禁止读取。如需排查配置问题，请在终端手动查看", displayNativePath(path))
+	}
 	offset := intArg(args, "offset", 1)
 	limit := intArg(args, "limit", 200)
 	if offset < 1 {

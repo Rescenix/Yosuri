@@ -23,8 +23,8 @@ const financeUnitPrice = 500
 
 // financeEntry 一条资金流水
 type financeEntry struct {
-	Type    string `json:"type"`    // earn_launch(发售收入) / spend_promo(推广) / spend_facility(设施)
-	Amount  int64  `json:"amount"`  // 正=入账 负=支出
+	Type    string `json:"type"`   // earn_launch(发售收入) / spend_promo(推广) / spend_facility(设施)
+	Amount  int64  `json:"amount"` // 正=入账 负=支出
 	Project string `json:"project,omitempty"`
 	Desc    string `json:"desc"`
 	At      string `json:"at"`
@@ -68,7 +68,7 @@ func productRevenue(rb realReviewsFile) int64 {
 		avg += float64(r.Score)
 	}
 	avg /= float64(len(rb.Reviews))
-	return int64(math.Round(avg*float64(len(rb.Reviews)) * financeUnitPrice))
+	return int64(math.Round(avg * float64(len(rb.Reviews)) * financeUnitPrice))
 }
 
 // syncProductRevenue 增量入账：产品收入上涨的部分进公司账户
@@ -110,10 +110,10 @@ func HandleCompanyFinance(c *gin.Context) {
 
 // financeSpendReq POST /api/company/finance/spend 请求体
 type financeSpendReq struct {
-	Type    string `json:"type"`    // promo(推广位) / facility(设施)
-	Amount  int64  `json:"amount"`  // 花费（正数）
-	Target  string `json:"target"`  // promo→项目名；facility→部门 key
-	Desc    string `json:"desc"`
+	Type   string `json:"type"`   // promo(推广位) / facility(设施)
+	Amount int64  `json:"amount"` // 花费（正数）
+	Target string `json:"target"` // promo→项目名；facility→部门 key
+	Desc   string `json:"desc"`
 }
 
 // HandleCompanyFinanceSpend POST /api/company/finance/spend — 花钱（推广/设施）

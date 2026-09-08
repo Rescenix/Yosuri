@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 // 浏览器预览 —— 让 coding agent 写完前端文件后，其改动被后端「自动预览」逻辑
 // 在「浏览器工具窗口」内嵌的真实 Chromium 里渲染并可视化。
@@ -17,7 +17,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"net/http"
@@ -892,7 +891,7 @@ func cdpOpenTarget(targetURL string) (tabWS string, finalURL string, err error) 
 		return "", "", e
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := readUpstreamBody(resp)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		preview := strings.TrimSpace(string(body))
 		if len(preview) > 200 {

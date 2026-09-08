@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -60,7 +59,7 @@ func askDeepSeekWithMessages(messages []DSMessage, temperature float64, topP flo
 	}
 	defer resp.Body.Close()
 
-	respBytes, _ := io.ReadAll(resp.Body)
+	respBytes, _ := readUpstreamBody(resp)
 	var dsResp struct {
 		Choices []struct {
 			Message DSMessage `json:"message"`

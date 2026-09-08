@@ -108,12 +108,12 @@ func findPython() (string, error) {
 // callMamboVideo mambo_video 工具实现：透传参数调 Python 引擎
 func callMamboVideo(ctx context.Context, argsJSON string) (nativeToolResult, error) {
 	var args struct {
-		Topic    string `json:"topic"`
-		Text     string `json:"text"`
-		MediaDir string `json:"media_dir"`
-		Voice    string `json:"voice"`
-		Rate     string `json:"rate"`
-		Out      string `json:"out"`
+		Topic     string `json:"topic"`
+		Text      string `json:"text"`
+		MediaDir  string `json:"media_dir"`
+		Voice     string `json:"voice"`
+		Rate      string `json:"rate"`
+		Out       string `json:"out"`
 		PexelsKey string `json:"pexels_key"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {

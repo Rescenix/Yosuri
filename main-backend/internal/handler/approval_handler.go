@@ -177,6 +177,10 @@ func projectArtifactStage(agent, name string) string {
 		return "research"
 	case strings.Contains(name, "需求") || strings.Contains(name, "计划") || strings.Contains(lower, "requirement") || strings.Contains(lower, "spec"):
 		return "requirements"
+	case strings.Contains(name, "视觉参考") || strings.Contains(lower, "参考稿"):
+		// 视觉参考稿（生图链产物）只是生成输入，不是 UI 设计迭代的结果。
+		// 必须排在 ui 规则之前——「UI参考稿.png」含 "ui" 子串会先命中 ui 规则虚增阶段数。
+		return ""
 	case strings.Contains(name, "设计") || strings.Contains(lower, "design") || strings.Contains(lower, "ui"):
 		return "ui"
 	case strings.Contains(name, "文档") || strings.Contains(lower, "readme") || strings.Contains(lower, "document"):

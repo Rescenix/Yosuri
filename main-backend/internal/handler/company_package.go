@@ -225,26 +225,6 @@ func HandleCompanyProjectPackage(c *gin.Context) {
 	c.Data(http.StatusOK, "application/zip", data)
 }
 
-// qaViewForDir 项目目录 → 前端审批卡用的质检摘要（无质检返回 checked:false）。
-// 与 collectCompanyProjectPending 里的 qa 字段同一套形状，审批卡与项目列表共用。
-func qaViewForDir(projectDir string) gin.H {
-	qa, ok := loadCompanyQAReport(projectDir)
-	if !ok {
-		return gin.H{"checked": false}
-	}
-	return gin.H{
-		"checked": true, "passed": qa.Passed, "repaired": qa.Repaired, "blank": qa.Blank,
-		"visualScore": qa.VisualScore, "buttons": qa.Buttons, "clicked": qa.Clicked,
-		"domChanged": qa.DOMChanged, "interactMeasured": qa.InteractOK, "visibleElements": qa.JSVisible, "textLength": qa.TextLength,
-		"journeyMeasured": qa.JourneyOK, "journeyPassed": qa.JourneyPass, "topicHits": qa.TopicHits,
-		"browserOk": qa.BrowserOK, "visionOk": qa.VisionOK, "issues": qa.Issues,
-		"summary": qa.Summary, "checkedAt": qa.CheckedAt,
-		// 新增质检维度：多帧评审帧数、布局充实度、返修轮数（前端审批卡展示用）
-		"framesReviewed": qa.FramesReviewed, "layoutMeasured": qa.LayoutOK,
-		"pageHeightRatio": qa.PageHeightRatio, "repairRounds": qa.RepairRounds,
-	}
-}
-
 // HandleCompanyProjects GET /api/company/projects
 // 项目真身列表：审批台、迭代区、打包入口共用同一份数据源。
 func HandleCompanyProjects(c *gin.Context) {
@@ -280,7 +260,6 @@ func HandleCompanyProjects(c *gin.Context) {
 				"roles": index.Roles, "agents": index.Agents, "status": manifest.Status,
 				"missing": manifest.Missing, "stages": stages, "artifacts": files,
 				"generatedAt": manifest.GeneratedAt, "gateVersion": manifest.GateVersion,
-				"qa": qaViewForDir(dir),
 			})
 		}
 	}
@@ -317,11 +296,6 @@ func collectCompanyProjectPending(decidedKey, decidedProjects map[string]bool) [
 				// 硬门禁未通过的项目留在生产区，绝不进入人类审批队列。
 				continue
 			}
-			// 质量硬门禁：真机质检未通过的项目也留在生产区，等质检返修后再进审批台。
-			// （无质检文件的老项目放行——那是历史资产，不是本轮的交付。）
-			if qa, ok := loadCompanyQAReport(projectDir); ok && !qa.Skipped && !qa.Passed {
-				continue
-			}
 			if decidedKey[agent+"|"+relFile] {
 				continue
 			}
@@ -333,7 +307,11 @@ func collectCompanyProjectPending(decidedKey, decidedProjects map[string]bool) [
 			srcCode := ""
 			reqPlan := ""
 			for _, f := range files {
-				stageSet[f.Stage] = true
+				// stage 为空的产物（质检报告/视觉参考稿等旁证）不进 stageSet——
+				// 否则空 stage 键会让「已完成阶段」计数虚增一格。
+				if f.Stage != "" {
+					stageSet[f.Stage] = true
+				}
 				if f.Name == "output-app.html" || strings.HasPrefix(f.Name, "output-") {
 					srcCode = f.Name
 					// output-* 同时是可运行程序证据：runnable 阶段与 code 共用这份产物，
@@ -359,24 +337,12 @@ func collectCompanyProjectPending(decidedKey, decidedProjects map[string]bool) [
 			if len(agents) == 0 {
 				agents = []string{agent}
 			}
-			qa, qaOK := loadCompanyQAReport(projectDir)
-			qaView := gin.H{"checked": false}
-			if qaOK {
-				qaView = gin.H{
-					"checked": true, "passed": qa.Passed, "repaired": qa.Repaired, "blank": qa.Blank,
-					"visualScore": qa.VisualScore, "buttons": qa.Buttons, "clicked": qa.Clicked,
-					"domChanged": qa.DOMChanged, "interactMeasured": qa.InteractOK, "visibleElements": qa.JSVisible, "textLength": qa.TextLength,
-					"journeyMeasured": qa.JourneyOK, "journeyPassed": qa.JourneyPass, "topicHits": qa.TopicHits,
-					"browserOk": qa.BrowserOK, "visionOk": qa.VisionOK, "issues": qa.Issues,
-					"summary": qa.Summary, "checkedAt": qa.CheckedAt,
-				}
-			}
 			out = append(out, gin.H{
 				"agent": agent, "file": relFile, "score": 92, "kind": "project",
 				"project": projectName, "title": index.Title, "requirement": reqPlan,
 				"source": srcCode, "artifacts": artifacts, "stages": stages,
 				"roles": index.Roles, "agents": agents, "missing": manifest.Missing,
-				"gateStatus": gate.Status, "qa": qaView,
+				"gateStatus": gate.Status,
 				"packageUrl": "/api/company/package?project=" + projectName,
 			})
 		}
@@ -453,15 +419,15 @@ func loadCompanyProjectIndex(projectDir, projectName string) companyProjectIndex
 
 // companyProjectFile 项目内一份产物（含子目录，路径相对项目根）。
 type companyProjectFile struct {
-	Name     string `json:"name"`
-	Path     string `json:"path"`
-	Stage    string `json:"stage"`
-	Kind     string `json:"kind"`
-	Size     int64  `json:"size"`
-	SHA256   string `json:"sha256,omitempty"`
-	Role     string `json:"producerRole,omitempty"`
-	Verify   string `json:"verification,omitempty"`
-	Previewable bool `json:"previewable"`
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	Stage       string `json:"stage"`
+	Kind        string `json:"kind"`
+	Size        int64  `json:"size"`
+	SHA256      string `json:"sha256,omitempty"`
+	Role        string `json:"producerRole,omitempty"`
+	Verify      string `json:"verification,omitempty"`
+	Previewable bool   `json:"previewable"`
 }
 
 // companyCollectProjectFiles 递归收集项目内全部产物。

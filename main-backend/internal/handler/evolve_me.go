@@ -22,18 +22,18 @@ type evolveMe struct {
 	Level int    `json:"level"`
 	Stage string `json:"stage"`
 
-	Output       int `json:"output"`       // 产出力
-	Skill         int `json:"skill"`        // 技能广度
-	Collaboration int `json:"collab"`       // 协作度
-	Memory        int `json:"memory"`       // 记忆沉淀
-	Success       int `json:"success"`      // 成功率
-	Intimacy      int `json:"intimacy"`     // 亲密度（ResceneCloud 权威）
+	Output        int `json:"output"`   // 产出力
+	Skill         int `json:"skill"`    // 技能广度
+	Collaboration int `json:"collab"`   // 协作度
+	Memory        int `json:"memory"`   // 记忆沉淀
+	Success       int `json:"success"`  // 成功率
+	Intimacy      int `json:"intimacy"` // 亲密度（ResceneCloud 权威）
 
 	Refines  int `json:"refines"`
-	Skills  int `json:"skills"`
+	Skills   int `json:"skills"`
 	Memories int `json:"memories"`
-	Outputs int `json:"outputs"`
-	AxisMax int `json:"axis_max"`
+	Outputs  int `json:"outputs"`
+	AxisMax  int `json:"axis_max"`
 }
 
 func dataDir() string {
@@ -191,12 +191,12 @@ func HandleEvolveMe(c *gin.Context) {
 	_, intimacyLv := readIntimacyGlobal()
 
 	// 六轴归一化 0-100
-	st.Output        = normScore(st.Outputs, 8)
-	st.Skill         = normScore(st.Skills, 2) // 40 技能 → 80
+	st.Output = normScore(st.Outputs, 8)
+	st.Skill = normScore(st.Skills, 2) // 40 技能 → 80
 	st.Collaboration = normScore(collab, 15)
-	st.Memory        = normScore(st.Memories, 10)
-	st.Success       = clampPct(success)
-	st.Intimacy      = normScore(intimacyLv, 15)
+	st.Memory = normScore(st.Memories, 10)
+	st.Success = clampPct(success)
+	st.Intimacy = normScore(intimacyLv, 15)
 
 	// XP / 等级 / 阶段
 	st.XP = st.Skills*20 + st.Memories*10 + st.Outputs*5

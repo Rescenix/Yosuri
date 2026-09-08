@@ -3,7 +3,6 @@ package handler
 import (
 	"os"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,12 +16,15 @@ func NewAPIRouter() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true,
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Guest-Uid"},
-		AllowCredentials: false,
-	}))
+	// 全局 CORS：只放行本机界面（详见 cors_local.go）。AllowAllOrigins 会让任意
+	// 网页 JS 跨源读写本地文件/起终端进程，等于把高危面开放给 drive-by 攻击。
+	r.Use(func(c *gin.Context) {
+		if corsLocalOnly(c.Writer, c.Request) {
+			c.Abort()
+			return
+		}
+		c.Next()
+	})
 	sessionStore := NewSessionStore(ChatSessionsDomain)
 	RegisterRoutes(r, sessionStore)
 	// 启动时跑一次存量清洗（幂等）：去掉 mock/演示噪音 + key 归一合并。

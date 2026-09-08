@@ -162,7 +162,10 @@ func HandleTerminalStream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
+	if isLocalOrigin(c.Request.Header.Get("Origin")) {
+		c.Header("Access-Control-Allow-Origin", c.Request.Header.Get("Origin"))
+		c.Header("Vary", "Origin")
+	}
 
 	// 先把滚屏历史整段回放一次，重新打开面板能看见之前的输出
 	if backlog := s.snapshot(); len(backlog) > 0 {

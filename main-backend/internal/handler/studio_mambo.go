@@ -36,9 +36,9 @@ const studioOutputDir = "test_output/studio"
 
 // studioManifest 引擎返回的结构
 type studioManifest struct {
-	Topic    string `json:"topic"`
-	Voice    string `json:"voice"`
-	Rate     string `json:"rate"`
+	Topic    string  `json:"topic"`
+	Voice    string  `json:"voice"`
+	Rate     string  `json:"rate"`
 	Duration float64 `json:"duration"`
 	Segments []struct {
 		Index       int      `json:"index"`
@@ -54,16 +54,16 @@ type studioManifest struct {
 // HandleStudioMambo POST /api/studio/mambo
 func HandleStudioMambo(c *gin.Context) {
 	var req struct {
-		Topic     string `json:"topic"`
-		Text      string `json:"text"`
-		Voice     string `json:"voice"`
-		Rate      string `json:"rate"`
-		Out       string `json:"out"`
-		PexelsKey string `json:"pexels_key"`
-		VideoOnly bool  `json:"video_only"`
-		Width     int   `json:"width"`
-		Height    int   `json:"height"`
-		Compose   bool  `json:"compose"`
+		Topic       string `json:"topic"`
+		Text        string `json:"text"`
+		Voice       string `json:"voice"`
+		Rate        string `json:"rate"`
+		Out         string `json:"out"`
+		PexelsKey   string `json:"pexels_key"`
+		VideoOnly   bool   `json:"video_only"`
+		Width       int    `json:"width"`
+		Height      int    `json:"height"`
+		Compose     bool   `json:"compose"`
 		Orientation string `json:"orientation"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -200,42 +200,42 @@ func HandleStudioMambo(c *gin.Context) {
 	flusher.Flush()
 
 	// 素材模式：返回素材包目录
-		if req.VideoOnly {
-			man := studioManifest{}
-			if mb, err := os.ReadFile(res.Manifest); err == nil {
-				_ = json.Unmarshal(mb, &man)
-			}
-			resultJSON, _ := json.Marshal(gin.H{
-				"ok":        true,
-				"out_dir":   res.OutDir,
-				"videoOnly": true,
-				"manifest":  res.Manifest,
-				"duration":  res.Duration,
-				"segments":  man.Segments,
-			})
-			fmt.Fprintf(c.Writer, "event: result\ndata: %s\n\n", string(resultJSON))
-			flusher.Flush()
-			return
-		}
-
-		// 默认成片模式：返回最终视频
+	if req.VideoOnly {
 		man := studioManifest{}
 		if mb, err := os.ReadFile(res.Manifest); err == nil {
 			_ = json.Unmarshal(mb, &man)
 		}
-		relVideo := filepath.ToSlash(filepath.Base(res.Video))
 		resultJSON, _ := json.Marshal(gin.H{
 			"ok":        true,
-			"video":     "/api/studio/files/" + relVideo,
-			"videoPath": res.Video,
-			"srtPath":   res.Srt,
+			"out_dir":   res.OutDir,
+			"videoOnly": true,
 			"manifest":  res.Manifest,
 			"duration":  res.Duration,
 			"segments":  man.Segments,
 		})
 		fmt.Fprintf(c.Writer, "event: result\ndata: %s\n\n", string(resultJSON))
 		flusher.Flush()
+		return
 	}
+
+	// 默认成片模式：返回最终视频
+	man := studioManifest{}
+	if mb, err := os.ReadFile(res.Manifest); err == nil {
+		_ = json.Unmarshal(mb, &man)
+	}
+	relVideo := filepath.ToSlash(filepath.Base(res.Video))
+	resultJSON, _ := json.Marshal(gin.H{
+		"ok":        true,
+		"video":     "/api/studio/files/" + relVideo,
+		"videoPath": res.Video,
+		"srtPath":   res.Srt,
+		"manifest":  res.Manifest,
+		"duration":  res.Duration,
+		"segments":  man.Segments,
+	})
+	fmt.Fprintf(c.Writer, "event: result\ndata: %s\n\n", string(resultJSON))
+	flusher.Flush()
+}
 
 // HandleStudioFiles 静态服务：/api/studio/files/* → test_output/studio/
 func HandleStudioFiles(c *gin.Context) {
@@ -299,7 +299,7 @@ func HandleStudioLibrary(c *gin.Context) {
 		}
 	}
 	// 素材目录：生成视频 + 角色图 + 基准图
-	add(filepath.Join(videoOutputDir()))            // ~/rescene_data/videos
+	add(filepath.Join(videoOutputDir()))               // ~/rescene_data/videos
 	add(filepath.Join(resceneUserDataDir(), "videos")) // 兜底同目录
 	root, _ := backendRoot()
 	add(filepath.Join(root, "drama", "assets", "characters"))

@@ -19,6 +19,8 @@ type nativeToolResult struct {
 	Text   string
 	Images []mcpImageArtifact
 	Videos []mcpVideoArtifact
+	// Charts 是 chart 工具产出的图表数据，前端 ECharts 渲染（零后端 Python 依赖）。
+	Charts []chartPayload
 	// Files 是 Agent 落盘、可作为产物交付的文件（md/pdf/pptx/docx/xlsx 等）。
 	// 由 write/patch/bash 等写文件的工具填充；执行层把它们转成 artifact(kind:file)。
 	Files []fileDeliverable
@@ -26,7 +28,53 @@ type nativeToolResult struct {
 	URLs []string
 }
 
-func nativeOnDemandToolDefs() []core.ToolDefinition {
+// chartPayload 是 chart 工具产出的单个图表，前端据此渲染 ECharts 配置。
+type chartPayload struct {
+	Title   string         `json:"title"`
+	Type    string         `json:"type"`
+	Options chartOptions   `json:"options"`
+	Data    chartDataUnion `json:"data"`
+}
+
+// chartOptions 前端渲染选项（颜色、坐标轴、图例等）。
+type chartOptions struct {
+	Color     string         `json:"color,omitempty"`
+	XLabel    string         `json:"x_label,omitempty"`
+	YLabel    string         `json:"y_label,omitempty"`
+	Fill      bool           `json:"fill,omitempty"`
+	Smooth    bool           `json:"smooth,omitempty"`
+	Stacked   bool           `json:"stacked,omitempty"`
+	Horizontal bool          `json:"horizontal,omitempty"`
+	Radius    []string       `json:"radius,omitempty"`
+	Palette   []string       `json:"palette,omitempty"`
+	Extra     map[string]any `json:"extra,omitempty"`
+}
+
+// chartDataUnion 统一数据格式：折线/柱状/饼图/散点/雷达共用。
+type chartDataUnion struct {
+	X      []any              `json:"x"`               // 类目轴（折线/柱/散点）
+	Y      []float64          `json:"y,omitempty"`      // 数值轴（折线/柱/散点）
+	Series []chartSeries       `json:"series,omitempty"` // 多系列（分组柱/多条折线）
+	Items  []chartPieItem     `json:"items,omitempty"`  // 饼图数据
+	Labels []string           `json:"labels,omitempty"` // 雷达维度
+	Min    float64            `json:"min,omitempty"`    // 雷达最小值
+	Max    float64            `json:"max,omitempty"`    // 雷达最大值
+}
+
+type chartSeries struct {
+	Name string    `json:"name"`
+	Data []float64 `json:"data"`
+}
+
+type chartPieItem struct {
+	Name  string  `json:"name"`
+	Value float64 `json:"value"`
+}
+
+// coreToolDefs 返回五个核心工具（read/write/remove/patch/bash）的定义。
+// 2026-09-07 提为常驻：系统提示词写死「日常操作只用五个核心工具」，schema 就必须
+// 从第一轮起在 tools 数组里——放在按需池里等于让模型第一轮靠一句话描述盲调。
+func coreToolDefs() []core.ToolDefinition {
 	defs := []core.ToolDefinition{
 		// ── 核心工具（Pi 风格最小集：read / write / patch / bash）──
 		// 文件/命令/检索的日常操作全部收敛到这 4 个；旧的文件系统工具
@@ -47,9 +95,9 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"action":  {Type: "string", Description: "操作类型：write(默认)/create_dir"},
 		}, []string{"path"}),
 		nativeTool("remove", "删除或移动文件/目录（不可逆）：默认删除 path 指向的文件或目录；action=move 时把 source 移动/重命名到 path。删除前请确认目标，内容不会进回收站。", map[string]core.ToolProperty{
-			"path":    {Type: "string", Description: "要删除的目标路径；action=move 时是目的地"},
-			"action":  {Type: "string", Description: "操作类型：delete(默认)/move"},
-			"source":  {Type: "string", Description: "action=move 时的源路径"},
+			"path":   {Type: "string", Description: "要删除的目标路径；action=move 时是目的地"},
+			"action": {Type: "string", Description: "操作类型：delete(默认)/move"},
+			"source": {Type: "string", Description: "action=move 时的源路径"},
 		}, []string{"path"}),
 		nativeTool("patch", "在文本文件中做一次定点替换；old_string 应从 read 结果原样复制（含缩进/空白/换行）。", map[string]core.ToolProperty{
 			"path":       {Type: "string", Description: "目标文件路径"},
@@ -63,6 +111,13 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"action":     {Type: "string", Description: "后台任务管理：status/log/wait/kill"},
 			"task_id":    {Type: "string", Description: "后台任务 ID"},
 		}, []string{"command"}),
+	}
+	return defs
+}
+
+// nativeOnDemandToolDefs 按需池：核心五件套之外的扩展工具 + legacy 文件/命令工具。
+func nativeOnDemandToolDefs() []core.ToolDefinition {
+	defs := []core.ToolDefinition{
 		// ── 扩展工具（仍按需暴露，非核心）──
 		nativeTool("read_file", "按行读取文本文件，返回带行号的内容；一次最多 400 行。offset 从 1 开始，limit 是行数。", map[string]core.ToolProperty{
 			"path":   {Type: "string", Description: "文件路径；相对路径按当前工作目录解析"},
@@ -196,11 +251,17 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, watermarkToolDef)
 	// video_generate：AI 生视频（Agnes 免费 API，$0/秒）
 	defs = append(defs, videoGenToolDef)
+	// chart：数学建模图表渲染（前端 ECharts 直出，零后端依赖）
+	defs = append(defs, chartToolDef)
 	// 原常驻工具简化为按需加载（2026-08-29 收敛）：skill_view 提回常驻
 	// （任务开始前的第一道工序），update_todo/skill_manage/harness_status/
 	// open_preview/inject_preview/remember/web_search/session_search 保持按需——
 	// 参数简单，模型直接调即自动带 schema。
-	defs = append(defs, updateTodoToolDef, skillManageToolDef,
+	// 2026-09-07：dispatch_agent 降为按需——派发子代理是重决策，几乎每个任务都要用
+	// 的是读写不是编排；且进按需池后子代理才能真正拿到它（subAgentToolsWire 只遍历
+	// 按需池，此前孙代理派发是哑的）。
+	defs = append(defs, dispatchAgentToolDef,
+		updateTodoToolDef, skillManageToolDef,
 		harnessStatusToolDef, openPreviewToolDef, injectPreviewToolDef,
 		rememberToolDef, webSearchToolDef, sessionSearchToolDef)
 	return defs
@@ -231,7 +292,9 @@ func isNativeOnDemandTool(name string) bool {
 }
 
 func isNativeExecutableTool(name string) bool {
-	return name == "apply_patch" || name == "web_search" || name == "session_search" || isNativeOnDemandTool(name)
+	// 五个核心工具常驻后仍必须走原生执行链（callNativeTool 有对应分支）；
+	// 2026-09-07 曾因只查 isNativeOnDemandTool 导致核心工具被甩「未知工具」。
+	return isCoreTool(name) || name == "apply_patch" || name == "web_search" || name == "session_search" || isNativeOnDemandTool(name)
 }
 
 func allOnDemandToolDefs() []core.ToolDefinition {
@@ -278,6 +341,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callNativeImageGenerate(ctx, argsJSON)
 	case "video_generate":
 		return callNativeVideoGenerate(ctx, argsJSON)
+	case "chart":
+		return callNativeChartTool(argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",
 		"workdir_read", "workdir_write", "workdir_append":
 		return callNativeMemoryTool(ctx, name, argsJSON)
@@ -504,4 +569,51 @@ func jsonMap(pairs ...any) string {
 func jsonMapFrom(m map[string]any) string {
 	b, _ := json.Marshal(m)
 	return string(b)
+}
+
+// ── chart 工具：数学建模图表渲染 ──────────────────────────────
+// 前端 ECharts 直出，零后端依赖。Go 侧只做 schema 校验 + 数据清洗，不跑 Python。
+
+var chartToolDef = nativeTool("chart", "数学建模图表渲染：传入数据 + 类型 + 样式选项，前端用 ECharts 渲染成可交互图表（可缩放/悬停/导出 PNG/SVG）。支持的类型：line(折线)、bar(柱状)、pie(饼图)、scatter(散点)、radar(雷达)。", map[string]core.ToolProperty{
+	"title":   {Type: "string", Description: "图表标题，如「正弦函数建模」"},
+	"type":    {Type: "string", Description: "图表类型：line/bar/pie/scatter/radar"},
+	"options": {Type: "object", Description: "渲染选项：color(主色，默认 #1950BE)、x_label/y_label、fill(是否填充)、smooth(平滑曲线)、stacked(堆叠)、horizontal(横向柱)、palette(多系列配色)、extra(扩展配置)。"},
+	"data":    {Type: "object", Description: "数据。折线/柱/散点：{x:[...], y:[...]} 或 {x:[...], series:[{name,data}]}；饼图：{items:[{name,value}]}；雷达：{labels:[...], series:[{name,data}], min, max}。"},
+}, []string{"type", "data"})
+
+func callNativeChartTool(argsJSON string) (nativeToolResult, error) {
+	var a struct {
+		Title   string          `json:"title"`
+		Type    string          `json:"type"`
+		Options chartOptions    `json:"options"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil {
+		return nativeToolResult{}, fmt.Errorf("chart 参数解析失败: %v", err)
+	}
+	a.Type = strings.ToLower(strings.TrimSpace(a.Type))
+	switch a.Type {
+	case "line", "bar", "pie", "scatter", "radar":
+	default:
+		return nativeToolResult{}, fmt.Errorf("chart type 只支持 line/bar/pie/scatter/radar，收到 %q", a.Type)
+	}
+	if len(a.Data) == 0 {
+		return nativeToolResult{}, fmt.Errorf("chart 需要 data 参数")
+	}
+	// 校验 data 能解析成 chartDataUnion
+	var du chartDataUnion
+	if err := json.Unmarshal(a.Data, &du); err != nil {
+		return nativeToolResult{}, fmt.Errorf("chart data 格式不对: %v", err)
+	}
+	// 默认色
+	if a.Options.Color == "" {
+		a.Options.Color = "#1950BE"
+	}
+	payload := chartPayload{
+		Title:   a.Title,
+		Type:    a.Type,
+		Options: a.Options,
+		Data:    du,
+	}
+	return nativeToolResult{Charts: []chartPayload{payload}}, nil
 }

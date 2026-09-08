@@ -36,7 +36,8 @@ func companyDataJSTemplate(project string) string {
     list:function(){ return read() },
     add:function(item){ var l=read(); item.id=item.id||uid(); item.createdAt=Date.now(); l.unshift(item); write(l); return item },
     update:function(id,patch){ var l=read(); for(var i=0;i<l.length;i++){ if(l[i].id===id){ for(var k in patch){ l[i][k]=patch[k] } break } } write(l); return l },
-    remove:function(id){ write(read().filter(function(x){return x.id!==id})); return read() }
+    remove:function(id){ write(read().filter(function(x){return x.id!==id})); return read() },
+    byDay:function(field){ var l=read(); var m={},order=[]; for(var i=0;i<l.length;i++){ var it=l[i]; var d=it[field||'createdAt']; if(!d){continue} var k=(typeof d==='number')?new Date(d).toISOString().slice(0,10):String(d).slice(0,10); if(!m[k]){m[k]=0;order.push(k)} m[k]++ } order.sort(); return order.map(function(k){return {day:k,count:m[k]}}) }
   };
 })();`
 }

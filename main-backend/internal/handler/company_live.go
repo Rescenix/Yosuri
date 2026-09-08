@@ -20,17 +20,17 @@ import (
 
 // companyLiveEvent 一条直播事件。
 type companyLiveEvent struct {
-	Seq     int64  `json:"seq"`
-	Time    string `json:"time"`
-	Kind    string `json:"kind"` // stage 阶段开始 / delta 模型文本 / artifact 产物落盘 / iteration 原型换版 / done 交付完成 / error 失败
-	Stage   string `json:"stage,omitempty"`
-	Role    string `json:"role,omitempty"`
-	Agent   string `json:"agent,omitempty"`
-	Text    string `json:"text,omitempty"`
-	Replaced bool  `json:"replaced,omitempty"` // delta 帧为 true 时：整块替换当前阶段文字（流式碎片→完整正文）
-	File    string `json:"file,omitempty"`
-	Project string `json:"project,omitempty"`
-	Version string `json:"version,omitempty"` // 原型版本号：v1 最小原型 / v2 设计迭代 / final 终版
+	Seq      int64  `json:"seq"`
+	Time     string `json:"time"`
+	Kind     string `json:"kind"` // stage 阶段开始 / delta 模型文本 / artifact 产物落盘 / iteration 原型换版 / done 交付完成 / error 失败
+	Stage    string `json:"stage,omitempty"`
+	Role     string `json:"role,omitempty"`
+	Agent    string `json:"agent,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Replaced bool   `json:"replaced,omitempty"` // delta 帧为 true 时：整块替换当前阶段文字（流式碎片→完整正文）
+	File     string `json:"file,omitempty"`
+	Project  string `json:"project,omitempty"`
+	Version  string `json:"version,omitempty"` // 原型版本号：v1 最小原型 / v2 设计迭代 / final 终版
 }
 
 const companyLiveBufferMax = 900

@@ -408,9 +408,9 @@
                       <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? (isZh ? '处理中…' : 'Loading…') : (rcMode === 'login' ? t('login.submit') : t('login.registerSubmit')) }}</button>
             <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
             <div class="smc-rc-hint">
-              <template v-if="rcMode === 'login'">{{ t('login.noAccount') }}<a class="smc-rc-link" @click="rcMode = 'register'; rcError = ''">{{ t('login.registerLink') }}</a></template>
-                            <template v-else>{{ t('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; loadCaptcha()">{{ t('login.loginLink') }}</a></template>
-            </div>
+                          <template v-if="rcMode === 'login'">{{ t('login.noAccount') }}<a class="smc-rc-link" :href="'https://yosuri.com'" target="_blank" rel="noopener">{{ t('login.registerLink') }}</a></template>
+                                        <template v-else>{{ t('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; loadCaptcha()">{{ t('login.loginLink') }}</a></template>
+                        </div>
           </div>
           <div class="smc-login-footer">
             <span><Icon icon="mdi:shield-account-outline" width="15" /> {{ t('login.footer') }}</span>
@@ -434,9 +434,9 @@
               <span>{{ t('account.menu.login') }}</span>
             </button>
             <button class="smc-account-item" type="button" @click="openRegisterPanel">
-              <Icon icon="mdi:account-plus-outline" width="18" />
-              <span>{{ t('account.menu.register') }}</span>
-            </button>
+                          <Icon icon="mdi:web" width="18" />
+                          <span>{{ t('account.menu.register') }}</span>
+                        </button>
           </template>
           <button class="smc-account-item" type="button" @click="langMenuOpen = !langMenuOpen">
             <Icon icon="mdi:translate" width="18" />
@@ -1153,14 +1153,11 @@ function openLoginPanel() {
   loadCaptcha()
   fetchPow()
 }
-// 打开注册面板（独立入口，注册/登录分开）
+// 打开注册面板：应用内不直接注册（2026-09-07 用户拍板：注册只走官网邀请码闸门），跳官网
 function openRegisterPanel() {
   accountMenuOpen.value = false
-  rcMode.value = 'register'
-  showUserMenu.value = true
-  refreshLoginState()
-  userMenuStyle.value = {}
-  fetchPow()
+  const url = 'https://yosuri.com'
+  window.open(url, '_blank')
 }
 function logout() {
   auth.logout()

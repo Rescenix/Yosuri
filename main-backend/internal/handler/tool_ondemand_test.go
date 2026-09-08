@@ -46,10 +46,39 @@ func TestHandleLoadToolsBadArgs(t *testing.T) {
 	}
 }
 
+// 五个核心工具必须常驻：系统提示词写死「日常操作只用五个核心工具」，
+// schema 就得从第一轮起在 tools 数组里，不能靠首次调用自动激活补一轮。
+func TestCoreToolsAreResident(t *testing.T) {
+	resident := map[string]bool{}
+	for _, tl := range buildCodeWorkflowTools(nil) {
+		fn := tl["function"].(map[string]any)
+		resident[fn["name"].(string)] = true
+	}
+	for _, name := range []string{"read", "write", "remove", "patch", "bash"} {
+		if !resident[name] {
+			t.Errorf("核心工具 %s 未常驻，第一轮只能盲调", name)
+		}
+		if isOnDemandTool(name) {
+			t.Errorf("核心工具 %s 不应同时出现在按需池", name)
+		}
+	}
+}
+
+// 核心工具移出按需池后，执行链必须仍认识它们——2026-09-07 曾回归为
+// 「未知工具 patch：请对照工具索引里的名字核对」，就是 isNativeExecutableTool
+// 忘了把常驻核心工具算进去。
+func TestCoreToolsRemainExecutable(t *testing.T) {
+	for _, name := range []string{"read", "write", "remove", "patch", "bash"} {
+		if !isNativeExecutableTool(name) {
+			t.Errorf("核心工具 %s 不在原生执行链里，会被甩「未知工具」", name)
+		}
+	}
+}
+
 // 激活后该工具必须真的进 tools 数组——只回 schema 文本而不进数组的话，
 // 模型看得见说明书却调不动，会卡在反复 load_tools。
 func TestActivatedToolEntersToolsArray(t *testing.T) {
-	name := "read"
+	name := "web_fetch"
 
 	base := len(buildCodeWorkflowTools(nil))
 	activated := map[string]bool{}
@@ -119,14 +148,14 @@ func TestToolIndexIsCompact(t *testing.T) {
 		}
 	}
 	// legacy 文件/命令工具绝不能出现在模型可见索引里（收敛到 read/write/patch/bash）。
-		// 用「索引行首 - name：」精确匹配，避免工具 description 里出现同名子串造成误判
-		// （如 read 的说明里含 "glob" 字样）。
-		for _, d := range nativeOnDemandToolDefs() {
-			if legacyFileToolSet[d.Function.Name] && strings.Contains(index, "- "+d.Function.Name+"：") {
-				t.Errorf("legacy 工具 %s 不应出现在模型可见索引里", d.Function.Name)
-			}
+	// 用「索引行首 - name：」精确匹配，避免工具 description 里出现同名子串造成误判
+	// （如 read 的说明里含 "glob" 字样）。
+	for _, d := range nativeOnDemandToolDefs() {
+		if legacyFileToolSet[d.Function.Name] && strings.Contains(index, "- "+d.Function.Name+"：") {
+			t.Errorf("legacy 工具 %s 不应出现在模型可见索引里", d.Function.Name)
 		}
 	}
+}
 
 func TestFirstSentence(t *testing.T) {
 	cases := map[string]string{

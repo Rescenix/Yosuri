@@ -45,6 +45,10 @@ type contextProvider struct {
 	sections []contextSection
 	// activated 已被 load_tools 激活的 Go 内置/MCP 工具，决定 Tools() 返回什么
 	activated map[string]bool
+	// hotSkillName 本轮被热集管线预加载全文的技能名（空=无）。工作流成功收尾时
+	// 据此补记一次使用——预加载后模型不会再调 skill_view，不补记的话分数自然衰减
+	// 掉出热集，下次冷启动白费一轮 skill_view（热者恒热的正确姿势是"真的还在用"）。
+	hotSkillName string
 	// onInvoked 每轮收尾时的落状态回调（当前用于落检查点）。
 	// 不由 provider 自己存盘：轮次内的 msgs/token 统计属于循环，provider 不该假装拥有它们。
 	onInvoked func(round int, st roundState)
@@ -173,8 +177,14 @@ func newWorkflowContextProviderFor(agentID string, tasks ...string) *contextProv
 		}
 	}
 
+	// 热门技能动态管线：按真实使用频率（账本衰减分）选 top-1 预加载全文。
+	// 冷启动账本为空 → 热集为空 → 退化为纯索引模式。命名记在 provider 上，
+	// 供工作流收尾补记一次使用（防"预加载后模型不再 skill_view → 分数掉出 → 死循环"）。
+	hotSection, hotState := hotSkillsPrompt(loadSkills())
+
 	return &contextProvider{
-		activated: map[string]bool{},
+		activated:    map[string]bool{},
+		hotSkillName: hotState.Name,
 		sections: []contextSection{
 			// —— 稳定段：进程内基本不变，构成前缀缓存的主体 ——
 			{key: "system", content: agent.MainAgentConfigNative().SystemPrompt, stable: true},
@@ -188,19 +198,22 @@ func newWorkflowContextProviderFor(agentID string, tasks ...string) *contextProv
 			// system/subagent/skill/memory/tools 五个桶，索引归到工具桶里，
 			// 免得凭空多一个前端会丢掉的 key，害「分类之和 ≈ prompt_tokens」对不上。
 			{key: "tools", content: mcpToolIndexPrompt() + nativeToolIndexPrompt(), stable: true},
-			// 技能库索引：进程内极少变，放稳定段保证每轮都在（模型先扫索引再决定
-			// 要不要 skill_view 取全文）；当前任务命中技能的全文预加载是易变的，留在易变段。
+			// 技能库索引：只注入名称+描述，正文一律由模型自己调 skill_view 取回，
+			// 宿主不做全文预加载（token 是成本，且索引段已强制要求"命中必须先取全文再动手"）。
+			// 进程内极少变，放稳定段保证每轮都在。
 			{key: "skill", content: skillLibraryPrompt(), stable: true},
 
 			// —— 易变段：一变就让它后面的缓存作废，所以一律排在最后 ——
-			{key: "skill", content: autoLoadedSkillsPrompt(task)}, // 当前任务命中技能的全文预加载
+			// 热门技能全文预加载（频率驱动，非关键词猜测）。热集稳定时这段内容不变，
+			// 换人才作废它后面的 memory 缓存——滞回设计就是为减少这种翻转。
+			{key: "skill", content: hotSection},
 			// memory 主体：预算内注入"最重要的记忆"（常驻/亲密/偏好/项目/工作态/联想），
 			// 超出预算的低优先块直接丢弃；index 单独作尾部索引，始终完整保留供反向链接展开。
 			{key: "memory", content: combineMemoryWithBudget([]memPart{
 				{0, pinnedSection}, {1, intimacySection}, {2, prefSection},
 				{3, workdirSection}, {4, handoffSection}, {5, taskMemory},
 			})},
-			{key: "memory", content: memorySection},   // 尾部记忆索引（agent 按需反向链接展开）
+			{key: "memory", content: memorySection},    // 尾部记忆索引（agent 按需反向链接展开）
 			{key: "memory", content: knowledgeSection}, // 外挂知识库 RAG：检索召回相关片段
 			// 私有记忆：只属于当前 Agent 的经历（agentID 为空时是空串，不占 token）
 			{key: "memory", content: agentMemorySection},
@@ -327,6 +340,15 @@ func (p *contextProvider) ActivateTools(argsJSON string) (string, bool) {
 
 // ActivatedTools 导出已激活集合，用于落检查点。
 func (p *contextProvider) ActivatedTools() map[string]bool { return p.activated }
+
+// RecordHotSkillUse 工作流成功收尾时调用：本轮热集技能被预加载且任务做完了，
+// 补记一次使用。不补记的话模型因预加载而不再调 skill_view，分数自然衰减掉出
+// 热集，形成"预加载杀死自己的入选理由"的死循环。
+func (p *contextProvider) RecordHotSkillUse() {
+	if p.hotSkillName != "" {
+		recordSkillUse(p.hotSkillName)
+	}
+}
 
 // IsActivated 判断某个工具是否已激活（用于动态按需加载：模型直接调用按需工具时，
 // 主循环据此决定要不要自动激活并刷新 tools 数组）。

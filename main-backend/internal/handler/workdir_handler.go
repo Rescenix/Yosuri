@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 import (
 	"net/http"
@@ -79,7 +79,7 @@ $selected = [PrismNativeDialog.FolderPicker]::Pick()
 if ($selected) { [Console]::Out.Write($selected) }
 `
 	pwsh := hiddenCommand("powershell.exe", "-NoProfile", "-STA", "-Command", script)
-		out, err := pwsh.Output()
+	out, err := pwsh.Output()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法打开系统文件夹选择器"})
 		return

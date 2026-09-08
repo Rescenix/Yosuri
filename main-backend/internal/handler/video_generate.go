@@ -42,24 +42,24 @@ const (
 
 // videoGenSpec 一次生视频请求。
 type videoGenSpec struct {
-	Prompt    string
-	Model     string // agnes-video-2.5-flash（默认，$0/秒） / agnes-video-v2.0（1080p 免费）
-	Width     int    // 2.0 用：默认 1920（1080p 档）
-	Height    int    // 2.0 用：默认 1080
-	NumFrames int    // 2.0 用：8n+1 规则，≤441；默认 121 ≈ 5s@24fps
-	FrameRate int    // 2.0 用：1-60，默认 24
-	Seconds   string // 2.5-flash 用：时长字符串 "4"-"12"，默认 "5"
-	Size      string // 2.5-flash 用：固定 "720P"
-	Ratio     string // 2.5-flash 用：aspect_ratio，默认 16:9
-	Seed      int64
-	Negative  string // 仅 2.0 支持
-	ImageURL  string // 图生视频（2.0 用 image 字段）
-	VideoURL  string // 视频参考（2.5 reference 模式的 videos 参数，2026-08-27 新增）
+	Prompt     string
+	Model      string // agnes-video-2.5-flash（默认，$0/秒） / agnes-video-v2.0（1080p 免费）
+	Width      int    // 2.0 用：默认 1920（1080p 档）
+	Height     int    // 2.0 用：默认 1080
+	NumFrames  int    // 2.0 用：8n+1 规则，≤441；默认 121 ≈ 5s@24fps
+	FrameRate  int    // 2.0 用：1-60，默认 24
+	Seconds    string // 2.5-flash 用：时长字符串 "4"-"12"，默认 "5"
+	Size       string // 2.5-flash 用：固定 "720P"
+	Ratio      string // 2.5-flash 用：aspect_ratio，默认 16:9
+	Seed       int64
+	Negative   string // 仅 2.0 支持
+	ImageURL   string // 图生视频（2.0 用 image 字段）
+	VideoURL   string // 视频参考（2.5 reference 模式的 videos 参数，2026-08-27 新增）
 	FirstFrame string // 首尾帧：首帧图（keyframe 模式，2026-08-27 新增）
 	LastFrame  string // 首尾帧：尾帧图（keyframe 模式）
-	OutDir    string // 落盘目录，默认 videoOutputDir()
-	Name      string // 文件名（不含扩展名），默认按时间戳
-	Style     string // 风格模板：anime（动漫）/ real（真人写实）/ anime_live（动漫真人化，默认）
+	OutDir     string // 落盘目录，默认 videoOutputDir()
+	Name       string // 文件名（不含扩展名），默认按时间戳
+	Style      string // 风格模板：anime（动漫）/ real（真人写实）/ anime_live（动漫真人化，默认）
 }
 
 // videoGenResult 生视频结果。
@@ -736,25 +736,37 @@ func HandleStudioAgnesSubmit(c *gin.Context) {
 		if req.FirstFrame != "" {
 			u, isV, errMsg := studioRefToDataURL(req.FirstFrame)
 			if errMsg != "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+				return
 			}
-			if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "首帧必须是图片"}); return }
+			if isV {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "首帧必须是图片"})
+				return
+			}
 			firstFrame = u
 		}
 		if req.LastFrame != "" {
 			u, isV, errMsg := studioRefToDataURL(req.LastFrame)
 			if errMsg != "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+				return
 			}
-			if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "尾帧必须是图片"}); return }
+			if isV {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "尾帧必须是图片"})
+				return
+			}
 			lastFrame = u
 		}
 	} else if req.RefImage != "" {
 		u, isV, errMsg := studioRefToDataURL(req.RefImage)
 		if errMsg != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+			return
 		}
-		if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "Agnes 免费档仅支持图片参考，不支持视频"}); return }
+		if isV {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Agnes 免费档仅支持图片参考，不支持视频"})
+			return
+		}
 		imageURL = u
 	}
 	if req.Model == "" {
@@ -835,15 +847,27 @@ func HandleStudioAgnesChain(c *gin.Context) {
 	if req.RefImage != "" {
 		u, isV, errMsg := studioRefToDataURL(req.RefImage)
 		if errMsg != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg}); return
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+			return
 		}
-		if isV { c.JSON(http.StatusBadRequest, gin.H{"error": "首帧必须是图片"}); return }
+		if isV {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "首帧必须是图片"})
+			return
+		}
 		imageURL = u
 	}
-	if req.Model == "" { req.Model = "agnes-video-2.5-flash" }
-	if req.Seconds == "" { req.Seconds = "5" }
-	if req.Ratio == "" { req.Ratio = "16:9" }
-	if req.Size == "" { req.Size = "720P" }
+	if req.Model == "" {
+		req.Model = "agnes-video-2.5-flash"
+	}
+	if req.Seconds == "" {
+		req.Seconds = "5"
+	}
+	if req.Ratio == "" {
+		req.Ratio = "16:9"
+	}
+	if req.Size == "" {
+		req.Size = "720P"
+	}
 
 	taskID := "chain_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	task := &agnesTask{Status: "pending", Size: req.Size, Seconds: req.Seconds}

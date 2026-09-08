@@ -17,9 +17,9 @@ import (
 
 // pdfFontPaths 候选中文字体（按优先级）。
 var pdfFontPaths = []string{
-	"/c/Windows/Fonts/simhei.ttf",   // 黑体
-	"C:/Windows/Fonts/simhei.ttf",   // 黑体（Windows 原生路径）
-	"/Windows/Fonts/simhei.ttf",     // MSYS 风格
+	"/c/Windows/Fonts/simhei.ttf", // 黑体
+	"C:/Windows/Fonts/simhei.ttf", // 黑体（Windows 原生路径）
+	"/Windows/Fonts/simhei.ttf",   // MSYS 风格
 	"/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
 	"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 	"/System/Library/Fonts/PingFang.ttc",

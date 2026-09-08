@@ -9,7 +9,6 @@ package handler
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -37,7 +36,7 @@ func CallHarnessRunTask(tool, argsJSON string) ([]byte, int, error) {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readUpstreamBody(resp)
 	return body, resp.StatusCode, err
 }
 

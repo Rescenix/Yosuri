@@ -348,4 +348,3 @@ func TestSearchBigramRecall(t *testing.T) {
 		t.Fatalf("「鉴权方案」应经 bigram 命中会话 a，实际 %+v", hits)
 	}
 }
-

@@ -36,10 +36,10 @@ const (
 
 // aggExport 导出结构：前端直接展示 + 复制。
 type aggExport struct {
-	BaseURL string            `json:"base_url"`
-	APIKey  string            `json:"api_key"` // 真实运行态 key（仅本机用）
+	BaseURL  string            `json:"base_url"`
+	APIKey   string            `json:"api_key"`  // 真实运行态 key（仅本机用）
 	Snippets map[string]string `json:"snippets"` // tool -> 配置片段文本
-	Status  map[string]string `json:"status"`  // tool -> "synced" | "unsynced" | "missing"
+	Status   map[string]string `json:"status"`   // tool -> "synced" | "unsynced" | "missing"
 }
 
 // HandleAggregateExport GET /api/aggregate/export
@@ -86,8 +86,8 @@ type aggSyncReq struct {
 type aggSyncResult struct {
 	Tool         string `json:"tool"`
 	OK           bool   `json:"ok"`
-	Path         string `json:"path,omitempty"`         // 写入/应写入的文件
-	BackedUp     string `json:"backed_up,omitempty"`     // 本次写回的时间戳备份
+	Path         string `json:"path,omitempty"`           // 写入/应写入的文件
+	BackedUp     string `json:"backed_up,omitempty"`      // 本次写回的时间戳备份
 	OrigBackedUp string `json:"orig_backed_up,omitempty"` // 用户原始配置备份（首次写回时存，还原用这份）
 	Error        string `json:"error,omitempty"`
 }
@@ -110,22 +110,22 @@ func HandleAggregateSync(c *gin.Context) {
 		r := aggSyncResult{Tool: t}
 		switch t {
 		case aggSyncCodex:
-						r.Path = codexConfigPath()
-						if req.Apply {
-							// 首次写回前，先存用户原始配置（只存一次），还原永远回这份
-							if ob, err := ensureOrigBackup(r.Path); err == nil && ob != "" {
-								r.OrigBackedUp = ob
-							}
-							bak, err := backupFile(r.Path)
-							if err == nil && bak != "" {
-								r.BackedUp = bak
-							}
-							// 只替换 [model_providers.openai-http] 段，不覆盖其他配置
-							if err := applyCodexProvider(r.Path, base, key); err != nil {
-								r.Error = err.Error()
-							} else {
-								r.OK = true
-							}
+			r.Path = codexConfigPath()
+			if req.Apply {
+				// 首次写回前，先存用户原始配置（只存一次），还原永远回这份
+				if ob, err := ensureOrigBackup(r.Path); err == nil && ob != "" {
+					r.OrigBackedUp = ob
+				}
+				bak, err := backupFile(r.Path)
+				if err == nil && bak != "" {
+					r.BackedUp = bak
+				}
+				// 只替换 [model_providers.openai-http] 段，不覆盖其他配置
+				if err := applyCodexProvider(r.Path, base, key); err != nil {
+					r.Error = err.Error()
+				} else {
+					r.OK = true
+				}
 			} else {
 				r.OK = true // 仅预览
 			}
@@ -430,4 +430,3 @@ func ensureOrigBackup(path string) (string, error) {
 	}
 	return orig, nil
 }
-

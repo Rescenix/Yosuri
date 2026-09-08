@@ -129,10 +129,12 @@ func firecrawlSearch(ctx context.Context, query string, limit int) (string, []st
 }
 
 // webSearch 按用户选的「联网来源」分发（设置面板 → 模型 → 联网来源）：
-//   bing（默认）→ 免 key 的 Bing 网页搜索（国内可达，零配置）
-//   firecrawl → Firecrawl /v1/search（要 key，500 次/月）
-//   custom → 自定义 OpenAI 兼容 Endpoint 的 /v1/responses（内置 web_search 服务端联网）
-//   mcp    → 用户指定的已装 MCP 搜索工具
+//
+//	bing（默认）→ 免 key 的 Bing 网页搜索（国内可达，零配置）
+//	firecrawl → Firecrawl /v1/search（要 key，500 次/月）
+//	custom → 自定义 OpenAI 兼容 Endpoint 的 /v1/responses（内置 web_search 服务端联网）
+//	mcp    → 用户指定的已装 MCP 搜索工具
+//
 // 没配置任何来源（默认 bing）时，模型也能直接联网——免 key 兜底，Rescene 原生支持联网。
 func webSearch(ctx context.Context, query string, limit int) (string, []string, error) {
 	entry, ok := capabilityEntry(websearchCapabilityID)

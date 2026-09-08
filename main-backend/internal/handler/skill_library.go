@@ -368,90 +368,6 @@ func skillLibraryPrompt() string {
 		strings.Join(lines, "\n") + "\n"
 }
 
-// autoLoadedSkillsPrompt 是“可发现”之外的确定性保障：宿主先按任务类型匹配，
-// 命中后直接把技能全文放进首轮 system prompt，不再依赖模型主动调用 skill_view。
-// 目前 frontend-design 属于高价值且触发边界清晰的技能；其他技能仍可通过在任务里
-// 显式写出技能名来强制加载，避免对所有技能做含糊的语义猜测和无上限 token 注入。
-func autoLoadedSkillsPrompt(task string) string {
-	task = strings.TrimSpace(task)
-	if task == "" {
-		return ""
-	}
-	lowerTask := strings.ToLower(task)
-	var matched []Skill
-	seen := map[string]bool{}
-	for _, skill := range loadSkills() {
-		name := strings.ToLower(strings.TrimSpace(skill.Name))
-		if name == "" || seen[name] {
-			continue
-		}
-		// 命中两种：任务里显式写出技能名；或任务的词命中技能 trigger 关键词。
-		// 后者对所有内置技能通用，不再给单个技能写特例（原 frontend-design 特例已并入）。
-		explicit := len(name) >= 4 && strings.Contains(lowerTask, name)
-		typed := matchesSkillTrigger(lowerTask, skill)
-		if !explicit && !typed {
-			continue
-		}
-		seen[name] = true
-		matched = append(matched, skill)
-		if len(matched) == 3 {
-			break
-		}
-	}
-	if len(matched) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("\n━━━ 已自动加载的任务技能（宿主确定性匹配，必须遵循） ━━━\n")
-	b.WriteString("以下内容已由宿主在第一次模型调用前加载，不需要再调用 skill_view，也不得因未主动读取而忽略。\n")
-	for _, skill := range matched {
-		fmt.Fprintf(&b, "\n## %s\n用途：%s\n", skill.Name, skill.Description)
-		if skill.Trigger != "" {
-			fmt.Fprintf(&b, "触发条件：%s\n", skill.Trigger)
-		}
-		if skill.Verification != "" {
-			fmt.Fprintf(&b, "验证方式：%s\n", skill.Verification)
-		}
-		if len(skill.Steps) > 0 {
-			b.WriteString("执行步骤：\n")
-			for i, step := range skill.Steps {
-				fmt.Fprintf(&b, "%d. %s\n", i+1, step)
-			}
-		}
-		if skill.Body != "" {
-			b.WriteString(skill.Body)
-			if !strings.HasSuffix(skill.Body, "\n") {
-				b.WriteByte('\n')
-			}
-		}
-	}
-	return b.String()
-}
-
-// matchesSkillTrigger 判定任务是否命中技能 trigger：把 trigger 字段按常见分隔符
-// 拆成关键词（去掉 1 字短词防噪音），任务文本包含任一关键词即命中。
-// 所有内置/自研技能共用这一套，不需要给单个技能写硬编码特例。
-func matchesSkillTrigger(lowerTask string, skill Skill) bool {
-	trigger := strings.ToLower(skill.Trigger)
-	if trigger == "" {
-		return false
-	}
-	for _, sep := range []string{"、", "，", "；", "。", "：", "/", " ", "　"} {
-		trigger = strings.ReplaceAll(trigger, sep, "\x00")
-	}
-	for _, kw := range strings.Split(trigger, "\x00") {
-		kw = strings.TrimSpace(kw)
-		if len(kw) < 2 {
-			continue
-		}
-		if strings.Contains(lowerTask, kw) {
-			return true
-		}
-	}
-	return false
-}
-
 // skillViewToolName 是取回技能完整内容（正文 + 关联文件）的钥匙，跟 load_tools 一样必须常驻工具集。
 // 与 Hermes 的 skill_view 对齐：按名字取回完整正文，并可带 file_path 取技能目录下的关联文件。
 const skillViewToolName = "skill_view"
@@ -630,6 +546,9 @@ func handleSkillView(argsJSON string, skills []Skill) string {
 		if s.Source == "learned" {
 			markSkillUsed(s)
 		}
+		// 热门技能管线的使用账本：所有来源都记（含 builtin/external——它们的
+		// JSON 文件本身不可写回，账本独立存在 .usage.json）。
+		recordSkillUse(s.Name)
 		found = append(found, entry)
 	}
 

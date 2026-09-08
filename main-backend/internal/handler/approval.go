@@ -28,20 +28,20 @@ import (
 // 危险工具分级：这些工具在 Ask 模式必须等人批准；其余（read_file /
 // search_memory / dispatch_agent / 只读 MCP）任何模式都直过，不烦人。
 var dangerousToolSet = map[string]bool{
-	"write_file": true,
-	"edit_file":  true,
+	"write_file":  true,
+	"edit_file":   true,
 	"apply_patch": true,
 	// 核心四件套：write/patch/bash 是文件写删与命令执行的入口，ask 模式必须拦截。
 	// read 是纯读，任何模式直过（与旧 read_file 同级，不烦人）。
-	"write":             true,
-	"patch":             true,
-	"bash":              true,
-	"remove":            true,
-	"create_directory":  true,
-	"move_file":         true,
-	"delete_file":       true,
-	"delete_directory":  true,
-	"run_command":       true,
+	"write":            true,
+	"patch":            true,
+	"bash":             true,
+	"remove":           true,
+	"create_directory": true,
+	"move_file":        true,
+	"delete_file":      true,
+	"delete_directory": true,
+	"run_command":      true,
 	// MCP filesystem 写删类：mcp__fs__write / edit / delete_file / move_file / create_directory
 	"mcp__fs__write_file":       true,
 	"mcp__fs__edit_file":        true,
@@ -188,16 +188,16 @@ func isIrreversibleToolCall(name, argsJSON string) bool {
 
 // sensitiveWriteToolSet 整文件覆写/新建类写工具。
 var sensitiveWriteToolSet = map[string]bool{
-	"write_file":              true,
-	"write":                   true,
-	"apply_patch":             true,
-	"create_file":             true,
-	"mcp__fs__write_file":     true,
-	"mcp__fs__create_file":    true,
+	"write_file":           true,
+	"write":                true,
+	"apply_patch":          true,
+	"create_file":          true,
+	"mcp__fs__write_file":  true,
+	"mcp__fs__create_file": true,
 }
 
 // isSensitiveFile 判定路径是否命中「敏感文件」名单：仓库门面文档（README*/
-// LICENSE）、依赖清单与锁文件、密钥凭据（.env*/证书/私钥）、协作规范
+// LICENSE）、依赖清单与锁文件、密钥凭据（.env*/证书/私钥/SSH）、协作规范
 // （AGENTS.md/CLAUDE.md/.cursorrules/.gitignore）。这些被整体覆写 = 信息丢失
 // 或安全风险。
 func isSensitiveFile(p string) bool {
@@ -217,6 +217,14 @@ func isSensitiveFile(p string) bool {
 		if strings.HasSuffix(base, suf) {
 			return true
 		}
+	}
+	// SSH 私钥 / 云凭据
+	switch base {
+	case "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa",
+		"authorized_keys", "known_hosts", "config",
+		"credentials.json", "service-account.json", "service_account.json",
+		"config.json", "auth.json":
+		return true
 	}
 	// 依赖清单 / 锁文件 / 构建脚本 / 协作规范
 	switch base {
@@ -283,7 +291,7 @@ var destructiveCommandPatterns = []struct {
 	{"del/erase 删除（含裸 del）", regexp.MustCompile(`\b(?:del|erase)\s+[\w.\-"'/*\$]`)},
 	{"Remove-Item 删除（含裸调用）", regexp.MustCompile(`\bremove-item\s+[\w.\-"'/*\$]`)},
 	{"rd/rmdir 递归删除", regexp.MustCompile(`\b(?:rd|rmdir)\s+/s\b`)},
-	{"del 强制/递归删除", regexp.MustCompile(`\bdel\s+/(?:f|s|q)` )},
+	{"del 强制/递归删除", regexp.MustCompile(`\bdel\s+/(?:f|s|q)`)},
 	{"git push 强推", regexp.MustCompile(`git\s+push\s+[^\n]*?(?:--force|-f\b)`)},
 }
 

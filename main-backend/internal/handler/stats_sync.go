@@ -86,9 +86,9 @@ type cloudHourStat struct {
 
 // cloudStatsResp 云端 GET /api/stats 响应体。
 type cloudStatsResp struct {
-	Daily  []cloudDailyStat  `json:"daily"`
-	Models []cloudModelStat  `json:"models"`
-	Hours  []cloudHourStat   `json:"hours"`
+	Daily  []cloudDailyStat `json:"daily"`
+	Models []cloudModelStat `json:"models"`
+	Hours  []cloudHourStat  `json:"hours"`
 }
 
 // fetchCloudStats 从云端拉取某 uid 的统计聚合。失败返回 ok=false（调用方回退本地）。

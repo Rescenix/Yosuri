@@ -73,16 +73,16 @@ type arxivAtomFeed struct {
 }
 
 type arxivAtomEntry struct {
-	ID               string                  `xml:"id"`
-	Title            string                  `xml:"title"`
-	Published        string                  `xml:"published"`
-	Updated          string                  `xml:"updated"`
-	Summary          string                  `xml:"summary"`
-	Comment          string                  `xml:"comment"`
-	DOI              string                  `xml:"doi"`
-	Authors          []arxivAtomAuthor       `xml:"author"`
-	Categories       []arxivAtomCategory     `xml:"category"`
-	PrimaryCategory  arxivAtomPrimaryCat     `xml:"primary_category"`
+	ID              string              `xml:"id"`
+	Title           string              `xml:"title"`
+	Published       string              `xml:"published"`
+	Updated         string              `xml:"updated"`
+	Summary         string              `xml:"summary"`
+	Comment         string              `xml:"comment"`
+	DOI             string              `xml:"doi"`
+	Authors         []arxivAtomAuthor   `xml:"author"`
+	Categories      []arxivAtomCategory `xml:"category"`
+	PrimaryCategory arxivAtomPrimaryCat `xml:"primary_category"`
 }
 
 type arxivAtomAuthor struct {
@@ -105,11 +105,11 @@ const (
 // callArxivSearch 执行一次 arXiv 检索，返回 JSON 文本（模型可读、前端卡片可解析）。
 func callArxivSearch(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
-		Query       string `json:"query"`
-		MaxResults  int    `json:"max_results"`
-		Sort        string `json:"sort"`
-		Categories  string `json:"categories"`
-		IDList      string `json:"id_list"`
+		Query      string `json:"query"`
+		MaxResults int    `json:"max_results"`
+		Sort       string `json:"sort"`
+		Categories string `json:"categories"`
+		IDList     string `json:"id_list"`
 	}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return "", fmt.Errorf("参数解析失败：%v", err)

@@ -22,6 +22,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"backend/internal/ai/core"
@@ -712,7 +713,7 @@ func openAIChatOnce(ctx context.Context, b RouterBackend, msgs []map[string]any,
 			return "", nil, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(resp.Body)
+			raw, _ := readUpstreamBody(resp)
 			resp.Body.Close()
 			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 			// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
@@ -848,7 +849,7 @@ func responsesOnce(ctx context.Context, b RouterBackend, msgs []map[string]any, 
 			return "", nil, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(resp.Body)
+			raw, _ := readUpstreamBody(resp)
 			resp.Body.Close()
 			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 			// 401(鉴权)/403(额度)/404(模型不存在) 确定性不可用才标记禁用；
@@ -971,7 +972,8 @@ func routeChatOnce(ctx context.Context, backends []RouterBackend, msgs []map[str
 // "context deadline exceeded (Client.Timeout or context cancellation while reading body)"。
 // 故流式 client Timeout 置 0，只由 Transport 卡"连接 + 首字节"(ResponseHeaderTimeout)，
 // 真正的取消交给请求上下文 c.Request.Context()（浏览器断开即取消）。
-func streamHTTPClient() *http.Client {
+// 流式客户端全局单例：旧版每次调用新建 Transport = 新连接池，每轮流式都重付握手。
+var streamClientSingleton = sync.OnceValue(func() *http.Client {
 	return &http.Client{
 		Timeout: 0,
 		Transport: &http.Transport{
@@ -986,6 +988,10 @@ func streamHTTPClient() *http.Client {
 			IdleConnTimeout:       90 * time.Second,
 		},
 	}
+})
+
+func streamHTTPClient() *http.Client {
+	return streamClientSingleton()
 }
 
 // streamRouterRound 沿路由链做流式调用。failover 只发生在拿到 200 响应之前
@@ -1081,7 +1087,7 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 				break
 			}
 			if resp.StatusCode != http.StatusOK {
-				raw, _ := io.ReadAll(resp.Body)
+				raw, _ := readUpstreamBody(resp)
 				resp.Body.Close()
 				roundCancel()
 				reason := fmt.Sprintf("HTTP %d", resp.StatusCode)
@@ -1196,6 +1202,33 @@ func censorshipNoteFromTried(tried []string) string {
 }
 
 // drainChatStream 读一条已建立的 SSE 流，实时转发 thinking/intent 事件。
+// chatChunk 是 drainChatStream 热路径的 typed 解析结构（替代 map[string]any 反射）。
+// 只声明用到的字段；上游多余字段自动忽略。index 缺省时为 0，与旧版行为一致
+// （旧版无 index 的 chunk 直接 continue，但实践中所有服务都带 index；
+// 为兼容个别缺 index 的服务，这里保留默认 0 归并到第一个调用）。
+type chatChunk struct {
+	Choices []struct {
+		Delta *struct {
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+			ToolCalls        []struct {
+				Index    int    `json:"index"`
+				ID       string `json:"id"`
+				Type     string `json:"type"`
+				Function struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
+		} `json:"delta"`
+		FinishReason string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
+}
+
 // 返回真实拆分的 inputTokens/outputTokens：优先取上游 usage.prompt_tokens/completion_tokens，
 // 上游不回传时退化为字符/4 估算（与四态机历史口径一致）。
 func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any, staticSum int) (string, []core.ToolCall, int, int, error) {
@@ -1229,77 +1262,65 @@ func drainChatStream(c *gin.Context, resp *http.Response, msgs []map[string]any,
 			break
 		}
 
-		var ev map[string]any
+		// typed struct 解析：旧版 map[string]any 每个值都装箱 interface{} + 反射，
+		// 流式热路径逐 token 付这笔钱（2026-09-08 性能清单 #2）。
+		var ev chatChunk
 		if json.Unmarshal([]byte(data), &ev) != nil {
 			continue
 		}
-		choices, _ := ev["choices"].([]any)
-		if len(choices) == 0 {
+		if len(ev.Choices) == 0 {
 			// 无 choices：可能是 usage chunk（stream_options.include_usage）
-			if usage, ok := ev["usage"].(map[string]any); ok {
-				if pt, ok := usage["prompt_tokens"].(float64); ok {
-					inTok = int(pt)
-				}
-				if ct, ok := usage["completion_tokens"].(float64); ok {
-					outTok = int(ct)
-				}
+			if ev.Usage != nil {
+				inTok = ev.Usage.PromptTokens
+				outTok = ev.Usage.CompletionTokens
 				gotUsage = true
 			}
 			continue
 		}
-		choice, _ := choices[0].(map[string]any)
-		if reason, ok := choice["finish_reason"].(string); ok && reason != "" {
-			finishReason = reason
+		choice := ev.Choices[0]
+		if choice.FinishReason != "" {
+			finishReason = choice.FinishReason
 		}
-		delta, _ := choice["delta"].(map[string]any)
+		delta := choice.Delta
 		if delta == nil {
 			continue
 		}
 
-		if rc, ok := delta["reasoning_content"].(string); ok && rc != "" {
+		if rc := delta.ReasoningContent; rc != "" {
 			charCount += len(rc)
 			writeCodeSSE(c, "thinking", map[string]any{"content": rc})
 		}
-		if ct, ok := delta["content"].(string); ok && ct != "" {
+		if ct := delta.Content; ct != "" {
 			charCount += len(ct)
 			full.WriteString(ct)
 			writeCodeSSE(c, "intent", map[string]any{"content": ct})
 		}
-		if rawCalls, ok := delta["tool_calls"].([]any); ok {
-			for _, rawCall := range rawCalls {
-				callMap, _ := rawCall.(map[string]any)
-				idxFloat, hasIdx := callMap["index"].(float64)
-				if !hasIdx {
-					continue
-				}
-				idx := int(idxFloat)
-				if _, exists := callsMap[idx]; !exists {
-					callsMap[idx] = &core.ToolCall{Type: "function"}
-				}
-				tc := callsMap[idx]
-				if id, ok := callMap["id"].(string); ok && id != "" {
-					tc.ID = id
-				}
-				if fnMap, ok := callMap["function"].(map[string]any); ok {
-					if name, ok := fnMap["name"].(string); ok && name != "" {
-						tc.Function.Name = name
-					}
-					if tc.ID != "" && tc.Function.Name != "" && !emittedToolStarts[idx] {
-						writeCodeSSE(c, "action_delta", map[string]any{
-							// 少数兼容服务会先送 arguments、后送 name；把已累计部分
-							// 一次补发，避免前端漏掉文件内容的开头。
-							"id": tc.ID, "name": tc.Function.Name, "args_delta": tc.Function.Arguments,
-						})
-						emittedToolStarts[idx] = true
-					}
-					if argsStr, ok := fnMap["arguments"].(string); ok {
-						tc.Function.Arguments += argsStr
-						if tc.ID != "" && tc.Function.Name != "" && argsStr != "" {
-							writeCodeSSE(c, "action_delta", map[string]any{
-								"id": tc.ID, "name": tc.Function.Name, "args_delta": argsStr,
-							})
-						}
-					}
+		for _, tc := range delta.ToolCalls {
+			idx := tc.Index
+			if _, exists := callsMap[idx]; !exists {
+				callsMap[idx] = &core.ToolCall{Type: "function"}
+			}
+			call := callsMap[idx]
+			if tc.ID != "" {
+				call.ID = tc.ID
+			}
+			if tc.Function.Name != "" {
+				call.Function.Name = tc.Function.Name
+			}
+			if tc.ID != "" && tc.Function.Name != "" && !emittedToolStarts[idx] {
+				writeCodeSSE(c, "action_delta", map[string]any{
+					// 少数兼容服务会先送 arguments、后送 name；把已累计部分
+					// 一次补发，避免前端漏掉文件内容的开头。
+					"id": tc.ID, "name": tc.Function.Name, "args_delta": call.Function.Arguments,
+				})
+				emittedToolStarts[idx] = true
+			}
+			if tc.Function.Arguments != "" {
+				call.Function.Arguments += tc.Function.Arguments
+				if tc.ID != "" && tc.Function.Name != "" {
+					writeCodeSSE(c, "action_delta", map[string]any{
+						"id": tc.ID, "name": tc.Function.Name, "args_delta": tc.Function.Arguments,
+					})
 				}
 			}
 		}
@@ -1397,7 +1418,7 @@ func (r *WorkflowRunner) streamResponsesRound(c *gin.Context, b RouterBackend, m
 			return "", nil, 0, 0, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(resp.Body)
+			raw, _ := readUpstreamBody(resp)
 			resp.Body.Close()
 			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncateChars(string(raw), 300))
 			// 401(鉴权)/403(额度)/404(模型不存在) 是确定性不可用，当场标记禁用；

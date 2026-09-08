@@ -140,9 +140,19 @@
             </div>
           </div>
           <div v-if="group.block.previewError" class="flow-file-err">{{ group.block.previewError }}</div>
-        </div>
+          </div>
 
-      <!-- 记忆写入：单行彩虹反馈（不占卡片，直接铺在聊天流里） -->
+          <!-- Agent 调 chart 工具产出的 ECharts 图表：前端 ChartRenderer 直出 -->
+          <div v-else-if="group.type === 'chart'" class="flow-chart">
+            <ChartRenderer
+              :title="group.block.title"
+              :type="group.block.chartType"
+              :data="group.block.chartData"
+              :options="group.block.chartOptions"
+            />
+          </div>
+
+          <!-- 记忆写入：单行彩虹反馈（不占卡片，直接铺在聊天流里） -->
       <div v-else-if="group.type === 'memory-saved'" class="flow-memory-saved">
         <span class="fms-scanline"></span>
         <span class="fms-label">已保存到记忆</span>
@@ -297,19 +307,43 @@
     <div v-if="flow.changedFiles && flow.changedFiles.length" class="flow-changed-files">
       <div class="flow-refs-title">本次改动 {{ flow.changedFiles.length }} 个文件</div>
       <div class="flow-changed-list">
-        <div v-for="f in flow.changedFiles" :key="f.rel_path" class="flow-changed-row">
-          <Icon icon="mdi:file-code-outline" class="flow-changed-file-icon" width="13" />
-          <span class="flow-changed-path" :title="f.rel_path">{{ f.rel_path }}</span>
-          <span class="flow-changed-stats">
-            <b class="flow-changed-add">+{{ f.added || 0 }}</b>
-            <b class="flow-changed-del">−{{ f.removed || 0 }}</b>
-          </span>
-          <button type="button" class="flow-changed-btn" :disabled="changedRestoring" @click="previewChangedFile(f)">
-            <Icon icon="mdi:eye-outline" width="12" /> 预览
-          </button>
-          <button type="button" class="flow-changed-btn danger" :disabled="changedRestoring" @click="restoreChangedFile(f)">
-            <Icon icon="mdi:undo" width="12" /> 回退
-          </button>
+        <div v-for="f in flow.changedFiles" :key="f.rel_path" class="flow-changed-item">
+          <div class="flow-changed-row">
+            <Icon icon="mdi:file-code-outline" class="flow-changed-file-icon" width="13" />
+            <span class="flow-changed-path" :title="f.rel_path">{{ f.rel_path }}</span>
+            <span class="flow-changed-stats">
+              <b class="flow-changed-add">+{{ f.added || 0 }}</b>
+              <b class="flow-changed-del">−{{ f.removed || 0 }}</b>
+            </span>
+            <button type="button" class="flow-changed-btn audit" :disabled="f.audit && f.audit.loading" @click="auditChangedFile(f)">
+              <Icon icon="mdi:shield-search" width="12" /> {{ (f.audit && f.audit.loading) ? '审查中…' : '审查' }}
+            </button>
+            <button type="button" class="flow-changed-btn" :disabled="changedRestoring" @click="previewChangedFile(f)">
+              <Icon icon="mdi:eye-outline" width="12" /> 预览
+            </button>
+            <button type="button" class="flow-changed-btn danger" :disabled="changedRestoring" @click="restoreChangedFile(f)">
+              <Icon icon="mdi:undo" width="12" /> 回退
+            </button>
+          </div>
+          <!-- 该文件的审查结果：独立免费模型调用挑这一处 diff 的潜在问题 -->
+          <div v-if="f.audit && f.audit.error" class="flow-audit-error">{{ f.audit.error }}</div>
+          <div v-if="f.audit && f.audit.findings" class="flow-audit-card">
+            <div class="flow-audit-title">
+              <Icon icon="mdi:shield-search" width="13" />
+              <span>独立审查</span>
+              <span v-if="f.audit.findings.length" class="flow-audit-count">{{ f.audit.findings.length }} 个潜在问题</span>
+            </div>
+            <div v-if="!f.audit.findings.length" class="flow-audit-empty">未发现潜在问题</div>
+            <div v-else class="flow-audit-list">
+              <div v-for="(a, ai) in f.audit.findings" :key="ai" class="flow-audit-row">
+                <span class="flow-audit-sev" :class="'sev-' + a.severity">{{ sevLabel(a.severity) }}</span>
+                <div class="flow-audit-body">
+                  <div class="flow-audit-issue">{{ a.issue }}</div>
+                  <div v-if="a.hint" class="flow-audit-hint">{{ a.hint }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div v-if="changedMsg" class="flow-changed-msg" :class="{ error: changedMsgErr }">{{ changedMsg }}</div>
@@ -351,6 +385,7 @@ import RoseIcon from './RoseIcon.vue'
 import { renderMarkdown } from './markdownRenderer.js'
 import { requestPreview } from '../composables/previewBus.js'
 import { pptxToHtml, xlsxToHtml, docxToHtml } from '../../../utils/officePreview.js'
+import ChartRenderer from './ChartRenderer.vue'
 
 const props = defineProps({
   flow: { type: Object, required: true }
@@ -464,6 +499,41 @@ function currentProjectName() {
 function sendSuggestion(text) {
   if (!text || !text.trim()) return
   window.dispatchEvent(new CustomEvent('workflow-suggestion', { detail: { text: text.trim() } }))
+}
+
+// 审查按钮（每个改动文件一个）：拉该文件本次 diff，交给后端独立免费模型审查，
+// 挑这一处改动的潜在问题。结果挂在 f.audit 上内联渲染。
+async function auditChangedFile(f) {
+  if (!f || !f.first_seq) return
+  if (f.audit && f.audit.loading) return
+  if (!f.audit) f.audit = { loading: false, findings: null, error: '' }
+  f.audit.loading = true
+  f.audit.error = ''
+  try {
+    const dres = await fetch('/api/agentfs/diff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: '', seq: f.first_seq })
+    })
+    const ddata = await dres.json()
+    if (!dres.ok) throw new Error(ddata.error || 'Diff 读取失败')
+    const ares = await fetch('/api/code/workflow/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: f.rel_path, diff: ddata.diff || '' })
+    })
+    const adata = await ares.json().catch(() => ({}))
+    if (!ares.ok) throw new Error(adata.error || `审查失败 (${ares.status})`)
+    f.audit.findings = Array.isArray(adata.findings) ? adata.findings : []
+  } catch (err) {
+    f.audit.error = err.message || '审查请求失败，请重试'
+  } finally {
+    f.audit.loading = false
+  }
+}
+
+function sevLabel(s) {
+  return s === 'high' ? '高' : s === 'low' ? '低' : '中'
 }
 
 // diff 原始文本 → 行数组（保留行首 +/− 符号作为增删标记，不做红绿双重显示）
@@ -585,6 +655,9 @@ const blockGroups = computed(() => {
             } else if (b.type === 'file') {
               // Agent 落盘的可交付文件：单独平铺成交付卡片（预览送右侧窗口/下载）
               groups.push({ type: 'file', block: b })
+            } else if (b.type === 'chart') {
+              // Agent 调 chart 工具产出的 ECharts 图表：单独平铺，前端 ChartRenderer 直出
+              groups.push({ type: 'chart', block: b })
             } else if (b.type === 'tool' && b.name === 'web_search') {
               // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
               groups.push({ type: 'search-tool', block: b })
@@ -1145,6 +1218,9 @@ function toolBodyText(b) {
   background: transparent;
   white-space: pre;
   text-overflow: ellipsis;
+  /* <code> 有 UA 默认 font-family:monospace（Windows=新宋体），父级 .flow-live-diff
+     的 font 简写不覆盖子元素 UA 样式，必须在此显式指定；中文走雅黑。 */
+  font-family: Consolas, ui-monospace, 'Cascadia Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
 }
 
 /* ---------- 概要栏：把一次 agent 回复之间的思考和工具调用都收纳进来 ----------
@@ -2084,6 +2160,78 @@ function toolBodyText(b) {
   border-color: var(--app-accent);
 }
 
+/* ============ 独立审查（改动文件行内按钮 + 结果卡片） ============ */
+.flow-changed-item {
+  display: flex;
+  flex-direction: column;
+}
+.flow-audit-error {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: #c0392b;
+}
+.flow-audit-card {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-2);
+}
+.flow-audit-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text);
+}
+.flow-audit-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--app-text-faint);
+}
+.flow-audit-empty {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--app-text-faint);
+}
+.flow-audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.flow-audit-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.flow-audit-sev {
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 1px 7px;
+  font-size: 11.5px;
+  border-radius: 6px;
+  color: #fff;
+}
+.flow-audit-sev.sev-high { background: #d64545; }
+.flow-audit-sev.sev-medium { background: #e08a2e; }
+.flow-audit-sev.sev-low { background: #8a94a6; }
+.flow-audit-body { flex: 1; min-width: 0; }
+.flow-audit-issue {
+  font-size: 13px;
+  color: var(--app-text);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.flow-audit-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--app-text-faint);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 /* ============ 改动文件卡片（内嵌工作流底部） ============ */
 .flow-changed-files {
   margin-top: 10px;
@@ -2160,6 +2308,10 @@ function toolBodyText(b) {
   color: #e24546;
   border-color: #e24546;
 }
+.flow-changed-btn.audit:hover {
+  color: var(--app-accent);
+  border-color: var(--app-accent);
+}
 .flow-changed-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -2193,11 +2345,15 @@ function toolBodyText(b) {
   display: flex;
   gap: 8px;
   padding: 1px 10px;
-  font-family: var(--app-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
+  /* 这是 <code> 的父级，但 <code> 有 UA 默认 font-family:monospace（Windows=新宋体），
+     必须在这里给子级 code 显式覆盖；同时中文走雅黑避免宋体混排。 */
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--app-text);
+}
+.flow-changed-code-line code {
+  font-family: Consolas, ui-monospace, 'Cascadia Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
 }
 .flow-changed-code-line.add {
   background: color-mix(in srgb, #2ea043 10%, transparent);

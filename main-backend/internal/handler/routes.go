@@ -22,13 +22,10 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/company/tags", companyAuthRequired(), HandleCompanyAddTag)
 	r.DELETE("/api/company/tags/:id", companyAuthRequired(), HandleCompanyDeleteTag)
 
-	// 全局 CORS 处理
+	// 全局 CORS 处理：同上，只放行本机界面
 	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Guest-Uid")
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent)
+		if corsLocalOnly(c.Writer, c.Request) {
+			c.Abort()
 			return
 		}
 		c.Next()
@@ -53,10 +50,11 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/file/rename", gin.WrapH(http.HandlerFunc(FileRenameHandler)))
 	r.DELETE("/api/file", gin.WrapH(http.HandlerFunc(FileDeleteHandler)))
 	r.GET("/api/file/changes", gin.WrapH(http.HandlerFunc(FileChangesHandler)))
-	// 外挂知识库抽屉：列出/上传/删除用户外部文档（复用 knowledge 包的 RAG 检索链路）
+	// 外挂知识库抽屉：列出/上传/删除用户外部文档（复用 knowledge 包的 RAG 检索链路）+ 图谱生成
 	r.GET("/api/knowledge/list", HandleKnowledgeList)
 	r.POST("/api/knowledge/upload", HandleKnowledgeUpload)
 	r.POST("/api/knowledge/delete", HandleKnowledgeDelete)
+	r.POST("/api/knowledge/graph", HandleKnowledgeGraph)
 	// agent 实际工具执行的工作目录：GET 读当前值，POST 真正切换 + 落盘持久化
 	r.GET("/api/workdir", GetWorkdir)
 	r.POST("/api/workdir/pick", PickWorkdir)
@@ -85,6 +83,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/agent/watch", HandleAgentWatch)
 	r.GET("/overlay", HandleOverlayPage)
 	r.GET("/overlay/icon.png", HandleOverlayIcon)
+	// 看板娘 Live2D 运行时与模型资源（内嵌进二进制，见 overlay_live2d.go）
+	r.GET("/overlay/live2d/*name", HandleLive2DAsset)
 	// 悬浮球演示功能开关（测试功能，默认关闭，见 overlay_config.go）
 	r.GET("/api/overlay/config", HandleGetOverlayConfig)
 	r.PUT("/api/overlay/config", HandlePutOverlayConfig)
@@ -94,6 +94,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/code/workflow/approve", workflowRunner.HandleCodeWorkflowApprove)
 	// 中途插话：工作流跑着的时候插一条消息，下一轮当作用户中途发言拼进上下文
 	r.POST("/api/code/workflow/steer", HandleCodeWorkflowSteer)
+	// 结束卡片「审查」按钮：用户主动点才跑，独立 LLM 调用挑潜在问题（免费模型池）
+	r.POST("/api/code/workflow/audit", HandleWorkflowAudit)
 	// ask_user 提问回答回调：前端提问弹窗「确认」写回，唤醒阻塞中的 ask_user 续跑
 	r.POST("/api/code/workflow/answer", workflowRunner.HandleCodeWorkflowAnswer)
 	// 断点续跑：列出中断的工作流；续跑本身走 GET /api/code/workflow?resume=<workflow_id>
@@ -277,9 +279,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/theme/name", HandleThemeName)
 
 	r.POST("/api/login", CloudLoginProxy)
-		r.POST("/api/auth/register", CloudRegisterProxy)
-		// 登录图形验证码（2026-09-05，自绘零依赖）：前端拉取图片，登录时带回校验
-		r.GET("/api/auth/captcha", CloudCaptchaProxy)
+	r.POST("/api/auth/register", CloudRegisterProxy)
+	// 登录图形验证码（2026-09-05，自绘零依赖）：前端拉取图片，登录时带回校验
+	r.GET("/api/auth/captcha", CloudCaptchaProxy)
 	// token 校验直接代理到 ResceneCloud 云端验签（透传 Authorization 头）。
 	// re0 开源侧不持有任何密钥，验签全由云端完成（与签发同源），
 	// 既修了「打包版无 .env → 本地默认密钥与云端不符 → auth/me 401」的登不上问题，
@@ -343,6 +345,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 定时任务：前端 ScheduledTaskModal 创建 → 调度器到点弹 Windows 原生通知（右下角）
 	r.POST("/api/cron/create", HandleCronCreate)
 	r.GET("/api/cron/list", HandleCronList)
+	r.POST("/api/cron/toggle/:id", HandleCronToggle)
 	r.DELETE("/api/cron/delete/:id", HandleCronDelete)
 	r.POST("/api/cron/test", HandleCronTest)
 

@@ -27,34 +27,34 @@ import (
 
 // mangaCharacter 人设卡（角色一致性锚点）
 type mangaCharacter struct {
-	ID         string `json:"id"`         // 角色编号 C1/C2...
-	Name       string `json:"name"`       // 角色名
-	Role       string `json:"role"`       // 主角/反派/配角
-	Appearance string `json:"appearance"` // 外貌特征（中文，供参考图提示词）
+	ID          string `json:"id"`          // 角色编号 C1/C2...
+	Name        string `json:"name"`        // 角色名
+	Role        string `json:"role"`        // 主角/反派/配角
+	Appearance  string `json:"appearance"`  // 外貌特征（中文，供参考图提示词）
 	Personality string `json:"personality"` // 性格
-	RefPrompt string `json:"ref_prompt"` // 英文参考图提示词（含统一画风前缀）
+	RefPrompt   string `json:"ref_prompt"`  // 英文参考图提示词（含统一画风前缀）
 }
 
 // mangaShot 分镜（镜头）
 type mangaShot struct {
-	Index     int      `json:"index"`
-	ShotNo    string   `json:"shot_no"`    // 镜头编号 S1 S2...
-	Scene     string   `json:"scene"`      // 场景/背景描述
-	Action    string   `json:"action"`     // 镜头动作描述（画面内容）
-	Character string   `json:"character"`  // 出场角色（对应人设卡 id/name，可为空）
-	Dialogue  string   `json:"dialogue"`   // 台词（可为空）
-	Duration  int      `json:"duration"`   // 建议时长（秒）
-	Platform  string   `json:"platform"`   // 推荐平台 auto/jimeng/kling/hailuo
-	Prompt    string   `json:"prompt"`     // 英文生成提示词（图生视频/文生视频）
+	Index     int    `json:"index"`
+	ShotNo    string `json:"shot_no"`   // 镜头编号 S1 S2...
+	Scene     string `json:"scene"`     // 场景/背景描述
+	Action    string `json:"action"`    // 镜头动作描述（画面内容）
+	Character string `json:"character"` // 出场角色（对应人设卡 id/name，可为空）
+	Dialogue  string `json:"dialogue"`  // 台词（可为空）
+	Duration  int    `json:"duration"`  // 建议时长（秒）
+	Platform  string `json:"platform"`  // 推荐平台 auto/jimeng/kling/hailuo
+	Prompt    string `json:"prompt"`    // 英文生成提示词（图生视频/文生视频）
 }
 
 // mangaPlan 完整分镜计划
 type mangaPlan struct {
-	Topic      string          `json:"topic"`
-	Genre      string          `json:"genre"`
+	Topic      string           `json:"topic"`
+	Genre      string           `json:"genre"`
 	Characters []mangaCharacter `json:"characters"`
-	Shots      []mangaShot     `json:"shots"`
-	TotalDur   int             `json:"total_dur"`
+	Shots      []mangaShot      `json:"shots"`
+	TotalDur   int              `json:"total_dur"`
 }
 
 // resolveMangaLLM 选择漫剧用 LLM（复用语义分析的路由逻辑）

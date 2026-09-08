@@ -23,8 +23,8 @@ func TestTimSortStable(t *testing.T) {
 		{h: autoHealth{signal: 1, latency: 50, lastOK: t0(2)}},
 		{h: autoHealth{signal: 4, latency: 200, lastOK: t0(3)}},
 		{h: autoHealth{signal: 2, latency: 80, lastOK: t0(4)}},
-		{h: autoHealth{signal: 3, latency: 50, lastOK: t0(5)}},  // 同 signal 3 但延迟更低，应排 #1 前面
-		{h: autoHealth{signal: 0, latency: 0, lastOK: t0(6)}},   // 死源沉底
+		{h: autoHealth{signal: 3, latency: 50, lastOK: t0(5)}}, // 同 signal 3 但延迟更低，应排 #1 前面
+		{h: autoHealth{signal: 0, latency: 0, lastOK: t0(6)}},  // 死源沉底
 	}
 	less := func(a, b autoItem) bool {
 		ha, hb := a.h, b.h

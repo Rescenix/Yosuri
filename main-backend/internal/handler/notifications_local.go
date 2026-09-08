@@ -118,8 +118,8 @@ func HandleLocalNotifList(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"notifications":  arr,
-		"unread_count": unread,
+		"notifications": arr,
+		"unread_count":  unread,
 	})
 }
 

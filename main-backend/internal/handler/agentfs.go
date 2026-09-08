@@ -383,14 +383,14 @@ func collectChangedFiles(sess *agentfsSession) []map[string]any {
 			}
 		}
 		files = append(files, map[string]any{
-			"rel_path":     rel,
-			"first_seq":    f.firstSeq,
-			"last_seq":     f.lastSeq,
-			"ops":          f.ops,
-			"op":           f.lastOp,
+			"rel_path":      rel,
+			"first_seq":     f.firstSeq,
+			"last_seq":      f.lastSeq,
+			"ops":           f.ops,
+			"op":            f.lastOp,
 			"exists_before": f.existsBefore,
-			"added":        added,
-			"removed":      removed,
+			"added":         added,
+			"removed":       removed,
 		})
 	}
 	return files

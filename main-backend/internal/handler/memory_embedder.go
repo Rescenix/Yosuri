@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"strings"
@@ -28,7 +27,7 @@ func getEmbedding(text string) ([]float64, error) {
 		return nil, fmt.Errorf("本地BGE请求失败: %v", err)
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := readUpstreamBody(resp)
 	vec := make([]float64, len(data)/4)
 	for i := range vec {
 		bits := binary.LittleEndian.Uint32(data[i*4 : (i+1)*4])

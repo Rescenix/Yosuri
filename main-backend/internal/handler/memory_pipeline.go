@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -145,7 +146,7 @@ func normalizedFacts(in []extractedFact) []extractedFact {
 	for _, f := range in {
 		f.Op, f.Category = strings.ToLower(strings.TrimSpace(f.Op)), strings.ToLower(strings.TrimSpace(f.Category))
 		f.Key, f.Value = cleanFactText(f.Key, 80), cleanFactText(f.Value, 500)
-		if sensitiveFactKey(f.Key) {
+		if sensitiveFactKey(f.Key) || sensitiveFactValue(f.Key) || sensitiveFactValue(f.Value) {
 			continue
 		}
 		if (f.Op != "add" && f.Op != "update" && f.Op != "delete") || f.Key == "" ||
@@ -364,12 +365,12 @@ func consolidateFacts() {
 
 	// key 归一表：别名 → 标准 key
 	aliases := map[string]string{
-		"preferred_language":      "language",
-		"preferred_output_format": "output_format",
+		"preferred_language":       "language",
+		"preferred_output_format":  "output_format",
 		"preferred_message_length": "message_length",
-		"response_length":         "message_length",
-		"use_of_emoji":            "emoji_usage",
-		"formality":               "tone",
+		"response_length":          "message_length",
+		"use_of_emoji":             "emoji_usage",
+		"formality":                "tone",
 		"mock_backend_task_length": "duration_preference",
 	}
 
@@ -421,12 +422,34 @@ func sensitiveFactKey(key string) bool {
 	case "location", "address", "city", "region", "province", "state", "home", "house",
 		"ip", "ip_address", "ipaddr", "device", "device_id", "deviceid", "fingerprint",
 		"mac", "mac_address", "sn", "serial", "id_card", "idcard", "identity", "identity_no",
-		"phone", "phone_number", "mobile", "tel", "bank_card", "bankcard", "credit_card", "card_no":
+		"phone", "phone_number", "mobile", "tel", "bank_card", "bankcard", "credit_card", "card_no",
+		"api_key", "apikey", "api-key", "access_token", "token", "secret", "secret_key",
+		"password", "passwd", "密钥", "密码", "口令":
 		return true
 	}
 	// 前缀命中：location=xxx / device_xxx / 精确住址 / 身份证 / 银行卡等常见写法
 	for _, p := range []string{"location", "address", "device", "fingerprint", "ip", "phone", "住址", "身份证", "银行卡", "地址"} {
 		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// sensitiveFactValue 值里含密钥/凭证模式的整条丢弃。提取模型不可信，
+// prompt 黑名单只是第一道，这里是归一化层的硬拦截（2026-09-07 实锤：
+// sk- 明文密钥混进自动提取事实并同步云端）。
+var sensitiveValuePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\bsk-[a-z0-9]{16,}`),
+	regexp.MustCompile(`(?i)AKIA[0-9A-Z]{16}`),
+	regexp.MustCompile(`(?i)ghp_[a-zA-Z0-9]{20,}`),
+	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`),
+	regexp.MustCompile(`(?i)\b(token|secret|password|passwd|api[_-]?key)\b.{0,12}[=:：]`),
+}
+
+func sensitiveFactValue(s string) bool {
+	for _, re := range sensitiveValuePatterns {
+		if re.MatchString(s) {
 			return true
 		}
 	}

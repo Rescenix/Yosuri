@@ -25,8 +25,8 @@ type circuitState struct {
 }
 
 var (
-	circuitMu      sync.Mutex
-	circuitStates  = map[string]*circuitState{}
+	circuitMu     sync.Mutex
+	circuitStates = map[string]*circuitState{}
 )
 
 const (

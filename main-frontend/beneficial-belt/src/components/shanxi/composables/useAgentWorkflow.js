@@ -501,6 +501,16 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     ext: d.ext || '',
                     size: d.size || 0
                 })
+            } else if (d.kind === 'chart') {
+                // Agent 调 chart 工具产出的 ECharts 图表数据，前端 ChartRenderer 直出
+                flow.blocks.push({
+                    type: 'chart',
+                    id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                    title: d.title || '',
+                    chartType: d.type || 'line',
+                    chartData: d.data || {},
+                    chartOptions: d.options || {}
+                })
             }
             onStreamUpdate?.()
         })
@@ -696,8 +706,8 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             // 的建议才给，没有就是空）：卡片底部渲染一行按钮，点击即把建议填进输入框发送，
             // 不用打字。
             flow.suggestions = Array.isArray(d.suggestions) ? d.suggestions : []
-                        currentFlow = null
-                        closeStream()
+            currentFlow = null
+            closeStream()
                         // 工作流结束 = 可能改了文件，通知文件树刷新
                         window.dispatchEvent(new Event('file-tree-changed'))
         })

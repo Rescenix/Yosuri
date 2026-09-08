@@ -18,7 +18,7 @@ import (
 
 // officeBlock 统一块模型，用于 docx/pdf 的段落/列表/标题/表格。
 type officeBlock struct {
-	Type    string     `json:"type"`             // heading|paragraph|bullets|table
+	Type    string     `json:"type"`              // heading|paragraph|bullets|table
 	Text    string     `json:"text,omitempty"`    // heading/paragraph 的文本
 	Level   int        `json:"level,omitempty"`   // heading 级别 1-3
 	Items   []string   `json:"items,omitempty"`   // bullets 列表项
@@ -34,19 +34,19 @@ type officeSlide struct {
 
 // officeSheet xlsx 工作表
 type officeSheet struct {
-	Name    string   `json:"name,omitempty"`
-	Headers []string `json:"headers,omitempty"`
+	Name    string     `json:"name,omitempty"`
+	Headers []string   `json:"headers,omitempty"`
 	Rows    [][]string `json:"rows,omitempty"`
 }
 
 // officeContent 统一输入结构
 type officeContent struct {
-	Format   string        `json:"format"`   // docx|pptx|xlsx|pdf
+	Format   string        `json:"format"` // docx|pptx|xlsx|pdf
 	Filename string        `json:"filename,omitempty"`
 	Title    string        `json:"title,omitempty"`
-	Blocks   []officeBlock `json:"blocks,omitempty"`   // docx/pdf
-	Slides   []officeSlide `json:"slides,omitempty"`   // pptx
-	Sheets   []officeSheet `json:"sheets,omitempty"`   // xlsx
+	Blocks   []officeBlock `json:"blocks,omitempty"` // docx/pdf
+	Slides   []officeSlide `json:"slides,omitempty"` // pptx
+	Sheets   []officeSheet `json:"sheets,omitempty"` // xlsx
 }
 
 // generateOfficeToolDef generate_office 工具定义

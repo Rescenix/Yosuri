@@ -102,14 +102,22 @@ func conversationTokens(inputTokens, staticSum int) int {
 	return 0
 }
 
-// codeSSEMu 串行化 SSE 写入：子代理 goroutine 会并发发出 subagent_* 事件，
-// gin 的 ResponseWriter 不是并发安全的。全局锁跨请求也会串行，但每次写都是
-// 微秒级 buffer 操作，不构成瓶颈——比 per-request 锁结构简单得多。
-var codeSSEMu sync.Mutex
+// sseMu 返回本请求（工作流）专属的 SSE 写锁：子代理 goroutine 会并发发出
+// subagent_* 事件，gin 的 ResponseWriter 不是并发安全的。锁挂在 gin.Context
+// 上按请求隔离——多工作流并行时互不阻塞（全局锁会让一个慢客户端卡住所有流）。
+func sseMu(c *gin.Context) *sync.Mutex {
+	if v, ok := c.Get("_sseMu"); ok {
+		return v.(*sync.Mutex)
+	}
+	mu := &sync.Mutex{}
+	c.Set("_sseMu", mu)
+	return mu
+}
 
 func writeCodeSSE(c *gin.Context, event string, data map[string]any) {
-	codeSSEMu.Lock()
-	defer codeSSEMu.Unlock()
+	mu := sseMu(c)
+	mu.Lock()
+	defer mu.Unlock()
 	data["type"] = event
 	b, _ := json.Marshal(data)
 	frame := fmt.Sprintf("event: %s\ndata: %s\n\n", event, b)
@@ -125,16 +133,13 @@ func truncateChars(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
-	// 按 rune 边界截断，避免切碎多字节 UTF-8
-	runes := []rune(s)
-	total := 0
-	for i, r := range runes {
-		total += len(string(r))
-		if total > max {
-			return string(runes[:i]) + "\n...[已截断]"
-		}
+	// 截到 max 后回退到 UTF-8 字符边界（跳过续字节 0x80-0xBF），
+	// 避免旧版 []rune(s) + len(string(r)) 的 O(n) 全量分配。
+	i := max
+	for i > 0 && s[i]&0xC0 == 0x80 {
+		i--
 	}
-	return s
+	return s[:i] + "\n...[已截断]"
 }
 
 // isModelUnavailableError 判断 400 响应体是否明确表示「模型当前不可用/不存在」。
@@ -253,7 +258,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
+	if origin := c.Request.Header.Get("Origin"); isLocalOrigin(origin) && origin != "" {
+		c.Header("Access-Control-Allow-Origin", origin)
+		c.Header("Vary", "Origin")
+	}
 	c.Header("X-Accel-Buffering", "no") // 反代（nginx/render）别缓冲 SSE
 	// 用户选了具体模型，但 ID 已过期、被探活淘汰或没有可用 Key。
 	// 这时必须原地失败：若继续组装 Auto 链，就会出现“选了 B 却仍在跑 A”。
@@ -275,6 +283,8 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 每 15s 推一条 SSE 注释（客户端不渲染），只刷新底层连接活性，不参与业务事件。
 	// 用独立 goroutine + 遇流关闭即退出；写之前先查 request context 是否已结束，避免对已关闭的 writer 写。
 	heartbeatDone := make(chan struct{})
+	// 锁在 goroutine 外取好：gin.Context 的 Keys map 非并发安全，不能在子协程里首次 c.Set。
+	hbMu := sseMu(c)
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
@@ -287,10 +297,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				return
 			case <-ticker.C:
 				if c.Request.Context().Err() == nil {
-					codeSSEMu.Lock()
+					hbMu.Lock()
 					fmt.Fprintf(c.Writer, ": heartbeat\n\n")
 					c.Writer.Flush()
-					codeSSEMu.Unlock()
+					hbMu.Unlock()
 				}
 			}
 		}
@@ -687,37 +697,56 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 					"final_output":  content,
 					"pending_tasks": n,
 				})
-				select {
-				case res := <-bgNotifyCh:
-					msgs = append(msgs, bgTaskDoneMessage(res))
-					writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
-					checkpoint(round + 1) // 完成通知已入历史，断线续跑能接上
-					continue
-				case <-c.Request.Context().Done():
-					// 等待期间用户停止/断线
-					if workflowControl.stopped.Load() {
-						// 用户主动停止：不存检查点、发 workflow_done(resumable=false)
-						historyFinal = "用户主动停止了工作流。"
-						outcome = "stopped"
-						persistHistory()
-						writeCodeSSE(c, "workflow_done", map[string]any{
-							"status":              "stopped",
-							"final_output":        historyFinal,
-							"input_tokens":        inputTokens,
-							"output_tokens":       outputTokens,
-							"conversation_tokens": conversationTokens(inputTokens, staticSum),
-							"resumable":           false,
-							"workflow_id":         workflowID,
-							"changed_files":       changedFilesPayload(),
-						})
-					} else {
-						// 网络断线：保留检查点，可续跑
-						historyFinal = "工作流连接中断，任务未完成。"
-						outcome = "interrupted"
-						checkpoint(round + 1)
+				// 兜底轮询：完成通知走缓冲 channel，极端情况（缓冲满被丢弃）会永远等不到。
+				// 每 5s 检查一次注册表——任务其实已退出但通知丢了时，主动退出等待，
+				// 下一轮开头的 drain 会捡回剩余通知；若已全部消费则正常收尾，不会卡死。
+				poll := time.NewTicker(5 * time.Second)
+			waitLoop:
+				for {
+					select {
+					case res := <-bgNotifyCh:
+						if res.Stage == "start" {
+							writeCodeSSE(c, "bg_task_start", bgTaskStartPayload(res))
+							continue // start 事件不算唤醒，继续等 done（poll 保持运行）
+						}
+						poll.Stop()
+						msgs = append(msgs, bgTaskDoneMessage(res))
+						writeCodeSSE(c, "bg_task_done", bgTaskDonePayload(res))
+						checkpoint(round + 1) // 完成通知已入历史，断线续跑能接上
+						break waitLoop
+					case <-poll.C:
+						if pendingBgTaskCount(workflowID) == 0 {
+							poll.Stop()
+							break waitLoop // 通知丢失兜底：任务都已退出，放行收尾
+						}
+					case <-c.Request.Context().Done():
+						poll.Stop()
+						// 等待期间用户停止/断线
+						if workflowControl.stopped.Load() {
+							// 用户主动停止：不存检查点、发 workflow_done(resumable=false)
+							historyFinal = "用户主动停止了工作流。"
+							outcome = "stopped"
+							persistHistory()
+							writeCodeSSE(c, "workflow_done", map[string]any{
+								"status":              "stopped",
+								"final_output":        historyFinal,
+								"input_tokens":        inputTokens,
+								"output_tokens":       outputTokens,
+								"conversation_tokens": conversationTokens(inputTokens, staticSum),
+								"resumable":           false,
+								"workflow_id":         workflowID,
+								"changed_files":       changedFilesPayload(),
+							})
+						} else {
+							// 网络断线：保留检查点，可续跑
+							historyFinal = "工作流连接中断，任务未完成。"
+							outcome = "interrupted"
+							checkpoint(round + 1)
+						}
+						return
 					}
-					return
 				}
+				continue
 			}
 			persistHistory()
 			deleteWorkflowCheckpoint(workflowID)
@@ -737,6 +766,9 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"suggestions":         suggestions,
 			})
 			go generateSkillAsync(task, transcript)
+			// 热门技能管线：本轮预加载了热集技能且任务成功 → 补记一次使用，
+			// 否则预加载会饿死自己的入选理由（模型不再 skill_view，分数衰减掉出）。
+			provider.RecordHotSkillUse()
 			return
 		}
 
@@ -991,6 +1023,18 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 					"size": f.Size,
 				})
 			}
+			// 图表工件：Agent 调 chart 工具产出的 ECharts 图表数据，前端 ChartRenderer 直出
+			for chartIndex, ch := range results[i].charts {
+				writeCodeSSE(c, "artifact", map[string]any{
+					"id":    fmt.Sprintf("%s_chart_%d", tc.ID, chartIndex),
+					"kind":  "chart",
+					"tool":  tc.Function.Name,
+					"title": ch.Title,
+					"type":  ch.Type,
+					"data":  ch.Data,
+					"options": ch.Options,
+				})
+			}
 			status := "ok"
 			if results[i].failed {
 				status = "error"
@@ -1083,6 +1127,8 @@ type codeExecResult struct {
 	failed bool
 	images []mcpImageArtifact
 	videos []mcpVideoArtifact
+	// charts 是 Agent 调 chart 工具产出的图表数据，前端 ECharts 渲染。
+	charts []chartPayload
 	// files 是 Agent 落盘、可作为产物交付的文件（md/pdf/pptx/docx/xlsx 等）。
 	// native 写文件工具填；执行层转成 artifact(kind:file) 推给前端。
 	files []fileDeliverable
@@ -1287,7 +1333,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
 				out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
 			}
-			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, files: nativeResult.Files, urls: nativeResult.URLs}
+			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, charts: nativeResult.Charts, files: nativeResult.Files, urls: nativeResult.URLs}
 			return
 		}
 		if strings.HasPrefix(name, "mcp__") {
@@ -1321,7 +1367,9 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			wg.Add(1)
 			go func(i int, tc core.ToolCall) {
 				defer wg.Done()
-				out, err := runSubAgent(c.Request.Context(), backends, tc.ID, tc.Function.Arguments, emit)
+				// depth 显式传 1：主 Agent 是 0，子代理从 1 起算，
+				// 否则 subAgentMaxDepth 判定整体偏移一层（本该禁派重孙却放到玄孙）。
+				out, err := runSubAgent(c.Request.Context(), backends, tc.ID, tc.Function.Arguments, emit, 1)
 				if err != nil {
 					results[i] = codeExecResult{output: "子代理执行失败: " + err.Error(), failed: true}
 					return

@@ -102,7 +102,7 @@ func proxyToCloudOpt(c *gin.Context, targetPath string, forwardAuth bool) {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := readUpstreamBody(resp)
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
 }
 
@@ -233,7 +233,7 @@ func proxyIntimacyToCloud(c *gin.Context, targetPath string) {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := readUpstreamBody(resp)
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
 
 	// 云端权威值 → 本地缓存（供每轮注入；失败静默不影响响应）

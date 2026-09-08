@@ -1106,13 +1106,13 @@
                 </div>
               </div>
 
-              <div class="settings-section-title appearance-mode-title">悬浮球演示模式</div>
+              <div class="settings-section-title appearance-mode-title">Live2D 看板娘</div>
               <div class="settings-section-desc">
-                测试功能，默认关闭：打开后主窗口最小化到托盘时会出现一个可拖拽的悬浮球，
-                点击展开面板实时显示 Agent 当前意图和操作，适合录屏演示。改动需要重启应用才生效。
+                默认关闭：打开后主窗口最小化到托盘时，桌面右下角会出现一只可拖拽的透明置顶 Live2D 看板娘，
+                点击展开后她会实时汇报 Agent 当前的意图和操作，说话时嘴型同步、视线跟随鼠标。改动需要重启应用才生效。
               </div>
               <div class="param-row">
-                <span class="param-label">悬浮球</span>
+                <span class="param-label">看板娘</span>
                 <div class="seg-control">
                   <button
                     class="seg-btn"
@@ -2968,7 +2968,7 @@ function setImageProvider(provider) {
   localStorage.setItem(IMAGE_PROVIDER_KEY, provider || 'pollinations')
 }
 
-// ============ 悬浮球演示模式（测试功能，默认关闭，改动需要重启应用才生效） ============
+// ============ Live2D 看板娘开关（原悬浮球演示模式，默认关闭，改动需要重启应用才生效） ============
 const overlayEnabled = ref(false)
 const overlaySaving = ref(false)
 async function loadOverlayConfig() {

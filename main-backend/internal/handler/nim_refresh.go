@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -61,8 +60,9 @@ func freeModelDisabledPath() string {
 
 // loadPersistedDisabledModels 读回上次持久化的死源集合（条目标识集合）。空文件/不存在 = 空集。
 // 返回 map：键 = 条目 ID（新格式）。兼容旧格式（上游 Model 名数组）：
-//   同名在 catalog 里唯一 → 迁移成该条目 ID；
-//   同名对应多个条目（如 deepseek-v4-flash=商汤+B.AI）→ 键为同名，由调用方按「不标死」处理。
+//
+//	同名在 catalog 里唯一 → 迁移成该条目 ID；
+//	同名对应多个条目（如 deepseek-v4-flash=商汤+B.AI）→ 键为同名，由调用方按「不标死」处理。
 func loadPersistedDisabledModels() map[string]bool {
 	path := freeModelDisabledPath()
 	if path == "" {
@@ -181,10 +181,13 @@ func applyPersistedDisabledModels() {
 // 这是永久下架，不是临时故障，必须淘汰——模型若上游已不存在，
 // 保留在链里只会让 auto 每次首跳白撞（2026-08-29 实锤：LLM7 模型已下架）。
 // ⚠️ 08-31 修连坐：入参改为条目 ID，只标死这一个条目，不再按裸 Model 名牵连同名活源。
-//    调用点必须传 f.ID / b.ID（free_xxx），不要传上游 Model 名。
+//
+//	调用点必须传 f.ID / b.ID（free_xxx），不要传上游 Model 名。
+//
 // ⚠️ 08-31 用户铁律：只标死「免 key 网关」条目（Keyless=true，白嫖小白用的）。
-//    有 key 的模型（用户自己填 key 的）永不标死、永不显示已淘汰、永远可勾回——
-//    上游挂了顶多 auto 沉底/熔断，绝不做物理抹除。
+//
+//	有 key 的模型（用户自己填 key 的）永不标死、永不显示已淘汰、永远可勾回——
+//	上游挂了顶多 auto 沉底/熔断，绝不做物理抹除。
 func forceDisableFreeModel(id string) {
 	if id == "" {
 		return
@@ -246,11 +249,11 @@ func fetchProviderList(endpoint, key string) map[string]bool {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, _ := readUpstreamBody(resp)
 		fmt.Printf("⚠️ [提供方重探] %s HTTP %d（保留现状）: %s\n", url, resp.StatusCode, truncateChars(string(raw), 200))
 		return nil
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := readUpstreamBody(resp)
 	if err != nil {
 		fmt.Printf("⚠️ [提供方重探] %s 读响应失败: %v\n", url, err)
 		return nil

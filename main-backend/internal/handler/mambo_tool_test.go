@@ -34,12 +34,12 @@ func TestCallMamboVideo_EndToEnd(t *testing.T) {
 
 	// 解析引擎返回的 JSON
 	var out struct {
-		Ok       bool   `json:"ok"`
-		Video    string `json:"video"`
-		Srt      string `json:"srt"`
-		Manifest string `json:"manifest"`
+		Ok       bool    `json:"ok"`
+		Video    string  `json:"video"`
+		Srt      string  `json:"srt"`
+		Manifest string  `json:"manifest"`
 		Duration float64 `json:"duration"`
-		Segments int    `json:"segments"`
+		Segments int     `json:"segments"`
 	}
 	if err := json.Unmarshal([]byte(res.Text), &out); err != nil {
 		t.Fatalf("引擎返回不是 JSON: %v\n%s", err, res.Text)

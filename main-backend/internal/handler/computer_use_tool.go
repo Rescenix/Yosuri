@@ -76,7 +76,7 @@ func computerUseToolDefs() []core.ToolDefinition {
 			map[string]core.ToolProperty{
 				"url": {Type: "string", Description: "要打开的完整网址，如 https://www.meituan.com"},
 			}, []string{"url"}),
-		}
+	}
 }
 
 // ---------- 调度入口 ----------
@@ -397,7 +397,7 @@ func callComputerScroll(argsJSON string) (nativeToolResult, error) {
 		if args.Direction == "up" {
 			dir = -1
 		}
-		robotgoScroll(dir * args.Amount, 0)
+		robotgoScroll(dir*args.Amount, 0)
 
 		return nativeToolResult{Text: fmt.Sprintf("已向%s滚动 %d 步", args.Direction, args.Amount)}, nil
 	})

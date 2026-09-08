@@ -67,13 +67,15 @@ func hasPendingBgTasks(workflow string) bool {
 
 // bgSweepFinishedLocked 清掉已结束且超过 TTL 的任务（调用方需持 bgTasksMu）。
 // 防止 map 撑到上限后新任务被拒；Hermes 同款 FINISHED_TTL 语义。
+// 计时基准是「退出时刻」而非「启动时刻」——否则一个跑了 31 分钟才结束的任务
+// 会在刚结束时被立刻清掉，前端面板和 task_log 再也查不到它的输出。
 func bgSweepFinishedLocked() {
 	now := time.Now()
 	for id, t := range bgTasks {
 		t.mu.Lock()
-		exited, startedAt := t.exited, t.startedAt
+		exitedAt := t.exitedAt
 		t.mu.Unlock()
-		if exited && now.Sub(startedAt) > bgTaskTTL {
+		if !exitedAt.IsZero() && now.Sub(exitedAt) > bgTaskTTL {
 			delete(bgTasks, id)
 		}
 	}
@@ -130,7 +132,7 @@ func workflowIDFromCtx(ctx context.Context) string {
 // bgTaskResult 一次后台任务的生命周期事件（start / done）。
 type bgTaskResult struct {
 	TaskID   string `json:"task_id"`
-	Stage    string `json:"stage"`          // "start" 或 "done"
+	Stage    string `json:"stage"` // "start" 或 "done"
 	Command  string `json:"command"`
 	ExitCode int    `json:"exit_code"`
 	Output   string `json:"output"` // 输出尾部（完成通知用，完整日志走 task_log）
@@ -149,6 +151,7 @@ type bgTask struct {
 	output     []byte
 	truncated  bool
 	exited     bool
+	exitedAt   time.Time
 	exitCode   int
 	killReason string
 
@@ -157,8 +160,8 @@ type bgTask struct {
 }
 
 const (
-	bgTaskOutputCap = 256 * 1024 // 滚动输出上限（256KB），超出丢最旧
-	bgTaskMaxTasks  = 32         // 同时跟踪的上限，超出拒绝新任务
+	bgTaskOutputCap = 256 * 1024       // 滚动输出上限（256KB），超出丢最旧
+	bgTaskMaxTasks  = 32               // 同时跟踪的上限，超出拒绝新任务
 	bgTaskTTL       = 30 * time.Minute // 已结束任务的保留时长（对齐 Hermes FINISHED_TTL）
 )
 
@@ -173,13 +176,14 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 	if strings.TrimSpace(command) == "" {
 		return "", fmt.Errorf("command 不能为空")
 	}
+	// 上限检查与登记必须在同一把锁内完成：否则并发 run_task 会同时通过检查，
+	// 一起把任务塞进 map，实际数量越过 bgTaskMaxTasks。
 	bgTasksMu.Lock()
 	bgSweepFinishedLocked() // 先清掉过期已结束任务，给新任务腾位子
 	if len(bgTasks) >= bgTaskMaxTasks {
 		bgTasksMu.Unlock()
 		return "", fmt.Errorf("后台任务数已达上限 %d，请先 task_kill 清理", bgTaskMaxTasks)
 	}
-	bgTasksMu.Unlock()
 
 	task := &bgTask{
 		id:        fmt.Sprintf("task_%d", time.Now().UnixNano()),
@@ -201,14 +205,18 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 	cmd.Stderr = task
 	task.cmd = cmd
 
+	// 占位登记：此刻仍持锁，len 检查与写入 map 原子完成。
+	// Start() 不放在锁内（fork/exec 可能耗时，会阻塞所有 task_status/log 查询）。
+	bgTasks[task.id] = task
+	bgTasksMu.Unlock()
+
 	if err := cmd.Start(); err != nil {
+		bgTasksMu.Lock()
+		delete(bgTasks, task.id)
+		bgTasksMu.Unlock()
 		return "", fmt.Errorf("启动后台任务失败: %w", err)
 	}
 	task.pid = cmd.Process.Pid
-
-	bgTasksMu.Lock()
-	bgTasks[task.id] = task
-	bgTasksMu.Unlock()
 
 	// 启动成功 → 立即推一条 start 事件（前端面板实时登记 running 卡片）。
 	// 非阻塞投递：与完成通知同一通道，缓冲 16 条；工作流循环每轮 drain 一条。
@@ -236,6 +244,7 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 		}
 		task.mu.Lock()
 		task.exited = true
+		task.exitedAt = time.Now()
 		task.exitCode = exitCode
 		task.mu.Unlock()
 		close(task.done)
@@ -298,12 +307,12 @@ func bgTaskStatus(taskID string) map[string]any {
 	t.mu.Unlock()
 	out, truncated := t.snapshot()
 	r := map[string]any{
-		"task_id":    t.id,
-		"command":    t.command,
-		"status":     "running",
-		"pid":        t.pid,
-		"uptime_seconds": int(time.Since(t.startedAt).Seconds()),
-		"output_preview": out,
+		"task_id":          t.id,
+		"command":          t.command,
+		"status":           "running",
+		"pid":              t.pid,
+		"uptime_seconds":   int(time.Since(t.startedAt).Seconds()),
+		"output_preview":   out,
 		"output_truncated": truncated,
 	}
 	if exited {

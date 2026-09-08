@@ -1000,16 +1000,31 @@
                         v-for="file in kbFiles"
                         :key="file.id"
                         class="kb-slot-item"
-                        @click="insertKbRef(file)"
+                        @mouseenter="onKbFileHover(file)"
+                        @mouseleave="onKbFileLeave"
                       >
-                        <div class="kb-slot-box">
+                        <div class="kb-slot-box" @click="insertKbRef(file)">
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="var(--app-text-faint)" stroke-width="1.5"/><path d="M14 2v6h6" stroke="var(--app-text-faint)" stroke-width="1.5"/></svg>
                           <button class="kb-slot-remove" @click.stop="removeKbFile(file.id)" title="移除">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
                           </button>
                         </div>
-                        <span class="kb-slot-name" :title="file.name">{{ file.name }}</span>
+                        <span class="kb-slot-name" :title="file.name" @click="insertKbRef(file)">{{ file.name }}</span>
                         <span v-if="file.chunks" class="kb-slot-meta">{{ file.chunks }} 段</span>
+                        <!-- 悬浮知识图谱弹窗 -->
+                        <div
+                          v-if="kbHoverFile === file.id"
+                          class="kg-popup"
+                          @mouseenter="kgPopupHover = true"
+                          @mouseleave="kgPopupHover = false"
+                        >
+                          <KnowledgeGraph
+                            :graph="kbGraph"
+                            :loading="kbGraphLoading"
+                            :error="kbGraphError"
+                            @regenerate="() => fetchKnowledgeGraph(file.name)"
+                          />
+                        </div>
                       </div>
                       <!-- 添加更多 -->
                       <div class="kb-slot-item kb-slot-add" @click.stop="triggerKbUpload">
@@ -1305,6 +1320,7 @@ import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
+import KnowledgeGraph from './KnowledgeGraph.vue'
 import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
@@ -3408,8 +3424,25 @@ const {
   groupedMessages, formatChatTime,
   kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,
   toggleKb, triggerKbUpload, onKbUploadSelected, onKbDrop, loadKb,
-  addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize
+  addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize,
+  kbGraph, kbGraphLoading, kbGraphError, kbGraphFile, fetchKnowledgeGraph
 } = useChatWidget(props, { renderMarkdown })
+
+// 知识库文件 hover：控制图谱弹窗
+const kbHoverFile = ref(null)
+const kgPopupHover = ref(false)
+let kbHoverTimer = null
+function onKbFileHover(file) {
+  clearTimeout(kbHoverTimer)
+  kbHoverFile.value = file.id
+  // 每次 hover 都重新生成图谱
+  fetchKnowledgeGraph(file.name)
+}
+function onKbFileLeave() {
+  kbHoverTimer = setTimeout(() => {
+    if (!kgPopupHover.value) kbHoverFile.value = null
+  }, 150)
+}
 
 // 群聊名牌：按 flow 上的 agentId 查角色卡。刷新后 agentId 由后端持久化的
 // message.agent 还原（loadAllHistory 里映射）。查不到卡（角色卡已删）返回 null，
@@ -3879,6 +3912,8 @@ watch(() => sessionId.value, (nid, oid) => {
   // 切会话时重载上下文数据，否则继续显示上个会话的数值
   loadContextBreakdown(nid || '')
   sessionTokenStats.value = loadSessionTokenStats(nid || '')
+  // 输入框 ↑/↓ 历史按会话隔离：切会话必须重载，否则翻出上个会话的话
+  loadChatHistory()
 })
 
 // 消息流里每个 kind:'group' 的组件实例，供后台任务清单点击跳转+展开用
@@ -3907,17 +3942,36 @@ const historySwapping = ref(false)
 const inputFocused = ref(false)
 let swapTimer = null
 const chatHistoryIndex = ref(-1) // -1 = 未在浏览（编辑新内容）
+// 会话级历史：{ [sessionId]: string[] }。旧版是全局数组，导致 ↑/↓ 翻出的是
+// 别的会话发过的话（2026-09-08 用户指出），改为按会话隔离。
 const CHAT_HISTORY_KEY = 'rescene_chat_history'
 const CHAT_HISTORY_MAX = 50
+const CHAT_HISTORY_SESSIONS_MAX = 200
 
-function loadChatHistory() {
+function historyMap() {
   try {
     const raw = localStorage.getItem(CHAT_HISTORY_KEY)
-    chatHistory.value = raw ? JSON.parse(raw) : []
-  } catch { chatHistory.value = [] }
+    const m = raw ? JSON.parse(raw) : null
+    if (Array.isArray(m)) return {} // 旧版全局数组：不迁移，直接丢弃
+    return (m && typeof m === 'object') ? m : {}
+  } catch { return {} }
+}
+function loadChatHistory() {
+  chatHistory.value = historyMap()[sessionId.value || 'global'] || []
+  chatHistoryIndex.value = -1
 }
 function saveChatHistory() {
-  try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatHistory.value)) } catch {}
+  try {
+    const sid = sessionId.value || 'global'
+    const m = historyMap()
+    if (chatHistory.value.length) m[sid] = chatHistory.value
+    else delete m[sid]
+    const keys = Object.keys(m)
+    if (keys.length > CHAT_HISTORY_SESSIONS_MAX) {
+      keys.slice(0, keys.length - CHAT_HISTORY_SESSIONS_MAX).forEach(k => delete m[k])
+    }
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(m))
+  } catch {}
 }
 function pushChatHistory(text) {
   const t = (text || '').trim()

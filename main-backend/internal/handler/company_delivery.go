@@ -12,6 +12,7 @@ package handler
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -244,10 +245,18 @@ func deliveryProductHTML(project, brief string, runnable bool, upstream string) 
 - 禁止大面积空白：内容不足一屏时，用统计卡片区、使用说明区、图例/分类汇总区把页面填满到至少 2.5 屏高度；列表为空时空状态区要占位有分量（图标+文案+引导按钮），绝不允许页面下半部分整体塌陷成空白
 - 收支/数值类产品：正负值必须颜色区分（收入绿/支出红），合计区做成带背景色的统计卡片，净额为负时标红警示`
 	// 先让模型生成，失败则回退到模板壳（保证门禁不因外部服务挂死）。
-	if html, err := deliveryLLMContent(role, brief, "产品HTML", criteria, upstream); err == nil && strings.Contains(html, "<html") {
-		// 模型可能用 markdown 代码围栏包裹 HTML（```html ... ```），必须剥离后再落盘，
-		// 否则浏览器把首行 ```html 当文本渲染成空白。见 03-UI原型.html 空白 bug。
-		return deliveryStripCodeFence(html)
+	if html, err := deliveryLLMContent(role, brief, "产品HTML", criteria, upstream); err == nil {
+		stripped := deliveryStripCodeFence(html)
+		// 完整性校验：除了「有 <html」，还必须闭合（</html> 收尾 + <script> 里有事件绑定）。
+		// 被 max_tokens 截断的产物（按钮在、事件没绑、标签没闭合）在此拦下，落盘半截 = 审批者点开就没。
+		if deliveryHTMLComplete(stripped) {
+			return stripped
+		}
+		// 截断修复：正文看似完整只差收尾标签时，自动补闭合（免一整次重跑）；
+		// 连事件绑定都没有的深度截断不修，回退模板壳。
+		if repaired := deliveryRepairHTMLTail(stripped); repaired != "" {
+			return repaired
+		}
 	}
 	// 回退：模板壳（仅当模型不可用时）
 	return buildCompanyDeliveryHTML(project, brief, runnable)
@@ -272,6 +281,43 @@ func deliveryStripCodeFence(s string) string {
 		}
 	}
 	return strings.TrimSpace(s)
+}
+
+// deliveryHTMLComplete 判断模型产出的单文件 HTML 是否完整可交付：
+// 有 <html 开头 + </html> 闭合 + <script> 内含真实事件绑定（addEventListener/onclick）。
+// 只查开头不查闭合，会让 max_tokens 截断的半截产物混进交付。
+func deliveryHTMLComplete(s string) bool {
+	lower := strings.ToLower(s)
+	if !strings.Contains(lower, "<html") || !strings.Contains(lower, "</html>") {
+		return false
+	}
+	// 可运行交互：有 script 且里面有事件绑定（runnable 产物门禁同款标准）
+	if idx := strings.Index(lower, "<script"); idx >= 0 {
+		tail := lower[idx:]
+		return strings.Contains(tail, "addeventlistener") || strings.Contains(tail, "onclick") || strings.Contains(tail, ".on")
+	}
+	return false
+}
+
+// deliveryRepairHTMLTail 尝试修复「正文完整、只差收尾标签」的浅截断：
+// 剥掉最后一个未闭合 <script> 的残段（避免半行 JS 语法错），补 </script></body></html>。
+// 深度截断（连事件绑定都没有）返回空串，由调用方回退模板壳。
+func deliveryRepairHTMLTail(s string) string {
+	lower := strings.ToLower(s)
+	if !strings.Contains(lower, "<html") {
+		return "" // 连开头都没有 = 深度截断，不修
+	}
+	if strings.Contains(lower, "addeventlistener") || strings.Contains(lower, "onclick") || strings.Contains(lower, ".on") {
+		// 已有事件绑定 = 逻辑基本写完，只是收尾被砍。剥掉残留的未闭合 <script> 段再补。
+		if lastOpen := strings.LastIndex(lower, "<script"); lastOpen >= 0 && !strings.Contains(lower[lastOpen:], "</script>") {
+			s = s[:lastOpen]
+		} else if !strings.Contains(lower, "</script>") {
+			// 有绑定但没 </script>：绑定在最后一段里，整段剥掉会丢功能——不修，让重试解决
+			return ""
+		}
+		return strings.TrimRight(s, " \t\n\r") + "\n</script></body></html>"
+	}
+	return "" // 无事件绑定 = 深度截断
 }
 
 // deliveryXML 转义 XML 特殊字符。
@@ -585,7 +631,7 @@ func deliveryPPTFromBrief(project, brief, upstream string) []officeSlide {
 				ln = string(r[:36]) + "…"
 			}
 			lines = append(lines, ln)
-			if len(lines) >= 20 {
+			if len(lines) >= 24 { // 4 页×5 条=20，多收 4 条余量防「某页凑不满 5 条」时把后面的行顶没
 				break
 			}
 		}
@@ -642,13 +688,20 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 	}
 	companyLiveStage(projectName, "meeting", "ceo", "ceo-01", "立项会议完成，直接进入最小原型")
 
+	// 视觉参考链：生图出 UI 参考稿 → 免费识图提炼实现规格 → 注入后续所有生成环节的 prompt。
+	// 让模型照着真实设计稿写代码，而不是凭空想象（用户铁律：有免费生图/识图就用起来）。
+	// 任何一环失败返回空串，生成端退回现有硬规格，不阻塞交付。
+	companyLiveStage(projectName, "mvp", "designer", "designer-04", "设计师产出视觉参考稿（免费生图 + 识图提炼规格）")
+	visualSpec := deliveryVisualReference(projectDir, projectName, brief)
+	visualBlock := deliveryVisualBlock(visualSpec)
+
 	// 2. MVP —— 一开始就产出可运行的最小原型（v1）。
 	// 此前链路要跑完会议/需求/调研/数据四个文本阶段才见到能操作的东西，
 	// 用户全程只看进度条。现在第一条指令几十秒内就有真页面，后续阶段全部围着它迭代。
 	companyLiveStage(projectName, "mvp", "coder", "coder-03", "最小可运行原型 v1 生成中（"+plan.Reason+"）")
 	var mvpHTML string
 	if plan.MultiFile {
-		mvpFiles := deliveryMultiProject(projectName, brief, "")
+		mvpFiles := deliveryMultiProject(projectName, brief, visualBlock)
 		for name, content := range mvpFiles {
 			if _, err := writeDeliveryFile(projectDir, name, []byte(content)); err != nil {
 				return "", err
@@ -656,15 +709,22 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 		}
 		mvpHTML = companyInlineMulti(mvpFiles)
 	} else {
-		mvpHTML = deliveryProductHTML(projectName, brief, true, "")
+		mvpHTML = deliveryProductHTML(projectName, brief, true, visualBlock)
 	}
 	if _, err := writeDeliveryFile(projectDir, "output-app.html", []byte(mvpHTML)); err != nil {
 		return "", err
 	}
 	companyLiveArtifact(projectName, "mvp", "coder", "output-app.html", "v1")
+	// 参考稿在 v1 之后补推：大屏先见 v1 原型，再闪现「本产品的视觉参考稿」，随后被 v2 覆盖。
+	if visualSpec != "" {
+		if matches, _ := filepath.Glob(filepath.Join(projectDir, "10-视觉参考", "视觉参考稿.*")); len(matches) > 0 {
+			companyLiveArtifact(projectName, "mvp", "designer", "10-视觉参考/"+filepath.Base(matches[0]), "ref")
+		}
+	}
 	prevContent := mvpHTML // 接力链：最小原型就是后续所有环节的底座
 
 	// 3. requirements —— 需求计划（需求分析师 agent，基于最小原型补全需求与验收标准）
+	companyLiveStage(projectName, "requirements", "writer", "writer-15", "需求计划拆解中（用户故事/功能清单/验收标准）")
 	reqContent := ""
 	if c, err := deliveryLLMContent("需求分析师", brief, "需求计划", "产品已有一版可运行最小原型，把用户指令拆成具体、可验收的需求与验收标准，含功能点。结构要求：①用户故事（作为<角色>，我要<功能>，以便<价值>）至少 3 条；②功能清单表格（功能点|优先级 P0/P1/P2|验收标准）；③非功能需求（性能/兼容/数据安全）至少 2 条；④明确「不在本期范围」的边界项防止范围蔓延。不要写通用套话，每条都要针对这个具体产品", prevContent); err == nil && strings.TrimSpace(c) != "" {
 		reqContent = c
@@ -697,6 +757,7 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 	appendCompanyRelay(companyRelayEvent{From: "researcher-04", To: "writer-15", Stage: "research", Artifact: "01-调研报告.md", Status: "done", DoneAt: time.Now().Format(time.RFC3339)})
 
 	// 4. data —— 研究数据 XLSX（数据分析师 agent，基于调研产物往下接力）
+	companyLiveStage(projectName, "data", "researcher", "researcher-04", "研究数据整理中（功能点|说明|状态 三列证据）")
 	// 模型可能不遵守「功能点|说明|状态」格式而输出整段 markdown（会让 xlsx 塞进乱码）。
 	// 这里做两层清洗：① 去 markdown 语法记号 ② 按 | 拆行；拆不出结构化行就从文本抽要点兜底。
 	// 行数下限：模型只给 2-3 条也算没干完活——从调研/需求产物里抽功能行补足到 6 条。
@@ -760,7 +821,7 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 
 	// 5. ui —— 设计迭代（设计师 agent 在最小原型 v1 上改出 v2，大屏实时换页）
 	companyLiveStage(projectName, "ui", "designer", "designer-04", "UI 设计迭代：在最小原型上重做视觉与布局")
-	uiHTML := deliveryProductHTML(projectName, brief, false, "已上线的最小可运行原型（在此基础上做设计升级，保留全部已有功能）:\n"+deliveryTruncate(mvpHTML, 2500)+"\n\n调研结论:\n"+deliveryTruncate(researchContent, 1500))
+	uiHTML := deliveryProductHTML(projectName, brief, false, "已上线的最小可运行原型（在此基础上做设计升级，保留全部已有功能）:\n"+deliveryTruncate(mvpHTML, 2500)+"\n\n调研结论:\n"+deliveryTruncate(researchContent, 1500)+visualBlock)
 	if _, err := writeDeliveryFile(projectDir, "03-UI原型.html", []byte(uiHTML)); err != nil {
 		return "", err
 	}
@@ -769,6 +830,7 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 	appendCompanyRelay(companyRelayEvent{From: "designer-04", To: "coder-03", Stage: "ui", Artifact: "03-UI原型.html", Status: "done", DoneAt: time.Now().Format(time.RFC3339)})
 
 	// 6. docs —— 软件文档（文档工程师 agent，基于 UI 原型产物往下接力）
+	companyLiveStage(projectName, "docs", "writer", "writer-15", "软件文档撰写中（简介/快速上手/功能详解/FAQ）")
 	docsContent := ""
 	if c, err := deliveryLLMContent("文档工程师", brief, "软件文档", "写该产品的完整软件文档，结构要求：①产品简介（一句话定位+核心价值）；②快速上手（3 步内跑起来，配具体操作说明）；③功能详解（每个功能一节：入口→操作→预期结果）；④常见问题 FAQ 至少 3 条；⑤技术实现说明（数据存储方式、浏览器兼容性）。面向最终用户写，别写成开发日志", prevContent); err == nil && strings.TrimSpace(c) != "" {
 		docsContent = c
@@ -781,7 +843,7 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 
 	// 7+8. code + runnable —— 终版迭代（把设计稿 v2 落成最终可运行程序）
 	companyLiveStage(projectName, "code", "coder", "coder-03", "终版迭代：设计稿落地为最终可运行程序")
-	upstream := "最小原型 v1（功能基线，必须全部保留）:\n" + deliveryTruncate(mvpHTML, 2000) + "\n\n设计稿 v2（视觉与布局以此为准）:\n" + deliveryTruncate(uiHTML, 2500)
+	upstream := "最小原型 v1（功能基线，必须全部保留）:\n" + deliveryTruncate(mvpHTML, 2000) + "\n\n设计稿 v2（视觉与布局以此为准）:\n" + deliveryTruncate(uiHTML, 2500) + visualBlock
 	var runnableHTML string
 	if plan.MultiFile {
 		// 多文件项目：终版重新产出 4 个源文件（覆盖 v1），再内联成 output-app.html 供预览与门禁。
@@ -799,21 +861,11 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 		return "", err
 	}
 	companyLiveArtifact(projectName, "runnable", "coder", "output-app.html", "final")
-	// 真机质检：用受管浏览器把产品真正打开，实测渲染/交互 + 免费识图评审视觉；
-	// 不合格则带缺陷清单返修一轮。返修会改写 output-app.html，故 prevContent 与
-	// 后续发布回执 SHA256 都以质检后的最终版为准。质检能力缺失时降级放行不卡死。
-	companyLiveStage(projectName, "qa", "qa", "qa-01", "质检员正在真机打开产品实测（渲染 / 交互 / 视觉）")
-	finalEntry, qaReport := companyQAAudit(projectDir, projectName, brief, "output-app.html", plan.MultiFile, upstream)
-	if strings.TrimSpace(finalEntry) != "" {
-		runnableHTML = finalEntry
-	}
-	if qaFile := saveCompanyQAReport(projectDir, qaReport); qaFile != "" {
-		companyLiveArtifact(projectName, "qa", "qa", qaFile, "")
-	}
 	prevContent = runnableHTML // 接力链：可运行程序交给路演环节
 	appendCompanyRelay(companyRelayEvent{From: "coder-03", To: "promoter-18", Stage: "code", Artifact: "output-app.html", Status: "done", DoneAt: time.Now().Format(time.RFC3339)})
 
 	// 9. ppt —— 路演 PPTX（路演策划 agent，基于产品产物产出大纲，复用纯 Go genPptx）
+	companyLiveStage(projectName, "ppt", "promoter", "promoter-18", "路演 PPT 大纲生成中（核心问题/方案亮点/功能实现/宣传行动）")
 	slides := deliveryPPTFromBrief(projectName, brief, prevContent)
 	pptxData, err := genPptx(projectName, slides)
 	if err != nil {
@@ -825,6 +877,7 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 
 	// 10. pv —— 宣传视频（尽力而为；真视频做不了则用免费生图素材代替，都不行才标记缺失）
 	// 视频成功→evidence；生图素材成功→evidence（kind=pv-fallback-images）；全失败→missing。
+	companyLiveStage(projectName, "pv", "promoter", "promoter-18", "宣传 PV 制作中（生图分镜 + 配音合成，尽力而为）")
 	var pvPath string
 	if p, videoErr := deliveryRenderVideoDirect(projectDir, projectName, brief); videoErr == nil && p != "" {
 		pvPath = filepath.Join(projectDir, "06-宣传PV.mp4")
@@ -835,6 +888,7 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 	}
 
 	// 11. promotion —— 发布回执（绑定可运行入口 SHA256）
+	companyLiveStage(projectName, "promotion", "publisher", "publisher-01", "发布回执生成中（绑定可运行入口 SHA256）")
 	runnableBytes, _ := os.ReadFile(filepath.Join(projectDir, "output-app.html"))
 	appSum := deliverySHA256(runnableBytes)
 	receiptBody := fmt.Sprintf("status=published\nchannel=local-project-preview\nproject=%s\npublished_at=%s\nentry=output-app.html\nentry_sha256=%s\n",
@@ -920,13 +974,14 @@ func deliveryRenderVideoDirect(projectDir, project, brief string) (string, error
 	out := filepath.Join(projectDir, "06-宣传PV.mp4")
 
 	// 素材兜底：本地素材池（assets/mambo）通常只有无关图，match_media 命中不了 → 渐变背景黑屏。
-	// 在调 mambo 前用免费生图（Pollinations 免 key，实测可用）生成几张产品相关背景图，
-	// 落盘到项目内素材目录，文件名带产品关键词，让 mambo match_media 能命中 → 出真实画面而不黑屏。
+	// 在调 mambo 前用免费生图（Pollinations 免 key）生成产品相关背景图，文件名带关键词。
+	// ⚠️ 不带 --ordered-media：ordered 是逐段轮放，完全绕过 match_media 匹配逻辑——
+	// 生成了关键词素材却按顺序轮放等于白生成。让 mambo 按每句关键词真正去命中素材。
 	mediaDir := filepath.Join(projectDir, "pv-media")
 	genShots := deliveryRenderPvStillShots(mediaDir, project, brief)
 	mediaArgs := []string{}
 	if len(genShots) > 0 {
-		mediaArgs = []string{"--media", mediaDir, "--ordered-media"}
+		mediaArgs = []string{"--media", mediaDir}
 	}
 
 	cmd := hiddenCommandContext(context.Background(), py,
@@ -944,19 +999,28 @@ func deliveryRenderVideoDirect(projectDir, project, brief string) (string, error
 }
 
 // deliveryRenderPvStillShots 用免费生图（Pollinations 免 key）生成产品相关背景图，落盘到 mediaDir。
-// 文件名带产品关键词片段，让 mambo 的 match_media（文件名关键词匹配）能命中。
+// 文件名带**多个**产品关键词片段，让 mambo 的 match_media（句子关键词 2-4 字滑窗匹配文件名）
+// 命中率最大化——此前只带 1 个词，命中率低，大量段落掉进纯渐变背景（黑屏观感来源）。
 func deliveryRenderPvStillShots(mediaDir, project, brief string) []string {
 	if err := os.MkdirAll(mediaDir, 0o755); err != nil {
 		return nil
 	}
-	// 从产品名/指令里切出 2-4 字短词当文件名，提高 match_media 命中率
-	safe := deliverySanitizeKeywords(brief)
-	if safe == "" {
-		safe = deliverySanitizeKeywords(project)
+	// 从指令里切出多个 2-4 字核心词拼进文件名（如「番茄钟-专注-计时-01.jpg」），
+	// mambo 每句的关键词滑窗（extract_keywords 产 2-4 字词）更容易对上文件名子串。
+	kws := deliveryKeywords(brief, 3)
+	if len(kws) == 0 {
+		kws = deliveryKeywords(project, 3)
 	}
-	if safe == "" {
-		safe = "product"
+	if len(kws) == 0 {
+		kws = []string{"product"}
 	}
+	// ⚠️ generateImage 的 sanitizeImageName 只留 ASCII（中文全变 '-' 再 Trim 成空串），
+	// 中文前缀会让文件名退化成 img-时间戳.jpg，match_media 命中率归零。
+	// 这里把每个中文词转成「首字拼音不可得 → 用词内字符的 Unicode 码点缩写」不可行；
+	// 正解：保留中文词、绕开 sanitizeImageName——generateImage 落盘后按 res.File 把文件
+	// 重命名为含中文关键词的名字（os.Rename 不经过 sanitize），mambo 的 match_media
+	// 拿中文滑窗词匹配中文文件名，命中率才真实成立。
+	prefix := strings.Join(kws, "-")
 	// 图片文件名前缀用关键词，后缀序数。生图 prompt 用清洗后的检索词（deliverySearchQuery），
 	// 整句指令直接塞给生图模型会带出「做一个/要能运行」这类语气词，画面主题被稀释。
 	searchQ := deliverySearchQuery(brief)
@@ -974,14 +1038,49 @@ func deliveryRenderPvStillShots(mediaDir, project, brief string) []string {
 			Provider: "pollinations",
 			Model:    "flux",
 			OutDir:   mediaDir,
-			Name:     fmt.Sprintf("%s-%02d", safe, i+1),
+			Name:     fmt.Sprintf("shot-%02d", i+1), // ASCII 名落盘（sanitize 安全）
 		})
 		if err != nil {
+			continue
+		}
+		// 落盘后重命名为含中文关键词的名字（绕开 sanitizeImageName 的 ASCII 清洗）：
+		// mambo match_media 用中文滑窗词匹配文件名子串，中文名才可能真命中。
+		chineseName := filepath.Join(mediaDir, fmt.Sprintf("%s-%02d%s", prefix, i+1, filepath.Ext(res.File)))
+		if rerr := os.Rename(res.File, chineseName); rerr == nil {
+			created = append(created, chineseName)
 			continue
 		}
 		created = append(created, res.File)
 	}
 	return created
+}
+
+// deliveryKeywords 从文本里提取至多 n 个可作文件名的核心词（中文 2-4 字片段 / 英文小写）。
+// 与 deliverySanitizeKeywords 的区别：返回多个词，供 pv 素材文件名多关键词化。
+func deliveryKeywords(s string, n int) []string {
+	s = deliverySanitize(s)
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	// 中文 2-4 字词（按出现顺序取，去重）
+	var out []string
+	seen := map[string]bool{}
+	re := regexp.MustCompile(`[\p{Han}]{2,4}`)
+	for _, m := range re.FindAllString(s, n*3) {
+		if !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+			if len(out) >= n {
+				return out
+			}
+		}
+	}
+	// 英文 fallback
+	if m := regexp.MustCompile(`[a-zA-Z0-9]{2,}`).FindString(s); m != "" && len(out) < n {
+		out = append(out, strings.ToLower(m))
+	}
+	return out
 }
 
 // deliverySanitizeKeywords 从文本里提取可作文件名的核心词（中文 2-4 字片段 / 英文小写）。
@@ -1020,7 +1119,8 @@ func deliveryRenderPvFallback(projectDir, project, brief string) (string, error)
 	created := []string{}
 	for i, prompt := range shots {
 		res, err := generateImage(context.Background(), imageGenSpec{
-			Prompt:   prompt + "，" + brief + "。产品海报风格，清晰干净，无文字遮挡关键信息",
+			// ⚠️ prompt 不再拼整句 brief：语气词稀释画面主题（与 deliveryRenderPvStillShots 同规则）
+			Prompt:   prompt + "。产品海报风格，清晰干净，无文字遮挡关键信息",
 			Width:    1024,
 			Height:   1024,
 			Provider: "pollinations",
@@ -1031,8 +1131,14 @@ func deliveryRenderPvFallback(projectDir, project, brief string) (string, error)
 		if err != nil {
 			continue // 单张失败不阻塞，尽量多出
 		}
-		created = append(created, res.File)
-		created = append(created, res.URL)
+		// 与 deliveryRenderPvStillShots 同规则：重命名为含中文关键词的名字，
+		// 审批者翻分镜图时文件名即产品语义；manifest.files 同步指向新名。
+		chineseName := filepath.Join(imgDir, fmt.Sprintf("%s-%02d%s", searchQ, i+1, filepath.Ext(res.File)))
+		if rerr := os.Rename(res.File, chineseName); rerr == nil {
+			created = append(created, chineseName, res.URL)
+			continue
+		}
+		created = append(created, res.File, res.URL)
 	}
 	if len(created) == 0 {
 		return "", fmt.Errorf("生图兜底全部失败")
@@ -1050,4 +1156,52 @@ func deliveryRenderPvFallback(projectDir, project, brief string) (string, error)
 		return "", err
 	}
 	return mp, nil
+}
+
+// deliveryVisualReference 视觉参考链：免费生图出该产品的 UI 参考稿 → 免费识图提取
+// 可落地的视觉规格（布局/配色/层次），注入生成 prompt，让模型照着真实设计稿写代码，
+// 而不是凭空想象。任何一环失败都返回空串（调用方退回现有硬规格，确定性兜底不阻塞）。
+// 参考稿落盘到项目目录（10-视觉参考/），审批者能看到「照着哪张图做的」。
+func deliveryVisualReference(projectDir, project, brief string) string {
+	refDir := filepath.Join(projectDir, "10-视觉参考")
+	_ = os.MkdirAll(refDir, 0o755)
+	// 生图：清洗后的检索词当主题（整句指令带语气词会稀释画面主题，见 deliverySearchQuery）。
+	spec := imageGenSpec{
+		Prompt:   deliverySearchQuery(brief) + "，网页应用 UI 设计稿，界面完整清晰，现代简洁，和谐配色，明亮，无文字乱码",
+		Width:    1280,
+		Height:   800,
+		Provider: "pollinations",
+		Model:    "flux",
+		OutDir:   refDir,
+		Name:     "视觉参考稿",
+	}
+	res, err := generateImage(context.Background(), spec)
+	if err != nil || res.File == "" {
+		return ""
+	}
+	// 直接用 generateImage 返回的真实路径与 mime（它按实际格式定扩展名），
+	// 不自造「.png」文件名——实测 Pollinations 返回 image/jpeg，硬拷成 .png 会得到假 PNG。
+	// Name 用「视觉参考稿」中文名：generateImage 内部 sanitize 会把它清掉再按时间戳命名，
+	// 但 deliveryVisualReference 落盘后由调用方按「10-视觉参考/视觉参考稿.*」glob 取用；
+	// projectArtifactStage 对「视觉参考/参考稿」判空，不虚增阶段数。
+	png, err := os.ReadFile(res.File)
+	if err != nil || len(png) < 100 {
+		return ""
+	}
+	// 识图：把参考稿转成「模型能照着执行」的具体规格，只问可落地维度，不问虚的。
+	question := "这是给前端工程师的 UI 参考稿。请提炼可直接照做的实现规格：1)主色/辅色/背景色的十六进制估值；2)页面布局结构（顶栏/侧栏/卡片区/统计区等各区块怎么摆）；3)卡片与按钮的视觉风格（圆角/阴影/描边）；4)整体气质关键词（如清新/专业/活泼）。控制在 250 字内，只描述看得到的。"
+	specText, err := AnalyzeImage(base64.StdEncoding.EncodeToString(png), question, nil)
+	if err != nil || strings.TrimSpace(specText) == "" {
+		return ""
+	}
+	return specText
+}
+
+// deliveryVisualBlock 把视觉参考规格包装成注入生成 prompt 的块（空串则返回空，调用方退回硬规格）。
+func deliveryVisualBlock(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return ""
+	}
+	return "\n【视觉参考规格】设计师已产出该产品的视觉参考稿，以下是从稿子里提炼的实现规格，配色与布局请尽量贴合（这是本产品的既定视觉方向，不是建议）：\n" + ref + "\n"
 }

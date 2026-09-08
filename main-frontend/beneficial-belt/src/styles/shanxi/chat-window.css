@@ -2370,15 +2370,12 @@ min-height: 90px !important;
 
 
 
-/* 主页容器：占满消息区剩余高度并垂直居中。
+/* 主页容器：不占剩余高度，内容紧凑排布，输入框紧随下方不被顶到底部。
    建议行高度恒定（见 NewSessionHome .home-followups：单行不换行），
-   异步加载前后总高不变，居中重算不会把日历顶上去 */
+   异步加载前后总高不变，日历不被顶上去 */
 .home-container-for-layout {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   overflow-y: auto;
 }
 
@@ -4753,6 +4750,7 @@ img.gem-rail-avatar {
   gap: 6px;
   cursor: pointer;
   transition: transform 0.15s;
+  position: relative;
 }
 /* 交替倾斜角度，像随手贴的便签。
    注意：calc() 不支持 % 取模和三元运算，必须用 nth-child 写死两个角度 */
@@ -4807,6 +4805,28 @@ img.gem-rail-avatar {
 }
 .kb-slot-item:hover .kb-slot-remove { opacity: 1 }
 .kb-slot-remove:hover { color: #d94834; border-color: #d94834 }
+
+/* 知识图谱悬浮弹窗 */
+.kg-popup {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  width: 380px;
+  height: 280px;
+  background: #fff;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  margin-top: 8px;
+  animation: kg-popup-in 0.15s ease-out;
+}
+@keyframes kg-popup-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 
 /* 抽屉上滑动画 */
 .kb-slide-enter-active,

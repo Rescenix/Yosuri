@@ -298,5 +298,3 @@ func SaveAgentAvatar(id, dataURL string) error {
 	}
 	return os.WriteFile(p, []byte(dataURL), 0o644)
 }
-
-

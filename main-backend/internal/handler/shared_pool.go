@@ -81,7 +81,7 @@ func HandleGetSharedPoolModels(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := readUpstreamBody(resp)
 	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "解析共享池响应失败"})
@@ -136,7 +136,7 @@ func HandleSharedPoolChat(c *gin.Context) {
 
 	// 检查是否限流（429）
 	if resp.StatusCode == http.StatusTooManyRequests {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := readUpstreamBody(resp)
 		c.Data(http.StatusTooManyRequests, "application/json", body)
 		return
 	}
@@ -159,7 +159,7 @@ func HandleSharedPoolChat(c *gin.Context) {
 		}
 	} else {
 		// 非流式：直接透传
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := readUpstreamBody(resp)
 		for k, v := range resp.Header {
 			for _, vv := range v {
 				c.Header(k, vv)
@@ -193,6 +193,6 @@ func HandleSharedPoolQuotaProxy(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := readUpstreamBody(resp)
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
 }

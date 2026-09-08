@@ -111,7 +111,8 @@ func TestActivatedToolNames(t *testing.T) {
 // 常驻工具被误当成需要加载时，系统应直接给出答案（"它已经在你手上了"），
 // 而不是回一句"名字不存在，自己去核对索引"——后者会把模型支到错误的方向。
 func TestLoadToolsTellsAboutResidentTools(t *testing.T) {
-	out, changed := handleLoadTools(`{"names":["harness_status"]}`, map[string]bool{})
+	// 用真正常驻的 skill_view（harness_status 是按需的，见上方测试）。
+	out, changed := handleLoadTools(`{"names":["skill_view"]}`, map[string]bool{})
 	if changed {
 		t.Error("常驻工具不该产生激活变更")
 	}

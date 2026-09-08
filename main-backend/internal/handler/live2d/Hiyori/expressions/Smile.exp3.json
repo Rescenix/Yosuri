@@ -1,0 +1,35 @@
+{
+ "Type": "Live2D Expression",
+ "Parameters": [
+  {
+   "Id": "ParamEyeLSmile",
+   "Value": 1.0,
+   "Blend": "Add"
+  },
+  {
+   "Id": "ParamEyeRSmile",
+   "Value": 1.0,
+   "Blend": "Add"
+  },
+  {
+   "Id": "ParamMouthForm",
+   "Value": 0.6,
+   "Blend": "Add"
+  },
+  {
+   "Id": "ParamBrowLAngle",
+   "Value": 0.2,
+   "Blend": "Add"
+  },
+  {
+   "Id": "ParamBrowRAngle",
+   "Value": 0.2,
+   "Blend": "Add"
+  },
+  {
+   "Id": "ParamCheek",
+   "Value": 0.25,
+   "Blend": "Add"
+  }
+ ]
+}

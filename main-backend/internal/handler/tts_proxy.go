@@ -6,7 +6,6 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,16 +21,16 @@ import (
 //   - "minimax"   MiniMax t2a_v2 专属格式（group_id + voice_setting）
 //   - ""          未启用（回落到前端 Edge 直连）
 type TTSConfig struct {
-	Enabled   bool   `json:"enabled"`
-	Provider  string `json:"provider"`
-	BaseURL   string `json:"base_url"`   // 如 https://api.minimax.chat/v1 或 OpenAI 兼容根
-	APIKey    string `json:"api_key"`    // 云端鉴权（只存本地）
-	Model     string `json:"model"`      // 如 minimax-tts 或 gpt-4o-mini-tts
-	Voice     string `json:"voice"`      // 如 male-qn-qingse 或 nova
-	GroupID   string `json:"group_id"`   // MiniMax 专属
-	Speed     float64 `json:"speed"`     // 语速倍率（OpenAI 兼容 tts 用）
-	TestOK    bool   `json:"test_ok"`    // 上次测试结果（前端显示连通性）
-	VoiceName string `json:"voice_name"` // 前端展示名（如「自定义·云端少女」）
+	Enabled   bool    `json:"enabled"`
+	Provider  string  `json:"provider"`
+	BaseURL   string  `json:"base_url"`   // 如 https://api.minimax.chat/v1 或 OpenAI 兼容根
+	APIKey    string  `json:"api_key"`    // 云端鉴权（只存本地）
+	Model     string  `json:"model"`      // 如 minimax-tts 或 gpt-4o-mini-tts
+	Voice     string  `json:"voice"`      // 如 male-qn-qingse 或 nova
+	GroupID   string  `json:"group_id"`   // MiniMax 专属
+	Speed     float64 `json:"speed"`      // 语速倍率（OpenAI 兼容 tts 用）
+	TestOK    bool    `json:"test_ok"`    // 上次测试结果（前端显示连通性）
+	VoiceName string  `json:"voice_name"` // 前端展示名（如「自定义·云端少女」）
 }
 
 var ttsConfig = TTSConfig{}
@@ -151,9 +150,9 @@ func HandleTTSSpeak(c *gin.Context) {
 		url = strings.TrimRight(cfg.BaseURL, "/") + "/t2a_v2"
 		contentType = "application/json"
 		body := map[string]interface{}{
-			"model":   model,
-			"text":    req.Text,
-			"stream":  false,
+			"model":  model,
+			"text":   req.Text,
+			"stream": false,
 			"voice_setting": map[string]interface{}{
 				"voice_id": voice,
 				"speed":    speed,
@@ -190,7 +189,7 @@ func HandleTTSSpeak(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := readUpstreamBody(resp)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "读取云端响应失败: " + err.Error()})
 		return
@@ -256,7 +255,7 @@ func HandleTTSTest(c *gin.Context) {
 		return
 	}
 	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := readUpstreamBody(resp)
 	if resp.StatusCode != http.StatusOK {
 		ttsConfig.TestOK = false
 		saveTTSConfigFile()

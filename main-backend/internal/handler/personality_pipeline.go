@@ -26,24 +26,24 @@ import (
 
 var personalityPipeline = struct {
 	sync.Mutex
-	once   sync.Once
-	timer  *time.Timer
-	mu     sync.Mutex
+	once  sync.Once
+	timer *time.Timer
+	mu    sync.Mutex
 }{
 	timer: nil,
 }
 
 // personalityProfile 蒸馏过程中用到的中间结构。
 type personalityProfile struct {
-	Tone         string
-	Length       string
-	Language     string
-	Emoji        string
-	SelfName     string
-	Taboos       []string
+	Tone          string
+	Length        string
+	Language      string
+	Emoji         string
+	SelfName      string
+	Taboos        []string
 	IntimacyLevel int64
 	IntimacyValue int64
-	Extra        map[string]string // 未归一化的额外偏好
+	Extra         map[string]string // 未归一化的额外偏好
 }
 
 // personalityPath 性格档案在 memorydir 的路径。

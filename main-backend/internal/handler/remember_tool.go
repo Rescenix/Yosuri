@@ -14,7 +14,7 @@ const rememberToolName = "remember"
 var rememberToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
-		Name:        rememberToolName,
+		Name: rememberToolName,
 		Description: "把「稳定的长期事实」写进长期记忆文件，下次对话还能读到。\n" +
 			"【必须主动调用的场景】对话中出现了以下任意一类稳定事实：\n" +
 			"  - 用户身份/职业/背景：如「我是全栈工程师」「我做二次元风格的 Agent 产品」\n" +

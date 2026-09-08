@@ -200,7 +200,7 @@ func HandleVisionAnalyze(c *gin.Context) {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("下载图片返回非200: %d, body: %s", resp.StatusCode, string(body))})
 			return
 		}
-		data, err := io.ReadAll(resp.Body)
+		data, err := readUpstreamBody(resp)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "读取图片失败: " + err.Error()})
 			return

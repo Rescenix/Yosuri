@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"sync"
@@ -262,7 +261,7 @@ func probeChatOnce(b RouterBackend) (bool, int, string) {
 		return false, 0, ""
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
+	raw, _ := readUpstreamBody(resp)
 	if resp.StatusCode != http.StatusOK {
 		return false, resp.StatusCode, string(raw)
 	}

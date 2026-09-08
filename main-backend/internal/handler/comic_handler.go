@@ -9,7 +9,6 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
-	"io"
 	"math"
 	"net/http"
 	"os"
@@ -264,11 +263,11 @@ func findComicPython(sdDir string) (string, error) {
 
 // comicDownloadLink 绘图引擎下载引导条目
 type comicDownloadLink struct {
-	Name   string `json:"name"`
-	Desc   string `json:"desc"`
-	URL    string `json:"url"`
-	Kind   string `json:"kind"` // package=整合包 mirror=镜像直链 page=教程页
-	Primary bool  `json:"primary"`
+	Name    string `json:"name"`
+	Desc    string `json:"desc"`
+	URL     string `json:"url"`
+	Kind    string `json:"kind"` // package=整合包 mirror=镜像直链 page=教程页
+	Primary bool   `json:"primary"`
 }
 
 // HandleComicSDDownload GET /api/comic/sd-download —— 返回国内可达的绘图引擎下载链接
@@ -569,7 +568,7 @@ func HandleComicRenderPanel(c *gin.Context) {
 		return
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := readUpstreamBody(resp)
 	if resp.StatusCode >= 400 {
 		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("SD WebUI 返回 HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))})
 		return

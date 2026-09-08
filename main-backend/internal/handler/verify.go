@@ -120,7 +120,7 @@ func verifyOnWorkflowDone(c *gin.Context, workflowID string) {
 			`return JSON.stringify({ count: nodes.length, types }); })()`
 		if raw, perr := evaluatePreviewExpression(probe); perr == nil {
 			var probeRes struct {
-				Count int             `json:"count"`
+				Count int            `json:"count"`
 				Types map[string]int `json:"types"`
 			}
 			if json.Unmarshal(raw, &probeRes) == nil {

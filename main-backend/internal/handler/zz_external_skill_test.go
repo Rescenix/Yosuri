@@ -49,7 +49,7 @@ func TestParseSkillMD(t *testing.T) {
 }
 
 func TestLoadExternalSkillsAndSource(t *testing.T) {
-	learnedDir := withTempSkillsDir(t)     // 复用现有 helper（skill_library_test.go）
+	learnedDir := withTempSkillsDir(t) // 复用现有 helper（skill_library_test.go）
 	extDir := withTempExtSkillsDir(t)
 
 	writeSkillFile(t, learnedDir, Skill{Name: "deploy-frontend", Description: "部署前端", Steps: []string{"a", "b"}})

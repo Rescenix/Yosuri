@@ -160,6 +160,7 @@ func chatBackend(ctx context.Context, b RouterBackend, prompt string) (string, e
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -167,6 +168,11 @@ func chatBackend(ctx context.Context, b RouterBackend, prompt string) (string, e
 	}
 	if len(out.Choices) == 0 {
 		return "", fmt.Errorf("%s 空响应", b.Name)
+	}
+	// 截断感知：finish_reason=length 说明输出被 max_tokens 砍半（按钮在、事件没绑），
+	// 这种残次品不能当完整交付物——报错让竞速换下一个源/触发重试，而不是落盘半截产物。
+	if out.Choices[0].FinishReason == "length" {
+		return "", fmt.Errorf("%s 输出被 max_tokens 截断（finish_reason=length），产物不完整", b.Name)
 	}
 	return out.Choices[0].Message.Content, nil
 }
@@ -206,6 +212,7 @@ func chatBackendStream(ctx context.Context, b RouterBackend, prompt string, onDe
 	}
 
 	var full strings.Builder
+	finish := "" // 流式结束原因：最后一块的 finish_reason（length=被截断）
 	scanner := newLineScanner(resp.Body)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -221,10 +228,14 @@ func chatBackendStream(ctx context.Context, b RouterBackend, prompt string, onDe
 				Delta struct {
 					Content string `json:"content"`
 				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
 			} `json:"choices"`
 		}
 		if json.Unmarshal([]byte(payload), &chunk) != nil || len(chunk.Choices) == 0 {
 			continue
+		}
+		if fr := chunk.Choices[0].FinishReason; fr != "" {
+			finish = fr // 记录流式结束原因（最后一块带 finish_reason）
 		}
 		delta := chunk.Choices[0].Delta.Content
 		if delta == "" {
@@ -238,6 +249,10 @@ func chatBackendStream(ctx context.Context, b RouterBackend, prompt string, onDe
 	out := full.String()
 	if strings.TrimSpace(out) == "" {
 		return "", fmt.Errorf("%s 空响应", b.Name)
+	}
+	// 截断感知：与 chatBackend 非流式同规则，length=被 max_tokens 砍半，产物不完整不采纳。
+	if finish == "length" {
+		return "", fmt.Errorf("%s 输出被 max_tokens 截断（finish_reason=length），产物不完整", b.Name)
 	}
 	return out, nil
 }

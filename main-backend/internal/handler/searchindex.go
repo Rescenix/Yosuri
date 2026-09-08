@@ -220,4 +220,3 @@ func containsAllText(msgs []DSMessage, token string) bool {
 	}
 	return false
 }
-

@@ -18,15 +18,15 @@ import (
 
 // marketGame 大厅里的一张应用卡
 type marketGame struct {
-	Project   string      `json:"project"`
-	Agent     string      `json:"agent"`   // 负责的 coder
-	AvgScore  float64     `json:"avg_score"`
-	Count     int         `json:"count"`   // 真实评分人数
-	Award     *reviewAward `json:"award"`  // 🏆神作/⭐好评/🌱新秀
-	Promoted  bool        `json:"promoted"` // 花钱买的推广位
-	PromoDesc string      `json:"promo_desc,omitempty"`
-	Score     float64     `json:"score"`   // 推荐分（排序用）
-	HasReview bool        `json:"has_review"`
+	Project   string       `json:"project"`
+	Agent     string       `json:"agent"` // 负责的 coder
+	AvgScore  float64      `json:"avg_score"`
+	Count     int          `json:"count"`    // 真实评分人数
+	Award     *reviewAward `json:"award"`    // 🏆神作/⭐好评/🌱新秀
+	Promoted  bool         `json:"promoted"` // 花钱买的推广位
+	PromoDesc string       `json:"promo_desc,omitempty"`
+	Score     float64      `json:"score"` // 推荐分（排序用）
+	HasReview bool         `json:"has_review"`
 }
 
 // HandleCompanyMarket GET /api/company/market — 游戏大厅信息流

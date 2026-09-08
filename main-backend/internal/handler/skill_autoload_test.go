@@ -7,35 +7,40 @@ import (
 
 const frontendDesignBodyMarker = "一屏一个视觉重心"
 
-func TestFrontendDesignSkillIsPreloadedForFrontendTask(t *testing.T) {
-	provider := newWorkflowContextProvider("请实现一个响应式 Vue 前端设置页面")
-	prompt := provider.SystemPrompt()
-	if !strings.Contains(prompt, frontendDesignBodyMarker) {
-		t.Fatalf("前端任务未自动注入 frontend-design 正文")
-	}
-	if !strings.Contains(prompt, "宿主确定性匹配") {
-		t.Fatalf("自动加载段缺少强制遵循标记")
-	}
-}
-
-func TestFrontendDesignSkillIsNotInjectedIntoUnrelatedTask(t *testing.T) {
-	provider := newWorkflowContextProvider("为 Go 后端的分页函数补充单元测试")
-	if strings.Contains(provider.SystemPrompt(), frontendDesignBodyMarker) {
-		t.Fatalf("非前端任务不应注入 frontend-design")
+// 宿主不再做技能全文预加载：任何任务（包括命中 trigger 的前端任务、
+// 显式点名技能的任务）都不该把技能正文塞进系统提示词，正文只能靠
+// 模型自己调 skill_view 取回。
+func TestNoSkillBodyIsPreloadedForAnyTask(t *testing.T) {
+	for _, task := range []string{
+		"请实现一个响应式 Vue 前端设置页面",
+		"请使用 frontend-design 完成这项工作",
+		"为 Go 后端的分页函数补充单元测试",
+	} {
+		provider := newWorkflowContextProvider(task)
+		if strings.Contains(provider.SystemPrompt(), frontendDesignBodyMarker) {
+			t.Fatalf("任务 %q 不应预加载技能正文", task)
+		}
 	}
 }
 
-func TestExplicitSkillNameForcesPreload(t *testing.T) {
-	provider := newWorkflowContextProvider("请使用 frontend-design 完成这项工作")
-	if !strings.Contains(provider.SystemPrompt(), frontendDesignBodyMarker) {
-		t.Fatalf("任务显式点名技能时必须自动加载正文")
+// 索引段必须始终在场，且带"命中先取全文"的强制规则。
+func TestSkillIndexAlwaysInjected(t *testing.T) {
+	provider := newWorkflowContextProvider("随便什么任务")
+	sp := provider.SystemPrompt()
+	if !strings.Contains(sp, "技能库索引") {
+		t.Fatalf("系统提示词缺少技能库索引段")
+	}
+	if !strings.Contains(sp, "skill_view") {
+		t.Fatalf("技能库索引缺少 skill_view 取全文指引")
 	}
 }
 
-func TestAutoLoadedSkillIsIncludedInContextBreakdown(t *testing.T) {
-	matched := newWorkflowContextProvider("设计一个网站前端")
-	unmatched := newWorkflowContextProvider("检查 Go 服务日志")
-	if matched.Breakdown()["skill"] <= unmatched.Breakdown()["skill"] {
-		t.Fatalf("自动加载的技能正文未计入 context breakdown")
+// 索引是稳定段：换任务不该改变 skill 桶的占用（全文预加载时代会变）。
+func TestSkillBreakdownIsTaskIndependent(t *testing.T) {
+	a := newWorkflowContextProvider("设计一个网站前端")
+	b := newWorkflowContextProvider("检查 Go 服务日志")
+	if a.Breakdown()["skill"] != b.Breakdown()["skill"] {
+		t.Fatalf("skill 桶占用随任务变化，说明还有按任务注入的正文: %d vs %d",
+			a.Breakdown()["skill"], b.Breakdown()["skill"])
 	}
 }

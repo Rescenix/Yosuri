@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -136,7 +135,7 @@ func analyzeImageWithGemini(
 	}
 	defer resp.Body.Close()
 
-	respBytes, err := io.ReadAll(resp.Body)
+	respBytes, err := readUpstreamBody(resp)
 	if err != nil {
 		return "", "", fmt.Errorf("读取响应失败: %w", err)
 	}

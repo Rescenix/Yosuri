@@ -22,27 +22,28 @@ import (
 // 后台调度器每 30s 检查一次 cron 匹配，到点调 Windows 原生 toast（右下角）。
 
 type CronTask struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name,omitempty"`
-	Prompt     string    `json:"prompt"`
-	Cron       string    `json:"cron"`
-	Frequency  string    `json:"frequency"`
-	DeliverTo  string    `json:"deliverTo,omitempty"`
-	Model      string    `json:"model,omitempty"`
-	Enabled    bool      `json:"enabled"`
-	CreatedAt  time.Time `json:"createdAt"`
-	LastFired  time.Time `json:"lastFired,omitempty"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name,omitempty"`
+	Prompt    string    `json:"prompt"`
+	Cron      string    `json:"cron"`
+	Frequency string    `json:"frequency"`
+	DeliverTo string    `json:"deliverTo,omitempty"`
+	Model     string    `json:"model,omitempty"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"createdAt"`
+	LastFired time.Time `json:"lastFired,omitempty"`
 }
 
 const (
-	cronAppID     = "ResceneAgent"       // go-toast AUMID（写注册表，Win10+ 生效）
-	cronTasksFile = "cron_tasks.json"    // 落盘文件名，放 ~/rescene_data/
+	cronAppID     = "ResceneAgent"    // go-toast AUMID（写注册表，Win10+ 生效）
+	cronTasksFile = "cron_tasks.json" // 落盘文件名，放 ~/rescene_data/
 )
 
 var (
-	cronMu      sync.RWMutex
-	cronTasks   = map[string]*CronTask{}
-	cronToasts  = make(map[string]time.Time) // taskID → 上次触发时间（防同分钟重复弹）
+	cronMu       sync.RWMutex
+	cronTasks    = map[string]*CronTask{}
+	cronToasts   = make(map[string]time.Time) // taskID → 上次触发时间（防同分钟重复弹）
+	cronSaveMu   sync.Mutex                   // 串行化落盘，防并发写同一个 .tmp
 	cronInitOnce sync.Once
 )
 
@@ -91,19 +92,32 @@ func saveCronTasks() {
 		log.Printf("⚠️ [定时任务] 序列化失败: %v", err)
 		return
 	}
+	cronSaveMu.Lock()
+	defer cronSaveMu.Unlock()
 	path := cronTasksPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		log.Printf("⚠️ [定时任务] 创建目录失败: %v", err)
 		return
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	// 原子落盘：先写临时文件再 rename，避免进程在写入中途被杀留下半截 JSON。
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		log.Printf("⚠️ [定时任务] 落盘失败: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		// Windows 上 rename 到已存在文件需要 MoveFileEx(MOVEFILE_REPLACE_EXISTING)，
+		// Go 的 os.Rename 底层就是它，一般可直接覆盖；失败时退一步删再改名。
+		_ = os.Remove(path)
+		if err2 := os.Rename(tmp, path); err2 != nil {
+			log.Printf("⚠️ [定时任务] 落盘失败: %v", err2)
+		}
 	}
 }
 
 // ==================== cron 匹配（5 段：分 时 日 月 周） ====================
 
-// cronFieldMatches 匹配单个字段：支持 *、*/n、n、a-b、a,b
+// cronFieldMatches 匹配单个字段：支持 *、*/n、n、a-b、a-b/n、a,b
 func cronFieldMatches(field string, v int) bool {
 	field = strings.TrimSpace(field)
 	if field == "*" {
@@ -117,12 +131,18 @@ func cronFieldMatches(field string, v int) bool {
 		}
 		return false
 	}
-	if strings.HasPrefix(field, "*/") {
-		step, err := strconv.Atoi(strings.TrimPrefix(field, "*/"))
+	// 步进：*/n 或 a-b/n
+	if idx := strings.Index(field, "/"); idx >= 0 {
+		base := field[:idx]
+		step, err := strconv.Atoi(field[idx+1:])
 		if err != nil || step <= 0 {
 			return false
 		}
-		return v%step == 0
+		if base == "*" {
+			return v%step == 0
+		}
+		lo, err := strconv.Atoi(base)
+		return err == nil && v >= lo && (v-lo)%step == 0
 	}
 	if strings.Contains(field, "-") {
 		parts := strings.SplitN(field, "-", 2)
@@ -135,6 +155,59 @@ func cronFieldMatches(field string, v int) bool {
 	}
 	n, err := strconv.Atoi(field)
 	return err == nil && v == n
+}
+
+// cronFieldValid 校验单个字段语法：*、n、a-b、*/n、a-b/n、逗号列表（元素递归校验）
+func cronFieldValid(field string) bool {
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return false
+	}
+	if strings.Contains(field, ",") {
+		for _, part := range strings.Split(field, ",") {
+			if !cronFieldValid(part) {
+				return false
+			}
+		}
+		return true
+	}
+	if field == "*" {
+		return true
+	}
+	if idx := strings.Index(field, "/"); idx >= 0 {
+		base := field[:idx]
+		step, err := strconv.Atoi(field[idx+1:])
+		if err != nil || step <= 0 {
+			return false
+		}
+		if base == "*" {
+			return true
+		}
+		_, err = strconv.Atoi(base)
+		return err == nil
+	}
+	if strings.Contains(field, "-") {
+		parts := strings.SplitN(field, "-", 2)
+		_, err1 := strconv.Atoi(parts[0])
+		_, err2 := strconv.Atoi(parts[1])
+		return err1 == nil && err2 == nil
+	}
+	_, err := strconv.Atoi(field)
+	return err == nil
+}
+
+// cronExprValid 校验 5 段 cron 表达式（分 时 日 月 周）语法
+func cronExprValid(expr string) bool {
+	fields := strings.Fields(expr)
+	if len(fields) != 5 {
+		return false
+	}
+	for _, f := range fields {
+		if !cronFieldValid(f) {
+			return false
+		}
+	}
+	return true
 }
 
 func cronMatches(expr string, t time.Time) bool {
@@ -154,9 +227,12 @@ func cronMatches(expr string, t time.Time) bool {
 	if !cronFieldMatches(fields[3], int(t.Month())) {
 		return false
 	}
-	// 周：cron 里 0=周日
+	// 周：cron 里 0 和 7 都表示周日，Go Weekday() 周日=0
 	dow := int(t.Weekday())
-	if !cronFieldMatches(fields[4], dow) {
+	if dow == 0 {
+		dow = 7 // 让表达式里的 7 能匹配；0 由下面单独兜
+	}
+	if !cronFieldMatches(fields[4], dow) && !(dow == 7 && cronFieldMatches(fields[4], 0)) {
 		return false
 	}
 	return true
@@ -212,17 +288,18 @@ func notifyCronTask(t *CronTask, now time.Time) {
 		title = "定时任务"
 	}
 	msg := t.Prompt
-	if len(msg) > 120 {
-		msg = msg[:120] + "…"
+	if runes := []rune(msg); len(runes) > 60 {
+		msg = string(runes[:60]) + "…"
 	}
-	if err := pushWindowsToast(title, msg); err != nil {
-		log.Printf("⚠️ [定时任务] %s 弹窗失败: %v", t.ID, err)
-		return
-	}
+	// 先登记防重弹，再推送：即使推送失败也不会在同一分钟内反复重试刷屏
 	cronMu.Lock()
 	t.LastFired = now
 	cronToasts[t.ID] = now
 	cronMu.Unlock()
+	if err := pushWindowsToast(title, msg); err != nil {
+		log.Printf("⚠️ [定时任务] %s 弹窗失败: %v", t.ID, err)
+		return
+	}
 	saveCronTasks()
 	log.Printf("🔔 [定时任务] 已触发: %s (%s)", title, t.Cron)
 }
@@ -230,9 +307,9 @@ func notifyCronTask(t *CronTask, now time.Time) {
 // pushWindowsToast 弹 Windows 右下角原生通知；非 Windows 平台为 no-op。
 func pushWindowsToast(title, message string) error {
 	n := toast.Notification{
-		AppID:   cronAppID,
-		Title:   title,
-		Body:    message,
+		AppID: cronAppID,
+		Title: title,
+		Body:  message,
 	}
 	return n.Push()
 }
@@ -252,8 +329,8 @@ func HandleCronCreate(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "prompt 和 cron 必填"})
 		return
 	}
-	if !strings.Contains(req.Cron, " ") {
-		c.JSON(400, gin.H{"error": "cron 表达式格式不正确"})
+	if !cronExprValid(req.Cron) {
+		c.JSON(400, gin.H{"error": "cron 表达式格式不正确（需 5 段：分 时 日 月 周）"})
 		return
 	}
 	task := &CronTask{
@@ -284,6 +361,34 @@ func HandleCronList(c *gin.Context) {
 	cronMu.RUnlock()
 	sort.Slice(list, func(i, j int) bool { return list[i].CreatedAt.Before(list[j].CreatedAt) })
 	c.JSON(200, list)
+}
+
+// HandleCronToggle 启用/停用定时任务（前端管理面板的开关用）。
+// body: {"enabled": true|false}；不传 enabled 时按当前值取反。
+func HandleCronToggle(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	cronMu.Lock()
+	t, ok := cronTasks[id]
+	enabled := false
+	if ok {
+		if req.Enabled != nil {
+			t.Enabled = *req.Enabled
+		} else {
+			t.Enabled = !t.Enabled
+		}
+		enabled = t.Enabled
+	}
+	cronMu.Unlock()
+	if !ok {
+		c.JSON(404, gin.H{"error": "任务不存在"})
+		return
+	}
+	saveCronTasks()
+	c.JSON(200, gin.H{"ok": true, "enabled": enabled})
 }
 
 func HandleCronDelete(c *gin.Context) {

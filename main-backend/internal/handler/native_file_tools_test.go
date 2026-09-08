@@ -73,3 +73,37 @@ func TestNativeEditRejectsAmbiguousMatch(t *testing.T) {
 		t.Fatalf("应拒绝歧义替换，实得 %v", err)
 	}
 }
+
+// TestNativeReadSensitiveFileBlocked 验证敏感文件读取拦截：.env/.pem/.ssh 等
+// 密钥文件被 read 时必须返回安全闸门错误，不能返回文件内容。
+func TestNativeReadSensitiveFileBlocked(t *testing.T) {
+	root := t.TempDir()
+	sensitiveFiles := []string{
+		".env", ".env.local", ".env.production",
+		"server.pem", "id_rsa", "id_ed25519",
+		"credentials.json", "service-account.json",
+	}
+	for _, name := range sensitiveFiles {
+		path := filepath.Join(root, name)
+		if err := os.WriteFile(path, []byte("SECRET_KEY=abc123\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := callNativeFileTool("read_file", nativeArgs(t, map[string]any{"path": path}))
+		if err == nil {
+			t.Errorf("敏感文件 %s 被 read 拦截失败——返回了内容", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "安全闸门") {
+			t.Errorf("敏感文件 %s 被拦但错误信息不含「安全闸门」: %v", name, err)
+		}
+	}
+	// 反测：普通文件必须能正常读到
+	normalPath := filepath.Join(root, "normal.txt")
+	if err := os.WriteFile(normalPath, []byte("hello world\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := callNativeFileTool("read_file", nativeArgs(t, map[string]any{"path": normalPath}))
+	if err != nil || !strings.Contains(res.Text, "hello world") {
+		t.Errorf("普通文件 normal.txt 读取应成功，实得 err=%v text=%q", err, res.Text)
+	}
+}

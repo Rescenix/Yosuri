@@ -761,6 +761,36 @@ async function switchSession(id) {
     userInput.value += ref
   }
 
+  // ===== 知识图谱 =====
+  const kbGraph = ref(null)       // 图谱数据 { nodes, links }
+  const kbGraphLoading = ref(false)
+  const kbGraphError = ref('')
+  const kbGraphFile = ref('')     // 当前图谱对应的文件名（空=全库）
+
+  async function fetchKnowledgeGraph(fileName) {
+    kbGraphLoading.value = true
+    kbGraphError.value = ''
+    kbGraphFile.value = fileName || ''
+    try {
+      const res = await fetch('/api/knowledge/graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fileName ? { file: fileName } : {}),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || '生成失败')
+      }
+      const data = await res.json()
+      kbGraph.value = data
+    } catch (e) {
+      kbGraphError.value = e.message || '生成失败'
+      kbGraph.value = null
+    } finally {
+      kbGraphLoading.value = false
+    }
+  }
+
   function fileIcon(name) {
     const ext = (name.split('.').pop() || '').toLowerCase()
     const map = {
@@ -806,6 +836,7 @@ async function switchSession(id) {
     groupedMessages, formatChatTime,
     kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,
     toggleKb, triggerKbUpload, onKbUploadSelected, onKbDrop, loadKb,
-    addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize
+    addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize,
+    kbGraph, kbGraphLoading, kbGraphError, kbGraphFile, fetchKnowledgeGraph
   }
 }

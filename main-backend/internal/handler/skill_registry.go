@@ -25,7 +25,7 @@ var (
 	githubRawBaseURL = "https://raw.githubusercontent.com"
 	// githubMirrorBase GitHub 镜像加速前缀（ghfast.top 类 gh-proxy）：
 	// 默认 https://ghfast.top/，env DHS_GITHUB_MIRROR 可覆盖（空 = 直连）。
-	// 镜像形式 https://ghfast.top/https://raw.githubusercontent.com/... 
+	// 镜像形式 https://ghfast.top/https://raw.githubusercontent.com/...
 	githubMirrorBase = func() string {
 		if v := strings.TrimSpace(os.Getenv("DHS_GITHUB_MIRROR")); v != "" {
 			return strings.TrimRight(v, "/")

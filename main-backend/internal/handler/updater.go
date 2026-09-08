@@ -27,7 +27,7 @@ const (
 	updateRepoOwner = "Rescenix"
 	updateRepoName  = "Yosuri"
 	// 官网 update.json 优先（国内可达的 Cloudflare CDN），GitHub API 兜底
-	siteUpdateURL  = "https://yosuri.com/update.json"
+	siteUpdateURL = "https://yosuri.com/update.json"
 	// 2026-08-28 用户定稿：官网一更新要尽快触发后台自动下载 → 缓存 TTL 30min→60s。
 	// update.json 是静态小 JSON、Cloudflare Pages 项目级缓存已 Disabled，压力可忽略；
 	// GitHub 兜底未认证 API 限 60 次/小时/IP——官网可达时走官网不触发，官网挂了兜底超限也只是静默。
@@ -41,15 +41,15 @@ const (
 // githubRelease 是 GitHub /releases/latest 响应里用到的字段子集。
 // 也兼容官网 update.json 的相同字段，所以客户端可以优先从国内可达的 update.json 获取。
 type githubRelease struct {
-	TagName     string `json:"tag_name"`
-	Name        string `json:"name"`
-	Body        string `json:"body"`
-	HTMLURL     string `json:"html_url"`
-	PublishedAt string `json:"published_at"`
-	DownloadURL string `json:"download_url"`     // 官网 JSON 提供，GitHub 无此字段
-	DownloadExe string `json:"download_url_exe"` // 热补丁通道：新版 rescene.exe 直链（官网 JSON 提供）
-	DownloadZip string `json:"download_url_zip"` // 热补丁通道的新字段名；兼容旧 download_url_exe
-	Changelog   []changelogEntry `json:"changelog"` // 官网 update.json 提供：按版本分列的更新日志
+	TagName     string           `json:"tag_name"`
+	Name        string           `json:"name"`
+	Body        string           `json:"body"`
+	HTMLURL     string           `json:"html_url"`
+	PublishedAt string           `json:"published_at"`
+	DownloadURL string           `json:"download_url"`     // 官网 JSON 提供，GitHub 无此字段
+	DownloadExe string           `json:"download_url_exe"` // 热补丁通道：新版 rescene.exe 直链（官网 JSON 提供）
+	DownloadZip string           `json:"download_url_zip"` // 热补丁通道的新字段名；兼容旧 download_url_exe
+	Changelog   []changelogEntry `json:"changelog"`        // 官网 update.json 提供：按版本分列的更新日志
 }
 
 // changelogEntry 是官网 update.json 的 changelog 数组元素。

@@ -63,7 +63,10 @@ async function fetchUid() {
     })
     if (res.ok) {
       const data = await res.json()
-      if (data.uid) {
+      // 已登录时不采用游客 UID：/api/auth/uid 返回的是设备游客号，若覆盖 refresh()
+      // 从 JWT 拿到的登录 uid，后续亲密度/统计查询会变成「登录 token + 游客 uid」
+      // 错配，被云端 requireUIDMatch 拒 403（2026-09-08 实测）。
+      if (data.uid && !isLoggedIn.value) {
         uid.value = data.uid
         localStorage.setItem(UID_KEY, String(data.uid))
       }
@@ -384,8 +387,10 @@ if (cachedCustomAvatar) customAvatar.value = cachedCustomAvatar
 
 // 首次加载：先从后端持久化文件恢复登录 token（WebView2 localStorage 可能因 exe
 // 路径变化被清空），再验真登录态；随后分发/校准 UID。
-restoreLoginToken().then(() => {
-  refresh()
+restoreLoginToken().then(async () => {
+  // 必须先 await refresh()：否则 fetchUid 比登录态校验先落地，isLoggedIn 还是 false，
+  // 游客 UID 会覆盖登录 UID → 亲密度 403（2026-09-08 实测）。
+  await refresh()
   fetchUid().then(() => {
     fetchIntimacy()
     pullCloudMemory()

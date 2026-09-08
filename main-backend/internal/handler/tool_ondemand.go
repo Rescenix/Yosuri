@@ -44,16 +44,17 @@ var loadToolsToolDef = core.ToolDefinition{
 	},
 }
 
-// nativeWorkflowToolDefs 常驻工具：编排类的 dispatch_agent + load_tools/skill_view 这类
-// 按需取全文的钥匙 + update_todo。文件读写/命令/检索/记忆由 Go 内置工具提供，
-// 同样通过 load_tools 按需激活；真正的外部能力仍可由 MCP 扩展。
-// 这几个常驻是因为数量少、几乎每个任务都要用，藏进按需加载得不偿失。
+// nativeWorkflowToolDefs 常驻工具：五个核心工具（read/write/remove/patch/bash，
+// 见 coreToolDefs）+ 按需取全文的钥匙 load_tools + skill_view + ask_user +
+// apply_patch。编排类的 dispatch_agent 与其余扩展工具走按需加载（native_tools.go），
+// 真正的外部能力仍可由 MCP 扩展。
+// 常驻判据：几乎每个任务第一轮就要用、且 schema 不便宜的，才值得常驻占 token。
 func nativeWorkflowToolDefs() []core.ToolDefinition {
-	return []core.ToolDefinition{
+	return append([]core.ToolDefinition{
 		// apply_patch 是长文件写入的基础能力，必须从第一轮起直接可用。
 		// 模型可以先建骨架，再用多个小补丁逐段追加，避开单次 write_file 参数过长。
 		nativeApplyPatchToolDef,
-		dispatchAgentToolDef, loadToolsToolDef,
+		loadToolsToolDef,
 		// ask_user：让 agent 在工作流中途向用户提问并暂停等待回答（human-in-the-loop）。
 		// 常驻是因为它是交互控制面工具，需要用时再 load_tools 就打断节奏了。
 		askUserToolDef,
@@ -62,7 +63,7 @@ func nativeWorkflowToolDefs() []core.ToolDefinition {
 		// 其余参数简单的常驻工具（update_todo/skill_manage/harness_status/
 		// web_search/session_search/remember/open_preview/inject_preview）已简化为按需
 		// 加载（见 native_tools.go）——模型直接调即自动带 schema，无需常驻占 token。
-	}
+	}, coreToolDefs()...)
 }
 
 // firstSentence 取描述的第一句，索引行只要一句话说清用途。
@@ -112,7 +113,7 @@ func mcpToolIndexPrompt() string {
 		lines = append(lines, fmt.Sprintf("- %s：%s", t.Function.Name, firstSentence(t.Function.Description)))
 	}
 	sort.Strings(lines)
-	return "\n━━━ 工具索引（核心 read/write/patch/remove/bash + 自研扩展，动态按需加载） ━━━\n" +
+	return "\n━━━ 工具索引（自研扩展 + 遗留文件/命令工具，动态按需加载） ━━━\n" +
 		"下列工具默认不在你的可用工具列表里，但**直接调用即可**：系统会在你首次调用时自动加载其完整参数说明，" +
 		"之后该工具就一直可用。若想批量预加载（或先看一眼参数再决定），也可用 load_tools 主动加载。\n" +
 		"截图/页面自检/浏览器快照成功时会直接作为图片插入当前聊天消息流；不要声称无法贴图、不要要求用户另存文件。\n" +
