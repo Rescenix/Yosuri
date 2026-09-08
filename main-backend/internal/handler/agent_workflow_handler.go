@@ -997,19 +997,32 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				})
 			}
 			// 视频工件：同图片模式，内嵌可拖动进度条播放块
-			for videoIndex, video := range results[i].videos {
-				writeCodeSSE(c, "artifact", map[string]any{
-					"id":      fmt.Sprintf("%s_video_%d", tc.ID, videoIndex),
-					"kind":    "video",
-					"tool":    tc.Function.Name,
-					"url":     video.URL,
-					"file":    video.File,
-					"mime":    video.Mime,
-					"size":    video.Size,
-					"seconds": video.Seconds,
-					"caption": "Agent 已生成视频，可拖动进度条播放。",
-				})
-			}
+						for videoIndex, video := range results[i].videos {
+							writeCodeSSE(c, "artifact", map[string]any{
+								"id":      fmt.Sprintf("%s_video_%d", tc.ID, videoIndex),
+								"kind":    "video",
+								"tool":    tc.Function.Name,
+								"url":     video.URL,
+								"file":    video.File,
+								"mime":    video.Mime,
+								"size":    video.Size,
+								"seconds": video.Seconds,
+								"caption": "Agent 已生成视频，可拖动进度条播放。",
+							})
+						}
+						// 音频工件（music_generate 等）：同视频模式，内嵌播放条
+						for audioIndex, audio := range results[i].audios {
+							writeCodeSSE(c, "artifact", map[string]any{
+								"id":      fmt.Sprintf("%s_audio_%d", tc.ID, audioIndex),
+								"kind":    "audio",
+								"tool":    tc.Function.Name,
+								"url":     audio.URL,
+								"file":    audio.File,
+								"mime":    audio.Mime,
+								"size":    audio.Size,
+								"caption": "Agent 已生成音乐，可点击播放。",
+							})
+						}
 			// 文件工件：Agent 用 write/bash 落盘的可交付文件（md/pdf/pptx/docx/xlsx 等）。
 			// 每条落盘即推 artifact(kind:file)，前端交付卡片自动弹右侧预览窗口。
 			for fileIndex, f := range results[i].files {
@@ -1127,6 +1140,7 @@ type codeExecResult struct {
 	failed bool
 	images []mcpImageArtifact
 	videos []mcpVideoArtifact
+	audios []mcpAudioArtifact
 	// charts 是 Agent 调 chart 工具产出的图表数据，前端 ECharts 渲染。
 	charts []chartPayload
 	// files 是 Agent 落盘、可作为产物交付的文件（md/pdf/pptx/docx/xlsx 等）。
@@ -1333,7 +1347,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
 				out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
 			}
-			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, charts: nativeResult.Charts, files: nativeResult.Files, urls: nativeResult.URLs}
+			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, audios: nativeResult.Audios, charts: nativeResult.Charts, files: nativeResult.Files, urls: nativeResult.URLs}
 			return
 		}
 		if strings.HasPrefix(name, "mcp__") {

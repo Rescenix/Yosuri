@@ -478,18 +478,29 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     expanded: false
                 })
             } else if (d.kind === 'video' && d.url) {
-                // 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式）
-                flow.blocks.push({
-                    type: 'video',
-                    id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
-                    url: d.url,
-                    file: d.file || '',
-                    mime: d.mime || 'video/mp4',
-                    size: d.size || '',
-                    seconds: d.seconds || '',
-                    caption: d.caption || 'Agent 已生成视频，可拖动进度条播放。'
-                })
-            } else if (d.kind === 'file' && d.path) {
+                            // 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式）
+                            flow.blocks.push({
+                                type: 'video',
+                                id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                                url: d.url,
+                                file: d.file || '',
+                                mime: d.mime || 'video/mp4',
+                                size: d.size || '',
+                                seconds: d.seconds || '',
+                                caption: d.caption || 'Agent 已生成视频，可拖动进度条播放。'
+                            })
+                        } else if (d.kind === 'audio' && d.url) {
+                            // 生成音乐：内嵌音频播放条（同视频块模式）
+                            flow.blocks.push({
+                                type: 'audio',
+                                id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                                url: d.url,
+                                file: d.file || '',
+                                mime: d.mime || 'audio/mpeg',
+                                size: d.size || '',
+                                caption: d.caption || 'Agent 已生成音乐，可点击播放。'
+                            })
+                        } else if (d.kind === 'file' && d.path) {
                 // Agent 落盘的可交付文件（md/pdf/pptx/docx/xlsx/html 等）：
                 // 交付卡片，点「预览」把内容送进右侧预览窗口（md/html/txt 本地渲染，
                 // 其余走 /api/agent/file?path=..&raw=1 新开）；带内嵌「下载」。

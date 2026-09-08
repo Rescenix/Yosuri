@@ -469,6 +469,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.Static("/api/image/file", imageOutputDir())
 	// AI 生视频（Agnes 免费 API，$0/秒）产物静态服务
 	r.Static("/api/video/file", videoOutputDir())
+	// AI 音乐生成落盘目录（music_generate 工具产物，前端内嵌播放条读取）
+	r.Static("/api/media", mediaDir())
 	// Galgame 模式：AI 生立绘 + 剧本对话 + 选项分支
 	r.POST("/api/galgame/new", HandleGalgameNew)
 	r.POST("/api/galgame/advance", HandleGalgameAdvance)

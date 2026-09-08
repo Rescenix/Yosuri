@@ -104,7 +104,18 @@
           class="flow-video-player"
         ></video>
         <div v-if="group.block.caption" class="flow-video-caption">{{ group.block.caption }}</div>
-        </div>
+                </div>
+
+                <!-- 生成音乐：内嵌音频播放条（music_generate 工具产物，同视频块模式） -->
+                <div v-else-if="group.type === 'audio'" class="flow-audio">
+                  <div class="flow-audio-head">
+                    <Icon icon="mdi:music-note-outline" width="14" />
+                    <span>生成音乐</span>
+                    <span v-if="group.block.size" class="flow-video-meta">{{ group.block.size }}</span>
+                  </div>
+                  <audio :src="group.block.url" controls preload="metadata" class="flow-audio-player"></audio>
+                  <div v-if="group.block.caption" class="flow-video-caption">{{ group.block.caption }}</div>
+                </div>
 
         <!-- Agent 交付文件（md/pdf/pptx/docx/xlsx/html/txt 等）：
              交付卡片，点「预览」把内容送进右侧预览窗口；带内嵌「下载」按钮。 -->
@@ -1866,6 +1877,24 @@ function toolBodyText(b) {
   background: #000;
 }
 .flow-video-caption { padding: 6px 10px 8px; font-size: 11px; color: var(--app-text-soft); }
+/* 生成音乐内嵌播放条 */
+.flow-audio { border-top: 1px solid var(--app-border); }
+.flow-audio-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--app-text-soft);
+}
+.flow-audio-head svg { color: var(--app-accent); }
+.flow-audio-player {
+  display: block;
+  width: 100%;
+  padding: 0 10px 10px;
+  box-sizing: border-box;
+}
 
 /* Agent 交付文件卡片 */
 .flow-file-deliver {

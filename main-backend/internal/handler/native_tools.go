@@ -19,6 +19,8 @@ type nativeToolResult struct {
 	Text   string
 	Images []mcpImageArtifact
 	Videos []mcpVideoArtifact
+	// Audios 是音乐/AI 语音生成工具产出的音频工件，前端内嵌播放条渲染。
+	Audios []mcpAudioArtifact
 	// Charts 是 chart 工具产出的图表数据，前端 ECharts 渲染（零后端 Python 依赖）。
 	Charts []chartPayload
 	// Files 是 Agent 落盘、可作为产物交付的文件（md/pdf/pptx/docx/xlsx 等）。
@@ -250,7 +252,9 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	// video_watermark_remove：AI 视频去水印（ffmpeg delogo + 清元数据）
 	defs = append(defs, watermarkToolDef)
 	// video_generate：AI 生视频（Agnes 免费 API，$0/秒）
-	defs = append(defs, videoGenToolDef)
+		defs = append(defs, videoGenToolDef)
+		// music_generate：AI 生成音乐并内嵌聊天（云端代理，用户零 key 零配置）
+		defs = append(defs, musicGenToolDef)
 	// chart：数学建模图表渲染（前端 ECharts 直出，零后端依赖）
 	defs = append(defs, chartToolDef)
 	// 原常驻工具简化为按需加载（2026-08-29 收敛）：skill_view 提回常驻
@@ -340,7 +344,9 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 	case "image_generate":
 		return callNativeImageGenerate(ctx, argsJSON)
 	case "video_generate":
-		return callNativeVideoGenerate(ctx, argsJSON)
+			return callNativeVideoGenerate(ctx, argsJSON)
+		case "music_generate":
+			return callNativeMusicGenerate(ctx, argsJSON)
 	case "chart":
 		return callNativeChartTool(argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",

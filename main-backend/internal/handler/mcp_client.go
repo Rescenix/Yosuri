@@ -634,6 +634,14 @@ type mcpVideoArtifact struct {
 	Seconds string `json:"seconds"` // 时长
 }
 
+// mcpAudioArtifact 是音乐/AI 语音生成工具携带的音频工件（音频走 URL，不走 base64 内联）。
+type mcpAudioArtifact struct {
+	URL  string `json:"url"`  // 前端可播放路径（如 /api/media/...）
+	File string `json:"file"` // 本地落盘路径
+	Mime string `json:"mime"` // audio/mpeg 等
+	Size string `json:"size"` // 字节数
+}
+
 // fileDeliverable 是 Agent 落盘、可作为产物交付给用户的文件（md/pdf/pptx/docx/xlsx 等）。
 // 走 artifact(kind:file) 事件交给前端：自动弹预览、md 内嵌渲染、其余走下载/新开。
 type fileDeliverable struct {
