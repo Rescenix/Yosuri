@@ -48,6 +48,10 @@ var musicGenToolDef = core.ToolDefinition{
 					Type:        "string",
 					Description: "可选：bgm（默认，纯音乐）/ song（带词成曲）/ instrumental",
 				},
+				"model": {
+					Type:        "string",
+					Description: "可选，模型：yin-chao-v4（默认）/ 前端可换其它音潮模型",
+				},
 			},
 			Required: []string{"prompt"},
 		},
@@ -79,6 +83,7 @@ func callNativeMusicGenerate(ctx context.Context, argsJSON string) (nativeToolRe
 		Lyrics string `json:"lyrics"`
 		Title  string `json:"title"`
 		Type   string `json:"type"`
+		Model  string `json:"model"`
 	}
 	if strings.TrimSpace(argsJSON) != "" {
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
@@ -95,6 +100,7 @@ func callNativeMusicGenerate(ctx context.Context, argsJSON string) (nativeToolRe
 		"lyrics": args.Lyrics,
 		"title":  args.Title,
 		"type":   args.Type,
+		"model":  args.Model,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, musicCloudURL(), strings.NewReader(string(payload)))
