@@ -43,11 +43,10 @@
                 </button>
                 <button
                                   class="settings-subtab"
-                                  :class="{ locked: !apiUnlocked }"
                                   type="button"
                                   @click="openCustomLock"
                                 >
-                                  <Icon :icon="apiUnlocked ? 'mdi:lock-open-variant' : 'mdi:lock-outline'" width="15" />自定义 API
+                                  <Icon icon="mdi:api" width="15" />自定义 API
                                 </button>
               </div>
             </div>
@@ -345,7 +344,7 @@
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
                   联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
-                  Agnes Key 在 platform.agnes-ai.com 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
+                  Agnes Key 在 platform.agnes-ai.cn 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
                 </div>
               </template>
 
@@ -502,7 +501,7 @@
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
                   联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
-                  Agnes Key 在 platform.agnes-ai.com 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
+                  Agnes Key 在 platform.agnes-ai.cn 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
                 </div>
               </template>
             </div>
@@ -590,6 +589,7 @@
                 <template v-else>
                   <div v-for="cfg in configs" :key="cfg.id" class="api-config-card">
                     <div class="api-config-row">
+                      <span class="api-config-logo" :style="{ '--vendor-color': vendorColor(cfg.name) }"><Icon :icon="vendorIcon(cfg.name, cfg.endpoint)" width="16" /></span>
                       <span class="api-config-name">{{ cfg.name || '未命名配置' }}</span>
                       <span v-if="cfg.is_default" class="api-config-default-badge">默认</span>
                       <div class="api-config-actions">
@@ -613,8 +613,8 @@
                   <div v-else class="api-config-form">
                     <div class="api-preset-row">
                       <span class="api-preset-label">预设模板：</span>
-                      <button class="api-preset-btn" :class="{ active: activePreset === '__custom__' }" type="button" @click="applyCustomPreset">自定义</button>
-                      <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" :class="{ active: activePreset === p.name }" type="button" @click="applyPreset(p)">{{ p.name }}</button>
+                      <button class="api-preset-btn" :class="{ active: activePreset === '__custom__' }" type="button" @click="applyCustomPreset"><Icon icon="lucide:pencil-line" width="14" />自定义</button>
+                      <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" :class="{ active: activePreset === p.name }" type="button" @click="applyPreset(p)"><Icon :icon="p.icon" width="14" />{{ p.name }}</button>
                     </div>
                     <label class="api-form-field">
                       <span>提供方名称</span>
@@ -1580,58 +1580,6 @@
     </div>
     <FreeOrderModal v-if="showFreeOrderModal" :openid="props.openid" @close="showFreeOrderModal = false" />
       </Teleport>
-      <!-- 自定义 API 解锁弹窗（协议 + 5s 倒计时） -->
-      <Teleport to="body">
-        <div v-if="showCustomLockModal" class="mm-backdrop" @click.self="showCustomLockModal = false">
-          <div class="mm-card gate-modal" style="max-width:440px;text-align:center">
-            <!-- 彼岸花 -->
-            <div class="gate-flower">
-              <svg viewBox="0 0 100 100" width="56" height="56" fill="none">
-                <g stroke="#e63946" stroke-width="2.2" stroke-linecap="round">
-                  <path d="M50 72 C40 58 40 44 50 30 M50 72 C60 58 60 44 50 30 M50 72 C45 56 55 42 50 30" />
-                  <path d="M50 30 C44 26 40 28 38 24 M50 30 C54 24 58 26 62 22 M50 30 C50 24 46 20 48 16 M50 30 C52 24 56 22 54 16" stroke-width="1.8"/>
-                  <path d="M38 24 C34 20 36 16 32 14 M62 22 C66 18 64 14 68 12 M48 16 C50 12 44 10 42 8" stroke-width="1.4"/>
-                </g>
-                <g stroke="#c1121f" stroke-width="1.6" stroke-linecap="round">
-                  <path d="M50 72 C48 78 44 82 40 86 M50 72 C52 78 56 82 60 86" />
-                  <path d="M40 86 C36 88 34 90 36 94 M60 86 C64 88 66 90 64 94 M50 72 C50 80 50 86 50 94" stroke-width="1.8"/>
-                </g>
-                <circle cx="50" cy="34" r="2.4" fill="#e63946"/>
-                <circle cx="40" cy="40" r="1.8" fill="#e63946"/>
-                <circle cx="60" cy="40" r="1.8" fill="#e63946"/>
-              </svg>
-            </div>
-            <div class="gate-title">禁忌之门的宣告</div>
-            <div class="gate-sub">FORBIDDEN GATE · 彼岸花开时</div>
-            <div class="agree-text gate-text">
-              骚年，你正站在 Yosuri 的禁忌之门前。<br />
-              自定义 API 是封印着创世之力的远古法器——<br />
-              填入你自己的 Key，即可撬动 OpenAI、Anthropic 等异世界的伟力。<br /><br />
-              但记住，这力量源于你的<b>本命契约（Key）</b>：<br />
-              其消耗的灵石由你向源头世界（Key 所属平台）支付，<br />
-              Yosuri 只是引路人，不承担任何法力反噬之责。<br /><br />
-              知晓此理，勾选同意，吾将为你开启创世伟力。<br />
-              （本协议最终解释权归 Yosuri 所有）
-            </div>
-            <label class="agree-check">
-              <input type="checkbox" v-model="agreeCustom" /> 我已阅读并同意上述协议
-            </label>
-            <div v-if="customLockError" class="mm-error">{{ customLockError }}</div>
-            <div class="mm-actions">
-              <button class="mm-btn mm-btn-cancel" type="button" @click="showCustomLockModal = false">取消</button>
-              <button
-                class="mm-btn mm-btn-primary"
-                :class="{ 'countdown-disabled': countdown > 0 }"
-                type="button"
-                :disabled="countdown > 0"
-                @click="unlockCustom"
-              >
-                {{ countdown > 0 ? `请阅读协议 (${countdown}s)` : '同意并解锁' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
 
     <PersonaReportModal v-if="personaReportOpen" @close="personaReportOpen = false" />
 </template>
@@ -1641,7 +1589,7 @@ import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS, customColor, customThemeName, setCustomColor, setCustomThemeName } from '../composables/useTheme.js'
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
-import { DEFAULT_PERSONA } from '../composables/useAgentWorkflow.js'
+import { BUILTIN_PRESETS } from '../composables/personaPresets.js'
 import { useAgentsStore } from '../composables/useAgents.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
@@ -1669,13 +1617,7 @@ const skillsSubTab = ref('local')
 // 内置预设 + 我的预设（localStorage.myPersonas）+ 每日随机。
 // 生效的人设始终落在 localStorage.persona，前端发工作流时经 persona
 // 参数带给后端（见 useAgentWorkflow.js）。内置预设不开个人化，我的预设本地存。
-const BUILTIN_PRESETS = [
-  { id: 'rescene', name: 'Yosuri酱', icon: 'mdi:heart', desc: '默认 · 软软暖暖的元气助手', prompt: DEFAULT_PERSONA },
-  { id: 'catgirl', name: '猫娘', icon: 'mdi:cat', desc: '喵系撒娇，带猫娘口癖', prompt: `你是小猫娘，一只软萌的猫耳 AI 助手。说话带「喵」的口癖，喜欢撒娇、蹭蹭，偶尔用一两个「~」「♪」点缀语气；但卖萌归卖萌，该做的事一件都不会少。遇到不确定的事会老实承认，不会编造假数据骗人。` },
-  { id: 'mature', name: '御姐', icon: 'mdi:flower-tulip', desc: '成熟冷静，可靠的大姐姐', prompt: `你是御姐型的 AI 助手，成熟、冷静、可靠。语气从容不迫，话不多但每句都在点上，遇到问题先给结论再解释原因；该严肃时严肃，偶尔流露一点温柔体贴。不装可爱，不堆语气词。` },
-  { id: 'loli', name: '萝莉', icon: 'mdi:candy', desc: '天真活泼，可爱软萌', prompt: `你是萝莉型的 AI 助手，天真烂漫、活泼可爱。语气轻盈欢快，喜欢用「哇」「耶」这样的感叹词，偶尔用一两个颜文字点缀；但小脑袋可聪明了，复杂的事也能讲得清清楚楚，绝不因为卖萌就偷懒。` },
-  { id: 'senpai', name: '学姐', icon: 'mdi:school', desc: '温柔知性，耐心照顾', prompt: `你是温柔知性的学姐型 AI 助手，耐心、体贴、有书卷气。说话条理清晰、循循善诱，像前辈一样照顾对方，遇到难题会一步步带着解决；语气温和但不拖沓，该给结论时干脆利落。` },
-]
+// 内置预设定义在 personaPresets.js，与首次打开引导弹窗共用一份。
 const loadMyPersonas = () => {
   try {
     const raw = localStorage.getItem('myPersonas')
@@ -1865,17 +1807,24 @@ const { editorLazy: editorLazyEnabled, setEditorLazy } = useEditorPrefs()
 
 const VENDOR_ICONS = [
   [/sensenova|商汤/i, 'lucide:sparkles'],
-  [/opencode/i, 'lucide:code-xml'],
+  [/opencode/i, 'thesvg-color:opencode'],
   [/ollama/i, 'simple-icons:ollama'],
   [/stepfun|阶跃/i, 'lucide:footprints'],
   [/modelscope|魔搭/i, 'lucide:gallery-vertical-end'],
+  [/kimi|moonshot|月之暗面/i, 'thesvg-color:kimi'],
+  [/bigmodel|zhipu|智谱/i, 'thesvg-color:zhipu'],
+  [/hunyuan|混元/i, 'thesvg-color:hunyuan'],
+  [/volces|火山/i, 'thesvg-color:volcengine'],
+  [/xiaomi|mimo|小米/i, 'thesvg-color:xiaomi-mimo'],
+  [/minimax/i, 'thesvg-color:minimax'],
+  [/commandcode/i, 'lucide:command'],
   [/deepseek/i, 'simple-icons:deepseek'],
   [/openai/i, 'simple-icons:openai'],
   [/anthropic|claude/i, 'simple-icons:anthropic'],
   [/gemini|google/i, 'simple-icons:googlegemini'],
   [/qwen|通义/i, 'simple-icons:alibabacloud'],
   [/mistral/i, 'simple-icons:mistralai'],
-  [/groq/i, 'simple-icons:groq'],
+  [/groq/i, 'thesvg-color:groq'],
   [/openrouter/i, 'simple-icons:openrouter'],
   [/hugging/i, 'simple-icons:huggingface'],
   [/github/i, 'simple-icons:github'],
@@ -1883,8 +1832,11 @@ const VENDOR_ICONS = [
   [/nvidia/i, 'simple-icons:nvidia']
 ]
 
-function vendorIcon(name = '') {
-  return VENDOR_ICONS.find(([pattern]) => pattern.test(name))?.[1] || 'lucide:box'
+// 自定义配置的名字是用户随手起的（可能就叫「我的号」），所以把 endpoint
+// 一起拼进匹配串，域名里的 deepseek.com / moonshot.cn 同样能命中。
+function vendorIcon(name = '', endpoint = '') {
+  const hay = name + ' ' + endpoint
+  return VENDOR_ICONS.find(([pattern]) => pattern.test(hay))?.[1] || 'lucide:box'
 }
 
 function vendorColor(name = '') {
@@ -2088,22 +2040,24 @@ function selectTheme(key) {
   if (THEME_PRESETS[key]?.fullSkin) mode.value = 'light'
 }
 
+// icon 全部经 Iconify API 核实存在；thesvg-color 系是官方彩色 logo，
+// simple-icons 系是单色（跟随文字色），两套混用按「有彩色 logo 优先」来挑。
 const PRESETS = [
-  { name: 'DeepSeek', endpoint: 'https://api.deepseek.com' },
-  { name: 'OpenAI', endpoint: 'https://api.openai.com/v1' },
-  { name: 'Kimi 月之暗面', endpoint: 'https://api.moonshot.cn/v1' },
-  { name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4' },
-  { name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
-  { name: 'Groq', endpoint: 'https://api.groq.com/openai/v1' },
-  { name: 'Mistral', endpoint: 'https://api.mistral.ai/v1' },
-  { name: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-  { name: '腾讯混元', endpoint: 'https://api.hunyuan.cloud.tencent.com/v1' },
-  { name: 'OpenCode Zen', endpoint: 'https://opencode.ai/zen/v1' },
-  { name: 'OpenCode Go', endpoint: 'https://opencode.ai/zen/go/v1' },
-  { name: 'Command Code', endpoint: 'https://api.commandcode.ai/provider/v1' },
-  { name: '火山引擎', endpoint: 'https://ark.cn-beijing.volces.com/api/v3' },
-  { name: '小米 MiMo', endpoint: 'https://api.xiaomimimo.com/v1' },
-  { name: 'MiniMax', endpoint: 'https://api.minimax.io/v1' },
+  { name: 'DeepSeek', endpoint: 'https://api.deepseek.com', icon: 'simple-icons:deepseek' },
+  { name: 'OpenAI', endpoint: 'https://api.openai.com/v1', icon: 'simple-icons:openai' },
+  { name: 'Kimi 月之暗面', endpoint: 'https://api.moonshot.cn/v1', icon: 'thesvg-color:kimi' },
+  { name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', icon: 'thesvg-color:zhipu' },
+  { name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', icon: 'simple-icons:alibabacloud' },
+  { name: 'Groq', endpoint: 'https://api.groq.com/openai/v1', icon: 'thesvg-color:groq' },
+  { name: 'Mistral', endpoint: 'https://api.mistral.ai/v1', icon: 'simple-icons:mistralai' },
+  { name: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', icon: 'simple-icons:googlegemini' },
+  { name: '腾讯混元', endpoint: 'https://api.hunyuan.cloud.tencent.com/v1', icon: 'thesvg-color:hunyuan' },
+  { name: 'OpenCode Zen', endpoint: 'https://opencode.ai/zen/v1', icon: 'thesvg-color:opencode' },
+  { name: 'OpenCode Go', endpoint: 'https://opencode.ai/zen/go/v1', icon: 'thesvg-color:opencode' },
+  { name: 'Command Code', endpoint: 'https://api.commandcode.ai/provider/v1', icon: 'lucide:command' },
+  { name: '火山引擎', endpoint: 'https://ark.cn-beijing.volces.com/api/v3', icon: 'thesvg-color:volcengine' },
+  { name: '小米 MiMo', endpoint: 'https://api.xiaomimimo.com/v1', icon: 'thesvg-color:xiaomi-mimo' },
+  { name: 'MiniMax', endpoint: 'https://api.minimax.io/v1', icon: 'thesvg-color:minimax' },
 ]
 const activePreset = ref('')
 const MASKED = '••••••••'
@@ -2583,38 +2537,8 @@ function onAggProxyPortBlur() {
   }
 }
 
-// 自定义 API 解锁弹窗（协议 + 5s 倒计时）
-const showCustomLockModal = ref(false)
-const customLockKey = ref('')
-const customLockError = ref('')
-const agreeCustom = ref(false)
-const countdown = ref(0)
-let countdownTimer = null
-const CUSTOM_API_UNLOCK_KEY = 'rescene' // ← 开发者密码，改这里
-const apiUnlocked = computed(() => !!localStorage.getItem('studio_api_agreed') || providerSubTab.value === 'custom')
+// 自定义 API 协议已挪到首次打开引导弹窗（OnboardingModal）签署，这里不再设锁。
 function openCustomLock() {
-  // 已同意过协议不再弹，直接进
-  if (localStorage.getItem('studio_api_agreed')) {
-    providerSubTab.value = 'custom'
-    return
-  }
-  showCustomLockModal.value = true
-  customLockError.value = ''
-  agreeCustom.value = false
-  countdown.value = 5
-  // 按钮显示 5s 倒计时，期间禁用，5s 后才可点击
-  clearInterval(countdownTimer)
-  countdownTimer = setInterval(() => {
-    countdown.value--
-    if (countdown.value <= 0) { clearInterval(countdownTimer); countdown.value = 0 }
-  }, 1000)
-}
-function unlockCustom() {
-  customLockError.value = ''
-  if (countdown.value > 0) { customLockError.value = `请阅读协议（${countdown.value}s）`; return }
-  if (!agreeCustom.value) { customLockError.value = '请先勾选同意协议'; return }
-  localStorage.setItem('studio_api_agreed', '1')
-  showCustomLockModal.value = false
   providerSubTab.value = 'custom'
 }
 
@@ -3059,7 +2983,7 @@ async function saveAgnesKey() {
     .filter(c => c.id !== AGNES_KEY_ID)
     .map(c => ({ ...c, api_key: MASKED }))
   await persist([...untouched, {
-    id: AGNES_KEY_ID, name: 'Agnes', endpoint: 'https://apihub.agnes-ai.com',
+    id: AGNES_KEY_ID, name: 'Agnes', endpoint: 'https://apihub.agnes-ai.cn',
     api_key: key, default_model: '', is_default: false
   }])
   await loadConfigs()
@@ -4052,6 +3976,11 @@ onUnmounted(() => {
 .model-pick-btn.on { color: #fff; background: var(--app-accent); border-color: var(--app-accent); }
 .api-config-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--app-surface-2); }
 .api-config-row { display: flex; align-items: center; gap: 8px; }
+.api-config-logo {
+  width: 26px; height: 26px; display: grid; place-items: center; flex: none;
+  color: var(--vendor-color); background: color-mix(in srgb, var(--vendor-color) 11%, var(--app-surface));
+  border: 1px solid color-mix(in srgb, var(--vendor-color) 18%, var(--app-border)); border-radius: 8px;
+}
 .api-config-name { font-size: 13px; font-weight: 600; color: var(--app-text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .api-config-default-badge { font-size: 10.5px; font-weight: 600; color: #12b76a; background: rgba(18, 183, 106, 0.12); padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
 .api-config-actions { display: flex; gap: 4px; flex-shrink: 0; }
@@ -4250,72 +4179,6 @@ onUnmounted(() => {
 .agg-health-badge { flex: none; font-size: 9.5px; padding: 1px 7px; border-radius: 8px; background: rgba(52, 199, 89, 0.15); color: #34c759; }
 .agg-health-badge.off { background: var(--app-surface-3); color: var(--app-text-faint); }
 .agg-health-foot { font-size: 9.5px; color: var(--app-text-faint); margin-top: 4px; line-height: 1.5; }
-/* 自定义 API 锁 + 解锁弹窗 */
-.locked { opacity: 0.5; cursor: pointer; }
-.locked:hover { opacity: 0.7; }
-.agree-text {
-  text-align: left; font-size: 12.5px; line-height: 1.7; color: var(--app-text-soft);
-  background: var(--app-bg); border-radius: 10px; padding: 12px 14px; margin: 12px 0; max-height: 200px; overflow-y: auto;
-}
-.agree-check {
-  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--app-text);
-  cursor: pointer; justify-content: center; margin-bottom: 4px;
-}
-.agree-check input { accent-color: var(--app-accent); width: 15px; height: 15px; }
-.countdown-disabled {
-  background: #e05252 !important; color: #fff !important; cursor: not-allowed !important; opacity: .9;
-}
-/* 彼岸花哥特弹窗 */
-.gate-modal {
-  background: linear-gradient(160deg, #0a0a0a 0%, #1a0a0a 40%, #0d0505 100%) !important;
-  border: 1px solid #3a1a1a !important; box-shadow: 0 0 40px rgba(230,57,70,.15), 0 20px 60px rgba(0,0,0,.5) !important;
-}
-.gate-flower { margin: 0 0 6px; filter: drop-shadow(0 0 8px rgba(230,57,70,.6)); animation: gate-flower-breathe 3.2s ease-in-out infinite; }
-.gate-title {
-  font-size: 20px; font-weight: 900; letter-spacing: 4px;
-  background: linear-gradient(135deg, #e63946 0%, #ff6b6b 25%, #c1121f 50%, #ff8a8a 75%, #e63946 100%);
-  background-size: 300% 300%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent; text-shadow: none; margin-bottom: 2px;
-  animation: gate-gradient-flow 3.6s linear infinite;
-}
-.gate-sub {
-  font-size: 10.5px; color: #8b4a4a; letter-spacing: 3px; font-weight: 600; margin-bottom: 10px;
-  font-family: 'Georgia', serif;
-  animation: gate-fade-up .6s ease .25s both;
-}
-.gate-text {
-  background: rgba(20,5,5,.5) !important; border: 1px solid #3a1a1a !important;
-  color: #d4a0a0 !important; font-size: 12.5px !important; line-height: 1.8 !important;
-  animation: gate-fade-up .7s ease .45s both;
-  scrollbar-width: thin; scrollbar-color: #7a2a2a transparent;
-}
-.gate-text::-webkit-scrollbar { width: 6px; }
-.gate-text::-webkit-scrollbar-track { background: transparent; }
-.gate-text::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #7a2a2a, #c1121f); border-radius: 3px;
-}
-.gate-text::-webkit-scrollbar-thumb:hover { background: #e63946; }
-@keyframes gate-gradient-flow {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-@keyframes gate-flower-breathe {
-  0%, 100% { transform: translateY(0) scale(1); opacity: .85; }
-  50% { transform: translateY(-4px) scale(1.04); opacity: 1; }
-}
-@keyframes gate-fade-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.gate-text b { color: #ff6b6b; }
-.gate-modal .agree-check { color: #d4a0a0; }
-.gate-modal .agree-check input { accent-color: #e63946; }
-.gate-modal .mm-btn-cancel { border-color: #3a1a1a; color: #8b4a4a; background: transparent; }
-.gate-modal .mm-btn-primary { background: #e63946; border: none; color: #fff; }
-.gate-modal .mm-btn-primary:disabled { opacity: .5; }
-.gate-modal .mm-error { color: #e63946; }
 .mm-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 99999; }
 .mm-card { width: 420px; max-width:90vw; max-height: 80vh; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden; padding:24px; }
 .mm-input { width:100%; padding:8px 12px; border:1px solid var(--app-border); border-radius:8px; background:var(--app-surface); color:var(--app-text); font-size:13px; outline:none; box-sizing:border-box; }
@@ -4388,7 +4251,8 @@ onUnmounted(() => {
 .vendor-key-cancel { font-size: 12px; font-weight: 600; color: var(--app-text-soft); background: var(--app-surface-3); border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 12px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-cancel:hover { background: var(--app-surface-3); }
 .api-preset-label { font-size: 11.5px; color: var(--app-text-faint); margin-right: 2px; }
-.api-preset-btn { font-size: 11.5px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 4px 10px; cursor: pointer; transition: all .15s; }
+.api-preset-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--app-text); background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 4px 10px; cursor: pointer; transition: all .15s; }
+.api-preset-btn :deep(svg) { flex: none; }
 .api-preset-btn:hover { background: var(--app-surface-3); }
 .api-preset-btn.active { background: var(--app-accent); color: #fff; border-color: var(--app-accent); }
 

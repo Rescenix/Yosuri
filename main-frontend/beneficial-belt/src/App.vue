@@ -72,6 +72,8 @@
     </div>
     <!-- 全局悬浮剪贴板卡片：输入框右键 剪切/复制/粘贴/全选 + 选中文本悬浮复制按钮（2026-08-27） -->
     <DesktopFloatingMenu />
+    <!-- 首次打开引导：语言+领养 Agent 一页，功能导航一页，底部用户协议勾选后才可进入（2026-09-09） -->
+    <OnboardingModal v-if="showWelcomeNav" :items="railItemDefinitions" @close="closeWelcomeNav" />
   </template>
 
 <script setup>
@@ -83,6 +85,7 @@ import { getSkippedVersion, isUpdateNotifyDisabled, shouldShowUpdateBanner, mark
 import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 import DesktopFloatingMenu from './components/shanxi/chat/DesktopFloatingMenu.vue'
 import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
+import OnboardingModal from './components/shanxi/chat/OnboardingModal.vue'
 
 const auth = useAuth()
 const route = useRoute()
@@ -95,18 +98,24 @@ const RAIL_POSITION_KEY = 'app_tool_rail_position_v1'
 const RAIL_ITEMS_KEY = 'app_tool_rail_items_v1'
 const railItemDefinitions = [
   { id: 'chat', label: '编码', icon: 'mdi:code-tags', to: '/chat' },
-  { id: 'bio', label: '生命建模', icon: 'mdi:dna', to: '/bio' },
   { id: 'company', label: 'Agent 公司', icon: 'mdi:domain', to: '/company' },
   { id: 'sites', label: '站点', icon: 'mdi:web', to: '/sites' },
   { id: 'publish', label: '网文创作', icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
   { id: 'comic', label: '漫画创作', icon: 'mdi:brush', to: '/comic' },
-  { id: 'arena', label: 'Agent 竞技场', icon: 'mdi:sword-cross', to: '/arena' },
   { id: 'game', label: '星迹游戏', icon: 'mdi:gamepad-variant', to: '/game' },
   { id: 'studio', label: '视频剪辑', icon: 'mdi:movie-edit-outline', to: '/studio' },
   { id: 'agg', label: '聚合 API', icon: 'mdi:api' }
 ]
 const railItems = ref([...railItemDefinitions])
 const railEditorOpen = ref(false)
+
+// 首次打开应用的功能导航弹窗：只弹一次，关闭或跳转即写标记；勾「不再显示」永久静默。
+const WELCOME_NAV_KEY = '***'
+const showWelcomeNav = ref(false)
+function closeWelcomeNav(payload) {
+  showWelcomeNav.value = false
+  try { localStorage.setItem(WELCOME_NAV_KEY, payload && payload.dontShow ? 'dontshow' : '1') } catch { /* 无痕模式忽略 */ }
+}
 const railItemDragging = ref('')
 const availableRailItems = computed(() => railItemDefinitions.filter(option => !railItems.value.some(item => item.id === option.id)))
 const railLayout = ref('elbow')
@@ -328,8 +337,12 @@ onMounted(() => {
     window.dispatchEvent(new Event('auth-change'))
   }
   window.addEventListener('auth-welcome', onAuthWelcome)
-  // 应用回到前台 → 弹挂起的更新通知（2026-08-28）
+  // 应用回到前台时，把挂起的更新通知弹出来（2026-08-28）
   document.addEventListener('visibilitychange', onWindowVisible)
+  // 首次打开：弹功能导航弹窗（勾过「不再显示」则永远不再弹）
+  try {
+    if (localStorage.getItem(WELCOME_NAV_KEY) !== 'dontshow') showWelcomeNav.value = true
+  } catch { showWelcomeNav.value = true }
 })
 
 onMounted(async () => {
