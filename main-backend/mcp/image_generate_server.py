@@ -19,7 +19,7 @@ import urllib.parse
 AGNES_API_KEY = os.environ.get("Agnes_API_KEY", "").strip()
 DEFAULT_PROVIDER = os.environ.get("IMAGE_GENERATE_PROVIDER", "pollinations").strip().lower()
 
-AGNES_IMAGE_URL = "https://apihub.agnes-ai.com/v1/images/generations"
+AGNES_IMAGE_URL = "https://apihub.agnes-ai.cn/v1/images/generations"
 POLLINATIONS_BASE = "https://image.pollinations.ai/prompt"
 
 AGNES_MODEL = "agnes-image-2.1-flash"

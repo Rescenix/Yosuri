@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -408,6 +409,42 @@ func toolOutsideRoot(argsJSON string) (bool, string) {
 // 否则批准一次越界写盘后，之后任意目录的写都会静默放行——那等于把闸门拆了。
 func outsideRememberKey(p string) string {
 	return "approve:outside:" + normCase(filepath.Dir(absAgainstRoot(p)))
+}
+
+// ---- 已授权交付路径注册表 ----
+// 用户在审批条上批准了工作目录外的写入后，把「那一个路径」记进这张表；
+// /api/agent/file 据此放行预览/下载。批准粒度是单条路径而不是整个目录，
+// 不会重蹈「开整目录白名单 = 把敏感文件一并送出」的覆辙。
+// 条目带过期时间（24h），过期自然失效，避免无限期白名单。
+
+var (
+	approvedOutsideMu   sync.Mutex
+	approvedOutsidePath = map[string]time.Time{}
+)
+
+const approvedOutsideTTL = 24 * time.Hour
+
+func rememberApprovedOutsidePath(p string) {
+	abs := filepath.Clean(absAgainstRoot(p))
+	approvedOutsideMu.Lock()
+	defer approvedOutsideMu.Unlock()
+	approvedOutsidePath[abs] = time.Now().Add(approvedOutsideTTL)
+}
+
+// isApprovedOutsidePath 判定一个工作目录外的绝对路径是否被用户批准过（未过期）。
+func isApprovedOutsidePath(p string) bool {
+	abs := filepath.Clean(p)
+	approvedOutsideMu.Lock()
+	defer approvedOutsideMu.Unlock()
+	expire, ok := approvedOutsidePath[abs]
+	if !ok {
+		return false
+	}
+	if time.Now().After(expire) {
+		delete(approvedOutsidePath, abs)
+		return false
+	}
+	return true
 }
 
 // approvalWaiter 是单次工作流运行期的审批等待器。

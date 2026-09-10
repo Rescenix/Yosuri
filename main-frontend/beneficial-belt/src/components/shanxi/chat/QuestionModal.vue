@@ -20,6 +20,7 @@
         >
           <span class="question-option-key">{{ optionKey(i) }}</span>
           <span class="question-option-label">{{ optionLabel(opt.label, i) }}</span>
+          <span v-if="opt.recommended" class="question-option-rec">推荐</span>
         </button>
         <form v-if="question.allowOther" class="question-other-row" @submit.prevent="onConfirm">
           <span class="question-option-key">{{ optionKey(question.options.length) }}</span>
@@ -286,6 +287,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 「推荐」徽标：模型自荐选项，accent 色小胶囊，不抢选项主文字焦点 */
+.question-option-rec {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--app-accent-gradient, var(--app-accent, #1950be));
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.5;
 }
 .question-bar-free {
   display: flex;

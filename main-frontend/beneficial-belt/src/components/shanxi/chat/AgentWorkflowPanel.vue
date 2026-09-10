@@ -18,19 +18,19 @@
         v-html="group.html"
       ></div>
 
-      <!-- 单步思考：不收束，直接平铺 -->
-      <div v-else-if="group.type === 'single-thinking'" class="flow-thinking flow-thinking-single">
-        <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`)">
-          <RoseIcon :size="16" class="flow-row-icon icon-think" />
-          <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : (flow.status === 'waiting' ? '等待后台任务' : '思考') }}</span>
-          <span v-if="!(thinkOpen[`single-${gIdx}`] ?? true) && group.block.text" class="flow-row-preview">{{ onelinePreview(group.block.text) }}</span>
-          <span v-else class="flow-spacer"></span>
-          <span class="flow-chevron" :class="{ open: thinkOpen[`single-${gIdx}`] ?? true }">›</span>
-        </div>
-        <div v-if="thinkOpen[`single-${gIdx}`] ?? true" class="flow-detail flow-thinking-detail">
-          <div class="flow-thinking-text">{{ group.block.text }}</div>
-        </div>
-      </div>
+      <!-- 单步思考：不收束，直接平铺（思考中展开，结束后自动收起+显示耗时） -->
+            <div v-else-if="group.type === 'single-thinking'" class="flow-thinking flow-thinking-single">
+              <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`, group.block)">
+                              <RoseParticleLoader :size="18" :active="!thinkDone(group.block)" class="flow-row-icon icon-think" />
+                <span class="flow-thinking-text-label">{{ thinkLabelText(group.block) }}</span>
+                <span v-if="thinkCollapsed(`single-${gIdx}`, group.block) && group.block.text" class="flow-row-preview">{{ onelinePreview(group.block.text) }}</span>
+                <span v-else class="flow-spacer"></span>
+                <span class="flow-chevron" :class="{ open: thinkIsOpen(`single-${gIdx}`, group.block) }">›</span>
+              </div>
+              <div v-if="thinkIsOpen(`single-${gIdx}`, group.block)" class="flow-detail flow-thinking-detail">
+                <div class="flow-thinking-text">{{ group.block.text }}</div>
+              </div>
+            </div>
 
       <!-- 联网搜索：状态卡——head 显示「联网搜索 + 扫描线」，body 只显示搜索词；
            引用来源暂存到 searchRefs，回复结束后在末尾紫色区块流式渐变展示 -->
@@ -72,7 +72,8 @@
         </div>
         <div class="flow-question-a">
           <span class="flow-question-a-label">回答</span>
-          <span class="flow-question-a-text">{{ group.block.answer || '（等待中…）' }}</span>
+          <!-- answered=false = 超时/断线走 fallback 兜底，不是用户的选择，不伪装成用户回答 -->
+          <span class="flow-question-a-text">{{ group.block.answered ? (group.block.answer || '（等待中…）') : '（未回答，已按兜底继续）' }}</span>
         </div>
       </div>
 
@@ -198,18 +199,18 @@
           <div v-show="isSummaryExpanded(gIdx)" class="flow-body">
             <template v-for="(b, i) in group.blocks" :key="`${gIdx}-${i}`">
               <!-- 思考 -->
-              <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
-                <div class="flow-row-head" @click.stop="toggleThink(`${gIdx}-${i}`)">
-                  <RoseIcon :size="16" class="flow-row-icon icon-think" />
-                  <span class="flow-thinking-text-label">{{ flow.status === 'running' ? '正在思考' : (flow.status === 'waiting' ? '等待后台任务' : '思考') }}</span>
-                  <span v-if="!(thinkOpen[`${gIdx}-${i}`] ?? true) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
-                  <span v-else class="flow-spacer"></span>
-                  <span class="flow-chevron" :class="{ open: thinkOpen[`${gIdx}-${i}`] ?? true }">›</span>
-                </div>
-                <div v-if="thinkOpen[`${gIdx}-${i}`] ?? true" class="flow-detail flow-thinking-detail">
-                  <div class="flow-thinking-text">{{ b.text }}</div>
-                </div>
-              </div>
+                            <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
+                              <div class="flow-row-head" @click.stop="toggleThink(`${gIdx}-${i}`, b)">
+                                                              <RoseParticleLoader :size="18" :active="!thinkDone(b)" class="flow-row-icon icon-think" />
+                                <span class="flow-thinking-text-label">{{ thinkLabelText(b) }}</span>
+                                <span v-if="thinkCollapsed(`${gIdx}-${i}`, b) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
+                                <span v-else class="flow-spacer"></span>
+                                <span class="flow-chevron" :class="{ open: thinkIsOpen(`${gIdx}-${i}`, b) }">›</span>
+                              </div>
+                              <div v-if="thinkIsOpen(`${gIdx}-${i}`, b)" class="flow-detail flow-thinking-detail">
+                                <div class="flow-thinking-text">{{ b.text }}</div>
+                              </div>
+                            </div>
 
               <!-- 操作 -->
               <div v-else-if="b.type === 'tool'" class="flow-tool flow-tool-timeline">
@@ -386,13 +387,12 @@
 </template>
 
 <script setup>
-import { reactive, computed, ref, watch, nextTick } from 'vue'
+import { reactive, computed, ref, watch, nextTick, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
 import ArxivPaperCard from './ArxivPaperCard.vue'
 import RoseParticleLoader from './RoseParticleLoader.vue'
-import RoseIcon from './RoseIcon.vue'
 import { renderMarkdown } from './markdownRenderer.js'
 import { requestPreview } from '../composables/previewBus.js'
 import { pptxToHtml, xlsxToHtml, docxToHtml } from '../../../utils/officePreview.js'
@@ -797,10 +797,84 @@ function toolBadge(b) {
 }
 
 // ==================== 思考块折叠 ====================
-// 思考块默认展开（模板用 thinkOpen[i] ?? true），toggle 基于"当前是否可见"取反：
-// 默认未点过视为展开，点一下收起，再点展开。
+// 思考块「思考中展开、结束后自动收起」：同一个块只有在流式书写途中才视为进行中
+// （flow.status === 'running' 且它就是 blocks 最后一个）；一旦被后面的块顶掉
+// 或整条流收尾，自动收起成一行（带预览）。手工点过以手工状态为准，不被自动收起覆盖。
+function thinkDone(b) {
+  if (!props.flow || !b) return true
+  if (b.elapsedMs) return true
+  if (props.flow.status !== 'running') return true
+  const blocks = props.flow.blocks || []
+  return blocks[blocks.length - 1] !== b
+}
+// 思考头文案：思考中 → 「正在思考 12.3s」（250ms 实时跳动）；已结束 → 「思考 3.2s」
+const nowTick = ref(0)
+let thinkTimer = null
+// 有思考块在流式书写时，用轻量定时器驱动实时计时显示。
+// 同时在这里给「被新块顶掉但没记耗时」的思考块补定格 elapsedMs：只有 appendText
+// 自己会记（intent/正文增量走它），而 tool 块是各事件处理器直接 flow.blocks.push
+// 的，绕过 appendText → 前面的思考块永远没有 elapsedMs，thinkDone 却已判结束，
+// 标签就退化成光秃秃的「思考」（时间没了，2026-09-10 用户反馈）。
+// 定格取下一个块的 startTime（≈思考结束那一刻），没有就用当前时间。
+watch(
+  () => props.flow?.blocks?.length,
+  () => {
+    const blocks = props.flow?.blocks || []
+    for (let i = 0; i < blocks.length - 1; i++) {
+      const b = blocks[i]
+      if (b.type === 'thinking' && b.startTime && !b.elapsedMs) {
+        const next = blocks[i + 1]
+        b.elapsedMs = Math.max(0, (next.startTime || Date.now()) - b.startTime)
+      }
+    }
+    const hasLive = blocks.some((b) => b.type === 'thinking' && !thinkDone(b))
+    if (hasLive && !thinkTimer) {
+      thinkTimer = setInterval(() => { nowTick.value = Date.now() }, 250)
+    } else if (!hasLive && thinkTimer) {
+      clearInterval(thinkTimer)
+      thinkTimer = null
+    }
+  },
+  { immediate: true }
+)
+onUnmounted(() => { if (thinkTimer) clearInterval(thinkTimer) })
+
+function thinkLabelText(b) {
+  if (!thinkDone(b)) {
+    const label = props.flow?.status === 'waiting' ? '等待后台任务' : '正在思考'
+    if (b.startTime) {
+      const live = fmtMs((nowTick.value || Date.now()) - b.startTime)
+      if (live) return `${label} ${live}`
+    }
+    return label
+  }
+  const t = fmtMs(b.elapsedMs)
+  return t ? `思考 ${t}` : '思考'
+}
+// 默认展开 = 仍在思考中；手工点过则按手工状态
+function thinkIsOpen(key, b) {
+  return thinkOpen[key] ?? !thinkDone(b)
+}
+function thinkCollapsed(key, b) {
+  return !thinkIsOpen(key, b)
+}
 const thinkOpen = reactive({})
-function toggleThink(i) { thinkOpen[i] = !(thinkOpen[i] ?? true) }
+function toggleThink(key, b) {
+  thinkOpen[key] = !thinkIsOpen(key, b)
+}
+// 整条流收尾（含 stop/失败）：最后的思考块可能来不及被下一个块顶掉，这里补记耗时
+watch(
+  () => props.flow?.status,
+  (st) => {
+    if (st === 'running' || st === 'waiting') return
+    const blocks = props.flow?.blocks || []
+    const last = blocks[blocks.length - 1]
+    if (last && last.type === 'thinking' && last.startTime && !last.elapsedMs) {
+      last.elapsedMs = Date.now() - last.startTime
+    }
+    if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null }
+  }
+)
 
 // ==================== 动作行文案 ====================
 // 一行白话，动词 + 对象，读起来跟正文一样（"编辑了 tools.go"），不靠图标传达语义。
@@ -1148,6 +1222,8 @@ function livePreviewRows(b) { return livePreviewData(b).rows }
 
 // 判断某个选项是否被用户的回答命中（answer 可能是「A、B」这类拼接，或自由文本）
 function isChosenAnswer(block, value) {
+  // answered=false（超时/断线走 fallback）不是用户的选择：不高亮任何选项
+  if (!block.answered) return false
   const ans = (block.answer || '').trim()
   if (!ans) return false
   if (ans === value) return true

@@ -27,16 +27,33 @@ import (
 // raw=1 时直接 ServeFile 下载/新开。path 相对主工作目录解析，禁止越界。
 func HandleAgentFile(c *gin.Context) {
 	raw := c.Query("path")
-	if raw == "" || filepath.IsAbs(raw) || strings.Contains(raw, "..") {
+	if raw == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	clean := filepath.Clean(filepath.FromSlash(raw))
-	if pathOutsideRoot(clean) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不允许访问工作目录之外的文件"})
-		return
+	var path string
+	// 只认工作目录内的相对路径。绝对路径只有在「用户刚在审批条上批准过的那一个
+	// 文件」时才放行（见 approval.go 的已授权交付路径注册表）；未经批准的一律拒。
+	// 交付端点是无鉴权公开读口，放开任意绝对路径等于把用户数据目录下的敏感文件
+	// 暴露给前端。
+	if filepath.IsAbs(raw) {
+		if !isApprovedOutsidePath(raw) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该文件不在 Agent 工作目录内，且未经你批准，无法预览/下载"})
+			return
+		}
+		path = filepath.Clean(raw)
+	} else {
+		if strings.Contains(raw, "..") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+			return
+		}
+		clean := filepath.Clean(filepath.FromSlash(raw))
+		if pathOutsideRoot(clean) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该文件不在 Agent 工作目录内，无法预览/下载"})
+			return
+		}
+		path = filepath.Join(core.GetProjectRoot(), clean)
 	}
-	path := filepath.Join(core.GetProjectRoot(), clean)
 
 	info, err := os.Stat(path)
 	if err != nil {

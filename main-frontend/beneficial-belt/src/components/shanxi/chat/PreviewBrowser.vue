@@ -88,7 +88,7 @@
       <iframe
         v-else-if="!isCDPPreview"
         ref="frameRef"
-        :key="isPdfTarget ? 'pdf' : 'sandboxed'"
+        :key="(isPdfTarget ? 'pdf' : 'sandboxed') + '|' + frameSrc"
         :src="frameSrc"
         class="pb-frame"
         :sandbox="isPdfTarget ? undefined : 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads'"
@@ -251,7 +251,12 @@ onUnmounted(() => {
 })
 
 function hasScheme(raw) {
-  return /^[a-z][a-z\d+.-]*:\/\//i.test(raw)
+  // data: / blob: 这类 scheme 后面不带 //，旧写法只认 `scheme://`，
+  // 导致 md 预览的 data:text/html URL 被当成缺协议的域名补成
+  // https://data:text/html... —— iframe 白屏。这里放行无 // 的合法 scheme，
+  // 但两种形态必须排除：`C:/path`（冒号后跟斜杠=盘符）、`localhost:5173`
+  // （冒号后跟数字=host:port），它们要留给 looksLikeLocalAddress 补 http://。
+  return /^[a-z][a-z\d+.-]+:\/\//i.test(raw) || /^[a-z][a-z\d+.-]+:(?![\/\\\d])/i.test(raw)
 }
 
 function looksLikeLocalAddress(raw) {

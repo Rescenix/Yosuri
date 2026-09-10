@@ -126,7 +126,8 @@ const { setLocale } = useI18n()
 const STEPS = ['setup', 'nav']
 const step = ref(0)
 const agreed = ref(!!localStorage.getItem('studio_api_agreed'))
-const dontShow = ref(false)
+// 「不再显示」默认勾上：走完一次引导即静默，想再看回来取消勾选。
+const dontShow = ref(true)
 const showAgreement = ref(false)
 
 const LANGS = [

@@ -215,14 +215,24 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         // 人设随每次新工作流发送（续跑分支不传：检查点 msgs[0] 已含当初完整系统提示词）。
         es = new EventSource(url)
 
-        // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块
-        const appendText = (type, text) => {
-            if (!text) return
-            const last = flow.blocks[flow.blocks.length - 1]
-            if (last && last.type === type) last.text += text
-            else flow.blocks.push({ type, text })
-            onStreamUpdate?.()
-        }
+        // thinking / intent 是文本增量：追加到同类型的最后一个块，类型切换时开新块。
+                // 思考块记 startTime；它被下一个非思考块顶掉（或收尾）时记 elapsedMs，
+                // 面板据此显示「思考 X.Xs」并在思考结束后自动收起。
+                const appendText = (type, text) => {
+                    if (!text) return
+                    const last = flow.blocks[flow.blocks.length - 1]
+                    if (last && last.type === type) last.text += text
+                    else {
+                        // 上一个块是思考、现在换了别的类型 = 这段思考结束，定格耗时
+                        if (last && last.type === 'thinking' && last.startTime && !last.elapsedMs) {
+                            last.elapsedMs = Date.now() - last.startTime
+                        }
+                        flow.blocks.push(type === 'thinking'
+                            ? { type, text, startTime: Date.now() }
+                            : { type, text })
+                    }
+                    onStreamUpdate?.()
+                }
 
         // 大多数上游会在流式 tool call 一开始就给 id；少数兼容服务会在最终 action
         // 才补 id，导致 action_delta 创建的“生成预览”卡片无法按 id 找回，永久卡住。
@@ -674,8 +684,9 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             if (pending?.id === d.id) questionState.pending = null
             for (const b of flow.blocks) {
                 if (b.type === 'question' && b.id === d.id) {
+                    // answered=false = 超时/断线走 fallback 兜底，不是用户的选择
                     b.answer = d.answer || b.answer || ''
-                    b.answered = true
+                    b.answered = !!d.answered
                     break
                 }
             }

@@ -296,6 +296,18 @@ func isWriteAuditTool(fullName string) bool {
 	return false
 }
 
+// shouldAuditNativeWrite 原生（非 MCP）写工具是否需要在执行前后打 AgentFS 审计
+// 钩子。工具收敛改名（write_file→write / edit_file→patch）后，核心写工具曾因
+// 调用点只认旧名而不进影子仓 → 收尾「改动文件」卡片永远为空（2026-09-10）。
+// apply_patch 走 nativePatchWritableArgs 多路径分支单独处理，不在此列。
+func shouldAuditNativeWrite(name string) bool {
+	switch name {
+	case "write_file", "edit_file", "write", "patch":
+		return true
+	}
+	return false
+}
+
 // beforeHashEntry pending 暂存的 before 信息。
 type beforeHashEntry struct {
 	hash   string

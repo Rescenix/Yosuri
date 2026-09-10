@@ -9,9 +9,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -117,5 +120,90 @@ func TestHandleAgentFile_ServeAndRaw(t *testing.T) {
 	r.ServeHTTP(w4, req4)
 	if w4.Code != http.StatusNotFound {
 		t.Errorf("不存在应 404，得到 %d", w4.Code)
+	}
+}
+
+// TestHandleAgentFile_UserDataAbsolute 覆盖记忆交付场景：memorydir 把文件落在
+// 工作目录之外（~/rescene_data/memory/），交付卡片给的是绝对路径。端点只放行
+// 「用户在审批条上批准过的那一个文件」（已授权交付路径注册表），未批准一律 400；
+// 这也保证用户数据目录里的敏感凭据文件不会因目录白名单被公开读口拖出去。
+func TestHandleAgentFile_UserDataAbsolute(t *testing.T) {
+	isolateTestProjectRoot(t)
+	root := core.GetProjectRoot()
+	// 清理注册表残留（测试隔离）
+	approvedOutsideMu.Lock()
+	approvedOutsidePath = map[string]time.Time{}
+	approvedOutsideMu.Unlock()
+
+	content := "# 自动提取记忆\n\n- **code_language** C\n"
+	memFile := filepath.Join(t.TempDir(), "memory", "facts.md")
+	if err := os.MkdirAll(filepath.Dir(memFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(memFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 工作目录内副本用于路径归一对照
+	relDoc := filepath.Join(root, "doc.md")
+	if err := os.WriteFile(relDoc, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/api/agent/file", HandleAgentFile)
+
+	// 1) 未批准的工作目录外绝对路径：400 + 友好提示
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile), nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("未批准绝对路径应 400，得到 %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "未经你批准") {
+		t.Errorf("错误提示应说明未经批准，得到 %s", w.Body.String())
+	}
+
+	// 2) 批准该路径后：serve 200 且回读 content
+	rememberApprovedOutsidePath(memFile)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile), nil))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("已批准绝对路径应 200，得到 %d: %s", w2.Code, w2.Body.String())
+	}
+	var meta struct {
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(w2.Body.Bytes(), &meta); err != nil {
+		t.Fatal(err)
+	}
+	if meta.Name != "facts.md" || meta.Kind != "text" || meta.Content != content {
+		t.Errorf("serve 元数据不符: %+v", meta)
+	}
+
+	// 3) 批准路径 raw 下载
+	w3 := httptest.NewRecorder()
+	r.ServeHTTP(w3, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile)+"&raw=1", nil))
+	if w3.Code != http.StatusOK || w3.Body.String() != content {
+		t.Errorf("raw 应 200 且内容一致，得到 %d", w3.Code)
+	}
+
+	// 4) 工作目录内相对路径：无需批准即可预览（回归，不受注册表影响）
+	w4 := httptest.NewRecorder()
+	r.ServeHTTP(w4, httptest.NewRequest(http.MethodGet, "/api/agent/file?path=doc.md", nil))
+	if w4.Code != http.StatusOK {
+		t.Errorf("工作目录内相对路径应 200，得到 %d: %s", w4.Code, w4.Body.String())
+	}
+
+	// 5) 从未批准的另一个绝对路径（如用户数据目录下的敏感文件）仍 400
+	cred := filepath.Join(t.TempDir(), "secrets.env")
+	if err := os.WriteFile(cred, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w5 := httptest.NewRecorder()
+	r.ServeHTTP(w5, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(cred), nil))
+	if w5.Code == http.StatusOK {
+		t.Error("未批准的其它绝对路径不应 200")
 	}
 }

@@ -34,7 +34,8 @@ import (
 )
 
 const (
-	agnesVideoBaseURL   = "https://apihub.agnes-ai.com"
+	// 国内节点：apihub.agnes-ai.cn 实测 0.2s 握手（海外 .com 4.5s），免翻墙
+	agnesVideoBaseURL   = "https://apihub.agnes-ai.cn"
 	agnesVideoTimeout   = 6 * time.Minute // 视频推理可能 60-90s+，轮询上限放宽
 	agnesVideoPollEvery = 10 * time.Second
 	agnesVideoMaxBytes  = 128 << 20 // 单视频上限 128MB
@@ -168,7 +169,7 @@ func generateVideo(ctx context.Context, spec videoGenSpec) (videoGenResult, erro
 	}
 	key := agnesVideoAPIKey()
 	if key == "" {
-		return videoGenResult{}, fmt.Errorf("未配置 Agnes API Key：打开设置 → 模型 → 填「Agnes API Key」（platform.agnes-ai.com 免费获取），或设置环境变量 AGNES_API_KEY")
+		return videoGenResult{}, fmt.Errorf("未配置 Agnes API Key：打开设置 → 模型 → 填「Agnes API Key」（platform.agnes-ai.cn 免费获取），或设置环境变量 AGNES_API_KEY")
 	}
 	// 默认 2.5-flash（$0/秒限时免费，继承 2.5 能力）；2.0 支持 1080p 免费
 	if spec.Model == "" {

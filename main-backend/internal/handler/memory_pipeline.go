@@ -78,6 +78,107 @@ func automaticMemoryWorker() {
 	}
 }
 
+// canonicalFactKey 把事实 key 归一到规范形式，作为去重主键。
+//
+// 提取模型每次对话都可能为同一个意思造新别名（code_language / preferred_code_language /
+// coding_language / code_language_preference 各存一条），字面 key 判等挡不住这种裂变。
+// 这里用确定性规则收敛：剥装饰性前后缀、折叠分隔符，再查同义词表。
+// 归一后的 key 同时作为落盘展示名，保证 facts.md 里看到的是规范写法。
+func canonicalFactKey(key string) string {
+	k := strings.ToLower(strings.TrimSpace(key))
+	var b strings.Builder
+	prevSep := false
+	for _, r := range k {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r >= 0x80 {
+			b.WriteRune(r)
+			prevSep = false
+		} else if !prevSep {
+			b.WriteByte('_')
+			prevSep = true
+		}
+	}
+	k = strings.Trim(b.String(), "_")
+	// 剥装饰性前缀（preferred_x 与 x 是同一件事）。只收「与属性本身无关的
+	// 所有格/偏好限定词」——不收 project_/current_ 这类可能承载语义的前缀，
+	// 否则 project_name→name 与 current_project_name→project_name 会不对称，
+	// 同一事物反而映射出两个 key。
+	for _, p := range []string{"preferred_", "prefer_", "use_of_", "user_", "my_"} {
+		if strings.HasPrefix(k, p) && len(k) > len(p)+2 {
+			k = strings.TrimPrefix(k, p)
+		}
+	}
+	// 剥装饰性后缀
+	for {
+		trimmed := k
+		for _, s := range []string{"_preference", "_preferences", "_pref", "_setting", "_choice", "_want"} {
+			if strings.HasSuffix(k, s) && len(k) > len(s)+2 {
+				k = strings.TrimSuffix(k, s)
+				trimmed = k
+			}
+		}
+		if trimmed == k {
+			break
+		}
+	}
+	k = strings.Trim(k, "_")
+	return k
+}
+
+// factBucket 归并存储桶：profile 与 preferences 渲染时本就合并（用户画像即偏好），
+// 去重也必须同桶，否则 language 会在两个桶各存一条。
+func factBucket(category string) string {
+	if category == "profile" {
+		return "preferences"
+	}
+	return category
+}
+
+// mergeFactValue 同 key 新值的合并判据：大小写/标点/空白归一后等价则保留旧值
+// （避免提取器每次换个写法就无意义地重刷 Updated），确有不同才让新表达覆盖——
+// 用户最新明确表达优先。
+func mergeFactValue(old, next string) string {
+	norm := func(s string) string {
+		var b strings.Builder
+		for _, r := range strings.ToLower(s) {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r >= 0x80 {
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	}
+	if norm(old) == norm(next) {
+		return old
+	}
+	return next
+}
+
+// factID 一条事实的去重主键。
+func factID(category, key string) string {
+	return factBucket(category) + "\x00" + canonicalFactKey(key)
+}
+
+// existingFactKeys 把当前 facts.json 里的规范 key 连同一条示例值列出来，喂给提取器，
+// 让它复用已有写法而不是为同一件事造新别名。只给 key + 短值，控制 token 开销；
+// 无已有事实时返回空串（首轮不注入该段）。
+func existingFactKeys() string {
+	facts, err := loadAutomaticFacts()
+	if err != nil || len(facts) == 0 {
+		return ""
+	}
+	seen := make(map[string]bool, len(facts))
+	var lines []string
+	for _, f := range facts {
+		id := factID(f.Category, f.Key)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		val := cleanFactText(f.Value, 60)
+		lines = append(lines, fmt.Sprintf("- [%s] %s = %s", factBucket(f.Category), canonicalFactKey(f.Key), val))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func extractFacts(parent context.Context, userText, dialogContext string) ([]extractedFact, error) {
 	ctx, cancel := context.WithTimeout(parent, 25*time.Second)
 	defer cancel()
@@ -92,10 +193,18 @@ func extractFacts(parent context.Context, userText, dialogContext string) ([]ext
 用户明确纠正旧信息时用 update；明确要求忘记/删除时用 delete。没有值得保存的事实就返回 []。
 只输出 JSON 数组，每项字段为 op(add|update|delete)、category(profile|preferences|projects|decisions)、key、value、confidence(high|medium)。
 
+去重铁律：key 必须复用下方「已有事实」里出现过的写法，语义相同就不要造新别名
+（code_language / preferred_code_language / coding_language 是同一件事，只能有一个 key）。
+已有事实里确实没有对应项时才新增 key，用简短规范名（小写下划线，不带 preferred_ 之类前缀）。
+新事实与已有事实同 key 但表达更好时，用 update 覆盖成更完整的那句，不要并列两条。
+
 <user_message>
 ` + userText + "\n</user_message>"
 	if strings.TrimSpace(dialogContext) != "" {
 		prompt += "\n\n<recent_dialog>\n" + dialogContext + "\n</recent_dialog>"
+	}
+	if existing := existingFactKeys(); existing != "" {
+		prompt += "\n\n<existing_facts>\n" + existing + "\n</existing_facts>"
 	}
 
 	backends := []RouterBackend{}
@@ -220,12 +329,19 @@ func applyAutomaticFacts(sourceID string, changes []extractedFact) error {
 	}
 	byID := make(map[string]memoryFact, len(facts))
 	for _, f := range facts {
-		byID[f.Category+"\x00"+strings.ToLower(f.Key)] = f
+		// 装载即归一：历史裂变的别名条目在这里收敛到规范 key，同簇保留最新。
+		norm := memoryFact{Category: factBucket(f.Category), Key: canonicalFactKey(f.Key), Value: f.Value, Updated: f.Updated}
+		id := factID(norm.Category, norm.Key)
+		if old, exists := byID[id]; !exists || norm.Updated.After(old.Updated) {
+			byID[id] = norm
+		}
 	}
 
 	changed := make([]extractedFact, 0, len(changes))
 	for _, change := range changes {
-		id := change.Category + "\x00" + strings.ToLower(change.Key)
+		// 归一后再落盘：展示名也用规范 key，facts.md 里不再出现同义别名并存。
+		id := factID(change.Category, change.Key)
+		change.Key = canonicalFactKey(change.Key)
 		old, exists := byID[id]
 		switch change.Op {
 		case "delete":
@@ -234,8 +350,12 @@ func applyAutomaticFacts(sourceID string, changes []extractedFact) error {
 				changed = append(changed, change)
 			}
 		case "add", "update":
-			if !exists || old.Value != change.Value {
-				byID[id] = memoryFact{Category: change.Category, Key: change.Key, Value: change.Value, Updated: time.Now().UTC()}
+			if !exists {
+				byID[id] = memoryFact{Category: factBucket(change.Category), Key: change.Key, Value: change.Value, Updated: time.Now().UTC()}
+				changed = append(changed, change)
+			} else if mergeFactValue(old.Value, change.Value) != old.Value {
+				merged := mergeFactValue(old.Value, change.Value)
+				byID[id] = memoryFact{Category: factBucket(change.Category), Key: change.Key, Value: merged, Updated: time.Now().UTC()}
 				changed = append(changed, change)
 			}
 		}
@@ -341,7 +461,7 @@ func renderAutomaticFacts(facts []memoryFact) error {
 // mockNoiseKey 检测一条事实是不是 mock/演示/测试噪音。
 func mockNoiseKey(key, value string) bool {
 	k := strings.ToLower(key + " " + value)
-	for _, noise := range []string{"mock", "demo", "测试", "test", "示例", "演示", "flowup", "子代理", "后台任务", "pdf_delivery"} {
+	for _, noise := range []string{"mock", "demo", "测试", "test", "示例", "演示", "flowup", "子代理", "后台任务", "pdf_delivery", "placeholder", "占位", "你的用户名", "your_username"} {
 		if strings.Contains(k, noise) {
 			return true
 		}
@@ -350,7 +470,8 @@ func mockNoiseKey(key, value string) bool {
 }
 
 // consolidateFacts 一次性存量清洗：去掉 mock/演示/测试噪音 + key 归一合并。
-// 启动时跑一次，幂等（跑过 clean 的文件不会再产生相同噪音，因为提取 prompt 已挡新增）。
+// 启动时跑一次，幂等（新写入在 applyAutomaticFacts 就已归一，跑过之后 facts.json
+// 里不再有可合并的同义条目，早返回不再重复落盘）。
 func consolidateFacts() {
 	if !automaticMemoryEnabled() {
 		return
@@ -363,30 +484,23 @@ func consolidateFacts() {
 		return
 	}
 
-	// key 归一表：别名 → 标准 key
-	aliases := map[string]string{
-		"preferred_language":       "language",
-		"preferred_output_format":  "output_format",
-		"preferred_message_length": "message_length",
-		"response_length":          "message_length",
-		"use_of_emoji":             "emoji_usage",
-		"formality":                "tone",
-		"mock_backend_task_length": "duration_preference",
-	}
-
 	byID := make(map[string]memoryFact, len(facts))
 	for _, f := range facts {
 		if mockNoiseKey(f.Key, f.Value) {
 			continue
 		}
-		normKey := strings.ToLower(f.Key)
-		if alias, ok := aliases[normKey]; ok {
-			normKey = alias
-			f.Key = alias
-		}
-		id := f.Category + "\x00" + normKey
-		if old, exists := byID[id]; !exists || f.Updated.After(old.Updated) {
-			byID[id] = f
+		norm := memoryFact{Category: factBucket(f.Category), Key: canonicalFactKey(f.Key), Value: f.Value, Updated: f.Updated}
+		id := factID(norm.Category, norm.Key)
+		if old, exists := byID[id]; !exists || norm.Updated.After(old.Updated) {
+			// 同簇冲突：保留最新表达；等价改写（归一后同义）不重刷 Updated。
+			if exists {
+				merged := mergeFactValue(old.Value, norm.Value)
+				if merged == old.Value {
+					norm.Updated = old.Updated
+				}
+				norm.Value = merged
+			}
+			byID[id] = norm
 		}
 	}
 

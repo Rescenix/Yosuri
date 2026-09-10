@@ -29,8 +29,9 @@ const askUserTimeout = 5 * time.Minute
 
 // askUserOption 是 ask_user 的一个候选选项。
 type askUserOption struct {
-	Label string `json:"label"`           // 展示文字
-	Value string `json:"value,omitempty"` // 回传值，省略则与 label 相同
+	Label       string `json:"label"`                 // 展示文字
+	Value       string `json:"value,omitempty"`       // 回传值，省略则与 label 相同
+	Recommended bool   `json:"recommended,omitempty"` // 模型自荐：此项是最推荐选择，前端标注「（推荐）」
 }
 
 // askUserArgs 是 ask_user 工具的参数。
@@ -63,26 +64,30 @@ var askUserToolDef = core.ToolDefinition{
 					Description: "要问用户的问题，清晰具体",
 				},
 				"options": {
-					Type: "array",
-					Description: "必须提供 2-5 个选项。每项是 {label: 展示文字, value: A/B/C/D/E}；" +
-						"不得把选项写进 question 正文。",
-					MinItems: 2,
-					Items: &core.ToolProperty{
-						Type:        "object",
-						Description: "一个选项：{label: 必填展示文字, value: 可选回传值}",
-						Properties: map[string]core.ToolProperty{
-							"label": {
-								Type:        "string",
-								Description: "选项文案，不要包含 A/B/C/D 前缀",
+						Type: "array",
+						Description: "必须提供 2-5 个选项。每项是 {label: 展示文字, value: A/B/C/D/E, recommended: 可选}；" +
+							"不得把选项写进 question 正文。若其中一项是你基于当前任务的最优推荐，请把该项的 recommended 设为 true（只设一项）。",
+						MinItems: 2,
+						Items: &core.ToolProperty{
+							Type:        "object",
+							Description: "一个选项：{label: 必填展示文字, value: 可选回传值, recommended: 可选是否推荐}",
+							Properties: map[string]core.ToolProperty{
+								"label": {
+									Type:        "string",
+									Description: "选项文案，不要包含 A/B/C/D 前缀",
+								},
+								"value": {
+									Type:        "string",
+									Description: "简短回传值，建议使用 A/B/C/D",
+								},
+								"recommended": {
+									Type:        "boolean",
+									Description: "可选：该项是否为你的推荐（最多一项为 true），前端会标注「（推荐）」",
+								},
 							},
-							"value": {
-								Type:        "string",
-								Description: "简短回传值，建议使用 A/B/C/D",
-							},
+							Required: []string{"label"},
 						},
-						Required: []string{"label"},
 					},
-				},
 				"multi": {
 					Type:        "boolean",
 					Description: "是否允许多选，默认 false（单选）",
@@ -143,17 +148,18 @@ func unregisterAskQuestion(id string) {
 }
 
 // waitAskUser 阻塞直到该 workflow 的提问被回答 / 超时 / ctx 取消。
-// 返回最终注入上下文的答案文字（空串 = 超时或断线，调用方应再套 fallback）。
-func waitAskUser(workflowID string, ch chan askUserReply, done <-chan struct{}) string {
+// 返回最终注入上下文的答案文字（空串 = 超时或断线，调用方应再套 fallback）
+// 和「是否用户本人回答」（false = 超时/断线走 fallback 兜底，不是用户的选择）。
+func waitAskUser(workflowID string, ch chan askUserReply, done <-chan struct{}) (string, bool) {
 	timer := time.NewTimer(askUserTimeout)
 	defer timer.Stop()
 	select {
 	case r := <-ch:
-		return r.answer
+		return r.answer, true
 	case <-timer.C:
-		return ""
+		return "", false
 	case <-done:
-		return ""
+		return "", false
 	}
 }
 
@@ -222,16 +228,16 @@ func handleAskUser(c *gin.Context, workflowID string, askCh chan askUserReply, a
 		return msg, FlowBlock{Type: "question", Question: "提问参数无效", Answer: msg}
 	}
 	id := "ask_" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	// 选项透传给前端（label+value），value 缺省回退到 label
-	opts := make([]map[string]string, 0, len(a.Options))
+	// 选项透传给前端（label+value+recommended），value 缺省回退到 label
+	opts := make([]map[string]any, 0, len(a.Options))
 	blockOpts := make([]askUserOption, 0, len(a.Options))
 	for _, o := range a.Options {
 		v := o.Value
 		if v == "" {
 			v = o.Label
 		}
-		opts = append(opts, map[string]string{"label": o.Label, "value": v})
-		blockOpts = append(blockOpts, askUserOption{Label: o.Label, Value: v})
+		opts = append(opts, map[string]any{"label": o.Label, "value": v, "recommended": o.Recommended})
+		blockOpts = append(blockOpts, askUserOption{Label: o.Label, Value: v, Recommended: o.Recommended})
 	}
 	registerAskQuestion(id, askCh)
 	defer unregisterAskQuestion(id)
@@ -243,16 +249,19 @@ func handleAskUser(c *gin.Context, workflowID string, askCh chan askUserReply, a
 		"multi":       a.Multi,
 		"allow_other": a.AllowOther,
 	})
-	ans := waitAskUser(workflowID, askCh, c.Request.Context().Done())
+	ans, answeredByUser := waitAskUser(workflowID, askCh, c.Request.Context().Done())
 	if ans == "" {
-		ans = a.Fallback // 超时/断线兜底
+		ans = a.Fallback // 超时/断线兜底：不是用户的选择
 	}
-	writeCodeSSE(c, "question_answered", map[string]any{"id": id, "answer": ans})
+	writeCodeSSE(c, "question_answered", map[string]any{
+		"id": id, "answer": ans, "answered": answeredByUser,
+	})
 	return ans, FlowBlock{
 		Type:     "question",
 		Question: a.Question,
 		Options:  blockOpts,
 		Answer:   ans,
+		Answered: answeredByUser,
 		Multi:    a.Multi,
 	}
 }

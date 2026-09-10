@@ -997,32 +997,32 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				})
 			}
 			// 视频工件：同图片模式，内嵌可拖动进度条播放块
-						for videoIndex, video := range results[i].videos {
-							writeCodeSSE(c, "artifact", map[string]any{
-								"id":      fmt.Sprintf("%s_video_%d", tc.ID, videoIndex),
-								"kind":    "video",
-								"tool":    tc.Function.Name,
-								"url":     video.URL,
-								"file":    video.File,
-								"mime":    video.Mime,
-								"size":    video.Size,
-								"seconds": video.Seconds,
-								"caption": "Agent 已生成视频，可拖动进度条播放。",
-							})
-						}
-						// 音频工件（music_generate 等）：同视频模式，内嵌播放条
-						for audioIndex, audio := range results[i].audios {
-							writeCodeSSE(c, "artifact", map[string]any{
-								"id":      fmt.Sprintf("%s_audio_%d", tc.ID, audioIndex),
-								"kind":    "audio",
-								"tool":    tc.Function.Name,
-								"url":     audio.URL,
-								"file":    audio.File,
-								"mime":    audio.Mime,
-								"size":    audio.Size,
-								"caption": "Agent 已生成音乐，可点击播放。",
-							})
-						}
+			for videoIndex, video := range results[i].videos {
+				writeCodeSSE(c, "artifact", map[string]any{
+					"id":      fmt.Sprintf("%s_video_%d", tc.ID, videoIndex),
+					"kind":    "video",
+					"tool":    tc.Function.Name,
+					"url":     video.URL,
+					"file":    video.File,
+					"mime":    video.Mime,
+					"size":    video.Size,
+					"seconds": video.Seconds,
+					"caption": "Agent 已生成视频，可拖动进度条播放。",
+				})
+			}
+			// 音频工件（music_generate 等）：同视频模式，内嵌播放条
+			for audioIndex, audio := range results[i].audios {
+				writeCodeSSE(c, "artifact", map[string]any{
+					"id":      fmt.Sprintf("%s_audio_%d", tc.ID, audioIndex),
+					"kind":    "audio",
+					"tool":    tc.Function.Name,
+					"url":     audio.URL,
+					"file":    audio.File,
+					"mime":    audio.Mime,
+					"size":    audio.Size,
+					"caption": "Agent 已生成音乐，可点击播放。",
+				})
+			}
 			// 文件工件：Agent 用 write/bash 落盘的可交付文件（md/pdf/pptx/docx/xlsx 等）。
 			// 每条落盘即推 artifact(kind:file)，前端交付卡片自动弹右侧预览窗口。
 			for fileIndex, f := range results[i].files {
@@ -1039,12 +1039,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			// 图表工件：Agent 调 chart 工具产出的 ECharts 图表数据，前端 ChartRenderer 直出
 			for chartIndex, ch := range results[i].charts {
 				writeCodeSSE(c, "artifact", map[string]any{
-					"id":    fmt.Sprintf("%s_chart_%d", tc.ID, chartIndex),
-					"kind":  "chart",
-					"tool":  tc.Function.Name,
-					"title": ch.Title,
-					"type":  ch.Type,
-					"data":  ch.Data,
+					"id":      fmt.Sprintf("%s_chart_%d", tc.ID, chartIndex),
+					"kind":    "chart",
+					"tool":    tc.Function.Name,
+					"title":   ch.Title,
+					"type":    ch.Type,
+					"data":    ch.Data,
 					"options": ch.Options,
 				})
 			}
@@ -1239,8 +1239,12 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 	// yolo 模式 / 非危险且未越界 / 已设 don't-ask-again → 直接放行。
 	maybeRequestApproval := func(tc core.ToolCall) bool {
 		name := tc.Function.Name
-		if mode == "yolo" && !ProtectedWorkspaceEnabled() {
-			// Yolo 畅通无阻：危险工具与越界访问一律不拦——但三类操作除外，
+		// 先算越界与只读：写在工作目录之外的文件（如 agent 把合并结果写进
+		// ~/rescene_data/memory/）必须让用户点头，不能因为 yolo 模式就静默放行——
+		// 否则写完弹交付卡、预览却又读不到，用户看到的只是谜之 400。
+		outside, outPath := toolOutsideRoot(tc.Function.Arguments)
+		if mode == "yolo" && !ProtectedWorkspaceEnabled() && !(outside && !isReadOnlyToolCall(name, tc.Function.Arguments)) {
+			// Yolo 畅通无阻：危险工具与越界读取一律不拦——但三类操作除外，
 			// 必须进下方审批，避免 agent 全自动毁掉不可挽回的东西：
 			//  1. 不可逆文件操作（删除/移动/重命名）
 			//  2. 敏感文件整体覆写（README/依赖清单/.env 等已存在文件被
@@ -1253,7 +1257,6 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 				return true
 			}
 		}
-		outside, outPath := toolOutsideRoot(tc.Function.Arguments)
 		// Harness 的统一只读判定：无论哪个 Agent、哪个前端入口，只要参数
 		// 本身是安全读取，就不弹审批；不是由某个 Git Agent 特例决定的。
 		if !outside && isReadOnlyToolCall(name, tc.Function.Arguments) {
@@ -1293,6 +1296,11 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 		writeCodeSSE(c, "approval_request", payload)
 		// 客户端断开则中止执行
 		allowed := waiter.wait(approvalID, c.Request.Context().Done())
+		if allowed && outside && !isReadOnlyToolCall(name, tc.Function.Arguments) {
+			// 用户批准了工作目录外的写入：把该路径记为「已授权交付文件」，
+			// /api/agent/file 据此放行预览/下载——批准的是这一个路径，不是整个目录。
+			rememberApprovedOutsidePath(outPath)
+		}
 		return allowed
 	}
 
@@ -1328,7 +1336,9 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 				for _, patchArg := range patchArgs {
 					OnBeforeWrite(name, patchArg)
 				}
-			} else if name == "write_file" || name == "edit_file" {
+			} else if shouldAuditNativeWrite(name) {
+				// 工具收敛改名（write_file→write / edit_file→patch）后审计钩子必须
+				// 跟着改名走，否则核心写工具不进影子仓 → 收尾「改动文件」卡片永远为空。
 				OnBeforeWrite(name, args)
 			}
 			nativeResult, err := callNativeTool(c.Request.Context(), name, tc.Function.Arguments)
@@ -1340,7 +1350,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 				for _, patchArg := range patchArgs {
 					OnAfterWrite(name, patchArg)
 				}
-			} else if name == "write_file" || name == "edit_file" {
+			} else if shouldAuditNativeWrite(name) {
 				OnAfterWrite(name, args)
 			}
 			out := nativeResult.Text

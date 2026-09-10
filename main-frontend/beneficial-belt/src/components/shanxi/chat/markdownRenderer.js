@@ -69,6 +69,21 @@ function transformOutsideCode(src, fn) {
 
 const md = new MarkdownIt({ breaks: true, linkify: true, html: true })
 md.use(markdownItKatex, { throwOnError: false, errorColor: '#ef4444', strict: false })
+
+// CommonMark 的强调规则在中文语境下会失灵：「」《》（）这类 CJK 标点同时满足
+// 左右 flanking，导致 **tease**「逗、调侃、戏弄」** 里内层 * 抢先配对成 em，
+// 外层 ** 凑不成 strong——GitHub 上同样渲染不出来。渲染前把"成对闭合"的
+// **…** / ***…*** 直接转 <strong>/<em><strong>：只处理本行 ** 出现次数为偶数
+// 的行（奇数=流式半截/未配对，原样留给默认规则），代码区域由
+// transformOutsideCode 保护，数学定界符已在更早的 core 规则里转换完毕。
+function fixCjkEmphasis(src) {
+  return src.replace(/^[^\n]*$/gm, (line) => {
+    if ((line.match(/\*\*/g) || []).length % 2 !== 0) return line
+    return line
+      .replace(/\*\*\*([^*\n]+)\*\*\*/g, '<em><strong>$1</strong></em>')
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+  })
+}
 md.use(function (md) {
   md.core.ruler.before('normalize', 'math_delimiters', function (state) {
     state.src = transformOutsideCode(state.src, convertMathDelimiters)
@@ -76,6 +91,10 @@ md.use(function (md) {
   })
   md.core.ruler.after('normalize', 'math_block_spacing', function (state) {
     state.src = transformOutsideCode(state.src, normalizeDisplayMath)
+    return true
+  })
+  md.core.ruler.after('math_block_spacing', 'cjk_emphasis', function (state) {
+    state.src = transformOutsideCode(state.src, fixCjkEmphasis)
     return true
   })
 })

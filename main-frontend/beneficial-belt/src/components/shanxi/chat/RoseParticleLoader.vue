@@ -35,7 +35,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 // ---------- rose-curve 参数（Hermes loader.tsx 转译，改为可配花瓣数） ----------
 const TWO_PI = Math.PI * 2
@@ -51,6 +51,8 @@ const props = defineProps({
   // 花瓣系数：5=5瓣玫瑰(默认)，3=三叶，6=六瓣；奇数花瓣数=对称瓣数，偶数=瓣数×2
   petals: { type: Number, default: 5 },
   particleCount: { type: Number, default: 64 },
+  // active=false 时动画冻结在最后一帧（思考结束直接静止，不换静态图标）
+  active: { type: Boolean, default: true },
 })
 
 const pathRef = ref(null)
@@ -101,11 +103,13 @@ function particleFor(index, progress, detailScale) {
 }
 
 // ---------- 动画循环 ----------
+// active=false 时冻结：停在最后一帧（整朵玫瑰轮廓+粒子都在），不再调度
 let raf = 0
 let startedAt = 0
 const phaseOffset = Math.random()
 
-function render(time) {
+function renderFrame(time) {
+  if (!startedAt) startedAt = time
   const elapsed = time - startedAt
   const progress = ((elapsed + phaseOffset * DURATION_MS) % DURATION_MS) / DURATION_MS
   const detail = detailScaleFor(elapsed, phaseOffset)
@@ -125,17 +129,29 @@ function render(time) {
     node.setAttribute('r', p.radius.toFixed(2))
     node.setAttribute('opacity', p.opacity.toFixed(3))
   }
-
-  raf = window.requestAnimationFrame(render)
 }
 
+function tick(time) {
+  renderFrame(time)
+  // 冻结态不再自调度：保持最后一帧的整朵玫瑰
+  if (props.active) raf = window.requestAnimationFrame(tick)
+}
+
+watch(
+  () => props.active,
+  (on) => {
+    if (on && !raf) {
+      raf = window.requestAnimationFrame(tick)
+    }
+  }
+)
+
 onMounted(() => {
-  startedAt = performance.now()
-  raf = window.requestAnimationFrame(render)
+  if (props.active) raf = window.requestAnimationFrame(tick)
 })
 
 onUnmounted(() => {
-  window.cancelAnimationFrame(raf)
+  if (raf) window.cancelAnimationFrame(raf)
 })
 </script>
 

@@ -30,6 +30,7 @@
             @mouseenter="onGroupEnter(f.name)"
             @mouseleave="onGroupLeave(f.name)"
             @click="togglePinnedFolder(f.name)"
+            @contextmenu.prevent="openGroupContextMenu(f.name, $event)"
           >
             <span class="smc-folder-lead">
               <Icon class="smc-folder-icon" icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
@@ -115,19 +116,20 @@
                           <Icon icon="mdi:chat-plus-outline" width="18" />
                         </button>
                       </div>
-              <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder">
+              <div v-for="grp in taskGroups" :key="'wd_' + grp.name" class="smc-folder" :class="{ 'smc-folder-nested': grp.depth > 0 }">
           <div
             class="smc-folder-head"
             :class="{ hover: hoveredGroup === grp.name, active: openGroupMenu === grp.name }"
             @mouseenter="onGroupEnter(grp.name)"
             @mouseleave="onGroupLeave(grp.name)"
             @click="toggleGroup(grp.name)"
+            @contextmenu.prevent="openGroupContextMenu(grp.name, $event)"
           >
             <span v-if="bulkMode" class="smc-bulk-check smc-group-check" @click.stop="toggleGroupSelect(grp.name)">
               <Icon :icon="groupAllSelected(grp.name) ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'" width="16" color="var(--app-accent)" />
             </span>
             <span v-else class="smc-folder-lead">
-              <Icon class="smc-folder-icon" icon="mdi:folder-outline" width="15" color="var(--app-accent)" />
+              <Icon class="smc-folder-icon" icon="mdi:folder-outline" width="15" :color="grp.depth > 0 ? 'var(--app-text-faint)' : 'var(--app-accent)'" />
               <Icon
                 class="smc-folder-chevron"
                 :class="{ open: isGroupOpen(grp.name) }"
@@ -481,9 +483,10 @@
       </div>
     </Teleport>
 
-    <!-- 项目更多菜单 -->
+    <!-- 项目更多菜单（… 按钮 或 右键项目头 都走这里） -->
     <Teleport to="body">
       <div v-if="openGroupMenu" class="smc-row-dropdown" :style="groupDropdownStyle" @click.stop>
+        <div v-if="projectForName(openGroupMenu)" class="smc-dropdown-item" @click="startCreateSubProject(openGroupMenu)"><Icon icon="mdi:folder-plus-outline" width="15" /><span>新建子项目</span></div>
         <div class="smc-dropdown-item danger" @click="onDeleteProject(openGroupMenu)">删除项目</div>
       </div>
     </Teleport>
@@ -518,6 +521,36 @@
             <div class="smc-create-project-actions">
               <button type="button" class="smc-cancel-btn" @click="closeCreateProject">取消</button>
               <button type="submit" class="smc-create-btn" :disabled="!selectedSourceFolder">创建项目</button>
+            </div>
+          </form>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 新建子项目：在父项目目录下开子目录，名字可编辑（父路径固定，不会撞名顶替） -->
+    <Teleport to="body">
+      <Transition name="smc-modal">
+        <div v-if="showCreateSubProject" class="smc-modal-backdrop" @click.self="closeCreateSubProject">
+          <form class="smc-create-project" @submit.prevent="confirmCreateSubProject">
+            <div class="smc-create-project-head">
+              <h2>新建子项目</h2>
+              <button type="button" class="smc-modal-close" title="关闭" @click="closeCreateSubProject">
+                <Icon icon="mdi:close" width="20" />
+              </button>
+            </div>
+            <div class="smc-source-label">父项目：{{ subProjectParent?.name }}</div>
+            <div class="smc-source-label">子项目路径</div>
+            <div class="smc-subpath-preview">{{ subProjectPreviewPath }}</div>
+            <input
+              ref="subProjectNameInputRef"
+              v-model="subProjectName"
+              class="smc-subname-input"
+              placeholder="输入子项目名"
+              maxlength="60"
+            />
+            <div class="smc-create-project-actions">
+              <button type="button" class="smc-cancel-btn" @click="closeCreateSubProject">取消</button>
+              <button type="submit" class="smc-create-btn" :disabled="!subProjectName.trim()">创建子项目</button>
             </div>
           </form>
         </div>
@@ -601,7 +634,7 @@ const props = defineProps({
     notifCount: { type: Number, default: 0 },
     currentWorkdir: { type: String, default: '' }
   })
-const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'delete-project', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'open-scheduled-tasks', 'open-mail', 'reorder-sessions'])
+const emit = defineEmits(['select-session', 'new-session', 'rename-session', 'delete-session', 'delete-sessions', 'delete-project', 'open-settings', 'open-search', 'open-plugins', 'create-project', 'create-subproject', 'open-scheduled-tasks', 'open-mail', 'reorder-sessions'])
 
 // ========== 创建项目 ==========
 // 项目名不可编辑：只能来自所选文件夹的名字，避免用户手改后跟已有项目撞名、
@@ -750,6 +783,52 @@ function toggleGroupMenu(name, ev) {
     groupDropdownStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: menuW + 'px' }
   }
 }
+// 右键项目头：在鼠标位置弹出项目菜单（此前项目组没绑 contextmenu，右键无反应）
+function openGroupContextMenu(name, ev) {
+  openGroupMenu.value = name
+  const menuW = 160
+  const menuH = 120
+  let left = ev.clientX
+  let top = ev.clientY
+  if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8
+  if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 8
+  if (left < 8) left = 8
+  groupDropdownStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', width: menuW + 'px' }
+}
+
+// ========== 新建子项目 ==========
+const showCreateSubProject = ref(false)
+const subProjectParent = ref(null)
+const subProjectName = ref('')
+const subProjectNameInputRef = ref(null)
+const subProjectPreviewPath = computed(() => {
+  const p = subProjectParent.value?.path || ''
+  const n = subProjectName.value.trim()
+  if (!p) return ''
+  const sep = /[\\/]$/.test(p) ? '' : (p.includes('\\') && !p.includes('/') ? '\\' : '/')
+  return p + sep + (n || '子项目名')
+})
+function startCreateSubProject(name) {
+  const project = projectForName(name)
+  openGroupMenu.value = null
+  if (!project) return
+  subProjectParent.value = project
+  subProjectName.value = ''
+  showCreateSubProject.value = true
+  nextTick(() => subProjectNameInputRef.value?.focus())
+}
+function closeCreateSubProject() {
+  showCreateSubProject.value = false
+  subProjectParent.value = null
+  subProjectName.value = ''
+}
+function confirmCreateSubProject() {
+  const name = subProjectName.value.trim()
+  const parent = subProjectParent.value
+  if (!name || !parent) return
+  emit('create-subproject', { parent, name })
+  closeCreateSubProject()
+}
 
 // ========== 按 workdir 分组 ==========
 const workdirMap = computed(() => {
@@ -771,15 +850,70 @@ const workdirMap = computed(() => {
 
 const taskGroups = computed(() => {
   const map = workdirMap.value
-  return Array.from(map.entries())
+  // 项目顺序 = props.projects 数组顺序（rememberProject 把新项目 unshift 到最前），
+  // 新项目（含新子项目）排最上面；置顶项目再提到最前。
+  const projIdx = new Map(props.projects.map((p, i) => [p.name.trim(), i]))
+  const list = Array.from(map.entries())
     .sort((a, b) => {
       const aP = isPinned(a[0]) ? 0 : 1
       const bP = isPinned(b[0]) ? 0 : 1
       if (aP !== bP) return aP - bP
-      return b[1].length - a[1].length
+      const ai = projIdx.has(a[0]) ? projIdx.get(a[0]) : 1e9
+      const bi = projIdx.has(b[0]) ? projIdx.get(b[0]) : 1e9
+      return ai - bi
     })
     .map(([name, sessions]) => ({ name, sessions: sortPinnedFirst(sessions) }))
+  return orderGroupsTree(list)
 })
+
+// 子项目 = 路径落在另一个项目目录下的项目。排序时把它紧跟在父项目后面，
+// 并带上缩进层级和「父 › 子」标签，侧栏就能看出归属关系。
+function normPath(path) {
+  return String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+const projectPathByName = computed(() => {
+  const m = new Map()
+  for (const p of props.projects) {
+    if (p?.name?.trim() && p?.path) m.set(p.name.trim(), normPath(p.path))
+  }
+  return m
+})
+function parentOfGroup(name) {
+  const self = projectPathByName.value.get(name)
+  if (!self) return null
+  let best = null
+  for (const [other, path] of projectPathByName.value) {
+    if (other === name || !path) continue
+    if (self.startsWith(path + '/') && (!best || path.length > best.path.length)) best = { name: other, path }
+  }
+  return best
+}
+function orderGroupsTree(list) {
+  const byName = new Map(list.map(g => [g.name, g]))
+  const childrenOf = new Map()
+  const roots = []
+  for (const g of list) {
+    const parent = parentOfGroup(g.name)
+    // 父项目当前不在列表里（被删了/还没建会话）就当顶级项目显示
+    if (parent && byName.has(parent.name)) {
+      if (!childrenOf.has(parent.name)) childrenOf.set(parent.name, [])
+      childrenOf.get(parent.name).push(g.name)
+    } else {
+      roots.push(g.name)
+    }
+  }
+  const out = []
+  const seen = new Set()
+  const walk = (name, depth) => {
+    if (seen.has(name)) return
+    seen.add(name)
+    const g = byName.get(name)
+    if (g) out.push({ ...g, depth })
+    for (const child of (childrenOf.get(name) || [])) walk(child, depth + 1)
+  }
+  for (const r of roots) walk(r, 0)
+  return out
+}
 
 const pinnedFolders = computed(() => {
   const map = workdirMap.value
@@ -1549,6 +1683,10 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
   /* 吸顶时必须有常驻底色，否则下面的会话行会从标题底下透出来 */
   background: var(--app-surface-2);
 }
+/* 子项目：整行右移一档表达层级（名字前不再放 ›——悬浮时 lead 里已有折叠 chevron，重复） */
+.smc-folder-nested > .smc-folder-head {
+  padding-left: 22px;
+}
 .smc-folder-head:hover,
 .smc-folder-head.hover,
 .smc-folder-head.active {
@@ -2151,6 +2289,29 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); window.re
 .smc-source-picker:hover { border-color: var(--app-accent); background: var(--app-surface-2); }
 .smc-source-picker .iconify { color: var(--app-text-soft); }
 .smc-source-picker-error { margin: 8px 2px 0; color: #c62828; font-size: 13px; line-height: 1.45; }
+/* 新建子项目弹窗：路径预览 + 名称输入 */
+.smc-subpath-preview {
+  margin: 2px 2px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--app-surface-2);
+  color: var(--app-text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.smc-subname-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--app-border, rgba(0, 0, 0, .12));
+  background: var(--app-surface-1, #fff);
+  color: var(--app-text);
+  font-size: 14px;
+  outline: none;
+}
+.smc-subname-input:focus { border-color: var(--app-accent); }
 .smc-recent-project-picker { display: grid; gap: 6px; margin-top: 16px; color: var(--app-text-soft); font-size: 13px; font-weight: 600; }
 .smc-recent-project-picker select { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-surface); color: var(--app-text); font: inherit; font-weight: 500; cursor: pointer; }
 .smc-recent-project-picker select:focus-visible { outline: 2px solid color-mix(in srgb, var(--app-accent), transparent 45%); outline-offset: 2px; border-color: var(--app-accent); }

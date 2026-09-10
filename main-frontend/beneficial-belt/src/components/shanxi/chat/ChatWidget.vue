@@ -109,6 +109,7 @@
                         @open-plugins="openPluginsMarket"
                         @open-scheduled-tasks="showScheduledTaskManager = true"
                                                 @create-project="createProject"
+                                                @create-subproject="createSubProject"
                         @open-mail="showMailPanel = true"
                                                 @reorder-sessions="reorderSessionList"
                       />
@@ -448,79 +449,87 @@
 
             <div v-if="copiedVisible" class="copy-toast">✓ 已复制</div>
 
-            <!-- ===== 悬浮条（todo / ask / approval）：移出 input-area 成为正常流，
-                 物理上把输入区顶下去，消息区 flex:1 自动收缩不被遮挡 ===== -->
-            <Transition name="todo-fade">
-              <div v-if="todoState.items.length" class="todo-bar floating-bar" :style="inputBarFadeStyle">
-                <div class="todo-bar-head" :class="{ collapsed: todoCollapsed }" @click="todoCollapsed = !todoCollapsed">
-                  <Icon :icon="todoCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="14" class="todo-bar-chevron" />
-                  <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
-                  <span class="todo-bar-title">任务</span>
-                  <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
-                </div>
-                <ul v-show="!todoCollapsed" class="todo-bar-list">
-                  <li
-                    v-for="(it, i) in todoState.items"
-                    :key="i"
-                    class="todo-bar-item"
-                    :class="'todo-' + it.status"
-                  >
-                    <Icon
-                      :icon="it.status === 'done' ? 'mdi:check-circle' : it.status === 'doing' ? 'mdi:dots-vertical' : 'mdi:circle-outline'"
-                      width="14"
-                      class="todo-bar-mark"
-                    />
-                    <span class="todo-bar-text">{{ it.text }}</span>
-                  </li>
-                </ul>
-              </div>
-            </Transition>
-
-            <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
-            <QuestionModal
-              v-if="questionState.pending"
-              :question="questionState.pending"
-              :style="inputBarFadeStyle"
-              class="floating-bar"
-              @answer="answerQuestion"
-            />
-
-            <!-- ===== 工具审批轻量条（Ask 模式）===== -->
-            <div
-              v-for="item in approvalState.pending"
-              :key="item.id"
-              class="approval-bar floating-bar"
-              :style="inputBarFadeStyle"
-            >
-              <span class="approval-bar-countdown" :title="'等待回应：' + item.remain + ' 秒'">{{ item.remain }}</span>
-              <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
-              <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
-              <div class="approval-bar-main">
-                <div class="approval-bar-line">
-                  <span class="approval-bar-tool">{{ item.tool }}</span>
-                  <span
-                    v-if="item.reason === 'path_outside_workdir'"
-                    class="approval-bar-badge"
-                    :title="'工作目录：' + item.workdir"
-                  >工作目录之外</span>
-                  <span class="approval-bar-args">{{ approvalArgsPreview(item.args) }}</span>
-                </div>
-                <div class="approval-bar-progress">
-                  <div class="approval-bar-progress-fill" :style="{ width: (item.remain / item.total * 100) + '%' }"></div>
-                </div>
-              </div>
-              <label
-                class="approval-bar-remember"
-                :title="item.reason === 'path_outside_workdir'
-                  ? '本次会话内不再询问该目录下的操作'
-                  : '本次会话内不再询问此工具'"
-              >
-                <input type="checkbox" v-model="item.remember" />
-                <span>不再问</span>
-              </label>
-            </div>
+            <!-- ===== 悬浮条（todo / ask / approval）：已移入 .chat-input-area 内
+                 absolute 悬浮在输入框正上方（见下方 chat-input-area 开头） ===== -->
 
             <div class="chat-input-area">
+              <!-- ===== 悬浮条（todo / ask / approval）：absolute bottom:100% 悬浮在
+                   输入框正上方，脱离文档流不占高度 → 消息区 flex:1 满高不被顶下去；
+                   半透明玻璃透出背后聊天，上滑随 --bar-fade 淡出、hover 恢复不透明。
+                   消息区底部由 --bar-clearance 垫出条高，最后一条消息可滚到条下面。
+                   （v0.3.2 曾改成正常流占位 → 条背后没有聊天可透 = 实心遮挡，还原） ===== -->
+              <div class="floating-bars" ref="floatingBarsRef" v-show="hasFloatingBars">
+              <Transition name="todo-fade">
+                <div v-if="todoState.items.length" class="todo-bar floating-bar" :style="inputBarFadeStyle">
+                  <div class="todo-bar-head" :class="{ collapsed: todoCollapsed }" @click="todoCollapsed = !todoCollapsed">
+                    <Icon :icon="todoCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="14" class="todo-bar-chevron" />
+                    <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
+                    <span class="todo-bar-title">任务</span>
+                    <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
+                  </div>
+                  <ul v-show="!todoCollapsed" class="todo-bar-list">
+                    <li
+                      v-for="(it, i) in todoState.items"
+                      :key="i"
+                      class="todo-bar-item"
+                      :class="'todo-' + it.status"
+                    >
+                      <Icon
+                        :icon="it.status === 'done' ? 'mdi:check-circle' : it.status === 'doing' ? 'mdi:dots-vertical' : 'mdi:circle-outline'"
+                        width="14"
+                        class="todo-bar-mark"
+                      />
+                      <span class="todo-bar-text">{{ it.text }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </Transition>
+
+              <!-- Agent 提问：与审批条同层，直接贴在输入框上方，选单选项后立即提交。 -->
+              <QuestionModal
+                v-if="questionState.pending"
+                :question="questionState.pending"
+                :style="inputBarFadeStyle"
+                class="floating-bar"
+                @answer="answerQuestion"
+              />
+
+              <!-- ===== 工具审批轻量条（Ask 模式）===== -->
+              <div
+                v-for="item in approvalState.pending"
+                :key="item.id"
+                class="approval-bar floating-bar"
+                :style="inputBarFadeStyle"
+              >
+                <span class="approval-bar-countdown" :title="'等待回应：' + item.remain + ' 秒'">{{ item.remain }}</span>
+                <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
+                <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
+                <div class="approval-bar-main">
+                  <div class="approval-bar-line">
+                    <span class="approval-bar-tool">{{ item.tool }}</span>
+                    <span
+                      v-if="item.reason === 'path_outside_workdir'"
+                      class="approval-bar-badge"
+                      :title="'工作目录：' + item.workdir"
+                    >工作目录之外</span>
+                    <span class="approval-bar-args">{{ approvalArgsPreview(item.args) }}</span>
+                  </div>
+                  <div class="approval-bar-progress">
+                    <div class="approval-bar-progress-fill" :style="{ width: (item.remain / item.total * 100) + '%' }"></div>
+                  </div>
+                </div>
+                <label
+                  class="approval-bar-remember"
+                  :title="item.reason === 'path_outside_workdir'
+                    ? '本次会话内不再询问该目录下的操作'
+                    : '本次会话内不再询问此工具'"
+                >
+                  <input type="checkbox" v-model="item.remember" />
+                  <span>不再问</span>
+                </label>
+              </div>
+              </div><!-- /floating-bars -->
+
               <!-- 群聊成员选择弹层：多选，点选即在/移出群聊 -->
               <div v-if="agentPickerOpen" class="agent-picker-pop">
                 <div class="agent-picker-title">群聊成员</div>
@@ -1505,9 +1514,12 @@ async function newSession(project) {
     await selectWorkDir(project, { recordSession: false })
   }
   const id = 'sess_' + Date.now().toString(36)
-  // 只有显式创建过的项目才归组；后端启动目录等未选目录不自动挂名（避免凭空冒出 re0 之类），
-  // 新建对话保持未分组（home 空态），用户显式选择目录后由 selectWorkDir 归入项目
-  const workdir = findProjectByPath(currentWorkDir.value?.path)?.name || ''
+  // 显式传了 project（如「在此项目中新建对话」）：直接用它的名字归属，
+  // 不依赖 selectWorkDir 是否切成功——workDirSwitching 守卫吞掉切换时
+  // 仍会落到父项目（用户报：新建对话建到父项目里）。
+  const workdir = project?.name?.trim()
+    ? project.name
+    : (findProjectByPath(currentWorkDir.value?.path)?.name || '')
   sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0, workdir }, ...sessionList.value]
   recordSessionWorkdir(id)
   switchSession(id)
@@ -2430,7 +2442,7 @@ async function selectWorkDir(dir, opts = {}) {
     const res = await fetch('/api/workdir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: dir.path })
+      body: JSON.stringify({ path: dir.path, create: !!opts.create })
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
@@ -2468,6 +2480,18 @@ async function createProject({ name, sourceFolder, thenNewSession }) {
   await selectWorkDir({ name: projectName, path: sourceFolder.path }, { recordSession: false })
   // 从"新建会话时没有项目可选"这条路径过来的创建，建完项目要接着把会话建上
   if (thenNewSession) await newSession(currentWorkDir.value)
+}
+// 新建子项目：在父项目路径下开一个子目录并注册为独立项目。
+// 目录不存在时由后端 create=true 顺手 MkdirAll，所以路径拼出来就能直接建。
+async function createSubProject({ parent, name }) {
+  const subName = name?.trim()
+  const parentPath = parent?.path
+  if (!subName || !parentPath) {
+    showGitToast('子项目名称或父项目无效')
+    return
+  }
+  const sep = /[\\/]$/.test(parentPath) ? '' : (parentPath.includes('\\') && !parentPath.includes('/') ? '\\' : '/')
+  await selectWorkDir({ name: subName, path: parentPath + sep + subName }, { recordSession: false, create: true })
 }
 async function openFolderBrowser() {
   workDirMenuView.value = 'browse'
@@ -3537,6 +3561,38 @@ const inputBarFadeStyle = computed(() => {
   if (inputBarFade.value < 0.999) s['--bar-fade'] = String(inputBarFade.value)
   return s
 })
+
+// ===== 悬浮条高度 → 消息区底部留白（--bar-clearance）=====
+// 三条 absolute 悬浮不占布局高度，最后一条消息会被盖住；这里把悬浮条总高度写进
+// .chat-messages-inner 的 padding-bottom，滚到底时最后一条正好落在条下方。
+// 只在条「出现/消失/折叠」这些状态变化时量一次（不用 ResizeObserver——上一版即因
+// 它触发思考流式卡顿而废弃）。
+const floatingBarsRef = ref(null)
+const hasFloatingBars = computed(() =>
+  (todoState.value.items || []).length > 0 ||
+  !!questionState.value.pending ||
+  (approvalState.value.pending || []).length > 0
+)
+function syncBarClearance() {
+  const bars = floatingBarsRef.value
+  const h = bars && bars.offsetHeight ? bars.offsetHeight + 8 : 0
+  const px = h + 'px'
+  // 有消息：垫在 .chat-messages-inner 底部，滚到底最后一条消息完整露在条下方
+  const el = messagesContainer.value
+  if (el) {
+    const inner = el.querySelector('.chat-messages-inner')
+    if (inner && (inner.style.getPropertyValue('--bar-clearance') || '0px') !== px) {
+      inner.style.setProperty('--bar-clearance', px)
+    }
+  }
+}
+watch(
+  [hasFloatingBars, todoCollapsed, () => (approvalState.value.pending || []).length,
+   () => (todoState.value.items || []).length],
+  () => nextTick(syncBarClearance)
+)
+watch(() => questionState.value.pending, () => nextTick(syncBarClearance))
+onMounted(() => nextTick(syncBarClearance))
 
 // 全部完成后延迟淡出：先让用户看到 N/N，再整条消失（仿 Hermes 收尾）。
 // agent 每次 update_todo 会全量覆盖 items，所以中途插入新/未完成项要取消定时。

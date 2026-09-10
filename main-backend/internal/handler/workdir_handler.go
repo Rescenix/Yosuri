@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -106,9 +107,11 @@ func GetWorkdir(c *gin.Context) {
 // path 支持相对路径（相对 GitRepoRoot，跟 /api/file-tree 返回的 path 字段对齐）和绝对路径。
 // 切换后 read_file/write_file/edit_file/execute_command（含 rg 代码检索）/search_memory 全部立刻生效，
 // 并落盘持久化到 ~/rescene_data/workdir.txt，下次启动自动恢复。
+// create=true 时目录不存在则先创建（侧栏「新建子项目」用：父项目路径下开子目录再切入）。
 func SetWorkdir(c *gin.Context) {
 	var body struct {
-		Path string `json:"path" binding:"required"`
+		Path   string `json:"path" binding:"required"`
+		Create bool   `json:"create"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Path == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "path required"})
@@ -120,6 +123,13 @@ func SetWorkdir(c *gin.Context) {
 		target = filepath.Join(GitRepoRoot, target)
 	}
 	target = filepath.Clean(target)
+
+	if body.Create {
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无法创建目录: " + err.Error()})
+			return
+		}
+	}
 
 	if err := core.SetProjectRoot(target); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

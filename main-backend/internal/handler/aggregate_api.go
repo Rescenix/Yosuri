@@ -262,11 +262,9 @@ func HandleAggregateChat(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
 	}
-	// 聚合调用来源审计：每次真实请求记 来源IP + 客户端UA + model + 消息数 + 流式标记。
-	// 目的：判断「外部工具（Claude Code/Cursor 等）实际有没有在调、调了什么模型」——
-	// 之前只知道云端有数据，不知道是谁在打（2026-09-08）。
-	log.Printf("[agg-call] 来源IP=%s UA=%q model=%q msgs=%d stream=%v",
-		c.ClientIP(), c.GetHeader("User-Agent"), req.Model, len(req.Messages), req.Stream)
+	// 聚合调用审计：每次真实请求记 客户端UA + model + 消息数 + 流式标记。
+	log.Printf("[agg-call] UA=%q model=%q msgs=%d stream=%v",
+		c.GetHeader("User-Agent"), req.Model, len(req.Messages), req.Stream)
 	if len(req.Messages) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "messages 不能为空"})
 		return

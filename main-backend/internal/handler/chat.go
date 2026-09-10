@@ -54,6 +54,7 @@ type FlowBlock struct {
 	Question string          `json:"question,omitempty"` // 问用户的话
 	Options  []askUserOption `json:"options,omitempty"`  // 候选选项
 	Answer   string          `json:"answer,omitempty"`   // 用户回答后回填
+	Answered bool            `json:"answered,omitempty"` // 是否用户本人回答；false = 超时/断线走 fallback，不是用户选择
 	Multi    bool            `json:"multi,omitempty"`    // 是否多选
 	// changed-files 块专用字段（工作流收尾的改动文件卡片，持久化用）
 	ChangedFiles []map[string]any `json:"changed_files,omitempty"`

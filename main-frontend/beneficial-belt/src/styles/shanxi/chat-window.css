@@ -2362,6 +2362,10 @@ min-height: 90px !important;
 .chat-content { position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .chat-messages { flex: 1; overflow-y: auto; width: 100%; position: relative; }
 .chat-messages-inner { max-width: 720px; width: 100%; margin: 0 auto; padding: 22px 24px; box-sizing: border-box; }
+/* 悬浮条（todo/ask/approval）absolute 在输入框上方时，最后一条消息会被条盖住：
+   底部垫 --bar-clearance（= 悬浮条总高，JS 在条出现/折叠时测量一次），
+   消息可滚到条下面不被盖死。无条时变量为 0，不产生多余留白。 */
+.chat-messages-inner { padding-bottom: calc(22px + var(--bar-clearance, 0px)); }
 /* 消息底部不再单独垫 clearance：输入框是 normal flow（flex-shrink:0）已自动让位，
    chat-messages(flex:1) 高度天然被输入框顶到这里，最后一条消息到输入框之间不会再留大空白。
    todo/ask/approval 条已改为 absolute 悬浮在输入框上方、不占布局高度，
@@ -2380,17 +2384,49 @@ min-height: 90px !important;
 }
 
 /* ==================== 输入框：悬浮卡片风格（无硬顶边框，柔和投影） ==================== */
-/* 悬浮条（todo / ask / approval）：正常流，不再 absolute。
-   物理占据空间把输入区顶下去，消息区 flex:1 自动收缩不被遮挡。
-   不做动态 ResizeObserver 测量——上一版即因它触发思考流式卡顿而废弃。 */
+/* 输入区：relative 作为悬浮条的定位父级（条 absolute bottom:100% 贴在输入框上方） */
 .chat-input-area { position: relative; flex-shrink: 0; padding: 8px 14px 12px; background: transparent; }
 
-.floating-bar {
+/* 悬浮条容器（todo / ask / approval）：absolute bottom:100% 悬浮在输入框正上方，
+   脱离文档流不占 flex 高度 → 消息区 flex:1 满高不被顶下去（v0.3.2 改成正常流
+   物理占位后条背后没有聊天可透、看着像实心遮挡，还原悬浮）。
+   三条装进同一个容器按列排布，避免同时出现时各自 absolute 叠在一起。
+   .chat-messages-inner 底部垫 var(--bar-clearance)（JS 在条状态变化时测量一次），
+   最后一条消息可滚到条下面不被盖死。 */
+.floating-bars {
+  position: absolute;
+  /* 全宽 + 居中 + max-width 封顶，跟输入框卡片 / 阅读列同宽同中线 */
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 8px;
+  box-sizing: border-box;
   width: 100%;
   max-width: 720px;
-  margin: 0 auto 8px;
-  box-sizing: border-box;
-  flex-shrink: 0;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* 容器本身不拦鼠标：只有条实体可点，条之间空隙透出背后内容 */
+  pointer-events: none;
+}
+/* 条在容器内回到正常流（定位交给容器），并恢复可交互 */
+.floating-bars > .todo-bar,
+.floating-bars > .question-bar,
+.floating-bars > .approval-bar {
+  position: static;
+  pointer-events: auto;
+  /* 负 margin / radius:0 是旧版「条与输入框边框拼接」留下的，悬浮后各自独立卡片 */
+  margin: 0;
+  border-radius: 10px;
+}
+/* 悬浮条必须压在消息之上（.chat-messages 是 position:relative 兄弟节点） */
+.floating-bars { z-index: 30; }
+/* QuestionModal 的 scoped 样式里有 margin-bottom:-1px（旧版与输入框拼接），
+   这里用双类名提权压过它，悬浮后不需要拼接 */
+.floating-bars > .question-bar.floating-bar {
+  margin: 0;
 }
 /* 这条规则故意把每个相关属性都显式写一遍（哪怕跟视觉上想要的值一样）——文件里
    还有好几处历史遗留的 .input-wrapper{...} 重复定义（align-items/padding/width 等），
