@@ -192,8 +192,8 @@ func FileWriteHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"ok": true})
 }
 
-// FileCreateFolderHandler 创建空目录。写文件时会自动创建父级目录，但教学演示或
-// 新项目起步时，用户也需要能先把目录结构搭出来。
+// FileCreateFolderHandler 创建空目录。写文件时会自动创建父级目录，新建项目起步时
+// 用户也需要能先把目录结构搭出来。
 func FileCreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -322,6 +322,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 工具执行链通过 context 里的 workflow_id 找到它（见 withWorkflowID）。
 	bgNotifyCh := registerBgNotify(workflowID)
 	defer unregisterBgNotify(workflowID)
+	// 收尾清场（09-10）：工作流真正退出（完成/停止/断线）时，仍挂在它名下没退出的
+	// 后台任务永远不会有人再消费通知了——树杀防孤儿进程，前端悬浮条靠 workflow_done
+	// /stop 的本地结算清灰。paused 等待期间主循环不返回，正常跑完再通知模型的任务不受影响。
+	defer func() { killWorkflowBgTasks(workflowID) }()
 	c.Request = c.Request.WithContext(withWorkflowID(c.Request.Context(), workflowID))
 	// 工作流开始：重置 AgentFS 水位线为当前审计最大 seq。
 	// 结束聚合 seq>起点 = 本次工作流新增改动——改了文件才弹卡片（2026-08-28）。
@@ -1034,6 +1038,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 					"name": f.Name,
 					"ext":  f.Ext,
 					"size": f.Size,
+					"url":  f.URL,
 				})
 			}
 			// 图表工件：Agent 调 chart 工具产出的 ECharts 图表数据，前端 ChartRenderer 直出

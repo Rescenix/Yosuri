@@ -656,6 +656,44 @@ const LANG_MAP = {
   sql: 'sql', xml: 'xml', toml: 'ini', ini: 'ini'
 }
 
+// ——— 打开态持久化：面板关闭（组件卸载）再打开时恢复之前的标签 ———
+// 只存 path/name/active/pinned，内容重挂载时重新从磁盘拉（实时保存已落盘，
+// 极小的 600ms 防抖窗口内未保存的输入会在 onUnmounted 时 flushAutoSave 冲掉）。
+const tabsCacheKey = () => `re0:fileToolTabs:${props.workdirPath || 'root'}`
+function persistOpenTabs() {
+  try {
+    localStorage.setItem(tabsCacheKey(), JSON.stringify({
+      tabs: tabs.value.map(t => ({ path: t.path, name: t.name })),
+      active: activeFilePath.value,
+      pinned: pinnedPaths.value
+    }))
+  } catch { /* 隐私模式或超限：丢弃，不影响编辑 */ }
+}
+watch(
+  () => [tabs.value.map(t => t.path).join('\u0000'), activeFilePath.value, pinnedPaths.value.join('\u0000')].join('|'),
+  persistOpenTabs
+)
+async function restoreOpenTabs() {
+  let saved = null
+  try { saved = JSON.parse(localStorage.getItem(tabsCacheKey()) || 'null') } catch { saved = null }
+  if (!saved || !Array.isArray(saved.tabs) || !saved.tabs.length) return
+  const restored = []
+  for (const item of saved.tabs) {
+    try {
+      const res = await fetch('/api/file?path=' + encodeURIComponent(item.path))
+      if (!res.ok) continue
+      const content = await res.text()
+      restored.push({ path: item.path, name: item.name || item.path.split('/').pop(), content, savedContent: content })
+    } catch { /* 文件被删/改名：跳过该标签 */ }
+  }
+  if (!restored.length) return
+  tabs.value = restored
+  activeFilePath.value = restored.some(t => t.path === saved.active) ? saved.active : restored[0].path
+  pinnedPaths.value = (saved.pinned || []).filter(p => restored.some(t => t.path === p))
+  const matched = tabs.value.find(t => t.path === activeFilePath.value)
+  if (matched) selectedNode.value = { type: 'file', path: matched.path, name: matched.name }
+}
+
 function languageOf(name) {
   const ext = name.split('.').pop()?.toLowerCase()
   return LANG_MAP[ext] || 'plaintext'
@@ -663,10 +701,12 @@ function languageOf(name) {
 
 onMounted(() => {
   loadTree()
+  restoreOpenTabs()
   // 工作流结束（可能新建/修改了文件）自动刷新文件树；手动刷新按钮在树头
   window.addEventListener('file-tree-changed', loadTree)
 })
 onUnmounted(() => {
+  flushAutoSave() // 最后 600ms 防抖窗口内的输入冲掉落盘，重开面板才不丢
   clearTimeout(autoSaveTimer)
   clearTimeout(saveStateTimer)
   fileChangesStream?.close()

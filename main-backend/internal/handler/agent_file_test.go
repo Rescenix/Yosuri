@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -123,12 +122,15 @@ func TestHandleAgentFile_ServeAndRaw(t *testing.T) {
 	}
 }
 
-// TestHandleAgentFile_UserDataAbsolute 覆盖记忆交付场景：memorydir 把文件落在
-// 工作目录之外（~/rescene_data/memory/），交付卡片给的是绝对路径。端点只放行
-// 「用户在审批条上批准过的那一个文件」（已授权交付路径注册表），未批准一律 400；
-// 这也保证用户数据目录里的敏感凭据文件不会因目录白名单被公开读口拖出去。
+// TestHandleAgentFile_UserDataAbsolute 覆盖交付卡片绝对路径（媒体/记忆目录都在
+// 工作目录外）。09-10 定稿语义：闸门只跟「受保护工作区」开关挂钩——普通模式
+// 全放行（卡片路径是服务端自己推的，不是用户输入），凭据文件任何模式都拒，
+// 受保护模式才要求审批注册表放行。
 func TestHandleAgentFile_UserDataAbsolute(t *testing.T) {
 	isolateTestProjectRoot(t)
+	dataDir := t.TempDir()
+	t.Setenv("RESCENE_DATA_DIR", dataDir)
+	// 普通模式：protected_workspace.json 不存在 → ProtectedWorkspaceEnabled fail-open
 	root := core.GetProjectRoot()
 	// 清理注册表残留（测试隔离）
 	approvedOutsideMu.Lock()
@@ -136,7 +138,7 @@ func TestHandleAgentFile_UserDataAbsolute(t *testing.T) {
 	approvedOutsideMu.Unlock()
 
 	content := "# 自动提取记忆\n\n- **code_language** C\n"
-	memFile := filepath.Join(t.TempDir(), "memory", "facts.md")
+	memFile := filepath.Join(dataDir, "memory", "facts.md")
 	if err := os.MkdirAll(filepath.Dir(memFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -153,22 +155,18 @@ func TestHandleAgentFile_UserDataAbsolute(t *testing.T) {
 	r := gin.New()
 	r.GET("/api/agent/file", HandleAgentFile)
 
-	// 1) 未批准的工作目录外绝对路径：400 + 友好提示
+	// 1) 普通模式：工作目录外绝对路径直接 200（不再要求批准）
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile), nil))
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("未批准绝对路径应 400，得到 %d: %s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "未经你批准") {
-		t.Errorf("错误提示应说明未经批准，得到 %s", w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("普通模式绝对路径应 200，得到 %d: %s", w.Code, w.Body.String())
 	}
 
-	// 2) 批准该路径后：serve 200 且回读 content
-	rememberApprovedOutsidePath(memFile)
+	// 2) serve 元数据 + content 回读
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile), nil))
 	if w2.Code != http.StatusOK {
-		t.Fatalf("已批准绝对路径应 200，得到 %d: %s", w2.Code, w2.Body.String())
+		t.Fatalf("绝对路径应 200，得到 %d: %s", w2.Code, w2.Body.String())
 	}
 	var meta struct {
 		Name    string `json:"name"`
@@ -182,28 +180,57 @@ func TestHandleAgentFile_UserDataAbsolute(t *testing.T) {
 		t.Errorf("serve 元数据不符: %+v", meta)
 	}
 
-	// 3) 批准路径 raw 下载
+	// 3) raw 下载
 	w3 := httptest.NewRecorder()
 	r.ServeHTTP(w3, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile)+"&raw=1", nil))
 	if w3.Code != http.StatusOK || w3.Body.String() != content {
 		t.Errorf("raw 应 200 且内容一致，得到 %d", w3.Code)
 	}
 
-	// 4) 工作目录内相对路径：无需批准即可预览（回归，不受注册表影响）
+	// 4) 工作目录内相对路径：不受影响（回归）
 	w4 := httptest.NewRecorder()
 	r.ServeHTTP(w4, httptest.NewRequest(http.MethodGet, "/api/agent/file?path=doc.md", nil))
 	if w4.Code != http.StatusOK {
 		t.Errorf("工作目录内相对路径应 200，得到 %d: %s", w4.Code, w4.Body.String())
 	}
 
-	// 5) 从未批准的另一个绝对路径（如用户数据目录下的敏感文件）仍 400
-	cred := filepath.Join(t.TempDir(), "secrets.env")
-	if err := os.WriteFile(cred, []byte("x"), 0o644); err != nil {
+	// 5) 凭据文件（user_configs/ 下）任何模式都 400——明文 key 绝不走公开读口
+	credDir := filepath.Join(dataDir, "user_configs")
+	if err := os.MkdirAll(credDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cred := filepath.Join(credDir, "openid123.json")
+	if err := os.WriteFile(cred, []byte(`{"api_key":"sk-secret"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	w5 := httptest.NewRecorder()
 	r.ServeHTTP(w5, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(cred), nil))
 	if w5.Code == http.StatusOK {
-		t.Error("未批准的其它绝对路径不应 200")
+		t.Error("user_configs 凭据文件不应经公开读口外发")
 	}
+
+	// 6) 受保护工作区模式：未批准的绝对路径回到 400，批准后放行
+	if err := saveProtectedWorkspaceConfig(protectedWorkspaceConfig{Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	w6 := httptest.NewRecorder()
+	r.ServeHTTP(w6, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile), nil))
+	if w6.Code != http.StatusBadRequest {
+		t.Fatalf("受保护模式未批准应 400，得到 %d", w6.Code)
+	}
+	rememberApprovedOutsidePath(memFile)
+	w7 := httptest.NewRecorder()
+	r.ServeHTTP(w7, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(memFile), nil))
+	if w7.Code != http.StatusOK {
+		t.Fatalf("受保护模式已批准应 200，得到 %d", w7.Code)
+	}
+	// 受保护模式下凭据文件即使被批准也拒（黑名单优先）
+	rememberApprovedOutsidePath(cred)
+	w8 := httptest.NewRecorder()
+	r.ServeHTTP(w8, httptest.NewRequest(http.MethodGet, "/api/agent/file?path="+url.QueryEscape(cred), nil))
+	if w8.Code == http.StatusOK {
+		t.Error("凭据文件即使批准也不应 200")
+	}
+	// 恢复：保护开关配置文件删除，避免影响后续用例
+	os.Remove(protectedWorkspaceConfigPath())
 }

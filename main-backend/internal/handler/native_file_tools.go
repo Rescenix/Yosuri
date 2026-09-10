@@ -151,7 +151,8 @@ func nativeReadFile(args map[string]any) (nativeToolResult, error) {
 	for scanner.Scan() {
 		total++
 		if total >= offset && total <= end {
-			lines = append(lines, fmt.Sprintf("%d:%s", total, scanner.Text()))
+			// 出口脱敏：密钥语义词的值在进模型上下文前替换成 ***（Hermes 同款）。
+			lines = append(lines, fmt.Sprintf("%d:%s", total, maskSecretText(scanner.Text())))
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -221,7 +222,8 @@ func nativeGrep(args map[string]any) (nativeToolResult, error) {
 	lines := strings.Split(raw, "\n")
 	hits := make([]string, 0, len(lines))
 	for _, line := range lines {
-		hits = append(hits, displayNativePath(root)+"/"+line)
+		// 出口脱敏：grep 命中行同样可能带明文 key
+		hits = append(hits, displayNativePath(root)+"/"+maskSecretText(line))
 	}
 	if len(hits) >= nativeGrepMaxHits {
 		hits = hits[:nativeGrepMaxHits]

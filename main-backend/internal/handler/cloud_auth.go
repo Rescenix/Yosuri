@@ -133,6 +133,12 @@ func CloudCaptchaProxy(c *gin.Context) {
 	proxyToCloud(c, "/api/auth/captcha")
 }
 
+// CloudPowProxy 登录工作量证明（2026-09-07）：GET 转发到 ResceneCloud
+// 拉取 PoW 任务（{id, challenge, difficulty}），无需鉴权。前端算好 nonce 随登录请求带回。
+func CloudPowProxy(c *gin.Context) {
+	proxyToCloud(c, "/api/auth/pow")
+}
+
 // CloudUidProxy 游客 UID 分发：转发到 ResceneCloud 统一验证并签发（前端不可伪造）。
 // 同一 device_id 恒定返回同一 UID；换设备/清缓存 = 新游客号，登录 bind 后永久保留。
 func CloudUidProxy(c *gin.Context) {

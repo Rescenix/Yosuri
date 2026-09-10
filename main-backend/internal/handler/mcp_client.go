@@ -645,10 +645,11 @@ type mcpAudioArtifact struct {
 // fileDeliverable 是 Agent 落盘、可作为产物交付给用户的文件（md/pdf/pptx/docx/xlsx 等）。
 // 走 artifact(kind:file) 事件交给前端：自动弹预览、md 内嵌渲染、其余走下载/新开。
 type fileDeliverable struct {
-	Path string `json:"path"` // 主工作目录下的相对路径（前端经 /api/agent/file 拉取）
-	Name string `json:"name"` // 文件名（含扩展名）
-	Ext  string `json:"ext"`  // 小写扩展名（含点）
-	Size int64  `json:"size"` // 字节数
+	Path string `json:"path"`      // 主工作目录下的相对路径（前端经 /api/agent/file 拉取）
+	Name string `json:"name"`      // 文件名（含扩展名）
+	Ext  string `json:"ext"`       // 小写扩展名（含点）
+	Size int64  `json:"size"`      // 字节数
+	URL  string `json:"url,omitempty"` // 可选：静态直链（如 /api/media/xxx）。有值时前端预览/下载走它，不再经 /api/agent/file 的路径沙箱
 }
 
 type mcpToolCallResult struct {

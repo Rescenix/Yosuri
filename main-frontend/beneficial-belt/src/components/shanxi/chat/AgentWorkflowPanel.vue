@@ -144,7 +144,7 @@
               </button>
               <a
                 class="flow-file-btn download"
-                :href="'/api/agent/file?path=' + encodeURIComponent(group.block.path) + '&raw=1'"
+                :href="(group.block.url || ('/api/agent/file?path=' + encodeURIComponent(group.block.path) + '&raw=1'))"
                 :download="group.block.name"
               >
                 <Icon icon="mdi:download-outline" width="13" /> 下载
@@ -430,7 +430,11 @@ async function previewDeliveredFile(block) {
   block.previewError = ''
   const ext = (block.ext || '').replace('.', '').toLowerCase()
   try {
-    if (TEXT_PREVIEW_EXTS.has(ext)) {
+    if (block.url) {
+      // 带静态直链的交付物（如 fetch_media 落到媒体目录的文档）：浏览器原生
+      // 渲染 pdf/图片/文本，直接进右侧预览窗，绕开 /api/agent/file 路径沙箱。
+      requestPreview(block.url)
+    } else if (TEXT_PREVIEW_EXTS.has(ext)) {
       // 文本类（md/html/txt）：拉 content，前端渲染成独立 HTML blob 进右侧窗口。
       const res = await fetch('/api/agent/file?path=' + encodeURIComponent(block.path))
       if (!res.ok) throw new Error('读取失败 (' + res.status + ')')

@@ -121,30 +121,28 @@ func callNativeFetchMedia(ctx context.Context, argsJSON string) (nativeToolResul
 			}},
 		}, nil
 	case "video":
+		// 视频已有内嵌播放块，不再重复弹交付卡片（卡片走 /api/agent/file 绝对路径必 400）
 		return nativeToolResult{
 			Text: fmt.Sprintf("已获取视频素材\n本地文件: %s\n预览: %s\n%s", path, url, caption),
 			Videos: []mcpVideoArtifact{{
 				URL: url, File: path, Mime: ct, Size: fmt.Sprintf("%d", len(data)),
 			}},
-			Files: []fileDeliverable{{
-				Path: path, Name: name, Ext: ext, Size: int64(len(data)),
-			}},
 		}, nil
 	case "audio":
+		// 音频已有内嵌播放条，不再重复弹交付卡片
 		return nativeToolResult{
 			Text: fmt.Sprintf("已获取音频素材\n本地文件: %s\n预览: %s\n%s", path, url, caption),
 			Audios: []mcpAudioArtifact{{
 				URL: url, File: path, Mime: ct, Size: fmt.Sprintf("%d", len(data)),
 			}},
-			Files: []fileDeliverable{{
-				Path: path, Name: name, Ext: ext, Size: int64(len(data)),
-			}},
 		}, nil
 	default:
+		// 文档类交付卡：媒体目录在工作目录之外，绝对路径过不了 /api/agent/file
+		// 审批注册表（必 400），改带 /api/media 静态直链供前端预览/下载。
 		return nativeToolResult{
 			Text: fmt.Sprintf("已获取文件素材\n本地路径: %s\n%s", path, caption),
 			Files: []fileDeliverable{{
-				Path: path, Name: name, Ext: ext, Size: int64(len(data)),
+				Path: path, Name: name, Ext: ext, Size: int64(len(data)), URL: url,
 			}},
 		}, nil
 	}

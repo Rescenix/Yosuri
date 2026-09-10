@@ -74,10 +74,11 @@ func callNativeCommand(parent context.Context, argsJSON string) (nativeToolResul
 	}
 	out := fmt.Sprintf("退出码: %d", exitCode)
 	if stdout.Len() > 0 {
-		out += "\nstdout:\n" + truncateChars(stdout.String(), codeResultMaxChars/2)
+		// 出口脱敏：命令输出同样可能吐出明文 key（cat .env 绕过 read 闸门的路径）
+		out += "\nstdout:\n" + maskSecretText(truncateChars(stdout.String(), codeResultMaxChars/2))
 	}
 	if stderr.Len() > 0 {
-		out += "\nstderr:\n" + truncateChars(stderr.String(), codeResultMaxChars/2)
+		out += "\nstderr:\n" + maskSecretText(truncateChars(stderr.String(), codeResultMaxChars/2))
 	}
 	if exitCode != 0 {
 		return nativeToolResult{}, fmt.Errorf("%s", out)

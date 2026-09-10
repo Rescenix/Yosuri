@@ -122,6 +122,9 @@
             <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话">
               <Icon icon="mdi:magnify" width="18" />
             </button>
+            <button class="gem-icon-btn" @click="showFavorites = true" title="我的收藏">
+              <Icon icon="mdi:star-outline" width="18" />
+            </button>
             <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
                           <Icon icon="mdi:puzzle-outline" width="18" />
                         </button>
@@ -402,6 +405,15 @@
                         <button class="tool-btn" @click="copyText(flowFinalText(item))" title="复制">
                           <Icon icon="mdi:content-copy" width="16" />
                         </button>
+                        <button v-if="canRegenerate(item)" class="tool-btn" @click="regenerateFlow(item)" title="重新生成">
+                          <Icon icon="mdi:autorenew" width="16" />
+                        </button>
+                        <button class="tool-btn" @click="toggleFavorite(item)" :class="{ active: isFavorited(item) }" :title="isFavorited(item) ? '取消收藏' : '收藏'">
+                          <Icon :icon="isFavorited(item) ? 'mdi:star' : 'mdi:star-outline'" width="16" />
+                        </button>
+                        <button class="tool-btn" @click="openShare(item)" title="分享">
+                          <Icon icon="mdi:share-variant-outline" width="16" />
+                        </button>
                         <span class="tools-spacer"></span>
                         <button class="tool-btn speak-btn" @click="speakMessage(item, flowFinalText(item))" :title="speakState(item.id)" :class="{ 'speaking': speakingId === item.id, 'loading': loadingId === item.id }">
                           <svg class="speak-btn-icon" :class="{ 'spin': loadingId === item.id }" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
@@ -448,6 +460,7 @@
             <UserMessageRail :messages="messages" :active-id="activeUserMessageId" @jump="jumpToMessage" />
 
             <div v-if="copiedVisible" class="copy-toast">✓ 已复制</div>
+            <div v-if="toastMsg" class="copy-toast">{{ toastMsg }}</div>
 
             <!-- ===== 悬浮条（todo / ask / approval）：已移入 .chat-input-area 内
                  absolute 悬浮在输入框正上方（见下方 chat-input-area 开头） ===== -->
@@ -691,13 +704,19 @@
               <!-- 输入框容器：外层改列布局，附件预览条占一整行浮在文字行上方，
                                  原来的横向内容（占位符/textarea/按钮）收进 .input-row 保持不变 -->
                             <div ref="inputWrapperRef" class="input-wrapper" style="position: relative;">
-                                                        <!-- 后台任务/子代理悬浮条：有进行中的任务时显示，紧贴输入框上沿 -->
-                                                        <div v-if="runningTaskCount > 0" class="input-running-tasks-bar" @click.stop="toggleDockPanel('tasks')">
-                                                          <Icon icon="mdi:loading" width="13" class="rt-spin" />
-                                                          <template v-if="runningSubagentCount > 0"><span>{{ runningSubagentCount }} 个子代理进行中</span></template>
-                                                          <template v-if="runningBgTaskCount > 0"><span>{{ runningBgTaskCount }} 个后台任务进行中</span></template>
-                                                          <template v-if="runningSubagentCount === 0 && runningBgTaskCount === 0"><span>{{ runningTaskCount }} 个任务进行中</span></template>
-                                                          <Icon icon="mdi:chevron-up" width="14" class="rt-caret" />
+                                                        <!-- 后台任务/子代理悬浮条：有进行中的任务时显示，紧贴输入框上沿；
+                                                             叉键=用户手动终止全部进行中任务（run_task 走 /api/bg-task/kill 真杀进程树） -->
+                                                        <div v-if="runningTaskCount > 0" class="input-running-tasks-bar">
+                                                          <div class="rt-main" @click.stop="toggleDockPanel('tasks')">
+                                                            <Icon icon="mdi:loading" width="13" class="rt-spin" />
+                                                            <template v-if="runningSubagentCount > 0"><span>{{ runningSubagentCount }} 个子代理进行中</span></template>
+                                                            <template v-if="runningBgTaskCount > 0"><span>{{ runningBgTaskCount }} 个后台任务进行中</span></template>
+                                                            <template v-if="runningSubagentCount === 0 && runningBgTaskCount === 0"><span>{{ runningTaskCount }} 个任务进行中</span></template>
+                                                            <Icon icon="mdi:chevron-up" width="14" class="rt-caret" />
+                                                          </div>
+                                                          <button type="button" class="rt-dismiss" title="终止全部进行中任务" @click.stop="clearAllBackgroundTasks">
+                                                            <Icon icon="mdi:close" width="14" />
+                                                          </button>
                                                         </div>
                 <!-- 粘贴图片提示 -->
                 <div v-if="visionStatus" class="vision-status-toast" :class="{ error: visionStatus === 'error' }">
@@ -768,11 +787,13 @@
 
                   <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
 
-                  <!-- 模型名 pill：点击向上弹模型菜单（悬浮在输入框上方） -->
-                  <div class="sch-model" ref="modelPillRef" @click.stop="toggleModelMenu">
-                    <span>{{ selectedModelLabel }}</span>
-                    <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
-                  </div>
+                  <!-- 模型切换：常态显示完整模型名；右边工具窗口打开挤压输入框时收成紧凑图标按钮 -->
+                                    <div class="sch-model" :class="{ collapsed: hasVisibleDockPanels }" ref="modelPillRef" @click.stop="toggleModelMenu"
+                                      :title="'当前模型：' + selectedModelLabel + '，点击切换'">
+                                      <span class="sch-model-label">{{ selectedModelLabel }}</span>
+                                      <Icon icon="mdi:robot-outline" width="15" class="sch-model-robot" />
+                                      <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
+                                    </div>
 
                   <!-- 语音输入：按住说话（Edge 原生语音识别） -->
                   <button class="voice-btn" :class="{ listening: voiceListening }"
@@ -1155,7 +1176,7 @@
                 </div>
                 <PreviewBrowser v-else-if="activeDockPanelFor(dockLocation) === 'preview'" />
                 <FileToolPanel v-else-if="activeDockPanelFor(dockLocation) === 'file'" :embedded="true" :workdir-path="currentWorkDir.path" :workdir-name="currentWorkDir.name" @run-command="runEditorCommand" />
-                <BackgroundTasksPanel v-else-if="activeDockPanelFor(dockLocation) === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" />
+                <BackgroundTasksPanel v-else-if="activeDockPanelFor(dockLocation) === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" @kill-task="dismissBackgroundTask" />
               </div>
             </div>
           </aside>
@@ -1247,6 +1268,54 @@
                           </div>
                         </Teleport>
       <ScheduledTaskModal v-if="showScheduledTask" @close="closeScheduledTask" @create="onCreateScheduledTask" />
+
+      <!-- 我的收藏：本机 localStorage，绝不上云 -->
+      <Teleport to="body">
+        <div v-if="showFavorites" class="fav-backdrop" @click.self="showFavorites = false">
+          <div class="fav-panel">
+            <div class="fav-head">
+              <h2><Icon icon="mdi:star" width="18" /> 我的收藏</h2>
+              <button class="fav-close" type="button" @click="showFavorites = false"><Icon icon="mdi:close" width="20" /></button>
+            </div>
+            <div class="fav-body">
+              <div v-if="favorites.length === 0" class="fav-empty">还没有收藏，点回复下面的☆试试</div>
+              <div v-for="f in favorites" :key="f.key" class="fav-row">
+                <div class="fav-main" @click="openFavorite(f)">
+                  <div v-if="f.ask" class="fav-ask">{{ f.ask }}</div>
+                  <div class="fav-text">{{ f.text }}</div>
+                  <div class="fav-meta"><span>{{ f.sessionName }}</span><span>{{ f.time }}</span></div>
+                </div>
+                <div class="fav-ops">
+                  <button class="tool-btn" title="复制" @click="copyText(f.text)"><Icon icon="mdi:content-copy" width="15" /></button>
+                  <button class="tool-btn" title="删除" @click="removeFavorite(f.key)"><Icon icon="mdi:trash-can-outline" width="15" /></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Teleport>
+
+      <!-- 分享：本地应用没有消息链接可发，只有 Markdown 和图片卡片两种真实形态 -->
+      <Teleport to="body">
+        <div v-if="showShare && shareItem" class="fav-backdrop" @click.self="closeShare">
+          <div class="share-pop">
+            <div class="share-title">分享这条回复</div>
+            <button class="share-opt" type="button" :disabled="sharing" @click="shareCopyMarkdown(shareItem)">
+              <Icon icon="mdi:language-markdown-outline" width="18" /><span>复制为 Markdown</span>
+            </button>
+            <button class="share-opt" type="button" :disabled="sharing" @click="shareDownloadMarkdown(shareItem)">
+              <Icon icon="mdi:download-outline" width="18" /><span>导出 Markdown 文件</span>
+            </button>
+            <button class="share-opt" type="button" :disabled="sharing" @click="shareAsImage(true)">
+              <Icon icon="mdi:content-copy" width="18" /><span>{{ sharing ? '正在生成…' : '复制为图片' }}</span>
+            </button>
+            <button class="share-opt" type="button" :disabled="sharing" @click="shareAsImage(false)">
+              <Icon icon="mdi:image-outline" width="18" /><span>导出图片卡片</span>
+            </button>
+          </div>
+        </div>
+      </Teleport>
+
       <ModelManagerModal
               v-if="showModelManager"
               :free-models="freeModelsFull"
@@ -2872,6 +2941,92 @@ async function confirmEdit(item) {
   startCodeWorkflow(text)
 }
 
+// 重新生成 = 从「这一轮之前」分叉一条新分支，把同一个问题原样再问一遍。
+// 不做原地覆写：后端只在往返完成时按 user+assistant 成对落盘，前端 splice 掉一条 flow
+// 并不会让后端历史少一轮，下次 loadAllHistory 就原样回来（confirmEdit 踩过同样的坑）。
+// 所以沿用编辑重发的分支式做法，差别只在：文本取那条提问的原文、不弹编辑框。
+// 这条回复能不能单独重跑：往回必须先撞到一条用户提问。
+// 群聊里接话的第 2、3 位同事，前面是同一条提问下别人的回复，没有独立提问可定位，
+// 重跑语义不成立（真要重跑是全员重来，那由第一位的按钮触发），所以不给按钮。
+function canRegenerate(item) {
+  if (!item || item.kind !== 'agentflow' || item.status !== 'completed') return false
+  const i = messages.value.findIndex(m => m.id === item.id)
+  if (i < 0) return false
+  for (let k = i - 1; k >= 0; k--) {
+    const m = messages.value[k]
+    if (m.sender === 'user') return true
+    if (m.kind === 'agentflow') return false
+  }
+  return false
+}
+
+async function regenerateFlow(item) {
+  if (flowState.value.active) return
+  const i = messages.value.findIndex(m => m.id === item.id)
+  if (i < 0) return
+  // 往回找这一轮的提问：agentflow 自己不存用户原话（气泡与 flow 是两条独立消息）。
+  let ask = null
+  for (let k = i - 1; k >= 0; k--) {
+    const m = messages.value[k]
+    if (m.sender === 'user') { ask = m; break }
+    if (m.kind === 'agentflow') return
+  }
+  if (!ask) return
+  const text = ask.content || ''
+  const combined = serializeOutgoing(text, ask.attachments || [])
+  if (!combined) return
+
+  // keep = 这一轮之前「已完成的 agentflow 数」×2（成对落盘），正好把要重跑的这轮甩掉。
+  // 循环上界是 i，不含 item 自己，所以数出来的就是它之前的完整轮次。
+  let completed = 0
+  for (let k = 0; k < i; k++) {
+    const m = messages.value[k]
+    if (m.kind === 'agentflow' && m.status === 'completed') completed++
+  }
+  const keep = completed * 2
+  const sid = sessionId.value || localStorage.getItem('prism_session_id') || ''
+
+  const display = { text, attachments: ask.attachments || [] }
+  // 分叉失败的兜底：原地截掉这一轮再重发。会丢后端历史里的那一轮尾巴（刷新后回来），
+  // 但绝不能让用户点一下没反应，所以宁可退化成不完美重发。
+  const resendInPlace = () => {
+    messages.value.splice(messages.value.indexOf(ask))
+    startCodeWorkflow(combined, display, { model: selectedModel.value })
+  }
+  if (!sid) { resendInPlace(); return }
+
+  let newId = ''
+  try {
+    const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}/fork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep })
+    })
+    if (!res.ok) throw new Error(`fork 返回 ${res.status}`)
+    newId = (await res.json()).session_id || ''
+  } catch (err) {
+    console.warn('重新生成：分叉会话失败，退回原地重发', err)
+    resendInPlace()
+    return
+  }
+  if (!newId || newId === sid) { resendInPlace(); return }
+
+  // 与 confirmEdit 同款乐观插入：分支带着血缘立刻出现在侧栏并高亮一下
+  sessionList.value = [
+    { id: newId, name: shortTitle(text), parentId: sid, forkIndex: keep, justForked: true },
+    ...sessionList.value
+  ]
+  setTimeout(() => {
+    const n = sessionList.value.find(s => s.id === newId)
+    if (n) n.justForked = false
+  }, 1300)
+
+  // 必须 await：switchSession 内部 await loadAllHistory() 会整体替换 messages.value，
+  // 放在 startCodeWorkflow 之后会把刚推的气泡冲掉，SSE 流进已脱离的对象=永远转圈。
+  await switchSession(newId)
+  startCodeWorkflow(combined, display, { model: selectedModel.value })
+}
+
 const copiedVisible = ref(false)
 async function copyText(text) {
   try {
@@ -2882,6 +3037,168 @@ async function copyText(text) {
     textarea.value = text; textarea.style.position = 'fixed'; textarea.style.opacity = '0'
     document.body.appendChild(textarea); textarea.select(); document.execCommand('copy'); document.body.removeChild(textarea)
     copiedVisible.value = true; setTimeout(() => { copiedVisible.value = false }, 2000)
+  }
+}
+
+// ==================== 收藏（本机 localStorage，绝不上云） ====================
+// 键不能是消息 id：实时流的 id 是 af_<时间戳>，刷新后由 loadAllHistory 换成数组下标，
+// 同一条回复两个 id。改用「会话 id + 正文哈希」——正文是落盘内容，刷新前后恒定。
+const FAV_KEY = '***'
+function textHash(s) {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+function loadFavorites() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAV_KEY))
+    return Array.isArray(raw) ? raw : []
+  } catch { return [] }
+}
+const favorites = ref(loadFavorites())
+// 极轻量的操作提示（复用 copy-toast 的观感），2 秒自动消失
+const toastMsg = ref('')
+let toastTimer = null
+function notice(msg) {
+  toastMsg.value = msg
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastMsg.value = '' }, 2000)
+}
+function currentSid() { return sessionId.value || localStorage.getItem('prism_session_id') || '' }
+function favKeyOf(text) { return `${currentSid()}|${textHash(text || '')}` }
+function isFavorited(item) {
+  const k = favKeyOf(flowFinalText(item))
+  return favorites.value.some(f => f.key === k)
+}
+function saveFavorites() {
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(favorites.value)) } catch { /* 配额满：静默 */ }
+}
+function askOf(item) {
+  const i = messages.value.findIndex(m => m.id === item.id)
+  for (let k = i - 1; k >= 0; k--) {
+    if (messages.value[k].sender === 'user') return messages.value[k].content || ''
+    if (messages.value[k].kind === 'agentflow') break
+  }
+  return ''
+}
+function toggleFavorite(item) {
+  const text = flowFinalText(item)
+  if (!text) return
+  const key = favKeyOf(text)
+  const at = favorites.value.findIndex(f => f.key === key)
+  if (at >= 0) { favorites.value.splice(at, 1); saveFavorites(); return }
+  const sid = currentSid()
+  const sess = sessionList.value.find(s => s.id === sid)
+  favorites.value.unshift({
+    key,
+    text,
+    ask: askOf(item),
+    sessionId: sid,
+    sessionName: sess?.name || '未知会话',
+    time: new Date().toLocaleString('zh-CN', { hour12: false })
+  })
+  // 只留最近 200 条，防 localStorage 无限膨胀
+  if (favorites.value.length > 200) favorites.value.length = 200
+  saveFavorites()
+}
+async function removeFavorite(key) {
+  const at = favorites.value.findIndex(f => f.key === key)
+  if (at >= 0) { favorites.value.splice(at, 1); saveFavorites() }
+}
+// 收藏跳回原会话：目标会话正在跑流时不重载历史（内存数组才是最全的），
+// 与 switchSession 内部同一套判断，这里只做「切过去」这一步。
+async function openFavorite(f) {
+  if (!f.sessionId) { notice('这条收藏没有记录来源会话'); return }
+  showFavorites.value = false
+  if (f.sessionId !== currentSid()) await switchSession(f.sessionId)
+}
+const showFavorites = ref(false)
+
+// ==================== 分享 ====================
+// 本地桌面应用没有「消息链接」可发——云端根本不存别人的会话，所以分享只有两种真实形态：
+// 文本（Markdown）和图片卡片。两者都从当前这条回复现取现生成，不落地、不上传。
+const showShare = ref(false)
+const shareItem = ref(null)
+const sharing = ref(false)
+function openShare(item) {
+  shareItem.value = item
+  showShare.value = true
+}
+function closeShare() { showShare.value = false }
+function shareMarkdown(item) {
+  const ask = askOf(item)
+  const ans = flowFinalText(item) || ''
+  const lines = []
+  if (ask) lines.push(`> ${ask.replace(/\n/g, '\n> ')}\n`)
+  lines.push(ans)
+  return lines.join('\n')
+}
+function downloadFile(name, mime, content) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mime })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+}
+async function shareCopyMarkdown(item) {
+  const md = shareMarkdown(item)
+  try {
+    await navigator.clipboard.writeText(md)
+    notice('已复制为 Markdown')
+  } catch {
+    downloadFile('分享.md', 'text/markdown;charset=utf-8', md)
+    notice('剪贴板不可用，已改为下载文件')
+  }
+  closeShare()
+}
+function shareDownloadMarkdown(item) {
+  downloadFile('分享.md', 'text/markdown;charset=utf-8', shareMarkdown(item))
+  notice('已导出 Markdown')
+  closeShare()
+}
+// 图片卡片：离屏挂一个亮蓝白节点，html2canvas 截成 PNG。
+// 离屏而不是隐藏（display:none 截出来是空白），挪到视口外即可。
+async function buildShareCard(item) {
+  const host = document.createElement('div')
+  host.className = 'share-card-offscreen'
+  const ask = askOf(item)
+  host.innerHTML = `
+    <div class="share-card">
+      <div class="share-card-brand"><span class="dot"></span>Yosuri</div>
+      ${ask ? `<div class="share-card-ask">${renderMarkdown(ask, false)}</div>` : ''}
+      <div class="share-card-ans">${renderMarkdown(flowFinalText(item) || '', false)}</div>
+      <div class="share-card-foot">${new Date().toLocaleDateString('zh-CN')} · Yosuri AI</div>
+    </div>`
+  document.body.appendChild(host)
+  try {
+    const h = await import('html2canvas')
+    const canvas = await h.default(host.firstChild, { scale: 2, useCORS: true, backgroundColor: '#F5F8FF' })
+    return canvas
+  } finally {
+    host.remove()
+  }
+}
+async function shareAsImage(copy) {
+  const item = shareItem.value
+  if (!item || sharing.value) return
+  sharing.value = true
+  try {
+    const canvas = await buildShareCard(item)
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'))
+    if (!blob) throw new Error('画布导出为空')
+    if (copy && navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      notice('图片已复制，可直接粘贴发送')
+    } else {
+      downloadFile('分享卡片.png', 'image/png', blob)
+      notice(copy ? '当前环境不支持复制图片，已改为下载' : '已导出图片')
+    }
+    closeShare()
+  } catch (e) {
+    notice('生成图片失败：' + (e.message || e))
+  } finally {
+    sharing.value = false
   }
 }
 
@@ -3440,6 +3757,8 @@ const {
   runningTaskCount,
   runningSubagentCount,
   runningBgTaskCount,
+  dismissBackgroundTask,
+  clearAllBackgroundTasks,
   flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
   todoState, sendSteerMessage,
   questionState, answerQuestion,
@@ -4588,8 +4907,9 @@ function onAttachFolderSelected(e) {
 // 发送那一刻才把附件序列化进正文：图片用 vision 分析结果、文件夹用清单、
 // 文本文件只给文件名（不塞全文——agent 在后端工作目录里自己 read_file 读取，
 // 把整份源码怼进消息既撑爆上下文又没必要）。顺序固定放在用户文字前面。
-function buildOutgoingMessage() {
-  const blocks = attachments.value
+// typed/atts 由调用方给：正常发送传输入框当前内容，重新生成传那条历史用户消息的内容+附件。
+function serializeOutgoing(typed, atts) {
+  const blocks = (atts || [])
     .filter(a => a.status === 'ready')
     .map(a => {
       if (a.kind === 'image') return `[图片: ${a.name}]\n${a.analysisText || ''}`
@@ -4598,8 +4918,11 @@ function buildOutgoingMessage() {
       // 文本/代码文件：只给文件名，让 agent 自行 read_file，不把内容塞进消息
       return `[文件: ${a.name}]`
     })
-  const typed = userInput.value.trim()
-  return [...blocks, typed].filter(Boolean).join('\n')
+  return [...blocks, (typed || '').trim()].filter(Boolean).join('\n')
+}
+
+function buildOutgoingMessage() {
+  return serializeOutgoing(userInput.value, attachments.value)
 }
 
 const showScrollButton = computed(() => { return isOpen.value && userScrolledUp.value })
@@ -4765,6 +5088,13 @@ async function refreshGitGraph() {
   transition: background 0.2s ease;
 }
 .input-wrapper > .input-running-tasks-bar:hover { background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface)); }
+.rt-main { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; cursor: pointer; }
+.rt-dismiss {
+  flex-shrink: 0; width: 22px; height: 22px; border: none; border-radius: 6px;
+  background: transparent; color: var(--app-text-soft); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.rt-dismiss:hover { background: rgba(217, 72, 52, 0.12); color: #d94834; }
 .rt-spin { animation: rt-spin 1s linear infinite; }
 @keyframes rt-spin { to { transform: rotate(360deg); } }
 .rt-sub { color: var(--app-text-faint); font-size: 11px; }
@@ -5318,4 +5648,35 @@ async function refreshGitGraph() {
   color: #b76f92;
   flex: none;
 }
+
+/* ==================== 收藏 / 分享 浮层（Teleport 到 body，必须全局样式） ==================== */
+.fav-backdrop { position: fixed; inset: 0; z-index: 4000; background: rgba(20,30,55,.34); display: flex; align-items: center; justify-content: center; }
+.fav-panel { width: min(680px, 92vw); max-height: 78vh; display: flex; flex-direction: column; background: #F5F8FF; border-radius: 16px; box-shadow: 0 24px 70px rgba(20,40,90,.26); overflow: hidden; }
+.fav-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid rgba(25,80,190,.12); }
+.fav-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: #1950BE; display: flex; align-items: center; gap: 7px; }
+.fav-close { border: 0; background: transparent; color: #6b7a95; cursor: pointer; display: flex; }
+.fav-body { padding: 8px 12px 14px; overflow-y: auto; }
+.fav-empty { padding: 40px 0; text-align: center; color: #8a97ad; font-size: 13px; }
+.fav-row { display: flex; align-items: flex-start; gap: 8px; padding: 10px 10px; border-radius: 11px; }
+.fav-row:hover { background: rgba(25,80,190,.06); }
+.fav-main { flex: 1; min-width: 0; cursor: pointer; }
+.fav-ask { font-size: 12px; color: #6b7a95; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-text { font-size: 13px; line-height: 1.6; color: #23324d; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.fav-meta { margin-top: 5px; display: flex; gap: 10px; font-size: 11px; color: #9aa7bb; }
+.fav-ops { display: flex; gap: 2px; flex-shrink: 0; }
+.share-pop { width: 268px; background: #F5F8FF; border-radius: 14px; box-shadow: 0 20px 56px rgba(20,40,90,.26); padding: 10px; }
+.share-title { font-size: 12px; font-weight: 700; color: #1950BE; padding: 6px 8px 8px; }
+.share-opt { width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 0; border-radius: 9px; background: transparent; color: #23324d; font-size: 13px; cursor: pointer; text-align: left; }
+.share-opt:hover:not(:disabled) { background: rgba(25,80,190,.09); }
+.share-opt:disabled { opacity: .55; cursor: default; }
+.tool-btn.active { color: #E8A317; }
+.share-card-offscreen { position: fixed; left: -99999px; top: 0; }
+.share-card { width: 620px; padding: 30px 32px 22px; background: #F5F8FF; color: #23324d; font: 14px/1.75 -apple-system,'Segoe UI','Microsoft YaHei',sans-serif; }
+.share-card-brand { display: flex; align-items: center; gap: 7px; font-weight: 800; color: #1950BE; letter-spacing: .04em; margin-bottom: 16px; }
+.share-card-brand .dot { width: 9px; height: 9px; border-radius: 50%; background: #1950BE; }
+.share-card-ask { padding: 10px 14px; margin-bottom: 14px; border-left: 3px solid rgba(25,80,190,.4); background: rgba(25,80,190,.07); color: #5a6a86; font-size: 13px; border-radius: 0 8px 8px 0; }
+.share-card-ans :is(h1,h2,h3) { color: #1950BE; margin: 14px 0 8px; }
+.share-card-ans pre { background: #12233f; color: #e6edf7; padding: 12px 14px; border-radius: 9px; overflow: hidden; font-size: 12px; }
+.share-card-ans code { font-family: Consolas,'Courier New',monospace; }
+.share-card-foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(25,80,190,.14); font-size: 11px; color: #9aa7bb; }
 </style>

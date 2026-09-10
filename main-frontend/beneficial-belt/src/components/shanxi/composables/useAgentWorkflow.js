@@ -518,6 +518,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     type: 'file',
                     id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
                     path: d.path,
+                    url: d.url || '',
                     name: d.name || d.path.split('/').pop() || d.path,
                     ext: d.ext || '',
                     size: d.size || 0
@@ -700,6 +701,9 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             // 正常完成/收尾：重置免费模型重试计数，让下一次新任务从 1/3 重新开始
             if (d.status !== 'failed') transientRetryCount = 0
             settlePendingTools('error', d.final_output || '工具调用未完成')
+            // 兜底：工作流收尾时仍挂着 running 的后台进程/子代理一并结算，
+            // 否则悬浮条永远清不掉（done 事件可能因断线丢失）。
+            settleSubagents(flow, 'stopped')
             flow.inputTokens = d.input_tokens || 0
             flow.outputTokens = d.output_tokens || 0
             // 对话类 token：用后端已扣除静态部分的 conversation_tokens。
@@ -826,12 +830,20 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         }
     }
 
-    // 流异常/手动停止时，把还挂着 running 的子代理一并收尾
+    // 流异常/手动停止时，把还挂着 running 的子代理与后台进程一并收尾。
+    // bgTasks 必须一起结算：否则 run_task 卡片永远停在 running，
+    // 输入框上方悬浮条（runningTaskCount）清不掉（09-10 修复）。
     function settleSubagents(flow, status) {
         for (const sa of flow.subagents || []) {
             if (sa.status === 'running') {
                 sa.status = status
                 sa.endTime = Date.now()
+            }
+        }
+        for (const bt of flow.bgTasks || []) {
+            if (bt.status === 'running') {
+                bt.status = status
+                bt.endTime = Date.now()
             }
         }
     }

@@ -22,6 +22,36 @@ import (
 	"backend/internal/ai/core"
 )
 
+// deliverablePathAllowed 判定一个交付卡片路径能否经本公开读口 serve。
+//
+// 闸门只跟「受保护工作区」开关挂钩（09-10 定稿）：卡片路径是服务端自己生成推给
+// 前端的，不是用户输入，普通模式没有理由拒——之前拿「用户批准过」当放行条件，
+// 等于自己弹卡自己拒（音频/视频/记忆文件交付卡必 400 的根因）。
+// 唯一无条件保留的是凭据文件黑名单：user_configs 落盘是明文 key，掩码只在 UI 出口，
+// 拖文件等于拖明文。这是确定性规则，不是概率审计。
+func deliverablePathAllowed(path string) bool {
+	if isCredentialFile(path) {
+		return false
+	}
+	if !ProtectedWorkspaceEnabled() {
+		return true
+	}
+	return isApprovedOutsidePath(path)
+}
+
+// isCredentialFile 密钥/凭据落盘文件，任何模式都不经公开读口外发。
+func isCredentialFile(path string) bool {
+	clean := normCase(filepath.Clean(path))
+	dir := normCase(resceneUserDataDir())
+	rel, err := filepath.Rel(dir, clean)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return false
+	}
+	// user_configs/ 下全部（含 openid.json），以及数据根里其它明显的凭证文件
+	return strings.HasPrefix(rel, normCase("user_configs")+string(filepath.Separator)) ||
+		filepath.Base(clean) == "credentials.json"
+}
+
 // HandleAgentFile GET /api/agent/file?path=...&raw=1
 // 同理 company 产物端点：按扩展名分类返回元信息（+文本类回读 content），
 // raw=1 时直接 ServeFile 下载/新开。path 相对主工作目录解析，禁止越界。
@@ -32,12 +62,10 @@ func HandleAgentFile(c *gin.Context) {
 		return
 	}
 	var path string
-	// 只认工作目录内的相对路径。绝对路径只有在「用户刚在审批条上批准过的那一个
-	// 文件」时才放行（见 approval.go 的已授权交付路径注册表）；未经批准的一律拒。
-	// 交付端点是无鉴权公开读口，放开任意绝对路径等于把用户数据目录下的敏感文件
-	// 暴露给前端。
+	// 绝对路径：交付卡片给的就是这种形态（媒体目录/记忆目录都在工作目录外），
+	// 闸门见 deliverablePathAllowed——普通模式全放行，受保护工作区模式才要批准过。
 	if filepath.IsAbs(raw) {
-		if !isApprovedOutsidePath(raw) {
+		if !deliverablePathAllowed(raw) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "该文件不在 Agent 工作目录内，且未经你批准，无法预览/下载"})
 			return
 		}

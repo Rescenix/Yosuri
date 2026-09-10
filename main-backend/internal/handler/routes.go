@@ -282,6 +282,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/auth/register", CloudRegisterProxy)
 	// 登录图形验证码（2026-09-05，自绘零依赖）：前端拉取图片，登录时带回校验
 	r.GET("/api/auth/captcha", CloudCaptchaProxy)
+	// 登录工作量证明（2026-09-07，双门禁之二）：GET 拿 challenge，前端算 nonce 随登录带回
+	r.GET("/api/auth/pow", CloudPowProxy)
 	// token 校验直接代理到 ResceneCloud 云端验签（透传 Authorization 头）。
 	// re0 开源侧不持有任何密钥，验签全由云端完成（与签发同源），
 	// 既修了「打包版无 .env → 本地默认密钥与云端不符 → auth/me 401」的登不上问题，

@@ -600,6 +600,7 @@ async function switchSession(id) {
           out.push({
             id: m.id,               // 跳转目标 = 所属的 agentflow 消息
             key: `${m.id}_${sa.id}`, // 面板渲染 key（同一流可有多只雨燕）
+            flowId: m.id,           // 清理时定位所属流
             agentLabel: '雨燕',
             description: sa.task,
             status: sa.status,
@@ -613,6 +614,7 @@ async function switchSession(id) {
           out.push({
             id: bt.id,              // task_id，点「查看日志」走 /api/bg-task/log
             key: `${m.id}_${bt.id}`,
+            flowId: m.id,           // 清理时定位所属流
             agentLabel: '后台进程',
             description: bt.task,
             status: bt.status,
@@ -671,6 +673,38 @@ async function switchSession(id) {
     }
     return n
   })
+
+  // 手动清理卡住的 running 任务（悬浮条叉键 / 面板终止按钮，09-10）：
+  // 后台进程先真杀进程树（/api/bg-task/kill），再本地把对应条目置 stopped——
+  // 后端任务已过期（not_found/already_exited）也照样清，保证 UI 不残留。
+  async function dismissBackgroundTask(t) {
+    if (!t) return
+    if (typeof t.id === 'string' && t.id.startsWith('task_')) {
+      try {
+        await fetch('/api/bg-task/kill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task_id: t.id })
+        })
+      } catch {}
+    }
+    for (const m of messages.value) {
+      if (m.kind !== 'agentflow') continue
+      if (t.flowId && m.id !== t.flowId) continue
+      for (const bt of (m.bgTasks || [])) {
+        if (bt.id === t.id && bt.status === 'running') { bt.status = 'stopped'; bt.endTime = Date.now() }
+      }
+      for (const sa of (m.subagents || [])) {
+        if (`${m.id}_${sa.id}` === t.key && sa.status === 'running') { sa.status = 'stopped'; sa.endTime = Date.now() }
+      }
+    }
+  }
+  // 叉键一键清理：终止所有进行中的任务
+  async function clearAllBackgroundTasks() {
+    for (const t of backgroundTaskList.value.filter(x => x.status === 'running')) {
+      await dismissBackgroundTask(t)
+    }
+  }
 
   // ===== 知识库抽屉 =====
   const kbOpen = ref(localStorage.getItem('kb_open') === '1')
@@ -828,6 +862,8 @@ async function switchSession(id) {
     runningTaskCount,
     runningSubagentCount,
     runningBgTaskCount,
+    dismissBackgroundTask,
+    clearAllBackgroundTasks,
     flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
     todoState, sendSteerMessage,
     questionState, answerQuestion,

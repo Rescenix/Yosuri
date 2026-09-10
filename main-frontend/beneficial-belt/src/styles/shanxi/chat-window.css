@@ -2225,7 +2225,7 @@ min-height: 90px !important;
   transition: y 0.4s ease, height 0.4s ease;
 }
 
-/* 模型名：纯文字 + 下拉箭头，无背景无药丸（Hermes 同款） */
+/* 模型切换：常态显示完整模型名（文字+下拉，无背景无药丸，Hermes 同款） */
 .sch-model {
   position: relative;
   display: inline-flex;
@@ -2243,7 +2243,7 @@ min-height: 90px !important;
   overflow: hidden;
   transition: color .15s ease;
 }
-.sch-model > span:first-child {
+.sch-model-label {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -2253,6 +2253,22 @@ min-height: 90px !important;
 }
 .sch-model:hover { color: var(--app-text); }
 .sch-model-caret { color: var(--app-text-faint); flex-shrink: 0; }
+.sch-model-robot { display: none; }
+/* 折叠态：右边工具窗口（终端/编辑器/任务等 dock）打开、输入框被挤压时，
+   模型名隐藏，只留紧凑图标按钮，点击仍弹模型菜单 */
+.sch-model.collapsed {
+  gap: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  flex: 0 0 auto;
+  justify-content: center;
+  border-radius: 6px;
+}
+.sch-model.collapsed .sch-model-label { display: none; }
+.sch-model.collapsed .sch-model-caret { display: none; }
+.sch-model.collapsed .sch-model-robot { display: block; }
+.sch-model.collapsed:hover { background: rgba(0,0,0,0.06); }
 /* 语音输入按钮：按住说话，识别中高亮 */
 .voice-btn {
   display: inline-flex;

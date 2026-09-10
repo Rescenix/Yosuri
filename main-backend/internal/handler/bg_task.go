@@ -312,7 +312,7 @@ func bgTaskStatus(taskID string) map[string]any {
 		"status":           "running",
 		"pid":              t.pid,
 		"uptime_seconds":   int(time.Since(t.startedAt).Seconds()),
-		"output_preview":   out,
+		"output_preview":   maskSecretText(out),
 		"output_truncated": truncated,
 	}
 	if exited {
@@ -352,7 +352,7 @@ func bgTaskLog(taskID string, offset, limit int) map[string]any {
 		"task_id":     t.id,
 		"command":     t.command,
 		"status":      "running",
-		"output":      strings.Join(lines[offset:end], "\n"),
+		"output":      maskSecretText(strings.Join(lines[offset:end], "\n")),
 		"total_lines": total,
 		"showing":     fmt.Sprintf("%d-%d/%d 行", offset+1, end, total),
 	}
@@ -361,6 +361,43 @@ func bgTaskLog(taskID string, offset, limit int) map[string]any {
 		r["exit_code"] = exitCode
 	}
 	return r
+}
+
+// killWorkflowBgTasks 工作流停止/收尾时清场：树杀该工作流名下所有仍在跑的
+// 后台任务。否则进程变孤儿继续跑，前端悬浮条也永远显示「进行中」清不掉。
+// 返回被杀任务 id（调用方可据此补推 done 事件，让还活着的流把卡片改灰）。
+func killWorkflowBgTasks(workflow string) []string {
+	if workflow == "" {
+		return nil
+	}
+	bgTasksMu.Lock()
+	var alive []*bgTask
+	for _, t := range bgTasks {
+		if t.workflow == workflow {
+			t.mu.Lock()
+			exited := t.exited
+			t.mu.Unlock()
+			if !exited {
+				alive = append(alive, t)
+			}
+		}
+	}
+	bgTasksMu.Unlock()
+	var ids []string
+	for _, t := range alive {
+		if t.cmd != nil && t.cmd.Process != nil {
+			if runtime.GOOS == "windows" {
+				exec.Command("taskkill", "/PID", fmt.Sprintf("%d", t.cmd.Process.Pid), "/T", "/F").Run()
+			} else {
+				_ = t.cmd.Process.Kill()
+			}
+		}
+		t.mu.Lock()
+		t.killReason = "workflow_stopped"
+		t.mu.Unlock()
+		ids = append(ids, t.id)
+	}
+	return ids
 }
 
 // killBgTask 树杀：Windows 用 taskkill /T /F（同 browser_preview_windows.go），
@@ -410,7 +447,7 @@ func waitBgTask(taskID string, timeout int) map[string]any {
 		t.mu.Lock()
 		code := t.exitCode
 		t.mu.Unlock()
-		return map[string]any{"status": "exited", "task_id": taskID, "exit_code": code, "output": t.outputTail(2000)}
+		return map[string]any{"status": "exited", "task_id": taskID, "exit_code": code, "output": maskSecretText(t.outputTail(2000))}
 	case <-time.After(time.Duration(timeout) * time.Second):
 		return map[string]any{"status": "timeout", "task_id": taskID, "timeout": timeout}
 	}
@@ -420,7 +457,7 @@ func waitBgTask(taskID string, timeout int) map[string]any {
 func bgTaskDoneMessage(res bgTaskResult) map[string]any {
 	return map[string]any{
 		"role":    "system",
-		"content": fmt.Sprintf("[后台任务 %s 完成] 命令：%s\n退出码：%d\n输出尾部：\n%s", res.TaskID, res.Command, res.ExitCode, res.Output),
+		"content": fmt.Sprintf("[后台任务 %s 完成] 命令：%s\n退出码：%d\n输出尾部：\n%s", res.TaskID, res.Command, res.ExitCode, maskSecretText(res.Output)),
 	}
 }
 

@@ -26,8 +26,9 @@
             <div class="bgtask-meta-row secondary">
               {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
             </div>
-            <div v-if="isBgTask(t)" class="bgtask-actions">
-              <button class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
+            <div v-if="isBgTask(t) || t.status === 'running'" class="bgtask-actions">
+              <button v-if="isBgTask(t)" class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
+              <button v-if="t.status === 'running'" class="bgtask-log-btn kill" @click.stop="killTask(t)">终止</button>
             </div>
           </div>
           <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
@@ -70,8 +71,9 @@
             <div class="bgtask-meta-row secondary">
               {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
             </div>
-            <div v-if="isBgTask(t)" class="bgtask-actions">
-              <button class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
+            <div v-if="isBgTask(t) || t.status === 'running'" class="bgtask-actions">
+              <button v-if="isBgTask(t)" class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
+              <button v-if="t.status === 'running'" class="bgtask-log-btn kill" @click.stop="killTask(t)">终止</button>
             </div>
           </div>
           <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
@@ -105,7 +107,13 @@ const props = defineProps({
   tasks: { type: Array, default: () => [] },
   embedded: { type: Boolean, default: false }
 })
-defineEmits(['close', 'select-task'])
+const emit = defineEmits(['close', 'select-task', 'kill-task'])
+
+// 终止：交给父层走 /api/bg-task/kill 真杀进程树 + 本地结算（面板里的 tasks 是
+// computed 派生对象，改它不会回写源数据，必须 emit）。
+function killTask(t) {
+  emit('kill-task', t)
+}
 
 const finishedCount = computed(() => props.tasks.filter(t => t.status !== 'running').length)
 
@@ -315,6 +323,8 @@ function statusLabel(status) {
   transition: all 0.15s ease;
 }
 .bgtask-log-btn:hover { border-color: var(--app-accent, #3b82f6); color: var(--app-accent, #3b82f6); }
+.bgtask-log-btn.kill { color: #d94834; border-color: color-mix(in srgb, #d94834 40%, transparent); }
+.bgtask-log-btn.kill:hover { background: rgba(217, 72, 52, 0.08); border-color: #d94834; color: #d94834; }
 
 /* 日志查看弹层 */
 .bgtask-log-backdrop {
