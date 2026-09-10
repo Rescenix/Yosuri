@@ -80,7 +80,7 @@ func TestStreamRouterRoundEmptyChainMessage(t *testing.T) {
 	r := &WorkflowRunner{}
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("GET", "/api/code/workflow", nil)
-	_, _, _, _, _, err := r.streamRouterRound(c, nil, nil, nil, "", 0, nil)
+	_, _, _, _, _, err := r.streamRouterRound(c, nil, nil, nil, "", 0, nil, nil)
 	if err == nil {
 		t.Fatal("空链应报错")
 	}
@@ -99,7 +99,7 @@ func TestStreamRouterRoundExactModelRateLimitIsNotGlobalFailure(t *testing.T) {
 	c.Request = httptest.NewRequest("GET", "/api/code/workflow", nil)
 	_, _, _, _, _, err := r.streamRouterRound(c, []RouterBackend{{
 		ID: "deepseek_v4_pro", Name: "DeepSeek V4 Pro", BaseURL: limited.URL, Model: "deepseek-v4-pro", Keyless: true,
-	}}, []map[string]any{{"role": "user", "content": "hi"}}, nil, "", 0, nil)
+	}}, []map[string]any{{"role": "user", "content": "hi"}}, nil, "", 0, nil, nil)
 	if err == nil {
 		t.Fatal("限流应返回错误")
 	}

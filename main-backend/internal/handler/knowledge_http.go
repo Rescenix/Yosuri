@@ -26,9 +26,13 @@ import (
 	"backend/internal/knowledge"
 )
 
-// HandleKnowledgeList GET /api/knowledge/list
+// HandleKnowledgeList GET /api/knowledge/list?scope=global|session&session_id=xxx
 func HandleKnowledgeList(c *gin.Context) {
-	files := knowledge.ListFiles()
+	dir := knowledge.Dir()
+	if c.Query("scope") == "session" {
+		dir = knowledge.SessionDir(c.Query("session_id"))
+	}
+	files := knowledge.ListFilesIn(dir)
 	type item struct {
 		Name    string `json:"name"`
 		Size    int64  `json:"size"`
@@ -43,6 +47,7 @@ func HandleKnowledgeList(c *gin.Context) {
 }
 
 // HandleKnowledgeUpload POST /api/knowledge/upload
+// multipart：file + scope(global|session) + session_id
 func HandleKnowledgeUpload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -56,6 +61,9 @@ func HandleKnowledgeUpload(c *gin.Context) {
 		return
 	}
 	dir := knowledge.Dir()
+	if c.PostForm("scope") == "session" {
+		dir = knowledge.SessionDir(c.PostForm("session_id"))
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建知识库目录失败"})
 		return
@@ -71,10 +79,12 @@ func HandleKnowledgeUpload(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "name": name})
 }
 
-// HandleKnowledgeDelete POST /api/knowledge/delete，body: {"name": "xxx.pdf"}
+// HandleKnowledgeDelete POST /api/knowledge/delete，body: {"name": "xxx.pdf", "scope": "global|session", "session_id": "..."}
 func HandleKnowledgeDelete(c *gin.Context) {
 	var req struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
+		Scope     string `json:"scope"`
+		SessionID string `json:"session_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少文件名"})
@@ -85,7 +95,11 @@ func HandleKnowledgeDelete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "非法文件名"})
 		return
 	}
-	dst := filepath.Join(knowledge.Dir(), req.Name)
+	dir := knowledge.Dir()
+	if req.Scope == "session" {
+		dir = knowledge.SessionDir(req.SessionID)
+	}
+	dst := filepath.Join(dir, req.Name)
 	if err := os.Remove(dst); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败: " + err.Error()})
 		return
@@ -98,7 +112,9 @@ func HandleKnowledgeDelete(c *gin.Context) {
 // graphReq 知识图谱请求。
 type graphReq struct {
 	// File 为空则生成全部文件的合并图谱。
-	File string `json:"file,omitempty"`
+	File      string `json:"file,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // HandleKnowledgeGraph POST /api/knowledge/graph
@@ -130,16 +146,21 @@ func HandleKnowledgeGraph(c *gin.Context) {
 	var graph *knowledge.Graph
 	var err error
 
+	dir := knowledge.Dir()
+	if req.Scope == "session" {
+		dir = knowledge.SessionDir(req.SessionID)
+	}
+
 	if req.File != "" {
 		// 单文件图谱
 		if strings.ContainsAny(req.File, "/\\") || req.File == ".." {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "非法文件名"})
 			return
 		}
-		path := filepath.Join(knowledge.Dir(), req.File)
+		path := filepath.Join(dir, req.File)
 		graph, err = knowledge.GraphForFile(path, llmCall)
 	} else {
-		// 全库合并图谱
+		// 全库合并图谱（仅全局，会话级不做全库图谱）
 		graph, err = knowledge.GraphForAll(llmCall)
 	}
 

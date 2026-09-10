@@ -22,6 +22,7 @@ package handler
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -177,6 +178,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	}
 
 	task := strings.TrimSpace(c.Query("task"))
+	// 超长任务（URL 塞不下，431）：task 为空时从 prepare=<id> 暂存区取回
+	if task == "" {
+		if prepareID := strings.TrimSpace(c.Query("prepare")); prepareID != "" {
+			if st, ok := takeStashedTask(prepareID); ok {
+				task = st
+			}
+		}
+	}
 	if resumed != nil && task == "" {
 		task = resumed.Task
 	}
@@ -351,6 +360,18 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// POST /api/code/workflow/steer 跨请求把消息塞进这条正在跑的循环。
 	steerCh := registerSteerChannel(workflowID)
 	defer unregisterSteerChannel(workflowID)
+	// 可中断 steer（2026-09-10）：模型调用阻塞期间，interrupt goroutine 把插话
+	// 收进 steerPending（不丢），并 close interruptCh 取消本轮模型调用 → 主循环
+	// 下一轮优先取 steerPending、带上插话重新生成 = 真·中途引导思考。
+	var steerPendingMu sync.Mutex
+	var steerPending string
+	takePendingSteer := func() string {
+		steerPendingMu.Lock()
+		defer steerPendingMu.Unlock()
+		s := steerPending
+		steerPending = ""
+		return s
+	}
 
 	// ask_user 提问等待通道：按 workflowID 注册，agent 调 ask_user 时阻塞在这里，
 	// 等前端 POST /api/code/workflow/answer 唤醒。同一工作流串行（循环阻塞着），
@@ -565,11 +586,17 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		// 非阻塞取一条 steer 消息（如果有）：一轮最多消费一条，多条按发送顺序留在
 		// channel 里排队到下一轮，避免把用户连续几句不同的话糊成一坨塞给模型。
 		// 放在压缩之前，让插入的消息也参与后续的上下文预算核算。
-		select {
-		case steerMsg := <-steerCh:
+		// 模型调用期间到达的插话由 interrupt goroutine 收进 steerPending，这里优先取。
+		steerMsg := takePendingSteer()
+		if steerMsg == "" {
+			select {
+			case steerMsg = <-steerCh:
+			default:
+			}
+		}
+		if steerMsg != "" {
 			msgs = append(msgs, map[string]any{"role": "user", "content": "[用户中途插话] " + steerMsg})
 			writeCodeSSE(c, "steering_injected", map[string]any{"message": steerMsg})
-		default:
 		}
 
 		// 后台任务生命周期通知 drain（Hermes completion_queue 语义）：run_task 启动的任务
@@ -621,7 +648,23 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 
 		finalRound = round // 账本落盘用（defer 里读的是最终值）
 		var reasoningOut []map[string]any
-		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, roundMsgs, tools, effort, staticSum, &reasoningOut)
+		// 可中断 steer：模型调用阻塞期间用户插话 → 收进 steerPending + close interruptCh
+		// → 取消本轮模型请求 → streamRouterRound 返回 errSteerInterrupt → 下一轮带上插话重生成。
+		var interruptOnce sync.Once
+		interruptCh := make(chan struct{})
+		go func() {
+			select {
+			case msg := <-steerCh:
+				steerPendingMu.Lock()
+				steerPending = msg
+				steerPendingMu.Unlock()
+				interruptOnce.Do(func() { close(interruptCh) })
+			case <-interruptCh:
+			case <-c.Request.Context().Done():
+			}
+		}()
+		content, calls, inTok, outTok, usedBackend, err := r.streamRouterRound(c, backends, roundMsgs, tools, effort, staticSum, &reasoningOut, interruptCh)
+		interruptOnce.Do(func() { close(interruptCh) }) // 本轮结束，停掉监听 goroutine
 		// inTok 优先用上游真实 prompt_tokens；为 0 时退化为历史字符/4 估算（与四态机口径一致）
 		if inTok > 0 {
 			inputTokens = inTok
@@ -639,6 +682,10 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			})
 		}
 		if err != nil {
+			// 用户中途插话中断：不是错误——下一轮已带上插话重新生成，直接继续主循环
+			if errors.Is(err, errSteerInterrupt) {
+				continue
+			}
 			// 上游挂了属于可恢复失败——保留检查点，前端可以带 resume=<id> 原地重试，
 			// 不必把已经跑完的十几轮工具再跑一遍。
 			checkpoint(round)

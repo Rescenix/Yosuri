@@ -785,7 +785,7 @@
                     </div>
                   </div>
 
-                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="adjustInputHeight" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
+                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="onChatInput" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
 
                   <!-- 模型切换：常态显示完整模型名；右边工具窗口打开挤压输入框时收成紧凑图标按钮 -->
                                     <div class="sch-model" :class="{ collapsed: hasVisibleDockPanels }" ref="modelPillRef" @click.stop="toggleModelMenu"
@@ -817,6 +817,10 @@
                                             <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
                                             <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
                                           </div>
+                                          <button class="model-menu-manage" @click.stop="refreshModels" title="重新拉取模型列表（新模型需要刷新才能看到）" :disabled="refreshingModels">
+                                            <Icon icon="mdi:refresh" width="14" :class="{ spinning: refreshingModels }" />
+                                            <span>{{ refreshingModels ? '刷新中…' : '刷新模型' }}</span>
+                                          </button>
                                           <button class="model-menu-manage" @click.stop="showModelManager = true; showModelMenu = false" title="管理模型">
                                             <Icon icon="mdi:cog-outline" width="14" />
                                             <span>管理模型</span>
@@ -1001,6 +1005,12 @@
                       <span>知识库</span>
                       <span v-if="kbFiles.length" class="kb-drawer-count">{{ kbFiles.length }}</span>
                     </div>
+                    <!-- 通用 / 当前会话 分段：各自独立存储（后端目录隔离），
+                         当前会话的知识库只对本会话生效 -->
+                    <div class="kb-scope-seg">
+                      <button class="kb-scope-btn" :class="{ active: kbScope === 'global' }" @click.stop="toggleKbScope('global')">通用</button>
+                      <button class="kb-scope-btn" :class="{ active: kbScope === 'session' }" @click.stop="toggleKbScope('session')">当前会话</button>
+                    </div>
                     <button class="kb-icon-btn" @click.stop="kbOpen = false" title="收起">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
@@ -1030,31 +1040,53 @@
                         v-for="file in kbFiles"
                         :key="file.id"
                         class="kb-slot-item"
-                        @mouseenter="onKbFileHover(file)"
+                        @mouseenter="onKbFileHover(file, $event)"
                         @mouseleave="onKbFileLeave"
                       >
-                        <div class="kb-slot-box" @click="insertKbRef(file)">
+                        <div class="kb-slot-box" @click.stop="insertKbRef(file)">
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="var(--app-text-faint)" stroke-width="1.5"/><path d="M14 2v6h6" stroke="var(--app-text-faint)" stroke-width="1.5"/></svg>
+                          <!-- 图钉按钮在图标左上角（不遮挡文件名） -->
+                          <button
+                            v-if="kbHoverFile === file.id"
+                            class="kb-pin-btn"
+                            :class="{ active: kbPinnedFile === file.id }"
+                            @click.stop="pinKbGraph(file)"
+                            :title="kbPinnedFile === file.id ? '取消固定图谱' : '固定图谱'"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                          </button>
                           <button class="kb-slot-remove" @click.stop="removeKbFile(file.id)" title="移除">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
                           </button>
                         </div>
-                        <span class="kb-slot-name" :title="file.name" @click="insertKbRef(file)">{{ file.name }}</span>
+                        <span class="kb-slot-name" :title="file.name" @click.stop="insertKbRef(file)">{{ file.name }}</span>
                         <span v-if="file.chunks" class="kb-slot-meta">{{ file.chunks }} 段</span>
-                        <!-- 悬浮知识图谱弹窗 -->
-                        <div
-                          v-if="kbHoverFile === file.id"
-                          class="kg-popup"
-                          @mouseenter="kgPopupHover = true"
-                          @mouseleave="kgPopupHover = false"
-                        >
-                          <KnowledgeGraph
-                            :graph="kbGraph"
-                            :loading="kbGraphLoading"
-                            :error="kbGraphError"
-                            @regenerate="() => fetchKnowledgeGraph(file.name)"
-                          />
-                        </div>
+                        <!-- 悬浮知识图谱弹窗：Teleport 到 body + fixed 坐标定位。
+                            悬浮显示在抽屉左边；点击文件固定钉住；可拖拽移动 -->
+                        <Teleport to="body">
+                          <div
+                            v-if="(kbHoverFile === file.id || kbPinnedFile === file.id)"
+                            class="kg-popup"
+                            :class="{ pinned: kbPinnedFile === file.id }"
+                            :style="{ left: kbPopupPos.x + 'px', top: kbPopupPos.y + 'px' }"
+                            @mouseenter="kgPopupHover = true"
+                            @mouseleave="kgPopupHover = false"
+                          >
+                            <div class="kg-popup-drag" @mousedown.prevent="onKgDragStart" title="拖拽移动">
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M9 5h2M15 5h2M9 12h2M15 12h2M9 19h2M15 19h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                              <span>知识图谱{{ kbPinnedFile === file.id ? '（已固定）' : '' }}</span>
+                              <button class="kg-popup-close" type="button" title="关闭图谱" @mousedown.stop @click.stop="closeKbGraph">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                              </button>
+                            </div>
+                            <KnowledgeGraph
+                              :graph="kbGraph"
+                              :loading="kbGraphLoading"
+                              :error="kbGraphError"
+                              @regenerate="() => fetchKnowledgeGraph(file.name)"
+                            />
+                          </div>
+                        </Teleport>
                       </div>
                       <!-- 添加更多 -->
                       <div class="kb-slot-item kb-slot-add" @click.stop="triggerKbUpload">
@@ -3412,6 +3444,17 @@ function toggleModelMenu() {
   }
 }
 const modelSearch = ref('')
+
+// 刷新模型：重新拉取 /api/models/config + 共享池，新模型立刻出现在下拉里。
+const refreshingModels = ref(false)
+async function refreshModels() {
+  if (refreshingModels.value) return
+  refreshingModels.value = true
+  try {
+    await loadModelCapabilities()
+  } catch (e) { /* 拉取失败保持现状，下次再试 */ }
+  refreshingModels.value = false
+}
 // 搜索过滤后的分组（图1 顶部搜索框）
 const filteredGroupedOptions = computed(() => {
   const q = modelSearch.value.trim().toLowerCase()
@@ -3760,31 +3803,84 @@ const {
   dismissBackgroundTask,
   clearAllBackgroundTasks,
   flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-  todoState, sendSteerMessage,
+  todoState, sendSteerMessage, pushFollowUp,
   questionState, answerQuestion,
   agentStore,
   toggleChat, updateParams,
   groupedMessages, formatChatTime,
   kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,
+  kbScope, toggleKbScope,
   toggleKb, triggerKbUpload, onKbUploadSelected, onKbDrop, loadKb,
   addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize,
   kbGraph, kbGraphLoading, kbGraphError, kbGraphFile, fetchKnowledgeGraph
 } = useChatWidget(props, { renderMarkdown })
 
-// 知识库文件 hover：控制图谱弹窗
+// 知识库文件 hover / 点击：控制图谱弹窗
 const kbHoverFile = ref(null)
+const kbPinnedFile = ref(null) // 点击固定的文件：图谱钉在抽屉左边，移开鼠标不消失
 const kgPopupHover = ref(false)
+const kbPopupPos = ref({ x: 0, y: 0 })
 let kbHoverTimer = null
-function onKbFileHover(file) {
+
+// 弹窗定位到「抽屉左边」：文件项左边缘往左（弹窗宽 380 + 间距 14）
+function positionKgPopup(el) {
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  kbPopupPos.value = {
+    x: Math.max(8, r.left - 394),
+    y: Math.max(8, r.top + r.height / 2 - 140),
+  }
+}
+
+function onKbFileHover(file, e) {
   clearTimeout(kbHoverTimer)
   kbHoverFile.value = file.id
+  positionKgPopup(e?.currentTarget)
   // 每次 hover 都重新生成图谱
   fetchKnowledgeGraph(file.name)
 }
-function onKbFileLeave() {
+
+// 关闭图谱弹窗（右上角 ×）
+function closeKbGraph() {
+  kbPinnedFile.value = null
+  kbHoverFile.value = null
+  kgPopupHover.value = false
+}
+
+// 固定/取消固定图谱（悬浮文件时的图钉按钮）：钉住后移开鼠标不消失，可拖拽
+function pinKbGraph(file) {
+  if (kbPinnedFile.value === file.id) {
+    kbPinnedFile.value = null
+    return
+  }
+  kbPinnedFile.value = file.id
+  kbHoverFile.value = file.id
+}
+
+function onKbFileLeave(e) {
+  // 弹窗已 Teleport 到 body：鼠标移向弹窗时 relatedTarget 是弹窗内元素，
+  // 不能关（否则弹窗永远悬不住）
+  const rt = e?.relatedTarget
+  if (rt && typeof rt.closest === 'function' && rt.closest('.kg-popup')) return
   kbHoverTimer = setTimeout(() => {
-    if (!kgPopupHover.value) kbHoverFile.value = null
+    // 已固定的不隐藏；仅悬浮的移开才关
+    if (!kgPopupHover.value && kbPinnedFile.value === null) kbHoverFile.value = null
   }, 150)
+}
+
+// 图谱弹窗拖拽：按住顶部条拖动
+let kgDrag = null
+function onKgDragStart(e) {
+  kgDrag = { dx: e.clientX - kbPopupPos.value.x, dy: e.clientY - kbPopupPos.value.y }
+  const move = (ev) => {
+    kbPopupPos.value = { x: ev.clientX - kgDrag.dx, y: ev.clientY - kgDrag.dy }
+  }
+  const up = () => {
+    window.removeEventListener('mousemove', move)
+    window.removeEventListener('mouseup', up)
+  }
+  window.addEventListener('mousemove', move)
+  window.addEventListener('mouseup', up)
 }
 
 // 群聊名牌：按 flow 上的 agentId 查角色卡。刷新后 agentId 由后端持久化的
@@ -3901,7 +3997,13 @@ function syncBarClearance() {
   if (el) {
     const inner = el.querySelector('.chat-messages-inner')
     if (inner && (inner.style.getPropertyValue('--bar-clearance') || '0px') !== px) {
+      // ⚠️ 必须在设置 padding 之前判断「是否在底部」：padding 加高后 scrollHeight
+      // 变大，会把原本在底部的位置「挤」成差 N px（>40），后置判断永远 false → 永不重滚。
+      const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
       inner.style.setProperty('--bar-clearance', px)
+      // 悬浮条变高后 padding 增加，滚动位置不动 → 最后一条被条盖住（初始遮挡）。
+      // 原本就在底部（最后一条可见）时重新滚到底，让最后一条露在条下方。
+      if (wasAtBottom) nextTick(() => forceScrollToBottom())
     }
   }
 }
@@ -4424,45 +4526,93 @@ function onFollowUpClick(card) {
   handleSend()
 }
 
-function handleSend() {
-  if (hasPendingAttachments.value) return
+// 插话风格：follow up 送达模型时的口吻（设置面板可配：默认/酒馆/修真/自定义前缀）
+const FOLLOW_UP_STYLES = {
+  plain: (t) => t,
+  tavern: (t) => `【你】${t}`,
+  xianxia: (t) => `【道友】${t}`,
+}
+function applyFollowUpStyle(text) {
+  const s = localStorage.getItem('follow_up_style') || 'plain'
+  if (s === 'custom') {
+    const prefix = (localStorage.getItem('follow_up_custom') || '').trim()
+    return prefix ? `${prefix}${text}` : text
+  }
+  const fn = FOLLOW_UP_STYLES[s]
+  return fn ? fn(text) : text
+}
+
+// 图片/视频分析中发送：气泡先出「分析中」占位，全部分析完成后自动启动工作流
+// （Hermes 式，不用再点一次发送）。pendingSend 存等待自动启动的草稿。
+let pendingSend = null
+
+async function handleSend() {
   // 亲密度 +1（fire-and-forget，失败静默不阻断发送）
   railAuth.incIntimacy()
   // 工作流跑着且是本会话的流：回车是「插话」。
   // 流在别的会话（切会话后旧会话还在跑）：先停掉它再发本会话的新消息，
   // 否则输入会被误当插话喂给别的会话的流（2026-09-06 重大 bug）。
   if (flowState.value.active && runningSessions.value.has(activeSession.value)) {
-      const steerText = userInput.value.trim()
-      if (!steerText) return
+      const followUpText = userInput.value.trim()
+      if (!followUpText) return
       userInput.value = ''
       nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-      const ok = sendSteerMessage(steerText)
-      if (ok) pushChatHistory(steerText)
-      if (!ok) {
-        messages.value.push({
-          id: `steer-fail-${Date.now()}`,
-          kind: 'text',
-          sender: 'user',
-          content: steerText,
-          status: 'steered-fail',
-          timestamp: new Date()
-        })
-        onStreamUpdate?.()
-      }
+      // follow up 秒出：渲染进当前工作流卡末尾（工具时间线下方，竖列），
+      // 不插独立气泡（避免消息流被顶一下）。旧流停掉后主模型自动续上
+      // （skipUserBubble 防重复插气泡）。免费模型首 token 前插话卡队列、
+      // 屏幕零反馈 = 消息被静默吞掉——直接换主模型新起流，历史落盘接上。
+      pushChatHistory(followUpText)
+      // 按设置的插话风格包装后送达模型（设置面板「插话风格」可配）
+      const styled = applyFollowUpStyle(followUpText)
+      pushFollowUp(styled)
+      stopCodeWorkflow().then(() => {
+        startCodeWorkflow(styled, { text: followUpText, attachments: [], skipUserBubble: true }, { model: selectedModel.value })
+      })
       return
     }
   // 本会话没有自己的流：正常发送，直接起本会话的新工作流（多会话并行，无需停别的会话）。
+  const hasAnalyzing = attachments.value.some(a => a.status === 'analyzing')
   const combined = buildOutgoingMessage()
-  if (!combined) return
+  // 空消息拦截，但「只有分析中的图片」不算空（serializeOutgoing 只带 ready 附件，
+  // 分析中图片会被过滤掉——那也得走占位发送，分析完自动启动）
+  if (!combined && !hasAnalyzing) return
   const displayText = userInput.value.trim()
+  const displayAttachments = attachments.value.map(a => ({ ...a }))
+  if (hasAnalyzing) {
+    // 图片/视频分析中：照常发送——气泡先出「分析中」占位，全部分析完成自动启动工作流
+    // （Hermes 式，不用再点一次发送；云端识图几十秒不能把输入框锁死）。
+    pushChatHistory(displayText)
+    messages.value.push({
+      id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      sender: 'user',
+      content: displayText,
+      attachments: displayAttachments,
+      timestamp: new Date()
+    })
+    onStreamUpdate?.()
+    userInput.value = ''
+    nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
+    // 清掉输入区 chip（pendingSend.items 已持有引用，气泡显示不受影响）
+    attachments.value = []
+    pendingSend = { text: displayText, items: displayAttachments }
+    return
+  }
   pushChatHistory(displayText)
-  const displayAttachments = attachments.value.filter(a => a.status === 'ready').map(a => ({ ...a }))
-  clearAttachments()
   userInput.value = ''
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
+  // 占位等待期间用户又主动发新消息：旧占位作废（防分析完自动启动双流）
+  pendingSend = null
+  launchWorkflow(combined, displayText, displayAttachments)
+}
+
+// 真正启动工作流（共享池 / 超长暂存 / startCodeWorkflow 三段，供 handleSend 与
+// 图片分析完成后的自动启动共用）。
+async function launchWorkflow(combined, displayText, displayAttachments, skipUserBubble = false) {
   // 公益免费模型：发消息瞬间就把「用户气泡 + bot 正在思考框」都建出来，
     // 鉴权/配额在后台并行——绝不让首屏等云往返（否则气泡、思考框都要卡到配额回来才显示）
     if (sharedPoolModelIds.value.has(selectedModel.value)) {
+      // 占位自动启动（skipUserBubble）时气泡已由占位发送建好，不再重复插
+      if (!skipUserBubble) {
       const userMsg = {
         id: `sp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         sender: 'user',
@@ -4471,6 +4621,7 @@ function handleSend() {
         timestamp: new Date()
       }
       messages.value.push(userMsg)
+      }
       // bot flow 先即时建出（running + 空 blocks）→「正在思考」扫描线立刻出现
       const flow = reactive({
         id: `sp_flow_${Date.now()}`,
@@ -4512,7 +4663,21 @@ function handleSend() {
       return
     }
     // opts.model = 下拉框当前选中的模型（响应式 ref，watch 保证非空）
-    startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value })
+    // 超长任务（>1500 字）URL 塞不下会 431：先 POST 暂存拿短 prepare_id，
+    // URL 只带 prepare=<id>，task 全文由后端取回（workflow_stash.go）。
+    let prepareId = null
+    if (combined.length > 1500) {
+      try {
+        const res = await fetch('/api/code/workflow/prepare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: combined })
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && data.prepare_id) prepareId = data.prepare_id
+      } catch { /* 暂存失败回退 URL 直传（极端场景，短任务不受影响） */ }
+    }
+    startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value, prepareId, skipUserBubble })
   }
 
   // 确保本机已有云端游客 UID（未登录时公益免费的身份依据）。
@@ -4754,6 +4919,19 @@ function fileToBase64(file) {
 // 用户趁等待打字问问题时，分析一结束就把这句话连同图一起抢发出去，用户根本没
 // 机会确认。跟"+"菜单选图（onAttachFilesSelected）保持一致："先附加，用户自己
 // 决定何时发送"，不再有这个隐藏的自动发送时机。
+// WebView2 桌面版右键菜单粘贴不触发 @paste 事件（浏览器/JS 触发不到原生菜单），
+// 在 @input 里按长度兜底：任何路径进来的内容超 2000 字就转 TXT 附件。
+// 打字是逐字上屏，不可能一次输入事件就超 2000，所以不按 inputType 过滤更稳。
+function onChatInput(e) {
+  adjustInputHeight()
+  const t = (e.target.value || '').trim()
+  if (t.length <= 2000) return
+  e.target.value = ''
+  userInput.value = ''
+  attachPastedText(t)
+  adjustInputHeight()
+}
+
 function handlePaste(e) {
   const items = e.clipboardData?.items
   if (!items) return
@@ -4764,11 +4942,37 @@ function handlePaste(e) {
     if (item.type && item.type.startsWith('video/')) { videoFile = item.getAsFile(); break }
   }
   const file = imageFile || videoFile
-  if (!file) return
-  e.preventDefault()
-  if (flowState.value.active) { showVisionError('工作流运行中，请稍后再粘贴图片/视频'); return }
-  if (file.type.startsWith('video/')) attachVideoFile(file)
-  else attachImageFile(file)
+  if (file) {
+    e.preventDefault()
+    if (flowState.value.active) { showVisionError('工作流运行中，请稍后再粘贴图片/视频'); return }
+    if (file.type.startsWith('video/')) attachVideoFile(file)
+    else attachImageFile(file)
+    return
+  }
+  // 纯文本粘贴：长文本（>2000 字）自动转成 TXT 附件，不刷进输入框——避免
+  // 超长内容撑爆输入框/聊天区，变成附件 chip 可下载、发送时全文进消息。
+  const text = e.clipboardData?.getData('text') || ''
+  if (text.trim().length > 2000) {
+    e.preventDefault()
+    attachPastedText(text)
+  }
+}
+
+// 长文本转「粘贴文本.txt」附件：名字取首行前 14 字（去非法字符），
+// 正文全文保留，发送时由 serializeOutgoing 拼进消息给 agent 看。
+function attachPastedText(text) {
+  const trimmed = text.trim()
+  if (!trimmed) return
+  const firstLine = (trimmed.split('\n')[0] || '').replace(/[\\/:*?"<>|\r\n]/g, '').trim().slice(0, 14)
+  const name = (firstLine || '粘贴文本') + '.txt'
+  attachments.value.push({
+    id: ++attachmentSeq,
+    kind: 'text',
+    name,
+    content: trimmed,
+    status: 'ready',
+    charCount: trimmed.length
+  })
 }
 
 // ==================== "+" 附加菜单：添加文件/照片、添加文件夹 ====================
@@ -4809,6 +5013,31 @@ function clearAttachments() {
 }
 const hasPendingAttachments = computed(() => attachments.value.some(a => a.status === 'analyzing'))
 
+// 图片/视频分析完成检查：pendingSend 里所有附件都处理完（ready/error）时，
+// 用最终内容自动启动工作流——发送时的「分析中」占位气泡就此续上回复。
+function maybeAutoStart() {
+  if (!pendingSend) return
+  const items = pendingSend.items || []
+  if (items.some(a => a.status === 'analyzing')) return
+  const combined = serializeOutgoing(pendingSend.text, items)
+  const text = pendingSend.text
+  pendingSend = null
+  if (!combined) return
+  // skipUserBubble：占位气泡已显示用户消息，工作流启动时不再重复插气泡
+  launchWorkflow(combined, text, items, true)
+}
+
+// 分析完成同步占位气泡：浅拷贝对象与 Vue 代理隔离，直接改属性渲染不更新，
+// 必须整体替换气泡的 attachments 数组触发响应式。
+function syncPendingAttachment(id, status, extra) {
+  for (const m of messages.value) {
+    if (m.attachments && m.attachments.some(a => a.id === id)) {
+      m.attachments = m.attachments.map(a => (a.id === id ? { ...a, ...extra, status } : a))
+      break
+    }
+  }
+}
+
 async function attachImageFile(file) {
   const id = ++attachmentSeq
   const previewUrl = URL.createObjectURL(file)
@@ -4829,11 +5058,17 @@ async function attachImageFile(file) {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || `识图请求失败 (${res.status})`)
     if (!data.text) throw new Error('未返回分析文本')
-    const item = attachments.value.find(a => a.id === id)
+    let item = attachments.value.find(a => a.id === id)
+    if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
     if (item) { item.status = 'ready'; item.analysisText = data.text }
+    syncPendingAttachment(id, 'ready', { analysisText: data.text })
+    maybeAutoStart()
   } catch (err) {
-    const item = attachments.value.find(a => a.id === id)
+    let item = attachments.value.find(a => a.id === id)
+    if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
     if (item) { item.status = 'error'; item.errorMsg = err?.message || '识图失败' }
+    syncPendingAttachment(id, 'error', { errorMsg: err?.message || '识图失败' })
+    maybeAutoStart()
   }
 }
 
@@ -4855,11 +5090,17 @@ async function attachVideoFile(file) {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || `视频理解请求失败 (${res.status})`)
     if (!data.text) throw new Error('未返回分析文本')
-    const item = attachments.value.find(a => a.id === id)
+    let item = attachments.value.find(a => a.id === id)
+    if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
     if (item) { item.status = 'ready'; item.analysisText = data.text }
+    syncPendingAttachment(id, 'ready', { analysisText: data.text })
+    maybeAutoStart()
   } catch (err) {
-    const item = attachments.value.find(a => a.id === id)
+    let item = attachments.value.find(a => a.id === id)
+    if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
     if (item) { item.status = 'error'; item.errorMsg = err?.message || '视频理解失败' }
+    syncPendingAttachment(id, 'error', { errorMsg: err?.message || '视频理解失败' })
+    maybeAutoStart()
   }
 }
 
@@ -4915,6 +5156,7 @@ function serializeOutgoing(typed, atts) {
       if (a.kind === 'image') return `[图片: ${a.name}]\n${a.analysisText || ''}`
       if (a.kind === 'video') return `[视频: ${a.name}]\n${a.analysisText || ''}`
       if (a.kind === 'folder') return `[文件夹: ${a.name}，共 ${a.fileCount} 个文件]\n${a.manifest}`
+      if (a.kind === 'text') return `[文本附件: ${a.name}（${a.charCount} 字）]\n${a.content}`
       // 文本/代码文件：只给文件名，让 agent 自行 read_file，不把内容塞进消息
       return `[文件: ${a.name}]`
     })

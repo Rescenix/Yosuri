@@ -11,6 +11,7 @@
       <div v-else class="attach-chip-icon">
         <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#94a3b8" />
         <Icon v-else-if="att.kind === 'video'" icon="mdi:video-outline" width="20" color="#94a3b8" />
+        <Icon v-else-if="att.kind === 'text'" icon="mdi:file-document-outline" width="20" color="#94a3b8" />
         <span v-else>{{ att.ext }}</span>
       </div>
       <div class="attach-chip-meta">
@@ -18,6 +19,7 @@
         <span v-if="att.status === 'analyzing'" class="attach-chip-status">分析中…</span>
         <span v-else-if="att.status === 'error'" class="attach-chip-status error">{{ att.errorMsg }}</span>
         <span v-else-if="att.kind === 'folder'" class="attach-chip-status">{{ att.fileCount }} 个文件</span>
+        <span v-else-if="att.kind === 'text'" class="attach-chip-status">{{ att.charCount }} 字</span>
       </div>
       <button v-if="removable" class="attach-chip-remove" type="button" @click="$emit('remove', att.id)" title="移除">
         <Icon icon="mdi:close" width="11" />

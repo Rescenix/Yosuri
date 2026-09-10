@@ -185,7 +185,8 @@ function watchInputClearance() {
   const respondApproval = (...a) => currentWF().respondApproval(...a)
   const answerQuestion = (...a) => currentWF().answerQuestion(...a)
   const sendSteerMessage = (...a) => currentWF().sendSteerMessage(...a)
-  function stopCodeWorkflow() { currentWF().stopCodeWorkflow() }
+  const pushFollowUp = (...a) => currentWF().pushFollowUp(...a)
+  function stopCodeWorkflow() { return currentWF().stopCodeWorkflow() }
 
   // 当前会话的流结束等灯维护已由每个 workflow 实例各自的 watch 负责（见 workflowOf）
 
@@ -708,6 +709,8 @@ async function switchSession(id) {
 
   // ===== 知识库抽屉 =====
   const kbOpen = ref(localStorage.getItem('kb_open') === '1')
+  // 知识库分「通用（global）/ 当前会话（session）」两档，各自独立存储（后端目录隔离）
+  const kbScope = ref(localStorage.getItem('kb_scope') || 'global')
   const kbFiles = ref([])
   const kbLoading = ref(false)
   const kbDragOver = ref(false)
@@ -719,11 +722,25 @@ async function switchSession(id) {
     if (kbOpen.value) loadKb()
   }
 
-  // 从后端拉真实知识库清单
+  function toggleKbScope(scope) {
+    if (scope === kbScope.value) return
+    kbScope.value = scope
+    localStorage.setItem('kb_scope', scope)
+    loadKb()
+  }
+
+  // 刷新后抽屉还开着：立即重拉清单，否则文件列表空白（「刷新就消失」的根因）
+  if (kbOpen.value) loadKb()
+
+  // 从后端拉真实知识库清单（按当前 scope：通用=全库，会话=当前会话目录）
   async function loadKb() {
     kbLoading.value = true
     try {
-      const res = await fetch('/api/knowledge/list')
+      const scope = kbScope.value
+      const qs = scope === 'session'
+        ? `?scope=session&session_id=${encodeURIComponent(sessionId.value || '')}`
+        : '?scope=global'
+      const res = await fetch('/api/knowledge/list' + qs)
       if (!res.ok) throw new Error('加载失败')
       const data = await res.json()
       kbFiles.value = (data.files || []).map(f => ({
@@ -731,6 +748,7 @@ async function switchSession(id) {
         name: f.name,
         size: formatKbSize(f.size),
         chunks: f.chunks,
+        scope,
       }))
     } catch (e) {
       kbFiles.value = []
@@ -759,6 +777,8 @@ async function switchSession(id) {
     for (const f of files) {
       const fd = new FormData()
       fd.append('file', f)
+      fd.append('scope', kbScope.value)
+      if (kbScope.value === 'session') fd.append('session_id', sessionId.value || '')
       try {
         const res = await fetch('/api/knowledge/upload', { method: 'POST', body: fd })
         if (!res.ok) {
@@ -781,7 +801,11 @@ async function switchSession(id) {
       await fetch('/api/knowledge/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: id }),
+        body: JSON.stringify({
+          name: id,
+          scope: kbScope.value,
+          session_id: kbScope.value === 'session' ? (sessionId.value || '') : '',
+        }),
       })
       await loadKb()
     } catch (e) {
@@ -865,12 +889,13 @@ async function switchSession(id) {
     dismissBackgroundTask,
     clearAllBackgroundTasks,
     flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-    todoState, sendSteerMessage,
+    todoState, sendSteerMessage, pushFollowUp,
     questionState, answerQuestion,
     agentStore,
     toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime,
     kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,
+    kbScope, toggleKbScope,
     toggleKb, triggerKbUpload, onKbUploadSelected, onKbDrop, loadKb,
     addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize,
     kbGraph, kbGraphLoading, kbGraphError, kbGraphFile, fetchKnowledgeGraph

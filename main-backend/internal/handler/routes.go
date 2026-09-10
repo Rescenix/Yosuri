@@ -79,6 +79,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	workflowRunner := NewWorkflowRunner(chatHandler)
 	// 四态机 Code 工作流（思考/意图/操作/结果，EventSource 直连）
 	r.GET("/api/code/workflow", workflowRunner.HandleCodeWorkflow)
+	// 超长任务暂存（431 根治）：POST 存任务拿短 prepare_id，SSE URL 只带 id
+	r.POST("/api/code/workflow/prepare", HandleWorkflowStashTask)
 	// 悬浮球演示面板：只读旁听同一份四态机事件 + 承载页面本身
 	r.GET("/api/agent/watch", HandleAgentWatch)
 	r.GET("/overlay", HandleOverlayPage)

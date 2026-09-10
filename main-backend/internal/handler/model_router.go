@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -994,12 +995,18 @@ func streamHTTPClient() *http.Client {
 	return streamClientSingleton()
 }
 
+// 用户中途插话触发的中断信号：streamRouterRound 返回它表示「本轮被插话取消」，
+// 主循环据此不报错、下一轮带上插话重新生成（真·中途引导思考）。
+var errSteerInterrupt = errors.New("steer_interrupt")
+
 // streamRouterRound 沿路由链做流式调用。failover 只发生在拿到 200 响应之前
 // （连接失败/非200 秒切下一个）；流一旦开始就不再切换源。
 // 实时把 reasoning_content/content 增量写成 thinking/intent SSE 事件。
 // 返回值里带上实际承接这轮请求的 backend（而不只是个名字字符串），前端要靠它
 // 拿到 vision/context_window/reasoning 这些能力元数据，决定要不要开放识图之类的功能。
-func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any, effort string, staticSum int, reasoningOut *[]map[string]any) (string, []core.ToolCall, int, int, *RouterBackend, error) {
+// interrupt（可 nil）：用户中途插话时关闭该通道 → 本轮模型调用立即取消，返回
+// errSteerInterrupt（非错误信号），主循环下一轮带上插话重新生成——真·中途引导思考。
+func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBackend, msgs []map[string]any, tools []map[string]any, effort string, staticSum int, reasoningOut *[]map[string]any, interrupt <-chan struct{}) (string, []core.ToolCall, int, int, *RouterBackend, error) {
 	// 空链是真实可能的：本地兜底已于 8186699e 移除，一个 Key 都没配时链就是空的。
 	// 不给这条单独的错误信息的话，用户看到的是 "所有模型源不可用：" 后面跟一片空白。
 	if len(backends) == 0 {
@@ -1063,6 +1070,16 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 		var was429 bool
 		for attempt := 0; attempt <= maxTransientRetries; attempt++ {
 			roundCtx, roundCancel := context.WithTimeout(c.Request.Context(), 180*time.Second)
+			// 用户中途插话中断：interrupt 关闭 → 取消本轮请求（流式读取同步中断）
+			if interrupt != nil {
+				go func() {
+					select {
+					case <-interrupt:
+						roundCancel()
+					case <-roundCtx.Done():
+					}
+				}()
+			}
 			httpReq, err := http.NewRequestWithContext(roundCtx, "POST", chatCompletionsURL(b.BaseURL), bytes.NewBuffer(body))
 			if err != nil {
 				roundCancel()
@@ -1078,6 +1095,10 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 			resp, err := client.Do(httpReq)
 			if err != nil {
 				roundCancel()
+				// 用户中途插话触发的取消：非错误，中断本轮等下一轮带上插话重新生成
+				if interrupt != nil && roundCtx.Err() == context.Canceled {
+					return "", nil, 0, 0, nil, errSteerInterrupt
+				}
 				// 连接失败/超时：暂时性故障，计入熔断
 				circuitFail(b)
 				lastErr = err
@@ -1143,6 +1164,10 @@ func (r *WorkflowRunner) streamRouterRound(c *gin.Context, backends []RouterBack
 			resp.Body.Close()
 			roundCancel()
 			if err != nil {
+				// 用户中途插话触发的中断（流式读取中被 roundCtx 取消）：非错误
+				if interrupt != nil && roundCtx.Err() == context.Canceled {
+					return "", nil, 0, 0, nil, errSteerInterrupt
+				}
 				// 流式中途失败（上游推到一半冻住 / 我方 180s 读取超时 / 连接被掐）：
 				// 免费模型源本就不稳定，这种"进行中"的失败不该直接判死整个工作流。
 				// 先发 flow_error 让前端清掉半截 intent/thinking（避免显示残缺回答），

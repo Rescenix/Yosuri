@@ -105,7 +105,23 @@
               </div>
               <div class="settings-section-desc">当前仅覆盖侧栏、账户菜单、登录等核心界面，其余界面陆续接入。</div>
 
-                            <div class="settings-section-title" style="margin-top: 18px;">启动</div>
+              <div class="settings-section-title" style="margin-top: 18px;">插话风格</div>
+              <div class="settings-section-desc">工作流运行中你发 follow up 时，消息以什么口吻送达给模型——按场景/受众适配（如酒馆 RP、修真世界观；自定义前缀可适配任意群体）。</div>
+              <div class="param-row">
+                <span class="param-label">风格</span>
+                <div class="seg-control">
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'plain' }" type="button" @click="setFollowUpStyle('plain')">默认</button>
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'tavern' }" type="button" @click="setFollowUpStyle('tavern')">酒馆</button>
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'xianxia' }" type="button" @click="setFollowUpStyle('xianxia')">修真</button>
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'custom' }" type="button" @click="setFollowUpStyle('custom')">自定义</button>
+                </div>
+              </div>
+              <div v-if="followUpStyle === 'custom'" class="param-row">
+                <span class="param-label">自定义前缀</span>
+                <input class="settings-text-input" v-model="followUpCustom" @change="saveFollowUpCustom" placeholder="如：【道友】" style="flex:1; min-width:0;" />
+              </div>
+
+              <div class="settings-section-title" style="margin-top: 18px;">启动</div>
                             <div class="profile-actions" style="margin-top: 6px; align-items: center;">
                               <label class="param-switch" title="关闭后开机不再自动启动 Yosuri（下次开机生效）">
                                 <input type="checkbox" v-model="autoStartOn" :disabled="!autoStartSupported" @change="onAutoStartChange" />
@@ -1607,6 +1623,17 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const { isZh, setLocale } = useI18n()
+
+// 插话风格：follow up 送达模型时的口吻（默认/酒馆/修真/小学生/自定义前缀）
+const followUpStyle = ref(localStorage.getItem('follow_up_style') || 'plain')
+const followUpCustom = ref(localStorage.getItem('follow_up_custom') || '')
+function setFollowUpStyle(s) {
+  followUpStyle.value = s
+  localStorage.setItem('follow_up_style', s)
+}
+function saveFollowUpCustom() {
+  localStorage.setItem('follow_up_custom', (followUpCustom.value || '').trim())
+}
 
 // 左侧边栏当前 tab：默认落在第一个 tab「通用/语言」，不再写死模型页
 const activeTab = ref(props.defaultTab || 'general')

@@ -209,9 +209,14 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                 // 群聊：agent_id 命中后端角色卡时人设由注册表注入，persona 参数不再传
                 const agentQs = agentId ? `&agent_id=${encodeURIComponent(agentId)}` : ''
                 const personaQs = agentId ? '' : `&persona=${encodeURIComponent(_personaParam())}`
+                // 超长任务：handleSend 已把 task POST 到后端暂存并拿到短 prepare_id，
+                // URL 只带 prepare=<id>（根治 431 请求头超限），task 全文仍留在 flow.task。
+                const taskQs = opts.prepareId
+                    ? `prepare=${encodeURIComponent(opts.prepareId)}`
+                    : `task=${encodeURIComponent(task)}`
                 const url = opts.resumeId
                     ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`
-                    : `/api/code/workflow?task=${encodeURIComponent(task)}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}${personaQs}${agentQs}`
+                    : `/api/code/workflow?${taskQs}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}${personaQs}${agentQs}`
         // 人设随每次新工作流发送（续跑分支不传：检查点 msgs[0] 已含当初完整系统提示词）。
         es = new EventSource(url)
 
@@ -885,6 +890,15 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         closeStream()
             }
 
+    // follow up 竖列显示：直接渲染进当前工作流卡的末尾（工具时间线下方），
+    // 不插独立用户气泡（避免消息流被顶一下）。停流换主模型由调用方负责。
+    function pushFollowUp(text) {
+        text = (text || '').trim()
+        if (!text || !currentFlow) return
+        currentFlow.blocks.push({ type: 'steer', text })
+        onStreamUpdate?.()
+    }
+
     // 中途插话：工作流跑着的时候塞一条消息，不用等它完全停下。
     // 依赖 currentFlow.workflowId（由 workflow_start 事件回填）定位正在跑的那个工作流；
     // 还没拿到 workflow_id（第一轮模型响应之前的极短窗口）就直接失败，调用方据此提示重试。
@@ -947,7 +961,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
 
     return {
         flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow,
-                todoState, sendSteerMessage, questionState, answerQuestion
+                todoState, sendSteerMessage, pushFollowUp, questionState, answerQuestion
     }
 }
 

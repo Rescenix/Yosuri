@@ -190,7 +190,13 @@
         >
           <div class="flow-summary-main">
             <Icon icon="mdi:console" width="13" class="flow-summary-icon" />
-            <span class="flow-summary-text">{{ groupSummaryTitle(group) }}</span>
+            <span class="flow-summary-text">
+              <!-- 概要栏外显「当前正在执行的指令」，指令切换时淡入淡出；
+                   全部命令/思考完成才收束成摘要（groupSummaryTitle 兜底态） -->
+              <Transition name="cmd-fade" mode="out-in">
+                <span :key="groupSummaryKey(group)">{{ groupSummaryTitle(group) }}</span>
+              </Transition>
+            </span>
           </div>
           <span class="flow-chevron" :class="{ open: isSummaryExpanded(gIdx) }">›</span>
         </div>
@@ -767,15 +773,37 @@ function toggleSummary(group, index) {
 // 各类型 block 统计（按组）
 // 概要栏徽章已移除，计数函数一并删除；展开/收起只由用户点击控制。
 
+// 概要栏外显「当前指令」：取组内最后一个 running/generating 的块（不是简单取 last——
+// 命令流式生成时是 generating 状态，旧实现只认 running 会提前收束成「运行了多个命令」）。
+function currentActiveBlock(group) {
+  const blocks = group.blocks || []
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const s = blocks[i].status
+    if (s === 'running' || s === 'generating') return blocks[i]
+  }
+  return null
+}
+
 function groupSummaryTitle(group) {
-  const running = group.blocks.some(b => b.status === 'running')
-  if (running) {
-    const last = group.blocks[group.blocks.length - 1]
-    if (last?.type === 'tool') return actionText(last)
-    if (last?.type === 'thinking') return '正在思考…'
+  const cur = currentActiveBlock(group)
+  if (cur) {
+    if (cur.type === 'tool') return actionText(cur)
+    if (cur.type === 'thinking') return '正在思考…'
     return 'Agent 正在处理…'
   }
+  // 全部命令/思考都完成了，才收束成摘要
   return '运行了多个命令'
+}
+
+// 指令切换淡入淡出的 key：流式生成（generating）中 key 固定防闪；
+// 命令确定/执行中/下一条指令切换时以「块 id + 内容」为 key → out-in 淡出旧指令淡入新指令。
+function groupSummaryKey(group) {
+  const cur = currentActiveBlock(group)
+  if (!cur) return 'done'
+  if (cur.type === 'thinking') return `think:${cur.id || cur.startTime || 0}`
+  const cmd = String((cur.args && cur.args.command) || '').trim()
+  if (cur.status === 'generating') return `tool-gen:${cur.id || cur.startTime || 0}`
+  return `tool:${cur.id || cur.startTime || 0}:${cmd}`
 }
 
 // 收起态思考行的一行预览：取首个非空行、压掉空白、截断
@@ -2100,6 +2128,9 @@ function toolBodyText(b) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 概要栏当前指令切换淡入淡出 */
+.cmd-fade-enter-active, .cmd-fade-leave-active { transition: opacity 0.18s ease; }
+.cmd-fade-enter-from, .cmd-fade-leave-to { opacity: 0; }
 .flow-tool-counts {
   flex-shrink: 0;
   display: inline-flex;

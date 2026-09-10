@@ -10,17 +10,17 @@
     <template v-if="!collapsed">
       <div v-if="question.options.length" class="question-bar-options">
         <button
-          v-for="(opt, i) in question.options"
-          :key="opt.value || i"
+          v-for="(item, i) in orderedOptions"
+          :key="item.opt.value || item.origIdx"
           class="question-option"
-          :class="{ checked: isChecked(opt.value) }"
+          :class="{ checked: isChecked(item.opt.value) }"
           type="button"
           :disabled="question.submitting"
-          @click="onToggle(opt.value)"
+          @click="onToggle(item.opt.value)"
         >
           <span class="question-option-key">{{ optionKey(i) }}</span>
-          <span class="question-option-label">{{ optionLabel(opt.label, i) }}</span>
-          <span v-if="opt.recommended" class="question-option-rec">推荐</span>
+          <span class="question-option-label">{{ optionLabel(item.opt.label, item.origIdx) }}</span>
+          <span v-if="item.opt.recommended" class="question-option-rec">推荐</span>
         </button>
         <form v-if="question.allowOther" class="question-other-row" @submit.prevent="onConfirm">
           <span class="question-option-key">{{ optionKey(question.options.length) }}</span>
@@ -61,12 +61,20 @@
 
 <script setup>
 import { Icon } from '@iconify/vue'
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 const props = defineProps({
   question: { type: Object, required: true }
 })
 const emit = defineEmits(['answer'])
+
+// 推荐选项置顶：带 recommended 标记的项稳定排到最前（其余保持原序），
+// 序号按排序后位置显示，label 去字母前缀按原始位置（避免排序后 A/B 错位）。
+const orderedOptions = computed(() => {
+  const list = props.question.options.map((opt, origIdx) => ({ opt, origIdx }))
+  list.sort((a, b) => (b.opt.recommended ? 1 : 0) - (a.opt.recommended ? 1 : 0))
+  return list
+})
 
 const selected = ref([])
 const freeText = ref('')
@@ -110,9 +118,10 @@ function onKey(event) {
   }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
   const i = event.key.toUpperCase().charCodeAt(0) - 65
-  if (i >= 0 && i < props.question.options.length) {
+  const list = orderedOptions.value
+  if (i >= 0 && i < list.length) {
     event.preventDefault()
-    onToggle(props.question.options[i].value)
+    onToggle(list[i].opt.value)
   }
 }
 

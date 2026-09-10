@@ -27,6 +27,14 @@ func Dir() string {
 	return filepath.Join(home, "rescene_data", "knowledge")
 }
 
+var sidCleanRe = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+
+// SessionDir 会话级知识库目录（scope=session 时用，按 session_id 隔离）。
+// 只允许字母数字/下划线/短横，防路径穿越。
+func SessionDir(sessionID string) string {
+	return filepath.Join(Dir(), "sessions", sidCleanRe.ReplaceAllString(sessionID, "_"))
+}
+
 // SupportedExts 支持的扩展名（小写，含点）。
 var SupportedExts = map[string]bool{
 	".md": true, ".markdown": true, ".txt": true,
@@ -48,9 +56,8 @@ type FileMeta struct {
 	Chunks  int
 }
 
-// ListFiles 扫描知识库目录，返回支持格式的文件清单（按名称排序）。
-func ListFiles() []FileMeta {
-	dir := Dir()
+// ListFilesIn 扫描指定目录（知识库根或其子目录），返回支持格式的文件清单（按名称排序）。
+func ListFilesIn(dir string) []FileMeta {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -78,12 +85,25 @@ func ListFiles() []FileMeta {
 	return out
 }
 
-// walkFiles 递归收集所有支持格式文件的绝对路径（含子目录）。
+// ListFiles 扫描知识库根目录（兼容既有调用方）。
+func ListFiles() []FileMeta {
+	return ListFilesIn(Dir())
+}
+
+// walkFiles 递归收集所有支持格式文件的绝对路径（含子目录），
+// 但跳过 sessions/（会话级知识库，不进全局检索）。
 func walkFiles() []string {
 	dir := Dir()
+	sessionsRoot := filepath.Join(dir, "sessions")
 	var out []string
 	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() {
+		if err != nil || info == nil {
+			return nil
+		}
+		if info.IsDir() {
+			if p == sessionsRoot {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if SupportedExts[strings.ToLower(filepath.Ext(p))] {
