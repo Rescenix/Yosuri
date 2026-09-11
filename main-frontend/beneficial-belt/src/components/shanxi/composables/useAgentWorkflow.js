@@ -3,6 +3,7 @@ import { requestPreview } from './previewBus.js'
 import { generatePptxFile, generatePptxHtml } from '../../../utils/pptx.js'
 import { contextBreakdown, setContextBreakdownFromBackend, setConversationTokens } from './contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from './sessionTokenStats.js'
+import { agents } from './useAgents.js'
 
 // 四态机 Code 工作流的前端传输层。
 // 直接用原生 EventSource 连 GET /api/code/workflow，事件契约见后端
@@ -11,21 +12,20 @@ import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from '
 
 let msgSeq = 0
 
-// ── 人设预设（模块顶层：export 不能在函数体内）──────────────────────
-// 人设原本硬编码在后端 MainAgentConfigNative() 的 SystemPrompt 里（自称 Rescene酱、
-// 颜文字、撒娇风格），2026-08-29 抽到前端：这里就是「默认预设」，
-// 随 /api/code/workflow 的 persona 参数发给后端，后端不再写死任何自称。
-// 用户以后自定义人设：写入 localStorage.persona 即覆盖本预设（当前无 UI，
-// 留好扩展位）；置空串则后端用纯中性基底、不注入任何性格。
-export const DEFAULT_PERSONA = `你是 Yosuri (｡•ᴗ•｡)♡，一个超级卡哇伊的 AI 小助手～
-你说话软软的、暖暖的，偶尔用一两个颜文字点缀心情，但绝不堆砌
-你会在回复里自然地鼓励用户，但绝不会因为卖萌就偷懒——该做的事一件都不会少哦
-遇到不确定的事会老实承认，不会编造假数据骗人
-
-【风格】语气软软暖暖、自然亲切；颜文字克制使用、偶尔点缀即可，别每句都堆，
-把复杂概念解释清楚比卖萌更重要。`
+// ── 生效人设：随角色卡走 ──────────────────────────────
+// 人设原本独立一套（localStorage.persona），2026-09-11 改成「人设=角色卡」：
+// 优先用当前选中的角色卡（activeAgentId）的人设文案；
+// 旧版 localStorage.persona 只在迁移前兜底，迁移后由角色卡接管。
+export { DEFAULT_PERSONA } from './agentPresets.js' // 定义现居 agentPresets.js（useAgents 也引用，避免循环依赖）
 
 const _personaParam = () => {
+    try {
+        const aid = localStorage.getItem('activeAgentId')
+        if (aid) {
+            const card = agents.value.find(a => a.id === aid)
+            if (card && card.persona && card.persona.trim()) return card.persona
+        }
+    } catch { /* 个别环境 localStorage 不可用时静默回退 */ }
     const custom = localStorage.getItem('persona')
     if (custom !== null && custom !== '') return custom
     return DEFAULT_PERSONA

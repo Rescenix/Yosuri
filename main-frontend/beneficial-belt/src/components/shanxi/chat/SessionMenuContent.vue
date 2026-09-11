@@ -6,11 +6,11 @@
             <span class="smc-new-session-icon">
               <Icon icon="mdi:chat-plus-outline" width="18" />
             </span>
-            <span>{{ t('nav.newSession') }}</span>
+            <span>{{ tr('nav.newSession') }}</span>
           </button>
-          <button class="smc-nav-item" type="button" @click="emit('open-scheduled-tasks')" title="定时任务">
+          <button class="smc-nav-item" type="button" @click="emit('open-scheduled-tasks')" :title="tr('定时任务')">
             <Icon icon="mdi:clock-outline" width="18" />
-            <span>{{ t('nav.scheduledTasks') }}</span>
+            <span>{{ tr('nav.scheduledTasks') }}</span>
           </button>
         </div>
 
@@ -21,7 +21,7 @@
       <div v-if="pinnedFolders.length" class="smc-section">
         <div class="smc-section-label">
           <Icon icon="mdi:pin" width="14" color="var(--app-accent)" />
-          <span>{{ t('nav.pinned') }}</span>
+          <span>{{ tr('nav.pinned') }}</span>
         </div>
         <div v-for="f in pinnedFolders" :key="'pin_' + f.name" class="smc-folder">
           <div
@@ -48,13 +48,13 @@
                 v-if="projectForName(f.name)"
                 class="smc-project-new-chat"
                 type="button"
-                title="在此项目中新建对话"
-                aria-label="在此项目中新建对话"
+                :title="tr('在此项目中新建对话')"
+                :aria-label="tr('在此项目中新建对话')"
                 @click.stop="newSessionForProject(f.name)"
               >
                 <Icon icon="mdi:message-plus-outline" width="16" />
               </button>
-              <button class="smc-folder-menu-btn" type="button" title="更多" aria-label="更多" @click.stop="toggleGroupMenu(f.name, $event)">
+              <button class="smc-folder-menu-btn" type="button" :title="tr('更多')" :aria-label="tr('更多')" @click.stop="toggleGroupMenu(f.name, $event)">
                 <Icon icon="mdi:dots-horizontal" width="16" />
               </button>
             </div>
@@ -99,7 +99,7 @@
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
               <div v-if="!bulkMode && editingId !== s.id" class="smc-row-menu-wrap" :class="{ visible: hoveredId === s.id || openMenuId === s.id }">
-                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
+                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" :title="tr('更多')">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
               </div>
@@ -111,8 +111,8 @@
       <!-- 项目：按工作目录分组 -->
             <div class="smc-section">
               <div class="smc-section-label smc-section-projects">
-                        <span>{{ t('nav.projects') }}</span>
-                        <button class="smc-project-add" type="button" title="新建对话" aria-label="新建对话" @click="onClickNewSession">
+                        <span>{{ tr('nav.projects') }}</span>
+                        <button class="smc-project-add" type="button" :title="tr('新建对话')" :aria-label="tr('新建对话')" @click="onClickNewSession">
                           <Icon icon="mdi:chat-plus-outline" width="18" />
                         </button>
                       </div>
@@ -144,17 +144,17 @@
                 v-if="projectForName(grp.name)"
                 class="smc-project-new-chat"
                 type="button"
-                title="在此项目中新建对话"
-                aria-label="在此项目中新建对话"
+                :title="tr('在此项目中新建对话')"
+                :aria-label="tr('在此项目中新建对话')"
                 @click.stop="newSessionForProject(grp.name)"
               >
                 <Icon icon="mdi:message-plus-outline" width="16" />
               </button>
-              <button class="smc-folder-menu-btn" type="button" title="更多" aria-label="更多" @click.stop="toggleGroupMenu(grp.name, $event)">
+              <button class="smc-folder-menu-btn" type="button" :title="tr('更多')" :aria-label="tr('更多')" @click.stop="toggleGroupMenu(grp.name, $event)">
                 <Icon icon="mdi:dots-horizontal" width="16" />
               </button>
             </div>
-            <button v-if="bulkMode" class="smc-group-delete" type="button" title="删除项目（含其下所有会话）" @click.stop="onDeleteProject(grp.name)">
+            <button v-if="bulkMode" class="smc-group-delete" type="button" :title="tr('删除项目（含其下所有会话）')" @click.stop="onDeleteProject(grp.name)">
               <Icon icon="mdi:trash-can-outline" width="15" />
             </button>
           </div>
@@ -198,7 +198,7 @@
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
               <div v-if="!bulkMode && editingId !== s.id" class="smc-row-menu-wrap" :class="{ visible: hoveredId === s.id || openMenuId === s.id }">
-                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
+                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" :title="tr('更多')">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
               </div>
@@ -224,7 +224,7 @@
                 color="var(--app-text-faint)"
               />
             </span>
-            <span class="smc-folder-name" style="color:var(--app-text-faint)">{{ t('nav.ungrouped') }}</span>
+            <span class="smc-folder-name" style="color:var(--app-text-faint)">{{ tr('nav.ungrouped') }}</span>
           </div>
           <div v-if="showOrphan" class="smc-folder-children">
             <div
@@ -266,7 +266,7 @@
               <Transition name="smc-title-swap" mode="out-in"><span v-if="editingId !== s.id" :key="s.name" class="smc-session-name">{{ s.name }}</span></Transition>
               <span v-if="editingId !== s.id" class="smc-session-time">{{ fmtTime(s.updatedAt) }}</span>
               <div v-if="!bulkMode && editingId !== s.id" class="smc-row-menu-wrap" :class="{ visible: hoveredId === s.id || openMenuId === s.id }">
-                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" title="更多">
+                <button class="smc-row-menu-btn" @click.stop="toggleMenu(s, $event)" :title="tr('更多')">
                   <Icon icon="mdi:dots-horizontal" width="16" />
                 </button>
               </div>
@@ -280,23 +280,23 @@
     <!-- 批量管理操作条 -->
     <div v-if="bulkMode" class="smc-bulk-bar">
       <button class="smc-bulk-action" type="button" @click="toggleSelectAllBulk">
-        {{ allBulkSelected ? '取消全选' : '全选' }}
+        {{ allBulkSelected ? tr('取消全选') : tr('全选') }}
       </button>
-      <span class="smc-bulk-count">{{ bulkSelected.size }} 个已选</span>
-      <button class="smc-bulk-action danger" type="button" :disabled="!bulkSelected.size" @click="onBulkDelete">删除</button>
-      <button class="smc-bulk-action" type="button" @click="toggleBulkMode">完成</button>
+      <span class="smc-bulk-count">{{ bulkSelected.size }}{{ tr('个已选') }}</span>
+      <button class="smc-bulk-action danger" type="button" :disabled="!bulkSelected.size" @click="onBulkDelete">{{ tr('删除') }}</button>
+      <button class="smc-bulk-action" type="button" @click="toggleBulkMode">{{ tr('完成') }}</button>
     </div>
 
     <!-- footer -->
     <div class="fm-footer" ref="footerRef">
-          <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" title="点击查看账户">
+          <div class="fm-user" ref="userRef" @click.stop="toggleUserMenu" :title="tr('点击查看账户')">
             <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="fm-user-avatar" alt="avatar" />
             <span v-else class="fm-user-avatar fm-user-avatar-fallback">{{ avatarFallback }}</span>
             <span class="fm-user-id">
-              <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : t('account.notLoggedIn') }}</span>
+              <span class="fm-user-name">{{ auth.isLoggedIn.value ? auth.displayName.value : tr('account.notLoggedIn') }}</span>
             </span>
           </div>
-          <button class="fm-footer-settings" type="button" title="设置" @click.stop="$emit('open-settings')">
+          <button class="fm-footer-settings" type="button" :title="tr('设置')" @click.stop="$emit('open-settings')">
             <Icon icon="mdi:cog-outline" width="18" />
           </button>
         </div>
@@ -311,18 +311,18 @@
             <div class="smc-avatar-shell">
               <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="smc-user-avatar" alt="avatar" />
               <span v-else class="smc-user-avatar-fallback">{{ avatarFallback }}</span>
-              <i class="smc-online-dot" title="在线"></i>
+              <i class="smc-online-dot" :title="tr('在线')"></i>
             </div>
             <div class="smc-user-card-name">
               <span class="smc-profile-kicker">RESCENE IDENTITY</span>
-              <strong>{{ auth.name.value || auth.login.value || t('login.localGuest') }}</strong>
+              <strong>{{ auth.name.value || auth.login.value || tr('login.localGuest') }}</strong>
               <div class="smc-profile-meta">
                 <span v-if="auth.uid.value">UID {{ auth.uid.value }}</span>
-                <span>本地 AI 档案</span>
+                <span>{{ tr('本地 AI 档案') }}</span>
               </div>
             </div>
-            <button class="smc-profile-share" type="button" aria-label="分享角色卡" @click="shareCard"><Icon icon="mdi:share-variant-outline" width="18" /></button>
-            <button class="smc-profile-close" type="button" aria-label="关闭角色卡" @click="showProfileCard = false"><Icon icon="mdi:close" width="18" /></button>
+            <button class="smc-profile-share" type="button" :aria-label="tr('分享角色卡')" @click="shareCard"><Icon icon="mdi:share-variant-outline" width="18" /></button>
+            <button class="smc-profile-close" type="button" :aria-label="tr('关闭角色卡')" @click="showProfileCard = false"><Icon icon="mdi:close" width="18" /></button>
           </header>
           <div v-if="auth.authError.value" class="smc-auth-warn"><Icon icon="mdi:cloud-alert-outline" width="15" />{{ auth.authError.value }}</div>
           <div v-if="evolve" class="smc-evolve">
@@ -336,11 +336,11 @@
             <div class="smc-xp-track" role="progressbar" :aria-valuenow="xpProgress" aria-valuemin="0" aria-valuemax="100">
               <i :style="{ width: xpProgress + '%' }"></i>
             </div>
-            <div class="smc-xp-copy"><span>本级进度 {{ xpProgress }}%</span><span>距 LV {{ (evolve.level || 1) + 1 }} 还需 {{ xpRemaining }} XP</span></div>
+            <div class="smc-xp-copy"><span>{{ tr('本级进度') }}{{ xpProgress }}%</span><span>{{ tr('距 LV') }}{{ (evolve.level || 1) + 1 }}{{ tr('还需') }}{{ xpRemaining }} XP</span></div>
 
             <div class="smc-profile-dashboard">
               <div class="smc-radar-wrap">
-                <span class="smc-panel-label">能力轮廓</span>
+                <span class="smc-panel-label">{{ tr('能力轮廓') }}</span>
                 <svg viewBox="0 0 200 200" class="smc-radar">
                   <polygon :points="evoPoints(1)" class="smc-radar-grid smc-radar-grid-1" />
                   <polygon :points="evoPoints(0.66)" class="smc-radar-grid smc-radar-grid-2" />
@@ -354,7 +354,7 @@
                 </svg>
               </div>
               <div class="smc-ability-list">
-                <span class="smc-panel-label">实时能力值</span>
+                <span class="smc-panel-label">{{ tr('实时能力值') }}</span>
                 <div v-for="a in EVO_AXES" :key="a.key" class="smc-ability-row">
                   <div><i :style="{ background: a.color }"></i><span>{{ a.label }}</span><b>{{ evolveNum()[a.key] || 0 }}<small v-if="a.key === 'success'">%</small></b></div>
                   <span class="smc-ability-track"><i :style="{ width: Math.max(2, evolveNum()[a.key] || 0) + '%', background: a.color }"></i></span>
@@ -363,21 +363,21 @@
             </div>
 
             <div class="smc-career-stats">
-              <div><Icon icon="mdi:file-check-outline" width="17" /><span><b>{{ evolve.outputs || 0 }}</b><small>真实产出</small></span></div>
-              <div><Icon icon="mdi:puzzle-outline" width="17" /><span><b>{{ evolve.skills || 0 }}</b><small>已学技能</small></span></div>
-              <div><Icon icon="mdi:brain" width="17" /><span><b>{{ evolve.memories || 0 }}</b><small>记忆沉淀</small></span></div>
-              <div><Icon icon="mdi:chart-timeline-variant-shimmer" width="17" /><span><b>{{ evolve.refines || 0 }}</b><small>自我迭代</small></span></div>
+              <div><Icon icon="mdi:file-check-outline" width="17" /><span><b>{{ evolve.outputs || 0 }}</b><small>{{ tr('真实产出') }}</small></span></div>
+              <div><Icon icon="mdi:puzzle-outline" width="17" /><span><b>{{ evolve.skills || 0 }}</b><small>{{ tr('已学技能') }}</small></span></div>
+              <div><Icon icon="mdi:brain" width="17" /><span><b>{{ evolve.memories || 0 }}</b><small>{{ tr('记忆沉淀') }}</small></span></div>
+              <div><Icon icon="mdi:chart-timeline-variant-shimmer" width="17" /><span><b>{{ evolve.refines || 0 }}</b><small>{{ tr('自我迭代') }}</small></span></div>
             </div>
           </div>
-          <div v-else class="smc-profile-loading"><i></i><span>正在读取成长档案…</span></div>
+          <div v-else class="smc-profile-loading"><i></i><span>{{ tr('正在读取成长档案…') }}</span></div>
           <footer class="smc-profile-actions">
-                      <span><Icon icon="mdi:shield-check-outline" width="15" /> 数据来自真实使用记录</span>
+                      <span><Icon icon="mdi:shield-check-outline" width="15" /> {{ tr('数据来自真实使用记录') }}</span>
                       <div class="smc-profile-actions-right">
                         <button class="smc-user-card-item" @click="showProfileCard = false; $emit('open-mail')">
-                          <Icon icon="mdi:email-outline" width="16" />通知
+                          <Icon icon="mdi:email-outline" width="16" />{{ tr('通知') }}
                           <span v-if="notifCount > 0" class="fm-mail-badge">{{ notifCount > 99 ? '99+' : notifCount }}</span>
                         </button>
-                        <button v-if="isLoggedIn" class="smc-user-card-item danger" @click="logout"><Icon icon="mdi:logout-variant" width="16" />退出登录</button>
+                        <button v-if="isLoggedIn" class="smc-user-card-item danger" @click="logout"><Icon icon="mdi:logout-variant" width="16" />{{ tr('退出登录') }}</button>
                       </div>
                     </footer>
       </div>
@@ -392,30 +392,30 @@
           <header class="smc-login-head">
             <div class="smc-login-title">
               <span class="smc-profile-kicker">RESCENE CLOUD</span>
-              <strong>{{ rcMode === 'login' ? t('login.title') : t('login.registerTitle') }}</strong>
+              <strong>{{ rcMode === 'login' ? tr('login.title') : tr('login.registerTitle') }}</strong>
             </div>
-            <button class="smc-profile-close" type="button" aria-label="关闭登录" @click="showUserMenu = false"><Icon icon="mdi:close" width="18" /></button>
+            <button class="smc-profile-close" type="button" :aria-label="tr('关闭登录')" @click="showUserMenu = false"><Icon icon="mdi:close" width="18" /></button>
           </header>
           <div class="smc-rc-login">
-                      <input v-model="rcUser" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.account') : t('login.username')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
-                      <input v-model="rcPwd" type="password" class="smc-rc-input" :placeholder="rcMode === 'login' ? t('login.password') : t('login.passwordHint')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
-                      <input v-if="rcMode === 'register'" v-model="rcPwd2" type="password" class="smc-rc-input" :placeholder="t('login.confirmPasswordHint')" @keyup.enter="registerResceneCloud()" />
+                      <input v-model="rcUser" class="smc-rc-input" :placeholder="rcMode === 'login' ? tr('login.account') : tr('login.username')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+                      <input v-model="rcPwd" type="password" class="smc-rc-input" :placeholder="rcMode === 'login' ? tr('login.password') : tr('login.passwordHint')" @keyup.enter="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()" />
+                      <input v-if="rcMode === 'register'" v-model="rcPwd2" type="password" class="smc-rc-input" :placeholder="tr('login.confirmPasswordHint')" @keyup.enter="registerResceneCloud()" />
                       <div v-if="rcMode === 'login'" class="smc-rc-captcha">
-                        <input v-model="rcCaptchaCode" class="smc-rc-input" style="flex:1" :placeholder="t('login.captcha')" maxlength="4" @keyup.enter="loginResceneCloud()" />
-                        <div class="smc-rc-captcha-img" :title="t('login.captchaRefresh')" @click="loadCaptcha">
+                        <input v-model="rcCaptchaCode" class="smc-rc-input" style="flex:1" :placeholder="tr('login.captcha')" maxlength="4" @keyup.enter="loginResceneCloud()" />
+                        <div class="smc-rc-captcha-img" :title="tr('login.captchaRefresh')" @click="loadCaptcha">
                           <img v-if="rcCaptchaImg" :src="rcCaptchaImg" alt="captcha" />
-                          <span v-else class="smc-rc-captcha-loading">{{ t('login.captchaLoadFail') }}</span>
+                          <span v-else class="smc-rc-captcha-loading">{{ tr('login.captchaLoadFail') }}</span>
                         </div>
                       </div>
-                      <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? (isZh ? '处理中…' : 'Loading…') : (rcMode === 'login' ? t('login.submit') : t('login.registerSubmit')) }}</button>
+                      <button class="smc-rc-btn" :disabled="rcLoading" @click="rcMode === 'login' ? loginResceneCloud() : registerResceneCloud()">{{ rcLoading ? (isZh ? tr('处理中…') : 'Loading…') : (rcMode === 'login' ? tr('login.submit') : tr('login.registerSubmit')) }}</button>
             <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
             <div class="smc-rc-hint">
-                          <template v-if="rcMode === 'login'">{{ t('login.noAccount') }}<a class="smc-rc-link" :href="'https://yosuri.com'" target="_blank" rel="noopener">{{ t('login.registerLink') }}</a></template>
-                                        <template v-else>{{ t('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; loadCaptcha()">{{ t('login.loginLink') }}</a></template>
+                          <template v-if="rcMode === 'login'">{{ tr('login.noAccount') }}<a class="smc-rc-link" :href="'https://yosuri.com'" target="_blank" rel="noopener">{{ tr('login.registerLink') }}</a></template>
+                                        <template v-else>{{ tr('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; loadCaptcha()">{{ tr('login.loginLink') }}</a></template>
                         </div>
           </div>
           <div class="smc-login-footer">
-            <span><Icon icon="mdi:shield-account-outline" width="15" /> {{ t('login.footer') }}</span>
+            <span><Icon icon="mdi:shield-account-outline" width="15" /> {{ tr('login.footer') }}</span>
           </div>
         </div>
       </template>
@@ -428,44 +428,44 @@
         <div class="smc-account-menu" :style="accountMenuStyle" @click.stop>
           <button class="smc-account-item" type="button" @click="openProfileCard">
             <Icon icon="mdi:card-account-details-outline" width="18" />
-            <span>{{ t('account.menu.profileCard') }}</span>
+            <span>{{ tr('account.menu.profileCard') }}</span>
           </button>
           <template v-if="!isLoggedIn">
             <button class="smc-account-item" type="button" @click="openLoginPanel">
               <Icon icon="mdi:login-variant" width="18" />
-              <span>{{ t('account.menu.login') }}</span>
+              <span>{{ tr('account.menu.login') }}</span>
             </button>
             <button class="smc-account-item" type="button" @click="openRegisterPanel">
                           <Icon icon="mdi:web" width="18" />
-                          <span>{{ t('account.menu.register') }}</span>
+                          <span>{{ tr('account.menu.register') }}</span>
                         </button>
           </template>
           <button class="smc-account-item" type="button" @click="langMenuOpen = !langMenuOpen">
             <Icon icon="mdi:translate" width="18" />
-            <span>{{ t('account.menu.language') }}</span>
-            <span class="smc-account-lang-current">{{ isZh ? '中文' : 'EN' }}</span>
+            <span>{{ tr('account.menu.language') }}</span>
+            <span class="smc-account-lang-current">{{ isZh ? tr('中文') : 'EN' }}</span>
           </button>
           <template v-if="langMenuOpen">
             <div class="smc-account-sub">
               <button class="smc-account-item smc-account-sub-item" type="button" @click="setLocale('zh'); langMenuOpen = false">
                 <Icon icon="mdi:check" v-if="isZh" width="16" color="var(--app-accent)" />
-                <span class="smc-account-lang-name">{{ t('lang.zh') }}</span>
+                <span class="smc-account-lang-name">{{ tr('lang.zh') }}</span>
               </button>
               <button class="smc-account-item smc-account-sub-item" type="button" @click="setLocale('en'); langMenuOpen = false">
                 <Icon icon="mdi:check" v-if="!isZh" width="16" color="var(--app-accent)" />
-                <span class="smc-account-lang-name">{{ t('lang.en') }}</span>
+                <span class="smc-account-lang-name">{{ tr('lang.en') }}</span>
               </button>
             </div>
           </template>
           <button class="smc-account-item" type="button" @click="openHelp">
             <Icon icon="mdi:help-circle-outline" width="18" />
-            <span>{{ t('account.menu.help') }}</span>
+            <span>{{ tr('account.menu.help') }}</span>
           </button>
           <template v-if="isLoggedIn">
             <div class="smc-account-divider"></div>
             <button class="smc-account-item danger" type="button" @click="logout">
               <Icon icon="mdi:logout-variant" width="18" />
-              <span>{{ t('account.menu.logout') }}</span>
+              <span>{{ tr('account.menu.logout') }}</span>
             </button>
           </template>
         </div>
@@ -475,19 +475,19 @@
     <!-- 会话三点菜单 -->
     <Teleport to="body">
       <div v-if="openMenuId" class="smc-row-dropdown" :style="dropdownStyle" @click.stop>
-        <div class="smc-dropdown-item" @click="togglePinSession(openMenuSession)"><Icon :icon="isSessionPinned(openMenuSession?.id) ? 'mdi:pin-off-outline' : 'mdi:pin-outline'" width="15" /><span>{{ isSessionPinned(openMenuSession?.id) ? '取消置顶' : '置顶' }}</span></div>
-        <div class="smc-dropdown-item" @click="startRename(openMenuSession)"><Icon icon="mdi:pencil-outline" width="15" /><span>重命名</span></div>
-        <div class="smc-dropdown-item" @click="copySessionId(openMenuSession)"><Icon icon="mdi:content-copy-outline" width="15" /><span>复制 ID</span></div>
+        <div class="smc-dropdown-item" @click="togglePinSession(openMenuSession)"><Icon :icon="isSessionPinned(openMenuSession?.id) ? 'mdi:pin-off-outline' : 'mdi:pin-outline'" width="15" /><span>{{ isSessionPinned(openMenuSession?.id) ? tr('取消置顶') : tr('置顶') }}</span></div>
+        <div class="smc-dropdown-item" @click="startRename(openMenuSession)"><Icon icon="mdi:pencil-outline" width="15" /><span>{{ tr('重命名') }}</span></div>
+        <div class="smc-dropdown-item" @click="copySessionId(openMenuSession)"><Icon icon="mdi:content-copy-outline" width="15" /><span>{{ tr('复制 ID') }}</span></div>
         <div class="smc-dropdown-sep"></div>
-        <div class="smc-dropdown-item danger" @click="onDelete(openMenuSession)"><Icon icon="mdi:trash-can-outline" width="15" /><span>删除</span></div>
+        <div class="smc-dropdown-item danger" @click="onDelete(openMenuSession)"><Icon icon="mdi:trash-can-outline" width="15" /><span>{{ tr('删除') }}</span></div>
       </div>
     </Teleport>
 
     <!-- 项目更多菜单（… 按钮 或 右键项目头 都走这里） -->
     <Teleport to="body">
       <div v-if="openGroupMenu" class="smc-row-dropdown" :style="groupDropdownStyle" @click.stop>
-        <div v-if="projectForName(openGroupMenu)" class="smc-dropdown-item" @click="startCreateSubProject(openGroupMenu)"><Icon icon="mdi:folder-plus-outline" width="15" /><span>新建子项目</span></div>
-        <div class="smc-dropdown-item danger" @click="onDeleteProject(openGroupMenu)">删除项目</div>
+        <div v-if="projectForName(openGroupMenu)" class="smc-dropdown-item" @click="startCreateSubProject(openGroupMenu)"><Icon icon="mdi:folder-plus-outline" width="15" /><span>{{ tr('新建子项目') }}</span></div>
+        <div class="smc-dropdown-item danger" @click="onDeleteProject(openGroupMenu)">{{ tr('删除项目') }}</div>
       </div>
     </Teleport>
 
@@ -497,30 +497,30 @@
         <div v-if="showCreateProject" class="smc-modal-backdrop" @click.self="closeCreateProject">
           <form class="smc-create-project" @submit.prevent="createProject">
             <div class="smc-create-project-head">
-              <h2>创建项目</h2>
-              <button type="button" class="smc-modal-close" title="关闭" @click="closeCreateProject">
+              <h2>{{ tr('创建项目') }}</h2>
+              <button type="button" class="smc-modal-close" :title="tr('关闭')" @click="closeCreateProject">
                 <Icon icon="mdi:close" width="20" />
               </button>
             </div>
-            <div class="smc-source-label">源文件夹（项目名称自动取文件夹名）</div>
+            <div class="smc-source-label">{{ tr('源文件夹（项目名称自动取文件夹名）') }}</div>
             <button type="button" class="smc-source-picker" @click="pickSourceFolder">
               <Icon icon="mdi:folder-plus-outline" width="25" />
               <span v-if="selectedSourceFolder">{{ selectedSourceFolder.name }}</span>
-              <span v-else>添加可读取和编辑的文件夹</span>
+              <span v-else>{{ tr('添加可读取和编辑的文件夹') }}</span>
             </button>
             <p v-if="sourcePickerError" class="smc-source-picker-error" role="alert">{{ sourcePickerError }}</p>
             <label v-if="recentProjectOptions.length" class="smc-recent-project-picker">
-              <span>最近选择项目</span>
+              <span>{{ tr('最近选择项目') }}</span>
               <select v-model="recentProjectPath" @change="pickRecentProject">
-                <option value="" disabled>选择一个最近项目</option>
+                <option value="" disabled>{{ tr('选择一个最近项目') }}</option>
                 <option v-for="project in recentProjectOptions" :key="project.path" :value="project.path">
                   {{ project.name }}
                 </option>
               </select>
             </label>
             <div class="smc-create-project-actions">
-              <button type="button" class="smc-cancel-btn" @click="closeCreateProject">取消</button>
-              <button type="submit" class="smc-create-btn" :disabled="!selectedSourceFolder">创建项目</button>
+              <button type="button" class="smc-cancel-btn" @click="closeCreateProject">{{ tr('取消') }}</button>
+              <button type="submit" class="smc-create-btn" :disabled="!selectedSourceFolder">{{ tr('创建项目') }}</button>
             </div>
           </form>
         </div>
@@ -533,24 +533,24 @@
         <div v-if="showCreateSubProject" class="smc-modal-backdrop" @click.self="closeCreateSubProject">
           <form class="smc-create-project" @submit.prevent="confirmCreateSubProject">
             <div class="smc-create-project-head">
-              <h2>新建子项目</h2>
-              <button type="button" class="smc-modal-close" title="关闭" @click="closeCreateSubProject">
+              <h2>{{ tr('新建子项目') }}</h2>
+              <button type="button" class="smc-modal-close" :title="tr('关闭')" @click="closeCreateSubProject">
                 <Icon icon="mdi:close" width="20" />
               </button>
             </div>
-            <div class="smc-source-label">父项目：{{ subProjectParent?.name }}</div>
-            <div class="smc-source-label">子项目路径</div>
+            <div class="smc-source-label">{{ tr('父项目：') }}{{ subProjectParent?.name }}</div>
+            <div class="smc-source-label">{{ tr('子项目路径') }}</div>
             <div class="smc-subpath-preview">{{ subProjectPreviewPath }}</div>
             <input
               ref="subProjectNameInputRef"
               v-model="subProjectName"
               class="smc-subname-input"
-              placeholder="输入子项目名"
+              :placeholder="tr('输入子项目名')"
               maxlength="60"
             />
             <div class="smc-create-project-actions">
-              <button type="button" class="smc-cancel-btn" @click="closeCreateSubProject">取消</button>
-              <button type="submit" class="smc-create-btn" :disabled="!subProjectName.trim()">创建子项目</button>
+              <button type="button" class="smc-cancel-btn" @click="closeCreateSubProject">{{ tr('取消') }}</button>
+              <button type="submit" class="smc-create-btn" :disabled="!subProjectName.trim()">{{ tr('创建子项目') }}</button>
             </div>
           </form>
         </div>
@@ -563,12 +563,12 @@
         <div v-if="showSelectProject" class="smc-modal-backdrop" @click.self="closeSelectProject">
           <div class="smc-create-project">
             <div class="smc-create-project-head">
-              <h2>选择项目</h2>
-              <button type="button" class="smc-modal-close" title="关闭" @click="closeSelectProject">
+              <h2>{{ tr('选择项目') }}</h2>
+              <button type="button" class="smc-modal-close" :title="tr('关闭')" @click="closeSelectProject">
                 <Icon icon="mdi:close" width="20" />
               </button>
             </div>
-            <div class="smc-source-label">新对话需要先归属到一个项目</div>
+            <div class="smc-source-label">{{ tr('新对话需要先归属到一个项目') }}</div>
             <div v-if="projects.length" class="smc-select-project-list">
               <button
                 v-for="p in projects"
@@ -578,12 +578,12 @@
                 @click="pickExistingProject(p)"
               >
                 <Icon icon="mdi:folder-outline" width="20" />
-                <span>{{ p.name }}</span>
+                <span>{{ tr(p.name) }}</span>
               </button>
             </div>
             <div class="smc-create-project-actions">
-              <button type="button" class="smc-cancel-btn" @click="closeSelectProject">取消</button>
-              <button type="button" class="smc-create-btn" @click="openCreateProjectForSession">新建项目</button>
+              <button type="button" class="smc-cancel-btn" @click="closeSelectProject">{{ tr('取消') }}</button>
+              <button type="button" class="smc-create-btn" @click="openCreateProjectForSession">{{ tr('新建项目') }}</button>
             </div>
           </div>
         </div>
@@ -597,11 +597,12 @@ import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import RunningArc from './RunningArc.vue'
 import { useAuth } from '../../../composables/useAuth.js'
-import { useI18n } from '../../../composables/useI18n.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
 import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
+const { isZh, setLocale } = useI18n()
 
 const auth = useAuth()
-const { t, isZh, setLocale } = useI18n()
+
 const langMenuOpen = ref(false)
 // 帮助 → 跳官网文档页（AMEKO 官网 docs.html）
 const AMEKO_DOCS_URL = 'https://yosuri.com/docs.html'
@@ -675,11 +676,11 @@ async function pickSourceFolder() {
   try {
     const res = await fetch('/api/workdir/pick', { method: 'POST' })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || '无法打开文件夹选择器')
+    if (!res.ok) throw new Error(data.error || tr('无法打开文件夹选择器'))
     if (!data.cancelled && data.path) selectedSourceFolder.value = { name: data.name || data.path, path: data.path }
-    else if (!data.cancelled) throw new Error('未收到所选文件夹路径')
+    else if (!data.cancelled) throw new Error(tr('未收到所选文件夹路径'))
   } catch (error) {
-    sourcePickerError.value = error?.message || '无法打开文件夹选择器'
+    sourcePickerError.value = error?.message || tr('无法打开文件夹选择器')
   }
 }
 function pickRecentProject() {
@@ -806,7 +807,7 @@ const subProjectPreviewPath = computed(() => {
   const n = subProjectName.value.trim()
   if (!p) return ''
   const sep = /[\\/]$/.test(p) ? '' : (p.includes('\\') && !p.includes('/') ? '\\' : '/')
-  return p + sep + (n || '子项目名')
+  return p + sep + (n || tr('子项目名'))
 })
 function startCreateSubProject(name) {
   const project = projectForName(name)
@@ -972,12 +973,12 @@ function startEvolveAnim(target) {
   evolveRaf = requestAnimationFrame(tick)
 }
 const EVO_AXES = [
-  { label: '产出', key: 'output', color: '#f59e0b' },
-  { label: '技能', key: 'skill', color: '#6366f1' },
-  { label: '协作', key: 'collab', color: '#0ea5e9' },
-  { label: '记忆', key: 'memory', color: '#8b5cf6' },
-  { label: '成功率', key: 'success', color: '#10b981' },
-  { label: '亲密度', key: 'intimacy', color: '#ec4899' },
+  { label: tr('产出'), key: 'output', color: '#f59e0b' },
+  { label: tr('技能'), key: 'skill', color: '#6366f1' },
+  { label: tr('协作'), key: 'collab', color: '#0ea5e9' },
+  { label: tr('记忆'), key: 'memory', color: '#8b5cf6' },
+  { label: tr('成功率'), key: 'success', color: '#10b981' },
+  { label: tr('亲密度'), key: 'intimacy', color: '#ec4899' },
 ]
 const xpLevelStart = computed(() => Math.max(0, ((evolve.value?.level || 1) * ((evolve.value?.level || 1) - 1) / 2) * 100))
 const xpLevelEnd = computed(() => (((evolve.value?.level || 1) * ((evolve.value?.level || 1) + 1) / 2) * 100))
@@ -1014,8 +1015,8 @@ function shareCard() {
   if (!evolve.value) return
   const ev = evolve.value
   const lv = ev.level || 1
-  const stage = ev.stage || '微光'
-  const name = auth.name.value || auth.login.value || '本地访客'
+  const stage = ev.stage || tr('微光')
+  const name = auth.name.value || auth.login.value || tr('本地访客')
   const W = 720, H = 640
   const c = document.createElement('canvas')
   c.width = W; c.height = H
@@ -1027,7 +1028,7 @@ function shareCard() {
   g.fillStyle = '#93c5fd'; g.font = '700 13px sans-serif'; g.fillText('RESCENE IDENTITY', 36, 44)
   g.fillStyle = '#ffffff'; g.font = '800 30px sans-serif'; g.fillText(name, 36, 84)
   g.fillStyle = '#cbd5e1'; g.font = '600 14px sans-serif'
-  g.fillText(auth.uid.value ? 'UID ' + auth.uid.value : '本地 AI 档案', 36, 112)
+  g.fillText(auth.uid.value ? 'UID ' + auth.uid.value : tr('本地 AI 档案'), 36, 112)
   g.textAlign = 'right'
   g.fillStyle = '#a5b4fc'; g.font = '800 22px sans-serif'; g.fillText(stage, W - 36, 66)
   g.fillStyle = '#eef2ff'; g.font = '800 42px sans-serif'; g.fillText('LV ' + lv, W - 36, 114)
@@ -1079,11 +1080,11 @@ function shareCard() {
   })
   // 页脚
   g.fillStyle = '#94a3b8'; g.font = '600 12px sans-serif'; g.textAlign = 'center'
-  g.fillText('数据来自真实使用记录 · Yosuri', W / 2, H - 18)
+  g.fillText(tr('数据来自真实使用记录 · Yosuri'), W / 2, H - 18)
   g.textAlign = 'left'
   // 下载
   const a = document.createElement('a')
-  a.download = '成长档案-LV' + lv + '-' + stage + '.png'
+  a.download = tr('成长档案-LV') + lv + '-' + stage + '.png'
   a.href = c.toDataURL('image/png')
   a.click()
 }
@@ -1196,8 +1197,8 @@ function announceWelcome(username) {
 
 async function loginResceneCloud() {
   rcError.value = ''
-  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = t('login.emptyInput'); return }
-  if (!rcCaptchaId.value || !rcCaptchaCode.value.trim()) { rcError.value = t('login.captchaInput'); return }
+  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = tr('login.emptyInput'); return }
+  if (!rcCaptchaId.value || !rcCaptchaCode.value.trim()) { rcError.value = tr('login.captchaInput'); return }
   rcLoading.value = true
   try {
     // 静默算 PoW（双门禁之二），失败重试一次后放弃
@@ -1206,7 +1207,7 @@ async function loginResceneCloud() {
       await ensurePow()
       powId = rcPowId.value; powNonce = rcPowNonce.value
     }
-    if (!powId || !powNonce) { rcError.value = t('login.netError'); rcLoading.value = false; return }
+    if (!powId || !powNonce) { rcError.value = tr('login.netError'); rcLoading.value = false; return }
     const username = rcUser.value.trim()
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -1219,7 +1220,7 @@ async function loginResceneCloud() {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.token) {
-      rcError.value = data.error || t('login.fail')
+      rcError.value = data.error || tr('login.fail')
       // 验证码一次性 + PoW 一次性：失败后刷新新图 + 重新签发 challenge
       loadCaptcha()
       fetchPow()
@@ -1230,13 +1231,13 @@ async function loginResceneCloud() {
     announceWelcome(username)
     rcUser.value = ''; rcPwd.value = ''
     showUserMenu.value = false
-  } catch (e) { rcError.value = t('login.netError') } finally { rcLoading.value = false }
+  } catch (e) { rcError.value = tr('login.netError') } finally { rcLoading.value = false }
 }
 
 async function registerResceneCloud() {
   rcError.value = ''
-  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = t('login.emptyRegister'); return }
-  if (!rcPwd2.value || rcPwd.value !== rcPwd2.value) { rcError.value = t('login.pwdMismatch'); return }
+  if (!rcUser.value.trim() || !rcPwd.value) { rcError.value = tr('login.emptyRegister'); return }
+  if (!rcPwd2.value || rcPwd.value !== rcPwd2.value) { rcError.value = tr('login.pwdMismatch'); return }
   rcLoading.value = true
   try {
     const username = rcUser.value.trim()
@@ -1246,14 +1247,14 @@ async function registerResceneCloud() {
       body: JSON.stringify({ username, password: rcPwd.value, fingerprint: computeHardwareFingerprint() })
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.token) { rcError.value = data.error || t('login.fail'); return }
+    if (!res.ok || !data.token) { rcError.value = data.error || tr('login.fail'); return }
     localStorage.setItem('token', data.token)
     window.dispatchEvent(new Event('auth-change'))
     announceWelcome(username)
     rcUser.value = ''; rcPwd.value = ''; rcPwd2.value = ''
     rcMode.value = 'login'
     showUserMenu.value = false
-  } catch (e) { rcError.value = t('login.netError') } finally { rcLoading.value = false }
+  } catch (e) { rcError.value = tr('login.netError') } finally { rcLoading.value = false }
 }
 
 // 点击用户名：弹「角色卡 / 登录 / 注册 / 语言 / 帮助」账户菜单（贴用户名上方）
@@ -1454,7 +1455,7 @@ function groupAllSelected(name) {
 }
 // 删除整个项目：项目实体 + 其下所有会话 + 归属映射（由 ChatWidget 落地）
 function onDeleteProject(name) {
-  if (!window.confirm(`删除项目「${name}」？其下所有会话将一并删除，无法恢复。`)) return
+  if (!window.confirm((tr('删除项目「') + name + tr('」？其下所有会话将一并删除，无法恢复。')))) return
   emit('delete-project', name)
   openGroupMenu.value = null
   hoveredGroup.value = null

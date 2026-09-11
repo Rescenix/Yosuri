@@ -2,8 +2,8 @@
   <nav class="navbar">
     <div class="nav-content">
       <div class="nav-brand">
-        <router-link to="/">星尘核心</router-link>
-        <router-link to="/studio" class="nav-studio">🎬 创作工作台</router-link>
+        <router-link to="/">{{ tr('星尘核心') }}</router-link>
+        <router-link to="/studio" class="nav-studio">{{ tr('🎬 创作工作台') }}</router-link>
       </div>
 
       <!-- 桌面端登录 -->
@@ -16,6 +16,9 @@
 
 <script setup>
 import AdminLogin from './shanxi/AdminLogin.vue'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 </script>
 
 <style scoped>

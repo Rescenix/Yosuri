@@ -2,20 +2,20 @@
   <div class="chart-renderer">
     <div class="chart-header">
       <Icon icon="mdi:chart-box-outline" width="14" color="#1950BE" />
-      <span class="chart-title">{{ title || '数据图表' }}</span>
+      <span class="chart-title">{{ title || tr('数据图表') }}</span>
       <span class="chart-type-badge">{{ typeLabel }}</span>
     </div>
     <div ref="chartEl" class="chart-canvas"></div>
     <div class="chart-actions">
-      <button class="chart-action-btn" @click="exportPNG" title="导出 PNG">
+      <button class="chart-action-btn" @click="exportPNG" :title="tr('导出 PNG')">
         <Icon icon="mdi:download" width="13" />
         <span>PNG</span>
       </button>
-      <button class="chart-action-btn" @click="exportSVG" title="导出 SVG">
+      <button class="chart-action-btn" @click="exportSVG" :title="tr('导出 SVG')">
         <Icon icon="mdi:vector-square" width="13" />
         <span>SVG</span>
       </button>
-      <button class="chart-action-btn" @click="toggleFullscreen" title="全屏">
+      <button class="chart-action-btn" @click="toggleFullscreen" :title="tr('全屏')">
         <Icon :icon="fullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'" width="13" />
       </button>
     </div>
@@ -26,6 +26,9 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   title: { type: String, default: '' },
@@ -40,7 +43,7 @@ const fullscreen = ref(false)
 let chart = null
 
 const typeLabel = computed(() => {
-  const map = { line: '折线图', bar: '柱状图', pie: '饼图', scatter: '散点图', radar: '雷达图' }
+  const map = { line: tr('折线图'), bar: tr('柱状图'), pie: tr('饼图'), scatter: tr('散点图'), radar: tr('雷达图') }
   return map[props.type] || props.type
 })
 

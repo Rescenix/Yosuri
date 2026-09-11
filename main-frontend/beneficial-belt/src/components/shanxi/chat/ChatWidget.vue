@@ -25,7 +25,7 @@
           <Transition name="search-panel">
             <div v-if="showSearchPanel" class="gem-search-panel" @click.stop>
               <div class="gem-search-head">
-                <button class="gem-icon-btn" @click="closeSearchPanel" title="返回">
+                <button class="gem-icon-btn" @click="closeSearchPanel" :title="tr('返回')">
                   <Icon icon="mdi:arrow-left" width="18" />
                 </button>
                 <div class="gem-search-input-wrap">
@@ -35,7 +35,7 @@
                     v-model="searchQuery"
                     type="text"
                     class="gem-search-input"
-                    placeholder="搜索对话内容"
+                    :placeholder="tr('搜索对话内容')"
                     @keydown.esc="closeSearchPanel"
                   />
                   <button v-if="searchQuery" class="gem-search-clear" @click="searchQuery = ''">
@@ -44,10 +44,10 @@
                 </div>
               </div>
               <div class="gem-search-body">
-                <div class="gem-search-section-label">{{ searchQuery.trim() ? '命中会话' : '近期对话' }}</div>
-                <div v-if="searchLoading" class="gem-search-empty">搜索中…</div>
+                <div class="gem-search-section-label">{{ searchQuery.trim() ? tr('命中会话') : tr('近期对话') }}</div>
+                <div v-if="searchLoading" class="gem-search-empty">{{ tr('搜索中…') }}</div>
                 <div v-else-if="searchResults.length === 0" class="gem-search-empty">
-                  {{ searchQuery.trim() ? '未找到匹配会话' : '还没有会话' }}
+                  {{ searchQuery.trim() ? tr('未找到匹配会话') : tr('还没有会话') }}
                 </div>
                 <button
                   v-for="s in searchResults"
@@ -70,17 +70,17 @@
                                   <span v-if="sidebarOpen" class="gem-brand-text">Yosuri</span>
                                 </div>
                                 <div v-if="sidebarOpen" class="gem-top-actions">
-                                                                  <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话" aria-label="搜索对话">
+                                                                  <button class="gem-icon-btn" @click="openSearchPanel" :title="tr('搜索对话')" :aria-label="tr('搜索对话')">
                                                                     <Icon icon="mdi:magnify" width="18" />
                                                                   </button>
-                                                                  <router-link class="gem-icon-btn" to="/sites" title="发布并分享 Agent 写好的网页" aria-label="网站">
+                                                                  <router-link class="gem-icon-btn" to="/sites" :title="tr('发布并分享 Agent 写好的网页')" :aria-label="tr('网站')">
                                                                     <Icon icon="mdi:web" width="18" />
                                                                   </router-link>
-                                                                  <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? '折叠边栏' : '打开边栏'" aria-label="折叠边栏">
+                                                                  <button class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="sidebarOpen ? tr('折叠边栏') : tr('打开边栏')" :aria-label="tr('折叠边栏')">
                                     <Icon icon="lucide:sidebar" width="18" />
                                   </button>
                                 </div>
-                                <button v-else class="gem-icon-btn gem-collapse" @click="toggleSidebar" title="打开边栏" aria-label="打开边栏">
+                                <button v-else class="gem-icon-btn gem-collapse" @click="toggleSidebar" :title="tr('打开边栏')" :aria-label="tr('打开边栏')">
                                   <Icon icon="lucide:sidebar" width="18" />
                                 </button>
                               </div>
@@ -116,19 +116,19 @@
 
           <!-- 折叠态：竖向图标条（项目就是会话横条本身） -->
           <template v-else>
-            <button class="gem-icon-btn" @click="newSession" title="新建任务">
+            <button class="gem-icon-btn" @click="newSession" :title="tr('新建任务')">
               <Icon icon="mdi:plus-circle-outline" width="18" />
             </button>
-            <button class="gem-icon-btn" @click="openSearchPanel" title="搜索对话">
+            <button class="gem-icon-btn" @click="openSearchPanel" :title="tr('搜索对话')">
               <Icon icon="mdi:magnify" width="18" />
             </button>
-            <button class="gem-icon-btn" @click="showFavorites = true" title="我的收藏">
+            <button class="gem-icon-btn" @click="showFavorites = true" :title="tr('我的收藏')">
               <Icon icon="mdi:star-outline" width="18" />
             </button>
-            <button class="gem-icon-btn" @click="openPluginsMarket" title="插件市场">
+            <button class="gem-icon-btn" @click="openPluginsMarket" :title="tr('插件市场')">
                           <Icon icon="mdi:puzzle-outline" width="18" />
                         </button>
-                        <button class="gem-icon-btn" @click="showScheduledTaskManager = true" title="定时任务">
+                        <button class="gem-icon-btn" @click="showScheduledTaskManager = true" :title="tr('定时任务')">
                           <Icon icon="mdi:clock-outline" width="18" />
                         </button>
             <!-- 会话横条：与 AgentFS 图谱完全分离，保留快速会话跳转 -->
@@ -152,7 +152,7 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
-              <button class="gem-icon-btn" @click="showSettings = true" title="设置">
+              <button class="gem-icon-btn" @click="showSettings = true" :title="tr('设置')">
                 <Icon icon="mdi:cog-outline" width="18" />
               </button>
               <img v-if="railAuth.displayAvatar.value" :src="railAuth.displayAvatar.value" class="gem-rail-avatar" :title="railAuth.displayName.value" />
@@ -200,7 +200,7 @@
                         <span class="agentfs-node-label">{{ node.label }}</span>
                       </button>
                     </div>
-                    <div v-else class="rail-utility-empty">当前仓库还没有提交记录</div>
+                    <div v-else class="rail-utility-empty">{{ tr('当前仓库还没有提交记录') }}</div>
                   </div>
                                   </aside>
               </Transition>
@@ -222,14 +222,14 @@
                       <b>+{{ agentFSDiffStats.added }}</b>
                       <em>−{{ agentFSDiffStats.removed }}</em>
                     </span>
-                    <span class="agentfs-meta-time">{{ selectedAgentFSSnapshot.op === 'edit' ? '编辑' : '写入' }} · {{ formatAgentFSTime(selectedAgentFSSnapshot.ts) }}</span>
-                    <button type="button" class="agentfs-card-close" title="关闭" @click="closeAgentFSDiff">
+                    <span class="agentfs-meta-time">{{ selectedAgentFSSnapshot.op === 'edit' ? tr('编辑') : tr('写入') }} · {{ formatAgentFSTime(selectedAgentFSSnapshot.ts) }}</span>
+                    <button type="button" class="agentfs-card-close" :title="tr('关闭')" @click="closeAgentFSDiff">
                       <Icon icon="mdi:close" width="15" />
                     </button>
                   </div>
                   <div class="agentfs-diff-body">
                     <div v-if="agentFSDiffLoading" class="agentfs-diff-state">
-                      <Icon icon="mdi:loading" width="20" class="agentfs-spin" /> 正在读取快照…
+                      <Icon icon="mdi:loading" width="20" class="agentfs-spin" /> {{ tr('正在读取快照…') }}
                     </div>
                     <div v-else-if="agentFSDiffError" class="agentfs-diff-state error">{{ agentFSDiffError }}</div>
                     <div v-else-if="agentFSDiffLines.length" class="agentfs-code">
@@ -243,7 +243,7 @@
                         <code>{{ line.text || ' ' }}</code>
                       </div>
                     </div>
-                    <div v-else class="agentfs-diff-state">该快照没有可显示的文本差异</div>
+                    <div v-else class="agentfs-diff-state">{{ tr('该快照没有可显示的文本差异') }}</div>
                   </div>
                 </aside>
               </Transition>
@@ -259,7 +259,7 @@
                 @mouseenter="openRailCard"
                 @mouseleave="closeRailCardDelayed"
               >
-                <div class="rail-card-label">{{ currentWorkDir.name || '最近' }}</div>
+                <div class="rail-card-label">{{ currentWorkDir.name || tr('最近') }}</div>
                 <button
                   v-for="s in railProject"
                   :key="s.id"
@@ -271,7 +271,7 @@
                   <span class="rail-card-name">{{ s.name }}</span>
                 </button>
                 <div v-if="railRecent.length" class="rail-card-divider"></div>
-                <div class="rail-card-label">其他</div>
+                <div class="rail-card-label">{{ tr('其他') }}</div>
                 <button
                   v-for="s in railRecent"
                   :key="s.id"
@@ -298,19 +298,19 @@
 
             <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。 -->
             <div v-if="inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" title="终端">
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" :title="tr('终端')">
                 <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
               </button>
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
                 <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
               </button>
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" title="预览">
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('preview') }" @click="toggleDockPanel('preview')" :title="tr('预览')">
                 <Icon icon="mage:preview" width="17" color="#6b6b6b" />
               </button>
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('tasks') }" @click.stop="toggleDockPanel('tasks')" title="后台任务">
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('tasks') }" @click.stop="toggleDockPanel('tasks')" :title="tr('后台任务')">
                 <Icon icon="mdi:task-minus" width="17" color="#6b6b6b" />
               </button>
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('file') }" @click.stop="toggleDockPanel('file')" title="文件">
+              <button class="header-icon-btn" :class="{ active: dockPanels.includes('file') }" @click.stop="toggleDockPanel('file')" :title="tr('文件')">
                 <Icon icon="mdi:file-code-outline" width="17" color="#6b6b6b" />
               </button>
             </div>
@@ -339,10 +339,10 @@
                   <div v-else-if="item.type === 'message'" :key="item.id" class="message-row" :class="item.sender" :data-msg-id="item.id">
                     <article v-if="item.kind === 'screenshot'" class="agent-screenshot-card">
                       <div class="agent-screenshot-head">
-                        <span><Icon icon="mdi:camera-outline" width="15" /> Agent 已发布截图</span>
-                        <small>{{ item.sourceUrl || '当前预览' }}</small>
+                        <span><Icon icon="mdi:camera-outline" width="15" /> {{ tr('Agent 已发布截图') }}</span>
+                        <small>{{ item.sourceUrl || tr('当前预览') }}</small>
                       </div>
-                      <img :src="item.image" :alt="item.content || 'Agent 交付截图'" class="agent-screenshot-image" />
+                      <img :src="item.image" :alt="item.content || tr('Agent 交付截图')" class="agent-screenshot-image" />
                       <p v-if="item.content" class="agent-screenshot-note">{{ item.content }}</p>
                     </article>
                     <div v-else-if="item.sender === 'user'" class="message-bubble user" :class="{ editing: editingMsgId === item.id, active: String(activeUserMessageId) === String(item.id) }">
@@ -372,7 +372,7 @@
                       <button
                         v-if="editingMsgId === item.id"
                         class="msg-edit-btn confirm"
-                        title="发送（Enter），Esc 取消"
+                        :title="tr('发送（Enter），Esc 取消')"
                         @mousedown.prevent
                         @click="confirmEdit(item)"
                       >
@@ -388,30 +388,30 @@
                     <!-- 必须包一层竖向容器：.message-row 是 flex-direction:row，
                          面板和工具栏平铺进去的话工具栏会变成"面板右边被拉满高的一竖条" -->
                     <div v-else-if="item.kind === 'agentflow'" class="agentflow-wrap">
-                      <!-- 群聊名牌：这条回复是哪个 Agent 说的。单 Agent（无 agentId）不渲染，
-                           界面与改造前一致。头像走角色卡，没设头像时用名牌色 + 首字。 -->
-                      <div v-if="flowAgent(item)" class="flow-agent-badge">
+                      <!-- 群聊名牌：只在真正的多 Agent 群聊（本会话勾了 2 个以上成员）才显示，
+                           单 Agent 通用对话不挂「XX 说」名牌——是通用 agent，不是酒馆软件。 -->
+                      <div v-if="flowAgent(item) && currentGroup.length > 1" class="flow-agent-badge">
                         <img v-if="flowAgent(item).avatar" :src="flowAgent(item).avatar" class="flow-agent-avatar" alt="" />
                         <span v-else class="flow-agent-avatar flow-agent-avatar-text" :style="{ background: flowAgent(item).color || '#8b5e7c' }">
                           {{ (flowAgent(item).name || '?').charAt(0) }}
                         </span>
-                        <span class="flow-agent-name">{{ flowAgent(item).name }}</span>
+                        <span class="flow-agent-name">{{ tr(flowAgent(item).name) }}</span>
                       </div>
                       <AgentWorkflowPanel :id="'group-' + item.id" :flow="item" />
                       <!-- 复制栏：以前只挂在纯文本 assistant 气泡上，而现在所有回复
                            都走四态机(agentflow)，等于这一栏彻底消失了。跑完再显示，跑的过程中
                            内容还在变，复制没意义。 -->
                       <div v-if="item.status === 'completed' && flowFinalText(item)" class="flow-tools">
-                        <button class="tool-btn" @click="copyText(flowFinalText(item))" title="复制">
+                        <button class="tool-btn" @click="copyText(flowFinalText(item))" :title="tr('复制')">
                           <Icon icon="mdi:content-copy" width="16" />
                         </button>
-                        <button v-if="canRegenerate(item)" class="tool-btn" @click="regenerateFlow(item)" title="重新生成">
+                        <button v-if="canRegenerate(item)" class="tool-btn" @click="regenerateFlow(item)" :title="tr('重新生成')">
                           <Icon icon="mdi:autorenew" width="16" />
                         </button>
-                        <button class="tool-btn" @click="toggleFavorite(item)" :class="{ active: isFavorited(item) }" :title="isFavorited(item) ? '取消收藏' : '收藏'">
+                        <button class="tool-btn" @click="toggleFavorite(item)" :class="{ active: isFavorited(item) }" :title="isFavorited(item) ? tr('取消收藏') : tr('收藏')">
                           <Icon :icon="isFavorited(item) ? 'mdi:star' : 'mdi:star-outline'" width="16" />
                         </button>
-                        <button class="tool-btn" @click="openShare(item)" title="分享">
+                        <button class="tool-btn" @click="openShare(item)" :title="tr('分享')">
                           <Icon icon="mdi:share-variant-outline" width="16" />
                         </button>
                         <span class="tools-spacer"></span>
@@ -426,18 +426,18 @@
                     <div v-else class="assistant-message" :class="{ streaming: item.isStreaming }">
                       <div v-if="item.reasoning" class="reasoning-stream">
                         <div class="reasoning-label">
-                          正在思考
+                          {{ tr('正在思考') }}
                         </div>
                         <div class="reasoning-text" v-html="renderMarkdown(item.reasoning, true)"></div>
                       </div>
                       <div v-if="item.toolCallName" class="tool-call-indicator">
                         <Icon icon="mdi:cog-sync" width="14" color="#6b7280" />
-                        <span>正在调用工具：{{ item.toolCallName }}</span>
+                        <span>{{ tr('正在调用工具：') }}{{ item.toolCallName }}</span>
                         <span v-if="item.toolCallDetail" class="tool-call-detail">{{ item.toolCallDetail }}</span>
                       </div>
                       <div class="markdown-body" v-html="renderMarkdown(item.content, true)"></div>
                       <div class="assistant-tools">
-                        <button class="tool-btn" @click="copyText(item.content)" title="复制">
+                        <button class="tool-btn" @click="copyText(item.content)" :title="tr('复制')">
                           <Icon icon="mdi:content-copy" width="16" />
                         </button>
                         <span class="tools-spacer"></span>
@@ -459,7 +459,7 @@
             <!-- 用户消息导航：以完整聊天内容列为定位基准，避免随消息滚动区高度塌缩到底部。 -->
             <UserMessageRail :messages="messages" :active-id="activeUserMessageId" @jump="jumpToMessage" />
 
-            <div v-if="copiedVisible" class="copy-toast">✓ 已复制</div>
+            <div v-if="copiedVisible" class="copy-toast">{{ tr('✓ 已复制') }}</div>
             <div v-if="toastMsg" class="copy-toast">{{ toastMsg }}</div>
 
             <!-- ===== 悬浮条（todo / ask / approval）：已移入 .chat-input-area 内
@@ -477,7 +477,7 @@
                   <div class="todo-bar-head" :class="{ collapsed: todoCollapsed }" @click="todoCollapsed = !todoCollapsed">
                     <Icon :icon="todoCollapsed ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="14" class="todo-bar-chevron" />
                     <Icon icon="mdi:format-list-checks" width="14" class="todo-bar-icon" />
-                    <span class="todo-bar-title">任务</span>
+                    <span class="todo-bar-title">{{ tr('任务') }}</span>
                     <span class="todo-bar-progress">{{ todoDoneCount }}/{{ todoState.items.length }}</span>
                   </div>
                   <ul v-show="!todoCollapsed" class="todo-bar-list">
@@ -514,17 +514,17 @@
                 class="approval-bar floating-bar"
                 :style="inputBarFadeStyle"
               >
-                <span class="approval-bar-countdown" :title="'等待回应：' + item.remain + ' 秒'">{{ item.remain }}</span>
-                <button class="approval-bar-btn deny" @click="respondApproval(item, false)">拒绝</button>
-                <button class="approval-bar-btn allow" @click="respondApproval(item, true)">允许</button>
+                <span class="approval-bar-countdown" :title="tr('等待回应：') + item.remain + tr(' 秒')">{{ item.remain }}</span>
+                <button class="approval-bar-btn deny" @click="respondApproval(item, false)">{{ tr('拒绝') }}</button>
+                <button class="approval-bar-btn allow" @click="respondApproval(item, true)">{{ tr('允许') }}</button>
                 <div class="approval-bar-main">
                   <div class="approval-bar-line">
                     <span class="approval-bar-tool">{{ item.tool }}</span>
                     <span
                       v-if="item.reason === 'path_outside_workdir'"
                       class="approval-bar-badge"
-                      :title="'工作目录：' + item.workdir"
-                    >工作目录之外</span>
+                      :title="tr('工作目录：') + item.workdir"
+                    >{{ tr('工作目录之外') }}</span>
                     <span class="approval-bar-args">{{ approvalArgsPreview(item.args) }}</span>
                   </div>
                   <div class="approval-bar-progress">
@@ -534,21 +534,21 @@
                 <label
                   class="approval-bar-remember"
                   :title="item.reason === 'path_outside_workdir'
-                    ? '本次会话内不再询问该目录下的操作'
-                    : '本次会话内不再询问此工具'"
+                    ? tr('本次会话内不再询问该目录下的操作')
+                    : tr('本次会话内不再询问此工具')"
                 >
                   <input type="checkbox" v-model="item.remember" />
-                  <span>不再问</span>
+                  <span>{{ tr('不再问') }}</span>
                 </label>
               </div>
               </div><!-- /floating-bars -->
 
               <!-- 群聊成员选择弹层：多选，点选即在/移出群聊 -->
               <div v-if="agentPickerOpen" class="agent-picker-pop">
-                <div class="agent-picker-title">群聊成员</div>
-                <div class="agent-picker-desc">选中的 Agent 按顺序依次发言，各自带角色卡、头像和私有记忆。</div>
+                <div class="agent-picker-title">{{ tr('群聊成员') }}</div>
+                <div class="agent-picker-desc">{{ tr('选中的 Agent 按顺序依次发言，各自带角色卡、头像和私有记忆。') }}</div>
                 <div v-if="!agentStore.agents.value.length" class="agent-picker-empty">
-                  还没有角色卡，去「设置 → 人设 → 我的 Agent」创建吧～
+                  {{ tr('还没有角色卡，去「设置 → 角色卡」创建吧～') }}
                 </div>
                 <button
                   v-for="a in agentStore.agents.value"
@@ -562,7 +562,7 @@
                   <span v-else class="agent-picker-avatar agent-picker-avatar-text" :style="{ background: a.color || '#8b5e7c' }">
                     {{ (a.name || '?').charAt(0) }}
                   </span>
-                  <span class="agent-picker-name">{{ a.name }}</span>
+                  <span class="agent-picker-name">{{ tr(a.name) }}</span>
                   <Icon v-if="currentGroup.includes(a.id)" icon="mdi:check-circle" width="16" class="agent-picker-check" />
                 </button>
               </div>
@@ -588,7 +588,7 @@
                       <Icon icon="mdi:source-branch" width="13" color="#6b6b6b" />
                       {{ gitStatus.branch || 'main' }}
                     </span>
-                    <button class="input-dir-add-btn" type="button" title="从系统中选择工作目录" @click.stop="openSystemWorkDirPicker">
+                    <button class="input-dir-add-btn" type="button" :title="tr('从系统中选择工作目录')" @click.stop="openSystemWorkDirPicker">
                       <Icon icon="mdi:plus" width="15" />
                     </button>
                     <input
@@ -623,7 +623,7 @@
                       <div class="workdir-menu-label workdir-menu-back" @click="workDirMenuView = 'recent'">
                         <Icon icon="mdi:chevron-left" width="14" /> Recent
                       </div>
-                      <div v-if="workDirBrowseLoading" class="workdir-menu-item disabled">加载中…</div>
+                      <div v-if="workDirBrowseLoading" class="workdir-menu-item disabled">{{ tr('加载中…') }}</div>
                       <template v-else-if="workDirBrowseOptions.length">
                         <div
                           v-for="dir in workDirBrowseOptions"
@@ -635,7 +635,7 @@
                           <span>{{ dir.name }}</span>
                         </div>
                       </template>
-                      <div v-else class="workdir-menu-item disabled">未找到可选目录</div>
+                      <div v-else class="workdir-menu-item disabled">{{ tr('未找到可选目录') }}</div>
                     </template>
                   </div>
                   <div v-if="showBranchMenu" class="branch-menu-dropdown" @click.stop>
@@ -644,12 +644,12 @@
                       <input
                         ref="branchSearchInput"
                         v-model="branchSearch"
-                        placeholder="搜索分支"
+                        :placeholder="tr('搜索分支')"
                         @keydown.esc="showBranchMenu = false"
                       />
                     </label>
-                    <div class="branch-menu-label">分支</div>
-                    <div v-if="branchesLoading" class="branch-menu-empty">正在读取分支…</div>
+                    <div class="branch-menu-label">{{ tr('分支') }}</div>
+                    <div v-if="branchesLoading" class="branch-menu-empty">{{ tr('正在读取分支…') }}</div>
                     <button
                       v-for="branch in filteredGitBranches"
                       :key="branch"
@@ -668,12 +668,12 @@
                       />
                     </button>
                     <div v-if="!branchesLoading && !filteredGitBranches.length" class="branch-menu-empty">
-                      没有匹配的分支
+                      {{ tr('没有匹配的分支') }}
                     </div>
                     <div class="branch-menu-divider"></div>
                     <button type="button" class="branch-menu-create" @click="createGitBranch">
                       <Icon icon="mdi:plus" width="20" />
-                      <span>创建并检出新分支…</span>
+                      <span>{{ tr('创建并检出新分支…') }}</span>
                     </button>
                   </div>
                 </div>
@@ -709,19 +709,19 @@
                                                         <div v-if="runningTaskCount > 0" class="input-running-tasks-bar">
                                                           <div class="rt-main" @click.stop="toggleDockPanel('tasks')">
                                                             <Icon icon="mdi:loading" width="13" class="rt-spin" />
-                                                            <template v-if="runningSubagentCount > 0"><span>{{ runningSubagentCount }} 个子代理进行中</span></template>
-                                                            <template v-if="runningBgTaskCount > 0"><span>{{ runningBgTaskCount }} 个后台任务进行中</span></template>
-                                                            <template v-if="runningSubagentCount === 0 && runningBgTaskCount === 0"><span>{{ runningTaskCount }} 个任务进行中</span></template>
+                                                            <template v-if="runningSubagentCount > 0"><span>{{ runningSubagentCount }}{{ tr('个子代理进行中') }}</span></template>
+                                                            <template v-if="runningBgTaskCount > 0"><span>{{ runningBgTaskCount }}{{ tr('个后台任务进行中') }}</span></template>
+                                                            <template v-if="runningSubagentCount === 0 && runningBgTaskCount === 0"><span>{{ runningTaskCount }}{{ tr('个任务进行中') }}</span></template>
                                                             <Icon icon="mdi:chevron-up" width="14" class="rt-caret" />
                                                           </div>
-                                                          <button type="button" class="rt-dismiss" title="终止全部进行中任务" @click.stop="clearAllBackgroundTasks">
+                                                          <button type="button" class="rt-dismiss" :title="tr('终止全部进行中任务')" @click.stop="clearAllBackgroundTasks">
                                                             <Icon icon="mdi:close" width="14" />
                                                           </button>
                                                         </div>
                 <!-- 粘贴图片提示 -->
                 <div v-if="visionStatus" class="vision-status-toast" :class="{ error: visionStatus === 'error' }">
                   <template v-if="visionStatus === 'analyzing'">
-                    <Icon icon="mdi:image-outline" width="14" color="#6b7280" /> 图片分析中...
+                    <Icon icon="mdi:image-outline" width="14" color="#6b7280" /> {{ tr('图片分析中...') }}
                   </template>
                   <template v-else>
                     <Icon icon="mdi:alert-circle-outline" width="14" color="#d94834" /> {{ visionStatusMessage }}
@@ -744,11 +744,11 @@
                     <input type="number" v-model.number="debugMaxTokens" min="100" max="8192" step="100" @change="updateParams" />
                   </div>
                   <div class="param-row">
-                    <span class="param-label">思考</span>
+                    <span class="param-label">{{ tr('思考') }}</span>
                     <select v-model="debugReasoning" @change="updateParams">
-                      <option value="">关闭</option>
-                      <option value="high">开启（高）</option>
-                      <option value="max">开启（最强）</option>
+                      <option value="">{{ tr('关闭') }}</option>
+                      <option value="high">{{ tr('开启（高）') }}</option>
+                      <option value="max">{{ tr('开启（最强）') }}</option>
                     </select>
                   </div>
                 </div>
@@ -766,21 +766,21 @@
                   </transition>
 
                   <div class="toolbar-dropdown-wrap">
-                    <button class="input-left-plus" @click.stop="showAddMenu = !showAddMenu" title="添加">
+                    <button class="input-left-plus" @click.stop="showAddMenu = !showAddMenu" :title="tr('添加')">
                       <Icon icon="mdi:plus" width="16" />
                     </button>
                     <div v-if="showAddMenu" class="add-menu-dropdown" @click.stop>
                       <div class="add-menu-item" @click="triggerAttachFiles">
                         <Icon icon="mdi:paperclip" width="14" color="#6b6b6b" />
-                        <span>添加文件或照片</span>
+                        <span>{{ tr('添加文件或照片') }}</span>
                       </div>
                       <div class="add-menu-item" @click="triggerAttachVideo">
                         <Icon icon="mdi:video-outline" width="14" color="#6b6b6b" />
-                        <span>添加视频</span>
+                        <span>{{ tr('添加视频') }}</span>
                       </div>
                       <div class="add-menu-item" @click="triggerAttachFolder">
                         <Icon icon="mdi:folder-outline" width="14" color="#6b6b6b" />
-                        <span>添加文件夹</span>
+                        <span>{{ tr('添加文件夹') }}</span>
                       </div>
                     </div>
                   </div>
@@ -789,7 +789,7 @@
 
                   <!-- 模型切换：常态显示完整模型名；右边工具窗口打开挤压输入框时收成紧凑图标按钮 -->
                                     <div class="sch-model" :class="{ collapsed: hasVisibleDockPanels }" ref="modelPillRef" @click.stop="toggleModelMenu"
-                                      :title="'当前模型：' + selectedModelLabel + '，点击切换'">
+                                      :title="tr('当前模型：') + selectedModelLabel + tr('，点击切换')">
                                       <span class="sch-model-label">{{ selectedModelLabel }}</span>
                                       <Icon icon="mdi:robot-outline" width="15" class="sch-model-robot" />
                                       <Icon icon="mdi:chevron-down" width="14" class="sch-model-caret" />
@@ -798,13 +798,13 @@
                   <!-- 语音输入：按住说话（Edge 原生语音识别） -->
                   <button class="voice-btn" :class="{ listening: voiceListening }"
                     @mousedown.prevent="voiceStart" @mouseup.prevent="voiceStop" @mouseleave="voiceStop"
-                    :title="voiceListening ? '松开结束并发送' : '按住说话'">
+                    :title="voiceListening ? tr('松开结束并发送') : tr('按住说话')">
                     <Icon :icon="voiceListening ? 'mdi:microphone' : 'mdi:microphone-outline'" width="18" />
                   </button>
 
                   <!-- 语音输出开关：深色圆+声波线 = 开启 AI 自动朗读；灰化 = 关闭 -->
                   <button class="input-inner-btn speak-toggle-btn" :class="{ muted: !ttsOn }" @click="toggleTts"
-                    :title="ttsOn ? '关闭语音朗读' : '开启语音朗读（AI 回复自动朗读）'">
+                    :title="ttsOn ? tr('关闭语音朗读') : tr('开启语音朗读（AI 回复自动朗读）')">
                     <svg class="speak-btn-icon" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
                       <path class="speak-wave" d="M2.6 10.4 C4.4 5.8, 6.6 5.8, 8 9 C9.4 12.2, 11.6 12.2, 13 9 C13.8 7.2, 14.8 6.6, 15.4 6.9" />
                     </svg>
@@ -815,18 +815,18 @@
                                         <div class="model-menu-head">
                                           <div class="model-menu-search">
                                             <Icon icon="mdi:magnify" width="14" class="model-menu-search-icon" />
-                                            <input v-model="modelSearch" type="text" placeholder="搜索模型" class="model-menu-search-input" @click.stop />
+                                            <input v-model="modelSearch" type="text" :placeholder="tr('搜索模型')" class="model-menu-search-input" @click.stop />
                                           </div>
-                                          <button class="model-menu-manage" @click.stop="refreshModels" title="重新拉取模型列表（新模型需要刷新才能看到）" :disabled="refreshingModels">
+                                          <button class="model-menu-manage" @click.stop="refreshModels" :title="tr('重新拉取模型列表（新模型需要刷新才能看到）')" :disabled="refreshingModels">
                                             <Icon icon="mdi:refresh" width="14" :class="{ spinning: refreshingModels }" />
-                                            <span>{{ refreshingModels ? '刷新中…' : '刷新模型' }}</span>
+                                            <span>{{ refreshingModels ? tr('刷新中…') : tr('刷新模型') }}</span>
                                           </button>
-                                          <button class="model-menu-manage" @click.stop="showModelManager = true; showModelMenu = false" title="管理模型">
+                                          <button class="model-menu-manage" @click.stop="showModelManager = true; showModelMenu = false" :title="tr('管理模型')">
                                             <Icon icon="mdi:cog-outline" width="14" />
-                                            <span>管理模型</span>
+                                            <span>{{ tr('管理模型') }}</span>
                                           </button>
                                         </div>
-                                        <div v-if="!hasModels" class="model-menu-empty">没有可用模型（去设置填 Key 或选免 Key 模型）</div>
+                                        <div v-if="!hasModels" class="model-menu-empty">{{ tr('没有可用模型（去设置填 Key 或选免 Key 模型）') }}</div>
                                         <div v-if="hasModels" class="model-menu-list">
                                           <div
                                             class="model-menu-item model-menu-auto"
@@ -834,11 +834,11 @@
                                             @click="selectModel('auto')"
                                           >
                                             <span class="model-menu-check" v-if="selectedModel === 'auto'">✓</span>
-                                            <span>Auto 智能路由</span>
+                                            <span>{{ tr('Auto 智能路由') }}</span>
                                           </div>
                                           <div class="model-menu-divider"></div>
                                           <template v-for="grp in filteredGroupedOptions" :key="grp.vendor">
-                                            <div class="model-menu-group-title">{{ grp.vendor }}</div>
+                                            <div class="model-menu-group-title">{{ tr(grp.vendor) }}</div>
                                             <div
                                               v-for="m in grp.items"
                                               :key="m.value"
@@ -847,18 +847,18 @@
                                               @click="selectModel(m.value)"
                                               @mouseenter="onItemHover(m.value, $event)"
                                               @mouseleave="onItemLeave"
-                                            ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span class="model-menu-item-label">{{ m.label }}</span><span class="model-menu-effort-tag">{{ effortLabel }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">公益免费</span></div>
+                                            ><span class="model-menu-check" v-if="selectedModel === m.value">✓</span><span class="model-menu-item-label">{{ m.label }}</span><span class="model-menu-effort-tag">{{ effortLabel }}</span><span v-if="sharedPoolModelIds.has(m.value)" class="model-menu-tag-free">{{ tr('公益免费') }}</span></div>
                                           </template>
                                         </div>
                                       </div>
                                       <!-- hover 思考强度选择卡片 -->
                                       <div v-if="hoveredModel && showModelMenu" class="model-menu-effort-popup" :style="hoverEffortStyle" @click.stop @mouseenter="hoverPopupEnter" @mouseleave="hoverPopupLeave">
                                         <div class="mep-header">
-                                          <span class="mep-title">思考</span>
-                                          <span class="mep-toggle" :class="{ on: debugReasoning }" @click="toggleThinking">{{ debugReasoning ? '开' : '关' }}</span>
+                                          <span class="mep-title">{{ tr('思考') }}</span>
+                                          <span class="mep-toggle" :class="{ on: debugReasoning }" @click="toggleThinking">{{ debugReasoning ? tr('开') : tr('关') }}</span>
                                         </div>
                                         <div class="mep-divider"></div>
-                                        <div class="mep-section-label">推理强度</div>
+                                        <div class="mep-section-label">{{ tr('推理强度') }}</div>
                                         <div
                                           v-for="lv in EFFORT_LEVELS"
                                           :key="lv"
@@ -875,12 +875,12 @@
                   <input ref="attachVideoInputRef" type="file" accept="video/*" multiple style="display:none" @change="onAttachVideoSelected" @click.stop />
 
                   <!-- 停止按钮：只在本会话自己有工作流在跑时才显示；切到别的会话（流在别处跑）不占用输入框 -->
-                  <button v-if="flowState.active && runningSessions.has(activeSession) && !userInput.trim() && attachments.length === 0" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" title="停止工作流（已生成内容会保留）">
+                  <button v-if="flowState.active && runningSessions.has(activeSession) && !userInput.trim() && attachments.length === 0" class="input-inner-btn input-right-btn input-stop-btn" @click="stopCodeWorkflow()" :title="tr('停止工作流（已生成内容会保留）')">
                     <Icon icon="mdi:stop" width="16" color="#fff" />
                   </button>
                   <!-- 发送按钮常驻占位：即使无输入也显示（灰色向上箭头），保证模型 pill 旁边永远有它，
                        不因空输入让 pill 沦为最右元素。有输入时高亮为可用态。插话态只对「本会话的流」成立 -->
-                  <button v-else class="input-inner-btn input-right-btn" :class="flowState.active && runningSessions.has(activeSession) ? 'input-steer-btn' : (userInput.trim() || attachments.length ? 'input-send-btn' : 'input-send-btn input-send-idle')" @click="handleSend" :title="flowState.active && runningSessions.has(activeSession) ? '发送插话给工作流（不打断，模型下一轮处理）' : '发送消息'">
+                  <button v-else class="input-inner-btn input-right-btn" :class="flowState.active && runningSessions.has(activeSession) ? 'input-steer-btn' : (userInput.trim() || attachments.length ? 'input-send-btn' : 'input-send-btn input-send-idle')" @click="handleSend" :title="flowState.active && runningSessions.has(activeSession) ? tr('发送插话给工作流（不打断，模型下一轮处理）') : tr('发送消息')">
                     <Icon :icon="flowState.active && runningSessions.has(activeSession) ? 'mdi:send' : 'mdi:arrow-up'" width="18" color="#fff" />
                   </button>
                 </div>
@@ -894,7 +894,7 @@
                     v-if="inputTopBarMode === 'git'"
                     class="toolbar-icon-pill-btn"
                     @click.stop="toggleGitBar"
-                    title="Git 工具栏"
+                    :title="tr('Git 工具栏')"
                   >
                     <Icon icon="mdi:source-branch" width="15" />
                   </button>
@@ -903,7 +903,7 @@
                     class="toolbar-icon-pill-btn"
                     :class="{ active: kbOpen }"
                     @click.stop="toggleKb"
-                    title="知识库（拖拽文件放入）"
+                    :title="tr('知识库（拖拽文件放入）')"
                   >
                     <Icon icon="mdi:bookshelf" width="15" />
                   </button>
@@ -912,7 +912,7 @@
                     class="toolbar-icon-pill-btn"
                     :class="{ active: agentPickerOpen || currentGroup.length > 0 }"
                     @click.stop="toggleAgentPicker"
-                    title="群聊成员（可多选，按顺序依次发言）"
+                    :title="tr('群聊成员（可多选，按顺序依次发言）')"
                   >
                     <Icon icon="mdi:account-group-outline" width="15" />
                   </button>
@@ -922,7 +922,7 @@
                       v-for="id in currentGroup"
                       :key="id"
                       class="agent-chip"
-                      :title="'点击移出群聊'"
+                      :title="tr('点击移出群聊')"
                       @click.stop="removeFromGroup(id)"
                     >
                       <img v-if="agentStore.agentById(id)?.avatar" :src="agentStore.agentById(id).avatar" class="agent-chip-avatar" alt="" />
@@ -937,7 +937,7 @@
 
                                 <div class="input-toolbar-right">
                                   <!-- Context window 用量：圆环 + 模型 pill + 模式 pill（紧凑版） -->
-                  <div v-if="messages.length > 0 && ctxTotalUsed > 0" class="context-bar-widget" @click.stop="toggleTokenPanel" title="Context window 用量">
+                  <div v-if="messages.length > 0 && ctxTotalUsed > 0" class="context-bar-widget" @click.stop="toggleTokenPanel" :title="tr('Context window 用量')">
                     <svg class="ctx-reservoir" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
                       <defs>
                         <clipPath id="ctxResClip">
@@ -952,7 +952,7 @@
                     </svg>
                     <div v-if="showTokenPanel" class="token-usage-panel" @click.stop>
                       <div class="tup-header">
-                        <span class="tup-title">上下文用量</span>
+                        <span class="tup-title">{{ tr('上下文用量') }}</span>
                         <span class="tup-total">~{{ formatTok(ctxTotalUsed) }}/{{ formatTok(ctxWindow) }} Tokens</span>
                       </div>
                       <div class="tup-pct">{{ ctxPct.toFixed(0) }}%</div>
@@ -980,9 +980,9 @@
                         Effort <b>{{ modelOptions.find(m => m.value === selectedModel)?.label || '' }}</b>
                       </div>
                       <div class="effort-slider-row">
-                        <span class="effort-end">快</span>
+                        <span class="effort-end">{{ tr('快') }}</span>
                                                 <input type="range" min="0" max="2" step="1" v-model.number="effortLevel" class="effort-slider" @click.stop @input="onEffortChange" />
-                                                <span class="effort-end">深</span>
+                                                <span class="effort-end">{{ tr('深') }}</span>
                       </div>
                     </div>
                   </Teleport>
@@ -1002,16 +1002,16 @@
                   <div class="kb-drawer-head">
                     <div class="kb-drawer-title">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="var(--app-accent)"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--app-accent)" stroke-width="2" stroke-linecap="round"/></svg>
-                      <span>知识库</span>
+                      <span>{{ tr('知识库') }}</span>
                       <span v-if="kbFiles.length" class="kb-drawer-count">{{ kbFiles.length }}</span>
                     </div>
                     <!-- 通用 / 当前会话 分段：各自独立存储（后端目录隔离），
                          当前会话的知识库只对本会话生效 -->
                     <div class="kb-scope-seg">
-                      <button class="kb-scope-btn" :class="{ active: kbScope === 'global' }" @click.stop="toggleKbScope('global')">通用</button>
-                      <button class="kb-scope-btn" :class="{ active: kbScope === 'session' }" @click.stop="toggleKbScope('session')">当前会话</button>
+                      <button class="kb-scope-btn" :class="{ active: kbScope === 'global' }" @click.stop="toggleKbScope('global')">{{ tr('通用') }}</button>
+                      <button class="kb-scope-btn" :class="{ active: kbScope === 'session' }" @click.stop="toggleKbScope('session')">{{ tr('当前会话') }}</button>
                     </div>
-                    <button class="kb-icon-btn" @click.stop="kbOpen = false" title="收起">
+                    <button class="kb-icon-btn" @click.stop="kbOpen = false" :title="tr('收起')">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </button>
                   </div>
@@ -1022,7 +1022,7 @@
                       <div class="kb-slot-box">
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" class="kb-spin"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z" stroke="currentColor" stroke-width="2" opacity="0.25"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                       </div>
-                      <span>加载中…</span>
+                      <span>{{ tr('加载中…') }}</span>
                     </div>
 
                     <!-- 空态：ref-slot 风格，倾斜 -->
@@ -1030,8 +1030,8 @@
                       <div class="kb-slot-box">
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                       </div>
-                      <span>添加文件</span>
-                      <span class="kb-empty-tip">也可以直接把文件拖拽进来哦</span>
+                      <span>{{ tr('添加文件') }}</span>
+                      <span class="kb-empty-tip">{{ tr('也可以直接把文件拖拽进来哦') }}</span>
                     </div>
 
                     <!-- 文件列表：ref-slot 倾斜卡片 -->
@@ -1051,16 +1051,16 @@
                             class="kb-pin-btn"
                             :class="{ active: kbPinnedFile === file.id }"
                             @click.stop="pinKbGraph(file)"
-                            :title="kbPinnedFile === file.id ? '取消固定图谱' : '固定图谱'"
+                            :title="kbPinnedFile === file.id ? tr('取消固定图谱') : tr('固定图谱')"
                           >
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
                           </button>
-                          <button class="kb-slot-remove" @click.stop="removeKbFile(file.id)" title="移除">
+                          <button class="kb-slot-remove" @click.stop="removeKbFile(file.id)" :title="tr('移除')">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
                           </button>
                         </div>
                         <span class="kb-slot-name" :title="file.name" @click.stop="insertKbRef(file)">{{ file.name }}</span>
-                        <span v-if="file.chunks" class="kb-slot-meta">{{ file.chunks }} 段</span>
+                        <span v-if="file.chunks" class="kb-slot-meta">{{ file.chunks }}{{ tr('段') }}</span>
                         <!-- 悬浮知识图谱弹窗：Teleport 到 body + fixed 坐标定位。
                             悬浮显示在抽屉左边；点击文件固定钉住；可拖拽移动 -->
                         <Teleport to="body">
@@ -1072,10 +1072,10 @@
                             @mouseenter="kgPopupHover = true"
                             @mouseleave="kgPopupHover = false"
                           >
-                            <div class="kg-popup-drag" @mousedown.prevent="onKgDragStart" title="拖拽移动">
+                            <div class="kg-popup-drag" @mousedown.prevent="onKgDragStart" :title="tr('拖拽移动')">
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M9 5h2M15 5h2M9 12h2M15 12h2M9 19h2M15 19h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                              <span>知识图谱{{ kbPinnedFile === file.id ? '（已固定）' : '' }}</span>
-                              <button class="kg-popup-close" type="button" title="关闭图谱" @mousedown.stop @click.stop="closeKbGraph">
+                              <span>{{ tr('知识图谱') }}{{ kbPinnedFile === file.id ? tr('（已固定）') : '' }}</span>
+                              <button class="kg-popup-close" type="button" :title="tr('关闭图谱')" @mousedown.stop @click.stop="closeKbGraph">
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
                               </button>
                             </div>
@@ -1093,7 +1093,7 @@
                         <div class="kb-slot-box">
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                         </div>
-                        <span>添加</span>
+                        <span>{{ tr('添加') }}</span>
                       </div>
                     </div>
                   </div>
@@ -1141,7 +1141,7 @@
                 @dragend="onDockTabDragEnd"
                 @dragover.prevent.stop="onDockTabDragOver(dockLocation)"
                 @drop.prevent.stop="onDockPanelDrop(dockLocation, panelKey)"
-                :title="`${dockPanelLabel(panelKey)} · 拖动可停靠，双击快速切换位置`"
+                :title="dockPanelLabel(panelKey) + tr(' · 拖动可停靠，双击快速切换位置')"
               >
                 <Icon icon="mdi:dots-grid" width="12" class="tool-dock-tab-grip" />
                 <Icon :icon="dockPanelIcon(panelKey)" width="14" class="tool-dock-tab-icon" />
@@ -1151,15 +1151,15 @@
                 </span>
               </button>
               <div class="tool-dock-tab-actions">
-                <button class="tool-dock-tab-add" @click.stop="toggleDockAddMenu($event, dockLocation)" title="添加工具标签页">
+                <button class="tool-dock-tab-add" @click.stop="toggleDockAddMenu($event, dockLocation)" :title="tr('添加工具标签页')">
                   <Icon icon="mdi:plus" width="16" />
                 </button>
               </div>
               <div class="tool-dock-global-actions">
-                <button class="tool-dock-tab-add" @click.stop="toggleDockExpanded(dockLocation)" :title="dockIsExpanded(dockLocation) ? '还原' : '最大化工具区'">
+                <button class="tool-dock-tab-add" @click.stop="toggleDockExpanded(dockLocation)" :title="dockIsExpanded(dockLocation) ? tr('还原') : tr('最大化工具区')">
                   <Icon :icon="dockIsExpanded(dockLocation) ? 'mdi:arrow-collapse' : 'mdi:arrow-expand'" width="15" />
                 </button>
-                <button class="tool-dock-tab-add" @click.stop="toggleDockHidden(dockLocation)" :title="dockLocation === 'right' ? '隐藏右侧工具区' : '隐藏底部工具区'">
+                <button class="tool-dock-tab-add" @click.stop="toggleDockHidden(dockLocation)" :title="dockLocation === 'right' ? tr('隐藏右侧工具区') : tr('隐藏底部工具区')">
                   <Icon :icon="dockLocation === 'right' ? 'mdi:dock-right' : 'mdi:dock-bottom'" width="15" />
                 </button>
               </div>
@@ -1182,11 +1182,11 @@
                         <Icon icon="mdi:close" width="11" />
                       </span>
                     </button>
-                    <button class="terminal-tab-add" @click="addTerminalTab" title="新建终端">
+                    <button class="terminal-tab-add" @click="addTerminalTab" :title="tr('新建终端')">
                       <Icon icon="mdi:plus" width="14" />
                     </button>
                     <div class="terminal-tabs-spacer"></div>
-                    <button class="terminal-tab-snippet-btn" :class="{ active: showSnippet }" @click="showSnippet = !showSnippet" title="脚本片段">
+                    <button class="terminal-tab-snippet-btn" :class="{ active: showSnippet }" @click="showSnippet = !showSnippet" :title="tr('脚本片段')">
                       <Icon icon="mdi:code-braces" width="15" />
                     </button>
                   </div>
@@ -1216,7 +1216,7 @@
           <!-- 菜单 Teleport 到 body，避免被可横向滚动的标签栏裁掉。 -->
           <Teleport to="body">
             <div ref="dockAddMenuRef" v-if="showDockAddMenu" class="tool-dock-add-menu" :style="dockAddMenuStyle" @click.stop>
-              <div class="tool-dock-add-heading">打开工具 · 自动停靠</div>
+              <div class="tool-dock-add-heading">{{ tr('打开工具 · 自动停靠') }}</div>
               <button
                 v-for="option in dockPanelOptions"
                 :key="option.key"
@@ -1244,7 +1244,7 @@
               @drop.prevent.stop="onDockPanelDrop('right')"
             >
               <Icon icon="mdi:dock-right" width="24" />
-              <span>停靠到右侧</span>
+              <span>{{ tr('停靠到右侧') }}</span>
             </div>
             <div
               class="tool-dock-drop-target is-bottom"
@@ -1253,7 +1253,7 @@
               @drop.prevent.stop="onDockPanelDrop('bottom')"
             >
               <Icon icon="mdi:dock-bottom" width="24" />
-              <span>停靠到底部</span>
+              <span>{{ tr('停靠到底部') }}</span>
             </div>
           </div>
         </div>
@@ -1272,9 +1272,9 @@
                           <div v-if="showMailPanel" class="mail-panel-backdrop" @click.self="showMailPanel = false">
                             <div class="mail-panel" @click="markNotifRead">
                               <div class="mail-panel-head">
-                                <h2><Icon icon="mdi:email-outline" width="20" /> 通知</h2>
+                                <h2><Icon icon="mdi:email-outline" width="20" /> {{ tr('通知') }}</h2>
                                 <div class="mail-panel-actions">
-                                  <button class="mail-panel-act-btn" type="button" @click.stop="markNotifRead" title="全部标为已读">
+                                  <button class="mail-panel-act-btn" type="button" @click.stop="markNotifRead" :title="tr('全部标为已读')">
                                     <Icon icon="mdi:email-check-outline" width="16" />
                                   </button>
                                   <button class="mail-panel-close" type="button" @click="showMailPanel = false">
@@ -1283,7 +1283,7 @@
                                 </div>
                               </div>
                               <div class="mail-panel-body">
-                                <div v-if="notifications.length === 0" class="mail-panel-empty">暂无通知</div>
+                                <div v-if="notifications.length === 0" class="mail-panel-empty">{{ tr('暂无通知') }}</div>
                                 <div v-for="n in notifications" :key="n.id" class="mail-notif-row" :class="{ unread: !n.is_read }">
                                   <div class="mail-notif-dot" v-if="!n.is_read"></div>
                                   <div class="mail-notif-content">
@@ -1306,11 +1306,11 @@
         <div v-if="showFavorites" class="fav-backdrop" @click.self="showFavorites = false">
           <div class="fav-panel">
             <div class="fav-head">
-              <h2><Icon icon="mdi:star" width="18" /> 我的收藏</h2>
+              <h2><Icon icon="mdi:star" width="18" /> {{ tr('我的收藏') }}</h2>
               <button class="fav-close" type="button" @click="showFavorites = false"><Icon icon="mdi:close" width="20" /></button>
             </div>
             <div class="fav-body">
-              <div v-if="favorites.length === 0" class="fav-empty">还没有收藏，点回复下面的☆试试</div>
+              <div v-if="favorites.length === 0" class="fav-empty">{{ tr('还没有收藏，点回复下面的☆试试') }}</div>
               <div v-for="f in favorites" :key="f.key" class="fav-row">
                 <div class="fav-main" @click="openFavorite(f)">
                   <div v-if="f.ask" class="fav-ask">{{ f.ask }}</div>
@@ -1318,8 +1318,8 @@
                   <div class="fav-meta"><span>{{ f.sessionName }}</span><span>{{ f.time }}</span></div>
                 </div>
                 <div class="fav-ops">
-                  <button class="tool-btn" title="复制" @click="copyText(f.text)"><Icon icon="mdi:content-copy" width="15" /></button>
-                  <button class="tool-btn" title="删除" @click="removeFavorite(f.key)"><Icon icon="mdi:trash-can-outline" width="15" /></button>
+                  <button class="tool-btn" :title="tr('复制')" @click="copyText(f.text)"><Icon icon="mdi:content-copy" width="15" /></button>
+                  <button class="tool-btn" :title="tr('删除')" @click="removeFavorite(f.key)"><Icon icon="mdi:trash-can-outline" width="15" /></button>
                 </div>
               </div>
             </div>
@@ -1331,18 +1331,18 @@
       <Teleport to="body">
         <div v-if="showShare && shareItem" class="fav-backdrop" @click.self="closeShare">
           <div class="share-pop">
-            <div class="share-title">分享这条回复</div>
+            <div class="share-title">{{ tr('分享这条回复') }}</div>
             <button class="share-opt" type="button" :disabled="sharing" @click="shareCopyMarkdown(shareItem)">
-              <Icon icon="mdi:language-markdown-outline" width="18" /><span>复制为 Markdown</span>
+              <Icon icon="mdi:language-markdown-outline" width="18" /><span>{{ tr('复制为 Markdown') }}</span>
             </button>
             <button class="share-opt" type="button" :disabled="sharing" @click="shareDownloadMarkdown(shareItem)">
-              <Icon icon="mdi:download-outline" width="18" /><span>导出 Markdown 文件</span>
+              <Icon icon="mdi:download-outline" width="18" /><span>{{ tr('导出 Markdown 文件') }}</span>
             </button>
             <button class="share-opt" type="button" :disabled="sharing" @click="shareAsImage(true)">
-              <Icon icon="mdi:content-copy" width="18" /><span>{{ sharing ? '正在生成…' : '复制为图片' }}</span>
+              <Icon icon="mdi:content-copy" width="18" /><span>{{ sharing ? tr('正在生成…') : tr('复制为图片') }}</span>
             </button>
             <button class="share-opt" type="button" :disabled="sharing" @click="shareAsImage(false)">
-              <Icon icon="mdi:image-outline" width="18" /><span>导出图片卡片</span>
+              <Icon icon="mdi:image-outline" width="18" /><span>{{ tr('导出图片卡片') }}</span>
             </button>
           </div>
         </div>
@@ -1367,18 +1367,18 @@
             ref="commitTextareaRef"
             v-model="commitMessage"
             class="commit-modal-textarea"
-            placeholder="输入提交信息，支持多行…"
+            :placeholder="tr('输入提交信息，支持多行…')"
             rows="1"
             @input="adjustCommitTextareaHeight"
             @keydown.esc="closeCommitModal"
           ></textarea>
           <div class="commit-modal-actions">
-            <button class="commit-modal-btn commit-modal-cancel" @click="closeCommitModal">取消</button>
+            <button class="commit-modal-btn commit-modal-cancel" @click="closeCommitModal">{{ tr('取消') }}</button>
             <button
               class="commit-modal-btn commit-modal-confirm"
               :disabled="!commitMessage.trim() || committing"
               @click="runGitCommit"
-            >{{ committing ? '提交中…' : '确认提交' }}</button>
+            >{{ committing ? tr('提交中…') : tr('确认提交') }}</button>
           </div>
         </div>
       </div>
@@ -1460,7 +1460,7 @@ const activeSessionObj = computed(
 const completedSessions = ref(new Set())
 
 function shortTitle(title) {
-  title = (title || '新对话').trim()
+  title = (title || tr('新对话')).trim()
   return title.length > 24 ? title.slice(0, 24) + '…' : title
 }
 
@@ -1491,7 +1491,7 @@ async function loadSessionList() {
     // 注意别把刚分叉出来的分支覆盖成无名根——confirmEdit 已经乐观插入过带血缘的条目了
     if (!real.some(s => s.id === sessionId.value)) {
       const optimistic = sessionList.value.find(s => s.id === sessionId.value)
-      real.unshift(optimistic || { id: sessionId.value, name: '新对话', parentId: '', forkIndex: 0, workdir: getSessionWorkdir(sessionId.value) })
+      real.unshift(optimistic || { id: sessionId.value, name: tr('新对话'), parentId: '', forkIndex: 0, workdir: getSessionWorkdir(sessionId.value) })
     }
     sessionList.value = real
   } catch (e) {
@@ -1621,7 +1621,7 @@ async function newSession(project) {
   const workdir = project?.name?.trim()
     ? project.name
     : (findProjectByPath(currentWorkDir.value?.path)?.name || '')
-  sessionList.value = [{ id, name: '新对话', parentId: '', forkIndex: 0, workdir }, ...sessionList.value]
+  sessionList.value = [{ id, name: tr('新对话'), parentId: '', forkIndex: 0, workdir }, ...sessionList.value]
   recordSessionWorkdir(id)
   switchSession(id)
 }
@@ -1738,12 +1738,12 @@ const toggleTokenPanel = () => {
 // 仿图：上下文分类明细（6 类）。数据来自后端真实估算（字符/4，与四态机口径一致），
 // 从 contextBreakdown store 读，刷新不丢。
 const CTX_CATEGORIES = [
-  { key: 'system',    label: '系统提示词', color: '#98a2b3' },
-  { key: 'tools',     label: '工具定义',   color: '#a78bfa' },
-  { key: 'skill',     label: '技能',       color: '#d97706' },
-  { key: 'subagent',  label: '子代理定义', color: '#3b82f6' },
-  { key: 'memory',    label: '记忆',       color: '#fb923c' },
-  { key: 'conversation', label: '对话',    color: '#0f766e' },
+  { key: 'system',    label: tr('系统提示词'), color: '#98a2b3' },
+  { key: 'tools',     label: tr('工具定义'),   color: '#a78bfa' },
+  { key: 'skill',     label: tr('技能'),       color: '#d97706' },
+  { key: 'subagent',  label: tr('子代理定义'), color: '#3b82f6' },
+  { key: 'memory',    label: tr('记忆'),       color: '#fb923c' },
+  { key: 'conversation', label: tr('对话'),    color: '#0f766e' },
 ]
 const ctxRows = computed(() => {
   const cb = contextBreakdown.value
@@ -1979,12 +1979,12 @@ function persistDockPlacement() {
 
 // ==================== 终端标签组 ====================
 let terminalSeq = 0
-const terminalTabs = ref([{ id: 'term_' + Date.now().toString(36), name: '终端 1' }])
+const terminalTabs = ref([{ id: 'term_' + Date.now().toString(36), name: tr('终端 1') }])
 const activeTerminalId = ref(terminalTabs.value[0].id)
 function addTerminalTab() {
   terminalSeq++
   const id = 'term_' + Date.now().toString(36) + terminalSeq
-  const tab = { id, name: '终端 ' + (terminalTabs.value.length + 1) }
+  const tab = { id, name: tr('终端 ') + (terminalTabs.value.length + 1) }
   terminalTabs.value = [...terminalTabs.value, tab]
   activeTerminalId.value = tab.id
 }
@@ -2000,10 +2000,10 @@ function closeTerminalTab(id) {
 // Diff/任务挂一个中看不中用的提示文字，那是纯粹的视觉谎言。
 const DOCK_PANEL_META = {
   diff: { label: 'Diff', icon: 'proicons:diff' },
-  terminal: { label: '终端', icon: 'ri:terminal-line', shortcut: 'Ctrl+J' },
-  preview: { label: '预览', icon: 'mage:preview', shortcut: 'Ctrl+Shift+B' },
-  file: { label: '文件', icon: 'mdi:file-code-outline', shortcut: 'Ctrl+G' },
-  tasks: { label: '任务', icon: 'mdi:task-minus' }
+  terminal: { label: tr('终端'), icon: 'ri:terminal-line', shortcut: 'Ctrl+J' },
+  preview: { label: tr('预览'), icon: 'mage:preview', shortcut: 'Ctrl+Shift+B' },
+  file: { label: tr('文件'), icon: 'mdi:file-code-outline', shortcut: 'Ctrl+G' },
+  tasks: { label: tr('任务'), icon: 'mdi:task-minus' }
 }
 const dockPanelOptions = Object.entries(DOCK_PANEL_META).map(([key, meta]) => ({ key, ...meta }))
 function dockPanelLabel(key) { return DOCK_PANEL_META[key]?.label || key }
@@ -2100,14 +2100,14 @@ function closeDockPanel(key) {
   }
 }
 function dockPanelPlacementLabel(key) {
-  return dockPlacement[key] === 'bottom' ? '底部' : '右侧'
+  return dockPlacement[key] === 'bottom' ? tr('底部') : tr('右侧')
 }
 function dockPanelAddTargetLabel(key) {
   const target = DEFAULT_DOCK_PLACEMENT[key] || 'right'
-  const targetLabel = target === 'bottom' ? '底部' : '右侧'
+  const targetLabel = target === 'bottom' ? tr('底部') : tr('右侧')
   if (!dockPanels.value.includes(key)) return targetLabel
   const current = dockPlacement[key] || target
-  return current === target ? `已在${targetLabel}` : `移到${targetLabel}`
+  return current === target ? (tr('已在') + targetLabel) : (tr('移到') + targetLabel)
 }
 function onDockTabDragStart(event, key, location) {
   draggedDockPanel.value = key
@@ -2330,7 +2330,7 @@ const agentFSDiffLines = computed(() => {
     if (hunk) {
       oldLine = Number(hunk[1])
       newLine = Number(hunk[2])
-      result.push({ text: `区块 · 原行 ${oldLine} → 新行 ${newLine}`, number: '··', kind: 'hunk' })
+      result.push({ text: (tr('区块 · 原行 ') + oldLine + tr(' → 新行 ') + newLine), number: '··', kind: 'hunk' })
       continue
     }
     if (text.startsWith('+++') || text.startsWith('---') || text.startsWith('diff ') ||
@@ -2396,7 +2396,7 @@ async function refreshAgentFSTimeline() {
     })
     const res = await fetch(`/api/agentfs/log?${params}`)
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || `读取失败 (${res.status})`)
+    if (!res.ok) throw new Error(data.error || (tr('读取失败 (') + res.status + ')'))
     agentFSTimeline.value = (Array.isArray(data.log) ? data.log : []).slice().reverse().slice(0, 18)
     if (selectedAgentFSSnapshot.value &&
         !agentFSTimeline.value.some(item => item.commit === selectedAgentFSSnapshot.value.commit)) {
@@ -2431,10 +2431,10 @@ async function openAgentFSSnapshot(snapshot, event) {
       body: JSON.stringify({ project: currentWorkDir.value.name, seq: snapshot.seq })
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || `Diff 读取失败 (${res.status})`)
+    if (!res.ok) throw new Error(data.error || (tr('Diff 读取失败 (') + res.status + ')'))
     agentFSDiffRaw.value = data.diff || ''
   } catch (err) {
-    agentFSDiffError.value = err.message || '无法读取该快照'
+    agentFSDiffError.value = err.message || tr('无法读取该快照')
   } finally {
     agentFSDiffLoading.value = false
   }
@@ -2498,12 +2498,12 @@ async function systemPickWorkdir() {
     const data = await res.json()
     if (!data || data.cancelled) return
     if (!data.path) {
-      showGitToast('无法识别所选目录')
+      showGitToast(tr('无法识别所选目录'))
       return
     }
     await selectWorkDir({ name: data.name || data.path, path: data.path })
   } catch (e) {
-    showGitToast(e.message || '选择目录失败')
+    showGitToast(e.message || tr('选择目录失败'))
   }
 }
 async function onSystemWorkDirSelected(event) {
@@ -2513,7 +2513,7 @@ async function onSystemWorkDirSelected(event) {
   const relativeParts = (files[0].webkitRelativePath || '').split('/').filter(Boolean)
   const folderName = relativeParts[0]
   if (!folderName) {
-    showGitToast('无法识别所选目录')
+    showGitToast(tr('无法识别所选目录'))
     return
   }
 
@@ -2522,7 +2522,7 @@ async function onSystemWorkDirSelected(event) {
   // GitRepoRoot 相对路径解析），必须改走系统原生选择器拿绝对路径。
   const nativeFilePath = files[0].path
   if (!nativeFilePath) {
-    showGitToast('浏览器拿不到本地路径，改用系统选择器')
+    showGitToast(tr('浏览器拿不到本地路径，改用系统选择器'))
     await systemPickWorkdir()
     return
   }
@@ -2547,7 +2547,7 @@ async function selectWorkDir(dir, opts = {}) {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.error || `切换失败 (${res.status})`)
+      throw new Error(data.error || (tr('切换失败 (') + res.status + ')'))
     }
     const data = await res.json()
     const resolved = { name: dir.name || data.name || dir.path, path: data.path || dir.path }
@@ -2561,10 +2561,10 @@ async function selectWorkDir(dir, opts = {}) {
     if (opts.recordSession !== false) recordSessionWorkdir(activeSession.value)
     saveWorkDirState()
     showWorkDirMenu.value = false
-    showGitToast(`已切换工作目录: ${resolved.name}`)
+    showGitToast((tr('已切换工作目录: ') + resolved.name))
     await refreshAgentFSTimeline()
   } catch (e) {
-    showGitToast(e.message || '切换工作目录失败')
+    showGitToast(e.message || tr('切换工作目录失败'))
   } finally {
     workDirSwitching.value = false
   }
@@ -2573,7 +2573,7 @@ async function selectWorkDir(dir, opts = {}) {
 async function createProject({ name, sourceFolder, thenNewSession }) {
   const projectName = name?.trim()
   if (!projectName || !sourceFolder?.path) {
-    showGitToast('项目名称或源文件夹无效')
+    showGitToast(tr('项目名称或源文件夹无效'))
     return
   }
   // 创建项目 = 新建实体 + 切 cwd，但不动当前会话归属（recordSession: false）：
@@ -2588,7 +2588,7 @@ async function createSubProject({ parent, name }) {
   const subName = name?.trim()
   const parentPath = parent?.path
   if (!subName || !parentPath) {
-    showGitToast('子项目名称或父项目无效')
+    showGitToast(tr('子项目名称或父项目无效'))
     return
   }
   const sep = /[\\/]$/.test(parentPath) ? '' : (parentPath.includes('\\') && !parentPath.includes('/') ? '\\' : '/')
@@ -2599,7 +2599,7 @@ async function openFolderBrowser() {
   workDirBrowseLoading.value = true
   try {
     const res = await fetch('/api/file-tree')
-    if (!res.ok) throw new Error('拉取目录失败')
+    if (!res.ok) throw new Error(tr('拉取目录失败'))
     const tree = await res.json()
     workDirBrowseOptions.value = (tree || [])
       .filter(n => n.type === 'folder' && !n.name.startsWith('.') && !WORKDIR_IGNORED.has(n.name))
@@ -2636,10 +2636,10 @@ async function readGitResponse(res) {
   } catch {
     if (!res.ok) {
       throw new Error(res.status === 404
-        ? '分支接口尚未加载，请重启后端服务'
-        : `Git 接口返回异常 (${res.status})`)
+        ? tr('分支接口尚未加载，请重启后端服务')
+        : (tr('Git 接口返回异常 (') + res.status + ')'))
     }
-    throw new Error('Git 接口返回了无法识别的数据')
+    throw new Error(tr('Git 接口返回了无法识别的数据'))
   }
 }
 
@@ -2648,10 +2648,10 @@ async function fetchGitBranches() {
   try {
     const res = await fetch('/api/git/branches')
     const data = await readGitResponse(res)
-    if (!res.ok) throw new Error(data.error || `读取失败 (${res.status})`)
+    if (!res.ok) throw new Error(data.error || (tr('读取失败 (') + res.status + ')'))
     gitBranches.value = Array.isArray(data.branches) ? data.branches : []
   } catch (err) {
-    showGitToast(err.message || '读取分支失败')
+    showGitToast(err.message || tr('读取分支失败'))
   } finally {
     branchesLoading.value = false
   }
@@ -2679,12 +2679,12 @@ async function checkoutGitBranch(branch) {
       body: JSON.stringify({ branch })
     })
     const data = await readGitResponse(res)
-    if (!res.ok) throw new Error(data.error || `切换失败 (${res.status})`)
+    if (!res.ok) throw new Error(data.error || (tr('切换失败 (') + res.status + ')'))
     showBranchMenu.value = false
     await fetchGitStatus()
-    showGitToast(`已切换到 ${branch}`)
+    showGitToast((tr('已切换到 ') + branch))
   } catch (err) {
-    showGitToast(err.message || '切换分支失败')
+    showGitToast(err.message || tr('切换分支失败'))
   } finally {
     branchSwitching.value = false
   }
@@ -2692,7 +2692,7 @@ async function checkoutGitBranch(branch) {
 
 async function createGitBranch() {
   const suggested = branchSearch.value.trim()
-  const branch = window.prompt('输入新分支名称', suggested)
+  const branch = window.prompt(tr('输入新分支名称'), suggested)
   if (!branch?.trim()) return
   branchSwitching.value = true
   try {
@@ -2702,12 +2702,12 @@ async function createGitBranch() {
       body: JSON.stringify({ branch: branch.trim() })
     })
     const data = await readGitResponse(res)
-    if (!res.ok) throw new Error(data.error || `创建失败 (${res.status})`)
+    if (!res.ok) throw new Error(data.error || (tr('创建失败 (') + res.status + ')'))
     showBranchMenu.value = false
     await Promise.all([fetchGitStatus(), fetchGitBranches()])
-    showGitToast(`已创建并切换到 ${data.branch}`)
+    showGitToast((tr('已创建并切换到 ') + data.branch))
   } catch (err) {
-    showGitToast(err.message || '创建分支失败')
+    showGitToast(err.message || tr('创建分支失败'))
   } finally {
     branchSwitching.value = false
   }
@@ -2736,20 +2736,20 @@ async function runGitAdd() {
   try {
     const res = await fetch('/api/git/add-all', { method: 'POST' })
     if (!res.ok) throw new Error(await res.text())
-    showGitToast('已执行 git add .')
+    showGitToast(tr('已执行 git add .'))
     await fetchGitStatus()
-  } catch (e) { showGitToast('git add 失败') }
+  } catch (e) { showGitToast(tr('git add 失败')) }
 }
 
 async function runGitPush() {
   showPrMenu.value = false
-  showGitToast('推送中…')
+  showGitToast(tr('推送中…'))
   try {
     const res = await fetch('/api/git/push', { method: 'POST' })
     const text = await res.text()
     if (!res.ok) throw new Error(text)
-    showGitToast('推送成功')
-  } catch (e) { showGitToast('推送失败，详见控制台'); console.error(e) }
+    showGitToast(tr('推送成功'))
+  } catch (e) { showGitToast(tr('推送失败，详见控制台')); console.error(e) }
 }
 
 const showCommitModal = ref(false)
@@ -2787,10 +2787,10 @@ async function runGitCommit() {
     if (!res.ok) throw new Error(await res.text())
     showCommitModal.value = false
     commitMessage.value = ''
-    showGitToast('提交成功')
+    showGitToast(tr('提交成功'))
     await fetchGitStatus()
   } catch (e) {
-    showGitToast('提交失败，详见控制台')
+    showGitToast(tr('提交失败，详见控制台'))
     console.error(e)
   } finally {
     committing.value = false
@@ -2813,28 +2813,29 @@ function toggleGitBar() {
 
 // ==================== 项目数据 ====================
 // 定义占位符池子（老王主题风格）
-const placeholders = [
-  "今天我们要创造什么？"
-
-]
-
-const randomPlaceholder = ref("输入你的问题...")
+// placeholder 存「中文 key 数组 + 当前索引」，展示时按 locale 实时翻译（切语言立刻变英文）
+const PLACEHOLDER_KEYS = ["今天我们要创造什么？", "今天想写点什么？"]
+const placeholderIndex = ref(0)
+const randomPlaceholder = computed(() => {
+  const key = PLACEHOLDER_KEYS[placeholderIndex.value] ?? PLACEHOLDER_KEYS[0]
+  return tr(key)
+})
 
 onMounted(() => {
   // 从数组中随机取一条
-  const randomIndex = Math.floor(Math.random() * placeholders.length)
-  randomPlaceholder.value = placeholders[randomIndex]
+  const randomIndex = Math.floor(Math.random() * PLACEHOLDER_KEYS.length)
+  placeholderIndex.value = randomIndex
   // 2. 每隔 6 秒自动轮换一次
   setInterval(() => {
-    const nextIndex = Math.floor(Math.random() * placeholders.length)
-    randomPlaceholder.value = placeholders[nextIndex]
+    const nextIndex = Math.floor(Math.random() * PLACEHOLDER_KEYS.length)
+    placeholderIndex.value = nextIndex
   }, 6000) // 60000毫秒 = 60秒
 })
 
 
 
 // 点导航轴上的圆点：滚到那条用户消息并高亮一下，否则跳过去了也不知道落在哪。
-// 用 behavior:'auto' 而不是 'smooth'：平滑滚动是可中断的动画，会被聊天区
+// 用 behavior:'autotr(' 而不是 ')smooth'：平滑滚动是可中断的动画，会被聊天区
 // 自动跟底的逻辑在半路打回原位（实测 smooth 跳完 scrollTop 原封不动，
 // 瞬时跳则稳定生效）。跨两千像素找旧消息本来也不需要看动画。
 function jumpToMessage(id) {
@@ -2938,7 +2939,7 @@ async function confirmEdit(item) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keep })
     })
-    if (!res.ok) throw new Error(`fork 返回 ${res.status}`)
+    if (!res.ok) throw new Error((tr('fork 返回 ') + res.status))
     newId = (await res.json()).session_id || ''
   } catch (err) {
     console.warn('分叉会话失败，退回原地重发', err)
@@ -3034,7 +3035,7 @@ async function regenerateFlow(item) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keep })
     })
-    if (!res.ok) throw new Error(`fork 返回 ${res.status}`)
+    if (!res.ok) throw new Error((tr('fork 返回 ') + res.status))
     newId = (await res.json()).session_id || ''
   } catch (err) {
     console.warn('重新生成：分叉会话失败，退回原地重发', err)
@@ -3126,7 +3127,7 @@ function toggleFavorite(item) {
     text,
     ask: askOf(item),
     sessionId: sid,
-    sessionName: sess?.name || '未知会话',
+    sessionName: sess?.name || tr('未知会话'),
     time: new Date().toLocaleString('zh-CN', { hour12: false })
   })
   // 只留最近 200 条，防 localStorage 无限膨胀
@@ -3140,7 +3141,7 @@ async function removeFavorite(key) {
 // 收藏跳回原会话：目标会话正在跑流时不重载历史（内存数组才是最全的），
 // 与 switchSession 内部同一套判断，这里只做「切过去」这一步。
 async function openFavorite(f) {
-  if (!f.sessionId) { notice('这条收藏没有记录来源会话'); return }
+  if (!f.sessionId) { notice(tr('这条收藏没有记录来源会话')); return }
   showFavorites.value = false
   if (f.sessionId !== currentSid()) await switchSession(f.sessionId)
 }
@@ -3177,16 +3178,16 @@ async function shareCopyMarkdown(item) {
   const md = shareMarkdown(item)
   try {
     await navigator.clipboard.writeText(md)
-    notice('已复制为 Markdown')
+    notice(tr('已复制为 Markdown'))
   } catch {
-    downloadFile('分享.md', 'text/markdown;charset=utf-8', md)
-    notice('剪贴板不可用，已改为下载文件')
+    downloadFile(tr('分享.md'), 'text/markdown;charset=utf-8', md)
+    notice(tr('剪贴板不可用，已改为下载文件'))
   }
   closeShare()
 }
 function shareDownloadMarkdown(item) {
-  downloadFile('分享.md', 'text/markdown;charset=utf-8', shareMarkdown(item))
-  notice('已导出 Markdown')
+  downloadFile(tr('分享.md'), 'text/markdown;charset=utf-8', shareMarkdown(item))
+  notice(tr('已导出 Markdown'))
   closeShare()
 }
 // 图片卡片：离屏挂一个亮蓝白节点，html2canvas 截成 PNG。
@@ -3218,17 +3219,17 @@ async function shareAsImage(copy) {
   try {
     const canvas = await buildShareCard(item)
     const blob = await new Promise(res => canvas.toBlob(res, 'image/png'))
-    if (!blob) throw new Error('画布导出为空')
+    if (!blob) throw new Error(tr('画布导出为空'))
     if (copy && navigator.clipboard && window.ClipboardItem) {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      notice('图片已复制，可直接粘贴发送')
+      notice(tr('图片已复制，可直接粘贴发送'))
     } else {
-      downloadFile('分享卡片.png', 'image/png', blob)
-      notice(copy ? '当前环境不支持复制图片，已改为下载' : '已导出图片')
+      downloadFile(tr('分享卡片.png'), 'image/png', blob)
+      notice(copy ? tr('当前环境不支持复制图片，已改为下载') : tr('已导出图片'))
     }
     closeShare()
   } catch (e) {
-    notice('生成图片失败：' + (e.message || e))
+    notice(tr('生成图片失败：') + (e.message || e))
   } finally {
     sharing.value = false
   }
@@ -3239,6 +3240,9 @@ async function shareAsImage(copy) {
 // 三态反馈：空闲=静态声波圆钮，加载中=图标旋转+「正在合成语音」，播放中=声波跳动+圆底转蓝。
 // 音频实时拉流播放，不落盘；同一时间只播一条，点另一条自动切；再点当前条停止。
 import { EdgeTTSBrowser } from 'edge-tts-universal/browser'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 const speakingId = ref(null)
 const loadingId = ref(null)
 let speakAudio = null
@@ -3249,9 +3253,9 @@ function ttsVoiceNow() {
 }
 
 function speakState(id) {
-  if (loadingId.value === id) return '正在合成语音…'
-  if (speakingId.value === id) return '停止朗读'
-  return '朗读'
+  if (loadingId.value === id) return tr('正在合成语音…')
+  if (speakingId.value === id) return tr('停止朗读')
+  return tr('朗读')
 }
 
 function stripMarkdownForTTS(md) {
@@ -3324,7 +3328,7 @@ const voiceListening = ref(false)
 let voiceRec = null
 function voiceStart() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-  if (!SR) { alert('当前浏览器不支持语音输入，请用 Edge/Chrome'); return }
+  if (!SR) { alert(tr('当前浏览器不支持语音输入，请用 Edge/Chrome')); return }
   if (voiceListening.value) return
   try {
     const rec = new SR()
@@ -3363,7 +3367,7 @@ const isModelVisible = (fm) => (fm.keyless || fm.api_key_set) && !fm.disabled &&
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
 // 模型 pill 的显示名：Auto 模式固定文案；其他取下拉里的 label，找不到回退占位。
 const selectedModelLabel = computed(() => {
-  if (selectedModel.value === 'auto') return 'Auto 智能路由'
+  if (selectedModel.value === 'auto') return tr('Auto 智能路由')
   return modelOptions.value.find(m => m.value === selectedModel.value)?.label || (hasModels.value ? '模型' : '无可用模型')
 })
 // 列表为空时下拉无选项；选中项若不在真实可见列表里则定位到第一个。
@@ -3386,10 +3390,10 @@ const groupedModelOptions = computed(() => {
   const groups = new Map()
   for (const fm of freeModelsFull.value) {
     if (!isModelVisible(fm)) continue
-    const vendor = fm.vendor || '其他'
+    const vendor = fm.vendor || tr('其他')
     if (!groups.has(vendor)) groups.set(vendor, { vendor, items: [] })
     groups.get(vendor).items.push({
-      label: modelLabels.value[fm.id] || fm.name || fm.id,
+      label: tr(modelLabels.value[fm.id] || fm.name || fm.id),
       value: fm.id
     })
   }
@@ -3556,7 +3560,7 @@ async function markNotifRead() {
   notifCount.value = 0
 }
 function notifTypeLabel(type) {
-  const labels = { system: '系统', invite: '邀请码', cron: '定时任务', vip: '会员' }
+  const labels = { system: tr('系统'), invite: tr('邀请码'), cron: tr('定时任务'), vip: tr('会员') }
   return labels[type] || type
 }
 // 新建弹窗是否从管理面板进入（取消/关闭时回到管理面板）
@@ -3593,13 +3597,13 @@ function onCreateScheduledTask(data) {
   })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(() => {
-      showGitToast('✅ 定时任务已创建，到点会弹系统通知')
+      showGitToast(tr('✅ 定时任务已创建，到点会弹系统通知'))
       // 创建完回到管理面板（v-if 重新挂载 → onMounted 自动刷新列表）
       showScheduledTaskManager.value = true
     })
     .catch(e => {
       console.log('定时任务数据:', data, e)
-      showGitToast('❌ 定时任务创建失败：' + (e.message || '网络错误'))
+      showGitToast(tr('❌ 定时任务创建失败：') + (e.message || tr('网络错误')))
     })
 }
 
@@ -3647,7 +3651,7 @@ function highlightAllCodeBlocks() {
         btnGroup.className = 'code-btn-group'
         const copyBtn = document.createElement('button')
         copyBtn.className = 'copy-code-btn'
-        copyBtn.textContent = '复制'
+        copyBtn.textContent = tr('复制')
         copyBtn.onclick = async () => {
           const success = await copyText(code.textContent || '')
           if (success) { copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制' }, 2000) }
@@ -4065,7 +4069,7 @@ function onSessionTitlePending(e) {
 // 注意：debugReasoning 来自上面的 useChatWidget 解构，本段必须放在解构之后，
 // 否则 setup 阶段会命中暂时性死区（TDZ）报 "Cannot access before initialization"。
 const EFFORT_LEVELS = ['low', 'medium', 'high']
-const EFFORT_UI_LABELS = { low: '低', medium: '中', high: '高' }
+const EFFORT_UI_LABELS = { low: tr('低'), medium: tr('中'), high: tr('高') }
 const showEffortPanel = ref(false)
 const showHeatmapPopup = ref(true)
 const effortWidgetRef = ref(null)
@@ -4206,7 +4210,7 @@ function highlightHits(hits) {
   let text = (hits[0].content || '').replace(/[<>&]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch]))
   if (q) {
     try {
-      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const esc = q.replace(/[.*+?^()|[\]\\]/g, '\\$&')
       text = text.replace(new RegExp('(' + esc + ')', 'gi'), '<mark>$1</mark>')
     } catch (e) { /* 非法正则保持原样 */ }
   }
@@ -4224,7 +4228,7 @@ async function runSessionSearch(q) {
     const data = await res.json()
     searchResults.value = (data.sessions || []).map(s => ({
       id: s.session_id,
-      name: s.title || '新对话',
+      name: s.title || tr('新对话'),
       updatedAt: s.updated_at,
       hits: s.hits || []
     }))
@@ -4273,9 +4277,9 @@ function formatSearchDate(ts) {
   const d = new Date(ts)
   const now = new Date()
   const isYesterday = d.getDate() === now.getDate() - 1 && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-  if (isYesterday) return '昨天'
-  if (d.toDateString() === now.toDateString()) return '今天'
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  if (isYesterday) return tr('昨天')
+  if (d.toDateString() === now.toDateString()) return tr('今天')
+  return (d.getMonth() + 1 + tr('月') + d.getDate() + tr('日'))
 }
 
 // 折叠态会话横条：当前项目会话在上，其他在下。
@@ -4529,8 +4533,8 @@ function onFollowUpClick(card) {
 // 插话风格：follow up 送达模型时的口吻（设置面板可配：默认/酒馆/修真/自定义前缀）
 const FOLLOW_UP_STYLES = {
   plain: (t) => t,
-  tavern: (t) => `【你】${t}`,
-  xianxia: (t) => `【道友】${t}`,
+  tavern: (t) => (tr('【你】') + t),
+  xianxia: (t) => (tr('【道友】') + t),
 }
 function applyFollowUpStyle(text) {
   const s = localStorage.getItem('follow_up_style') || 'plain'
@@ -4600,9 +4604,11 @@ async function handleSend() {
   pushChatHistory(displayText)
   userInput.value = ''
   nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-  // 占位等待期间用户又主动发新消息：旧占位作废（防分析完自动启动双流）
-  pendingSend = null
-  launchWorkflow(combined, displayText, displayAttachments)
+  // 发送后清掉输入区 chip（对比 hasAnalyzing 分支，这里之前漏清 → 图片发出去后仍残留）
+    attachments.value = []
+    // 占位等待期间用户又主动发新消息：旧占位作废（防分析完自动启动双流）
+    pendingSend = null
+    launchWorkflow(combined, displayText, displayAttachments)
 }
 
 // 真正启动工作流（共享池 / 超长暂存 / startCodeWorkflow 三段，供 handleSend 与
@@ -4768,7 +4774,7 @@ async function launchWorkflow(combined, displayText, displayAttachments, skipUse
     async function sendSharedPoolStream(flow, combined, model) {
       // 先确保游客 UID 已拿到并缓存，请求才带得上 X-Guest-Uid（否则云端 401）
       await ensureGuestUid()
-      const retryMsg = (n, total) => `重新尝试连接神经网络 (${n}/${total})～`
+      const retryMsg = (n, total) => (tr('重新尝试连接神经网络 (') + n + '/' + total + ')～')
       let accumulated = '' // 已流式累积的回复文本（重试时保留）
       let retryCount = 0
       for (; ; ) {
@@ -4791,7 +4797,7 @@ async function launchWorkflow(combined, displayText, displayAttachments, skipUse
                 type: 'intent',
                 text: used != null
                   ? `😅 公益免费额度已用完（今日 ${used}/${limit} 次）\n\n填自己的 Key 继续使用，无限制～`
-                  : `😅 上游免费模型暂时繁忙（429），稍等几分钟再试试～`
+                  : (tr('😅 上游免费模型暂时繁忙（429），稍等几分钟再试试～'))
               })
               flow.endTime = Date.now()
               onStreamUpdate?.()
@@ -4802,16 +4808,16 @@ async function launchWorkflow(combined, displayText, displayAttachments, skipUse
               // 云端没识别游客身份（极端情况：游客 UID 服务不可达）。
               // 公益免费不需要登录 —— 这是网络/云端问题，给平实提示并引导重试。
               flow.status = 'failed'
-              flow.blocks.push({ type: 'intent', text: `😅 暂时连不上公益免费服务，请检查网络后重试～` })
+              flow.blocks.push({ type: 'intent', text: (tr('😅 暂时连不上公益免费服务，请检查网络后重试～')) })
               flow.endTime = Date.now()
               onStreamUpdate?.()
               resolve(false)
               return
             }
             if (!res.ok) {
-              const err = await res.json().catch(() => ({ error: '请求失败' }))
+              const err = await res.json().catch(() => ({ error: tr('请求失败') }))
               flow.status = 'failed'
-              flow.blocks.push({ type: 'intent', text: `共享池错误：${err.error || '未知错误'}` })
+              flow.blocks.push({ type: 'intent', text: (tr('共享池错误：') + err.error || tr('未知错误')) })
               flow.endTime = Date.now()
               onStreamUpdate?.()
               resolve(false)
@@ -4871,7 +4877,7 @@ async function launchWorkflow(combined, displayText, displayAttachments, skipUse
         retryCount++
         if (retryCount >= MAX_STREAM_RETRY) {
           flow.status = 'failed'
-          flow.blocks.push({ type: 'intent', text: `😅 连接一直不稳定，试了 ${MAX_STREAM_RETRY} 次都没连上，稍等片刻再发一次试试～` })
+          flow.blocks.push({ type: 'intent', text: (tr('😅 连接一直不稳定，试了 ') + MAX_STREAM_RETRY + tr(' 次都没连上，稍等片刻再发一次试试～')) })
           flow.endTime = Date.now()
           onStreamUpdate?.()
           return
@@ -4909,7 +4915,7 @@ function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => { const result = String(reader.result || ''); resolve(result.split(',')[1] || '') }
-    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.onerror = () => reject(new Error(tr('图片读取失败')))
     reader.readAsDataURL(file)
   })
 }
@@ -4944,7 +4950,7 @@ function handlePaste(e) {
   const file = imageFile || videoFile
   if (file) {
     e.preventDefault()
-    if (flowState.value.active) { showVisionError('工作流运行中，请稍后再粘贴图片/视频'); return }
+    if (flowState.value.active) { showVisionError(tr('工作流运行中，请稍后再粘贴图片/视频')); return }
     if (file.type.startsWith('video/')) attachVideoFile(file)
     else attachImageFile(file)
     return
@@ -4964,7 +4970,7 @@ function attachPastedText(text) {
   const trimmed = text.trim()
   if (!trimmed) return
   const firstLine = (trimmed.split('\n')[0] || '').replace(/[\\/:*?"<>|\r\n]/g, '').trim().slice(0, 14)
-  const name = (firstLine || '粘贴文本') + '.txt'
+  const name = (firstLine || tr('粘贴文本')) + '.txt'
   attachments.value.push({
     id: ++attachmentSeq,
     kind: 'text',
@@ -5056,8 +5062,8 @@ async function attachImageFile(file) {
       body: JSON.stringify({ image_base64: base64, mime_type: file.type || 'image/png', model: visionModel })
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || `识图请求失败 (${res.status})`)
-    if (!data.text) throw new Error('未返回分析文本')
+    if (!res.ok) throw new Error(data.error || (tr('识图请求失败 (') + res.status + ')'))
+    if (!data.text) throw new Error(tr('未返回分析文本'))
     let item = attachments.value.find(a => a.id === id)
     if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
     if (item) { item.status = 'ready'; item.analysisText = data.text }
@@ -5066,8 +5072,8 @@ async function attachImageFile(file) {
   } catch (err) {
     let item = attachments.value.find(a => a.id === id)
     if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
-    if (item) { item.status = 'error'; item.errorMsg = err?.message || '识图失败' }
-    syncPendingAttachment(id, 'error', { errorMsg: err?.message || '识图失败' })
+    if (item) { item.status = 'error'; item.errorMsg = err?.message || tr('识图失败') }
+    syncPendingAttachment(id, 'error', { errorMsg: err?.message || tr('识图失败') })
     maybeAutoStart()
   }
 }
@@ -5088,8 +5094,8 @@ async function attachVideoFile(file) {
     if (visionModel) fd.append('model', visionModel)
     const res = await fetch('/api/video/analyze', { method: 'POST', body: fd })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || `视频理解请求失败 (${res.status})`)
-    if (!data.text) throw new Error('未返回分析文本')
+    if (!res.ok) throw new Error(data.error || (tr('视频理解请求失败 (') + res.status + ')'))
+    if (!data.text) throw new Error(tr('未返回分析文本'))
     let item = attachments.value.find(a => a.id === id)
     if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
     if (item) { item.status = 'ready'; item.analysisText = data.text }
@@ -5098,8 +5104,8 @@ async function attachVideoFile(file) {
   } catch (err) {
     let item = attachments.value.find(a => a.id === id)
     if (!item && pendingSend) item = pendingSend.items.find(a => a.id === id)
-    if (item) { item.status = 'error'; item.errorMsg = err?.message || '视频理解失败' }
-    syncPendingAttachment(id, 'error', { errorMsg: err?.message || '视频理解失败' })
+    if (item) { item.status = 'error'; item.errorMsg = err?.message || tr('视频理解失败') }
+    syncPendingAttachment(id, 'error', { errorMsg: err?.message || tr('视频理解失败') })
     maybeAutoStart()
   }
 }
@@ -5136,7 +5142,7 @@ function onAttachFolderSelected(e) {
   const files = Array.from(e.target.files || [])
   e.target.value = ''
   if (files.length === 0) return
-  const folderName = files[0].webkitRelativePath?.split('/')[0] || '未命名文件夹'
+  const folderName = files[0].webkitRelativePath?.split('/')[0] || tr('未命名文件夹')
   const list = files.slice(0, 200).map(f => f.webkitRelativePath).join('\n')
   const more = files.length > 200 ? `\n…（共 ${files.length} 个文件，已截断显示）` : ''
   attachments.value.push({
@@ -5153,12 +5159,12 @@ function serializeOutgoing(typed, atts) {
   const blocks = (atts || [])
     .filter(a => a.status === 'ready')
     .map(a => {
-      if (a.kind === 'image') return `[图片: ${a.name}]\n${a.analysisText || ''}`
-      if (a.kind === 'video') return `[视频: ${a.name}]\n${a.analysisText || ''}`
+      if (a.kind === 'image') return (tr('[图片: ') + a.name + ']\n' + a.analysisText || '')
+      if (a.kind === 'video') return (tr('[视频: ') + a.name + ']\n' + a.analysisText || '')
       if (a.kind === 'folder') return `[文件夹: ${a.name}，共 ${a.fileCount} 个文件]\n${a.manifest}`
       if (a.kind === 'text') return `[文本附件: ${a.name}（${a.charCount} 字）]\n${a.content}`
       // 文本/代码文件：只给文件名，让 agent 自行 read_file，不把内容塞进消息
-      return `[文件: ${a.name}]`
+      return (tr('[文件: ') + a.name + ']')
     })
   return [...blocks, (typed || '').trim()].filter(Boolean).join('\n')
 }
@@ -5282,14 +5288,14 @@ onMounted(() => {
 function onPasteImageFromMenu(e) {
   const file = e.detail && e.detail.file
   if (!file) return
-  if (flowState.value.active) { showVisionError('工作流运行中，请稍后再粘贴图片'); return }
+  if (flowState.value.active) { showVisionError(tr('工作流运行中，请稍后再粘贴图片')); return }
   attachImageFile(file)
 }
 async function refreshGitGraph() {
   try {
     const res = await fetch('/api/git/graph')
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || '读取 Git 图失败')
+    if (!res.ok) throw new Error(data.error || tr('读取 Git 图失败'))
     gitGraph.value = { commits: Array.isArray(data.commits) ? data.commits : [], current_branch: data.current_branch || '' }
   } catch (err) {
     console.warn('读取 Git 分支图失败', err)

@@ -3,38 +3,38 @@
     <header class="sites-hero">
       <div>
         <p class="eyebrow"><Icon icon="mdi:web" width="17" /> AMEKO SITES · POWERED BY NETLIFY</p>
-        <h1>把 Agent 写好的作品，<em>一键分享</em>出去</h1>
-        <p class="intro">选择 Agent 已构建的网页，发布后会得到一个公开链接。朋友不需要安装 Ameko，也能直接打开。</p>
+        <h1>{{ tr('把 Agent 写好的作品，') }}<em>{{ tr('一键分享') }}</em>{{ tr('出去') }}</h1>
+        <p class="intro">{{ tr('选择 Agent 已构建的网页，发布后会得到一个公开链接。朋友不需要安装 Ameko，也能直接打开。') }}</p>
       </div>
       <div class="hero-actions">
-        <button type="button" class="sites-return" @click="backToChat"><Icon icon="mdi:arrow-left" width="16" /> 回到聊天</button>
+        <button type="button" class="sites-return" @click="backToChat"><Icon icon="mdi:arrow-left" width="16" /> {{ tr('回到聊天') }}</button>
         <div class="hero-orbit" aria-hidden="true"><Icon icon="mdi:rocket-launch-outline" width="60" /></div>
       </div>
     </header>
 
     <section class="publish-card">
-      <div class="section-heading"><span class="step">1</span><div><h2>发布一个站点</h2><p>{{ workdir ? `当前项目：${workdir}` : '先在编码页面选择一个项目文件夹' }}</p></div></div>
+      <div class="section-heading"><span class="step">1</span><div><h2>{{ tr('发布一个站点') }}</h2><p>{{ workdir ? tr('当前项目：') + workdir : tr('先在编码页面选择一个项目文件夹') }}</p></div></div>
       <div v-if="!candidates.length" class="empty-build">
         <Icon icon="mdi:package-variant-closed" width="26" />
-        <div><strong>还没有可发布的网页构建</strong><p>让 Agent 先运行构建命令，生成含有 <code>index.html</code> 的 <code>dist</code>、<code>build</code> 或 <code>out</code> 文件夹。</p></div>
+        <div><strong>{{ tr('还没有可发布的网页构建') }}</strong><p>{{ tr('让 Agent 先运行构建命令，生成含有') }} <code>index.html</code> {{ tr('的') }} <code>dist</code>、<code>build</code> {{ tr('或') }} <code>out</code> {{ tr('文件夹。') }}</p></div>
       </div>
       <div v-else class="deploy-form">
-        <label><span>公开地址名称</span><input v-model="name" autocomplete="off" placeholder="例如：my-travel-plan" /><small>将作为 <code>名称.netlify.app</code>，需在全球唯一。</small></label>
-        <label><span>发布哪个构建目录</span><select v-model="source"><option v-for="item in candidates" :key="item.path" :value="item.path">{{ item.label }}</option></select></label>
-        <label class="token-field"><span>Netlify Personal Access Token <a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noreferrer">去创建 ↗</a></span><div><input v-model="token" :type="showToken ? 'text' : 'password'" autocomplete="off" placeholder="nfp_..." /><button type="button" @click="showToken = !showToken" :aria-label="showToken ? '隐藏令牌' : '显示令牌'"><Icon :icon="showToken ? 'mdi:eye-off-outline' : 'mdi:eye-outline'" width="18" /></button></div><small>令牌只用于本次上传，不会由 Ameko 保存。</small></label>
-        <label class="public-confirm"><input v-model="publishApproved" type="checkbox" /><span>我确认将此站点公开发布。任何拿到链接的人都可以访问。</span></label>
-        <button class="deploy-button" type="button" :disabled="deploying || !name.trim() || !token.trim() || !publishApproved" @click="deploy(selectedSite)"><Icon :icon="deploying ? 'mdi:loading' : 'mdi:rocket-launch-outline'" width="19" :class="{ spinning: deploying }" />{{ deploying ? '正在发布…' : (selectedSite ? '确认并更新到 Netlify' : '确认并发布到 Netlify') }}</button>
+        <label><span>{{ tr('公开地址名称') }}</span><input v-model="name" autocomplete="off" :placeholder="tr('例如：my-travel-plan')" /><small>{{ tr('将作为') }} <code>{{ tr('名称.netlify.app') }}</code>{{ tr('，需在全球唯一。') }}</small></label>
+        <label><span>{{ tr('发布哪个构建目录') }}</span><select v-model="source"><option v-for="item in candidates" :key="item.path" :value="item.path">{{ item.label }}</option></select></label>
+        <label class="token-field"><span>Netlify Personal Access Token <a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noreferrer">{{ tr('去创建 ↗') }}</a></span><div><input v-model="token" :type="showToken ? 'text' : 'password'" autocomplete="off" placeholder="nfp_..." /><button type="button" @click="showToken = !showToken" :aria-label="showToken ? tr('隐藏令牌') : tr('显示令牌')"><Icon :icon="showToken ? 'mdi:eye-off-outline' : 'mdi:eye-outline'" width="18" /></button></div><small>{{ tr('令牌只用于本次上传，不会由 Ameko 保存。') }}</small></label>
+        <label class="public-confirm"><input v-model="publishApproved" type="checkbox" /><span>{{ tr('我确认将此站点公开发布。任何拿到链接的人都可以访问。') }}</span></label>
+        <button class="deploy-button" type="button" :disabled="deploying || !name.trim() || !token.trim() || !publishApproved" @click="deploy(selectedSite)"><Icon :icon="deploying ? 'mdi:loading' : 'mdi:rocket-launch-outline'" width="19" :class="{ spinning: deploying }" />{{ deploying ? tr('正在发布…') : (selectedSite ? tr('确认并更新到 Netlify') : tr('确认并发布到 Netlify')) }}</button>
       </div>
       <p v-if="notice" class="notice" :class="{ error: noticeError }"><Icon :icon="noticeError ? 'mdi:alert-circle-outline' : 'mdi:check-circle-outline'" width="17" />{{ notice }}</p>
     </section>
 
     <section class="sites-list">
-      <div class="list-heading"><div><h2>已发布站点</h2><p>再次发布会更新同一个分享链接。</p></div><button type="button" class="refresh" @click="load"><Icon icon="mdi:refresh" width="17" />刷新</button></div>
-      <div v-if="!sites.length" class="no-sites">第一次发布后，站点会显示在这里。</div>
+      <div class="list-heading"><div><h2>{{ tr('已发布站点') }}</h2><p>{{ tr('再次发布会更新同一个分享链接。') }}</p></div><button type="button" class="refresh" @click="load"><Icon icon="mdi:refresh" width="17" />{{ tr('刷新') }}</button></div>
+      <div v-if="!sites.length" class="no-sites">{{ tr('第一次发布后，站点会显示在这里。') }}</div>
       <article v-for="site in sites" :key="site.site_id" class="site-row">
         <div class="site-icon"><Icon icon="mdi:language-html5" width="24" /></div>
-        <div class="site-info"><strong>{{ site.name }}</strong><a v-if="site.url" :href="site.url" target="_blank" rel="noreferrer">{{ site.url }}</a><small>最近发布 {{ formatDate(site.updated_at) }} · 来源 {{ site.source }}</small></div>
-        <div class="site-actions"><button type="button" @click="copy(site.url)" :disabled="!site.url"><Icon icon="mdi:content-copy" width="17" />{{ copied === site.site_id ? '已复制' : '复制链接' }}</button><button type="button" class="update" @click="updateSite(site)"><Icon icon="mdi:upload-outline" width="17" />更新</button></div>
+        <div class="site-info"><strong>{{ site.name }}</strong><a v-if="site.url" :href="site.url" target="_blank" rel="noreferrer">{{ site.url }}</a><small>{{ tr('最近发布') }}{{ formatDate(site.updated_at) }}{{ tr('· 来源') }}{{ site.source }}</small></div>
+        <div class="site-actions"><button type="button" @click="copy(site.url)" :disabled="!site.url"><Icon icon="mdi:content-copy" width="17" />{{ copied === site.site_id ? tr('已复制') : tr('复制链接') }}</button><button type="button" class="update" @click="updateSite(site)"><Icon icon="mdi:upload-outline" width="17" />{{ tr('更新') }}</button></div>
       </article>
     </section>
   </main>
@@ -44,6 +44,9 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 
 const router = useRouter()
 const sites = ref([]); const candidates = ref([]); const workdir = ref('')
@@ -53,7 +56,7 @@ const deploying = ref(false); const notice = ref(''); const noticeError = ref(fa
 async function load() {
   try {
     const res = await fetch('/api/sites'); const data = await res.json()
-    if (!res.ok) throw new Error(data.error || '读取站点失败')
+    if (!res.ok) throw new Error(data.error || tr('读取站点失败'))
     sites.value = data.sites || []; candidates.value = data.candidates || []; workdir.value = data.workdir || ''
     if (!candidates.value.some(item => item.path === source.value)) source.value = candidates.value[0]?.path || 'dist'
     if (!name.value) name.value = (workdir.value || 'my-agent-site').split(/[\\/]/).filter(Boolean).pop() || 'my-agent-site'
@@ -65,15 +68,15 @@ async function deploy(site) {
     const res = await fetch('/api/sites/deploy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.value, source: source.value, token: token.value, site_id: site?.site_id || '', confirm_public: publishApproved.value }) })
     const data = await res.json()
     if (!res.ok) {
-      if (data.suggested_name) { name.value = data.suggested_name; publishApproved.value = false; notice.value = `“${data.suggested_name}” 已填入建议名称。请检查后重新勾选公开发布。`; noticeError.value = true; return }
-      throw new Error(data.error || '发布失败')
+      if (data.suggested_name) { name.value = data.suggested_name; publishApproved.value = false; notice.value = ('“' + data.suggested_name + tr('” 已填入建议名称。请检查后重新勾选公开发布。')); noticeError.value = true; return }
+      throw new Error(data.error || tr('发布失败'))
     }
-    notice.value = `发布成功：${data.site.url}`; sites.value = [data.site, ...sites.value.filter(item => item.site_id !== data.site.site_id)]; selectedSite.value = data.site; publishApproved.value = false
+    notice.value = (tr('发布成功：') + data.site.url); sites.value = [data.site, ...sites.value.filter(item => item.site_id !== data.site.site_id)]; selectedSite.value = data.site; publishApproved.value = false
   } catch (error) { notice.value = error.message; noticeError.value = true } finally { deploying.value = false }
 }
-function updateSite(site) { selectedSite.value = site; name.value = site.name; source.value = site.source; publishApproved.value = false; notice.value = '粘贴 Token 后点击“更新到 Netlify”，即可更新该站点。'; noticeError.value = false; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function updateSite(site) { selectedSite.value = site; name.value = site.name; source.value = site.source; publishApproved.value = false; notice.value = tr('粘贴 Token 后点击“更新到 Netlify”，即可更新该站点。'); noticeError.value = false; window.scrollTo({ top: 0, behavior: 'smooth' }) }
 async function copy(url) { if (!url) return; try { await navigator.clipboard.writeText(url); const match = sites.value.find(item => item.url === url); copied.value = match?.site_id || ''; setTimeout(() => copied.value = '', 1800) } catch { notice.value = '复制失败，请手动复制链接'; noticeError.value = true } }
-function formatDate(value) { return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '刚刚' }
+function formatDate(value) { return value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : tr('刚刚') }
 function backToChat() { router.push('/chat') }
 onMounted(load)
 </script>

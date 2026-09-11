@@ -2,10 +2,10 @@
   <div class="game-page">
     <div class="game-topbar">
       <button class="back-btn" @click="goBack">
-        <Icon icon="mdi:arrow-left" /> 返回
+        <Icon icon="mdi:arrow-left" /> {{ tr('返回') }}
       </button>
-      <span class="game-title">星迹 · Star Trail</span>
-      <span class="game-tip">云端经济 · 独立部署</span>
+      <span class="game-title">{{ tr('星迹 · Star Trail') }}</span>
+      <span class="game-tip">{{ tr('云端经济 · 独立部署') }}</span>
     </div>
     <!-- 游戏前端独立构建部署（不进入 re0 开源仓库），re0 只提供入口 -->
     <iframe
@@ -20,6 +20,9 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 
 const router = useRouter()
 function goBack() { router.push('/chat') }

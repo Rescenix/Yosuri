@@ -6,7 +6,7 @@
     <div v-for="(para, idx) in startNarratives" :key="'s' + idx" class="group-narrative markdown-body" v-html="renderMarkdown(para, true)"></div>
     
     <!-- 加载中占位符（只在没有任何文字且没有工具时显示） -->
-    <div v-if="showLoadingPlaceholder && startNarratives.length === 0" class="group-narrative group-narrative-loading">正在处理...</div>
+    <div v-if="showLoadingPlaceholder && startNarratives.length === 0" class="group-narrative group-narrative-loading">{{ tr('正在处理...') }}</div>
 
     <!-- 第二部分：唯一的聚合折叠摘要与白卡片 -->
     <template v-if="allToolCalls.length">
@@ -30,6 +30,9 @@ import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import ToolActionRow from './ToolActionRow.vue'
 import { renderMarkdown } from './markdownRenderer.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   group: { type: Object, required: true }
@@ -91,10 +94,10 @@ const summaryText = computed(() => {
     else others++
   }
   const parts = []
-  if (reads > 0) parts.push(`读取了 ${reads} 个文件`)
-  if (edits > 0) parts.push(`编辑了 ${edits} 个文件`)
-  if (commands > 0) parts.push(`运行了 ${commands} 条命令`)
-  if (others > 0) parts.push(`调用了 ${others} 次工具`)
+  if (reads > 0) parts.push((tr('读取了 ') + reads + tr(' 个文件')))
+  if (edits > 0) parts.push((tr('编辑了 ') + edits + tr(' 个文件')))
+  if (commands > 0) parts.push((tr('运行了 ') + commands + tr(' 条命令')))
+  if (others > 0) parts.push((tr('调用了 ') + others + tr(' 次工具')))
   return parts.join('，')
 })
 

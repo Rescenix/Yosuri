@@ -3,17 +3,17 @@
     <div class="fo-backdrop" @click="$emit('close')">
       <div class="fo-card" @click.stop>
         <div class="fo-header">
-          <span class="fo-title">Auto 自定义排序</span>
-          <button class="fo-close" @click="$emit('close')" title="关闭">
+          <span class="fo-title">{{ tr('Auto 自定义排序') }}</span>
+          <button class="fo-close" @click="$emit('close')" :title="tr('关闭')">
             <Icon icon="mdi:close" width="18" />
           </button>
         </div>
         <div class="fo-hint">
           <Icon icon="mdi:auto-fix" width="13" class="fo-hint-icon" />
-          <span>此顺序决定 Auto 智能路由逐个尝试免费模型的顺序 —— 拖动调整，松手自动保存</span>
+          <span>{{ tr('此顺序决定 Auto 智能路由逐个尝试免费模型的顺序 —— 拖动调整，松手自动保存') }}</span>
         </div>
         <div class="fo-body">
-          <div v-if="loading" class="fo-loading">加载中...</div>
+          <div v-if="loading" class="fo-loading">{{ tr('加载中...') }}</div>
           <template v-else-if="list.length">
             <div
               v-for="m in list"
@@ -28,20 +28,20 @@
               @drop.prevent="onDrop(m.id)"
             >
               <Icon icon="mdi:drag-vertical" width="16" class="fo-drag" />
-              <span class="fo-name">{{ m.name }}</span>
+              <span class="fo-name">{{ tr(m.name) }}</span>
               <span class="fo-vendor">{{ m.vendor }}</span>
-              <span class="fo-tag" :class="{ free: m.keyless, nkey: !m.keyless && !m.api_key_set }">{{ m.keyless ? '免 Key' : (m.api_key_set ? '已配 Key' : '未配 Key') }}</span>
+              <span class="fo-tag" :class="{ free: m.keyless, nkey: !m.keyless && !m.api_key_set }">{{ m.keyless ? tr('免 Key') : (m.api_key_set ? tr('已配 Key') : tr('未配 Key')) }}</span>
             </div>
           </template>
-          <div v-else class="fo-loading">没有免费模型</div>
+          <div v-else class="fo-loading">{{ tr('没有免费模型') }}</div>
         </div>
         <div class="fo-footer">
-          <button class="fo-reset" type="button" :disabled="saving" @click="resetOrder">恢复默认顺序</button>
-          <button class="fo-pin-ds" type="button" :disabled="saving" @click="pinDeepSeekTop" title="将 DeepSeek（小鲸鱼）模型置顶">
-            <Icon icon="mdi:pin" width="13" /> 小鲸鱼置顶
+          <button class="fo-reset" type="button" :disabled="saving" @click="resetOrder">{{ tr('恢复默认顺序') }}</button>
+          <button class="fo-pin-ds" type="button" :disabled="saving" @click="pinDeepSeekTop" :title="tr('将 DeepSeek（小鲸鱼）模型置顶')">
+            <Icon icon="mdi:pin" width="13" /> {{ tr('小鲸鱼置顶') }}
           </button>
-          <span class="fo-save-state">{{ saving ? '保存中...' : saveError }}</span>
-          <button class="fo-done" type="button" @click="$emit('close')">完成</button>
+          <span class="fo-save-state">{{ saving ? tr('保存中...') : saveError }}</span>
+          <button class="fo-done" type="button" @click="$emit('close')">{{ tr('完成') }}</button>
         </div>
       </div>
     </div>
@@ -51,6 +51,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   openid: { type: String, default: '' }
@@ -95,7 +98,7 @@ async function load() {
     }
     list.value = models
   } catch (e) {
-    saveError.value = '加载失败：' + (e.message || '网络错误')
+    saveError.value = tr('加载失败：') + (e.message || tr('网络错误'))
   } finally {
     loading.value = false
   }
@@ -147,7 +150,7 @@ async function saveOrder(arr) {
     // 通知 ChatWidget / 设置面板重新拉取（聊天下拉顺序同步更新）
     window.dispatchEvent(new CustomEvent('model-config-changed'))
   } catch (e) {
-    saveError.value = '保存失败：' + (e.message || '网络错误')
+    saveError.value = tr('保存失败：') + (e.message || tr('网络错误'))
     await load() // 回滚到后端顺序
   } finally {
     saving.value = false
@@ -168,7 +171,7 @@ async function resetOrder() {
     window.dispatchEvent(new CustomEvent('model-config-changed'))
     await load() // 重新按目录顺序展示
   } catch (e) {
-    saveError.value = '恢复失败：' + (e.message || '网络错误')
+    saveError.value = tr('恢复失败：') + (e.message || tr('网络错误'))
   } finally {
     saving.value = false
   }
@@ -189,7 +192,7 @@ async function pinDeepSeekTop() {
     list.value = newOrder.map(id => byId.get(id)).filter(Boolean)
     await saveOrder(newOrder)
   } catch (e) {
-    saveError.value = '置顶失败：' + (e.message || '网络错误')
+    saveError.value = tr('置顶失败：') + (e.message || tr('网络错误'))
     await load()
   } finally {
     saving.value = false

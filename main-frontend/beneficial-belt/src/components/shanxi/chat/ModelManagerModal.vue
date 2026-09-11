@@ -3,31 +3,31 @@
     <div class="mm-backdrop" @click="$emit('close')">
       <div class="mm-card" @click.stop>
         <div class="mm-header">
-          <span class="mm-title">模型</span>
-          <button class="mm-close" @click="$emit('close')" title="关闭">
+          <span class="mm-title">{{ tr('模型') }}</span>
+          <button class="mm-close" @click="$emit('close')" :title="tr('关闭')">
             <Icon icon="mdi:close" width="18" />
           </button>
         </div>
         <div class="mm-search">
           <Icon icon="mdi:magnify" width="14" class="mm-search-icon" />
-          <input v-model="q" type="text" placeholder="搜索模型" class="mm-search-input" />
+          <input v-model="q" type="text" :placeholder="tr('搜索模型')" class="mm-search-input" />
         </div>
         <div class="mm-body">
-          <div v-if="loading" class="mm-loading">加载中...</div>
+          <div v-if="loading" class="mm-loading">{{ tr('加载中...') }}</div>
           <template v-else>
             <div v-for="grp in filteredGroups" :key="grp.vendor" class="mm-group">
               <div class="mm-group-head">
-                <span class="mm-group-name">{{ grp.vendor }}</span>
+                <span class="mm-group-name">{{ tr(grp.vendor) }}</span>
                 <label class="mm-switch" @click.prevent="toggleVendor(grp)">
                   <input type="checkbox" :checked="vendorOn(grp)" />
                   <span class="mm-switch-track"></span>
                 </label>
               </div>
               <div v-for="m in grp.items" :key="m.id" class="mm-model-row">
-                              <span class="mm-model-name">{{ m.name }}</span>
-                              <span v-if="m.keyless" class="mm-tag mm-tag-free">免 Key</span>
-                                                            <span v-else-if="!m.api_key_set" class="mm-tag mm-tag-nkey">未配 Key</span>
-                                                            <span v-else class="mm-tag mm-tag-ok">已配 Key</span>
+                              <span class="mm-model-name">{{ tr(m.name) }}</span>
+                              <span v-if="m.keyless" class="mm-tag mm-tag-free">{{ tr('免 Key') }}</span>
+                                                            <span v-else-if="!m.api_key_set" class="mm-tag mm-tag-nkey">{{ tr('未配 Key') }}</span>
+                                                            <span v-else class="mm-tag mm-tag-ok">{{ tr('已配 Key') }}</span>
                               <label class="mm-switch" @click.prevent="toggleHidden(m.id)">
                                 <input type="checkbox" :checked="!isHidden(m.id)" />
                                 <span class="mm-switch-track"></span>
@@ -37,7 +37,7 @@
           </template>
         </div>
         <div class="mm-footer" @click="$emit('add-provider')">
-          <Icon icon="mdi:plus" width="14" /> 添加提供方...
+          <Icon icon="mdi:plus" width="14" /> {{ tr('添加提供方...') }}
         </div>
       </div>
     </div>
@@ -48,6 +48,9 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { hiddenModelIds, isHidden, toggleHidden, batchSet } from '../composables/modelVisibility.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   freeModels: { type: Array, default: () => [] },
@@ -62,7 +65,7 @@ const groups = computed(() => {
   const map = new Map()
   for (const fm of props.freeModels) {
     if (fm.local) continue
-    const v = fm.vendor || '其他'
+    const v = fm.vendor || tr('其他')
     if (!map.has(v)) map.set(v, { vendor: v, items: [] })
     map.get(v).items.push(fm)
   }

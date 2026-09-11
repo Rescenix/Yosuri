@@ -36,7 +36,7 @@
       @click="copySelection"
     >
       <Icon v-if="!sel.copied" icon="mdi:content-copy" width="13" />
-      <span>{{ sel.copied ? '✓ 已复制' : '复制' }}</span>
+      <span>{{ sel.copied ? tr('✓ 已复制') : tr('复制') }}</span>
     </button>
   </Teleport>
 </template>
@@ -45,6 +45,9 @@
 import { reactive, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import router from '../../../router.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const menu = reactive({ show: false, x: 0, y: 0, items: [], target: null, selText: '' })
 const sel = reactive({ show: false, x: 0, y: 0, text: '', copied: false })
@@ -130,11 +133,11 @@ function onContextMenu(e) {
     e.preventDefault()
     const hasSel = hasSelIn(t) || hasStoredSel(t)
     menu.items = [
-      { id: 'cut', label: '剪切', key: 'Ctrl+X', disabled: !hasSel },
-      { id: 'copy', label: '复制', key: 'Ctrl+C', disabled: !hasSel },
-      { id: 'paste', label: '粘贴', key: 'Ctrl+V' },
+      { id: 'cut', label: tr('剪切'), key: 'Ctrl+X', disabled: !hasSel },
+      { id: 'copy', label: tr('复制'), key: 'Ctrl+C', disabled: !hasSel },
+      { id: 'paste', label: tr('粘贴'), key: 'Ctrl+V' },
       { sep: true },
-      { id: 'selectAll', label: '全选', key: 'Ctrl+A' }
+      { id: 'selectAll', label: tr('全选'), key: 'Ctrl+A' }
     ]
     menu.target = t
     menu.selText = ''
@@ -142,9 +145,9 @@ function onContextMenu(e) {
   } else if (selText) {
     e.preventDefault()
     menu.items = [
-      { id: 'copySel', label: '复制', key: 'Ctrl+C' },
+      { id: 'copySel', label: tr('复制'), key: 'Ctrl+C' },
       { sep: true },
-      { id: 'selectBlock', label: '全选', key: 'Ctrl+A' }
+      { id: 'selectBlock', label: tr('全选'), key: 'Ctrl+A' }
     ]
     menu.target = t
     menu.selText = selText
@@ -153,9 +156,9 @@ function onContextMenu(e) {
     // 代码块 / 终端输出：无选区时也能「复制内容」
     e.preventDefault()
     menu.items = [
-      { id: 'copyPre', label: '复制内容', key: 'Ctrl+C' },
+      { id: 'copyPre', label: tr('复制内容'), key: 'Ctrl+C' },
       { sep: true },
-      { id: 'selectBlock', label: '全选', key: 'Ctrl+A' }
+      { id: 'selectBlock', label: tr('全选'), key: 'Ctrl+A' }
     ]
     menu.target = t.closest('pre')
     menu.selText = ''

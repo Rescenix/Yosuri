@@ -1,11 +1,14 @@
 <template>
   <ul class="nav-links">
-    <li><a href="/blog">博客</a></li>
+    <li><a href="/blog">{{ tr('博客') }}</a></li>
   </ul>
 </template>
 
 <script setup>
 import { useAuth } from '../composables/useAuth.js'
+import { useI18n, tr } from '../../composables/useI18n.js'
+
+
 
 // 登录态统一由 useAuth 管理（含验真 + 监听 auth-change 自动刷新）
 const isLoggedIn = useAuth().isLoggedIn

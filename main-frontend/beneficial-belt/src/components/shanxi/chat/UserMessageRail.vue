@@ -12,7 +12,7 @@
         <button
           class="umr-node"
           :class="{ hovered: hoverIdx === i, active: activeIdx === i && hoverIdx < 0 }"
-          :aria-label="`跳到第 ${i + 1} 条提问`"
+          :aria-label="tr('跳到第 ') + (i + 1) + tr(' 条提问')"
           @mouseenter="hoverIdx = i"
           @click="$emit('jump', m.id)"
         >
@@ -47,6 +47,9 @@
 
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   // 完整消息列表，组件自己筛出用户消息

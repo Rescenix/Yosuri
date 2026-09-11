@@ -2,13 +2,13 @@
   <div class="kg-container" ref="container">
     <div v-if="loading" class="kg-loading">
       <div class="kg-spin"></div>
-      <span>正在用免费模型分析文档…</span>
+      <span>{{ tr('正在用免费模型分析文档…') }}</span>
     </div>
     <div v-else-if="error" class="kg-error">
       <span>{{ error }}</span>
-      <button class="kg-retry" @click="generate">重试</button>
+      <button class="kg-retry" @click="generate">{{ tr('重试') }}</button>
     </div>
-    <div v-else-if="!hasData" class="kg-empty">暂无可图谱化的内容</div>
+    <div v-else-if="!hasData" class="kg-empty">{{ tr('暂无可图谱化的内容') }}</div>
     <svg v-else ref="svg" :width="width" :height="height"></svg>
   </div>
 </template>
@@ -16,6 +16,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   graph: { type: Object, default: () => ({ nodes: [], links: [] }) },
@@ -150,7 +153,7 @@ function render() {
     d3.select(this).select('circle')
       .transition().duration(150)
       .attr('r', (d.count ? 10 + Math.min(d.count, 8) * 2 : 14) + 4)
-    tooltip.html(`<strong>${d.name}</strong><br>类型：${d.type || '未知'}<br>出现：${d.count || 1} 次`)
+    tooltip.html(('<strong>' + d.name + tr('</strong><br>类型：') + d.type || tr('未知') + tr('<br>出现：') + d.count || 1 + tr(' 次')))
       .style('left', (e.offsetX + 12) + 'px')
       .style('top', (e.offsetY - 8) + 'px')
       .style('opacity', 1)

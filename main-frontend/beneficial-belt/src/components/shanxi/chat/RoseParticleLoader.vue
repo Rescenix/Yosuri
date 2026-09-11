@@ -11,7 +11,7 @@
     viewBox="0 0 100 100"
     fill="none"
     role="status"
-    aria-label="运行中"
+    :aria-label="tr('运行中')"
   >
     <g :transform="`rotate(${rotation} 50 50)`">
       <path
@@ -36,6 +36,9 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 // ---------- rose-curve 参数（Hermes loader.tsx 转译，改为可配花瓣数） ----------
 const TWO_PI = Math.PI * 2

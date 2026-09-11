@@ -1,15 +1,15 @@
 <template>
   <Teleport to="body">
     <div class="ob-mask">
-      <div class="ob-card" role="dialog" aria-label="首次启动引导">
+      <div class="ob-card" role="dialog" :aria-label="tr('首次启动引导')">
         <div class="ob-steps">
           <span v-for="(s, i) in STEPS" :key="s" class="ob-dot" :class="{ on: i === step, done: i < step }"></span>
         </div>
 
         <!-- 1 语言 + 领养 Agent -->
         <section v-if="step === 0" class="ob-body">
-          <h2>选语言，领养你的 Agent</h2>
-          <p class="ob-sub">语言随时可在「设置 → 通用」改；性格选定后它会一直这样跟你说话，也可在「设置 → 人设」自定义。</p>
+          <h2>{{ tr('选语言，领养你的 Agent') }}</h2>
+          <p class="ob-sub">{{ tr('语言随时可在「设置 → 通用」改；选一张角色卡就是领养一个 Agent，人设和头像都写在这张卡上，之后也可在「设置 → 角色卡」里改。') }}</p>
 
           <div class="ob-lang-grid">
             <button
@@ -36,8 +36,8 @@
             >
               <span class="ob-persona-icon"><Icon :icon="p.icon" width="20" /></span>
               <span class="ob-persona-body">
-                <span class="ob-persona-name">{{ p.name }}</span>
-                <span class="ob-persona-desc">{{ p.desc }}</span>
+                <span class="ob-persona-name">{{ tr(p.name) }}</span>
+                                <span class="ob-persona-desc">{{ tr(p.desc) }}</span>
               </span>
             </button>
           </div>
@@ -45,8 +45,8 @@
 
         <!-- 2 功能导航 + 用户协议 -->
         <section v-else class="ob-body">
-          <h2>这些入口，随时能去</h2>
-          <p class="ob-sub">右下角折角导航可以拖动、增删、排序。</p>
+          <h2>{{ tr('这些入口，随时能去') }}</h2>
+          <p class="ob-sub">{{ tr('右下角折角导航可以拖动、增删、排序。') }}</p>
           <div class="ob-grid">
             <button
               v-for="item in navigableItems"
@@ -58,8 +58,8 @@
             >
               <span class="ob-item-icon"><Icon :icon="item.icon" width="20" /></span>
               <span class="ob-item-body">
-                <span class="ob-item-label">{{ item.label }}</span>
-                <span class="ob-item-desc">{{ desc[item.id] || '' }}</span>
+                <span class="ob-item-label">{{ tr(item.label) }}</span>
+                <span class="ob-item-desc">{{ tr(desc[item.id] || '') }}</span>
               </span>
               <span class="ob-item-arrow">›</span>
             </button>
@@ -70,18 +70,18 @@
           <div class="ob-agree-row">
             <label class="ob-check">
               <input v-model="agreed" type="checkbox" />
-              <span>我已阅读并同意</span>
+              <span>{{ tr('我已阅读并同意') }}</span>
             </label>
-            <button class="ob-link" type="button" @click="showAgreement = true">《Yosuri 用户协议》</button>
+            <button class="ob-link" type="button" @click="showAgreement = true">{{ tr('《Yosuri 用户协议》') }}</button>
             <label v-if="step === 1" class="ob-check ob-check-right">
               <input v-model="dontShow" type="checkbox" />
-              <span>不再显示</span>
+              <span>{{ tr('不再显示') }}</span>
             </label>
           </div>
           <div class="ob-foot-actions">
-            <button v-if="step > 0" class="ob-btn" type="button" @click="step--">上一步</button>
-            <button v-if="step < STEPS.length - 1" class="ob-btn ob-btn-primary" type="button" :disabled="!agreed" @click="step++">继续</button>
-            <button v-else class="ob-btn ob-btn-primary" type="button" :disabled="!agreed" @click="finish">开始使用</button>
+            <button v-if="step > 0" class="ob-btn" type="button" @click="step--">{{ tr('上一步') }}</button>
+            <button v-if="step < STEPS.length - 1" class="ob-btn ob-btn-primary" type="button" :disabled="!agreed" @click="step++">{{ tr('继续') }}</button>
+            <button v-else class="ob-btn ob-btn-primary" type="button" :disabled="!agreed" @click="finish">{{ tr('开始使用') }}</button>
           </div>
         </footer>
 
@@ -89,7 +89,7 @@
         <div v-if="showAgreement" class="ob-doc">
           <header class="ob-doc-head">
             <strong>{{ AGREEMENT_TITLE }}</strong>
-            <button class="ob-doc-close" type="button" title="返回" aria-label="返回" @click="showAgreement = false">
+            <button class="ob-doc-close" type="button" :title="tr('返回')" :aria-label="tr('返回')" @click="showAgreement = false">
               <Icon icon="mdi:close" width="18" />
             </button>
           </header>
@@ -100,7 +100,7 @@
             </section>
           </div>
           <footer class="ob-doc-foot">
-            <button class="ob-btn ob-btn-primary" type="button" @click="readAndAgree">已阅读，同意</button>
+            <button class="ob-btn ob-btn-primary" type="button" @click="readAndAgree">{{ tr('已阅读，同意') }}</button>
           </footer>
         </div>
       </div>
@@ -112,9 +112,11 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import { useI18n } from '../../../composables/useI18n.js'
-import { BUILTIN_PRESETS } from '../composables/personaPresets.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+import { BUILTIN_AGENT_CARDS } from '../composables/agentPresets.js'
+import { useAgentsStore } from '../composables/useAgents.js'
 import { AGREEMENT_TITLE, AGREEMENT_SECTIONS } from '../composables/userAgreement.js'
+const { setLocale } = useI18n()
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -122,7 +124,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const router = useRouter()
-const { setLocale } = useI18n()
+
 const STEPS = ['setup', 'nav']
 const step = ref(0)
 const agreed = ref(!!localStorage.getItem('studio_api_agreed'))
@@ -131,7 +133,7 @@ const dontShow = ref(true)
 const showAgreement = ref(false)
 
 const LANGS = [
-  { id: 'zh', name: '简体中文', tag: '默认' },
+  { id: 'zh', name: tr('简体中文'), tag: tr('默认') },
   { id: 'en', name: 'English', tag: 'Beta' },
 ]
 const pickedLang = ref(localStorage.getItem('ameko_locale_v1') === 'en' ? 'en' : 'zh')
@@ -140,19 +142,18 @@ function pickLang(id) {
   setLocale(id)
 }
 
-const presets = ref(BUILTIN_PRESETS)
-// 已存过 persona 的老用户回显选中项；每日随机或自定义人设不预选，交给用户自己挑。
-const savedPersona = localStorage.getItem('persona')
-const pickedPersona = ref(
-  localStorage.getItem('randomPersona') === 'true' || !savedPersona
-    ? ''
-    : (BUILTIN_PRESETS.find((p) => p.prompt === savedPersona) || {}).id || '',
-)
-function pickPersona(p) {
+const agentStore = useAgentsStore()
+const presets = ref(BUILTIN_AGENT_CARDS)
+// 选中的内置角色卡 id（只做回显）。内置卡在 useAgents 里已播种成真实角色卡，
+// 这里选中即把对应那张设为当前 Agent；后端没起时静默跳过，之后在设置里补。
+const pickedPersona = ref('')
+async function pickPersona(p) {
   pickedPersona.value = p.id
-  localStorage.setItem('persona', p.prompt)
-  localStorage.removeItem('randomPersona')
-  localStorage.removeItem('randomPersonaDate')
+  try {
+    if (!agentStore.agentsLoaded.value) await agentStore.loadAgents()
+    const hit = agentStore.agents.value.find((a) => a.id === p.id || a.name === p.name)
+    if (hit) agentStore.selectAgent(hit.id)
+  } catch { /* 后端没起：留着在设置 → 角色卡 里建 */ }
 }
 
 function readAndAgree() {
@@ -163,13 +164,13 @@ function readAndAgree() {
 
 const navigableItems = computed(() => props.items.filter((item) => item.to))
 const desc = {
-  chat: '对话、写代码、跑终端',
-  company: 'Agent 团队实时状态与交付',
-  sites: '部署与查看自己的站点',
-  publish: '网文写作与一键发布',
-  comic: '漫画分镜与生成',
-  game: '星迹：联机副本与交易行',
-  studio: 'AI 短剧与视频剪辑',
+  chat: tr('对话、写代码、跑终端'),
+  company: tr('Agent 团队实时状态与交付'),
+  sites: tr('部署与查看自己的站点'),
+  publish: tr('网文写作与一键发布'),
+  comic: tr('漫画分镜与生成'),
+  game: tr('星迹：联机副本与交易行'),
+  studio: tr('AI 短剧与视频剪辑'),
 }
 
 function go(item) {

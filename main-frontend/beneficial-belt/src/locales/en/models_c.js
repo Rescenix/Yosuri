@@ -1,0 +1,26 @@
+// 后端模型目录中文 → 英文（末片）。
+export default {
+"商汤免费·每模型 1500 次调用/5 小时·多模态": "SenseTime free · 1500 calls/5 h per model · multimodal",
+"商汤免费·每模型 500 次调用/5 小时·1M 上下文": "SenseTime free · 500 calls/5 h per model · 1M context",
+"商汤免费档·agent 可用（实测 2026-08-02）": "SenseTime free tier · agent-ready (measured 2026-08-02)",
+"智谱 BigModel": "Zhipu BigModel",
+"智谱免费·识图": "Zhipu free · vision",
+"智谱永久免费": "Zhipu permanently free",
+"智谱永久免费·30 并发": "Zhipu permanently free · 30 concurrent",
+"阶跃星辰 StepFun": "StepFun",
+"阶跃星辰免费档·agent 可用（实测 2026-08-02）": "StepFun free tier · agent-ready (measured 2026-08-02)",
+"阶跃星辰免费档·agent 可用（实测 2026-08-21）": "StepFun free tier · agent-ready (measured 2026-08-21)",
+"阶跃星辰免费档·多模态 GUI 推理·agent 可用（实测 2026-08-21）": "StepFun free tier · multimodal GUI reasoning · agent-ready (measured 2026-08-21)",
+"阶跃星辰免费档·语音对话·agent 可用（实测 2026-08-21，tools 实测能正确触发 tool_calls）": "StepFun free tier · voice chat · agent-ready (measured 2026-08-21; tools correctly trigger tool_calls)",
+"阶跃星辰（识图）": "StepFun (vision)",
+"魔搭免费·访问令牌调用·2000次/天·2026-08-13 ID 改 -0731（旧 ID 上游已下架 400）": "ModelScope free · token auth · 2000/day · ID switched to -0731 on 2026-08-13 (old ID delisted upstream, 400)",
+"魔搭免费·访问令牌调用·2000次/天·agent 可用（实测 2026-08-21）": "ModelScope free · token auth · 2000/day · agent-ready (measured 2026-08-21)",
+"魔搭免费·访问令牌调用·2000次/天·与 Flash 共享同一份免费额度·agent 可用（实测 2026-08-21）": "ModelScope free · token auth · 2000/day · shares the same free quota as Flash · agent-ready (measured 2026-08-21)",
+"魔搭免费·访问令牌调用·2000次/天·代码专精·agent 可用（实测 2026-08-21）": "ModelScope free · token auth · 2000/day · code specialist · agent-ready (measured 2026-08-21)",
+"魔搭免费·访问令牌调用·2000次/天·多模态": "ModelScope free · token auth · 2000/day · multimodal",
+"魔搭免费·访问令牌调用·2000次/天·多模态·agent 可用（实测 2026-08-21）": "ModelScope free · token auth · 2000/day · multimodal · agent-ready (measured 2026-08-21)",
+"魔搭免费·访问令牌调用·2000次/天·欧美厂商多样性·agent 可用（实测 2026-08-21）": "ModelScope free · token auth · 2000/day · Western vendor diversity · agent-ready (measured 2026-08-21)",
+"魔搭免费·访问令牌调用·2000次/天·深度思考档·agent 可用（实测 2026-08-21）": "ModelScope free · token auth · 2000/day · deep reasoning · agent-ready (measured 2026-08-21)",
+"魔搭免费·访问令牌调用·2000次/天·非 Qwen 系厂商多样性·agent 可用（实测 2026-08-21）": "ModelScope free · token auth · 2000/day · non-Qwen vendor diversity · agent-ready (measured 2026-08-21)",
+"魔搭免费·访问令牌调用·2000次/天（实测 2026-08-02）": "ModelScope free · token auth · 2000/day (measured 2026-08-02)"
+}

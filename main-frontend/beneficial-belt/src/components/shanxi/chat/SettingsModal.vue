@@ -1,20 +1,20 @@
 <template>
   <Teleport to="body">
     <div class="settings-modal-backdrop" @click="$emit('close')" @keydown.esc="$emit('close')">
-      <div class="settings-modal-card" role="dialog" aria-modal="true" aria-label="Yosuri 设置" tabindex="-1" @click.stop>
+      <div class="settings-modal-card" role="dialog" aria-modal="true" :aria-label="tr('Yosuri 设置')" tabindex="-1" @click.stop>
         <div class="settings-modal-header">
           <div class="settings-brand">
             <span class="settings-brand-mark"><Icon icon="lucide:sparkles" width="17" /></span>
             <span class="settings-brand-copy">
               <strong>Yosuri</strong>
-              <small>偏好设置</small>
+              <small>{{ tr('偏好设置') }}</small>
             </span>
           </div>
           <div class="settings-header-actions">
             <span class="settings-privacy-badge">
-              <Icon icon="lucide:shield-check" width="14" />本地优先
+              <Icon icon="lucide:shield-check" width="14" />{{ tr('本地优先') }}
             </span>
-            <button class="settings-modal-close" @click="$emit('close')" title="关闭">
+            <button class="settings-modal-close" @click="$emit('close')" :title="tr('关闭')">
               <Icon icon="mdi:close" width="18" />
             </button>
           </div>
@@ -22,15 +22,15 @@
         <div class="settings-modal-body">
           <!-- 左侧边栏 -->
           <div class="settings-sidebar">
-            <div class="settings-nav-label">通用</div>
+            <div class="settings-nav-label">{{ tr('通用') }}</div>
                         <button class="settings-tab" :class="{ on: activeTab === 'general' }" @click="activeTab = 'general'; loadAutoStart()">
-                                                  <Icon icon="mdi:cog-outline" width="16" />通用</button>
-            <div class="settings-nav-label">模型与连接</div>
+                                                  <Icon icon="mdi:cog-outline" width="16" />{{ tr('通用') }}</button>
+            <div class="settings-nav-label">{{ tr('模型与连接') }}</div>
             <button class="settings-tab" :class="{ on: activeTab === 'models' }" @click="activeTab = 'models'">
-              <Icon icon="mdi:brain" width="16" />模型</button>
+              <Icon icon="mdi:brain" width="16" />{{ tr('模型') }}</button>
             <div class="settings-tab-group">
               <button class="settings-tab" :class="{ on: activeTab === 'providers' }" @click="activeTab = 'providers'">
-                <Icon icon="mdi:server-network-outline" width="16" />提供方
+                <Icon icon="mdi:server-network-outline" width="16" />{{ tr('提供方') }}
               </button>
               <div v-show="activeTab === 'providers'" class="settings-subtabs">
                 <button
@@ -39,30 +39,30 @@
                   type="button"
                   @click="providerSubTab = 'free'"
                 >
-                  <Icon icon="mdi:gift-outline" width="15" />免费模型
+                  <Icon icon="mdi:gift-outline" width="15" />{{ tr('免费模型') }}
                 </button>
                 <button
                                   class="settings-subtab"
                                   type="button"
                                   @click="openCustomLock"
                                 >
-                                  <Icon icon="mdi:api" width="15" />自定义 API
+                                  <Icon icon="mdi:api" width="15" />{{ tr('自定义 API') }}
                                 </button>
               </div>
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'aggapi' }" @click="activeTab = 'aggapi'">
-                          <Icon icon="mdi:api" width="16" />聚合 API</button>
+                          <Icon icon="mdi:api" width="16" />{{ tr('聚合 API') }}</button>
                         <button class="settings-tab" :class="{ on: activeTab === 'lan' }" @click="activeTab = 'lan'; loadLanSyncSetting()">
-                          <Icon icon="mdi:lan-connect" width="16" />局域网</button>
-                        <div class="settings-nav-label">体验与能力</div>
+                          <Icon icon="mdi:lan-connect" width="16" />{{ tr('局域网') }}</button>
+                        <div class="settings-nav-label">{{ tr('体验与能力') }}</div>
             <button class="settings-tab" :class="{ on: activeTab === 'persona' }" @click="activeTab = 'persona'">
-              <Icon icon="mdi:heart-cog-outline" width="16" />人设</button>
+              <Icon icon="mdi:account-star-outline" width="16" />{{ tr('角色卡') }}</button>
             <button class="settings-tab" :class="{ on: activeTab === 'appearance' }" @click="activeTab = 'appearance'">
-              <Icon icon="mdi:palette-outline" width="16" />外观</button>
+              <Icon icon="mdi:palette-outline" width="16" />{{ tr('外观') }}</button>
             <button class="settings-tab" :class="{ on: activeTab === 'editor' }" @click="activeTab = 'editor'">
-              <Icon icon="mdi:code-tags" width="16" />编辑器</button>
+              <Icon icon="mdi:code-tags" width="16" />{{ tr('编辑器') }}</button>
             <button class="settings-tab" :class="{ on: activeTab === 'safety' }" @click="activeTab = 'safety'; loadProtectedWorkspace()">
-              <Icon icon="mdi:shield-lock-outline" width="16" />安全</button>
+              <Icon icon="mdi:shield-lock-outline" width="16" />{{ tr('安全') }}</button>
             <!-- Skills tab 暂时隐藏(2026-08-22 用户反馈"绝对有 bug", 先下线避免用户碰到,
                  代码原样保留在下面 settings-panel 里没删, 只是没有入口可以点进去了) -->
             <div class="settings-tab-group" v-if="false">
@@ -71,453 +71,450 @@
               </button>
               <div v-show="activeTab === 'skills'" class="settings-subtabs">
                 <button class="settings-subtab" :class="{ on: skillsSubTab === 'local' }" type="button" @click="skillsSubTab = 'local'; loadSkills()">
-                  <Icon icon="mdi:laptop" width="15" />本地
+                  <Icon icon="mdi:laptop" width="15" />{{ tr('本地') }}
                 </button>
                 <button class="settings-subtab" :class="{ on: skillsSubTab === 'aggregate' }" type="button" @click="skillsSubTab = 'aggregate'; loadAggregateSkills()">
-                  <Icon icon="mdi:swap-horizontal-bold" width="15" />聚合
+                  <Icon icon="mdi:swap-horizontal-bold" width="15" />{{ tr('聚合') }}
                 </button>
                 <button class="settings-subtab" :class="{ on: skillsSubTab === 'external' }" type="button" @click="skillsSubTab = 'external'; loadSkillRegistry()">
-                  <Icon icon="mdi:cloud-outline" width="15" />外部
+                  <Icon icon="mdi:cloud-outline" width="15" />{{ tr('外部') }}
                 </button>
               </div>
             </div>
             <button class="settings-tab" :class="{ on: activeTab === 'memory' }" @click="activeTab = 'memory'; loadMemoryInject()">
-                          <Icon icon="mdi:notebook-outline" width="16" />记忆</button>
-                                      <div class="settings-nav-label">账户与产品</div>
+                          <Icon icon="mdi:notebook-outline" width="16" />{{ tr('记忆') }}</button>
+                                      <div class="settings-nav-label">{{ tr('账户与产品') }}</div>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
-              <Icon icon="mdi:account-circle-outline" width="16" />我的</button>
+              <Icon icon="mdi:account-circle-outline" width="16" />{{ tr('我的') }}</button>
             <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion(); loadAutoStart()">
-              <Icon icon="mdi:update" width="16" />版本</button>
+              <Icon icon="mdi:update" width="16" />{{ tr('版本') }}</button>
           </div>
 
           <!-- 右侧内容区 -->
           <div class="settings-content">
             <!-- ========== 语言（通用） ========== -->
             <div v-show="activeTab === 'general'" class="settings-panel">
-              <div class="settings-section-title">通用</div>
-              <div class="settings-section-desc">界面语言切换，立即生效。</div>
+              <div class="settings-section-title">{{ tr('通用') }}</div>
+              <div class="settings-section-desc">{{ tr('界面语言切换，立即生效。') }}</div>
               <div class="param-row">
-                <span class="param-label">界面语言</span>
+                <span class="param-label">{{ tr('界面语言') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: isZh }" type="button" @click="setLocale('zh')">简体中文</button>
+                  <button class="seg-btn" :class="{ on: isZh }" type="button" @click="setLocale('zh')">{{ tr('简体中文') }}</button>
                   <button class="seg-btn" :class="{ on: !isZh }" type="button" @click="setLocale('en')">English</button>
                 </div>
               </div>
-              <div class="settings-section-desc">当前仅覆盖侧栏、账户菜单、登录等核心界面，其余界面陆续接入。</div>
+              <div class="settings-section-desc">{{ tr('界面语言切换，立即生效。') }}</div>
 
-              <div class="settings-section-title" style="margin-top: 18px;">插话风格</div>
-              <div class="settings-section-desc">工作流运行中你发 follow up 时，消息以什么口吻送达给模型——按场景/受众适配（如酒馆 RP、修真世界观；自定义前缀可适配任意群体）。</div>
+              <div class="settings-section-title" style="margin-top: 18px;">{{ tr('插话风格') }}</div>
+              <div class="settings-section-desc">{{ tr('工作流运行中你发 follow up 时，消息以什么口吻送达给模型——按场景/受众适配（如酒馆 RP、修真世界观；自定义前缀可适配任意群体）。') }}</div>
               <div class="param-row">
-                <span class="param-label">风格</span>
+                <span class="param-label">{{ tr('风格') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'plain' }" type="button" @click="setFollowUpStyle('plain')">默认</button>
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'tavern' }" type="button" @click="setFollowUpStyle('tavern')">酒馆</button>
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'xianxia' }" type="button" @click="setFollowUpStyle('xianxia')">修真</button>
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'custom' }" type="button" @click="setFollowUpStyle('custom')">自定义</button>
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'plain' }" type="button" @click="setFollowUpStyle('plain')">{{ tr('默认') }}</button>
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'tavern' }" type="button" @click="setFollowUpStyle('tavern')">{{ tr('酒馆') }}</button>
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'xianxia' }" type="button" @click="setFollowUpStyle('xianxia')">{{ tr('修真') }}</button>
+                  <button class="seg-btn" :class="{ on: followUpStyle === 'custom' }" type="button" @click="setFollowUpStyle('custom')">{{ tr('自定义') }}</button>
                 </div>
               </div>
               <div v-if="followUpStyle === 'custom'" class="param-row">
-                <span class="param-label">自定义前缀</span>
-                <input class="settings-text-input" v-model="followUpCustom" @change="saveFollowUpCustom" placeholder="如：【道友】" style="flex:1; min-width:0;" />
+                <span class="param-label">{{ tr('自定义前缀') }}</span>
+                <input class="settings-text-input" v-model="followUpCustom" @change="saveFollowUpCustom" :placeholder="tr('如：【道友】')" style="flex:1; min-width:0;" />
               </div>
 
-              <div class="settings-section-title" style="margin-top: 18px;">启动</div>
+              <div class="settings-section-title" style="margin-top: 18px;">{{ tr('启动') }}</div>
                             <div class="profile-actions" style="margin-top: 6px; align-items: center;">
-                              <label class="param-switch" title="关闭后开机不再自动启动 Yosuri（下次开机生效）">
+                              <label class="param-switch" :title="tr('关闭后开机不再自动启动 Yosuri（下次开机生效）')">
                                 <input type="checkbox" v-model="autoStartOn" :disabled="!autoStartSupported" @change="onAutoStartChange" />
                                 <span class="param-switch-track"></span>
                               </label>
-                              <span class="param-value">开机自动启动</span>
+                              <span class="param-value">{{ tr('开机自动启动') }}</span>
                               <span v-if="autoStartHint" class="param-value" style="opacity:.65; font-size:12px;">{{ autoStartHint }}</span>
                             </div>
-                            <div class="settings-section-desc">关闭后不再随 Windows 开机启动；已开机的本次会话不受影响。</div>
+                            <div class="settings-section-desc">{{ tr('关闭后不再随 Windows 开机启动；已开机的本次会话不受影响。') }}</div>
                           </div>
 
             <!-- ========== 模型 ========== -->
             <div v-show="activeTab === 'models'" class="settings-panel">
-              <div class="settings-section-title">基础配置</div>
+              <div class="settings-section-title">{{ tr('基础配置') }}</div>
               <div class="settings-section-desc">
-                统一模型：一个模型同时处理对话与识图。分开配置：文字对话、识图分析各用各的模型
-                （识图模型由你自己选，选错了换成能识图的即可）。候选来自「提供方」里选为可用的模型。
+                {{ tr('统一模型：一个模型同时处理对话与识图。分开配置：文字对话、识图分析各用各的模型 （识图模型由你自己选，选错了换成能识图的即可）。候选来自「提供方」里选为可用的模型。') }}
               </div>
 
               <div class="param-row">
-                <span class="param-label">语音音色</span>
+                <span class="param-label">{{ tr('语音音色') }}</span>
                 <select class="model-select" :value="ttsVoice" @change="saveTtsVoice($event.target.value)" :disabled="ttsConfig.enabled">
-                  <option value="zh-CN-XiaoyiNeural">晓依 · 软萌少女</option>
-                  <option value="zh-CN-XiaoxiaoNeural">晓晓 · 温柔女声</option>
-                  <option value="zh-CN-XiaomoNeural">晓墨 · 元气活力</option>
-                  <option value="zh-CN-XiaoxuanNeural">晓萱 · 清亮少女</option>
-                  <option value="ja-JP-NanamiNeural">七海 · 日系少女</option>
-                  <option value="ja-JP-AoiNeural">葵 · 日系轻声</option>
+                  <option value="zh-CN-XiaoyiNeural">{{ tr('晓依 · 软萌少女') }}</option>
+                  <option value="zh-CN-XiaoxiaoNeural">{{ tr('晓晓 · 温柔女声') }}</option>
+                  <option value="zh-CN-XiaomoNeural">{{ tr('晓墨 · 元气活力') }}</option>
+                  <option value="zh-CN-XiaoxuanNeural">{{ tr('晓萱 · 清亮少女') }}</option>
+                  <option value="ja-JP-NanamiNeural">{{ tr('七海 · 日系少女') }}</option>
+                  <option value="ja-JP-AoiNeural">{{ tr('葵 · 日系轻声') }}</option>
                 </select>
               </div>
 
               <!-- 自定义语音：云端/外部 TTS 代理 -->
               <div class="tts-custom-block">
                 <div class="tts-custom-head">
-                  <span class="param-label">自定义云端语音</span>
+                  <span class="param-label">{{ tr('自定义云端语音') }}</span>
                   <label class="tts-switch">
                     <input type="checkbox" :checked="ttsConfig.enabled" @change="toggleTts($event.target.checked)" />
                     <span class="tts-switch-track"></span>
                   </label>
                 </div>
                 <div v-if="ttsConfig.enabled" class="tts-custom-body">
-                  <div class="tts-hint">启用后，消息朗读走你配的云端 TTS（MiniMax / OpenAI 兼容），Edge 直连自动停用。</div>
+                  <div class="tts-hint">{{ tr('启用后，消息朗读走你配的云端 TTS（MiniMax / OpenAI 兼容），Edge 直连自动停用。') }}</div>
                   <div class="param-row">
-                    <span class="param-label">提供商</span>
+                    <span class="param-label">{{ tr('提供商') }}</span>
                     <select class="model-select" v-model="ttsConfig.provider" @change="saveTtsConfig()">
-                      <option value="openai">OpenAI 兼容</option>
+                      <option value="openai">{{ tr('OpenAI 兼容') }}</option>
                       <option value="minimax">MiniMax t2a_v2</option>
                     </select>
                   </div>
                   <div class="param-row">
                     <span class="param-label">Base URL</span>
-                    <input class="model-input" v-model="ttsConfig.base_url" @blur="saveTtsConfig()" placeholder="https://api.minimax.chat/v1 或 OpenAI 兼容根" />
+                    <input class="model-input" v-model="ttsConfig.base_url" @blur="saveTtsConfig()" :placeholder="tr('https://api.minimax.chat/v1 或 OpenAI 兼容根')" />
                   </div>
                   <div class="param-row">
                     <span class="param-label">API Key</span>
-                    <input class="model-input" v-model="ttsConfig.api_key" @blur="saveTtsConfig()" type="password" placeholder="sk-... 或 MiniMax Key" />
+                    <input class="model-input" v-model="ttsConfig.api_key" @blur="saveTtsConfig()" type="password" :placeholder="tr('sk-... 或 MiniMax Key')" />
                   </div>
                   <div class="param-row">
-                    <span class="param-label">模型</span>
-                    <input class="model-input" v-model="ttsConfig.model" @blur="saveTtsConfig()" placeholder="minimax-tts 或 gpt-4o-mini-tts" />
+                    <span class="param-label">{{ tr('模型') }}</span>
+                    <input class="model-input" v-model="ttsConfig.model" @blur="saveTtsConfig()" :placeholder="tr('minimax-tts 或 gpt-4o-mini-tts')" />
                   </div>
                   <div class="param-row">
-                    <span class="param-label">音色/语音 ID</span>
+                    <span class="param-label">{{ tr('音色/语音 ID') }}</span>
                     <input class="model-input" v-model="ttsConfig.voice" @blur="saveTtsConfig()" placeholder="male-qn-qingse / nova / shimmer" />
                   </div>
                   <div class="param-row">
-                    <span class="param-label">语速</span>
+                    <span class="param-label">{{ tr('语速') }}</span>
                     <input class="model-input" v-model.number="ttsConfig.speed" @blur="saveTtsConfig()" type="number" step="0.1" min="0.5" max="2.0" />
                   </div>
                   <div class="param-row">
-                    <span class="param-label">展示名</span>
-                    <input class="model-input" v-model="ttsConfig.voice_name" @blur="saveTtsConfig()" placeholder="自定义·云端少女" />
+                    <span class="param-label">{{ tr('展示名') }}</span>
+                    <input class="model-input" v-model="ttsConfig.voice_name" @blur="saveTtsConfig()" :placeholder="tr('自定义·云端少女')" />
                   </div>
                   <div class="tts-test-row">
                     <button class="tts-test-btn" @click="testTts()" :disabled="ttsTesting">
-                      {{ ttsTesting ? '测试中…' : '连通性测试' }}
+                      {{ ttsTesting ? tr('测试中…') : tr('连通性测试') }}
                     </button>
                     <span v-if="ttsTestResult" class="tts-test-status" :class="ttsTestResult.ok ? 'ok' : 'fail'">
-                      {{ ttsTestResult.ok ? `✓ 通（${ttsTestResult.bytes} 字节）` : `✗ ${ttsTestResult.error}` }}
+                      {{ ttsTestResult.ok ? tr('✓ 通（') + ttsTestResult.bytes + tr(' 字节）') : `✗ ${ttsTestResult.error}` }}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div class="param-row">
-                <span class="param-label">配置方式</span>
+                <span class="param-label">{{ tr('配置方式') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: modelMode === 'unified' }" type="button" @click="setModelMode('unified')">统一模型</button>
-                  <button class="seg-btn" :class="{ on: modelMode === 'split' }" type="button" @click="setModelMode('split')">分开配置</button>
+                  <button class="seg-btn" :class="{ on: modelMode === 'unified' }" type="button" @click="setModelMode('unified')">{{ tr('统一模型') }}</button>
+                  <button class="seg-btn" :class="{ on: modelMode === 'split' }" type="button" @click="setModelMode('split')">{{ tr('分开配置') }}</button>
                 </div>
               </div>
 
               <template v-if="modelMode === 'unified'">
                 <div class="param-row">
-                  <span class="param-label">主模型</span>
+                  <span class="param-label">{{ tr('主模型') }}</span>
                   <select class="model-select" v-model="unifiedModelDraft" @change="setUnifiedModel(unifiedModelDraft)">
-                    <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
+                    <option v-if="!chatList.length" value="">{{ tr('先去「提供方」选至少一个可用模型') }}</option>
                     <option v-for="m in chatList" :key="m.value" :value="m.value">
-                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}
+                      {{ m.label }}{{ visionByID[m.value] ? tr(' · 识图') : '' }}
                     </option>
                   </select>
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
-                  标注"识图"的模型声明支持视觉分析（仅供参考）；未标注的也可能能识图，以实际效果为准。
+                  {{ tr('标注"识图"的模型声明支持视觉分析（仅供参考）；未标注的也可能能识图，以实际效果为准。') }}
                 </div>
                 <div class="param-row">
-                  <span class="param-label">生图提供商</span>
+                  <span class="param-label">{{ tr('生图提供商') }}</span>
                   <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
-                    <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
-                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
-                    <option value="mcp">MCP 生图工具</option>
+                    <option value="pollinations">{{ tr('Pollinations（免费，无 key，速度快）') }}</option>
+                    <option value="custom">{{ tr('自定义模型（OpenAI 兼容，需 key）') }}</option>
+                    <option value="mcp">{{ tr('MCP 生图工具') }}</option>
                   </select>
                 </div>
 
                 <!-- 生图：自定义模型配置卡片 -->
                 <div v-if="imageProviderDraft === 'custom'" class="cap-card">
-                  <div class="cap-card-title">自定义生图</div>
+                  <div class="cap-card-title">{{ tr('自定义生图') }}</div>
                   <div class="cap-field">
                     <span class="cap-label">Endpoint</span>
                     <input v-model="imageCustomEndpoint" type="text" class="cap-input" placeholder="https://api.example.com" @keyup.enter="saveImageCapability" />
                   </div>
                   <div class="cap-field">
-                    <span class="cap-label">模型名</span>
-                    <input v-model="imageCustomModel" type="text" class="cap-input" placeholder="如 gpt-image-1" @keyup.enter="saveImageCapability" />
+                    <span class="cap-label">{{ tr('模型名') }}</span>
+                    <input v-model="imageCustomModel" type="text" class="cap-input" :placeholder="tr('如 gpt-image-1')" @keyup.enter="saveImageCapability" />
                   </div>
                   <div class="cap-field">
                     <span class="cap-label">API Key</span>
-                    <input v-model="imageKeyDraft" type="password" class="cap-input" :placeholder="imageKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveImageCapability" />
+                    <input v-model="imageKeyDraft" type="password" class="cap-input" :placeholder="imageKeySet ? tr('••••••••（留空不修改）') : tr('输入 API Key')" @keyup.enter="saveImageCapability" />
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">{{ tr('保存') }}</button>
                   </div>
                 </div>
 
                 <!-- 生图：MCP 工具配置卡片 -->
                 <div v-else-if="imageProviderDraft === 'mcp'" class="cap-card">
-                  <div class="cap-card-title">MCP 生图工具</div>
+                  <div class="cap-card-title">{{ tr('MCP 生图工具') }}</div>
                   <div class="cap-field">
-                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <span class="cap-label">{{ tr('选择已装的 MCP 工具') }}</span>
                     <select v-model="imageMCPTool" class="model-select">
-                      <option value="">未选择</option>
+                      <option value="">{{ tr('未选择') }}</option>
                       <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
                     </select>
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">{{ tr('保存') }}</button>
                   </div>
                 </div>
 
                 <div class="param-row">
-                  <span class="param-label">联网来源</span>
+                  <span class="param-label">{{ tr('联网来源') }}</span>
                   <select class="model-select" v-model="websearchMode">
-                    <option value="bing">Bing（免费，无 key）</option>
-                    <option value="firecrawl">Firecrawl（免费 500 次/月）</option>
-                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
-                    <option value="mcp">MCP 搜索工具</option>
+                    <option value="bing">{{ tr('Bing（免费，无 key）') }}</option>
+                    <option value="firecrawl">{{ tr('Firecrawl（免费 500 次/月）') }}</option>
+                    <option value="custom">{{ tr('自定义模型（OpenAI 兼容，需 key）') }}</option>
+                    <option value="mcp">{{ tr('MCP 搜索工具') }}</option>
                   </select>
                 </div>
 
                 <!-- 联网：Bing（默认，免 key）——无需配置，选中即用，不展开说明 -->
-                                <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</div>
+                                <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">{{ tr('✅ 联网搜索已启用（Bing，模型自主触发）') }}</div>
 
                 <!-- 联网：Firecrawl 配置 -->
                 <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
                   <div class="cap-card-title">Firecrawl API Key</div>
                   <div class="cap-field">
-                    <span class="cap-label">fc- 开头的 Firecrawl API Key（联网搜索用）</span>
+                    <span class="cap-label">{{ tr('fc- 开头的 Firecrawl API Key（联网搜索用）') }}</span>
                     <input
                       v-model="firecrawlKeyDraft"
                       type="password"
                       class="cap-input"
-                      placeholder="fc- 开头的 Firecrawl API Key"
+                      :placeholder="tr('fc- 开头的 Firecrawl API Key')"
                       @keyup.enter="saveFirecrawlKey"
                     />
                   </div>
                   <div class="cap-actions">
                     <button class="vendor-key-save" type="button" @click="saveFirecrawlKey">
-                      {{ firecrawlKeySet ? '已配置 · 更新' : '保存' }}
+                      {{ firecrawlKeySet ? tr('已配置 · 更新') : tr('保存') }}
                     </button>
                   </div>
-                  <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
+                  <span v-if="firecrawlKeySet" class="firecrawl-key-status">{{ tr('✅ 联网搜索已启用（Firecrawl，模型自主触发）') }}</span>
                 </div>
 
                 <!-- 联网：自定义模型配置 -->
                 <div v-else-if="websearchMode === 'custom'" class="cap-card">
-                  <div class="cap-card-title">自定义联网</div>
+                  <div class="cap-card-title">{{ tr('自定义联网') }}</div>
                   <div class="cap-field">
                     <span class="cap-label">Endpoint</span>
                     <input v-model="websearchEndpoint" type="text" class="cap-input" placeholder="https://api.deepseek.com" @keyup.enter="saveWebsearchCapability" />
                   </div>
                   <div class="cap-field">
-                    <span class="cap-label">联网模型名（需支持服务端搜索）</span>
-                    <input v-model="websearchModel" type="text" class="cap-input" placeholder="如 deepseek-chat" @keyup.enter="saveWebsearchCapability" />
+                    <span class="cap-label">{{ tr('联网模型名（需支持服务端搜索）') }}</span>
+                    <input v-model="websearchModel" type="text" class="cap-input" :placeholder="tr('如 deepseek-chat')" @keyup.enter="saveWebsearchCapability" />
                   </div>
                   <div class="cap-field">
                     <span class="cap-label">API Key</span>
-                    <input v-model="websearchKeyDraft" type="password" class="cap-input" :placeholder="websearchKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveWebsearchCapability" />
+                    <input v-model="websearchKeyDraft" type="password" class="cap-input" :placeholder="websearchKeySet ? tr('••••••••（留空不修改）') : tr('输入 API Key')" @keyup.enter="saveWebsearchCapability" />
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">{{ tr('保存') }}</button>
                   </div>
-                  <span class="firecrawl-key-status">自定义联网走 Endpoint 的 /v1/responses（内置 web_search 工具），DeepSeek 等服务端联网模型可用。</span>
+                  <span class="firecrawl-key-status">{{ tr('自定义联网走 Endpoint 的 /v1/responses（内置 web_search 工具），DeepSeek 等服务端联网模型可用。') }}</span>
                 </div>
 
                 <!-- 联网：MCP 搜索工具配置 -->
                 <div v-else class="cap-card">
-                  <div class="cap-card-title">MCP 搜索工具</div>
+                  <div class="cap-card-title">{{ tr('MCP 搜索工具') }}</div>
                   <div class="cap-field">
-                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <span class="cap-label">{{ tr('选择已装的 MCP 工具') }}</span>
                     <select v-model="websearchMCPTool" class="model-select">
-                      <option value="">未选择</option>
+                      <option value="">{{ tr('未选择') }}</option>
                       <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
                     </select>
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">{{ tr('保存') }}</button>
                   </div>
-                  <span v-if="websearchMCPTool" class="firecrawl-key-status">✅ 联网搜索已指向 MCP 工具，模型自主触发</span>
+                  <span v-if="websearchMCPTool" class="firecrawl-key-status">{{ tr('✅ 联网搜索已指向 MCP 工具，模型自主触发') }}</span>
                 </div>
 
                 <div class="param-row">
-                  <span class="param-label">Agnes API Key（AI 生视频）</span>
+                  <span class="param-label">{{ tr('Agnes API Key（AI 生视频）') }}</span>
                   <div class="search-model-row">
                     <input
                       v-model="agnesKeyDraft"
                       type="password"
                       class="vendor-key-input"
-                      placeholder="Agnes API Key（AI 生视频/动漫分镜，$0/秒）"
+                      :placeholder="tr('Agnes API Key（AI 生视频/动漫分镜，$0/秒）')"
                       @keyup.enter="saveAgnesKey"
                     />
                     <button class="vendor-key-save" type="button" @click="saveAgnesKey">
-                      {{ agnesKeySet ? '已配置 · 更新' : '保存' }}
+                      {{ agnesKeySet ? tr('已配置 · 更新') : tr('保存') }}
                     </button>
                   </div>
-                  <span v-if="agnesKeySet" class="firecrawl-key-status">✅ AI 生视频已启用（Agnes，免费 $0/秒）</span>
+                  <span v-if="agnesKeySet" class="firecrawl-key-status">{{ tr('✅ AI 生视频已启用（Agnes，免费 $0/秒）') }}</span>
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
-                  联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
-                  Agnes Key 在 platform.agnes-ai.cn 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
+                  {{ tr('联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。 Agnes Key 在 platform.agnes-ai.cn 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。') }}
                 </div>
               </template>
 
               <template v-else>
                 <div class="param-row">
-                  <span class="param-label">文字模型</span>
+                  <span class="param-label">{{ tr('文字模型') }}</span>
                   <select class="model-select" v-model="textModelDraft" @change="setTextModel(textModelDraft)">
-                    <option v-if="!chatList.length" value="">先去「提供方」选至少一个可用模型</option>
+                    <option v-if="!chatList.length" value="">{{ tr('先去「提供方」选至少一个可用模型') }}</option>
                     <option v-for="m in chatList" :key="m.value" :value="m.value">
-                      {{ m.label }}{{ visionByID[m.value] ? ' · 识图' : '' }}
+                      {{ m.label }}{{ visionByID[m.value] ? tr(' · 识图') : '' }}
                     </option>
                   </select>
                 </div>
                 <div class="param-row">
-                  <span class="param-label">识图模型</span>
+                  <span class="param-label">{{ tr('识图模型') }}</span>
                   <select class="model-select" v-model="visionModelDraft" @change="setVisionModel(visionModelDraft)">
-                    <option v-if="!visionCapableChatList.length" value="">未配置识图模型</option>
+                    <option v-if="!visionCapableChatList.length" value="">{{ tr('未配置识图模型') }}</option>
                     <option v-for="m in visionCapableChatList" :key="m.value" :value="m.value">{{ m.label }}</option>
                   </select>
                 </div>
                 <div v-if="!visionCapableChatList.length" class="settings-section-desc" style="margin-top:6px">
-                  未检测到可用模型。请先到「提供方」添加并启用至少一个模型。
+                  {{ tr('未检测到可用模型。请先到「提供方」添加并启用至少一个模型。') }}
                 </div>
                 <div class="param-row">
-                  <span class="param-label">生图提供商</span>
+                  <span class="param-label">{{ tr('生图提供商') }}</span>
                   <select class="model-select" v-model="imageProviderDraft" @change="setImageProvider(imageProviderDraft)">
-                    <option value="pollinations">Pollinations（免费，无 key，速度快）</option>
-                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
-                    <option value="mcp">MCP 生图工具</option>
+                    <option value="pollinations">{{ tr('Pollinations（免费，无 key，速度快）') }}</option>
+                    <option value="custom">{{ tr('自定义模型（OpenAI 兼容，需 key）') }}</option>
+                    <option value="mcp">{{ tr('MCP 生图工具') }}</option>
                   </select>
                 </div>
 
                 <!-- 生图：自定义模型配置卡片 -->
                 <div v-if="imageProviderDraft === 'custom'" class="cap-card">
-                  <div class="cap-card-title">自定义生图</div>
+                  <div class="cap-card-title">{{ tr('自定义生图') }}</div>
                   <div class="cap-field">
                     <span class="cap-label">Endpoint</span>
                     <input v-model="imageCustomEndpoint" type="text" class="cap-input" placeholder="https://api.example.com" @keyup.enter="saveImageCapability" />
                   </div>
                   <div class="cap-field">
-                    <span class="cap-label">模型名</span>
-                    <input v-model="imageCustomModel" type="text" class="cap-input" placeholder="如 gpt-image-1" @keyup.enter="saveImageCapability" />
+                    <span class="cap-label">{{ tr('模型名') }}</span>
+                    <input v-model="imageCustomModel" type="text" class="cap-input" :placeholder="tr('如 gpt-image-1')" @keyup.enter="saveImageCapability" />
                   </div>
                   <div class="cap-field">
                     <span class="cap-label">API Key</span>
-                    <input v-model="imageKeyDraft" type="password" class="cap-input" :placeholder="imageKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveImageCapability" />
+                    <input v-model="imageKeyDraft" type="password" class="cap-input" :placeholder="imageKeySet ? tr('••••••••（留空不修改）') : tr('输入 API Key')" @keyup.enter="saveImageCapability" />
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">{{ tr('保存') }}</button>
                   </div>
                 </div>
 
                 <!-- 生图：MCP 工具配置卡片 -->
                 <div v-else-if="imageProviderDraft === 'mcp'" class="cap-card">
-                  <div class="cap-card-title">MCP 生图工具</div>
+                  <div class="cap-card-title">{{ tr('MCP 生图工具') }}</div>
                   <div class="cap-field">
-                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <span class="cap-label">{{ tr('选择已装的 MCP 工具') }}</span>
                     <select v-model="imageMCPTool" class="model-select">
-                      <option value="">未选择</option>
+                      <option value="">{{ tr('未选择') }}</option>
                       <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
                     </select>
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveImageCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveImageCapability">{{ tr('保存') }}</button>
                   </div>
                 </div>
 
                 <div class="param-row">
-                  <span class="param-label">联网来源</span>
+                  <span class="param-label">{{ tr('联网来源') }}</span>
                   <select class="model-select" v-model="websearchMode">
-                    <option value="bing">Bing（免费，无 key）</option>
-                    <option value="firecrawl">Firecrawl（免费 500 次/月）</option>
-                    <option value="custom">自定义模型（OpenAI 兼容，需 key）</option>
-                    <option value="mcp">MCP 搜索工具</option>
+                    <option value="bing">{{ tr('Bing（免费，无 key）') }}</option>
+                    <option value="firecrawl">{{ tr('Firecrawl（免费 500 次/月）') }}</option>
+                    <option value="custom">{{ tr('自定义模型（OpenAI 兼容，需 key）') }}</option>
+                    <option value="mcp">{{ tr('MCP 搜索工具') }}</option>
                   </select>
                 </div>
 
                 <!-- 联网：Bing（默认，免 key）——无需配置，选中即用，不展开说明 -->
-                                <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">✅ 联网搜索已启用（Bing，模型自主触发）</div>
+                                <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">{{ tr('✅ 联网搜索已启用（Bing，模型自主触发）') }}</div>
 
                 <!-- 联网：Firecrawl 配置 -->
                 <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
                   <div class="cap-card-title">Firecrawl API Key</div>
                   <div class="cap-field">
-                    <span class="cap-label">fc- 开头的 Firecrawl API Key（联网搜索用）</span>
+                    <span class="cap-label">{{ tr('fc- 开头的 Firecrawl API Key（联网搜索用）') }}</span>
                     <input
                       v-model="firecrawlKeyDraft"
                       type="password"
                       class="cap-input"
-                      placeholder="fc- 开头的 Firecrawl API Key"
+                      :placeholder="tr('fc- 开头的 Firecrawl API Key')"
                       @keyup.enter="saveFirecrawlKey"
                     />
                   </div>
                   <div class="cap-actions">
                     <button class="vendor-key-save" type="button" @click="saveFirecrawlKey">
-                      {{ firecrawlKeySet ? '已配置 · 更新' : '保存' }}
+                      {{ firecrawlKeySet ? tr('已配置 · 更新') : tr('保存') }}
                     </button>
                   </div>
-                  <span v-if="firecrawlKeySet" class="firecrawl-key-status">✅ 联网搜索已启用（Firecrawl，模型自主触发）</span>
+                  <span v-if="firecrawlKeySet" class="firecrawl-key-status">{{ tr('✅ 联网搜索已启用（Firecrawl，模型自主触发）') }}</span>
                 </div>
 
                 <!-- 联网：自定义模型配置 -->
                 <div v-else-if="websearchMode === 'custom'" class="cap-card">
-                  <div class="cap-card-title">自定义联网</div>
+                  <div class="cap-card-title">{{ tr('自定义联网') }}</div>
                   <div class="cap-field">
                     <span class="cap-label">Endpoint</span>
                     <input v-model="websearchEndpoint" type="text" class="cap-input" placeholder="https://api.deepseek.com" @keyup.enter="saveWebsearchCapability" />
                   </div>
                   <div class="cap-field">
-                    <span class="cap-label">联网模型名（需支持服务端搜索）</span>
-                    <input v-model="websearchModel" type="text" class="cap-input" placeholder="如 deepseek-chat" @keyup.enter="saveWebsearchCapability" />
+                    <span class="cap-label">{{ tr('联网模型名（需支持服务端搜索）') }}</span>
+                    <input v-model="websearchModel" type="text" class="cap-input" :placeholder="tr('如 deepseek-chat')" @keyup.enter="saveWebsearchCapability" />
                   </div>
                   <div class="cap-field">
                     <span class="cap-label">API Key</span>
-                    <input v-model="websearchKeyDraft" type="password" class="cap-input" :placeholder="websearchKeySet ? '••••••••（留空不修改）' : '输入 API Key'" @keyup.enter="saveWebsearchCapability" />
+                    <input v-model="websearchKeyDraft" type="password" class="cap-input" :placeholder="websearchKeySet ? tr('••••••••（留空不修改）') : tr('输入 API Key')" @keyup.enter="saveWebsearchCapability" />
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">{{ tr('保存') }}</button>
                   </div>
-                  <span class="firecrawl-key-status">自定义联网走 Endpoint 的 /v1/responses（内置 web_search 工具），DeepSeek 等服务端联网模型可用。</span>
+                  <span class="firecrawl-key-status">{{ tr('自定义联网走 Endpoint 的 /v1/responses（内置 web_search 工具），DeepSeek 等服务端联网模型可用。') }}</span>
                 </div>
 
                 <!-- 联网：MCP 搜索工具配置 -->
                 <div v-else class="cap-card">
-                  <div class="cap-card-title">MCP 搜索工具</div>
+                  <div class="cap-card-title">{{ tr('MCP 搜索工具') }}</div>
                   <div class="cap-field">
-                    <span class="cap-label">选择已装的 MCP 工具</span>
+                    <span class="cap-label">{{ tr('选择已装的 MCP 工具') }}</span>
                     <select v-model="websearchMCPTool" class="model-select">
-                      <option value="">未选择</option>
+                      <option value="">{{ tr('未选择') }}</option>
                       <option v-for="t in mcpToolOptions" :key="t" :value="t">{{ t }}</option>
                     </select>
                   </div>
                   <div class="cap-actions">
-                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">保存</button>
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">{{ tr('保存') }}</button>
                   </div>
-                  <span v-if="websearchMCPTool" class="firecrawl-key-status">✅ 联网搜索已指向 MCP 工具，模型自主触发</span>
+                  <span v-if="websearchMCPTool" class="firecrawl-key-status">{{ tr('✅ 联网搜索已指向 MCP 工具，模型自主触发') }}</span>
                 </div>
 
                 <div class="param-row">
-                  <span class="param-label">Agnes API Key（AI 生视频）</span>
+                  <span class="param-label">{{ tr('Agnes API Key（AI 生视频）') }}</span>
                   <div class="search-model-row">
                     <input
                       v-model="agnesKeyDraft"
                       type="password"
                       class="vendor-key-input"
-                      placeholder="Agnes API Key（AI 生视频/动漫分镜，$0/秒）"
+                      :placeholder="tr('Agnes API Key（AI 生视频/动漫分镜，$0/秒）')"
                       @keyup.enter="saveAgnesKey"
                     />
                     <button class="vendor-key-save" type="button" @click="saveAgnesKey">
-                      {{ agnesKeySet ? '已配置 · 更新' : '保存' }}
+                      {{ agnesKeySet ? tr('已配置 · 更新') : tr('保存') }}
                     </button>
                   </div>
-                  <span v-if="agnesKeySet" class="firecrawl-key-status">✅ AI 生视频已启用（Agnes，免费 $0/秒）</span>
+                  <span v-if="agnesKeySet" class="firecrawl-key-status">{{ tr('✅ AI 生视频已启用（Agnes，免费 $0/秒）') }}</span>
                 </div>
                 <div class="settings-section-desc" style="margin-top:6px">
-                  联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。
-                  Agnes Key 在 platform.agnes-ai.cn 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。
+                  {{ tr('联网搜索是给模型的一个工具：需要最新信息时它自己决定搜（免费额度 500 次/月，firecrawl.dev 获取 Key）。 Agnes Key 在 platform.agnes-ai.cn 免费获取，用于 AI 生成视频素材（动漫分镜/短片，$0/秒）。') }}
                 </div>
               </template>
             </div>
@@ -526,11 +523,11 @@
             <div v-show="activeTab === 'providers'" class="settings-panel">
               <template v-if="providerSubTab === 'free'">
                 <div class="settings-section-title settings-section-title-row">
-                  <span>免费模型</span>
+                  <span>{{ tr('免费模型') }}</span>
                 </div>
-                <div class="settings-section-desc">配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；点击「官网获取 Key」打开官网登录即可免费领取 API Key，粘贴输入框即可使用；免 Key 提供方无需配置。</div>
+                <div class="settings-section-desc">{{ tr('配置提供方的 Key 后，它的全部模型会自动进入聊天下拉框；点击「官网获取 Key」打开官网登录即可免费领取 API Key，粘贴输入框即可使用；免 Key 提供方无需配置。') }}</div>
 
-                <div v-if="loading" class="settings-loading">加载中...</div>
+                <div v-if="loading" class="settings-loading">{{ tr('加载中...') }}</div>
                 <template v-else>
                   <div v-for="grp in vendorGroups" :key="grp.vendor" class="vendor-group">
                     <div
@@ -546,12 +543,12 @@
                       <span class="vendor-logo" :style="{ '--vendor-color': vendorColor(grp.vendor) }">
                         <Icon :icon="vendorIcon(grp.vendor)" width="16" />
                       </span>
-                      <span class="vendor-name">{{ grp.vendor }}</span>
-                      <span class="vendor-count">{{ grp.items.length }} 个模型</span>
-                      <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? '免 Key' : (grp.hasKey ? '已配 Key' : '未配 Key') }}</span>
-                      <a v-if="grp.keyUrl && !grp.keyless" class="vendor-key-btn vendor-key-link" :href="grp.keyUrl" target="_blank" rel="noopener" title="打开官网登录即可免费获取 API Key" @click.stop>官网获取 Key ↗</a>
-                      <button v-if="!grp.keyless && editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? '改 Key' : '填 Key' }}</button>
-                      <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">收起</button>
+                      <span class="vendor-name">{{ tr(grp.vendor) }}</span>
+                      <span class="vendor-count">{{ grp.items.length }}{{ tr('个模型') }}</span>
+                      <span class="vendor-keystate" :class="{ on: grp.hasKey, free: grp.keyless }">{{ grp.keyless ? tr('免 Key') : (grp.hasKey ? tr('已配 Key') : tr('未配 Key')) }}</span>
+                      <a v-if="grp.keyUrl && !grp.keyless" class="vendor-key-btn vendor-key-link" :href="grp.keyUrl" target="_blank" rel="noopener" :title="tr('打开官网登录即可免费获取 API Key')" @click.stop>{{ tr('官网获取 Key ↗') }}</a>
+                      <button v-if="!grp.keyless && editingVendor !== grp.vendor" class="vendor-key-btn" @click.stop="startEditVendor(grp)">{{ grp.hasKey ? tr('改 Key') : tr('填 Key') }}</button>
+                      <button v-else-if="editingVendor === grp.vendor" class="vendor-key-btn" @click.stop="cancelVendorEdit">{{ tr('收起') }}</button>
                     </div>
                     <div v-show="isVendorOpen(grp.vendor)" class="vendor-body">
                       <div v-if="editingVendor === grp.vendor" class="vendor-key-inline">
@@ -576,12 +573,12 @@
                             v-model="vendorKeyDraft"
                             type="password"
                             class="vendor-key-input"
-                            :placeholder="grp.hasKey ? '••••••••（留空则不修改）' : '输入 ' + grp.vendor + ' 的 API Key'"
+                            :placeholder="grp.hasKey ? tr('••••••••（留空则不修改）') : tr('输入 ') + grp.vendor + tr(' 的 API Key')"
                             @keyup.enter="saveVendorKey(grp)"
                           />
                         </template>
-                        <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">保存</button>
-                        <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">取消</button>
+                        <button class="vendor-key-save" type="button" @click="saveVendorKey(grp)">{{ tr('保存') }}</button>
+                        <button class="vendor-key-cancel" type="button" @click="cancelVendorEdit">{{ tr('取消') }}</button>
                       </div>
                       <div class="vendor-model-cards">
                         <div v-for="m in grp.items" :key="m.id" class="fm-card" :title="m.note || m.name">
@@ -598,43 +595,43 @@
               </template>
 
               <template v-else>
-                <div class="settings-section-title">自定义 API</div>
-                <div class="settings-section-desc">一条配置对应一个提供方。保存时会读取它的 /models，并把该提供方的全部模型加入聊天下拉框。</div>
+                <div class="settings-section-title">{{ tr('自定义 API') }}</div>
+                <div class="settings-section-desc">{{ tr('一条配置对应一个提供方。保存时会读取它的 /models，并把该提供方的全部模型加入聊天下拉框。') }}</div>
 
-                <div v-if="loading" class="settings-loading">加载中...</div>
+                <div v-if="loading" class="settings-loading">{{ tr('加载中...') }}</div>
                 <template v-else>
                   <div v-for="cfg in configs" :key="cfg.id" class="api-config-card">
                     <div class="api-config-row">
                       <span class="api-config-logo" :style="{ '--vendor-color': vendorColor(cfg.name) }"><Icon :icon="vendorIcon(cfg.name, cfg.endpoint)" width="16" /></span>
-                      <span class="api-config-name">{{ cfg.name || '未命名配置' }}</span>
-                      <span v-if="cfg.is_default" class="api-config-default-badge">默认</span>
+                      <span class="api-config-name">{{ cfg.name || tr('未命名配置') }}</span>
+                      <span v-if="cfg.is_default" class="api-config-default-badge">{{ tr('默认') }}</span>
                       <div class="api-config-actions">
                         <button class="api-config-action-btn" :disabled="!!configBusy" @click="refreshConfigModels(cfg)">
-                          {{ configBusy === cfg.id ? '获取中...' : '刷新模型' }}
+                          {{ configBusy === cfg.id ? tr('获取中...') : tr('刷新模型') }}
                         </button>
-                        <button v-if="!cfg.is_default" class="api-config-action-btn" @click="setDefault(cfg.id)">设为默认</button>
-                        <button class="api-config-action-btn" @click="startEdit(cfg)">编辑</button>
-                        <button class="api-config-action-btn danger" @click="removeConfig(cfg.id)">删除</button>
+                        <button v-if="!cfg.is_default" class="api-config-action-btn" @click="setDefault(cfg.id)">{{ tr('设为默认') }}</button>
+                        <button class="api-config-action-btn" @click="startEdit(cfg)">{{ tr('编辑') }}</button>
+                        <button class="api-config-action-btn danger" @click="removeConfig(cfg.id)">{{ tr('删除') }}</button>
                       </div>
                     </div>
                     <div class="api-config-meta">
-                      {{ cfg.endpoint }} · {{ providerModelCount(cfg) }} 个模型 · {{ cfg.api_key_set ? '已设置 Key' : '免 Key / 未设置 Key' }}
+                      {{ cfg.endpoint }} · {{ providerModelCount(cfg) }}{{ tr('个模型 ·') }}{{ cfg.api_key_set ? tr('已设置 Key') : tr('免 Key / 未设置 Key') }}
                     </div>
                   </div>
 
                   <div v-if="!editingConfig" class="api-config-add-btn" @click="startAdd">
-                    <Icon icon="mdi:plus" width="15" /> 添加自定义提供方
+                    <Icon icon="mdi:plus" width="15" /> {{ tr('添加自定义提供方') }}
                   </div>
 
                   <div v-else class="api-config-form">
                     <div class="api-preset-row">
-                      <span class="api-preset-label">预设模板：</span>
-                      <button class="api-preset-btn" :class="{ active: activePreset === '__custom__' }" type="button" @click="applyCustomPreset"><Icon icon="lucide:pencil-line" width="14" />自定义</button>
+                      <span class="api-preset-label">{{ tr('预设模板：') }}</span>
+                      <button class="api-preset-btn" :class="{ active: activePreset === '__custom__' }" type="button" @click="applyCustomPreset"><Icon icon="lucide:pencil-line" width="14" />{{ tr('自定义') }}</button>
                       <button v-for="p in PRESETS" :key="p.name" class="api-preset-btn" :class="{ active: activePreset === p.name }" type="button" @click="applyPreset(p)"><Icon :icon="p.icon" width="14" />{{ p.name }}</button>
                     </div>
                     <label class="api-form-field">
-                      <span>提供方名称</span>
-                      <input v-model="editingConfig.name" type="text" placeholder="比如 DeepSeek" autocomplete="off" />
+                      <span>{{ tr('提供方名称') }}</span>
+                      <input v-model="editingConfig.name" type="text" :placeholder="tr('比如 DeepSeek')" autocomplete="off" />
                     </label>
                     <label class="api-form-field">
                       <span>Endpoint</span>
@@ -646,14 +643,14 @@
                         v-model="editingConfig.api_key"
                         type="password"
                         autocomplete="new-password"
-                        :placeholder="editingConfig.api_key_set ? '••••••••（留空则不修改）' : '输入 API Key'"
+                        :placeholder="editingConfig.api_key_set ? tr('••••••••（留空则不修改）') : tr('输入 API Key')"
                       />
                     </label>
-                    <div class="api-form-hint">无需逐个填写模型名；系统会从 Endpoint 的 /models 自动获取全部模型。</div>
+                    <div class="api-form-hint">{{ tr('无需逐个填写模型名；系统会从 Endpoint 的 /models 自动获取全部模型。') }}</div>
                     <div class="api-form-actions">
-                      <button class="api-form-btn cancel" type="button" @click="cancelEdit">取消</button>
+                      <button class="api-form-btn cancel" type="button" @click="cancelEdit">{{ tr('取消') }}</button>
                       <button class="api-form-btn save" type="button" :disabled="!!configBusy" @click="saveConfig">
-                        {{ configBusy ? '正在获取模型...' : '保存并添加全部模型' }}
+                        {{ configBusy ? tr('正在获取模型...') : tr('保存并添加全部模型') }}
                       </button>
                     </div>
                   </div>
@@ -663,22 +660,22 @@
 
             <!-- ========== 聚合 API ========== -->
             <div v-show="activeTab === 'aggapi'" class="settings-panel">
-              <div class="settings-section-title">聚合 API</div>
-              <div class="settings-section-desc">你配置的所有模型 key 聚合成一个 OpenAI 兼容端点，任何支持 OpenAI 兼容配置的客户端（Claude Code / Cursor / Codex）填上 Base URL 和 Key 即可使用，自动路由到信号最好的免费模型。</div>
+              <div class="settings-section-title">{{ tr('聚合 API') }}</div>
+              <div class="settings-section-desc">{{ tr('你配置的所有模型 key 聚合成一个 OpenAI 兼容端点，任何支持 OpenAI 兼容配置的客户端（Claude Code / Cursor / Codex）填上 Base URL 和 Key 即可使用，自动路由到信号最好的免费模型。') }}</div>
               <div class="agg-api-card" style="margin-top:10px">
                 <div class="agg-api-row">
                   <span class="agg-api-label">Base URL</span>
                   <code class="agg-api-code">http://localhost:8080/v1</code>
-                  <button class="agg-api-copy" type="button" @click="copyAggText('http://localhost:8080/v1', 'Base URL')">复制</button>
+                  <button class="agg-api-copy" type="button" @click="copyAggText('http://localhost:8080/v1', 'Base URL')">{{ tr('复制') }}</button>
                 </div>
                 <div class="agg-api-row">
                   <span class="agg-api-label">API Key</span>
                   <code class="agg-api-code">sk-rescene-local</code>
-                  <button class="agg-api-copy" type="button" @click="copyAggText('sk-rescene-local', 'API Key')">复制</button>
+                  <button class="agg-api-copy" type="button" @click="copyAggText('sk-rescene-local', 'API Key')">{{ tr('复制') }}</button>
                 </div>
                 <div class="agg-api-row">
-                  <span class="agg-api-label">本地代理端口</span>
-                  <input v-model="aggLocalProxyPort" class="agg-proxy-input" type="number" min="1" max="65535" placeholder="如 9910（留空=自动探测）" @blur="onAggProxyPortBlur()" @keyup.enter="onAggProxyPortBlur()" />
+                  <span class="agg-api-label">{{ tr('本地代理端口') }}</span>
+                  <input v-model="aggLocalProxyPort" class="agg-proxy-input" type="number" min="1" max="65535" :placeholder="tr('如 9910（留空=自动探测）')" @blur="onAggProxyPortBlur()" @keyup.enter="onAggProxyPortBlur()" />
                 </div>
               </div>
               <Transition name="agg-copy-toast">
@@ -687,39 +684,39 @@
                   <span>{{ aggCopyFeedback.message }}</span>
                 </div>
               </Transition>
-              <div class="agg-api-tip">已聚合 {{ freeModels.length + customModels.length }} 个模型（免费池 + 自定义）。model 填 <code class="agg-api-code">auto</code> 自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。</div>
+              <div class="agg-api-tip">{{ tr('已聚合') }}{{ freeModels.length + customModels.length }}{{ tr('个模型（免费池 + 自定义）。model 填') }}<code class="agg-api-code">auto</code> {{ tr('自动路由，或填任意模型 ID；key 可用 RESCENE_AGG_API_KEY 环境变量修改。') }}</div>
 
               <!-- ===== 一键同步 / 还原（codex / dsh）：两个工具都还没做好，整卡片先藏起来 ===== -->
                             <div v-if="showCodex || showDsh" class="agg-sync-card">
                               <div class="agg-sync-head">
-                                <span class="agg-sync-title">一键同步到本地工具</span>
+                                <span class="agg-sync-title">{{ tr('一键同步到本地工具') }}</span>
                                 <div class="agg-sync-actions">
                                   <button v-if="showCodex" class="agg-sync-btn" type="button" :disabled="aggSyncing === 'codex'" @click="aggSyncOne('codex')">
-                                    {{ aggSyncing === 'codex' ? '同步中…' : (isSynced('codex') ? '已同步 codex' : '未同步 codex') }}
+                                    {{ aggSyncing === 'codex' ? tr('同步中…') : (isSynced('codex') ? tr('已同步 codex') : tr('未同步 codex')) }}
                                   </button>
                                   <button v-if="showDsh" class="agg-sync-btn" type="button" :disabled="aggSyncing === 'dsh'" @click="aggSyncOne('dsh')">
-                                    {{ aggSyncing === 'dsh' ? '同步中…' : (isSynced('dsh') ? '已同步 dsh' : '未同步 dsh') }}
+                                    {{ aggSyncing === 'dsh' ? tr('同步中…') : (isSynced('dsh') ? tr('已同步 dsh') : tr('未同步 dsh')) }}
                                   </button>
                                   <button v-if="showCodex" class="agg-sync-btn ghost" type="button" :disabled="aggRestoring === 'codex'" @click="aggRestoreOne('codex')">
-                                    {{ aggRestoring === 'codex' ? '还原中…' : '还原 codex' }}
+                                    {{ aggRestoring === 'codex' ? tr('还原中…') : tr('还原 codex') }}
                                   </button>
                                   <button v-if="showDsh" class="agg-sync-btn ghost" type="button" :disabled="aggRestoring === 'dsh'" @click="aggRestoreOne('dsh')">
-                                    {{ aggRestoring === 'dsh' ? '还原中…' : '还原 dsh' }}
+                                    {{ aggRestoring === 'dsh' ? tr('还原中…') : tr('还原 dsh') }}
                                   </button>
                                 </div>
                               </div>
-                              <div class="agg-sync-tip">每个工具独立操作：点「同步 codex / dsh」只生成对应配置片段；点「还原 codex / dsh」只还原对应工具到原始配置（首次写回前自动备份一次）。片段旁「写入配置」才真正落盘（写前自动备份）。</div>
+                              <div class="agg-sync-tip">{{ tr('每个工具独立操作：点「同步 codex / dsh」只生成对应配置片段；点「还原 codex / dsh」只还原对应工具到原始配置（首次写回前自动备份一次）。片段旁「写入配置」才真正落盘（写前自动备份）。') }}</div>
                               <div v-if="aggSyncResult.length" class="agg-sync-result">
                                 <div v-for="r in aggSyncResult" :key="r.tool" class="agg-sync-item" v-show="r.tool !== 'codex'">
                                   <div class="agg-sync-item-head">
                                     <span class="agg-sync-tool">{{ r.tool }}</span>
-                                    <span class="agg-sync-badge" :class="{ ok: r.ok, err: !!r.error }">{{ r.error ? '失败' : (r.applied ? '已写入' : '已生成') }}</span>
+                                    <span class="agg-sync-badge" :class="{ ok: r.ok, err: !!r.error }">{{ r.error ? tr('失败') : (r.applied ? tr('已写入') : tr('已生成')) }}</span>
                                   </div>
                                   <pre class="agg-sync-snippet">{{ aggSnippetOf(r.tool) }}</pre>
                                   <div class="agg-sync-item-actions">
-                                    <button class="agg-sync-mini" type="button" @click="copyAggText(aggSnippetOf(r.tool))">复制片段</button>
-                                    <button v-if="!r.applied && !r.error" class="agg-sync-mini primary" type="button" :disabled="aggWriting" @click="aggApply(r.tool)">写入配置</button>
-                                    <button v-if="r.backed_up" class="agg-sync-mini" type="button" disabled>已备份: {{ basename(r.backed_up) }}</button>
+                                    <button class="agg-sync-mini" type="button" @click="copyAggText(aggSnippetOf(r.tool))">{{ tr('复制片段') }}</button>
+                                    <button v-if="!r.applied && !r.error" class="agg-sync-mini primary" type="button" :disabled="aggWriting" @click="aggApply(r.tool)">{{ tr('写入配置') }}</button>
+                                    <button v-if="r.backed_up" class="agg-sync-mini" type="button" disabled>{{ tr('已备份:') }}{{ basename(r.backed_up) }}</button>
                                   </div>
                                   <div v-if="r.error" class="agg-sync-err">{{ r.error }}</div>
                                 </div>
@@ -730,27 +727,27 @@
                             <div class="agg-api-card" style="margin-top:10px">
                               <div class="agg-api-row">
                                 <div class="agg-mode-tabs">
-                                  <button type="button" :class="{ on: aggMode === 'official' }" @click="switchAggOfficial()">官方</button>
+                                  <button type="button" :class="{ on: aggMode === 'official' }" @click="switchAggOfficial()">{{ tr('官方') }}</button>
                                   <template v-for="t in customTags" :key="t.id">
-                                    <input v-if="aggMode === t.id" class="agg-tag-input" v-model="t.name" @blur="onTagRename(t)" @keyup.enter="onTagRename(t)" @click.stop="selectTag(t)" :title="'可改名'" />
+                                    <input v-if="aggMode === t.id" class="agg-tag-input" v-model="t.name" @blur="onTagRename(t)" @keyup.enter="onTagRename(t)" @click.stop="selectTag(t)" :title="tr('可改名')" />
                                     <button v-else type="button" :class="{ on: aggMode === t.id }" @click="selectTag(t)">{{ t.name }}</button>
                                     <span v-if="customTags.length > 1" class="agg-tag-del" @click="removeCustomTag(t.id)">×</span>
                                   </template>
                                   <button type="button" class="agg-tag-add" @click="addCustomTag">+</button>
                                 </div>
                               </div>
-                              <div class="agg-api-tip">官方 = 自动收录全部已配置 Key 的免费模型，auto 智能路由自动挑可用的，无需手动选择；用户自定义 = 自己勾选任意模型进聚合端口，标签名可改名、可 + 新增。修改实时保存，无需点保存。</div>
+                              <div class="agg-api-tip">{{ tr('官方 = 自动收录全部已配置 Key 的免费模型，auto 智能路由自动挑可用的，无需手动选择；用户自定义 = 自己勾选任意模型进聚合端口，标签名可改名、可 + 新增。修改实时保存，无需点保存。') }}</div>
                               <template v-if="aggMode !== 'official'">
-                                <input v-model="aggCfgSearch" class="agg-cfg-search" placeholder="搜索模型名 / 厂商…" />
+                                <input v-model="aggCfgSearch" class="agg-cfg-search" :placeholder="tr('搜索模型名 / 厂商…')" />
                                 <div class="agg-cfg-list">
                                   <div v-for="g in aggCfgGroups" :key="g.vendor" class="agg-cfg-group">
                                     <div class="agg-cfg-group-head">
                                       <button type="button" class="agg-cfg-toggle" @click="toggleAggGroup(g.vendor)">
                                         <span class="agg-cfg-chevron" :class="{ open: aggOpen[g.vendor] }">▸</span>
-                                        <span class="agg-cfg-vendor">{{ g.vendor }}</span>
+                                        <span class="agg-cfg-vendor">{{ tr(g.vendor) }}</span>
                                         <span class="agg-cfg-count">{{ g.items.length }}</span>
                                       </button>
-                                      <button type="button" class="agg-cfg-select-all" @click="toggleAggGroupAll(g.vendor)">{{ aggGroupAllState(g.vendor) ? '取消全选' : '全选' }}</button>
+                                      <button type="button" class="agg-cfg-select-all" @click="toggleAggGroupAll(g.vendor)">{{ aggGroupAllState(g.vendor) ? tr('取消全选') : tr('全选') }}</button>
                                     </div>
                                     <div v-if="aggOpen[g.vendor] !== false" class="agg-cfg-group-body">
                                       <div v-for="c in g.items" :key="c.id" class="agg-cfg-item-wrap">
@@ -758,20 +755,20 @@
                                                                                 <input type="checkbox" :value="c.id" v-model="aggModelIDs" :disabled="!c.key_set" />
                                                                                 <span class="agg-cfg-name" :title="c.model">{{ c.name }}</span>
                                                                                 <span class="agg-cfg-model">{{ c.model }}</span>
-                                                                                <span v-if="c.disabled" class="agg-cfg-dead" title="该模型当前判定不可用，但可选回实验">已淘汰</span>
-                                                                                <button v-if="reviewCountId(c.id)" class="agg-cfg-info" type="button" :class="{ on: aggReviewOpen === c.id }" :title="'大众点评（' + reviewCountId(c.id) + ' 条）'" @click="aggReviewOpen = aggReviewOpen === c.id ? '' : c.id">
+                                                                                <span v-if="c.disabled" class="agg-cfg-dead" :title="tr('该模型当前判定不可用，但可选回实验')">{{ tr('已淘汰') }}</span>
+                                                                                <button v-if="reviewCountId(c.id)" class="agg-cfg-info" type="button" :class="{ on: aggReviewOpen === c.id }" :title="tr('大众点评（') + reviewCountId(c.id) + tr(' 条）')" @click="aggReviewOpen = aggReviewOpen === c.id ? '' : c.id">
                                                                                   <span class="agg-cfg-info-stars">{{ renderStars(avgStarsId(c.id)) }}</span>
                                                                                   <span class="agg-cfg-info-num">{{ avgStarsId(c.id).toFixed(1) }}</span>
                                                                                 </button>
-                                                                                <span v-if="!c.chat" class="agg-cfg-nochat">非对话</span>
-                                                                                <span v-if="!c.key_set" class="agg-cfg-nokey">未配 key</span>
+                                                                                <span v-if="!c.chat" class="agg-cfg-nochat">{{ tr('非对话') }}</span>
+                                                                                <span v-if="!c.key_set" class="agg-cfg-nokey">{{ tr('未配 key') }}</span>
                                                                               </label>
                                         <div v-show="aggReviewOpen === c.id" class="agg-review-card">
                                           <div class="agg-review-card-head">
                                             <span class="agg-review-model">{{ c.name }}</span>
                                             <span class="agg-review-avg">{{ avgStarsId(c.id).toFixed(1) }}</span>
                                             <span class="agg-review-stars">{{ renderStars(avgStarsId(c.id)) }}</span>
-                                            <span class="agg-review-total">{{ reviewCountId(c.id) }} 条点评</span>
+                                            <span class="agg-review-total">{{ reviewCountId(c.id) }}{{ tr('条点评') }}</span>
                                           </div>
                                           <div class="agg-review-list">
                                             <div v-for="(rv, ri) in reviewsOfId(c.id)" :key="ri" class="agg-review-item">
@@ -786,7 +783,7 @@
                                       </div>
                                     </div>
                                   </div>
-                                  <div v-if="!aggCfgGroups.length" class="settings-empty">没有匹配的模型。</div>
+                                  <div v-if="!aggCfgGroups.length" class="settings-empty">{{ tr('没有匹配的模型。') }}</div>
                                 </div>
                               </template>
                             </div>
@@ -794,26 +791,26 @@
                             <!-- ===== 聚合池健康度可视化 ===== -->
                             <div class="agg-health-card">
                               <div class="agg-health-head">
-                                <span class="agg-health-title">聚合池健康度</span>
+                                <span class="agg-health-title">{{ tr('聚合池健康度') }}</span>
                                 <span v-if="aggHealthLoaded" class="agg-health-summary">
-                                  <span class="agg-health-dot" :class="{ ok: aggHealthOK > 0 }">{{ aggHealthOK }}</span> 可用 /
-                                  <span class="agg-health-dot warn" :class="{ on: aggHealthDown > 0 }">{{ aggHealthDown }}</span> 异常
+                                  <span class="agg-health-dot" :class="{ ok: aggHealthOK > 0 }">{{ aggHealthOK }}</span> {{ tr('可用 /') }}
+                                  <span class="agg-health-dot warn" :class="{ on: aggHealthDown > 0 }">{{ aggHealthDown }}</span> {{ tr('异常') }}
                                 </span>
                                 <button class="agg-api-copy" type="button" :disabled="aggHealthLoading" @click="loadAggHealth()">
-                                  {{ aggHealthLoading ? '刷新中…' : '刷新' }}
+                                  {{ aggHealthLoading ? tr('刷新中…') : tr('刷新') }}
                                 </button>
                               </div>
-                              <div v-if="aggHealthLoading" class="settings-loading">加载健康度...</div>
+                              <div v-if="aggHealthLoading" class="settings-loading">{{ tr('加载健康度...') }}</div>
                               <div v-else-if="aggHealthError" class="agg-health-error">
-                                ⚠️ Yosuri 桌面应用未启动或当前 Agent 连接配置错误
-                                <div class="agg-health-error-sub">请确认 Yosuri 桌面应用已运行、本地聚合端口未被占用；如刚改过配置，点右上角「刷新」重试。</div>
+                                {{ tr('⚠️ Yosuri 桌面应用未启动或当前 Agent 连接配置错误') }}
+                                <div class="agg-health-error-sub">{{ tr('请确认 Yosuri 桌面应用已运行、本地聚合端口未被占用；如刚改过配置，点右上角「刷新」重试。') }}</div>
                               </div>
                               <template v-else>
-                                <div v-if="!aggHealthModels.length" class="settings-empty">没有可展示的模型（聚合端口不暴露任何模型时为空）。</div>
+                                <div v-if="!aggHealthModels.length" class="settings-empty">{{ tr('没有可展示的模型（聚合端口不暴露任何模型时为空）。') }}</div>
                                 <template v-else>
                                   <!-- auto 路由链（最优先展示） -->
                                   <div v-if="aggAutoChain.length" class="agg-health-block">
-                                    <div class="agg-health-block-title">auto 路由链（命中优先）</div>
+                                    <div class="agg-health-block-title">{{ tr('auto 路由链（命中优先）') }}</div>
                                     <div v-for="m in aggAutoChain" :key="m.id" class="agg-health-row" :class="{ bad: m.disabled }">
                                       <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
                                         <i v-for="n in 4" :key="n" :class="{ on: (m.signal == null ? -1 : m.signal) >= n || n === 1 }"></i>
@@ -829,7 +826,7 @@
                                   </div>
                                   <!-- 全部暴露模型 -->
                                   <div class="agg-health-block">
-                                    <div class="agg-health-block-title">全部暴露模型（{{ aggHealthModels.length }}）</div>
+                                    <div class="agg-health-block-title">{{ tr('全部暴露模型（') }}{{ aggHealthModels.length }}）</div>
                                     <div v-for="m in aggHealthModels" :key="m.id" class="agg-health-row" :class="{ bad: m.disabled }">
                                       <span class="fm-signal" :class="'sig-' + (m.signal == null ? -1 : m.signal)">
                                         <i v-for="n in 4" :key="n" :class="{ on: (m.signal == null ? -1 : m.signal) >= n || n === 1 }"></i>
@@ -842,175 +839,88 @@
                                       </span>
                                     </div>
                                   </div>
-                                  <div class="agg-health-foot">探活每日一轮（免 key 网关，零成本），信号格 0-4：绿=快(≤3s) 黄=中(≤8s) 红=慢(>8s) 灰=未探测。</div>
+                                  <div class="agg-health-foot">探活每日一轮（免 key 网关，零成本），信号格 0-4：绿=快(≤3s) 黄=中(≤8s) 红=慢(>{{ tr('8s) 灰=未探测。') }}</div>
                                 </template>
                               </template>
                             </div>
                           </div>
 
-            <!-- ========== 人设 ========== -->
+            <!-- ========== 角色卡（一张卡 = 一个 Agent：人设 + 头像 + 私有记忆） ========== -->
                         <div v-show="activeTab === 'persona'" class="settings-panel">
-                                      <div class="settings-section-title settings-section-title-row">
-                                        <span>人设</span>
-                                        <button class="persona-report-btn" type="button" @click="personaReportPost">
-                                                                          <Icon icon="mdi:email-fast-outline" width="14" /> 周报投递
-                                                                        </button>
-                                      </div>
-                          <div class="settings-section-desc">
-                            当前人设文案显示在下面，直接改内容再点「保存」即可；也可以存成预设，或者每天随机换一个。
-                          </div>
-                          <textarea
-                            v-model="personaDraft"
-                            class="persona-textarea"
-                            rows="5"
-                            placeholder="写下你自己的 AI 人设，比如：你是冷面可靠的工作助手，话少、直接、从不客套……"
-                            @focus="personaEditing = true"
-                            @input="personaEditing = true"
-                          ></textarea>
-
-                          <!-- 编辑态操作行 -->
-                          <div class="persona-actions" v-if="personaEditing">
-                            <button class="vendor-key-save" type="button" @click="saveCustomPersona">保存</button>
-                            <button class="vendor-key-save" type="button" style="margin-left: 8px;" @click="personaSavingPreset = !personaSavingPreset">
-                              {{ personaSavingPreset ? '取消存预设' : '保存为预设' }}
-                            </button>
-                            <button class="vendor-key-cancel" type="button" style="margin-left: 8px;" @click="clearPersona">清除人设（中性助手）</button>
-                          </div>
-                          <!-- 保存为预设：命名行 -->
-                          <div class="persona-save-preset-row" v-if="personaSavingPreset">
-                            <input
-                              v-model="newPresetName"
-                              class="persona-preset-name-input"
-                              type="text"
-                              placeholder="预设名字，比如：我的老板人设"
-                              @keyup.enter="saveAsPreset"
-                            />
-                            <button class="vendor-key-save" type="button" @click="saveAsPreset">存进「我的预设」</button>
-                          </div>
-
-                          <div class="persona-divider"></div>
-
-                          <!-- 每日随机 -->
-                          <button
-                            class="persona-preset-card persona-random-card"
-                            :class="{ on: personaSelected === 'random' }"
-                            type="button"
-                            @click="selectRandomPreset"
-                          >
-                            <Icon :icon="RANDOM_PRESET.icon" width="22" class="persona-preset-icon" />
-                            <span class="persona-preset-name">{{ RANDOM_PRESET.name }}</span>
-                            <span class="persona-preset-desc">{{ RANDOM_PRESET.desc }}</span>
-                          </button>
-
-                          <!-- 内置预设 -->
-                          <div class="persona-group-title">预设</div>
-                          <div class="persona-preset-grid">
-                            <button
-                              v-for="p in BUILTIN_PRESETS"
-                              :key="p.id"
-                              class="persona-preset-card"
-                              :class="{ on: personaSelected === p.id }"
-                              type="button"
-                              @click="selectPersonaPreset(p)"
-                            >
-                              <Icon :icon="p.icon" width="22" class="persona-preset-icon" />
-                              <span class="persona-preset-name">{{ p.name }}</span>
-                              <span class="persona-preset-desc">{{ p.desc }}</span>
-                            </button>
-                          </div>
-
-                          <!-- 我的预设 -->
-                          <template v-if="myPersonas.length">
-                            <div class="persona-group-title">我的预设</div>
-                            <div class="persona-preset-grid">
-                              <button
-                                v-for="p in myPersonas"
-                                :key="p.id"
-                                class="persona-preset-card"
-                                :class="{ on: personaSelected === p.id }"
-                                type="button"
-                                @click="selectPersonaPreset(p)"
-                              >
-                                <Icon icon="mdi:account-heart" width="22" class="persona-preset-icon" />
-                                <span class="persona-preset-name">{{ p.name }}</span>
-                                <span class="persona-preset-desc">自定义预设</span>
-                                <span class="persona-preset-del" title="删除预设" @click="deleteMyPreset(p.id, $event)">×</span>
-                              </button>
-                            </div>
-                          </template>
-
-                          <Transition name="persona-toast">
-                            <div v-if="personaToast" class="persona-toast" :class="{ error: !personaToast.ok }" role="status" aria-live="polite">
-                              <Icon :icon="personaToast.ok ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'" width="16" />
-                              <span>{{ personaToast.message }}</span>
-                            </div>
-                          </Transition>
-
-                          <div class="persona-divider"></div>
-
-                          <!-- ========== 我的 Agent（多角色卡：各自人设/头像/私有记忆） ========== -->
                           <div class="settings-section-title settings-section-title-row">
-                            <span>我的 Agent</span>
-                            <button class="vendor-key-save" type="button" @click="startNewAgent">新建角色卡</button>
+                            <span>{{ tr('角色卡') }}</span>
+                            <button class="vendor-key-save" type="button" @click="startNewAgent">{{ tr('新建角色卡') }}</button>
                           </div>
                           <div class="settings-section-desc">
-                            每个 Agent 有自己的角色卡、头像和私有记忆；用户偏好等通用记忆所有 Agent 共享。
-                            在聊天输入框的「群聊成员」里勾选，一个对话可以让多个 Agent 依次发言。
+                            {{ tr('一张角色卡就是一个 Agent：卡里的人设和头像决定它是谁。每个 Agent 有自己的私有记忆，用户偏好等通用记忆所有 Agent 共享。 在聊天输入框的「群聊成员」里勾选，一个对话可以让多个 Agent 依次发言。') }}
                           </div>
                           <div class="agent-card-grid">
-                            <div v-for="a in agentStore.agents.value" :key="a.id" class="agent-card">
-                              <img v-if="a.avatar" :src="a.avatar" class="agent-card-avatar" alt="" />
-                              <span v-else class="agent-card-avatar agent-card-avatar-text" :style="{ background: a.color || '#8b5e7c' }">
-                                {{ (a.name || '?').charAt(0) }}
-                              </span>
-                              <div class="agent-card-body">
-                                <div class="agent-card-name">{{ a.name }}</div>
-                                <div class="agent-card-persona">{{ (a.persona || '（未写角色卡）').slice(0, 40) }}…</div>
-                              </div>
-                              <div class="agent-card-ops">
-                                <button class="profile-avatar-action" type="button" @click="editAgent(a)">编辑</button>
-                                <button class="profile-avatar-action muted" type="button" @click="removeAgent(a.id)">删除</button>
-                              </div>
-                            </div>
+                            <div
+                                                          v-for="a in agentStore.agents.value"
+                                                          :key="a.id"
+                                                          class="agent-card"
+                                                          :class="{ on: agentStore.currentAgentId.value === a.id }"
+                                                          @click="activateAgent(a.id)"
+                                                        >
+                                                          <img v-if="a.avatar" :src="a.avatar" class="agent-card-avatar" alt="" />
+                                                          <span v-else class="agent-card-avatar agent-card-avatar-text" :style="{ background: a.color || '#8b5e7c' }">
+                                                            {{ (a.name || '?').charAt(0) }}
+                                                          </span>
+                                                          <div class="agent-card-body">
+                                                            <div class="agent-card-name">{{ tr(a.name) }}</div>
+                                                            <div class="agent-card-persona">{{ (a.persona || tr('（未写角色卡）')).slice(0, 40) }}…</div>
+                                                          </div>
+                                                          <span v-if="agentStore.currentAgentId.value === a.id" class="agent-card-current">{{ tr('当前') }}</span>
+                                                          <div class="agent-card-ops" @click.stop>
+                                                            <button class="profile-avatar-action" type="button" @click="editAgent(a)">{{ tr('编辑') }}</button>
+                                                            <button class="profile-avatar-action muted" type="button" @click="removeAgent(a.id)">{{ tr('删除') }}</button>
+                                                          </div>
+                                                        </div>
                           </div>
 
                           <!-- 角色卡编辑表单 -->
                           <div v-if="agentEditing" class="agent-edit-form">
                             <div class="profile-row">
-                              <span class="profile-label">名字</span>
-                              <input class="profile-input" v-model="agentDraft.name" maxlength="16" placeholder="比如：小雪" />
+                              <span class="profile-label">{{ tr('名字') }}</span>
+                              <input class="profile-input" v-model="agentDraft.name" maxlength="16" :placeholder="tr('比如：小雪')" />
                             </div>
                             <div class="profile-row">
-                              <span class="profile-label">头像</span>
+                              <span class="profile-label">{{ tr('头像') }}</span>
                               <div class="profile-avatar-editor">
                                 <img v-if="agentDraft.avatar" :src="agentDraft.avatar" class="profile-avatar" alt="" />
                                 <span v-else class="profile-avatar">{{ (agentDraft.name || '?').charAt(0) }}</span>
                                 <div class="profile-avatar-actions">
-                                  <button class="profile-avatar-action" type="button" @click="agentAvatarInputRef?.click()">选择图片</button>
-                                  <button v-if="agentDraft.avatar" class="profile-avatar-action muted" type="button" @click="agentDraft.avatar = ''">移除</button>
+                                  <button class="profile-avatar-action" type="button" @click="agentAvatarInputRef?.click()">{{ tr('选择图片') }}</button>
+                                  <button v-if="agentDraft.avatar" class="profile-avatar-action muted" type="button" @click="agentDraft.avatar = ''">{{ tr('移除') }}</button>
                                 </div>
                                 <input ref="agentAvatarInputRef" class="profile-avatar-input" type="file"
                                   accept="image/png,image/jpeg,image/webp,image/gif" @change="onAgentAvatarFile" />
                               </div>
                             </div>
                             <div class="profile-row">
-                              <span class="profile-label">角色卡</span>
+                              <span class="profile-label">{{ tr('角色卡') }}</span>
                               <textarea class="persona-textarea" rows="6" v-model="agentDraft.persona"
-                                placeholder="写下这个 Agent 是谁：自称、语气、性格、口头禅、忌讳……"></textarea>
+                                :placeholder="tr('写下这个 Agent 是谁：自称、语气、性格、口头禅、忌讳……')"></textarea>
                             </div>
                             <div class="agent-edit-actions">
-                              <button class="vendor-key-save" type="button" @click="saveAgentDraft">保存</button>
-                              <button class="vendor-key-cancel" type="button" @click="agentEditing = false">取消</button>
+                              <button class="vendor-key-save" type="button" @click="saveAgentDraft">{{ tr('保存') }}</button>
+                              <button class="vendor-key-cancel" type="button" @click="agentEditing = false">{{ tr('取消') }}</button>
                             </div>
                           </div>
+                          <Transition name="persona-toast">
+                            <div v-if="personaToast" class="persona-toast" :class="{ error: !personaToast.ok }" role="status" aria-live="polite">
+                              <Icon :icon="personaToast.ok ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'" width="16" />
+                              <span>{{ personaToast.message }}</span>
+                            </div>
+                          </Transition>
                         </div>
 
                         <!-- ========== 外观 ========== -->
             <div v-show="activeTab === 'appearance'" class="settings-panel">
-              <div class="settings-section-title">主题</div>
-              <div class="settings-section-desc">选择你喜欢的主题色，设置会立即应用到整个界面。</div>
+              <div class="settings-section-title">{{ tr('主题') }}</div>
+              <div class="settings-section-desc">{{ tr('选择你喜欢的主题色，设置会立即应用到整个界面。') }}</div>
               <div class="param-row" style="align-items: flex-start;">
-                            <span class="param-label">主题色</span>
+                            <span class="param-label">{{ tr('主题色') }}</span>
                             <div class="theme-swatches">
                               <button
                                 v-for="[key, p] in colorThemes"
@@ -1025,7 +935,7 @@
                                 <span class="theme-swatch-label">{{ p.label }}</span>
                               </button>
                               <!-- 自定义主题色：点击弹出调色板选色，确定后由 auto 免费模型按色彩语义起名 -->
-                              <label class="theme-swatch custom" :class="{ on: theme === 'custom' }" :title="'自定义主题色 · ' + customThemeName">
+                              <label class="theme-swatch custom" :class="{ on: theme === 'custom' }" :title="tr('自定义主题色 · ') + customThemeName">
                                 <input
                                   type="color"
                                   class="custom-color-input"
@@ -1034,15 +944,15 @@
                                   @change="onCustomColorConfirm"
                                 />
                                 <span class="theme-swatch-dot" :style="{ background: customColor }"></span>
-                                <span class="theme-swatch-label">{{ customNaming ? '起名中…' : customThemeName }}</span>
+                                <span class="theme-swatch-label">{{ customNaming ? tr('起名中…') : customThemeName }}</span>
                               </label>
                             </div>
                           </div>
 
-              <div class="settings-section-title appearance-mode-title">皮肤</div>
-              <div class="settings-section-desc">动画工作台皮肤保留专业 IDE 布局，只切换成套色板与状态标记。</div>
+              <div class="settings-section-title appearance-mode-title">{{ tr('皮肤') }}</div>
+              <div class="settings-section-desc">{{ tr('动画工作台皮肤保留专业 IDE 布局，只切换成套色板与状态标记。') }}</div>
               <div class="param-row" style="align-items: flex-start;">
-                <span class="param-label">工作台皮肤</span>
+                <span class="param-label">{{ tr('工作台皮肤') }}</span>
                 <div class="skin-groups">
                   <div v-for="[series, items] in skinThemes" :key="series" class="skin-group">
                     <div class="skin-group-title">{{ series }}</div>
@@ -1053,7 +963,7 @@
                         class="skin-card"
                         :class="{ on: theme === key }"
                         type="button"
-                        :title="`切换到${p.label}皮肤`"
+                        :title="tr('切换到') + p.label + tr('皮肤')"
                         @click="selectTheme(key)"
                       >
                         <span
@@ -1066,7 +976,7 @@
                         </span>
                         <span class="skin-card-info">
                           <strong>{{ p.label }}</strong>
-                          <small>{{ key === 'witchtrial' ? '珊瑚红 × 靛青 · 原画工作流' : '青碧 × 夜紫 · 夜场工作流' }}</small>
+                          <small>{{ key === 'witchtrial' ? tr('珊瑚红 × 靛青 · 原画工作流') : tr('青碧 × 夜紫 · 夜场工作流') }}</small>
                         </span>
                         <Icon v-if="theme === key" class="skin-card-check" icon="mdi:check" width="17" />
                       </button>
@@ -1075,10 +985,10 @@
                 </div>
               </div>
 
-              <div class="settings-section-title appearance-mode-title">显示模式</div>
-              <div class="settings-section-desc">选择亮色、暗色，或自动跟随系统设置。</div>
+              <div class="settings-section-title appearance-mode-title">{{ tr('显示模式') }}</div>
+              <div class="settings-section-desc">{{ tr('选择亮色、暗色，或自动跟随系统设置。') }}</div>
               <div class="param-row">
-                <span class="param-label">界面亮度</span>
+                <span class="param-label">{{ tr('界面亮度') }}</span>
                 <div class="seg-control">
                   <button
                     v-for="opt in MODE_OPTIONS"
@@ -1091,8 +1001,8 @@
                 </div>
               </div>
 
-              <div class="settings-section-title appearance-preview-title">实时预览</div>
-              <div class="settings-section-desc">预览会随当前主题色和显示模式同步更新。</div>
+              <div class="settings-section-title appearance-preview-title">{{ tr('实时预览') }}</div>
+              <div class="settings-section-desc">{{ tr('预览会随当前主题色和显示模式同步更新。') }}</div>
               <div
                               class="theme-live-preview"
                               :style="{
@@ -1109,26 +1019,25 @@
                 </div>
                 <div class="theme-live-body">
                   <div class="theme-live-sidebar">
-                    <span class="on"><Icon icon="lucide:message-square" width="13" />对话</span>
-                    <span><Icon icon="lucide:folder" width="13" />项目</span>
-                    <span><Icon icon="lucide:settings-2" width="13" />设置</span>
+                    <span class="on"><Icon icon="lucide:message-square" width="13" />{{ tr('对话') }}</span>
+                    <span><Icon icon="lucide:folder" width="13" />{{ tr('项目') }}</span>
+                    <span><Icon icon="lucide:settings-2" width="13" />{{ tr('设置') }}</span>
                   </div>
                   <div class="theme-live-main">
-                    <div class="theme-live-heading">今天想创造什么？</div>
-                    <div class="theme-live-copy">主题色会用于选中状态、按钮和重要提示。</div>
-                    <div class="theme-live-message">界面预览已与当前设置同步。</div>
-                    <div class="theme-live-composer"><span>输入消息...</span><b><Icon icon="lucide:arrow-up" width="13" /></b></div>
+                    <div class="theme-live-heading">{{ tr('今天想创造什么？') }}</div>
+                    <div class="theme-live-copy">{{ tr('主题色会用于选中状态、按钮和重要提示。') }}</div>
+                    <div class="theme-live-message">{{ tr('界面预览已与当前设置同步。') }}</div>
+                    <div class="theme-live-composer"><span>{{ tr('输入消息...') }}</span><b><Icon icon="lucide:arrow-up" width="13" /></b></div>
                   </div>
                 </div>
               </div>
 
-              <div class="settings-section-title appearance-mode-title">Live2D 看板娘</div>
+              <div class="settings-section-title appearance-mode-title">{{ tr('Live2D 看板娘') }}</div>
               <div class="settings-section-desc">
-                默认关闭：打开后主窗口最小化到托盘时，桌面右下角会出现一只可拖拽的透明置顶 Live2D 看板娘，
-                点击展开后她会实时汇报 Agent 当前的意图和操作，说话时嘴型同步、视线跟随鼠标。改动需要重启应用才生效。
+                {{ tr('默认关闭：打开后主窗口最小化到托盘时，桌面右下角会出现一只可拖拽的透明置顶 Live2D 看板娘， 点击展开后她会实时汇报 Agent 当前的意图和操作，说话时嘴型同步、视线跟随鼠标。改动需要重启应用才生效。') }}
               </div>
               <div class="param-row">
-                <span class="param-label">看板娘</span>
+                <span class="param-label">{{ tr('看板娘') }}</span>
                 <div class="seg-control">
                   <button
                     class="seg-btn"
@@ -1136,93 +1045,92 @@
                     type="button"
                     :disabled="overlaySaving"
                     @click="setOverlayEnabled(false)"
-                  >关闭</button>
+                  >{{ tr('关闭') }}</button>
                   <button
                     class="seg-btn"
                     :class="{ on: overlayEnabled }"
                     type="button"
                     :disabled="overlaySaving"
                     @click="setOverlayEnabled(true)"
-                  >开启</button>
+                  >{{ tr('开启') }}</button>
                 </div>
               </div>
 
-              <div class="settings-section-title">流式输出</div>
+              <div class="settings-section-title">{{ tr('流式输出') }}</div>
               <div class="settings-section-desc">
-                AI 回复时新到的文字逐字符级联淡入（瀑布渐变）。如果看起来一闪一闪，先关掉这个开关。
+                {{ tr('AI 回复时新到的文字逐字符级联淡入（瀑布渐变）。如果看起来一闪一闪，先关掉这个开关。') }}
               </div>
               <div class="param-row">
-                <span class="param-label">瀑布渐变</span>
+                <span class="param-label">{{ tr('瀑布渐变') }}</span>
                 <label class="param-switch">
                   <input type="checkbox" v-model="streamFadeConfig.enabled" />
                   <span class="param-switch-track"></span>
                 </label>
               </div>
               <div class="param-row">
-                <span class="param-label">淡入时长</span>
+                <span class="param-label">{{ tr('淡入时长') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs <= 120 }" type="button" @click="streamFadeConfig.fadeMs = 100">快</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs > 120 && streamFadeConfig.fadeMs <= 240 }" type="button" @click="streamFadeConfig.fadeMs = 180">中</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs > 240 }" type="button" @click="streamFadeConfig.fadeMs = 300">慢</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs <= 120 }" type="button" @click="streamFadeConfig.fadeMs = 100">{{ tr('快') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs > 120 && streamFadeConfig.fadeMs <= 240 }" type="button" @click="streamFadeConfig.fadeMs = 180">{{ tr('中') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.fadeMs > 240 }" type="button" @click="streamFadeConfig.fadeMs = 300">{{ tr('慢') }}</button>
                 </div>
               </div>
               <div class="param-row">
-                <span class="param-label">级联间隔</span>
+                <span class="param-label">{{ tr('级联间隔') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs <= 5 }" type="button" @click="streamFadeConfig.staggerMs = 4">紧凑</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs > 5 && streamFadeConfig.staggerMs <= 12 }" type="button" @click="streamFadeConfig.staggerMs = 8">标准</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs > 12 }" type="button" @click="streamFadeConfig.staggerMs = 16">宽松</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs <= 5 }" type="button" @click="streamFadeConfig.staggerMs = 4">{{ tr('紧凑') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs > 5 && streamFadeConfig.staggerMs <= 12 }" type="button" @click="streamFadeConfig.staggerMs = 8">{{ tr('标准') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.staggerMs > 12 }" type="button" @click="streamFadeConfig.staggerMs = 16">{{ tr('宽松') }}</button>
                 </div>
               </div>
               <div class="param-row">
-                <span class="param-label">扫过时长</span>
+                <span class="param-label">{{ tr('扫过时长') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs <= 180 }" type="button" @click="streamFadeConfig.maxSweepMs = 150">快</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs > 180 && streamFadeConfig.maxSweepMs <= 300 }" type="button" @click="streamFadeConfig.maxSweepMs = 250">标准</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs > 300 }" type="button" @click="streamFadeConfig.maxSweepMs = 400">慢</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs <= 180 }" type="button" @click="streamFadeConfig.maxSweepMs = 150">{{ tr('快') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs > 180 && streamFadeConfig.maxSweepMs <= 300 }" type="button" @click="streamFadeConfig.maxSweepMs = 250">{{ tr('标准') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.maxSweepMs > 300 }" type="button" @click="streamFadeConfig.maxSweepMs = 400">{{ tr('慢') }}</button>
                 </div>
               </div>
               <div class="param-row">
-                <span class="param-label">模糊消散</span>
+                <span class="param-label">{{ tr('模糊消散') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx === 0 }" type="button" @click="streamFadeConfig.blurPx = 0">无</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx === 1 }" type="button" @click="streamFadeConfig.blurPx = 1">轻</button>
-                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx >= 2 }" type="button" @click="streamFadeConfig.blurPx = 2">中</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx === 0 }" type="button" @click="streamFadeConfig.blurPx = 0">{{ tr('无') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx === 1 }" type="button" @click="streamFadeConfig.blurPx = 1">{{ tr('轻') }}</button>
+                  <button class="seg-btn" :class="{ on: streamFadeConfig.blurPx >= 2 }" type="button" @click="streamFadeConfig.blurPx = 2">{{ tr('中') }}</button>
                 </div>
               </div>
               <div class="param-row" style="border-bottom: none;">
                 <span class="param-label"></span>
-                <button class="seg-btn" type="button" @click="resetStreamFadeConfig" style="font-size: 11.5px; color: var(--app-text-soft);">恢复默认</button>
+                <button class="seg-btn" type="button" @click="resetStreamFadeConfig" style="font-size: 11.5px; color: var(--app-text-soft);">{{ tr('恢复默认') }}</button>
               </div>
             </div>
 
                         <!-- ========== 编辑器 ========== -->
                         <div v-show="activeTab === 'editor'" class="settings-panel">
-                          <div class="settings-section-title">代码编辑器</div>
+                          <div class="settings-section-title">{{ tr('代码编辑器') }}</div>
                           <div class="settings-section-desc">
-                            打开项目时按需加载代码编辑器（Monaco），降低低配机器启动卡顿。
-                            关闭后应用启动即后台预取编辑器，打开文件面板秒开（高配机/重度使用编辑器时可选）。
+                            {{ tr('打开项目时按需加载代码编辑器（Monaco），降低低配机器启动卡顿。 关闭后应用启动即后台预取编辑器，打开文件面板秒开（高配机/重度使用编辑器时可选）。') }}
                           </div>
                           <div class="param-row">
-                            <span class="param-label">按需加载（懒加载）</span>
+                            <span class="param-label">{{ tr('按需加载（懒加载）') }}</span>
                             <div class="seg-control">
-                              <button class="seg-btn" :class="{ on: editorLazyEnabled }" type="button" @click="setEditorLazy(true)">开启（推荐）</button>
-                              <button class="seg-btn" :class="{ on: !editorLazyEnabled }" type="button" @click="setEditorLazy(false)">关闭</button>
+                              <button class="seg-btn" :class="{ on: editorLazyEnabled }" type="button" @click="setEditorLazy(true)">{{ tr('开启（推荐）') }}</button>
+                              <button class="seg-btn" :class="{ on: !editorLazyEnabled }" type="button" @click="setEditorLazy(false)">{{ tr('关闭') }}</button>
                             </div>
                           </div>
                         </div>
 
                         <!-- ========== 受保护工作区 ========== -->
             <div v-show="activeTab === 'safety'" class="settings-panel">
-              <div class="settings-section-title">受保护工作区</div>
+              <div class="settings-section-title">{{ tr('受保护工作区') }}</div>
               <div class="settings-section-desc">
-                默认关闭。开启后，Agent 的文件工具和 filesystem MCP 只能访问当前项目目录；越界文件访问会被直接拒绝，即使在 Yolo 模式下也是如此。写盘和命令仍会要求本次明确批准。它是应用层保护，不是操作系统沙盒。
+                {{ tr('默认关闭。开启后，Agent 的文件工具和 filesystem MCP 只能访问当前项目目录；越界文件访问会被直接拒绝，即使在 Yolo 模式下也是如此。写盘和命令仍会要求本次明确批准。它是应用层保护，不是操作系统沙盒。') }}
               </div>
               <div class="param-row">
-                <span class="param-label">保护模式</span>
+                <span class="param-label">{{ tr('保护模式') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: !protectedWorkspaceEnabled }" type="button" :disabled="protectedWorkspaceSaving" @click="setProtectedWorkspace(false)">关闭</button>
-                  <button class="seg-btn" :class="{ on: protectedWorkspaceEnabled }" type="button" :disabled="protectedWorkspaceSaving" @click="setProtectedWorkspace(true)">开启</button>
+                  <button class="seg-btn" :class="{ on: !protectedWorkspaceEnabled }" type="button" :disabled="protectedWorkspaceSaving" @click="setProtectedWorkspace(false)">{{ tr('关闭') }}</button>
+                  <button class="seg-btn" :class="{ on: protectedWorkspaceEnabled }" type="button" :disabled="protectedWorkspaceSaving" @click="setProtectedWorkspace(true)">{{ tr('开启') }}</button>
                 </div>
               </div>
               <div v-if="protectedWorkspaceError" class="settings-error">{{ protectedWorkspaceError }}</div>
@@ -1232,24 +1140,24 @@
             <div v-show="activeTab === 'skills'" class="settings-panel">
               <template v-if="skillsSubTab === 'local'">
                 <div class="settings-section-title">
-                  本地技能库
-                  <button class="inline-refresh" type="button" @click="loadSkills(true)" title="刷新"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
+                  {{ tr('本地技能库') }}
+                  <button class="inline-refresh" type="button" @click="loadSkills(true)" :title="tr('刷新')"><Icon icon="mdi:refresh" width="14" :class="{ spin: skillsLoading }" /></button>
                 </div>
                 <div class="settings-section-desc">
-                  内置技能随客户端发布；Agent 学到的技能与从外部安装的 <code>SKILL.md</code> 都保存在用户数据目录，并可离线使用。
+                  {{ tr('内置技能随客户端发布；Agent 学到的技能与从外部安装的') }} <code>SKILL.md</code> {{ tr('都保存在用户数据目录，并可离线使用。') }}
                 </div>
-                <div v-if="skillsLoading" class="settings-loading">加载中...</div>
+                <div v-if="skillsLoading" class="settings-loading">{{ tr('加载中...') }}</div>
                 <template v-else>
-                  <div v-if="!skills.length" class="settings-empty">还没有技能。完成复杂工作流后 Agent 会自动学习，也可从「外部」安装。</div>
+                  <div v-if="!skills.length" class="settings-empty">{{ tr('还没有技能。完成复杂工作流后 Agent 会自动学习，也可从「外部」安装。') }}</div>
                   <div v-for="sk in skills" :key="(sk.source || '') + ':' + sk.name" class="entity-card">
                     <div class="entity-head" @click="toggleSkill(sk.name)" style="cursor:pointer">
                       <Icon :icon="sk.source === 'builtin' ? 'mdi:package-variant-closed' : (sk.source === 'external' ? 'mdi:puzzle-outline' : 'mdi:school-outline')" width="15" />
                       <span class="entity-name">{{ sk.name }}</span>
                       <span class="entity-badge" :class="sk.source === 'external' ? 'src-ext' : 'src-learned'">
-                        {{ sk.source === 'builtin' ? '内置' : (sk.source === 'external' ? '外部' : '自研') }}
+                        {{ sk.source === 'builtin' ? tr('内置') : (sk.source === 'external' ? tr('外部') : tr('自研')) }}
                       </span>
                       <span v-if="sk.source !== 'external'" class="entity-badge skill-status" :class="'is-' + normalizedSkillStatus(sk)">{{ skillStatusLabel(sk) }}</span>
-                      <span v-if="sk.source !== 'external'" class="entity-badge">{{ (sk.steps || []).length }} 步</span>
+                      <span v-if="sk.source !== 'external'" class="entity-badge">{{ (sk.steps || []).length }}{{ tr('步') }}</span>
                       <Icon :icon="expandedSkill === sk.name ? 'mdi:chevron-up' : 'mdi:chevron-down'" width="16" style="margin-left:auto" />
                     </div>
                     <div class="entity-meta">{{ sk.description }}</div>
@@ -1257,25 +1165,25 @@
                       <li v-for="(st, i) in sk.steps" :key="i">{{ st }}</li>
                     </ol>
                     <div v-if="expandedSkill === sk.name && sk.source !== 'external'" class="skill-detail">
-                      <div><b>何时使用</b> {{ sk.trigger || '旧版技能未填写' }}</div>
-                      <div><b>如何验证</b> {{ sk.verification || '旧版技能未填写' }}</div>
+                      <div><b>{{ tr('何时使用') }}</b> {{ sk.trigger || tr('旧版技能未填写') }}</div>
+                      <div><b>{{ tr('如何验证') }}</b> {{ sk.verification || tr('旧版技能未填写') }}</div>
                     </div>
                     <pre v-else-if="expandedSkill === sk.name && sk.body" class="skill-body">{{ sk.body }}</pre>
                     <div v-if="sk.source === 'learned'" class="skill-actions">
-                      <button v-if="isSkillActive(sk)" type="button" @click.stop="setSkillStatus(sk, 'archived')">关闭</button>
-                      <button v-else type="button" @click.stop="setSkillStatus(sk, 'active')">恢复启用</button>
-                      <button class="danger" type="button" @click.stop="removeSkill(sk)">删除</button>
+                      <button v-if="isSkillActive(sk)" type="button" @click.stop="setSkillStatus(sk, 'archived')">{{ tr('关闭') }}</button>
+                      <button v-else type="button" @click.stop="setSkillStatus(sk, 'active')">{{ tr('恢复启用') }}</button>
+                      <button class="danger" type="button" @click.stop="removeSkill(sk)">{{ tr('删除') }}</button>
                     </div>
                   </div>
                 </template>
               </template>
               <template v-else-if="skillsSubTab === 'aggregate'">
                 <div class="settings-section-title">
-                  Skills 聚合管理
-                  <button class="inline-refresh" type="button" @click="loadAggregateSkills(true)" title="重新扫描"><Icon icon="mdi:refresh" width="14" :class="{ spin: aggregateSkillsLoading }" /></button>
+                  {{ tr('Skills 聚合管理') }}
+                  <button class="inline-refresh" type="button" @click="loadAggregateSkills(true)" :title="tr('重新扫描')"><Icon icon="mdi:refresh" width="14" :class="{ spin: aggregateSkillsLoading }" /></button>
                 </div>
                 <div class="settings-section-desc">
-                  像 CC Switch 一样统一管理 Hermes、Claude 与 Codex 的本地技能。选择任一版本作为来源，可把整个技能包同步到其他端；覆盖前自动备份。
+                  {{ tr('像 CC Switch 一样统一管理 Hermes、Claude 与 Codex 的本地技能。选择任一版本作为来源，可把整个技能包同步到其他端；覆盖前自动备份。') }}
                 </div>
                 <div class="skill-platform-grid">
                   <button
@@ -1287,24 +1195,24 @@
                     @click="aggregatePlatformFilter = aggregatePlatformFilter === platform.id ? 'all' : platform.id"
                   >
                     <span class="skill-platform-icon"><Icon :icon="aggregatePlatformIcon(platform.id)" width="18" /></span>
-                    <span><strong>{{ platform.label }}</strong><small>{{ platform.count }} 个技能</small></span>
+                    <span><strong>{{ platform.label }}</strong><small>{{ platform.count }}{{ tr('个技能') }}</small></span>
                     <i :class="{ live: platform.available }"></i>
                   </button>
                 </div>
                 <label class="catalog-search aggregate-search">
                   <Icon icon="mdi:magnify" width="16" />
-                  <input v-model="aggregateSkillQuery" type="search" placeholder="搜索三端技能" />
+                  <input v-model="aggregateSkillQuery" type="search" :placeholder="tr('搜索三端技能')" />
                   <span>{{ filteredAggregateSkills.length }} / {{ aggregateSkills.length }}</span>
                 </label>
-                <div v-if="aggregateSkillsLoading" class="settings-loading">正在扫描三端技能目录…</div>
+                <div v-if="aggregateSkillsLoading" class="settings-loading">{{ tr('正在扫描三端技能目录…') }}</div>
                 <template v-else>
-                  <div v-if="!filteredAggregateSkills.length" class="settings-empty">没有找到匹配的技能。</div>
+                  <div v-if="!filteredAggregateSkills.length" class="settings-empty">{{ tr('没有找到匹配的技能。') }}</div>
                   <div v-for="skill in filteredAggregateSkills" :key="skill.name" class="aggregate-skill-card" :class="{ conflict: skill.conflict }">
                     <div class="aggregate-skill-head">
                       <div class="aggregate-skill-title">
                         <Icon icon="mdi:school-outline" width="16" />
                         <strong>{{ skill.name }}</strong>
-                        <span v-if="skill.conflict" class="aggregate-conflict"><Icon icon="mdi:alert-outline" width="12" />版本不同</span>
+                        <span v-if="skill.conflict" class="aggregate-conflict"><Icon icon="mdi:alert-outline" width="12" />{{ tr('版本不同') }}</span>
                       </div>
                       <span class="aggregate-coverage">{{ aggregateCoverage(skill) }}/3</span>
                     </div>
@@ -1321,29 +1229,29 @@
                           type="button"
                           :disabled="aggregateSyncing === skill.name + ':' + location.platform"
                           @click="syncAggregateSkill(skill, location)"
-                        >{{ aggregateSyncing === skill.name + ':' + location.platform ? '同步中…' : syncAggregateLabel(skill, location.platform) }}</button>
-                        <span v-else class="aggregate-complete"><Icon icon="mdi:check" width="13" />三端已有</span>
+                        >{{ aggregateSyncing === skill.name + ':' + location.platform ? tr('同步中…') : syncAggregateLabel(skill, location.platform) }}</button>
+                        <span v-else class="aggregate-complete"><Icon icon="mdi:check" width="13" />{{ tr('三端已有') }}</span>
                       </div>
                     </div>
                   </div>
                 </template>
               </template>
               <template v-else>
-                <div class="settings-section-title">GitHub 技能仓库</div>
-                <div class="settings-section-desc">通过 GitHub 公共 API 浏览 Anthropic、OpenAI 与 Vercel Labs 的技能仓库；安装后文件会完整保存到本地。</div>
+                <div class="settings-section-title">{{ tr('GitHub 技能仓库') }}</div>
+                <div class="settings-section-desc">{{ tr('通过 GitHub 公共 API 浏览 Anthropic、OpenAI 与 Vercel Labs 的技能仓库；安装后文件会完整保存到本地。') }}</div>
                 <div class="catalog-toolbar">
                   <select v-model="skillRegistrySource" class="catalog-source" @change="loadSkillRegistry(true)">
                     <option v-for="source in skillRegistrySources" :key="source.id" :value="source.id">{{ source.label }}</option>
                   </select>
                   <label class="catalog-search">
                     <Icon icon="mdi:magnify" width="16" />
-                    <input v-model="skillRegistryQuery" type="search" placeholder="筛选技能" @keyup.enter="loadSkillRegistry(true)" />
+                    <input v-model="skillRegistryQuery" type="search" :placeholder="tr('筛选技能')" @keyup.enter="loadSkillRegistry(true)" />
                   </label>
-                  <button class="catalog-search-btn" type="button" @click="loadSkillRegistry(true)">筛选</button>
+                  <button class="catalog-search-btn" type="button" @click="loadSkillRegistry(true)">{{ tr('筛选') }}</button>
                 </div>
-                <div v-if="skillRegistryLoading" class="settings-loading">正在读取 GitHub 技能仓库…</div>
+                <div v-if="skillRegistryLoading" class="settings-loading">{{ tr('正在读取 GitHub 技能仓库…') }}</div>
                 <template v-else>
-                  <div v-if="!skillRegistryItems.length" class="settings-empty">该仓库中没有匹配的技能。</div>
+                  <div v-if="!skillRegistryItems.length" class="settings-empty">{{ tr('该仓库中没有匹配的技能。') }}</div>
                   <div v-for="item in skillRegistryItems" :key="item.source + ':' + item.path" class="catalog-card">
                     <div class="catalog-card-main">
                       <div class="entity-head">
@@ -1358,14 +1266,14 @@
                       type="button"
                       :disabled="catalogBusy === 'skill-install:' + item.path"
                       @click="installHostedSkill(item)"
-                    >{{ catalogBusy === 'skill-install:' + item.path ? '安装中…' : '安装' }}</button>
+                    >{{ catalogBusy === 'skill-install:' + item.path ? tr('安装中…') : tr('安装') }}</button>
                     <button
                       v-else
                       class="catalog-install-btn installed removable"
                       type="button"
                       :disabled="catalogBusy === 'skill-remove:' + item.external_id"
                       @click="uninstallHostedSkill(item)"
-                    >{{ catalogBusy === 'skill-remove:' + item.external_id ? '移除中…' : '已安装 · 移除' }}</button>
+                    >{{ catalogBusy === 'skill-remove:' + item.external_id ? tr('移除中…') : tr('已安装 · 移除') }}</button>
                   </div>
                 </template>
               </template>
@@ -1374,69 +1282,87 @@
 
             <!-- ========== 记忆（当前注入上下文的内容，仿 Claude Memory） ========== -->
             <div v-show="activeTab === 'memory'" class="settings-panel">
-              <div class="settings-section-title">记忆</div>
+              <div class="settings-section-title">{{ tr('记忆') }}</div>
               <div class="param-row mem-sync-row" style="align-items: center;">
-                <span class="param-label">云端记忆备份</span>
+                <span class="param-label">{{ tr('云端记忆备份') }}</span>
                 <label class="param-switch" :class="{ 'is-locked': memorySyncLocked }" @click.prevent="onMemorySyncToggle">
                   <input type="checkbox" v-model="memorySyncEnabled" :disabled="memorySyncEnvOverride" />
                   <span class="param-switch-track" :class="{ 'is-denied': memorySyncDenied }"></span>
                 </label>
                 <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
-                                  开启后，记忆（偏好 / 决策 / 索引）会备份到云端，换设备登录自动恢复。
-                                  <template v-if="memorySyncEnvOverride">（当前被部署环境变量 RESCENE_MEMORY_SYNC=off 强制关闭）</template>
+                                  {{ tr('开启后，记忆（偏好 / 决策 / 索引）会备份到云端，换设备登录自动恢复。') }}
+                                  <template v-if="memorySyncEnvOverride">{{ tr('（当前被部署环境变量 RESCENE_MEMORY_SYNC=off 强制关闭）') }}</template>
                                 </span>
                 <!-- 气泡浮在开关下方，不占面板版面 -->
                 <Transition name="mem-guard">
                   <span v-if="memorySyncToast" class="mem-guard-tip" role="status" aria-live="polite">
-                    <Icon icon="mdi:lock-outline" width="14" />云端备份仅对登录账号开放，登录后即可开启
+                    <Icon icon="mdi:lock-outline" width="14" />{{ tr('云端备份仅对登录账号开放，登录后即可开启') }}
                   </span>
                 </Transition>
               </div>
-                              <div v-if="memoryLoading" class="settings-loading">加载中…</div>
+              <!-- 记忆归属：通用记忆（所有 Agent 共享）+ 各角色 Agent 私有记忆 -->
+              <div class="mem-scope-row">
+                <button class="mem-scope-chip" :class="{ on: memoryScope === 'shared' }" type="button" @click="selectMemoryScope('shared')">
+                  <Icon icon="mdi:account-multiple-outline" width="14" />{{ tr('通用记忆') }}
+                </button>
+                <button
+                  v-for="a in agentStore.agents.value"
+                  :key="a.id"
+                  class="mem-scope-chip"
+                  :class="{ on: memoryScope === a.id }"
+                  type="button"
+                  @click="selectMemoryScope(a.id)"
+                >
+                  <img v-if="a.avatar" :src="a.avatar" class="mem-scope-avatar" alt="" />
+                  <span v-else class="mem-scope-avatar mem-scope-avatar-fallback">{{ (a.name || '?').slice(0, 1) }}</span>
+                  {{ tr(a.name || a.id) }}
+                </button>
+              </div>
+              <div v-if="memoryLoading" class="settings-loading">{{ tr('加载中…') }}</div>
               <template v-else-if="humanReadableMemoryMarkdown">
                 <div class="memory-md markdown-body" v-html="renderMarkdown(humanReadableMemoryMarkdown)"></div>
               </template>
-              <div v-else class="memory-empty">尚未配置任何记忆。</div>
+              <div v-else class="memory-empty">{{ memoryScope === 'shared' ? tr('尚未配置任何记忆。') : tr('这个角色还没有私有记忆。') }}</div>
             </div>
 
             <!-- ========== 局域网（手机↔电脑内网同步对话，零云端；记忆走云端同步不在此处） ========== -->
             <div v-show="activeTab === 'lan'" class="settings-panel">
-              <div class="settings-section-title">局域网同步</div>
+              <div class="settings-section-title">{{ tr('局域网同步') }}</div>
               <div class="param-row" style="align-items: center;">
-                <span class="param-label">开启同步</span>
+                <span class="param-label">{{ tr('开启同步') }}</span>
                 <label class="param-switch">
                   <input type="checkbox" v-model="lanSyncEnabled" @change="saveLanSyncSetting" />
                   <span class="param-switch-track"></span>
                 </label>
                 <span class="settings-section-desc" style="flex-basis: 100%; margin: 4px 0 10px;">
-                  开启后电脑监听 18080 端口（仅内网可达，token 鉴权 + 加密传输），手机 App 填下面信息即可同步对话。默认关闭，首次开启时 Windows 防火墙会弹窗，允许即可。
+                  {{ tr('开启后电脑监听 18080 端口（仅内网可达，token 鉴权 + 加密传输），手机 App 填下面信息即可同步对话。默认关闭，首次开启时 Windows 防火墙会弹窗，允许即可。') }}
                 </span>
               </div>
               <div v-if="lanSyncEnabled && lanSyncInfo" class="lan-sync-box">
                 <div class="lan-sync-row"><span class="lan-sync-lbl">IP</span><code class="lan-sync-val">{{ lanSyncInfo.ip }}</code></div>
-                <div class="lan-sync-row"><span class="lan-sync-lbl">端口</span><code class="lan-sync-val">{{ lanSyncInfo.port }}</code></div>
+                <div class="lan-sync-row"><span class="lan-sync-lbl">{{ tr('端口') }}</span><code class="lan-sync-val">{{ lanSyncInfo.port }}</code></div>
                 <div class="lan-sync-row"><span class="lan-sync-lbl">Token</span><code class="lan-sync-val lan-sync-token">{{ lanSyncInfo.token }}</code></div>
-                <button class="lan-sync-copy" @click="copyLanSyncInfo">📋 复制连接信息</button>
+                <button class="lan-sync-copy" @click="copyLanSyncInfo">{{ tr('📋 复制连接信息') }}</button>
               </div>
-              <div v-else class="memory-empty">未开启局域网同步，手机无法连接。</div>
+              <div v-else class="memory-empty">{{ tr('未开启局域网同步，手机无法连接。') }}</div>
             </div>
 
             <!-- ========== 我的（Profile + 自定义指令，仿 Claude Profile） ========== -->
             <div v-show="activeTab === 'profile'" class="settings-panel">
-              <div class="settings-section-title">个人资料</div>
+              <div class="settings-section-title">{{ tr('个人资料') }}</div>
               <div class="profile-row">
-                <span class="profile-label">头像</span>
+                <span class="profile-label">{{ tr('头像') }}</span>
                 <div class="profile-avatar-editor">
-                  <button class="profile-avatar-button" type="button" title="选择自定义头像" @click="chooseAvatar">
-                    <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="profile-avatar" alt="当前头像" />
+                  <button class="profile-avatar-button" type="button" :title="tr('选择自定义头像')" @click="chooseAvatar">
+                    <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="profile-avatar" :alt="tr('当前头像')" />
                     <span v-else class="profile-avatar">{{ avatarFallback }}</span>
                   </button>
                   <div class="profile-avatar-controls">
                     <div class="profile-avatar-actions">
-                      <button class="profile-avatar-action" type="button" @click="chooseAvatar">选择图片</button>
-                      <button v-if="auth.hasCustomAvatar.value" class="profile-avatar-action muted" type="button" @click="restoreAvatar">恢复默认</button>
+                      <button class="profile-avatar-action" type="button" @click="chooseAvatar">{{ tr('选择图片') }}</button>
+                      <button v-if="auth.hasCustomAvatar.value" class="profile-avatar-action muted" type="button" @click="restoreAvatar">{{ tr('恢复默认') }}</button>
                     </div>
-                    <span class="profile-avatar-hint">PNG、JPG、WebP 或 GIF，最大 2 MB</span>
+                    <span class="profile-avatar-hint">{{ tr('PNG、JPG、WebP 或 GIF，最大 2 MB') }}</span>
                     <span v-if="avatarError" class="profile-avatar-error" role="alert">{{ avatarError }}</span>
                   </div>
                   <input
@@ -1449,35 +1375,35 @@
                 </div>
               </div>
               <div class="profile-row">
-                <span class="profile-label">昵称</span>
-                <input class="profile-input" v-model="profile.full_name" type="text" placeholder="你的名字，AI 会用它称呼你" />
+                <span class="profile-label">{{ tr('昵称') }}</span>
+                <input class="profile-input" v-model="profile.full_name" type="text" :placeholder="tr('你的名字，AI 会用它称呼你')" />
               </div>
               <div class="profile-row">
-                <span class="profile-label">你的职业 / 身份</span>
-                <input class="profile-input" v-model="profile.work" type="text" placeholder="比如 软件工程师" />
+                <span class="profile-label">{{ tr('你的职业 / 身份') }}</span>
+                <input class="profile-input" v-model="profile.work" type="text" :placeholder="tr('比如 软件工程师')" />
               </div>
               <div class="profile-row">
-                <span class="profile-label">性别</span>
+                <span class="profile-label">{{ tr('性别') }}</span>
                 <div class="seg-control" style="min-width:0">
-                  <button class="seg-btn" :class="{ on: profile.gender === '' }" type="button" @click="profile.gender = ''">不透露</button>
-                  <button class="seg-btn" :class="{ on: profile.gender === 'male' }" type="button" @click="profile.gender = 'male'">男</button>
-                  <button class="seg-btn" :class="{ on: profile.gender === 'female' }" type="button" @click="profile.gender = 'female'">女</button>
+                  <button class="seg-btn" :class="{ on: profile.gender === '' }" type="button" @click="profile.gender = ''">{{ tr('不透露') }}</button>
+                  <button class="seg-btn" :class="{ on: profile.gender === 'male' }" type="button" @click="profile.gender = 'male'">{{ tr('男') }}</button>
+                  <button class="seg-btn" :class="{ on: profile.gender === 'female' }" type="button" @click="profile.gender = 'female'">{{ tr('女') }}</button>
                 </div>
               </div>
               <div class="settings-section-desc" style="margin-top:-4px">
-                设置后 AI 会用「哥哥/先生」或「妹妹/女士」称呼你；不透露则不改变称呼。
+                {{ tr('设置后 AI 会用「哥哥/先生」或「妹妹/女士」称呼你；不透露则不改变称呼。') }}
               </div>
               <div class="profile-row">
-                <span class="profile-label">记忆注入预算(token)</span>
-                <input class="profile-input" v-model.number="profile.memory_token_budget" type="number" min="0" step="100" placeholder="默认 2200（0=默认）" />
+                <span class="profile-label">{{ tr('记忆注入预算(token)') }}</span>
+                <input class="profile-input" v-model.number="profile.memory_token_budget" type="number" min="0" step="100" :placeholder="tr('默认 2200（0=默认）')" />
               </div>
               <div class="profile-row">
-                <span class="profile-label">账号 UID</span>
+                <span class="profile-label">{{ tr('账号 UID') }}</span>
                 <span v-if="auth.uid.value" class="profile-uid">UID {{ auth.uid.value }}</span>
-                <span v-else class="profile-uid faint">登录后永久保留</span>
+                <span v-else class="profile-uid faint">{{ tr('登录后永久保留') }}</span>
               </div>
               <div class="profile-row">
-                <span class="profile-label">亲密等级</span>
+                <span class="profile-label">{{ tr('亲密等级') }}</span>
                 <div class="profile-intimacy">
                   <span class="intimacy-hearts">{{ heartsText }}</span>
                   <span class="intimacy-level">Lv.{{ intimacyLevel }}</span>
@@ -1489,68 +1415,68 @@
               </div>
 
               <div class="profile-row">
-                <span class="profile-label">绑定的邮箱</span>
-                <div v-if="!auth.isLoggedIn.value" class="profile-uid faint">登录后可绑定邮箱（用于找回密码）</div>
+                <span class="profile-label">{{ tr('绑定的邮箱') }}</span>
+                <div v-if="!auth.isLoggedIn.value" class="profile-uid faint">{{ tr('登录后可绑定邮箱（用于找回密码）') }}</div>
                 <template v-else-if="auth.email.value">
                   <div class="profile-email-bound">
                     <span class="profile-email-value">{{ auth.email.value }}</span>
-                    <button class="profile-email-action" type="button" @click="openEmailBind">改绑</button>
+                    <button class="profile-email-action" type="button" @click="openEmailBind">{{ tr('改绑') }}</button>
                   </div>
                 </template>
                 <template v-else>
-                  <span class="profile-uid faint">未绑定</span>
-                  <button class="profile-email-action" type="button" @click="openEmailBind">补绑邮箱</button>
+                  <span class="profile-uid faint">{{ tr('未绑定') }}</span>
+                  <button class="profile-email-action" type="button" @click="openEmailBind">{{ tr('补绑邮箱') }}</button>
                 </template>
               </div>
 
               <!-- 邮箱绑定弹窗 -->
               <div v-if="showEmailBind" class="email-bind-panel">
-                <div class="email-bind-hint">绑定后可用于「找回密码」。一个邮箱只绑一个账号。</div>
+                <div class="email-bind-hint">{{ tr('绑定后可用于「找回密码」。一个邮箱只绑一个账号。') }}</div>
                 <div class="email-bind-row">
-                  <input v-model="bindEmailDraft" type="email" class="profile-input" placeholder="例如 you@example.com" @keyup.enter="emailBindSendCode" />
+                  <input v-model="bindEmailDraft" type="email" class="profile-input" :placeholder="tr('例如 you@example.com')" @keyup.enter="emailBindSendCode" />
                   <button class="profile-email-action" type="button" :disabled="emailCodeCooldown || !bindEmailDraft" @click="emailBindSendCode">
-                    {{ emailCodeCooldown ? emailCodeCooldown + 's' : '发送验证码' }}
+                    {{ emailCodeCooldown ? emailCodeCooldown + 's' : tr('发送验证码') }}
                   </button>
                 </div>
                 <div v-if="emailCodeSent" class="email-bind-row">
-                  <input v-model="bindEmailCode" type="text" inputmode="numeric" class="profile-input" placeholder="6 位验证码" @keyup.enter="emailBindConfirm" />
-                  <button class="profile-email-action primary" type="button" :disabled="!bindEmailCode" @click="emailBindConfirm">确认绑定</button>
+                  <input v-model="bindEmailCode" type="text" inputmode="numeric" class="profile-input" :placeholder="tr('6 位验证码')" @keyup.enter="emailBindConfirm" />
+                  <button class="profile-email-action primary" type="button" :disabled="!bindEmailCode" @click="emailBindConfirm">{{ tr('确认绑定') }}</button>
                 </div>
-                <button v-if="auth.email.value" class="profile-email-action muted" type="button" @click="showEmailBind = false">取消</button>
+                <button v-if="auth.email.value" class="profile-email-action muted" type="button" @click="showEmailBind = false">{{ tr('取消') }}</button>
                 <div v-if="emailBindError" class="profile-avatar-error" role="alert">{{ emailBindError }}</div>
               </div>
 
-              <div class="settings-section-title" style="margin-top: 18px;">给 AI 的自定义指令</div>
-              <div class="settings-section-desc">这些会跨对话注入系统提示词，影响 AI 的语气与行为。</div>
-              <textarea class="profile-instructions" v-model="profile.instructions" rows="6" placeholder="例如：用温柔、清晰的语气；理性稳重，不要过度共情。"></textarea>
+              <div class="settings-section-title" style="margin-top: 18px;">{{ tr('给 AI 的自定义指令') }}</div>
+              <div class="settings-section-desc">{{ tr('这些会跨对话注入系统提示词，影响 AI 的语气与行为。') }}</div>
+              <textarea class="profile-instructions" v-model="profile.instructions" rows="6" :placeholder="tr('例如：用温柔、清晰的语气；理性稳重，不要过度共情。')"></textarea>
 
               <div class="profile-actions">
-                <span v-if="profileSaved" class="profile-saved">已保存</span>
-                <button class="api-form-btn save" type="button" @click="saveProfile" :disabled="profileSaving">{{ profileSaving ? '保存中…' : '保存' }}</button>
+                <span v-if="profileSaved" class="profile-saved">{{ tr('已保存') }}</span>
+                <button class="api-form-btn save" type="button" @click="saveProfile" :disabled="profileSaving">{{ profileSaving ? tr('保存中…') : tr('保存') }}</button>
               </div>
             </div>
 
             <!-- ========== 版本与更新 ========== -->
             <div v-show="activeTab === 'version'" class="settings-panel">
-              <div class="settings-section-title">版本与更新</div>
-              <div class="settings-section-desc">版本以 GitHub Release 为基准，下载走官网直链。</div>
+              <div class="settings-section-title">{{ tr('版本与更新') }}</div>
+              <div class="settings-section-desc">{{ tr('版本以 GitHub Release 为基准，下载走官网直链。') }}</div>
 
               <div class="param-row">
-                <span class="param-label">当前版本</span>
-                <span class="version-value">{{ versionInfo.current_version ? 'v' + versionInfo.current_version : (versionLoading ? '检查中…' : '未知') }}</span>
+                <span class="param-label">{{ tr('当前版本') }}</span>
+                <span class="version-value">{{ versionInfo.current_version ? 'v' + versionInfo.current_version : (versionLoading ? tr('检查中…') : tr('未知')) }}</span>
               </div>
               <div class="param-row">
-                <span class="param-label">最新版本</span>
-                <span v-if="versionLoading" class="version-value">检查中…</span>
+                <span class="param-label">{{ tr('最新版本') }}</span>
+                <span v-if="versionLoading" class="version-value">{{ tr('检查中…') }}</span>
                 <span v-else-if="versionInfo.has_update" class="version-value version-new">{{ versionInfo.latest_version }}</span>
-                <span v-else class="version-value">已是最新版本</span>
+                <span v-else class="version-value">{{ tr('已是最新版本') }}</span>
               </div>
 
               <div class="param-row" style="align-items: flex-start;">
-                <span class="param-label">更新内容</span>
-                <div v-if="versionLoading" class="settings-loading">检查中…</div>
+                <span class="param-label">{{ tr('更新内容') }}</span>
+                <div v-if="versionLoading" class="settings-loading">{{ tr('检查中…') }}</div>
                 <div v-else-if="versionInfo.release_notes" class="update-notes" v-html="renderMarkdown(versionInfo.release_notes)"></div>
-                <div v-else class="memory-empty">{{ versionInfo.has_update ? '本次更新没有附带更新说明。' : '—' }}</div>
+                <div v-else class="memory-empty">{{ versionInfo.has_update ? tr('本次更新没有附带更新说明。') : '—' }}</div>
               </div>
 
               <div v-if="versionInfo.has_update" class="profile-actions" style="margin-top: 14px; align-items: center;">
@@ -1560,7 +1486,7 @@
                   v-if="dlState === 'done'"
                   :disabled="installing"
                   @click="onInstallUpdate"
-                >{{ installing ? '正在安装，即将重启…' : '一键安装' }}</button>
+                >{{ installing ? tr('正在安装，即将重启…') : tr('一键安装') }}</button>
                 <button
                   class="api-form-btn save dl-progress-btn"
                   type="button"
@@ -1575,17 +1501,17 @@
                   type="button"
                   v-else
                   disabled
-                >正在下载…</button>
+                >{{ tr('正在下载…') }}</button>
                 <span v-if="dlState === 'error' || installError" class="update-err" style="flex:1; margin-left:12px; color:var(--danger, #e5484d); font-size:13px;">{{ installError || dlError }}</span>
               </div>
 
               <!-- 偏好开关：不提示版本更新（2026-08-28 起不再区分测试版，删掉「热更新测试版本」开关） -->
               <div class="profile-actions" style="margin-top: 10px; align-items: center;">
-                <label class="param-switch" title="关闭后启动不再检查/弹窗提示更新">
+                <label class="param-switch" :title="tr('关闭后启动不再检查/弹窗提示更新')">
                   <input type="checkbox" v-model="notifyDisabled" @change="onNotifyDisabledChange" />
                   <span class="param-switch-track"></span>
                                   </label>
-                                  <span class="param-value">不提示版本更新</span>
+                                  <span class="param-value">{{ tr('不提示版本更新') }}</span>
                                 </div>
                               </div>
                             </div>
@@ -1597,7 +1523,6 @@
     <FreeOrderModal v-if="showFreeOrderModal" :openid="props.openid" @close="showFreeOrderModal = false" />
       </Teleport>
 
-    <PersonaReportModal v-if="personaReportOpen" @close="personaReportOpen = false" />
 </template>
 
 <script setup>
@@ -1605,16 +1530,16 @@ import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS, customColor, customThemeName, setCustomColor, setCustomThemeName } from '../composables/useTheme.js'
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
-import { BUILTIN_PRESETS } from '../composables/personaPresets.js'
 import { useAgentsStore } from '../composables/useAgents.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
 import { useAuth } from '../../../composables/useAuth.js'
-import { useI18n } from '../../../composables/useI18n.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import FreeOrderModal from './FreeOrderModal.vue'
-import PersonaReportModal from './PersonaReportModal.vue'
+const { isZh, setLocale } = useI18n()
+
 
 const props = defineProps({
   openid: { type: String, default: '' },
@@ -1622,7 +1547,6 @@ const props = defineProps({
 })
 const emit = defineEmits(['close'])
 
-const { isZh, setLocale } = useI18n()
 
 // 插话风格：follow up 送达模型时的口吻（默认/酒馆/修真/小学生/自定义前缀）
 const followUpStyle = ref(localStorage.getItem('follow_up_style') || 'plain')
@@ -1640,196 +1564,13 @@ const activeTab = ref(props.defaultTab || 'general')
 const providerSubTab = ref('free')
 const skillsSubTab = ref('local')
 
-// ── 人设预设 ─────────────────────────────────────────────
-// 内置预设 + 我的预设（localStorage.myPersonas）+ 每日随机。
-// 生效的人设始终落在 localStorage.persona，前端发工作流时经 persona
-// 参数带给后端（见 useAgentWorkflow.js）。内置预设不开个人化，我的预设本地存。
-// 内置预设定义在 personaPresets.js，与首次打开引导弹窗共用一份。
-const loadMyPersonas = () => {
-  try {
-    const raw = localStorage.getItem('myPersonas')
-    if (!raw) return []
-    const arr = JSON.parse(raw)
-    return Array.isArray(arr) ? arr.filter(p => p && p.name && p.prompt) : []
-  } catch { return [] }
-}
-const myPersonas = ref(loadMyPersonas())
-const persistMyPersonas = () => localStorage.setItem('myPersonas', JSON.stringify(myPersonas.value))
-const PERSONA_PRESETS = computed(() => [...BUILTIN_PRESETS, ...myPersonas.value])
-const RANDOM_PRESET = { id: 'random', name: '每日随机', icon: 'mdi:dice-multiple', desc: '每天自动换一个人设' }
-
 const personaToast = ref(null) // { ok, message } 轻量浮条反馈
-const personaDraft = ref('') // 人设草稿
-const personaSelected = ref('')
-const personaEditing = ref(false) // 编辑过输入框才显示按钮，避免误导
-const personaSavingPreset = ref(false) // 显示「保存为预设」命名行
-const newPresetName = ref('')
-const personaReportOpen = ref(false) // 人设周报弹窗（改为手动打开）
-// 周报投递到通知中心（本地通知 API，不弹窗，邮件图标可见）
-const personaReportPost = async () => {
-  try {
-    const arr = JSON.parse(localStorage.getItem('personaHistory') || '[]')
-    if (!Array.isArray(arr) || !arr.length) { showPersonaToast(false, '暂无周报数据，先换几天人设再看看吧'); return }
-    // 计算统计（与 PersonaReportModal 一致）
-    const rangeDays = 7
-    const cutoff = Date.now() - rangeDays * 864e5
-    const h = arr.filter(x => x.ts > cutoff)
-    const switchCount = h.length
-    const activeDays = new Set(h.map(x => x.key)).size
-    const randomDays = new Set(h.filter(x => x.mode === 'random').map(x => x.key)).size
-    const counts = {}
-    for (const x of h) counts[x.name] = (counts[x.name] || 0) + 1
-    let topName = '', topCount = 0
-    for (const [n, c] of Object.entries(counts)) { if (c > topCount) { topName = n; topCount = c } }
-    const end = new Date(); const start = new Date(); start.setDate(start.getDate() - rangeDays + 1)
-    const f = d => `${d.getMonth()+1}.${d.getDate()}`
-    const title = `人设周报 ${f(start)}-${f(end)}`
-    const body = `换了 ${switchCount} 次人设，活跃 ${activeDays} 天，每日随机 ${randomDays} 天，最宠「${topName}」（${topCount} 次）`
-    await fetch('/api/notifications/local', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, body, icon: 'mdi:heart-pulse' })
-    })
-    showPersonaToast(true, '周报已投递到通知中心')
-  } catch { showPersonaToast(false, '投递失败，后端没起？') }
-}
 let personaToastTimer = null
 const showPersonaToast = (ok, message) => {
   personaToast.value = { ok, message }
   clearTimeout(personaToastTimer)
   personaToastTimer = setTimeout(() => { personaToast.value = null }, 2200)
 }
-// 人设使用埋点：周报数据源（只记预设名/模式/日期，不碰对话内容）
-const recordPersonaUse = (name, mode) => {
-  try {
-    const key = new Date().toISOString().slice(0, 10)
-    const arr = JSON.parse(localStorage.getItem('personaHistory') || '[]')
-    arr.push({ key, name, mode, ts: Date.now() })
-    const cutoff = Date.now() - 60 * 24 * 3600 * 1000 // 只留最近 60 天
-    const trimmed = arr.filter(x => x.ts > cutoff)
-    localStorage.setItem('personaHistory', JSON.stringify(trimmed.slice(-1000)))
-  } catch { /* 埋点失败不影响主流程 */ }
-}
-const todayKey = () => new Date().toDateString()
-const todaySeed = () => {
-  const d = new Date()
-  const s = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
-  return Math.abs(h)
-}
-// 每日随机落地：以日期为种子从全部预设里挑一个，写进 localStorage.persona
-const applyDailyRandom = () => {
-  const pool = PERSONA_PRESETS.value
-  if (!pool.length) return null
-  const picked = pool[todaySeed() % pool.length]
-  localStorage.setItem('persona', picked.prompt)
-  localStorage.setItem('randomPersona', 'true')
-  localStorage.setItem('randomPersonaDate', todayKey())
-  return picked
-}
-const loadPersona = () => {
-  // 每日随机开启：同一天沿用，跨天自动重抽
-  if (localStorage.getItem('randomPersona') === 'true') {
-    if (localStorage.getItem('randomPersonaDate') !== todayKey()) {
-      const picked = applyDailyRandom()
-      if (picked) {
-        personaSelected.value = 'random'
-        personaDraft.value = picked.prompt
-        return
-      }
-    } else {
-      personaSelected.value = 'random'
-      personaDraft.value = localStorage.getItem('persona') || ''
-      return
-    }
-  }
-  const v = localStorage.getItem('persona')
-  if (v === null || v === '') {
-    personaSelected.value = 'rescene'
-    personaDraft.value = BUILTIN_PRESETS[0].prompt
-    return
-  }
-  const hit = PERSONA_PRESETS.value.find(p => p.prompt === v)
-  if (hit) {
-    personaSelected.value = hit.id
-    personaDraft.value = v
-  } else {
-    personaSelected.value = 'custom'
-    personaDraft.value = v
-  }
-}
-const selectPersonaPreset = (p) => {
-  personaSelected.value = p.id
-  personaDraft.value = p.prompt
-  personaEditing.value = false
-  localStorage.removeItem('randomPersona')
-  localStorage.removeItem('randomPersonaDate')
-  localStorage.setItem('persona', p.prompt)
-  recordPersonaUse(p.name, 'preset')
-  showPersonaToast(true, '已切换人设：' + p.name)
-}
-const selectRandomPreset = () => {
-  const picked = applyDailyRandom()
-  personaSelected.value = 'random'
-  personaDraft.value = picked ? picked.prompt : ''
-  personaEditing.value = false
-  if (picked) recordPersonaUse(picked.name, 'random')
-  showPersonaToast(true, picked ? '已开启每日随机：今天 ' + picked.name : '暂无可用预设')
-}
-const saveCustomPersona = () => {
-  const t = personaDraft.value.trim()
-  if (!t) {
-    showPersonaToast(false, '先写下你的人设内容再保存')
-    return
-  }
-  localStorage.setItem('persona', t)
-  localStorage.removeItem('randomPersona')
-    localStorage.removeItem('randomPersonaDate')
-    personaSelected.value = 'custom'
-    personaEditing.value = false
-    recordPersonaUse('自定义', 'custom')
-    showPersonaToast(true, '自定义人设已保存')
-}
-// 把当前文案存成「我的预设」（带名字，进分组）
-const saveAsPreset = () => {
-  const t = personaDraft.value.trim()
-  const n = newPresetName.value.trim()
-  if (!t) { showPersonaToast(false, '先写下人设内容'); return }
-  if (!n) { showPersonaToast(false, '给预设起个名字'); return }
-  const id = 'mp_' + Date.now()
-  myPersonas.value.push({ id, name: n, prompt: t })
-  persistMyPersonas()
-  localStorage.setItem('persona', t)
-  localStorage.removeItem('randomPersona')
-  localStorage.removeItem('randomPersonaDate')
-  personaSelected.value = id
-  personaEditing.value = false
-  personaSavingPreset.value = false
-  newPresetName.value = ''
-  recordPersonaUse(n, 'preset')
-  showPersonaToast(true, '已保存为预设：' + n)
-}
-const deleteMyPreset = (id, e) => {
-  e.stopPropagation()
-  myPersonas.value = myPersonas.value.filter(p => p.id !== id)
-  persistMyPersonas()
-  if (personaSelected.value === id) {
-    selectPersonaPreset(BUILTIN_PRESETS[0])
-  }
-  showPersonaToast(true, '已删除预设')
-}
-const clearPersona = () => {
-  localStorage.removeItem('persona')
-  localStorage.removeItem('randomPersona')
-  localStorage.removeItem('randomPersonaDate')
-  personaSelected.value = 'rescene'
-  personaDraft.value = ''
-  personaEditing.value = false
-  recordPersonaUse('中性助手', 'none')
-  showPersonaToast(true, '已清除人设，恢复中性助手')
-}
-loadPersona()
 const { editorLazy: editorLazyEnabled, setEditorLazy } = useEditorPrefs()
 
 const VENDOR_ICONS = [
@@ -1910,7 +1651,7 @@ async function onAgentAvatarFile(event) {
   input.value = ''
   if (!file) return
   if (file.size > 2 * 1024 * 1024) {
-    personaToast.value = { ok: false, message: '头像超过 2 MB，换张小一点的' }
+    personaToast.value = { ok: false, message: tr('头像超过 2 MB，换张小一点的') }
     setTimeout(() => { personaToast.value = null }, 2500)
     return
   }
@@ -1919,7 +1660,7 @@ async function onAgentAvatarFile(event) {
 
 async function saveAgentDraft() {
   if (!agentDraft.name.trim()) {
-    personaToast.value = { ok: false, message: '先给 Agent 起个名字' }
+    personaToast.value = { ok: false, message: tr('先给 Agent 起个名字') }
     setTimeout(() => { personaToast.value = null }, 2500)
     return
   }
@@ -1928,19 +1669,25 @@ async function saveAgentDraft() {
     // 头像单独落盘（注册表只存元信息）
     await agentStore.saveAgentAvatar(saved.id, agentDraft.avatar || '')
     agentEditing.value = false
-    personaToast.value = { ok: true, message: '已保存角色卡「' + saved.name + '」' }
+    personaToast.value = { ok: true, message: tr('已保存角色卡「') + saved.name + '」' }
   } catch (e) {
-    personaToast.value = { ok: false, message: '保存失败：' + e.message }
+    personaToast.value = { ok: false, message: tr('保存失败：') + e.message }
   }
   setTimeout(() => { personaToast.value = null }, 2500)
+}
+
+// 设为当前角色卡：发消息时人设=这张卡。点击卡片即选中，当前卡高亮。
+function activateAgent(id) {
+  agentStore.selectAgent(id)
+  personaToast.value = { ok: true, message: tr('已切换当前角色卡') }
 }
 
 async function removeAgent(id) {
   try {
     await agentStore.deleteAgent(id)
-    personaToast.value = { ok: true, message: '已删除（含它的私有记忆）' }
+    personaToast.value = { ok: true, message: tr('已删除（含它的私有记忆）') }
   } catch (e) {
-    personaToast.value = { ok: false, message: '删除失败：' + e.message }
+    personaToast.value = { ok: false, message: tr('删除失败：') + e.message }
   }
   setTimeout(() => { personaToast.value = null }, 2500)
 }
@@ -1954,7 +1701,7 @@ function readAvatarFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('无法读取这张图片'))
+    reader.onerror = () => reject(new Error(tr('无法读取这张图片')))
     reader.readAsDataURL(file)
   })
 }
@@ -1966,11 +1713,11 @@ async function onAvatarFileSelected(event) {
   if (!file) return
   const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
   if (!allowedTypes.has(file.type)) {
-    avatarError.value = '请选择 PNG、JPG、WebP 或 GIF 图片'
+    avatarError.value = tr('请选择 PNG、JPG、WebP 或 GIF 图片')
     return
   }
   if (file.size > 2 * 1024 * 1024) {
-    avatarError.value = '图片超过 2 MB，请选择更小的图片'
+    avatarError.value = tr('图片超过 2 MB，请选择更小的图片')
     return
   }
   try {
@@ -1978,7 +1725,7 @@ async function onAvatarFileSelected(event) {
     auth.setCustomAvatar(dataUrl)
     avatarError.value = ''
   } catch (error) {
-    avatarError.value = error?.message || '头像保存失败'
+    avatarError.value = error?.message || tr('头像保存失败')
   }
 }
 
@@ -2022,7 +1769,7 @@ const skinThemes = computed(() => {
   Object.entries(THEME_PRESETS)
     .filter(([, preset]) => preset.fullSkin)
     .forEach(([key, preset]) => {
-      const series = preset.series || '动漫皮肤'
+      const series = preset.series || tr('动漫皮肤')
       if (!groups[series]) groups[series] = []
       groups[series].push([key, preset])
     })
@@ -2072,18 +1819,18 @@ function selectTheme(key) {
 const PRESETS = [
   { name: 'DeepSeek', endpoint: 'https://api.deepseek.com', icon: 'simple-icons:deepseek' },
   { name: 'OpenAI', endpoint: 'https://api.openai.com/v1', icon: 'simple-icons:openai' },
-  { name: 'Kimi 月之暗面', endpoint: 'https://api.moonshot.cn/v1', icon: 'thesvg-color:kimi' },
-  { name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', icon: 'thesvg-color:zhipu' },
-  { name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', icon: 'simple-icons:alibabacloud' },
+  { name: tr('Kimi 月之暗面'), endpoint: 'https://api.moonshot.cn/v1', icon: 'thesvg-color:kimi' },
+  { name: tr('智谱 GLM'), endpoint: 'https://open.bigmodel.cn/api/paas/v4', icon: 'thesvg-color:zhipu' },
+  { name: tr('通义千问'), endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', icon: 'simple-icons:alibabacloud' },
   { name: 'Groq', endpoint: 'https://api.groq.com/openai/v1', icon: 'thesvg-color:groq' },
   { name: 'Mistral', endpoint: 'https://api.mistral.ai/v1', icon: 'simple-icons:mistralai' },
   { name: 'Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', icon: 'simple-icons:googlegemini' },
-  { name: '腾讯混元', endpoint: 'https://api.hunyuan.cloud.tencent.com/v1', icon: 'thesvg-color:hunyuan' },
+  { name: tr('腾讯混元'), endpoint: 'https://api.hunyuan.cloud.tencent.com/v1', icon: 'thesvg-color:hunyuan' },
   { name: 'OpenCode Zen', endpoint: 'https://opencode.ai/zen/v1', icon: 'thesvg-color:opencode' },
   { name: 'OpenCode Go', endpoint: 'https://opencode.ai/zen/go/v1', icon: 'thesvg-color:opencode' },
   { name: 'Command Code', endpoint: 'https://api.commandcode.ai/provider/v1', icon: 'lucide:command' },
-  { name: '火山引擎', endpoint: 'https://ark.cn-beijing.volces.com/api/v3', icon: 'thesvg-color:volcengine' },
-  { name: '小米 MiMo', endpoint: 'https://api.xiaomimimo.com/v1', icon: 'thesvg-color:xiaomi-mimo' },
+  { name: tr('火山引擎'), endpoint: 'https://ark.cn-beijing.volces.com/api/v3', icon: 'thesvg-color:volcengine' },
+  { name: tr('小米 MiMo'), endpoint: 'https://api.xiaomimimo.com/v1', icon: 'thesvg-color:xiaomi-mimo' },
   { name: 'MiniMax', endpoint: 'https://api.minimax.io/v1', icon: 'thesvg-color:minimax' },
 ]
 const activePreset = ref('')
@@ -2106,7 +1853,7 @@ const vendorGroups = computed(() => {
   const map = new Map()
   for (const fm of freeModels.value) {
     if (fm.local) continue
-    const v = fm.vendor || '其他'
+    const v = fm.vendor || tr('其他')
     if (!map.has(v)) map.set(v, { vendor: v, items: [], hasKey: false, keyless: false, keyUrl: '', dualKey: false })
     const g = map.get(v)
     g.items.push(fm)
@@ -2155,17 +1902,17 @@ function fallbackCopyText(text) {
   textarea.remove()
   if (!copied) throw new Error('copy command rejected')
 }
-async function copyAggText(text, label = '配置片段') {
+async function copyAggText(text, label = tr('配置片段')) {
   try {
     if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text)
     else fallbackCopyText(text)
-    showAggCopyFeedback(`${label} 已复制`, true)
+    showAggCopyFeedback((label + tr(' 已复制')), true)
   } catch {
     try {
       fallbackCopyText(text)
-      showAggCopyFeedback(`${label} 已复制`, true)
+      showAggCopyFeedback((label + tr(' 已复制')), true)
     } catch {
-      showAggCopyFeedback('复制失败，请手动复制', false)
+      showAggCopyFeedback(tr('复制失败，请手动复制'), false)
     }
   }
 }
@@ -2200,7 +1947,7 @@ async function aggSyncOne(tool) {
     const out = await r.json()
     const entry = (out.results || []).find(x => x.tool === tool)
     if (entry) aggSyncResult.value.push({ ...entry, applied: false })
-    else aggSyncResult.value.push({ tool, ok: false, error: '后端未返回结果' })
+    else aggSyncResult.value.push({ tool, ok: false, error: tr('后端未返回结果') })
   } catch (e) {
     aggSyncResult.value.push({ tool, ok: false, error: e.message })
   } finally {
@@ -2243,7 +1990,7 @@ async function aggRestoreOne(tool) {
     const out = await r.json()
     const hit = (out.results || []).find(x => x.tool === tool)
     if (hit) aggSyncResult.value.push({ ...hit, applied: !hit.error, restored: true })
-    else aggSyncResult.value.push({ tool, ok: false, error: '后端未返回结果' })
+    else aggSyncResult.value.push({ tool, ok: false, error: tr('后端未返回结果') })
   } catch (e) {
     aggSyncResult.value.push({ tool, ok: false, error: e.message })
   } finally {
@@ -2309,23 +2056,23 @@ const aggReviewOpen = ref('')
 // 演示点评：以模型 id 为 key（与 /api/aggregate/config 的 candidates[].id 一致）
 const aggDemoReviews = {
   'free_zen_deepseek_v4_flash': [
-    { user: '阿强', stars: 5, text: '速度飞快，写代码一把好手，白嫖真香。' },
-    { user: '喵酱', stars: 4, text: '日常够用，偶尔抽风，总体好评。' },
-    { user: '老王', stars: 5, text: '替我扛了半年项目，稳。' }
+    { user: tr('阿强'), stars: 5, text: tr('速度飞快，写代码一把好手，白嫖真香。') },
+    { user: tr('喵酱'), stars: 4, text: tr('日常够用，偶尔抽风，总体好评。') },
+    { user: tr('老王'), stars: 5, text: tr('替我扛了半年项目，稳。') }
   ],
   'kilo_tencent_hy3_free': [
-    { user: 'Tencent粉', stars: 5, text: '中文语感最自然，聊天首选。' },
-    { user: '夜猫子', stars: 4, text: '长文逻辑在线，就是夜里偶尔慢。' }
+    { user: tr('Tencent粉'), stars: 5, text: tr('中文语感最自然，聊天首选。') },
+    { user: tr('夜猫子'), stars: 4, text: tr('长文逻辑在线，就是夜里偶尔慢。') }
   ],
   'free_modelscope_qwen3_5_397b': [
-    { user: '工具人', stars: 4, text: '工具调用很听话，就是比 ds 慢半拍。' }
+    { user: tr('工具人'), stars: 4, text: tr('工具调用很听话，就是比 ds 慢半拍。') }
   ],
   'free_zhipu_glm_4_5_flash': [
-    { user: '学术党', stars: 4, text: '数学推导清晰，文献总结好用。' },
-    { user: '小白', stars: 3, text: '有时候答非所问，得追问。' }
+    { user: tr('学术党'), stars: 4, text: tr('数学推导清晰，文献总结好用。') },
+    { user: tr('小白'), stars: 3, text: tr('有时候答非所问，得追问。') }
   ],
   'free_step_3_7_flash': [
-    { user: '阶跃用户', stars: 4, text: '长上下文稳，读论文神器。' }
+    { user: tr('阶跃用户'), stars: 4, text: tr('长上下文稳，读论文神器。') }
   ]
 }
 function reviewsOfId(id) {
@@ -2359,8 +2106,8 @@ function latencyClass(m) {
   return 'slow'
 }
 function latencyText(m) {
-  if (m.disabled) return '不可用'
-  if (!m.real_ms) return '未探测'
+  if (m.disabled) return tr('不可用')
+  if (!m.real_ms) return tr('未探测')
   return m.real_ms >= 1000 ? (m.real_ms / 1000).toFixed(1) + 's' : m.real_ms + 'ms'
 }
 // 切到聚合 API tab 时自动加载健康度 + 暴露模型配置
@@ -2404,11 +2151,11 @@ try {
   // 2026-08-31 修复：每个标签的 modelIds 必须一并持久化。此前 persistTags 只写
   // {id,name}，重启(开机自启)后各标签勾选模型全丢、面板回退官方。modelIds 未存
   // 过的旧数据兜底为 []。
-  customTags.value = saved.length ? saved.map(t => ({ id: t.id, name: t.name, editing: false, modelIds: Array.isArray(t.modelIds) ? t.modelIds : [] })) : [{ id: 'default', name: '用户自定义', editing: false, modelIds: [] }]
+  customTags.value = saved.length ? saved.map(t => ({ id: t.id, name: t.name, editing: false, modelIds: Array.isArray(t.modelIds) ? t.modelIds : [] })) : [{ id: 'default', name: tr('用户自定义'), editing: false, modelIds: [] }]
 } catch (e) {
-  customTags.value = [{ id: 'default', name: '用户自定义', editing: false, modelIds: [] }]
+  customTags.value = [{ id: 'default', name: tr('用户自定义'), editing: false, modelIds: [] }]
 }
-if (!customTags.value.find(t => t.id)) customTags.value = [{ id: 'default', name: '用户自定义', editing: false, modelIds: [] }]
+if (!customTags.value.find(t => t.id)) customTags.value = [{ id: 'default', name: tr('用户自定义'), editing: false, modelIds: [] }]
 const activeTagId = ref(localStorage.getItem(AGG_ACTIVE_KEY) || (customTags.value[0] && customTags.value[0].id) || 'default')
 const activeTag = () => customTags.value.find(t => t.id === activeTagId.value) || customTags.value[0]
 function persistTags() {
@@ -2434,7 +2181,7 @@ function switchAggOfficial() {
 }
 function addCustomTag() {
   const id = 'tag_' + Date.now()
-  customTags.value.push({ id, name: '自定义' + customTags.value.length, editing: false, modelIds: [] })
+  customTags.value.push({ id, name: tr('自定义') + customTags.value.length, editing: false, modelIds: [] })
   activeTagId.value = id
   aggMode.value = id
   aggModelIDs.value = []
@@ -2450,7 +2197,7 @@ function removeCustomTag(id) {
 }
 function onTagRename(t) {
   t.editing = false
-  if (!t.name.trim()) t.name = '自定义'
+  if (!t.name.trim()) t.name = tr('自定义')
   persistTags()
   saveAggConfig()
 }
@@ -2512,7 +2259,7 @@ async function loadAggConfig() {
     for (const c of aggCandidates.value) aggOpen[c.vendor] = true
     if (data.mode === 'custom') {
       if (!customTags.value.find(t => t.id === activeTagId.value)) activeTagId.value = 'default'
-      if (!customTags.value.find(t => t.id === 'default')) customTags.value.unshift({ id: 'default', name: '用户自定义', editing: false })
+      if (!customTags.value.find(t => t.id === 'default')) customTags.value.unshift({ id: 'default', name: tr('用户自定义'), editing: false })
       const at = customTags.value.find(t => t.id === activeTagId.value) || customTags.value.find(t => t.id === 'default')
       at.modelIds = data.model_ids || []
       aggMode.value = at.id
@@ -2585,7 +2332,7 @@ async function loadConfigs() {
   errorMsg.value = ''
   try {
     const res = await fetch(configUrl())
-    if (!res.ok) throw new Error('加载失败')
+    if (!res.ok) throw new Error(tr('加载失败'))
     const data = await res.json()
     configs.value = data.configs || []
     freeModels.value = data.free_models || []
@@ -2605,7 +2352,7 @@ async function loadConfigs() {
     imageMCPTool.value = ic.mcp_tool || ''
     imageKeySet.value = !!ic.api_key_set
   } catch (e) {
-    errorMsg.value = '加载配置失败，请稍后再试'
+    errorMsg.value = tr('加载配置失败，请稍后再试')
   } finally {
     loading.value = false
   }
@@ -2619,7 +2366,7 @@ async function persist(nextConfigs) {
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || '保存失败')
+    throw new Error(data.error || tr('保存失败'))
   }
   window.dispatchEvent(new CustomEvent('model-config-changed'))
 }
@@ -2655,7 +2402,7 @@ async function saveVendorKey(grp) {
     ? (vendorKeyDraft.value + ':' + vendorKeySecretDraft.value)
     : vendorKeyDraft.value
   if (!key || !key.trim()) {
-    errorMsg.value = '请输入 API Key'
+    errorMsg.value = tr('请输入 API Key')
     return
   }
   errorMsg.value = ''
@@ -2718,17 +2465,17 @@ async function discoverProviderModels(cfg) {
     })
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || '获取模型列表失败')
+  if (!res.ok) throw new Error(data.error || tr('获取模型列表失败'))
   return data.models || []
 }
 
 async function saveConfig() {
   if (!editingConfig.value.name.trim()) {
-    errorMsg.value = '提供方名称不能为空'
+    errorMsg.value = tr('提供方名称不能为空')
     return
   }
   if (!editingConfig.value.endpoint.trim()) {
-    errorMsg.value = 'Endpoint 不能为空'
+    errorMsg.value = tr('Endpoint 不能为空')
     return
   }
   errorMsg.value = ''
@@ -2814,7 +2561,7 @@ const chatList = computed(() => {
     .filter(model => model.keyless || model.api_key_set)
     .map(model => ({ label: `${model.vendor} · ${model.name}`, value: model.id }))
   // Auto 智能路由置顶：按免费模型池排序逐个尝试 + 熔断
-  return [{ label: 'Auto 智能路由', value: 'auto' }, ...builtIn, ...custom]
+  return [{ label: tr('Auto 智能路由'), value: 'auto' }, ...builtIn, ...custom]
 })
 
 // ============ 模型：统一 / 分开配置（文字 vs 识图） ============
@@ -2949,11 +2696,11 @@ const protectedWorkspaceError = ref('')
 async function loadProtectedWorkspace() {
   try {
     const res = await fetch('/api/protected-workspace/config')
-    if (!res.ok) throw new Error('读取保护模式失败')
+    if (!res.ok) throw new Error(tr('读取保护模式失败'))
     const data = await res.json()
     protectedWorkspaceEnabled.value = !!data.enabled
   } catch (e) {
-    protectedWorkspaceError.value = e.message || '读取保护模式失败'
+    protectedWorkspaceError.value = e.message || tr('读取保护模式失败')
   }
 }
 async function setProtectedWorkspace(next) {
@@ -2964,10 +2711,10 @@ async function setProtectedWorkspace(next) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: next }),
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || '更新保护模式失败')
+    if (!res.ok) throw new Error(data.error || tr('更新保护模式失败'))
     protectedWorkspaceEnabled.value = !!data.enabled
   } catch (e) {
-    protectedWorkspaceError.value = e.message || '更新保护模式失败'
+    protectedWorkspaceError.value = e.message || tr('更新保护模式失败')
   } finally { protectedWorkspaceSaving.value = false }
 }
 
@@ -2979,7 +2726,7 @@ const firecrawlKeyDraft = ref('')
 async function saveFirecrawlKey() {
   const key = firecrawlKeyDraft.value
   if (!key || !key.trim()) {
-    errorMsg.value = '请输入 Firecrawl API Key'
+    errorMsg.value = tr('请输入 Firecrawl API Key')
     return
   }
   errorMsg.value = ''
@@ -3002,7 +2749,7 @@ const agnesKeyDraft = ref('')
 async function saveAgnesKey() {
   const key = agnesKeyDraft.value
   if (!key || !key.trim()) {
-    errorMsg.value = '请输入 Agnes API Key'
+    errorMsg.value = tr('请输入 Agnes API Key')
     return
   }
   errorMsg.value = ''
@@ -3053,15 +2800,15 @@ async function loadMCPToolOptions() {
 async function saveWebsearchCapability() {
   const mode = websearchMode.value
   if (mode === 'custom' && !websearchEndpoint.value.trim()) {
-    errorMsg.value = '请输入自定义联网 Endpoint'
+    errorMsg.value = tr('请输入自定义联网 Endpoint')
     return
   }
   if (mode === 'custom' && !websearchModel.value.trim()) {
-    errorMsg.value = '请输入自定义联网模型名'
+    errorMsg.value = tr('请输入自定义联网模型名')
     return
   }
   if (mode === 'mcp' && !websearchMCPTool.value) {
-    errorMsg.value = '请选择 MCP 搜索工具'
+    errorMsg.value = tr('请选择 MCP 搜索工具')
     return
   }
   errorMsg.value = ''
@@ -3071,7 +2818,7 @@ async function saveWebsearchCapability() {
       .filter(c => c.id !== WEBSEARCH_CFG_ID)
       .map(c => ({ ...c, api_key: MASKED }))
     await persist([...untouched, {
-      id: WEBSEARCH_CFG_ID, name: '联网搜索',
+      id: WEBSEARCH_CFG_ID, name: tr('联网搜索'),
       endpoint: mode === 'custom' ? websearchEndpoint.value.trim() : (mode === 'mcp' ? 'mcp://' + websearchMCPTool.value : 'https://api.firecrawl.dev'),
       api_key: mode === 'custom' ? (websearchKeyDraft.value || (websearchKeySet.value ? MASKED : '')) : '',
       default_model: mode === 'custom' ? websearchModel.value.trim() : '',
@@ -3081,7 +2828,7 @@ async function saveWebsearchCapability() {
     await loadConfigs()
     websearchKeyDraft.value = ''
   } catch (e) {
-    errorMsg.value = e.message || '保存联网来源失败'
+    errorMsg.value = e.message || tr('保存联网来源失败')
   } finally { websearchSaving.value = false }
 }
 
@@ -3089,15 +2836,15 @@ async function saveWebsearchCapability() {
 async function saveImageCapability() {
   const mode = imageProviderDraft.value
   if (mode === 'custom' && !imageCustomEndpoint.value.trim()) {
-    errorMsg.value = '请输入自定义生图 Endpoint'
+    errorMsg.value = tr('请输入自定义生图 Endpoint')
     return
   }
   if (mode === 'custom' && !imageCustomModel.value.trim()) {
-    errorMsg.value = '请输入自定义生图模型名'
+    errorMsg.value = tr('请输入自定义生图模型名')
     return
   }
   if (mode === 'mcp' && !imageMCPTool.value) {
-    errorMsg.value = '请选择 MCP 生图工具'
+    errorMsg.value = tr('请选择 MCP 生图工具')
     return
   }
   errorMsg.value = ''
@@ -3107,7 +2854,7 @@ async function saveImageCapability() {
       .filter(c => c.id !== IMAGE_CFG_ID)
       .map(c => ({ ...c, api_key: MASKED }))
     await persist([...untouched, {
-      id: IMAGE_CFG_ID, name: '生图',
+      id: IMAGE_CFG_ID, name: tr('生图'),
       endpoint: mode === 'custom' ? imageCustomEndpoint.value.trim() : (mode === 'mcp' ? 'mcp://' + imageMCPTool.value : ''),
       api_key: mode === 'custom' ? (imageKeyDraft.value || (imageKeySet.value ? MASKED : '')) : '',
       default_model: mode === 'custom' ? imageCustomModel.value.trim() : '',
@@ -3117,7 +2864,7 @@ async function saveImageCapability() {
     await loadConfigs()
     imageKeyDraft.value = ''
   } catch (e) {
-    errorMsg.value = e.message || '保存生图来源失败'
+    errorMsg.value = e.message || tr('保存生图来源失败')
   } finally { imageSaving.value = false }
 }
 
@@ -3172,7 +2919,7 @@ let skillsLoaded = false
 let aggregateSkillsLoaded = false
 function toggleSkill(name) { expandedSkill.value = expandedSkill.value === name ? null : name }
 function normalizedSkillStatus(skill) { return skill.status === 'archived' ? 'archived' : 'active' }
-function skillStatusLabel(skill) { return normalizedSkillStatus(skill) === 'active' ? '已启用' : '已关闭' }
+function skillStatusLabel(skill) { return normalizedSkillStatus(skill) === 'active' ? tr('已启用') : tr('已关闭') }
 function isSkillActive(skill) { return normalizedSkillStatus(skill) === 'active' }
 async function loadSkills(force = false) {
   if (skillsLoaded && !force) return
@@ -3214,9 +2961,9 @@ function missingAggregateTargets(skill, source) {
 }
 function syncAggregateLabel(skill, source) {
   const targets = missingAggregateTargets(skill, source)
-  if (targets.length === 2) return skill.conflict ? '以此覆盖其余两端' : '同步到其余两端'
+  if (targets.length === 2) return skill.conflict ? tr('以此覆盖其余两端') : tr('同步到其余两端')
   const platform = aggregatePlatforms.value.find(item => item.id === targets[0])
-  return platform ? `${skill.conflict ? '覆盖' : '同步到'} ${platform.label}` : '同步'
+  return platform ? `${skill.conflict ? tr('覆盖') : tr('同步到')} ${platform.label}` : tr('同步')
 }
 async function loadAggregateSkills(force = false) {
   if (aggregateSkillsLoaded && !force) return
@@ -3226,7 +2973,7 @@ async function loadAggregateSkills(force = false) {
   try {
     const res = await fetch('/api/skills/aggregate')
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || '三端技能扫描失败')
+    if (!res.ok) throw new Error(data.error || tr('三端技能扫描失败'))
     aggregateSkills.value = data.skills || []
     aggregatePlatforms.value = data.platforms || []
   } catch (e) {
@@ -3249,7 +2996,7 @@ async function syncAggregateSkill(skill, location) {
       body: JSON.stringify({ name: skill.name, source: location.platform, source_path: location.path, targets }),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || '技能同步失败')
+    if (!res.ok) throw new Error(data.error || tr('技能同步失败'))
     await loadAggregateSkills(true)
   } catch (e) {
     errorMsg.value = e.message
@@ -3268,7 +3015,7 @@ async function loadSkillRegistry(force = false) {
     if (skillRegistryQuery.value.trim()) params.set('q', skillRegistryQuery.value.trim())
     const res = await fetch('/api/skills/registry?' + params)
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'GitHub 技能仓库加载失败')
+    if (!res.ok) throw new Error(data.error || tr('GitHub 技能仓库加载失败'))
     skillRegistryItems.value = data.items || []
     if (Array.isArray(data.sources) && data.sources.length) skillRegistrySources.value = data.sources
   } catch (e) {
@@ -3288,7 +3035,7 @@ async function installHostedSkill(item) {
       body: JSON.stringify({ source: item.source, path: item.path })
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || '技能安装失败')
+    if (!res.ok) throw new Error(data.error || tr('技能安装失败'))
     await Promise.all([loadSkills(true), loadSkillRegistry(true)])
   } catch (e) {
     errorMsg.value = e.message
@@ -3298,13 +3045,13 @@ async function installHostedSkill(item) {
 }
 
 async function uninstallHostedSkill(item) {
-  if (!window.confirm(`移除技能「${item.name}」？`)) return
+  if (!window.confirm((tr('移除技能「') + item.name + '」？'))) return
   catalogBusy.value = 'skill-remove:' + item.external_id
   errorMsg.value = ''
   try {
     const res = await fetch('/api/skills/external/' + encodeURIComponent(item.external_id), { method: 'DELETE' })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || '技能移除失败')
+    if (!res.ok) throw new Error(data.error || tr('技能移除失败'))
     await Promise.all([loadSkills(true), loadSkillRegistry(true)])
   } catch (e) {
     errorMsg.value = e.message
@@ -3317,15 +3064,15 @@ async function setSkillStatus(skill, status) {
     const res = await fetch('/api/skills/' + encodeURIComponent(skill.name) + '/status', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
     })
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '更新失败')
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || tr('更新失败'))
     await loadSkills(true)
   } catch (e) { errorMsg.value = e.message }
 }
 async function removeSkill(skill) {
-  if (!window.confirm(`删除技能「${skill.name}」？此操作不可恢复。`)) return
+  if (!window.confirm((tr('删除技能「') + skill.name + tr('」？此操作不可恢复。')))) return
   try {
     const res = await fetch('/api/skills/' + encodeURIComponent(skill.name), { method: 'DELETE' })
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '删除失败')
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || tr('删除失败'))
     if (expandedSkill.value === skill.name) expandedSkill.value = null
     await loadSkills(true)
   } catch (e) { errorMsg.value = e.message }
@@ -3335,14 +3082,41 @@ const profile = ref({ full_name: '', work: '', instructions: '', gender: '', mem
 
 // 记忆 tab：直接渲染后端 /api/memory/inject 返回的真实注入段（system / memory 两段），
 // 不再在前端重拼，杜绝「展示 ≠ 实际注入」的漂移。
+// memoryScope：'shared'=通用记忆（默认，Yosuri酱即默认人设，她的记忆就是通用记忆），
+// 其余为 Agent id=该角色私有记忆（/api/agents/:id/memory）。
+const memoryScope = ref('shared')
 const memorySegments = ref([])
 const memoryLoading = ref(false)
+// 私有记忆文件列表（{name, content}），仅 scope 为 Agent 时有值
+const agentMemoryFiles = ref([])
+
+function selectMemoryScope(scope) {
+  if (memoryScope.value === scope) return
+  memoryScopeTouched = true
+  memoryScope.value = scope
+  loadMemoryInject()
+}
+let memoryScopeTouched = false
+
+// 默认归属：优先默认角色卡「Yosuri酱」，没有角色卡时回退通用记忆。
+// 用户手动切过（memoryScopeTouched）之后不再自动覆盖。
+function applyDefaultMemoryScope() {
+  const list = agentStore.agents.value
+  if (!list.length) { memoryScope.value = 'shared'; return }
+  const dflt = list.find(a => /yosuri|杉汐/i.test(a.name || '')) || list[0]
+  memoryScope.value = dflt.id
+}
 // 云端记忆同步开关（记忆 tab）：默认开；env_override 时禁用（部署级强制关闭）。
 // 2026-09-04：云端备份只对登录账号开放，未登录（游客）时禁用开关。
 const memorySyncEnabled = ref(true)
 const memorySyncEnvOverride = ref(false)
 const memorySyncLocked = computed(() => memorySyncEnvOverride.value || !auth.isLoggedIn.value)
 const humanReadableMemoryMarkdown = computed(() => {
+  if (memoryScope.value !== 'shared') {
+    // 私有记忆：后端返回该 Agent memory/ 目录下全部 .md 文件
+    const parts = agentMemoryFiles.value.map(f => `## ${f.name}\n\n${String(f.content || '').trim()}`)
+    return parts.join('\n\n').trim()
+  }
   const parts = []
   for (const seg of memorySegments.value) {
     if (!seg || !seg.raw) continue
@@ -3357,11 +3131,19 @@ async function loadMemoryInject() {
   memoryLoading.value = true
   loadMemorySyncSetting()
   try {
+    // 角色卡列表可能还没加载完（直接点进记忆 tab），先补一次再定默认归属
+    if (!agentStore.agentsLoaded.value) await agentStore.loadAgents()
+    if (!memoryScopeTouched) applyDefaultMemoryScope()
+    // 角色私有记忆：scope 为 Agent id 时走 /api/agents/:id/memory
+    if (memoryScope.value !== 'shared') {
+      agentMemoryFiles.value = await agentStore.loadAgentMemory(memoryScope.value)
+      return
+    }
     // 优先读派生摘要（LLM 整理的高可读视图）；404（尚未生成）回退旧注入段
     const res = await fetch('/api/memory/summary')
     if (res.ok) {
       const data = await res.json()
-      memorySegments.value = [{ key: 'memory', title: '记忆概览', raw: data.summary || '', enabled: !!data.summary }]
+      memorySegments.value = [{ key: 'memory', title: tr('记忆概览'), raw: data.summary || '', enabled: !!data.summary }]
       return
     }
     const res2 = await fetch('/api/memory/inject')
@@ -3404,7 +3186,7 @@ function emailBindSendCode() {
   if (!email || emailCodeCooldown.value > 0) return
   bindEmailError.value = ''
   const token = localStorage.getItem('token')
-  if (!token) { bindEmailError.value = '请先登录账号' ; return }
+  if (!token) { bindEmailError.value = tr('请先登录账号') ; return }
   fetch('/api/auth/bind-send-code', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -3421,9 +3203,9 @@ function emailBindSendCode() {
         if (emailCodeCooldown.value <= 0) { clearInterval(emailCooldownTimer); emailCooldownTimer = null }
       }, 1000)
     } else {
-      bindEmailError.value = data.error || ('发送失败（HTTP ' + res.status + '）')
+      bindEmailError.value = data.error || (tr('发送失败（HTTP ') + res.status + '）')
     }
-  }).catch(() => { bindEmailError.value = '网络异常，请稍后重试' })
+  }).catch(() => { bindEmailError.value = tr('网络异常，请稍后重试') })
 }
 
 async function emailBindConfirm() {
@@ -3432,7 +3214,7 @@ async function emailBindConfirm() {
   if (!email || !code) return
   bindEmailError.value = ''
   const token = localStorage.getItem('token')
-  if (!token) { bindEmailError.value = '请先登录账号' ; return }
+  if (!token) { bindEmailError.value = tr('请先登录账号') ; return }
   try {
     const res = await fetch('/api/auth/bind-email', {
       method: 'POST',
@@ -3448,9 +3230,9 @@ async function emailBindConfirm() {
       // 刷新账号信息，让「我的」tab 显示刚绑定的脱敏邮箱
       auth.refresh()
     } else {
-      bindEmailError.value = data.error || ('绑定失败（HTTP ' + res.status + '）')
+      bindEmailError.value = data.error || (tr('绑定失败（HTTP ') + res.status + '）')
     }
-  } catch (e) { bindEmailError.value = '网络异常，请稍后重试' }
+  } catch (e) { bindEmailError.value = tr('网络异常，请稍后重试') }
 }
 
 // 云端记忆同步开关：读取当前状态 + 切换保存（记忆 tab 开关）
@@ -3570,9 +3352,9 @@ const dlWorking = ref(false)
 const dlPercent = ref(0)
 const dlPercentText = computed(() => {
   const p = Math.round(dlPercent.value)
-  if (p <= 0) return '正在下载…'
-  if (p >= 100) return '解压安装包…'
-  return `下载中 ${p}%`
+  if (p <= 0) return tr('正在下载…')
+  if (p >= 100) return tr('解压安装包…')
+  return (tr('下载中 ') + p + '%')
 })
 let dlTimer = null
 
@@ -3609,7 +3391,7 @@ async function refreshDlStatus() {
       pollDownloadStatus()
     } else if (d.state === 'error') {
       dlState.value = 'error'
-      dlError.value = d.error || '下载失败'
+      dlError.value = d.error || tr('下载失败')
     } else {
       // idle：App.vue 启动/周期轮询已触发后台下载（2026-08-28 用户定稿：无需手动点下载），
       // 这里兜底再触发一次并轮询进度；下载完自动应用在下次启动。
@@ -3635,11 +3417,11 @@ async function startAutoDownload() {
       // 透传后端具体原因（无法读取更新清单/缺 ZIP 地址等），别写死（2026-09-09 修）
       const d = await res.json().catch(() => ({}))
       dlState.value = 'error'
-      dlError.value = d.error || '触发下载失败'
+      dlError.value = d.error || tr('触发下载失败')
     }
   } catch (e) {
     dlState.value = 'error'
-    dlError.value = '网络异常'
+    dlError.value = tr('网络异常')
   } finally {
     dlWorking.value = false
   }
@@ -3661,7 +3443,7 @@ async function pollDownloadStatus() {
         dlTimer = null
       } else if (d.state === 'error') {
         dlState.value = 'error'
-        dlError.value = d.error || '下载失败'
+        dlError.value = d.error || tr('下载失败')
         clearInterval(dlTimer)
         dlTimer = null
       }
@@ -3686,7 +3468,7 @@ async function loadAutoStart() {
     autoStartOn.value = !!d.enabled
     autoStartSupported.value = d.supported !== false
     // 用户没关但注册表里没有（例如被安全软件清掉）：提示一下，避免以为开了其实没开
-    autoStartHint.value = (d.enabled && d.supported && !d.registered) ? '（系统启动项未生效，点一下开关重新登记）' : ''
+    autoStartHint.value = (d.enabled && d.supported && !d.registered) ? tr('（系统启动项未生效，点一下开关重新登记）') : ''
   } catch (e) { /* 非桌面环境/后端未就绪：保持默认 */ }
 }
 async function onAutoStartChange() {
@@ -3698,12 +3480,12 @@ async function onAutoStartChange() {
       body: JSON.stringify({ enabled: want }),
     })
     const d = await res.json().catch(() => ({}))
-    if (!res.ok || d.ok === false) throw new Error(d.error || `设置失败 (${res.status})`)
+    if (!res.ok || d.ok === false) throw new Error(d.error || (tr('设置失败 (') + res.status + ')'))
     autoStartOn.value = d.enabled !== undefined ? !!d.enabled : want
-    autoStartHint.value = want && d.registered === false ? '（未生效：可能被安全软件拦截）' : ''
+    autoStartHint.value = want && d.registered === false ? tr('（未生效：可能被安全软件拦截）') : ''
   } catch (err) {
     autoStartOn.value = !want
-    autoStartHint.value = err.message || '设置失败'
+    autoStartHint.value = err.message || tr('设置失败')
   }
 }
 
@@ -3718,11 +3500,11 @@ async function onInstallUpdate() {
   try {
     const res = await fetch('/api/update/install', { method: 'POST' })
     const d = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(d.error || `安装失败 (${res.status})`)
+    if (!res.ok) throw new Error(d.error || (tr('安装失败 (') + res.status + ')'))
     // 成功：后端 3 秒后退出本进程替换 exe，这里保持「正在安装」提示，应用马上会重启
   } catch (err) {
     installing.value = false
-    installError.value = err.message || '安装失败，请稍后重试'
+    installError.value = err.message || tr('安装失败，请稍后重试')
   }
 }
 
@@ -4238,27 +4020,83 @@ onUnmounted(() => {
 .vendor-key-input:focus { outline: none; border-color: #c0c0c0; }
 .vendor-key-save { font-size: 12px; font-weight: 600; color: #fff; background: #1a1a1a; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; flex-shrink: 0; }
 .vendor-key-save:hover { background: #333; }
-.persona-preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
-.persona-preset-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-surface); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
-.persona-preset-card:hover { border-color: var(--app-border-soft); background: var(--app-surface-2); }
-.persona-preset-card.on { border-color: color-mix(in srgb, var(--app-accent, #7c6cf0) 55%, var(--app-border)); background: color-mix(in srgb, var(--app-accent, #7c6cf0) 10%, var(--app-surface)); }
-.persona-preset-icon { flex: none; color: var(--app-text-soft); }
-.persona-preset-card.on .persona-preset-icon { color: var(--app-accent, #7c6cf0); }
-.persona-preset-name { font-size: 14px; font-weight: 700; color: var(--app-text); }
-.persona-preset-desc { font-size: 11px; color: var(--app-text-faint); line-height: 1.4; }
-.persona-group-title { font-size: 11px; font-weight: 700; color: var(--app-text-soft); text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 8px; }
-.persona-preset-del { position: absolute; top: 4px; right: 6px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 13px; font-weight: 700; color: var(--app-text-soft); background: var(--app-surface-3); cursor: pointer; opacity: 0; transition: opacity .12s; line-height: 1; }
-.persona-preset-card:hover .persona-preset-del { opacity: 1; }
-.persona-preset-del:hover { color: #e74c3c; background: color-mix(in srgb, #e74c3c 15%, var(--app-surface-3)); }
-.persona-preset-card { position: relative; } /* 为删除按钮定位 */
-.persona-random-card { margin-top: 0; } /* 就是普通卡片 */
-.persona-save-preset-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.persona-report-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--app-accent, #7c6cf0); background: transparent; border: 1px solid color-mix(in srgb, var(--app-accent, #7c6cf0) 40%, var(--app-border)); border-radius: 999px; padding: 3px 10px; cursor: pointer; margin-left: auto; }
-.persona-report-btn:hover { background: color-mix(in srgb, var(--app-accent, #7c6cf0) 12%, var(--app-surface)); }
-.persona-preset-name-input { flex: 1; background: var(--app-surface-2); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit; }
-.persona-preset-name-input:focus { outline: none; border-color: var(--app-accent, #7c6cf0); }
-.persona-divider { height: 1px; background: var(--app-border); margin: 18px 0 14px; }
-.persona-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+/* 角色卡：一张卡 = 一个 Agent（头像 + 名字 + 人设摘要）；默认那张带白发看板娘头像 */
+.agent-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.agent-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.agent-card:hover { border-color: var(--app-border-soft); background: var(--app-surface-2); }
+.agent-card.on { border-color: #1950be; background: var(--app-surface-2); box-shadow: 0 0 0 1px #1950be inset; }
+.agent-card-current {
+  position: absolute;
+  top: -7px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: #1950be;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.agent-card { position: relative; }
+.agent-card-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.agent-card-avatar-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+.agent-card-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.agent-card-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-card-persona {
+  font-size: 11.5px;
+  color: var(--app-text-faint);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-card-ops { display: flex; flex-direction: column; gap: 4px; flex: none; }
+.agent-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-2);
+}
+.agent-edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 角色卡编辑里的多行人设输入（沿用原人设框样式） */
 .persona-textarea { width: 100%; box-sizing: border-box; background: var(--app-surface-2); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; font-size: 13px; font-family: inherit; line-height: 1.6; resize: vertical; }
 .persona-textarea:focus { outline: none; border-color: var(--app-accent, #7c6cf0); }
 .persona-toast {
@@ -4642,6 +4480,48 @@ onUnmounted(() => {
   border-radius: 12px;
   max-height: 44vh;
   overflow-y: auto;
+}
+/* 记忆归属选择器：通用记忆 + 各角色 Agent（头像 + 名字） */
+.mem-scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.mem-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  color: var(--app-text-dim);
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mem-scope-chip:hover { border-color: var(--app-accent); }
+.mem-scope-chip.on {
+  color: var(--app-accent);
+  background: var(--app-surface-3);
+  border-color: var(--app-accent);
+  font-weight: 600;
+}
+.mem-scope-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.mem-scope-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--app-text-faint);
+  background: var(--app-surface-3);
 }
 .mem-emphasis { color: var(--app-accent); font-weight: 600; }
 .memory-empty {

@@ -1,14 +1,15 @@
-// 轻量 i18n：不引 vue-i18n 重依赖。全局一个响应式 locale（localStorage 持久化），
-// t(key) 按当前 locale 查消息表。供侧栏/顶栏/设置等核心界面用。
+// 轻量 i18n：不引 vue-i18n 重依赖。全局一个响应式 locale（localStorage 持久化）。
+// 约定：中文原文即 key。t('发送消息') 在 zh 下原样返回，在 en 下查英文表；
+// 带变量的句子用占位符 t('共 {n} 条', { n: 5 })。新增界面文案直接写中文并包 t() 即可，
+// 未登记英文的 key 自动回退中文，不会渲染成空白。
 import { reactive, computed } from 'vue'
+import enMessages from '../locales/en/index.js'
 
 const LOCALE_KEY = 'ameko_locale_v1'
 
-// 消息表：目前只维护核心界面所需 key。新增面板加进来即可，locale 结构保持一致。
-// zh = 简体中文（默认），en = English
-const MESSAGES = {
+// 历史遗留的符号 key（早期界面在用），保留映射避免老调用点失效。
+const LEGACY = {
   zh: {
-    // 侧栏 / 账户菜单
     'nav.newSession': '新建会话',
     'nav.scheduledTasks': '定时任务',
     'nav.sites': '站点',
@@ -47,10 +48,8 @@ const MESSAGES = {
     'login.fail': '登录失败，请检查账号密码',
     'login.netError': '网络错误，请稍后再试',
     'login.localGuest': '本地访客',
-    // 语言选择菜单
     'lang.zh': '简体中文',
     'lang.en': 'English',
-    // 会话行
     'session.time.today': '今天',
   },
   en: {
@@ -102,16 +101,35 @@ const state = reactive({
   locale: localStorage.getItem(LOCALE_KEY) === 'en' ? 'en' : 'zh', // 默认中文
 })
 
+// 切换界面语言时广播，供需要重算文案的地方（如日期格式化）监听
+export const LOCALE_EVENT = 'ameko-locale-change'
+
+function fill(str, params) {
+  if (!params) return str
+  return str.replace(/\{(\w+)\}/g, (whole, name) =>
+    (params[name] !== undefined && params[name] !== null ? String(params[name]) : whole))
+}
+
+// 模块级 t：不依赖 useI18n() 解构顺序，顶层 const 数组也能安全调用（避免 TDZ）。
+export function tr(key, params) {
+  if (typeof key !== 'string') return key
+  if (LEGACY.zh[key] !== undefined) {
+    return fill(state.locale === 'en' ? (LEGACY.en[key] ?? key) : LEGACY.zh[key], params)
+  }
+  if (state.locale === 'en') return fill(enMessages[key] ?? key, params)
+  return fill(key, params)
+}
+
 export function useI18n() {
   function setLocale(locale) {
-    state.locale = locale === 'en' ? 'en' : 'zh'
-    localStorage.setItem(LOCALE_KEY, state.locale)
+    const next = locale === 'en' ? 'en' : 'zh'
+    if (next === state.locale) return
+    state.locale = next
+    localStorage.setItem(LOCALE_KEY, next)
+    window.dispatchEvent(new CustomEvent(LOCALE_EVENT, { detail: { locale: next } }))
   }
-  // t(key) → 当前 locale 文案；缺 key 回退中文再回退 key 本身
-  function t(key) {
-    const table = MESSAGES[state.locale] || MESSAGES.zh
-    return table[key] !== undefined ? table[key] : (MESSAGES.zh[key] !== undefined ? MESSAGES.zh[key] : key)
-  }
+  // t := 模块级 tr
+  const t = tr
   const locale = computed(() => state.locale)
   const isZh = computed(() => state.locale === 'zh')
   return { t, locale, isZh, setLocale }

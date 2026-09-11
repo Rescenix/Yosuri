@@ -11,8 +11,8 @@
       class="app-tool-btn"
       :class="[{ active: item.to === route.path, 'agg-api-shortcut': item.id === 'agg' }, { 'is-dragging-item': railItemDragging === item.id }]"
       type="button"
-      :title="item.label"
-      :aria-label="item.label"
+      :title="tr(item.label)"
+      :aria-label="tr(item.label)"
       draggable="true"
       @click="activateRailItem(item)"
       @dragstart="onRailItemDragStart($event, item.id)"
@@ -22,53 +22,53 @@
     >
       <Icon :icon="item.icon" width="16" />
     </button>
-    <button class="app-tool-rail-edit" type="button" title="编辑导航" aria-label="编辑导航" @click="railEditorOpen = !railEditorOpen">
+    <button class="app-tool-rail-edit" type="button" :title="tr('编辑导航')" :aria-label="tr('编辑导航')" @click="railEditorOpen = !railEditorOpen">
       <Icon icon="mdi:pencil-outline" width="15" />
     </button>
     <button
       class="app-tool-rail-grip"
       type="button"
-      title="拖动导航"
-      aria-label="拖动导航"
+      :title="tr('拖动导航')"
+      :aria-label="tr('拖动导航')"
       @pointerdown.stop.prevent="onRailGripPointerDown"
     >
       <Icon icon="mdi:drag-vertical" width="15" />
     </button>
   </nav>
   <div v-if="railEditorOpen" class="rail-editor" @click.stop>
-    <div class="rail-editor-head"><strong>编辑导航</strong><button type="button" title="关闭" @click="railEditorOpen = false"><Icon icon="mdi:close" width="15" /></button></div>
-    <p>直接拖动图标可调整顺序。</p>
+    <div class="rail-editor-head"><strong>{{ tr('编辑导航') }}</strong><button type="button" :title="tr('关闭')" @click="railEditorOpen = false"><Icon icon="mdi:close" width="15" /></button></div>
+    <p>{{ tr('直接拖动图标可调整顺序。') }}</p>
     <div class="rail-editor-list">
       <div v-for="item in railItems" :key="item.id" class="rail-editor-item">
-        <span><Icon :icon="item.icon" width="15" />{{ item.label }}</span>
-        <button type="button" title="移除" @click="removeRailItem(item.id)"><Icon icon="mdi:close" width="15" /></button>
+        <span><Icon :icon="item.icon" width="15" />{{ tr(item.label) }}</span>
+        <button type="button" :title="tr('移除')" @click="removeRailItem(item.id)"><Icon icon="mdi:close" width="15" /></button>
       </div>
     </div>
     <div v-if="availableRailItems.length" class="rail-editor-add">
-      <span>添加入口</span>
-      <button v-for="item in availableRailItems" :key="item.id" type="button" :title="`添加${item.label}`" @click="addRailItem(item.id)"><Icon :icon="item.icon" width="15" />{{ item.label }}</button>
+      <span>{{ tr('添加入口') }}</span>
+      <button v-for="item in availableRailItems" :key="item.id" type="button" :title="tr('添加') + tr(item.label)" @click="addRailItem(item.id)"><Icon :icon="item.icon" width="15" />{{ tr(item.label) }}</button>
     </div>
   </div>
   <SettingsModal v-if="showAggApi" default-tab="aggapi" @close="showAggApi = false" />
-          <router-view />
+          <router-view :key="locale" />
           <UpdateModal v-if="showUpdate" :update="updateInfo" @close="showUpdate = false" />
     <!-- 顶部轻量更新提示：15s 自动消失，点击才弹全窗（2026-08-17 用户定稿：堵塞弹窗破坏体验） -->
     <button v-if="showUpdateBanner" class="update-banner" type="button" @click="openUpdateModal">
       <span class="update-banner-dot" />
-      <span>发现新版本 <b>{{ updateInfo && updateInfo.latest_version }}</b>，点击查看</span>
+      <span>{{ tr('发现新版本') }} <b>{{ updateInfo && updateInfo.latest_version }}</b>{{ tr('，点击查看') }}</span>
       <span class="update-banner-arrow">›</span>
     </button>
     <!-- 升级完成提示：alpha 补丁启动时静默自动应用后，下一次启动显示（2026-08-18 用户定稿） -->
     <div v-if="showUpdatedBanner" class="updated-banner">
       <span class="updated-banner-check">✓</span>
-      <span>已更新到 <b>{{ updatedVersion }}</b></span>
-      <button class="updated-banner-close" type="button" @click="closeUpdatedBanner" aria-label="关闭">×</button>
+      <span>{{ tr('已更新到') }} <b>{{ updatedVersion }}</b></span>
+      <button class="updated-banner-close" type="button" @click="closeUpdatedBanner" :aria-label="tr('关闭')">×</button>
     </div>
     <!-- 登录/注册成功提示：欢迎回来横幅，和升级完成横幅同款样式/15s 自动消失（2026-08-20 用户定稿） -->
     <div v-if="showWelcomeBanner" class="updated-banner">
       <span class="updated-banner-check">✓</span>
-      <span>欢迎回来，<b>{{ welcomeName }}</b>！</span>
-      <button class="updated-banner-close" type="button" @click="closeWelcomeBanner" aria-label="关闭">×</button>
+      <span>{{ tr('欢迎回来，') }}<b>{{ welcomeName }}</b>！</span>
+      <button class="updated-banner-close" type="button" @click="closeWelcomeBanner" :aria-label="tr('关闭')">×</button>
     </div>
     <!-- 全局悬浮剪贴板卡片：输入框右键 剪切/复制/粘贴/全选 + 选中文本悬浮复制按钮（2026-08-27） -->
     <DesktopFloatingMenu />
@@ -86,6 +86,9 @@ import UpdateModal from './components/shanxi/chat/UpdateModal.vue'
 import DesktopFloatingMenu from './components/shanxi/chat/DesktopFloatingMenu.vue'
 import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
 import OnboardingModal from './components/shanxi/chat/OnboardingModal.vue'
+import { useI18n, tr } from './composables/useI18n.js'
+const { locale } = useI18n()
+
 
 const auth = useAuth()
 const route = useRoute()
@@ -97,14 +100,14 @@ const showAggApi = ref(false)
 const RAIL_POSITION_KEY = 'app_tool_rail_position_v1'
 const RAIL_ITEMS_KEY = 'app_tool_rail_items_v1'
 const railItemDefinitions = [
-  { id: 'chat', label: '编码', icon: 'mdi:code-tags', to: '/chat' },
-  { id: 'company', label: 'Agent 公司', icon: 'mdi:domain', to: '/company' },
-  { id: 'sites', label: '站点', icon: 'mdi:web', to: '/sites' },
-  { id: 'publish', label: '网文创作', icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
-  { id: 'comic', label: '漫画创作', icon: 'mdi:brush', to: '/comic' },
-  { id: 'game', label: '星迹游戏', icon: 'mdi:gamepad-variant', to: '/game' },
-  { id: 'studio', label: '视频剪辑', icon: 'mdi:movie-edit-outline', to: '/studio' },
-  { id: 'agg', label: '聚合 API', icon: 'mdi:api' }
+  { id: 'chat', label: tr('编码'), icon: 'mdi:code-tags', to: '/chat' },
+  { id: 'company', label: tr('Agent 公司'), icon: 'mdi:domain', to: '/company' },
+  { id: 'sites', label: tr('站点'), icon: 'mdi:web', to: '/sites' },
+  { id: 'publish', label: tr('网文创作'), icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
+  { id: 'comic', label: tr('漫画创作'), icon: 'mdi:brush', to: '/comic' },
+  { id: 'game', label: tr('星迹游戏'), icon: 'mdi:gamepad-variant', to: '/game' },
+  { id: 'studio', label: tr('视频剪辑'), icon: 'mdi:movie-edit-outline', to: '/studio' },
+  { id: 'agg', label: tr('聚合 API'), icon: 'mdi:api' }
 ]
 const railItems = ref([...railItemDefinitions])
 const railEditorOpen = ref(false)

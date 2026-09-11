@@ -3,10 +3,10 @@
     <div class="session-new-wrap">
       <button class="session-new-btn" @click="$emit('new-session')">
         <span class="plus">+</span>
-        <span>新建会话</span>
+        <span>{{ tr('新建会话') }}</span>
       </button>
     </div>
-    <div class="session-recent-label">最近会话</div>
+    <div class="session-recent-label">{{ tr('最近会话') }}</div>
     <div class="session-list-body">
       <div
         v-for="s in sessions"
@@ -33,12 +33,12 @@
         <span v-else class="session-name">{{ s.name }}</span>
 
         <div v-if="editingId !== s.id && (hoveredId === s.id || openMenuId === s.id)" class="session-row-menu-wrap">
-          <button class="session-row-menu-btn" @click.stop="toggleMenu(s.id)" title="更多">
+          <button class="session-row-menu-btn" @click.stop="toggleMenu(s.id)" :title="tr('更多')">
             <Icon icon="mdi:dots-horizontal" width="16" />
           </button>
           <div v-if="openMenuId === s.id" class="session-row-dropdown" @click.stop>
-            <div class="session-row-dropdown-item" @click="startRename(s)">重命名</div>
-            <div class="session-row-dropdown-item danger" @click="onDelete(s)">删除</div>
+            <div class="session-row-dropdown-item" @click="startRename(s)">{{ tr('重命名') }}</div>
+            <div class="session-row-dropdown-item danger" @click="onDelete(s)">{{ tr('删除') }}</div>
           </div>
         </div>
       </div>
@@ -49,6 +49,9 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 defineProps({
   sessions: { type: Array, default: () => [] },

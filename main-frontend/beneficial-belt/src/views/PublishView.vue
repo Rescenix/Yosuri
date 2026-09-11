@@ -2,41 +2,41 @@
   <main class="publish-view">
     <header class="publish-command">
       <div class="command-copy">
-        <span class="command-kicker">CREATOR'S GARDEN · 创作者灵感花园</span>
-        <h1>从一个脑洞，到连载发布。</h1>
-        <p>梳理设定、搭建大纲、续写章节、校对润色；最后一步，由你决定发往哪家小说平台。</p>
+        <span class="command-kicker">{{ tr("CREATOR'S GARDEN · 创作者灵感花园") }}</span>
+        <h1>{{ tr('从一个脑洞，到连载发布。') }}</h1>
+        <p>{{ tr('梳理设定、搭建大纲、续写章节、校对润色；最后一步，由你决定发往哪家小说平台。') }}</p>
       </div>
       <div class="command-status">
-        <span>当前任务</span>
+        <span>{{ tr('当前任务') }}</span>
         <strong>{{ projectName }}</strong>
-        <div><i :class="{ online: edgeReady }"></i>{{ edgeReady ? '发布通道已连接' : '发布通道待检查' }}</div>
+        <div><i :class="{ online: edgeReady }"></i>{{ edgeReady ? tr('发布通道已连接') : tr('发布通道待检查') }}</div>
       </div>
       <div class="command-metrics">
-        <div><span>创作旅程</span><strong>{{ completedCount }}/4</strong><small>位搭档已完成</small></div>
-        <div><span>文字生长</span><strong>{{ contentLength }}</strong><small>个字符</small></div>
-        <div><span>准备去往</span><strong>{{ picked.length }}</strong><small>个内容平台</small></div>
-        <div class="ready"><span>发布状态</span><strong>{{ publishReady ? '可以出发' : '继续创作' }}</strong><small>由你最后确认</small></div>
+        <div><span>{{ tr('创作旅程') }}</span><strong>{{ completedCount }}/4</strong><small>{{ tr('位搭档已完成') }}</small></div>
+        <div><span>{{ tr('文字生长') }}</span><strong>{{ contentLength }}</strong><small>{{ tr('个字符') }}</small></div>
+        <div><span>{{ tr('准备去往') }}</span><strong>{{ picked.length }}</strong><small>{{ tr('个内容平台') }}</small></div>
+        <div class="ready"><span>{{ tr('发布状态') }}</span><strong>{{ publishReady ? tr('可以出发') : tr('继续创作') }}</strong><small>{{ tr('由你最后确认') }}</small></div>
       </div>
     </header>
 
     <section class="bookshelf-card">
       <div class="shelf-heading">
-        <div><span>MY BOOKSHELF</span><h2>先选一本书，再开始写新章节</h2><p>默认打开最近编辑的书，设定和文风会自动带入本次创作。</p></div>
-        <button type="button" class="new-book-button" @click="showBookCreator = true"><Icon icon="mdi:book-plus-outline" width="17" /> 创建新书</button>
+        <div><span>MY BOOKSHELF</span><h2>{{ tr('先选一本书，再开始写新章节') }}</h2><p>{{ tr('默认打开最近编辑的书，设定和文风会自动带入本次创作。') }}</p></div>
+        <button type="button" class="new-book-button" @click="showBookCreator = true"><Icon icon="mdi:book-plus-outline" width="17" /> {{ tr('创建新书') }}</button>
       </div>
       <div v-if="books.length" class="book-strip">
         <div v-for="book in books" :key="book.id" class="book-item" :class="{ active: selectedBook?.id === book.id }">
-          <button type="button" class="book-chip" @click="selectBook(book)"><span class="mini-cover" :style="coverStyle(book)"><img v-if="book.cover" :src="book.cover" alt="" /><Icon v-else icon="mdi:book-open-page-variant-outline" width="22" /></span><span><b>{{ book.title }}</b><small>{{ book.genre || '未设置题材' }} · {{ book.chapters?.length || 0 }} 章</small><em>{{ selectedBook?.id === book.id ? '当前创作' : formatBookTime(book.lastOpenedAt) }}</em></span></button>
-          <div class="book-actions"><button type="button" title="编辑书籍" @click="editBook(book)"><Icon icon="mdi:pencil-outline" width="15" /></button><button type="button" title="删除书籍" @click="deleteBook(book)"><Icon icon="mdi:trash-can-outline" width="15" /></button></div>
+          <button type="button" class="book-chip" @click="selectBook(book)"><span class="mini-cover" :style="coverStyle(book)"><img v-if="book.cover" :src="book.cover" alt="" /><Icon v-else icon="mdi:book-open-page-variant-outline" width="22" /></span><span><b>{{ book.title }}</b><small>{{ book.genre || tr('未设置题材') }} · {{ book.chapters?.length || 0 }}{{ tr('章') }}</small><em>{{ selectedBook?.id === book.id ? tr('当前创作') : formatBookTime(book.lastOpenedAt) }}</em></span></button>
+          <div class="book-actions"><button type="button" :title="tr('编辑书籍')" @click="editBook(book)"><Icon icon="mdi:pencil-outline" width="15" /></button><button type="button" :title="tr('删除书籍')" @click="deleteBook(book)"><Icon icon="mdi:trash-can-outline" width="15" /></button></div>
         </div>
       </div>
-      <button v-else type="button" class="empty-shelf" @click="showBookCreator = true"><Icon icon="mdi:bookshelf" width="28" /><span><b>书架还是空的</b><small>创建第一本书，之后每次会默认回到最近创作的作品</small></span></button>
+      <button v-else type="button" class="empty-shelf" @click="showBookCreator = true"><Icon icon="mdi:bookshelf" width="28" /><span><b>{{ tr('书架还是空的') }}</b><small>{{ tr('创建第一本书，之后每次会默认回到最近创作的作品') }}</small></span></button>
     </section>
 
     <section class="pipeline-card">
       <div class="section-head">
-        <div><span>CREATIVE JOURNEY</span><h2>让灵感沿着这条路，慢慢长成作品</h2></div>
-        <span class="progress-label">创作进度 {{ Math.round((completedCount / 4) * 100) }}%</span>
+        <div><span>CREATIVE JOURNEY</span><h2>{{ tr('让灵感沿着这条路，慢慢长成作品') }}</h2></div>
+        <span class="progress-label">{{ tr('创作进度') }}{{ Math.round((completedCount / 4) * 100) }}%</span>
       </div>
       <div class="stage-track">
         <button v-for="(stage, index) in stages" :key="stage.key" type="button" class="stage-step"
@@ -45,7 +45,7 @@
           <span class="stage-line"><i></i></span>
           <span class="stage-body">
             <span class="stage-icon"><Icon :icon="stage.icon" width="18" /></span>
-            <span><b>{{ stage.name }}</b><small>{{ stage.agent }}</small></span>
+            <span><b>{{ stage.name }}</b><small>{{ tr(stage.agent) }}</small></span>
             <em>0{{ index + 1 }}</em>
           </span>
         </button>
@@ -56,64 +56,64 @@
       <section class="editor-panel">
         <div class="section-head editor-head">
           <div><span>{{ currentStage.eyebrow }}</span><h2>{{ currentStage.title }}</h2></div>
-          <div class="editor-head-actions"><button type="button" class="file-button" :disabled="!content.trim()" @click="showPreview = true"><Icon icon="mdi:book-open-variant" width="17" /> 阅读预览</button><label class="file-button"><Icon icon="mdi:file-upload-outline" width="17" /> 导入文稿<input type="file" accept=".md,.txt,.markdown" @change="onFileChange" /></label></div>
+          <div class="editor-head-actions"><button type="button" class="file-button" :disabled="!content.trim()" @click="showPreview = true"><Icon icon="mdi:book-open-variant" width="17" /> {{ tr('阅读预览') }}</button><label class="file-button"><Icon icon="mdi:file-upload-outline" width="17" /> {{ tr('导入文稿') }}<input type="file" accept=".md,.txt,.markdown" @change="onFileChange" /></label></div>
         </div>
 
         <div v-if="activeStage === 0 && !outputs.ideation" class="brief-editor">
-          <label>这次想写什么故事</label>
-          <textarea v-model="brief" rows="7" placeholder="例如：题材与时代背景、主角身份与欲望、金手指或核心设定、开篇冲突、预计篇幅。只有一个脑洞也可以先写下来。"></textarea>
+          <label>{{ tr('这次想写什么故事') }}</label>
+          <textarea v-model="brief" rows="7" :placeholder="tr('例如：题材与时代背景、主角身份与欲望、金手指或核心设定、开篇冲突、预计篇幅。只有一个脑洞也可以先写下来。')"></textarea>
           <div class="brief-options">
-            <label><span>作品定位</span><input v-model="audience" placeholder="例如：女频古言、男频都市、悬疑推理、轻小说" /></label>
-            <label><span>文风与创作要求</span><input v-model="style" placeholder="由你自由填写，例如：轻松沙雕、第一人称、感情线慢热、每章结尾留钩子" /></label>
+            <label><span>{{ tr('作品定位') }}</span><input v-model="audience" :placeholder="tr('例如：女频古言、男频都市、悬疑推理、轻小说')" /></label>
+            <label><span>{{ tr('文风与创作要求') }}</span><input v-model="style" :placeholder="tr('由你自由填写，例如：轻松沙雕、第一人称、感情线慢热、每章结尾留钩子')" /></label>
           </div>
         </div>
 
         <div v-else-if="activeStage < 4" class="artifact-editor">
           <div class="artifact-meta">
-            <span><i></i>{{ currentStage.agent }} 正在负责</span>
-            <span>{{ currentArtifact.length }} 字</span>
+            <span><i></i>{{ currentStage.agent }}{{ tr('正在负责') }}</span>
+            <span>{{ currentArtifact.length }}{{ tr('字') }}</span>
           </div>
           <textarea v-model="currentArtifactModel" :placeholder="currentStage.placeholder"></textarea>
         </div>
 
         <div v-else class="final-editor">
-          <label>最终标题</label>
-          <input v-model="title" placeholder="小说名或本章标题" />
-          <label>最终正文</label>
-          <textarea v-model="content" placeholder="完成创作流水线，或直接导入已有小说章节"></textarea>
-          <div v-if="fileName" class="file-proof"><Icon icon="mdi:file-check-outline" width="17" /> {{ fileName }} · {{ contentLength }} 字</div>
+          <label>{{ tr('最终标题') }}</label>
+          <input v-model="title" :placeholder="tr('小说名或本章标题')" />
+          <label>{{ tr('最终正文') }}</label>
+          <textarea v-model="content" :placeholder="tr('完成创作流水线，或直接导入已有小说章节')"></textarea>
+          <div v-if="fileName" class="file-proof"><Icon icon="mdi:file-check-outline" width="17" /> {{ fileName }} · {{ contentLength }}{{ tr('字') }}</div>
         </div>
 
         <div class="editor-actions">
-          <button v-if="activeStage > 0" type="button" class="secondary" @click="activeStage--"><Icon icon="mdi:arrow-left" width="16" /> 上一步</button>
+          <button v-if="activeStage > 0" type="button" class="secondary" @click="activeStage--"><Icon icon="mdi:arrow-left" width="16" /> {{ tr('上一步') }}</button>
           <span class="action-hint">{{ currentStage.hint }}</span>
           <button v-if="activeStage < 4" type="button" class="primary" :disabled="composing || !brief.trim()" @click="startAutoPipeline">
             <Icon :icon="composing ? 'mdi:loading' : 'mdi:auto-fix'" :class="{ spin: composing }" width="17" />
-            {{ composing ? `${currentStage.agent} 正在接力…` : completedCount ? '重新启动自动接力' : '开始创作，自动完成四步' }}
+            {{ composing ? tr('正在接力：') + currentStage.agent : completedCount ? tr('重新启动自动接力') : tr('开始创作，自动完成四步') }}
           </button>
           <button v-else type="button" class="primary publish-button" :disabled="busy || !publishReady" @click="publish">
             <Icon :icon="busy ? 'mdi:loading' : 'mdi:rocket-launch-outline'" :class="{ spin: busy }" width="17" />
-            {{ busy ? '正在发布…' : `确认并发布到 ${picked.length} 个平台` }}
+            {{ busy ? tr('正在发布…') : tr('确认并发布到') + ` ${picked.length} ` + tr('个平台') }}
           </button>
-          <button v-if="activeStage === 4" type="button" class="secondary save-draft-button" :disabled="savingChapter || !selectedBook || !title.trim() || !content.trim()" @click="approveChapter"><Icon :icon="savingChapter ? 'mdi:loading' : 'mdi:check-decagram-outline'" :class="{ spin: savingChapter }" width="17" /> {{ savingChapter ? '保存中…' : '审批通过并保存' }}</button>
+          <button v-if="activeStage === 4" type="button" class="secondary save-draft-button" :disabled="savingChapter || !selectedBook || !title.trim() || !content.trim()" @click="approveChapter"><Icon :icon="savingChapter ? 'mdi:loading' : 'mdi:check-decagram-outline'" :class="{ spin: savingChapter }" width="17" /> {{ savingChapter ? tr('保存中…') : tr('审批通过并保存') }}</button>
         </div>
-        <div v-if="activeStage === 4" class="human-review"><label>不满意？写下修改建议，整条创作链会自动重新接力</label><textarea v-model="reviewFeedback" placeholder="例如：主角反应太平静，加强雨夜压迫感；保留结尾悬念，但不要提前暴露凶手。"></textarea><button type="button" class="reject-review" :disabled="composing || !reviewFeedback.trim()" @click="rejectAndRerun"><Icon icon="mdi:backup-restore" width="16" /> 打回并自动重写</button></div>
+        <div v-if="activeStage === 4" class="human-review"><label>{{ tr('不满意？写下修改建议，整条创作链会自动重新接力') }}</label><textarea v-model="reviewFeedback" :placeholder="tr('例如：主角反应太平静，加强雨夜压迫感；保留结尾悬念，但不要提前暴露凶手。')"></textarea><button type="button" class="reject-review" :disabled="composing || !reviewFeedback.trim()" @click="rejectAndRerun"><Icon icon="mdi:backup-restore" width="16" /> {{ tr('打回并自动重写') }}</button></div>
         <div v-if="notice" class="notice" :class="{ error: noticeError }">{{ notice }}</div>
       </section>
 
       <section class="floating-manuscript" @wheel.prevent="switchPreviewByWheel">
         <div class="paper-shadow"></div><div class="paper-back"></div>
         <article class="paper-sheet">
-          <header><span>{{ previewStage + 1 }}/4 · {{ stages[previewStage].name }}</span><em>滚动滚轮切换版本</em></header>
-          <div class="paper-book"><small>{{ selectedBook?.title || '尚未选择书籍' }}</small><h2>{{ previewTitle }}</h2></div>
-          <div class="paper-content">{{ previewContent || '稿纸会一直留在这里。启动创作后，构思、提纲、初稿和润色稿会依次同步到纸上。' }}</div>
+          <header><span>{{ previewStage + 1 }}/4 · {{ stages[previewStage].name }}</span><em>{{ tr('滚动滚轮切换版本') }}</em></header>
+          <div class="paper-book"><small>{{ selectedBook?.title || tr('尚未选择书籍') }}</small><h2>{{ previewTitle }}</h2></div>
+          <div class="paper-content">{{ previewContent || tr('稿纸会一直留在这里。启动创作后，构思、提纲、初稿和润色稿会依次同步到纸上。') }}</div>
           <footer><button v-for="(_, index) in stages.slice(0,4)" :key="index" type="button" :class="{ active: previewStage === index, ready: Boolean(outputs[stages[index].key]) }" @click="previewStage = index">0{{ index + 1 }}</button></footer>
         </article>
       </section>
 
       <aside class="publish-sidebar">
         <section class="agent-roster">
-          <div class="aside-title"><span>我的创作搭档</span><button type="button" @click="resetPipeline">重新开始</button></div>
+          <div class="aside-title"><span>{{ tr('我的创作搭档') }}</span><button type="button" @click="resetPipeline">{{ tr('重新开始') }}</button></div>
           <div v-for="(stage, index) in stages.slice(0, 4)" :key="stage.key" class="agent-row" :class="{ active: activeStage === index, running: composing && activeStage === index, done: isStageDone(stage.key) }" :style="{ '--agent-color': stage.color, '--agent-rgb': stage.rgb }">
             <span class="agent-avatar" :style="{ color: stage.color, background: `rgba(${stage.rgb}, .1)` }"><Icon :icon="stage.icon" width="18" /></span>
             <span><b>{{ stage.agent }}</b><small>{{ stage.responsibility }}</small></span>
@@ -123,22 +123,22 @@
         </section>
 
         <section class="channel-panel">
-          <div class="aside-title"><span>作品准备去往哪里</span><button type="button" @click="checkEdge">{{ checkingEdge ? '检查中…' : '检查连接' }}</button></div>
-          <div class="channel-tools"><button type="button" @click="pickAll">全选</button><button type="button" @click="pickNone">清空</button><span>{{ picked.length }}/{{ platforms.length }}</span></div>
+          <div class="aside-title"><span>{{ tr('作品准备去往哪里') }}</span><button type="button" @click="checkEdge">{{ checkingEdge ? tr('检查中…') : tr('检查连接') }}</button></div>
+          <div class="channel-tools"><button type="button" @click="pickAll">{{ tr('全选') }}</button><button type="button" @click="pickNone">{{ tr('清空') }}</button><span>{{ picked.length }}/{{ platforms.length }}</span></div>
           <div class="channel-list">
             <button v-for="platform in platforms" :key="platform.id" type="button" :class="{ selected: picked.includes(platform.id), warning: platform.minLen > contentLength }" @click="toggle(platform.id)">
               <span class="channel-check"><Icon :icon="picked.includes(platform.id) ? 'mdi:check' : 'mdi:plus'" width="14" /></span>
-              <span><b>{{ platform.name }}</b><small>{{ platform.genre }}<template v-if="platform.minLen"> · ≥{{ platform.minLen }} 字</template></small></span>
+              <span><b>{{ platform.name }}</b><small>{{ platform.genre }}<template v-if="platform.minLen"> · ≥{{ platform.minLen }}{{ tr('字') }}</template></small></span>
             </button>
           </div>
           <p v-if="loginMsg" class="edge-message" :class="{ ok: edgeReady }">{{ loginMsg }}</p>
         </section>
 
         <section v-if="results.length" class="result-panel">
-          <div class="aside-title"><span>发布小回执</span></div>
+          <div class="aside-title"><span>{{ tr('发布小回执') }}</span></div>
           <div v-for="result in results" :key="result.platform" class="result-row" :class="{ ok: result.ok }">
             <Icon :icon="result.ok ? 'mdi:check-circle' : 'mdi:alert-circle'" width="17" />
-            <span><b>{{ result.name }}</b><small>{{ result.message || (result.ok ? '发布成功' : '发布失败') }}</small></span>
+            <span><b>{{ result.name }}</b><small>{{ result.message || (result.ok ? tr('发布成功') : tr('发布失败')) }}</small></span>
           </div>
         </section>
       </aside>
@@ -148,16 +148,16 @@
       <section class="book-creator">
         <button class="modal-close" type="button" @click="closeBookEditor"><Icon icon="mdi:close" width="19" /></button>
         <div class="creator-cover">
-          <label :style="draftCover ? { backgroundImage: `url(${draftCover})` } : {}"><input type="file" accept="image/png,image/jpeg,image/webp" @change="onCoverChange" /><Icon v-if="!draftCover" icon="mdi:image-plus-outline" width="28" /><span>{{ draftCover ? '更换封面' : '上传书籍封面' }}</span><small>JPG / PNG / WEBP，建议 3:4</small></label>
+          <label :style="draftCover ? { backgroundImage: `url(${draftCover})` } : {}"><input type="file" accept="image/png,image/jpeg,image/webp" @change="onCoverChange" /><Icon v-if="!draftCover" icon="mdi:image-plus-outline" width="28" /><span>{{ draftCover ? tr('更换封面') : tr('上传书籍封面') }}</span><small>{{ tr('JPG / PNG / WEBP，建议 3:4') }}</small></label>
         </div>
-        <div class="creator-fields"><span>{{ editingBookId ? 'EDIT STORY' : 'CREATE A NEW STORY' }}</span><h2>{{ editingBookId ? '编辑书籍资料' : '把新故事放上书架' }}</h2><label>书名<input v-model="newBook.title" placeholder="输入书名" /></label><label>题材定位<input v-model="newBook.genre" placeholder="例如：古言权谋、都市异能、无限流" /></label><label>故事简介<textarea v-model="newBook.summary" placeholder="主角是谁、想要什么、最大的阻碍是什么"></textarea></label><label>长期文风与禁忌<input v-model="newBook.style" placeholder="自由填写，后续新章节默认继承，也可以随时修改" /></label><button type="button" class="primary create-book-submit" :disabled="creatingBook || !newBook.title.trim()" @click="saveBookEditor">{{ creatingBook ? '正在保存…' : editingBookId ? '保存书籍修改' : '创建并开始第一章' }}</button></div>
+        <div class="creator-fields"><span>{{ editingBookId ? 'EDIT STORY' : 'CREATE A NEW STORY' }}</span><h2>{{ editingBookId ? tr('编辑书籍资料') : tr('把新故事放上书架') }}</h2><label>{{ tr('书名') }}<input v-model="newBook.title" :placeholder="tr('输入书名')" /></label><label>{{ tr('题材定位') }}<input v-model="newBook.genre" :placeholder="tr('例如：古言权谋、都市异能、无限流')" /></label><label>{{ tr('故事简介') }}<textarea v-model="newBook.summary" :placeholder="tr('主角是谁、想要什么、最大的阻碍是什么')"></textarea></label><label>{{ tr('长期文风与禁忌') }}<input v-model="newBook.style" :placeholder="tr('自由填写，后续新章节默认继承，也可以随时修改')" /></label><button type="button" class="primary create-book-submit" :disabled="creatingBook || !newBook.title.trim()" @click="saveBookEditor">{{ creatingBook ? tr('正在保存…') : editingBookId ? tr('保存书籍修改') : tr('创建并开始第一章') }}</button></div>
       </section>
     </div>
 
     <div v-if="showPreview" class="novel-modal preview-modal" @click.self="showPreview = false">
       <article class="reader-preview">
         <button class="modal-close" type="button" @click="showPreview = false"><Icon icon="mdi:close" width="19" /></button>
-        <header><span class="reader-cover" :style="coverStyle(selectedBook || {})"><img v-if="selectedBook?.cover" :src="selectedBook.cover" alt="书籍封面" /><Icon v-else icon="mdi:book-open-page-variant-outline" width="30" /></span><span><small>{{ selectedBook?.title || '未选择书籍' }}</small><h1>{{ cleanChapterTitle }}</h1><em>{{ contentLength }} 字 · 草稿预览</em></span></header>
+        <header><span class="reader-cover" :style="coverStyle(selectedBook || {})"><img v-if="selectedBook?.cover" :src="selectedBook.cover" :alt="tr('书籍封面')" /><Icon v-else icon="mdi:book-open-page-variant-outline" width="30" /></span><span><small>{{ selectedBook?.title || tr('未选择书籍') }}</small><h1>{{ cleanChapterTitle }}</h1><em>{{ contentLength }}{{ tr('字 · 草稿预览') }}</em></span></header>
         <div class="reader-body">{{ cleanChapterContent }}</div>
       </article>
     </div>
@@ -167,6 +167,9 @@
 <script setup>
 import { computed, reactive, ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 
 const platforms = ref([])
 const picked = ref([])
@@ -199,19 +202,19 @@ const previewStage = ref(0)
 const reviewFeedback = ref('')
 
 const stages = [
-  { key: 'ideation', name: '构思', agent: '灵感策划师', responsibility: '题材卖点 · 主角冲突', icon: 'mdi:lightbulb-on-outline', color: '#b76f92', rgb: '183,111,146', eyebrow: '01 · 灵感萌芽', title: '把脑洞变成能展开的故事设定', placeholder: '人物、世界观、核心冲突和差异化卖点会出现在这里，也可以人工修改。', hint: '把现有脑洞交给灵感策划师，先补齐故事支点。', action: '生成故事构思' },
-  { key: 'outline', name: '提纲', agent: '故事结构师', responsibility: '主线推进 · 章节钩子', icon: 'mdi:file-tree-outline', color: '#db936f', rgb: '219,147,111', eyebrow: '02 · 故事成形', title: '搭建主线、人物弧光和章节节奏', placeholder: '先完成故事构思，再生成卷纲或章节细纲。', hint: '可先修改人物设定和冲突，再交给故事结构师。', action: '生成小说提纲' },
-  { key: 'draft', name: '成稿', agent: '文字创作师', responsibility: '场景描写 · 章节正文', icon: 'ph:pen-nib-bold', color: '#7b83c5', rgb: '123,131,197', eyebrow: '03 · 文字生长', title: '把提纲续写成完整小说章节', placeholder: '完整章节初稿会出现在这里。', hint: '章节会基于提纲推进，不擅自改变核心设定。', action: '续写章节正文' },
-  { key: 'polish', name: '润色', agent: '风格编辑师', responsibility: '人设一致 · 节奏语言', icon: 'mdi:creation-outline', color: '#70a895', rgb: '112,168,149', eyebrow: '04 · 细节打磨', title: '校对人设、节奏与叙述口吻', placeholder: '校对润色后的完整章节会出现在这里。', hint: '保留你的文风要求，重点修复重复、跳戏和设定冲突。', action: '校对并润色' },
-  { key: 'publish', name: '发布', agent: '由我确认', responsibility: '渠道选择 · 最终确认', icon: 'mdi:rocket-launch-outline', color: '#c6576f', rgb: '198,87,111', eyebrow: '05 · 准备出发', title: '最终检查，然后一键发布', hint: '真实发布是外部操作，最后一步由你决定。' },
+  { key: 'ideation', name: tr('构思'), agent: tr('灵感策划师'), responsibility: tr('题材卖点 · 主角冲突'), icon: 'mdi:lightbulb-on-outline', color: '#b76f92', rgb: '183,111,146', eyebrow: tr('01 · 灵感萌芽'), title: tr('把脑洞变成能展开的故事设定'), placeholder: tr('人物、世界观、核心冲突和差异化卖点会出现在这里，也可以人工修改。'), hint: tr('把现有脑洞交给灵感策划师，先补齐故事支点。'), action: tr('生成故事构思') },
+  { key: 'outline', name: tr('提纲'), agent: tr('故事结构师'), responsibility: tr('主线推进 · 章节钩子'), icon: 'mdi:file-tree-outline', color: '#db936f', rgb: '219,147,111', eyebrow: tr('02 · 故事成形'), title: tr('搭建主线、人物弧光和章节节奏'), placeholder: tr('先完成故事构思，再生成卷纲或章节细纲。'), hint: tr('可先修改人物设定和冲突，再交给故事结构师。'), action: tr('生成小说提纲') },
+  { key: 'draft', name: tr('成稿'), agent: tr('文字创作师'), responsibility: tr('场景描写 · 章节正文'), icon: 'ph:pen-nib-bold', color: '#7b83c5', rgb: '123,131,197', eyebrow: tr('03 · 文字生长'), title: tr('把提纲续写成完整小说章节'), placeholder: tr('完整章节初稿会出现在这里。'), hint: tr('章节会基于提纲推进，不擅自改变核心设定。'), action: tr('续写章节正文') },
+  { key: 'polish', name: tr('润色'), agent: tr('风格编辑师'), responsibility: tr('人设一致 · 节奏语言'), icon: 'mdi:creation-outline', color: '#70a895', rgb: '112,168,149', eyebrow: tr('04 · 细节打磨'), title: tr('校对人设、节奏与叙述口吻'), placeholder: tr('校对润色后的完整章节会出现在这里。'), hint: tr('保留你的文风要求，重点修复重复、跳戏和设定冲突。'), action: tr('校对并润色') },
+  { key: 'publish', name: tr('发布'), agent: tr('由我确认'), responsibility: tr('渠道选择 · 最终确认'), icon: 'mdi:rocket-launch-outline', color: '#c6576f', rgb: '198,87,111', eyebrow: tr('05 · 准备出发'), title: tr('最终检查，然后一键发布'), hint: tr('真实发布是外部操作，最后一步由你决定。') },
 ]
 
 const currentStage = computed(() => stages[activeStage.value])
-const projectName = computed(() => title.value.trim() || brief.value.trim().split(/[。！？\n]/)[0]?.slice(0, 28) || '未命名发布任务')
+const projectName = computed(() => title.value.trim() || brief.value.trim().split(/[。！？\n]/)[0]?.slice(0, 28) || tr('未命名发布任务'))
 const contentLength = computed(() => Array.from(content.value || '').length)
 const completedCount = computed(() => stages.slice(0, 4).filter(stage => outputs[stage.key].trim()).length)
 const publishReady = computed(() => Boolean(title.value.trim() && content.value.trim() && picked.value.length))
-const cleanChapterTitle = computed(() => title.value.trim() || '未命名章节')
+const cleanChapterTitle = computed(() => title.value.trim() || tr('未命名章节'))
 const cleanChapterContent = computed(() => content.value.replace(/^#\s+.*\n?/, '').trim())
 const previewContent = computed(() => outputs[stages[previewStage.value].key] || '')
 const previewTitle = computed(() => previewStage.value < 2 ? stages[previewStage.value].title : (extractTitle(previewContent.value) || title.value || stages[previewStage.value].title))
@@ -238,7 +241,7 @@ function apiFetch(path, options) {
 
 async function loadBooks() {
   try { const response = await apiFetch('/api/publish/books'); const data = await response.json(); if (!response.ok) throw new Error(data.error); books.value = data.books || []; if (books.value.length) selectBook(books.value[0], false) }
-  catch (error) { notice.value = `书架加载失败：${error.message}`; noticeError.value = true }
+  catch (error) { notice.value = (tr('书架加载失败：') + error.message); noticeError.value = true }
 }
 async function selectBook(book, touch = true) {
   selectedBook.value = book
@@ -250,7 +253,7 @@ async function selectBook(book, touch = true) {
 }
 function onCoverChange(event) {
   const file = event.target.files?.[0]; if (!file) return
-  if (file.size > 3 * 1024 * 1024) { notice.value = '封面不能超过 3MB'; noticeError.value = true; return }
+  if (file.size > 3 * 1024 * 1024) { notice.value = tr('封面不能超过 3MB'); noticeError.value = true; return }
   const reader = new FileReader(); reader.onload = () => { draftCover.value = String(reader.result || '') }; reader.readAsDataURL(file)
 }
 function editBook(book) { editingBookId.value = book.id; Object.assign(newBook, { title: book.title, genre: book.genre || '', summary: book.summary || '', style: book.style || '' }); draftCover.value = book.cover || ''; showBookCreator.value = true }
@@ -259,18 +262,18 @@ async function saveBookEditor() { if (editingBookId.value) return updateBook(); 
 async function updateBook() {
   creatingBook.value = true
   try { const response = await apiFetch(`/api/publish/books/${encodeURIComponent(editingBookId.value)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newBook, cover: draftCover.value, platforms: selectedBook.value?.id === editingBookId.value ? picked.value : books.value.find(book => book.id === editingBookId.value)?.platforms || [] }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); books.value = books.value.map(book => book.id === data.book.id ? data.book : book); if (selectedBook.value?.id === data.book.id) await selectBook(data.book, false); notice.value = `《${data.book.title}》资料已更新`; noticeError.value = false; closeBookEditor() }
-  catch (error) { notice.value = `修改失败：${error.message}`; noticeError.value = true }
+  catch (error) { notice.value = (tr('修改失败：') + error.message); noticeError.value = true }
   finally { creatingBook.value = false }
 }
 async function deleteBook(book) {
-  if (!window.confirm(`确定删除《${book.title}》及其 ${book.chapters?.length || 0} 个章节吗？此操作无法撤销。`)) return
+  if (!window.confirm((tr('确定删除《') + book.title + tr('》及其 ') + book.chapters?.length || 0 + tr(' 个章节吗？此操作无法撤销。')))) return
   try { const response = await apiFetch(`/api/publish/books/${encodeURIComponent(book.id)}`, { method: 'DELETE' }); const data = await response.json(); if (!response.ok) throw new Error(data.error); books.value = books.value.filter(item => item.id !== book.id); if (selectedBook.value?.id === book.id) { selectedBook.value = null; resetChapter(); if (books.value.length) await selectBook(books.value[0]) }; notice.value = `《${book.title}》已删除`; noticeError.value = false }
-  catch (error) { notice.value = `删除失败：${error.message}`; noticeError.value = true }
+  catch (error) { notice.value = (tr('删除失败：') + error.message); noticeError.value = true }
 }
 async function createBook() {
   creatingBook.value = true
-  try { const response = await apiFetch('/api/publish/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newBook, cover: draftCover.value, platforms: picked.value }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); books.value = [data.book, ...books.value]; await selectBook(data.book, false); closeBookEditor(); resetChapter(); notice.value = `《${data.book.title}》已创建，可以开始第一章`; noticeError.value = false }
-  catch (error) { notice.value = `创建失败：${error.message}`; noticeError.value = true }
+  try { const response = await apiFetch('/api/publish/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newBook, cover: draftCover.value, platforms: picked.value }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); books.value = [data.book, ...books.value]; await selectBook(data.book, false); closeBookEditor(); resetChapter(); notice.value = ('《' + data.book.title + tr('》已创建，可以开始第一章')); noticeError.value = false }
+  catch (error) { notice.value = (tr('创建失败：') + error.message); noticeError.value = true }
   finally { creatingBook.value = false }
 }
 function resetChapter() { title.value = ''; content.value = ''; fileName.value = ''; Object.keys(outputs).forEach(key => { outputs[key] = '' }); activeStage.value = 0; results.value = [] }
@@ -278,10 +281,10 @@ async function saveChapter() {
   if (!selectedBook.value) return
   savingChapter.value = true
   try { const response = await apiFetch(`/api/publish/books/${encodeURIComponent(selectedBook.value.id)}/chapters`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.value, content: content.value }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); selectedBook.value = data.book; books.value = [data.book, ...books.value.filter(book => book.id !== data.book.id)]; notice.value = `《${data.book.title}》已保存“${data.chapter.title}”草稿`; noticeError.value = false }
-  catch (error) { notice.value = `章节保存失败：${error.message}`; noticeError.value = true }
+  catch (error) { notice.value = (tr('章节保存失败：') + error.message); noticeError.value = true }
   finally { savingChapter.value = false }
 }
-async function approveChapter() { await saveChapter(); if (!noticeError.value) notice.value = `${notice.value}，已通过人工审批` }
+async function approveChapter() { await saveChapter(); if (!noticeError.value) notice.value = (notice.value + tr('，已通过人工审批')) }
 
 async function runCurrentStage() {
   if (!canRunCurrent.value || activeStage.value >= 4) return
@@ -298,7 +301,7 @@ async function runCurrentStage() {
       response = await fetch('http://127.0.0.1:8081/api/publish/compose', request)
     }
     const data = await response.json()
-    if (!response.ok) throw new Error(data.error || `请求失败 (${response.status})`)
+    if (!response.ok) throw new Error(data.error || (tr('请求失败 (') + response.status + ')'))
     outputs[stage.key] = data.content || ''
     if (stage.key === 'draft' || stage.key === 'polish') {
       content.value = outputs[stage.key]
@@ -316,10 +319,10 @@ async function requestStage(index, feedback = '') {
   previewStage.value = index
   const stage = stages[index]
   const source = index === 0 ? brief.value : outputs[stages[index - 1].key]
-  const request = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: stage.key, brief: `${brief.value}${feedback ? `\n\n人工打回建议：${feedback}` : ''}`, audience: audience.value, style: style.value, title: title.value, content: source }) }
+  const request = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: stage.key, brief: `${brief.value}${feedback ? `\n\n人工打回建议：feedback` : ''}`, audience: audience.value, style: style.value, title: title.value, content: source }) }
   const response = await apiFetch('/api/publish/compose', request)
   const data = await response.json()
-  if (!response.ok) throw new Error(data.error || `${stage.agent} 接力失败`)
+  if (!response.ok) throw new Error(data.error || (stage.agent + tr(' 接力失败')))
   outputs[stage.key] = data.content || ''
   previewStage.value = index
   if (index >= 2) { content.value = outputs[stage.key]; title.value = extractTitle(outputs[stage.key]) || title.value }
@@ -328,8 +331,8 @@ async function startAutoPipeline(feedback = '') {
   if (!brief.value.trim() || composing.value) return
   composing.value = true; notice.value = ''; noticeError.value = false; results.value = []
   Object.keys(outputs).forEach(key => { outputs[key] = '' }); content.value = ''; title.value = ''
-  try { for (let index = 0; index < 4; index++) await requestStage(index, feedback); activeStage.value = 4; previewStage.value = 3; notice.value = '四位创作搭档已完成接力，请预览后审批或打回修改。' }
-  catch (error) { notice.value = `自动接力中断：${error.message}`; noticeError.value = true }
+  try { for (let index = 0; index < 4; index++) await requestStage(index, feedback); activeStage.value = 4; previewStage.value = 3; notice.value = tr('四位创作搭档已完成接力，请预览后审批或打回修改。') }
+  catch (error) { notice.value = (tr('自动接力中断：') + error.message); noticeError.value = true }
   finally { composing.value = false }
 }
 async function rejectAndRerun() { const feedback = reviewFeedback.value.trim(); reviewFeedback.value = ''; await startAutoPipeline(feedback) }
@@ -354,9 +357,9 @@ async function loadPlatforms() {
   try {
     const response = await fetch('/api/publish/platforms')
     const data = await response.json()
-    if (!response.ok) throw new Error(data.error || '平台加载失败')
+    if (!response.ok) throw new Error(data.error || tr('平台加载失败'))
     platforms.value = data.platforms || []
-  } catch (error) { notice.value = `加载平台失败：${error.message}`; noticeError.value = true }
+  } catch (error) { notice.value = (tr('加载平台失败：') + error.message); noticeError.value = true }
 }
 async function checkEdge() {
   checkingEdge.value = true
@@ -365,7 +368,7 @@ async function checkEdge() {
     const data = await response.json()
     edgeReady.value = Boolean(data.ok)
     loginMsg.value = data.message || ''
-  } catch (error) { edgeReady.value = false; loginMsg.value = `检查失败：${error.message}` }
+  } catch (error) { edgeReady.value = false; loginMsg.value = (tr('检查失败：') + error.message) }
   finally { checkingEdge.value = false }
 }
 function toggle(id) { picked.value = picked.value.includes(id) ? picked.value.filter(item => item !== id) : [...picked.value, id] }
@@ -382,16 +385,16 @@ async function publish() {
   try {
     const response = await fetch('/api/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.value, content: content.value, platforms: picked.value }) })
     const data = await response.json()
-    if (!response.ok) throw new Error(data.error || `发布失败 (${response.status})`)
+    if (!response.ok) throw new Error(data.error || (tr('发布失败 (') + response.status + ')'))
     results.value = data.results || []
     const successCount = results.value.filter(item => item.ok).length
-    notice.value = `发布完成：${successCount}/${results.value.length} 个平台成功`
+    notice.value = (tr('发布完成：') + successCount + '/' + results.value.length + tr(' 个平台成功'))
     noticeError.value = successCount !== results.value.length
-  } catch (error) { notice.value = `发布失败：${error.message}`; noticeError.value = true }
+  } catch (error) { notice.value = (tr('发布失败：') + error.message); noticeError.value = true }
   finally { busy.value = false }
 }
 
-onMounted(() => { document.title = '杉汐 | 小说创作'; loadPlatforms(); loadBooks() })
+onMounted(() => { document.title = tr('杉汐 | 小说创作'); loadPlatforms(); loadBooks() })
 </script>
 
 <style scoped>

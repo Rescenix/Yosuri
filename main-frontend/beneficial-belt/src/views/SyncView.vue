@@ -5,38 +5,37 @@
       <div class="sv-banner-inner">
         <span class="sv-banner-crown">⚡</span>
         <div class="sv-banner-text">
-          <span class="sv-banner-title">AGENT OS · 王者归来</span>
-          <span class="sv-banner-sub">100 个 AI 员工 · 24H 不眠不休 · 免费算力驱动</span>
+          <span class="sv-banner-title">{{ tr('AGENT OS · 王者归来') }}</span>
+          <span class="sv-banner-sub">{{ tr('100 个 AI 员工 · 24H 不眠不休 · 免费算力驱动') }}</span>
         </div>
-        <span class="sv-banner-live" :class="{ on: anyWorking }">LIVE {{ workingCount }} 工作中</span>
+        <span class="sv-banner-live" :class="{ on: anyWorking }">LIVE {{ workingCount }}{{ tr('工作中') }}</span>
       </div>
     </div>
 
     <header class="sv-header">
       <div class="sv-title-row">
-        <h1>Ameko Agent OS · 100 人公司</h1>
+        <h1>{{ tr('Ameko Agent OS · 100 人公司') }}</h1>
         <div class="sv-live" :class="{ on: anyWorking }">
-          <span class="live-dot"></span> LIVE · {{ workingCount }}/{{ agents.length }} 工作中
-        </div>
+          <span class="live-dot"></span> LIVE · {{ workingCount }}/{{ agents.length }}{{ tr('工作中') }}</div>
       </div>
-      <p class="sub">６个部门协同 · 24H 自转 · 免费算力池 · 每 3 秒实时刷新</p>
+      <p class="sub">{{ tr('６个部门协同 · 24H 自转 · 免费算力池 · 每 3 秒实时刷新') }}</p>
     </header>
 
     <!-- 全局统计 -->
     <section class="sv-stats">
-      <div class="sv-stat"><Icon icon="mdi:account-group" width="22" class="st-ico st-blue" /><div class="sv-stat-num">{{ agents.length }}</div><div class="sv-stat-lbl">AI 员工</div></div>
-      <div class="sv-stat"><Icon icon="mdi:access-point" width="22" class="st-ico st-green" /><div class="sv-stat-num">{{ workingCount }}</div><div class="sv-stat-lbl">正在工作</div></div>
-      <div class="sv-stat"><Icon icon="mdi:file-document-outline" width="22" class="st-ico st-orange" /><div class="sv-stat-num">{{ totalOutputs }}</div><div class="sv-stat-lbl">产出文档</div></div>
-      <div class="sv-stat"><Icon icon="mdi:brain" width="22" class="st-ico st-purple" /><div class="sv-stat-num">{{ totalSkills }}</div><div class="sv-stat-lbl">掌握技能</div></div>
+      <div class="sv-stat"><Icon icon="mdi:account-group" width="22" class="st-ico st-blue" /><div class="sv-stat-num">{{ agents.length }}</div><div class="sv-stat-lbl">{{ tr('AI 员工') }}</div></div>
+      <div class="sv-stat"><Icon icon="mdi:access-point" width="22" class="st-ico st-green" /><div class="sv-stat-num">{{ workingCount }}</div><div class="sv-stat-lbl">{{ tr('正在工作') }}</div></div>
+      <div class="sv-stat"><Icon icon="mdi:file-document-outline" width="22" class="st-ico st-orange" /><div class="sv-stat-num">{{ totalOutputs }}</div><div class="sv-stat-lbl">{{ tr('产出文档') }}</div></div>
+      <div class="sv-stat"><Icon icon="mdi:brain" width="22" class="st-ico st-purple" /><div class="sv-stat-num">{{ totalSkills }}</div><div class="sv-stat-lbl">{{ tr('掌握技能') }}</div></div>
     </section>
 
     <!-- 按部门分组 -->
     <section v-for="dept in departments" :key="dept.key" class="sv-dept">
       <div class="sv-dept-head">
         <Icon :icon="dept.icon" width="20" class="dept-ico" :style="{ color: dept.color }" />
-        <span class="sv-dept-name">{{ dept.name }}</span>
-        <span class="sv-dept-count">{{ dept.agents.length }} 人</span>
-        <span v-if="dept.working" class="sv-dept-working">工作中</span>
+        <span class="sv-dept-name">{{ tr(dept.name) }}</span>
+        <span class="sv-dept-count">{{ dept.agents.length }}{{ tr('人') }}</span>
+        <span v-if="dept.working" class="sv-dept-working">{{ tr('工作中') }}</span>
       </div>
       <div class="sv-grid">
         <div
@@ -52,8 +51,8 @@
               <span class="sv-status-dot" :class="{ on: isWorking(a) }"></span>
             </div>
             <div class="sv-agent-info">
-              <div class="sv-agent-name">{{ a.name }}</div>
-              <div class="sv-agent-role">{{ dept.name }}</div>
+              <div class="sv-agent-name">{{ tr(a.name) }}</div>
+              <div class="sv-agent-role">{{ tr(dept.name) }}</div>
             </div>
           </div>
           <div class="sv-agent-doing">
@@ -76,7 +75,7 @@
 
     <!-- 同步活动时间线 -->
     <section class="sv-timeline">
-      <h3>同步活动流</h3>
+      <h3>{{ tr('同步活动流') }}</h3>
       <div class="sv-events">
         <div v-for="(e, i) in events" :key="i" class="sv-event">
           <div class="ev-time-line">
@@ -91,7 +90,7 @@
             <div class="ev-text">{{ e.text }}</div>
           </div>
         </div>
-        <div v-if="!events.length" class="sv-noevents">她们正在赶来…</div>
+        <div v-if="!events.length" class="sv-noevents">{{ tr('她们正在赶来…') }}</div>
       </div>
     </section>
 
@@ -111,6 +110,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 
 const agents = ref([])
 const events = ref([])
@@ -118,12 +120,12 @@ const seen = new Set()
 const preview = ref(null)
 
 const deptMeta = {
-  writer: { key: 'writer', name: '作者部', icon: 'ph:pen-nib-bold', color: '#f59e0b' },
-  researcher: { key: 'researcher', name: '研究部', icon: 'mdi:microscope', color: '#3b82f6' },
-  coder: { key: 'coder', name: '程序部', icon: 'mdi:code-tags', color: '#8b5cf6' },
-  designer: { key: 'designer', name: '设计部', icon: 'mdi:palette', color: '#ec4899' },
-  publisher: { key: 'publisher', name: '发布部', icon: 'mdi:bullhorn', color: '#ef4444' },
-  promoter: { key: 'promoter', name: '宣传部', icon: 'mdi:megaphone', color: '#14b8a6' },
+  writer: { key: 'writer', name: tr('作者部'), icon: 'ph:pen-nib-bold', color: '#f59e0b' },
+  researcher: { key: 'researcher', name: tr('研究部'), icon: 'mdi:microscope', color: '#3b82f6' },
+  coder: { key: 'coder', name: tr('程序部'), icon: 'mdi:code-tags', color: '#8b5cf6' },
+  designer: { key: 'designer', name: tr('设计部'), icon: 'mdi:palette', color: '#ec4899' },
+  publisher: { key: 'publisher', name: tr('发布部'), icon: 'mdi:bullhorn', color: '#ef4444' },
+  promoter: { key: 'promoter', name: tr('宣传部'), icon: 'mdi:megaphone', color: '#14b8a6' },
 }
 
 const departments = computed(() => {
@@ -156,9 +158,9 @@ function doingText(a) {
   const lines = log.split('\n').filter(Boolean)
   const last = lines[lines.length - 1] || ''
   // 错误状态 → 友好化（不显示 429/熔断原文，败兴）
-  if (/失败|熔断|429|未成功|未完成|限流/.test(last)) return '⚡ 充电中…'
+  if (/失败|熔断|429|未成功|未完成|限流/.test(last)) return tr('⚡ 充电中…')
   const clean = last.replace(/^\[[^\]]*\]\s*/, '').replace(/·[^·]*$/, '').trim()
-  return clean || '待命中'
+  return clean || tr('待命中')
 }
 
 // 产出类型标签（按文件名前缀）
@@ -172,7 +174,7 @@ function fileType(f) {
   if (f.startsWith('需求')) return '📐 需求'
   if (f.startsWith('日报')) return '📊 日报'
   if (f.endsWith('.pptx') || f.endsWith('.ppt')) return '📽️ PPT'
-  return '📄 文档'
+  return tr('📄 文档')
 }
 
 // 预览：渲染 md 为可读内容（标题/段落/列表），不是 raw 源码
@@ -197,7 +199,7 @@ async function previewFile(a, f) {
     const d = await r.json()
     preview.value = { agent: a.name, file: f, content: d.content || d.error || '' }
   } catch (e) {
-    preview.value = { agent: a.name, file: f, content: '读取失败：' + e.message }
+    preview.value = { agent: a.name, file: f, content: tr('读取失败：') + e.message }
   }
 }
 
@@ -212,9 +214,9 @@ async function loadAgents() {
         // 错误事件友好化（不显示 429/熔断原文）
         const friendly = line.replace(/^\[[^\]]*\]\s*/, '')
         if (/失败|熔断|429|未成功|未完成|限流/.test(friendly)) {
-          if (seen.has(a.name + '|⚡充电')) continue
-          seen.add(a.name + '|⚡充电')
-          events.value.unshift({ role: a.role, name: a.name, time: '', text: '⚡ 充电中…' })
+          if (seen.has(a.name + tr('|⚡充电'))) continue
+          seen.add(a.name + tr('|⚡充电'))
+          events.value.unshift({ role: a.role, name: a.name, time: '', text: tr('⚡ 充电中…') })
           continue
         }
         const key = a.name + '|' + line
@@ -232,7 +234,7 @@ async function loadAgents() {
 
 let timer
 onMounted(() => {
-  document.title = 'Ameko Agent OS · 王者归来'
+  document.title = tr('Ameko Agent OS · 王者归来')
   loadAgents()
   timer = setInterval(loadAgents, 3000)
 })

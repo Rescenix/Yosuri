@@ -7,7 +7,7 @@
         <span>New Snippet</span>
       </button>
       <div class="snippet-toolbar-actions">
-        <button class="snippet-icon-btn" type="button" @click="searchOpen = !searchOpen" :title="searchOpen ? '关闭搜索' : '搜索'">
+        <button class="snippet-icon-btn" type="button" @click="searchOpen = !searchOpen" :title="searchOpen ? tr('关闭搜索') : tr('搜索')">
           <Icon :icon="searchOpen ? 'mdi:close' : 'mdi:magnify'" width="15" />
         </button>
       </div>
@@ -16,7 +16,7 @@
     <!-- 搜索栏 -->
     <div v-if="searchOpen" class="snippet-search">
       <Icon icon="mdi:magnify" width="14" />
-      <input ref="searchInputRef" v-model="searchQuery" type="text" placeholder="搜索片段…" @keydown.esc="closeSearch" />
+      <input ref="searchInputRef" v-model="searchQuery" type="text" :placeholder="tr('搜索片段…')" @keydown.esc="closeSearch" />
     </div>
 
     <!-- 新建/编辑表单 -->
@@ -25,23 +25,23 @@
         <button class="snippet-icon-btn" type="button" @click="cancelEdit">
           <Icon icon="mdi:arrow-left" width="16" />
         </button>
-        <span class="snippet-form-title">{{ editing.id ? '编辑片段' : '新片段' }}</span>
-        <button class="snippet-save-btn" type="button" @click="saveSnippet" :disabled="!editing.name.trim()">保存</button>
+        <span class="snippet-form-title">{{ editing.id ? tr('编辑片段') : tr('新片段') }}</span>
+        <button class="snippet-save-btn" type="button" @click="saveSnippet" :disabled="!editing.name.trim()">{{ tr('保存') }}</button>
       </div>
       <label class="snippet-field">
-        <span>名称</span>
-        <input v-model="editing.name" type="text" placeholder="例如：Deploy" autocomplete="off" />
+        <span>{{ tr('名称') }}</span>
+        <input v-model="editing.name" type="text" :placeholder="tr('例如：Deploy')" autocomplete="off" />
       </label>
       <label class="snippet-field">
-        <span>命令</span>
-        <textarea v-model="editing.command" rows="4" placeholder="例如：bash /root/deploy.sh" spellcheck="false"></textarea>
+        <span>{{ tr('命令') }}</span>
+        <textarea v-model="editing.command" rows="4" :placeholder="tr('例如：bash /root/deploy.sh')" spellcheck="false"></textarea>
       </label>
     </div>
 
     <!-- 片段列表 -->
     <div v-else class="snippet-list">
       <div v-if="filteredSnippets.length === 0" class="snippet-empty">
-        {{ searchQuery ? '没有匹配的片段' : '还没有片段，点击上方按钮创建' }}
+        {{ searchQuery ? tr('没有匹配的片段') : tr('还没有片段，点击上方按钮创建') }}
       </div>
       <div
         v-for="s in filteredSnippets"
@@ -52,10 +52,10 @@
         <div class="snippet-item-head">
           <span class="snippet-item-name">{{ s.name }}</span>
           <div class="snippet-item-actions">
-            <button class="snippet-item-action" title="编辑" @click.stop="startEdit(s)">
+            <button class="snippet-item-action" :title="tr('编辑')" @click.stop="startEdit(s)">
               <Icon icon="mdi:pencil-outline" width="13" />
             </button>
-            <button class="snippet-item-action danger" title="删除" @click.stop="deleteSnippet(s.id)">
+            <button class="snippet-item-action danger" :title="tr('删除')" @click.stop="deleteSnippet(s.id)">
               <Icon icon="mdi:delete-outline" width="13" />
             </button>
           </div>
@@ -69,6 +69,9 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const emit = defineEmits(['insert'])
 

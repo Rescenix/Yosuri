@@ -1,6 +1,6 @@
 <template>
   <div class="diffviewer">
-    <div v-if="collapsedRows.length === 0" class="dv-empty">无内容变化</div>
+    <div v-if="collapsedRows.length === 0" class="dv-empty">{{ tr('无内容变化') }}</div>
     <template v-for="(row, i) in collapsedRows" :key="i">
       <div v-if="row.type === 'fold'" class="dv-fold" @click="expandAll">
         <span class="dv-fold-text">{{ row.count }} unchanged lines</span>
@@ -18,6 +18,9 @@
 import { ref, computed } from 'vue'
 import { diffLines } from 'diff'
 import hljs from 'highlight.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   oldContent: { type: String, default: '' },

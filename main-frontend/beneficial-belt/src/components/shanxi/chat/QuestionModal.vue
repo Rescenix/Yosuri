@@ -4,8 +4,8 @@
       <Icon icon="mdi:chevron-down" width="14" class="question-bar-chevron" :class="{ collapsed }" />
       <span class="question-bar-mark">?</span>
       <span class="question-bar-title">{{ question.question }}</span>
-      <span v-if="question.multi && !collapsed" class="question-bar-hint">可多选</span>
-      <button class="question-bar-close" type="button" title="跳过" aria-label="跳过此问题" @click.stop="onCancel">×</button>
+      <span v-if="question.multi && !collapsed" class="question-bar-hint">{{ tr('可多选') }}</span>
+      <button class="question-bar-close" type="button" :title="tr('跳过')" :aria-label="tr('跳过此问题')" @click.stop="onCancel">×</button>
     </div>
     <template v-if="!collapsed">
       <div v-if="question.options.length" class="question-bar-options">
@@ -20,7 +20,7 @@
         >
           <span class="question-option-key">{{ optionKey(i) }}</span>
           <span class="question-option-label">{{ optionLabel(item.opt.label, item.origIdx) }}</span>
-          <span v-if="item.opt.recommended" class="question-option-rec">推荐</span>
+          <span v-if="item.opt.recommended" class="question-option-rec">{{ tr('推荐') }}</span>
         </button>
         <form v-if="question.allowOther" class="question-other-row" @submit.prevent="onConfirm">
           <span class="question-option-key">{{ optionKey(question.options.length) }}</span>
@@ -28,9 +28,9 @@
             ref="freeInput"
             v-model="freeText"
             class="question-free-input"
-            placeholder="其他（输入你的答案）"
+            :placeholder="tr('其他（输入你的答案）')"
           />
-          <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">发送</button>
+          <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">{{ tr('发送') }}</button>
         </form>
         <button
           v-if="question.multi"
@@ -38,7 +38,7 @@
           type="button"
           :disabled="question.submitting || (!selected.length && !freeText.trim())"
           @click="onConfirm"
-        >确认</button>
+        >{{ tr('确认') }}</button>
       </div>
 
       <form
@@ -50,9 +50,9 @@
           ref="freeInput"
           v-model="freeText"
           class="question-free-input"
-          :placeholder="question.options.length ? '输入其他回答' : '输入你的回答'"
+          :placeholder="question.options.length ? tr('输入其他回答') : tr('输入你的回答')"
         />
-        <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">发送</button>
+        <button class="question-submit" type="submit" :disabled="question.submitting || !freeText.trim()">{{ tr('发送') }}</button>
       </form>
       <div v-if="question.error" class="question-error">{{ question.error }}</div>
     </template>
@@ -62,6 +62,9 @@
 <script setup>
 import { Icon } from '@iconify/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   question: { type: Object, required: true }

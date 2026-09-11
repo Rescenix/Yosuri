@@ -12,7 +12,7 @@
         v-if="node.children.length"
         class="stn-chevron"
         :class="{ open: expanded }"
-        :title="expanded ? '折叠分支' : '展开分支'"
+        :title="expanded ? tr('折叠分支') : tr('展开分支')"
         @click.stop="$emit('toggle', node.id)"
       >
         <Icon icon="mdi:chevron-right" width="13" />
@@ -27,7 +27,7 @@
       <span v-if="node.children.length" class="stn-branch-count">{{ node.children.length }}</span>
 
       <div v-if="hoveredId === node.id || openMenuId === node.id" class="stn-menu-wrap">
-        <button class="stn-menu-btn" title="更多" @click.stop="$emit('menu', node, $event)">
+        <button class="stn-menu-btn" :title="tr('更多')" @click.stop="$emit('menu', node, $event)">
           <Icon icon="mdi:dots-horizontal" width="16" />
         </button>
       </div>
@@ -59,6 +59,9 @@
 <script setup>
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 // 递归 SFC：靠文件名自引用（同 FileTreeNode.vue 的做法）。所有交互状态都由
 // SessionMenuContent 持有，这里只负责渲染 + 把事件逐层冒泡上去。

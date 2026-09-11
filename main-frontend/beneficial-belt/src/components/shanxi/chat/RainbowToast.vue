@@ -35,6 +35,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
+
 
 const toasts = ref([])
 let idSeq = 0
@@ -51,7 +55,7 @@ function push(t) {
   const id = ++idSeq
   toasts.value.push({
     id,
-    title: t.title || '已保存到记忆',
+    title: t.title || tr('已保存到记忆'),
     sub: t.sub || '',
     count: t.count != null ? t.count : null,
     ms: t.ms != null ? t.ms : null,
@@ -94,7 +98,7 @@ async function poll() {
     for (const e of events) {
       if (!seen.has(e.name)) {
         seen.add(e.name)
-        push({ title: '新技能已习得', sub: e.name, count: '+XP', ms: '已入库' })
+        push({ title: tr('新技能已习得'), sub: e.name, count: '+XP', ms: tr('已入库') })
       }
     }
   } catch (e) { /* 后端没起静默 */ }

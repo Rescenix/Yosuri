@@ -17,14 +17,14 @@
             @unpin-file="unpinFile"
           >
             <template #tab-actions>
-              <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? '保存并在终端运行当前文件' : '当前文件暂不支持一键运行'" @click="runActiveFile">
+              <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? tr('保存并在终端运行当前文件') : tr('当前文件暂不支持一键运行')" @click="runActiveFile">
                 <Icon icon="mdi:play" width="15" />
-                <span>运行</span>
+                <span>{{ tr('运行') }}</span>
               </button>
               <span v-if="saveState" class="file-tool-save-state" :class="saveState">
-                {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
+                {{ saveState === 'saving' ? tr('保存中…') : saveState === 'saved' ? tr('已保存') : tr('保存失败') }}
               </span>
-              <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? '显示文件树' : '隐藏文件树'">
+              <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? tr('显示文件树') : tr('隐藏文件树')">
                 <Icon icon="lucide:sidebar" width="16" />
               </button>
             </template>
@@ -32,17 +32,17 @@
         </section>
 
         <aside v-if="!treeCollapsed" class="file-tool-tree-pane">
-          <div class="file-tool-tree-resize" title="拖拽调整宽度" @mousedown="startTreeResize"></div>
+          <div class="file-tool-tree-resize" :title="tr('拖拽调整宽度')" @mousedown="startTreeResize"></div>
           <div class="file-tool-tree-header">
             <span class="file-tool-tree-project">
                         <Icon icon="mdi:folder-outline" width="14" />
-                        <span>{{ workdirName || '项目' }}</span>
+                        <span>{{ workdirName || tr('项目') }}</span>
                       </span>
                       <div class="file-tool-tree-actions">
-                        <button class="file-tool-icon-btn" type="button" :class="{ spin: treeLoading }" @click="loadTree" title="刷新文件树">
+                        <button class="file-tool-icon-btn" type="button" :class="{ spin: treeLoading }" @click="loadTree" :title="tr('刷新文件树')">
                           <Icon icon="mdi:refresh" width="14" />
                         </button>
-                        <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
+                        <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? tr('关闭搜索') : tr('搜索文件')">
                           <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
                         </button>
                       </div>
@@ -52,14 +52,14 @@
           <template v-if="treeSearchOpen">
             <div class="file-tool-search-bar">
               <Icon icon="mdi:magnify" width="14" />
-              <input ref="treeSearchInputRef" v-model="treeQuery" type="text" placeholder="搜索文件…" @keydown.esc="closeTreeSearch" />
-              <button class="search-toggle-btn" :class="{ on: searchCaseSensitive }" type="button" title="区分大小写" @click="searchCaseSensitive = !searchCaseSensitive">Aa</button>
-              <button class="search-toggle-btn" :class="{ on: searchWholeWord }" type="button" title="全字匹配" @click="searchWholeWord = !searchWholeWord">ab</button>
-              <button class="search-toggle-btn" :class="{ on: searchRegex }" type="button" title="正则表达式" @click="searchRegex = !searchRegex">.*</button>
+              <input ref="treeSearchInputRef" v-model="treeQuery" type="text" :placeholder="tr('搜索文件…')" @keydown.esc="closeTreeSearch" />
+              <button class="search-toggle-btn" :class="{ on: searchCaseSensitive }" type="button" :title="tr('区分大小写')" @click="searchCaseSensitive = !searchCaseSensitive">Aa</button>
+              <button class="search-toggle-btn" :class="{ on: searchWholeWord }" type="button" :title="tr('全字匹配')" @click="searchWholeWord = !searchWholeWord">ab</button>
+              <button class="search-toggle-btn" :class="{ on: searchRegex }" type="button" :title="tr('正则表达式')" @click="searchRegex = !searchRegex">.*</button>
             </div>
             <div class="file-tool-tree-body">
-              <div v-if="!treeQuery.trim()" class="file-tool-tree-msg">输入关键字搜索文件名</div>
-              <div v-else-if="filteredTreeNodes.length === 0" class="file-tool-tree-msg">没有匹配的文件</div>
+              <div v-if="!treeQuery.trim()" class="file-tool-tree-msg">{{ tr('输入关键字搜索文件名') }}</div>
+              <div v-else-if="filteredTreeNodes.length === 0" class="file-tool-tree-msg">{{ tr('没有匹配的文件') }}</div>
               <FileTreeNode
                               v-else
                               v-for="node in filteredTreeNodes"
@@ -78,7 +78,7 @@
             </div>
           </template>
           <div v-else class="file-tool-tree-body">
-            <div v-if="treeLoading" class="file-tool-tree-msg">加载中…</div>
+            <div v-if="treeLoading" class="file-tool-tree-msg">{{ tr('加载中…') }}</div>
             <div v-else-if="treeError" class="file-tool-tree-msg error">{{ treeError }}</div>
             <FileTreeNode
                           v-else
@@ -120,17 +120,17 @@
               @unpin-file="unpinFile"
             >
               <template #tab-actions>
-                <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? '保存并在终端运行当前文件' : '当前文件暂不支持一键运行'" @click="runActiveFile">
+                <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? tr('保存并在终端运行当前文件') : tr('当前文件暂不支持一键运行')" @click="runActiveFile">
                   <Icon icon="mdi:play" width="15" />
-                  <span>运行</span>
+                  <span>{{ tr('运行') }}</span>
                 </button>
                 <span v-if="saveState" class="file-tool-save-state" :class="saveState">
-                  {{ saveState === 'saving' ? '保存中…' : saveState === 'saved' ? '已保存' : '保存失败' }}
+                  {{ saveState === 'saving' ? tr('保存中…') : saveState === 'saved' ? tr('已保存') : tr('保存失败') }}
                 </span>
-                <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? '显示文件树' : '隐藏文件树'">
+                <button class="file-tool-icon-btn" type="button" @click="treeCollapsed = !treeCollapsed" :title="treeCollapsed ? tr('显示文件树') : tr('隐藏文件树')">
                   <Icon icon="lucide:sidebar" width="16" />
                 </button>
-                <button class="file-tool-icon-btn" type="button" @click="requestClose" title="关闭 (Esc)">
+                <button class="file-tool-icon-btn" type="button" @click="requestClose" :title="tr('关闭 (Esc)')">
                   <Icon icon="mdi:close" width="18" />
                 </button>
               </template>
@@ -138,17 +138,17 @@
           </section>
 
           <aside v-if="!treeCollapsed" class="file-tool-tree-pane">
-            <div class="file-tool-tree-resize" title="拖拽调整宽度" @mousedown="startTreeResize"></div>
+            <div class="file-tool-tree-resize" :title="tr('拖拽调整宽度')" @mousedown="startTreeResize"></div>
             <div class="file-tool-tree-header">
               <span class="file-tool-tree-project">
                           <Icon icon="mdi:folder-outline" width="14" />
-                          <span>{{ workdirName || '项目' }}</span>
+                          <span>{{ workdirName || tr('项目') }}</span>
                         </span>
                         <div class="file-tool-tree-actions">
-                          <button class="file-tool-icon-btn" type="button" :class="{ spin: treeLoading }" @click="loadTree" title="刷新文件树">
+                          <button class="file-tool-icon-btn" type="button" :class="{ spin: treeLoading }" @click="loadTree" :title="tr('刷新文件树')">
                             <Icon icon="mdi:refresh" width="14" />
                           </button>
-                          <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? '关闭搜索' : '搜索文件'">
+                          <button class="file-tool-icon-btn sm" type="button" @click="toggleTreeSearch" :title="treeSearchOpen ? tr('关闭搜索') : tr('搜索文件')">
                             <Icon :icon="treeSearchOpen ? 'mdi:close' : 'mdi:magnify'" width="14" />
                           </button>
                         </div>
@@ -157,14 +157,14 @@
             <template v-if="treeSearchOpen">
               <div class="file-tool-search-bar">
                 <Icon icon="mdi:magnify" width="14" />
-                <input ref="treeSearchInputRef" v-model="treeQuery" type="text" placeholder="搜索文件…" @keydown.esc="closeTreeSearch" />
-                <button class="search-toggle-btn" :class="{ on: searchCaseSensitive }" type="button" title="区分大小写" @click="searchCaseSensitive = !searchCaseSensitive">Aa</button>
-                <button class="search-toggle-btn" :class="{ on: searchWholeWord }" type="button" title="全字匹配" @click="searchWholeWord = !searchWholeWord">ab</button>
-                <button class="search-toggle-btn" :class="{ on: searchRegex }" type="button" title="正则表达式" @click="searchRegex = !searchRegex">.*</button>
+                <input ref="treeSearchInputRef" v-model="treeQuery" type="text" :placeholder="tr('搜索文件…')" @keydown.esc="closeTreeSearch" />
+                <button class="search-toggle-btn" :class="{ on: searchCaseSensitive }" type="button" :title="tr('区分大小写')" @click="searchCaseSensitive = !searchCaseSensitive">Aa</button>
+                <button class="search-toggle-btn" :class="{ on: searchWholeWord }" type="button" :title="tr('全字匹配')" @click="searchWholeWord = !searchWholeWord">ab</button>
+                <button class="search-toggle-btn" :class="{ on: searchRegex }" type="button" :title="tr('正则表达式')" @click="searchRegex = !searchRegex">.*</button>
               </div>
               <div class="file-tool-tree-body">
-                <div v-if="!treeQuery.trim()" class="file-tool-tree-msg">输入关键字搜索文件名</div>
-                <div v-else-if="filteredTreeNodes.length === 0" class="file-tool-tree-msg">没有匹配的文件</div>
+                <div v-if="!treeQuery.trim()" class="file-tool-tree-msg">{{ tr('输入关键字搜索文件名') }}</div>
+                <div v-else-if="filteredTreeNodes.length === 0" class="file-tool-tree-msg">{{ tr('没有匹配的文件') }}</div>
                 <FileTreeNode
                                 v-else
                                 v-for="node in filteredTreeNodes"
@@ -183,7 +183,7 @@
               </div>
             </template>
             <div v-else class="file-tool-tree-body">
-              <div v-if="treeLoading" class="file-tool-tree-msg">加载中…</div>
+              <div v-if="treeLoading" class="file-tool-tree-msg">{{ tr('加载中…') }}</div>
               <div v-else-if="treeError" class="file-tool-tree-msg error">{{ treeError }}</div>
               <FileTreeNode
                             v-else
@@ -229,6 +229,9 @@ function prefetchEditor() {
 watch(editorLazy, (lazy) => { if (!lazy) prefetchEditor() }, { immediate: true })
 import FileTreeNode from './FileTreeNode.vue'
 import { useResizableWidth } from './useResizable.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const emit = defineEmits(['close', 'run-command'])
 const props = defineProps({
@@ -298,7 +301,7 @@ function buildMatcher(query) {
       return null // 正则写错了：当无匹配处理，不让它把整个搜索炸掉
     }
   }
-  let pattern = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // 转义成字面量再拼
+  let pattern = query.replace(/[.*+?^()|[\]\\]/g, '\\$&') // 转义成字面量再拼
   if (searchWholeWord.value) pattern = `\\b${pattern}\\b`
   try {
     return new RegExp(pattern, searchCaseSensitive.value ? '' : 'i')
@@ -336,10 +339,10 @@ async function loadTree() {
   treeError.value = ''
   try {
     const res = await fetch('/api/file-tree')
-    if (!res.ok) throw new Error(`加载失败 (${res.status})`)
+    if (!res.ok) throw new Error((tr('加载失败 (') + res.status + ')'))
     treeNodes.value = await res.json()
   } catch (e) {
-    treeError.value = e.message || '加载文件树失败'
+    treeError.value = e.message || tr('加载文件树失败')
   } finally {
     treeLoading.value = false
   }
@@ -356,7 +359,7 @@ function validNewPath(path) {
 async function createFile(folder) {
   const name = window.prompt(`在「${folder.name}」中新建文件（例如 hello.py）`)?.trim()
   if (!name) return
-  if (!validNewPath(name) || name.includes('/')) return window.alert('请输入文件名，不要包含路径')
+  if (!validNewPath(name) || name.includes('/')) return window.alert(tr('请输入文件名，不要包含路径'))
   const path = `${folder.path}/${name}`
   try {
     const res = await fetch('/api/file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, content: '' }) })
@@ -366,25 +369,25 @@ async function createFile(folder) {
     tabs.value.push(tab)
     activeFilePath.value = path
     selectedNode.value = { type: 'file', path, name: tab.name }
-  } catch (e) { window.alert('新建文件失败：' + (e.message || '未知错误')) }
+  } catch (e) { window.alert(tr('新建文件失败：') + (e.message || tr('未知错误'))) }
 }
 
 async function createFolder(folder) {
   const name = window.prompt(`在「${folder.name}」中新建文件夹`)?.trim()
   if (!name) return
-  if (!validNewPath(name) || name.includes('/')) return window.alert('请输入文件夹名，不要包含路径')
+  if (!validNewPath(name) || name.includes('/')) return window.alert(tr('请输入文件夹名，不要包含路径'))
   const path = `${folder.path}/${name}`
   try {
     const res = await fetch('/api/folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) })
     if (!res.ok) throw new Error(await res.text())
     await loadTree()
-  } catch (e) { window.alert('新建文件夹失败：' + (e.message || '未知错误')) }
+  } catch (e) { window.alert(tr('新建文件夹失败：') + (e.message || tr('未知错误'))) }
 }
 
 async function renameNode(node) {
   const name = window.prompt(`重命名「${node.name}」`, node.name)?.trim()
   if (!name || name === node.name) return
-  if (!validNewPath(name) || name.includes('/')) return window.alert('请输入名称，不要包含路径')
+  if (!validNewPath(name) || name.includes('/')) return window.alert(tr('请输入名称，不要包含路径'))
   const parent = node.path.includes('/') ? node.path.slice(0, node.path.lastIndexOf('/')) : ''
   const newPath = parent ? `${parent}/${name}` : name
   try {
@@ -392,18 +395,18 @@ async function renameNode(node) {
     if (!res.ok) throw new Error(await res.text())
     tabs.value.filter(tab => tab.path === node.path || tab.path.startsWith(node.path + '/')).forEach(tab => closeFile(tab.path))
     await loadTree()
-  } catch (e) { window.alert('重命名失败：' + (e.message || '未知错误')) }
+  } catch (e) { window.alert(tr('重命名失败：') + (e.message || tr('未知错误'))) }
 }
 
 async function deleteNode(node) {
-  const detail = node.type === 'folder' ? '及其所有内容' : ''
-  if (!window.confirm(`确定删除「${node.name}」${detail}？此操作不可恢复。`)) return
+  const detail = node.type === 'folder' ? tr('及其所有内容') : ''
+  if (!window.confirm((tr('确定删除「') + node.name + '」' + detail + tr('？此操作不可恢复。')))) return
   try {
     const res = await fetch('/api/file?path=' + encodeURIComponent(node.path), { method: 'DELETE' })
     if (!res.ok) throw new Error(await res.text())
     tabs.value.filter(tab => tab.path === node.path || tab.path.startsWith(node.path + '/')).forEach(tab => closeFile(tab.path))
     await loadTree()
-  } catch (e) { window.alert('删除失败：' + (e.message || '未知错误')) }
+  } catch (e) { window.alert(tr('删除失败：') + (e.message || tr('未知错误'))) }
 }
 
 function quotePowerShell(value) { return "'" + value.replaceAll("'", "''") + "'" }
@@ -454,13 +457,13 @@ async function openFile(node) {
   }
   try {
     const res = await fetch('/api/file?path=' + encodeURIComponent(node.path))
-    if (!res.ok) throw new Error(await res.text() || `打开失败 (${res.status})`)
+    if (!res.ok) throw new Error(await res.text() || (tr('打开失败 (') + res.status + ')'))
     const content = await res.text()
     tabs.value.push({ path: node.path, name: node.name, content, savedContent: content })
     activeFilePath.value = node.path
   } catch (e) {
-    openError.value = e.message || '打开文件失败'
-    window.alert('打开失败：' + openError.value)
+    openError.value = e.message || tr('打开文件失败')
+    window.alert(tr('打开失败：') + openError.value)
   }
 }
 
@@ -478,7 +481,7 @@ async function previewFile(node) {
   try {
     if (ext === 'pptx' || ext === 'xlsx' || ext === 'xls' || ext === 'docx' || ext === 'doc') {
       const binary = await fetch('/api/agent/file?path=' + encodeURIComponent(node.path) + '&raw=1')
-      if (!binary.ok) throw new Error('读取失败 (' + binary.status + ')')
+      if (!binary.ok) throw new Error(tr('读取失败 (') + binary.status + ')')
       const buf = await binary.arrayBuffer()
       if (ext === 'pptx') requestPreview(await pptxToHtml(buf))
       else if (ext === 'xlsx' || ext === 'xls') requestPreview(await xlsxToHtml(buf))
@@ -488,7 +491,7 @@ async function previewFile(node) {
     // pdf / 图片：直接让预览窗以 raw URL 渲染（浏览器原生 PDF / <img>）。
     requestPreview('/api/agent/file?path=' + encodeURIComponent(node.path) + '&raw=1')
   } catch (e) {
-    window.alert('预览失败：' + (e.message || '未知错误'))
+    window.alert(tr('预览失败：') + (e.message || tr('未知错误')))
   }
 }
 
@@ -560,7 +563,7 @@ function closeFile(path) {
   const tab = tabs.value.find(t => t.path === path)
   if (tab && isDirty(tab)) {
     // 实时保存下这条基本只在"保存请求本身失败"时才会触发，留着当兜底
-    if (!window.confirm(`「${tab.name}」还有未保存的修改（保存失败？），确定要关闭吗？`)) return
+    if (!window.confirm(('「' + tab.name + tr('」还有未保存的修改（保存失败？），确定要关闭吗？')))) return
   }
   const idx = tabs.value.findIndex(t => t.path === path)
   if (idx === -1) return
@@ -619,7 +622,7 @@ async function saveActiveFile() {
     return true
   } catch (e) {
     saveState.value = 'error'
-    window.alert('保存失败，未运行当前文件。')
+    window.alert(tr('保存失败，未运行当前文件。'))
     return false
   } finally {
     clearTimeout(saveStateTimer)
@@ -638,7 +641,7 @@ function onKeydown(e) {
 function requestClose() {
   flushAutoSave()
   const dirtyTabs = tabs.value.filter(isDirty)
-  if (dirtyTabs.length && !window.confirm(`还有 ${dirtyTabs.length} 个文件未保存（保存失败？），确定要关闭吗？`)) {
+  if (dirtyTabs.length && !window.confirm((tr('还有 ') + dirtyTabs.length + tr(' 个文件未保存（保存失败？），确定要关闭吗？')))) {
     return
   }
   emit('close')

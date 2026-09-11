@@ -13,8 +13,8 @@
       <div class="home-stats-header">
         <div class="home-tabs">
           <span class="home-user-name" :title="auth.uid.value ? 'UID ' + auth.uid.value : ''">{{ auth.displayName.value }}</span>
-          <span class="home-tab" :class="{ active: homeTab === 'overview' }" @click="homeTab = 'overview'">总览</span>
-          <span class="home-tab" :class="{ active: homeTab === 'models' }" @click="homeTab = 'models'">模型</span>
+          <span class="home-tab" :class="{ active: homeTab === 'overview' }" @click="homeTab = 'overview'">{{ tr('总览') }}</span>
+          <span class="home-tab" :class="{ active: homeTab === 'models' }" @click="homeTab = 'models'">{{ tr('模型') }}</span>
         </div>
         <div class="home-range-group">
           <span
@@ -57,7 +57,7 @@
             </div>
           </div>
         </div>
-        <div v-else class="home-model-empty">暂无模型使用数据</div>
+        <div v-else class="home-model-empty">{{ tr('暂无模型使用数据') }}</div>
       </template>
 
     </div>
@@ -85,6 +85,9 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from '../../../composables/useAuth.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({ showContent: { type: Boolean, default: true } })
 
@@ -106,7 +109,7 @@ const followupLoading = ref(true) // 建议加载中：先出骨架屏占位，�
 
 const displayGreeting = computed(() => {
   if (currentGreeting.value) return currentGreeting.value
-  return '欢迎回来，' + auth.displayName.value
+  return tr('欢迎回来，') + auth.displayName.value
 })
 
 onMounted(() => {
@@ -136,9 +139,9 @@ const homeTab = ref('overview')
 const homeRange = ref('all')
 
 const HOME_RANGES = [
-  { value: 'all', label: '全部' },
-  { value: '30d', label: '30 天' },
-  { value: '7d', label: '7 天' }
+  { value: 'all', label: tr('全部') },
+  { value: '30d', label: tr('30 天') },
+  { value: '7d', label: tr('7 天') }
 ]
 
 // 后端真实统计数据（/api/stats/overview、/api/stats/daily）
@@ -198,25 +201,25 @@ const statsGridItems = computed(() => {
   const w = currentWindow.value
   if (!w) {
     return [
-      { label: '会话数', value: '-' },
-      { label: '消息数', value: '-' },
-      { label: '总 Token 数', value: '-' },
-      { label: '活跃天数', value: '-' },
-      { label: '当前连续', value: '-' },
-      { label: '最长连续', value: '-' },
-      { label: '高峰时段', value: '-' },
-      { label: '常用模型', value: '-' }
+      { label: tr('会话数'), value: '-' },
+      { label: tr('消息数'), value: '-' },
+      { label: tr('总 Token 数'), value: '-' },
+      { label: tr('活跃天数'), value: '-' },
+      { label: tr('当前连续'), value: '-' },
+      { label: tr('最长连续'), value: '-' },
+      { label: tr('高峰时段'), value: '-' },
+      { label: tr('常用模型'), value: '-' }
     ]
   }
   return [
-    { label: '会话数', value: formatCount(w.total_sessions) },
-    { label: '消息数', value: formatCount(w.total_messages) },
-    { label: '总 Token 数', value: formatTokens(w.total_tokens) },
-    { label: '活跃天数', value: `${w.active_days} 天` },
-    { label: '当前连续', value: `${w.current_streak} 天` },
-    { label: '最长连续', value: `${w.longest_streak} 天` },
-    { label: '高峰时段', value: w.peak_hour },
-    { label: '常用模型', value: w.favorite_model }
+    { label: tr('会话数'), value: formatCount(w.total_sessions) },
+    { label: tr('消息数'), value: formatCount(w.total_messages) },
+    { label: tr('总 Token 数'), value: formatTokens(w.total_tokens) },
+    { label: tr('活跃天数'), value: (w.active_days + tr(' 天')) },
+        { label: tr('当前连续'), value: (w.current_streak + tr(' 天')) },
+        { label: tr('最长连续'), value: (w.longest_streak + tr(' 天')) },
+        { label: tr('高峰时段'), value: tr(w.peak_hour) },
+    { label: tr('常用模型'), value: w.favorite_model }
   ]
 })
 
@@ -252,14 +255,14 @@ const heatmapCells = computed(() => {
 
 // 世界名著大致字数（用于将 token 消耗量换算为"手抄X遍"的趣味类比）
 const CLASSIC_BOOKS = [
-  { title: '《局外人》', author: '加缪', chars: 30_000 },
-  { title: '《查拉图斯特拉如是说》', author: '尼采', chars: 70_000 },
-  { title: '《小王子》', author: '圣埃克苏佩里', chars: 20_000 },
-  { title: '《动物农场》', author: '奥威尔', chars: 30_000 },
-  { title: '《1984》', author: '奥威尔', chars: 90_000 },
-  { title: '《了不起的盖茨比》', author: '菲茨杰拉德', chars: 50_000 },
-  { title: '《老人与海》', author: '海明威', chars: 27_000 },
-  { title: '《瓦尔登湖》', author: '梭罗', chars: 75_000 },
+  { title: tr('《局外人》'), author: tr('加缪'), chars: 30_000 },
+  { title: tr('《查拉图斯特拉如是说》'), author: tr('尼采'), chars: 70_000 },
+  { title: tr('《小王子》'), author: tr('圣埃克苏佩里'), chars: 20_000 },
+  { title: tr('《动物农场》'), author: tr('奥威尔'), chars: 30_000 },
+  { title: '《1984》', author: tr('奥威尔'), chars: 90_000 },
+  { title: tr('《了不起的盖茨比》'), author: tr('菲茨杰拉德'), chars: 50_000 },
+  { title: tr('《老人与海》'), author: tr('海明威'), chars: 27_000 },
+  { title: tr('《瓦尔登湖》'), author: tr('梭罗'), chars: 75_000 },
 ]
 
 // 根据 token 总量选取最合适的书，使 "copies" 尽量落在 0.01~9 之间
@@ -282,17 +285,17 @@ function pickBook(tokenCount) {
 
 const heatmapCaption = computed(() => {
   const totalTokens = dailyStats.value.reduce((sum, d) => sum + (d.tokens || 0), 0)
-  if (totalTokens <= 0) return '最近还没有对话记录，开始聊点什么吧。'
+  if (totalTokens <= 0) return tr('最近还没有对话记录，开始聊点什么吧。')
 
   const book = pickBook(totalTokens)
   const copies = totalTokens / book.chars
   if (copies >= 1) {
     const copiesText = copies >= 10 ? copies.toFixed(0) : copies.toFixed(1)
-    return `这些对话消耗的 token，抵得上手抄 ${copiesText} 遍${book.title}。`
+    return (tr('这些对话消耗的 token，抵得上手抄 ') + copiesText + tr(' 遍') + book.title + '。')
   }
   const percent = copies * 100
-  const percentText = percent < 0.01 ? '不到 0.01' : percent.toFixed(2)
-  return `这些对话消耗的 token，抵得上手抄了${book.title}的 ${percentText}%。`
+  const percentText = percent < 0.01 ? tr('不到 0.01') : percent.toFixed(2)
+  return (tr('这些对话消耗的 token，抵得上手抄了') + book.title + tr('的 ') + percentText + '%。')
 })
 </script>
 

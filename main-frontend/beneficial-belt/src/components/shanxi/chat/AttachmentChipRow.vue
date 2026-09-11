@@ -6,7 +6,7 @@
         :src="att.previewUrl"
         class="attach-chip-thumb"
         @click="openPreview(att.previewUrl)"
-        title="点击查看大图"
+        :title="tr('点击查看大图')"
       />
       <div v-else class="attach-chip-icon">
         <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#94a3b8" />
@@ -16,12 +16,12 @@
       </div>
       <div class="attach-chip-meta">
         <span class="attach-chip-name" :title="att.name">{{ att.name }}</span>
-        <span v-if="att.status === 'analyzing'" class="attach-chip-status">分析中…</span>
+        <span v-if="att.status === 'analyzing'" class="attach-chip-status">{{ tr('分析中…') }}</span>
         <span v-else-if="att.status === 'error'" class="attach-chip-status error">{{ att.errorMsg }}</span>
-        <span v-else-if="att.kind === 'folder'" class="attach-chip-status">{{ att.fileCount }} 个文件</span>
-        <span v-else-if="att.kind === 'text'" class="attach-chip-status">{{ att.charCount }} 字</span>
+        <span v-else-if="att.kind === 'folder'" class="attach-chip-status">{{ att.fileCount }}{{ tr('个文件') }}</span>
+        <span v-else-if="att.kind === 'text'" class="attach-chip-status">{{ att.charCount }}{{ tr('字') }}</span>
       </div>
-      <button v-if="removable" class="attach-chip-remove" type="button" @click="$emit('remove', att.id)" title="移除">
+      <button v-if="removable" class="attach-chip-remove" type="button" @click="$emit('remove', att.id)" :title="tr('移除')">
         <Icon icon="mdi:close" width="11" />
       </button>
     </div>
@@ -39,8 +39,8 @@
                不会被 transform 放大的图片盖住——之前它在文档流里，
                图片一放大就从视觉上把它糊住了 -->
           <div class="image-preview-header">
-            <span class="image-preview-title">{{ currentImage?.name || '图片预览' }}</span>
-            <button class="image-preview-close" @click="closePreview" title="关闭 (Esc)">
+            <span class="image-preview-title">{{ currentImage?.name || tr('图片预览') }}</span>
+            <button class="image-preview-close" @click="closePreview" :title="tr('关闭 (Esc)')">
               <Icon icon="mdi:close" width="20" />
             </button>
           </div>
@@ -64,19 +64,19 @@
 
           <!-- 底部工具栏 -->
           <div class="image-preview-toolbar">
-            <button class="toolbar-btn" :disabled="currentIndex <= 0" @click="prevImage" title="上一张">
+            <button class="toolbar-btn" :disabled="currentIndex <= 0" @click="prevImage" :title="tr('上一张')">
               <Icon icon="mdi:chevron-left" width="18" />
             </button>
             <span class="toolbar-page">{{ currentIndex + 1 }} / {{ imageAttachments.length }}</span>
-            <button class="toolbar-btn" :disabled="currentIndex >= imageAttachments.length - 1" @click="nextImage" title="下一张">
+            <button class="toolbar-btn" :disabled="currentIndex >= imageAttachments.length - 1" @click="nextImage" :title="tr('下一张')">
               <Icon icon="mdi:chevron-right" width="18" />
             </button>
             <div class="toolbar-divider"></div>
-            <button class="toolbar-btn" @click="zoomOut" title="缩小">
+            <button class="toolbar-btn" @click="zoomOut" :title="tr('缩小')">
               <Icon icon="mdi:magnify-minus" width="18" />
             </button>
             <span class="toolbar-zoom">{{ Math.round(scale * 100) }}%</span>
-            <button class="toolbar-btn" @click="zoomIn" title="放大">
+            <button class="toolbar-btn" @click="zoomIn" :title="tr('放大')">
               <Icon icon="mdi:magnify-plus" width="18" />
             </button>
           </div>
@@ -92,6 +92,9 @@
 // 展示"贴过什么"，正文只留用户自己敲的话
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   attachments: { type: Array, default: () => [] },

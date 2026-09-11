@@ -1,6 +1,6 @@
 <template>
   <div class="session-list">
-    <button class="new-session-btn" @click="newSession">+ 新对话</button>
+    <button class="new-session-btn" @click="newSession">{{ tr('+ 新对话') }}</button>
     <div 
       v-for="s in sessions" 
       :key="s.id"
@@ -15,6 +15,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n, tr } from '../../composables/useI18n.js'
+
+
 
 defineProps(['currentSessionId'])
 const emit = defineEmits(['select'])

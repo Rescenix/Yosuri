@@ -2,42 +2,42 @@
   <main class="comic-view">
     <header class="comic-header">
       <div class="comic-header-copy">
-        <span class="comic-kicker">COMIC FACTORY · 漫画工坊</span>
-        <h1>从小说章节，到一页漫画。</h1>
-        <p>输入小说章节，AI 自动拆成分镜、生成画面、拼成漫画页。角色库确保每格角色一致。</p>
+        <span class="comic-kicker">{{ tr('COMIC FACTORY · 漫画工坊') }}</span>
+        <h1>{{ tr('从小说章节，到一页漫画。') }}</h1>
+        <p>{{ tr('输入小说章节，AI 自动拆成分镜、生成画面、拼成漫画页。角色库确保每格角色一致。') }}</p>
       </div>
       <div class="comic-header-status">
-        <span>当前状态</span>
+        <span>{{ tr('当前状态') }}</span>
         <strong>{{ statusText }}</strong>
-        <div><i :class="{ online: sdOnline, starting: engineStarting }"></i>{{ sdOnline ? `绘图引擎已就绪${sdModel ? ' · ' + sdModel : ''}` : engineStarting ? '正在唤醒绘图引擎' : '绘图引擎待命' }}</div>
+        <div><i :class="{ online: sdOnline, starting: engineStarting }"></i>{{ sdOnline ? tr('绘图引擎已就绪') + (sdModel ? ' · ' + sdModel : '') : engineStarting ? tr('正在唤醒绘图引擎') : tr('绘图引擎待命') }}</div>
       </div>
     </header>
     <section class="comic-input-section">
       <div class="comic-input-left">
-        <label>小说章节 / 故事梗概</label>
-        <textarea v-model="chapter" rows="6" placeholder="粘贴小说章节正文，或从创作tab导入"></textarea>
-        <div class="source-row"><label>从书架导入 <select v-model="selectedBookId" @change="selectBook"><option value="">选择书籍</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label><label>选择章节 <select v-model="selectedChapterId" @change="selectChapter"><option value="">选择已有章节</option><option v-for="item in selectedBook?.chapters || []" :key="item.id" :value="item.id">{{ item.title }}</option></select></label></div>
+        <label>{{ tr('小说章节 / 故事梗概') }}</label>
+        <textarea v-model="chapter" rows="6" :placeholder="tr('粘贴小说章节正文，或从创作tab导入')"></textarea>
+        <div class="source-row"><label>{{ tr('从书架导入') }} <select v-model="selectedBookId" @change="selectBook"><option value="">{{ tr('选择书籍') }}</option><option v-for="book in books" :key="book.id" :value="book.id">{{ book.title }}</option></select></label><label>{{ tr('选择章节') }} <select v-model="selectedChapterId" @change="selectChapter"><option value="">{{ tr('选择已有章节') }}</option><option v-for="item in selectedBook?.chapters || []" :key="item.id" :value="item.id">{{ item.title }}</option></select></label></div>
         <div class="comic-input-meta">
-          <label>标题 <input v-model="title" placeholder="章节名" /></label>
-          <label>风格 <input v-model="style" placeholder="画风，如：日式漫画" /></label>
-          <label>格数 <select v-model.number="panelCount"><option :value="1">1格</option><option :value="2">2格</option><option :value="4" selected>4格</option><option :value="6">6格</option><option :value="9">9格</option></select></label>
+          <label>{{ tr('标题') }} <input v-model="title" :placeholder="tr('章节名')" /></label>
+          <label>{{ tr('风格') }} <input v-model="style" :placeholder="tr('画风，如：日式漫画')" /></label>
+          <label>{{ tr('格数') }} <select v-model.number="panelCount"><option :value="1">{{ tr('1格') }}</option><option :value="2">{{ tr('2格') }}</option><option :value="4" selected>{{ tr('4格') }}</option><option :value="6">{{ tr('6格') }}</option><option :value="9">{{ tr('9格') }}</option></select></label>
         </div>
       </div>
       <div class="comic-input-right">
-        <label>角色设定</label>
+        <label>{{ tr('角色设定') }}</label>
         <div class="comic-char-list">
           <div v-for="ch in characters" :key="ch.name" class="char-chip" :class="{ active: selectedChar === ch.name }" @click="selectedChar = ch.name">
             <span class="char-avatar" :style="{ background: ch.gender === '女' ? '#f0d6e8' : '#d6e0f0' }"><Icon :icon="ch.gender === '女' ? 'mdi:face-woman' : 'mdi:face-man'" width="16" /></span>
-            <span><b>{{ ch.name }}</b><small>{{ (ch.look || '').slice(0, 12) || '未设定' }}</small></span>
+            <span><b>{{ ch.name }}</b><small>{{ (ch.look || '').slice(0, 12) || tr('未设定') }}</small></span>
           </div>
-          <button class="char-add" @click="showCharCreator = true"><Icon icon="mdi:plus" width="16" /> 新建角色</button>
+          <button class="char-add" @click="showCharCreator = true"><Icon icon="mdi:plus" width="16" /> {{ tr('新建角色') }}</button>
         </div>
         <div class="comic-actions">
           <button class="primary" :disabled="!chapter.trim() || generating" @click="startGenerate">
             <Icon :icon="generating ? 'mdi:loading' : 'mdi:auto-fix'" :class="{ spin: generating }" width="17" />
-            {{ generating ? (engineStarting ? '正在启动绘图引擎…' : 'AI 正在创作…') : '开始生成漫画' }}
+            {{ generating ? (engineStarting ? tr('正在启动绘图引擎…') : tr('AI 正在创作…')) : tr('开始生成漫画') }}
           </button>
-          <button class="secondary" type="button" :disabled="engineStarting" @click="ensureSD"><Icon :icon="engineStarting ? 'mdi:loading' : 'mdi:power'" :class="{ spin: engineStarting }" width="16" /> {{ sdOnline ? '绘图引擎已就绪' : engineStarting ? '正在启动…' : '启动绘图引擎' }}</button>
+          <button class="secondary" type="button" :disabled="engineStarting" @click="ensureSD"><Icon :icon="engineStarting ? 'mdi:loading' : 'mdi:power'" :class="{ spin: engineStarting }" width="16" /> {{ sdOnline ? tr('绘图引擎已就绪') : engineStarting ? tr('正在启动…') : tr('启动绘图引擎') }}</button>
         </div>
       </div>
     </section>
@@ -46,11 +46,11 @@
         <span>COMIC PAGE</span>
         <h2>{{ pageTitle }}</h2>
         <div class="section-actions">
-          <span v-if="renderingPanels" class="render-progress">{{ renderedCount }}/{{ panels.length }} 格已完成</span>
-          <button v-if="panels.some(panel => !panel.imageUrl)" :disabled="renderingPanels || !sdOnline" @click="renderAllPanels">生成全部画面</button>
-          <button v-if="panels.length && panels.every(panel => panel.imageUrl)" :disabled="assembling" @click="assemblePage">{{ assembling ? '正在拼页…' : '自动拼成漫画页' }}</button>
-          <button @click="exportPage">导出 PNG</button>
-          <button @click="resetPage">重新生成</button>
+          <span v-if="renderingPanels" class="render-progress">{{ renderedCount }}/{{ panels.length }}{{ tr('格已完成') }}</span>
+          <button v-if="panels.some(panel => !panel.imageUrl)" :disabled="renderingPanels || !sdOnline" @click="renderAllPanels">{{ tr('生成全部画面') }}</button>
+          <button v-if="panels.length && panels.every(panel => panel.imageUrl)" :disabled="assembling" @click="assemblePage">{{ assembling ? tr('正在拼页…') : tr('自动拼成漫画页') }}</button>
+          <button @click="exportPage">{{ tr('导出 PNG') }}</button>
+          <button @click="resetPage">{{ tr('重新生成') }}</button>
         </div>
       </div>
       <div class="comic-page" :class="'layout-' + layout">
@@ -58,57 +58,57 @@
           <img v-if="panel.imageUrl" class="panel-image" :src="panel.imageUrl" :alt="panel.scene" @error="handlePanelImageError(idx)" />
           <div v-else class="panel-placeholder">
             <Icon :icon="panel.rendering ? 'mdi:loading' : panel.renderError ? 'mdi:image-refresh-outline' : 'mdi:image-auto-outline'" :class="{ spin: panel.rendering }" width="32" />
-            <strong>{{ panel.rendering ? '正在绘制这一格' : panel.renderError ? '这一格需要重绘' : panel.scene }}</strong>
-            <button v-if="panel.renderError && !panel.rendering" type="button" @click.stop="generatePanel(idx)">重绘此格</button>
+            <strong>{{ panel.rendering ? tr('正在绘制这一格') : panel.renderError ? tr('这一格需要重绘') : panel.scene }}</strong>
+            <button v-if="panel.renderError && !panel.rendering" type="button" @click.stop="generatePanel(idx)">{{ tr('重绘此格') }}</button>
           </div>
           <div v-if="panel.dialogue" class="manga-copy" :class="[isNarration(panel) ? 'is-narration' : 'is-dialogue', idx % 2 ? 'on-left' : 'on-right']"><span>{{ panel.dialogue }}</span></div>
           <div class="panel-number">{{ idx + 1 }}</div>
         </div>
       </div>
-      <div v-if="assembledImage" class="assembled-result"><span>最终漫画页</span><img :src="assetUrl(assembledImage)" alt="最终漫画页" /></div>
+      <div v-if="assembledImage" class="assembled-result"><span>{{ tr('最终漫画页') }}</span><img :src="assetUrl(assembledImage)" :alt="tr('最终漫画页')" /></div>
     </section>
     <div v-if="showSdGuide" class="comic-modal" @click.self="showSdGuide = false">
       <section class="sd-guide">
         <button class="modal-close" @click="showSdGuide = false"><Icon icon="mdi:close" width="19" /></button>
-        <h2>还没有检测到绘图引擎</h2>
-        <p class="sd-guide-sub">漫画工坊用本机的 Stable Diffusion 出图。选一种方式装好绘图引擎，装完回到这里点「启动绘图引擎」即可。</p>
+        <h2>{{ tr('还没有检测到绘图引擎') }}</h2>
+        <p class="sd-guide-sub">{{ tr('漫画工坊用本机的 Stable Diffusion 出图。选一种方式装好绘图引擎，装完回到这里点「启动绘图引擎」即可。') }}</p>
         <div class="sd-guide-list">
           <a v-for="link in sdLinks" :key="link.url" class="sd-guide-item" :class="{ primary: link.primary }" :href="link.url" target="_blank" rel="noopener">
             <span class="sd-guide-name">{{ link.name }}</span>
             <span class="sd-guide-desc">{{ link.desc }}</span>
-            <span class="sd-guide-open">打开<Icon icon="mdi:arrow-top-right" width="13" /></span>
+            <span class="sd-guide-open">{{ tr('打开') }}<Icon icon="mdi:arrow-top-right" width="13" /></span>
           </a>
         </div>
-        <p class="sd-guide-tip">装好后回到这里点「启动绘图引擎」会自动识别。用秋叶整合包的话，请在启动器设置里打开「启用 API」开关，否则无法出图。装在非常见位置时，可设置环境变量 RESCENE_SD_LAUNCHER 指向启动文件。</p>
+        <p class="sd-guide-tip">{{ tr('装好后回到这里点「启动绘图引擎」会自动识别。用秋叶整合包的话，请在启动器设置里打开「启用 API」开关，否则无法出图。装在非常见位置时，可设置环境变量 RESCENE_SD_LAUNCHER 指向启动文件。') }}</p>
         <div class="sd-guide-actions">
-          <button class="primary" @click="retrySDFromGuide"><Icon icon="mdi:refresh" width="15" /> 我装好了，重新检测</button>
-          <button class="ghost" @click="showSdGuide = false">暂不安装</button>
+          <button class="primary" @click="retrySDFromGuide"><Icon icon="mdi:refresh" width="15" /> {{ tr('我装好了，重新检测') }}</button>
+          <button class="ghost" @click="showSdGuide = false">{{ tr('暂不安装') }}</button>
         </div>
       </section>
     </div>
     <div v-if="showCharCreator" class="comic-modal" @click.self="showCharCreator = false">
       <section class="char-creator">
         <button class="modal-close" @click="showCharCreator = false"><Icon icon="mdi:close" width="19" /></button>
-        <h2>新建角色</h2>
-        <label>角色名 <input v-model="newChar.name" placeholder="如：林雪" /></label>
-        <label>性别 <select v-model="newChar.gender"><option value="女">女</option><option value="男">男</option></select></label>
-        <label>外貌描述 <textarea v-model="newChar.look" rows="3" placeholder="英文描述，用于AI生图保持一致"></textarea></label>
-        <label>画风 <input v-model="newChar.style" placeholder="如：anime, manga style" /></label>
-        <button class="primary" :disabled="!newChar.name.trim()" @click="saveCharacter">保存角色</button>
+        <h2>{{ tr('新建角色') }}</h2>
+        <label>{{ tr('角色名') }} <input v-model="newChar.name" :placeholder="tr('如：林雪')" /></label>
+        <label>{{ tr('性别') }} <select v-model="newChar.gender"><option value="女">{{ tr('女') }}</option><option value="男">{{ tr('男') }}</option></select></label>
+        <label>{{ tr('外貌描述') }} <textarea v-model="newChar.look" rows="3" :placeholder="tr('英文描述，用于AI生图保持一致')"></textarea></label>
+        <label>{{ tr('画风') }} <input v-model="newChar.style" :placeholder="tr('如：anime, manga style')" /></label>
+        <button class="primary" :disabled="!newChar.name.trim()" @click="saveCharacter">{{ tr('保存角色') }}</button>
       </section>
     </div>
     <div v-if="showPanelDetail" class="comic-modal" @click.self="showPanelDetail = false">
       <section class="panel-detail">
         <button class="modal-close" @click="showPanelDetail = false"><Icon icon="mdi:close" width="19" /></button>
-        <h2>第{{ detailPanel.index + 1 }}格 · {{ detailPanel.scene }}</h2>
+        <h2>{{ tr('第') }}{{ detailPanel.index + 1 }}{{ tr('格 ·') }}{{ detailPanel.scene }}</h2>
         <div class="detail-grid">
-          <div><label>镜头</label><span>{{ detailPanel.camera }}</span></div>
-          <div><label>角色</label><span>{{ detailPanel.character }}</span></div>
-          <div><label>动作</label><span>{{ detailPanel.action }}</span></div>
-          <div><label>对话</label><span>{{ detailPanel.dialogue || '无' }}</span></div>
+          <div><label>{{ tr('镜头') }}</label><span>{{ detailPanel.camera }}</span></div>
+          <div><label>{{ tr('角色') }}</label><span>{{ detailPanel.character }}</span></div>
+          <div><label>{{ tr('动作') }}</label><span>{{ detailPanel.action }}</span></div>
+          <div><label>{{ tr('对话') }}</label><span>{{ detailPanel.dialogue || tr('无') }}</span></div>
         </div>
-        <div class="detail-prompt"><label>生图提示词</label><textarea :value="detailPanel.promptEn" rows="4" readonly></textarea></div>
-        <button class="primary" :disabled="panels[detailPanel.index]?.rendering" @click="generatePanel(detailPanel.index)">{{ detailPanel.imageUrl ? '重新绘制此格' : '生成此格图片' }}</button>
+        <div class="detail-prompt"><label>{{ tr('生图提示词') }}</label><textarea :value="detailPanel.promptEn" rows="4" readonly></textarea></div>
+        <button class="primary" :disabled="panels[detailPanel.index]?.rendering" @click="generatePanel(detailPanel.index)">{{ detailPanel.imageUrl ? tr('重新绘制此格') : tr('生成此格图片') }}</button>
       </section>
     </div>
   </main>
@@ -117,10 +117,13 @@
 <script setup>
 import { computed, reactive, ref, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 
 const chapter = ref('')
 const title = ref('')
-const style = ref('日式漫画，细腻线条，柔和光影')
+const style = ref(tr('日式漫画，细腻线条，柔和光影'))
 const panelCount = ref(4)
 const selectedChar = ref('')
 const characters = ref([])
@@ -138,7 +141,7 @@ const assembledImage = ref('')
 const books = ref([])
 const selectedBookId = ref('')
 const selectedChapterId = ref('')
-const statusText = ref('等待输入')
+const statusText = ref(tr('等待输入'))
 const showCharCreator = ref(false)
 const showPanelDetail = ref(false)
 const showSdGuide = ref(false)
@@ -147,7 +150,7 @@ const detailPanel = ref({ index: 0, scene: '', dialogue: '', character: '', acti
 const charCount = computed(() => characters.value.length)
 const renderedCount = computed(() => panels.value.filter(panel => panel.imageUrl).length)
 const selectedBook = computed(() => books.value.find(book => book.id === selectedBookId.value) || null)
-const newChar = reactive({ name: '', gender: '女', look: '', style: '' })
+const newChar = reactive({ name: '', gender: tr('女'), look: '', style: '' })
 
 function apiFetch(path, options) {
   if (['localhost', '127.0.0.1'].includes(window.location.hostname))
@@ -155,23 +158,23 @@ function apiFetch(path, options) {
   return fetch(path, options)
 }
 
-async function readAPIResponse(res, fallback = '请求失败') {
+async function readAPIResponse(res, fallback = tr('请求失败')) {
   const raw = await res.text()
   if (!raw) return {}
   try { return JSON.parse(raw) }
   catch {
     if (res.status === 404 || raw.toLowerCase().includes('page not found')) throw new Error('漫画服务版本过旧，请重启应用后再试')
-    throw new Error(res.ok ? '服务返回了无法识别的数据' : `${fallback}（HTTP ${res.status}）`)
+    throw new Error(res.ok ? tr('服务返回了无法识别的数据') : `${fallback}（HTTP ${res.status}）`)
   }
 }
 
-onMounted(() => { document.title = '杉汐 | 漫画工坊'; loadCharacters(); loadBooks(); checkSD() })
+onMounted(() => { document.title = tr('杉汐 | 漫画工坊'); loadCharacters(); loadBooks(); checkSD() })
 
 function assetUrl(path) { if (!path) return ''; if (/^(data:|https?:)/.test(path)) return path; return ['localhost','127.0.0.1'].includes(window.location.hostname) ? 'http://127.0.0.1:8081' + path : path }
 
 async function checkSD() {
   try { const res = await apiFetch('/api/comic/status'); const data = await res.json(); sdOnline.value = Boolean(data.online); sdModel.value = data.model || ''; engineStarting.value = Boolean(data.starting); return data }
-  catch (e) { sdOnline.value = false; statusText.value = 'SD 检查失败: ' + e.message }
+  catch (e) { sdOnline.value = false; statusText.value = tr('SD 检查失败: ') + e.message }
 }
 
 function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)) }
@@ -181,35 +184,35 @@ async function loadSdLinks() {
 
 async function retrySDFromGuide() {
   const state = await checkSD()
-  if (state?.online) { showSdGuide.value = false; statusText.value = '绘图引擎已就绪'; return }
-  statusText.value = '仍未检测到绘图引擎，确认已安装并启动后再试'
+  if (state?.online) { showSdGuide.value = false; statusText.value = tr('绘图引擎已就绪'); return }
+  statusText.value = tr('仍未检测到绘图引擎，确认已安装并启动后再试')
 }
 
 async function ensureSD() {
   const current = await checkSD()
   if (current?.online) return true
-  engineStarting.value = true; statusText.value = '正在自动启动绘图引擎，首次加载模型可能需要几分钟…'
+  engineStarting.value = true; statusText.value = tr('正在自动启动绘图引擎，首次加载模型可能需要几分钟…')
   try {
-    const start = await apiFetch('/api/comic/start-sd', { method: 'POST' }); const started = await readAPIResponse(start, '绘图引擎启动失败')
+    const start = await apiFetch('/api/comic/start-sd', { method: 'POST' }); const started = await readAPIResponse(start, tr('绘图引擎启动失败'))
     if (!start.ok) {
       // needInstall = 本机没装绘图引擎：拉取下载引导并弹窗，让用户选择国内直达链接安装
-      if (start.status === 404 || started.needInstall) { await loadSdLinks(); showSdGuide.value = true; throw new Error('本机未安装绘图引擎') }
-      throw new Error(started.error || '绘图引擎启动失败')
+      if (start.status === 404 || started.needInstall) { await loadSdLinks(); showSdGuide.value = true; throw new Error(tr('本机未安装绘图引擎')) }
+      throw new Error(started.error || tr('绘图引擎启动失败'))
     }
     if (started.needManualApi) {
       // 图形启动器（如秋叶整合包）需要用户手动开启 API 开关
-      statusText.value = started.message || '请在绘图引擎启动器中开启 API 开关'
+      statusText.value = started.message || tr('请在绘图引擎启动器中开启 API 开关')
       engineStarting.value = false
       return false
     }
     for (let attempt = 0; attempt < 180; attempt++) {
       await wait(2000)
       const state = await checkSD()
-      if (state?.online) { statusText.value = '绘图引擎已就绪'; engineStarting.value = false; return true }
+      if (state?.online) { statusText.value = tr('绘图引擎已就绪'); engineStarting.value = false; return true }
       if (state && !state.starting && state.error) throw new Error(state.error)
     }
-    throw new Error('模型加载超时，请查看绘图引擎日志')
-  } catch (e) { engineStarting.value = false; statusText.value = '绘图引擎启动失败: ' + e.message; return false }
+    throw new Error(tr('模型加载超时，请查看绘图引擎日志'))
+  } catch (e) { engineStarting.value = false; statusText.value = tr('绘图引擎启动失败: ') + e.message; return false }
 }
 
 async function loadBooks() {
@@ -226,30 +229,30 @@ async function saveCharacter() {
   try {
     const res = await apiFetch('/api/comic/characters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newChar) })
     const data = await res.json()
-    if (res.ok) { characters.value = data.characters; showCharCreator.value = false; Object.assign(newChar, { name: '', gender: '女', look: '', style: '' }) }
-  } catch (e) { alert('保存失败: ' + e.message) }
+    if (res.ok) { characters.value = data.characters; showCharCreator.value = false; Object.assign(newChar, { name: '', gender: tr('女'), look: '', style: '' }) }
+  } catch (e) { alert(tr('保存失败: ') + e.message) }
 }
 
 async function startGenerate() {
-  generating.value = true; statusText.value = '正在准备绘图引擎…'
+  generating.value = true; statusText.value = tr('正在准备绘图引擎…')
   try {
     const sdReady = ensureSD()
-    statusText.value = 'AI 正在拆解分镜…'
+    statusText.value = tr('AI 正在拆解分镜…')
     const character = characters.value.find(item => item.name === selectedChar.value)
     const characterBrief = character ? [character.name, character.look, character.style].filter(Boolean).join('；') : selectedChar.value
-    const res = await apiFetch('/api/comic/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.value || '未命名章节', chapter: chapter.value, style: style.value, character: characterBrief, panels: panelCount.value }) })
+    const res = await apiFetch('/api/comic/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.value || tr('未命名章节'), chapter: chapter.value, style: style.value, character: characterBrief, panels: panelCount.value }) })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error)
-    panels.value = data.panels || []; pageTitle.value = data.title; pageId.value = data.pageId || ''; assembledImage.value = ''; statusText.value = '已生成 ' + panels.value.length + ' 格分镜'
+    panels.value = data.panels || []; pageTitle.value = data.title; pageId.value = data.pageId || ''; assembledImage.value = ''; statusText.value = tr('已生成 ') + panels.value.length + tr(' 格分镜')
     layout.value = panels.value.length <= 4 ? 'manga' : 'dense'
     if (await sdReady) await renderAllPanels()
-  } catch (e) { statusText.value = '生成失败: ' + e.message; alert(e.message) }
+  } catch (e) { statusText.value = tr('生成失败: ') + e.message; alert(e.message) }
   finally { generating.value = false }
 }
 
 async function generatePanel(index) {
   const panel = panels.value[index]; if (!panel || panel.rendering) return false
-  panel.rendering = true; panel.renderError = ''; statusText.value = '正在生成第 ' + (index + 1) + ' 格图片…'
+  panel.rendering = true; panel.renderError = ''; statusText.value = tr('正在生成第 ') + (index + 1) + tr(' 格图片…')
   try {
     const character = characters.value.find(item => item.name === selectedChar.value)
     const renderPanel = { ...panel, promptEn: [panel.promptEn, character?.look, character?.style, style.value].filter(Boolean).join(', ') }
@@ -257,9 +260,9 @@ async function generatePanel(index) {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error)
     panel.imageUrl = assetUrl(data.imageUrl || '')
-    statusText.value = '第 ' + (index + 1) + ' 格已生成'
+    statusText.value = tr('第 ') + (index + 1) + tr(' 格已生成')
     return true
-  } catch (e) { panel.imageUrl = ''; panel.renderError = e.message || '出图失败'; statusText.value = '第 ' + (index + 1) + ' 格生成失败，稍后可重绘'; return false }
+  } catch (e) { panel.imageUrl = ''; panel.renderError = e.message || tr('出图失败'); statusText.value = tr('第 ') + (index + 1) + tr(' 格生成失败，稍后可重绘'); return false }
   finally { panel.rendering = false }
 }
 
@@ -273,25 +276,25 @@ async function renderAllPanels() {
       if (!done) { await wait(900); done = await generatePanel(index) }
     }
     if (panels.value.every(panel => panel.imageUrl)) await assemblePage()
-    else statusText.value = '部分画面需要重绘，已保留其他完成内容'
+    else statusText.value = tr('部分画面需要重绘，已保留其他完成内容')
   }
   finally { renderingPanels.value = false }
 }
 async function assemblePage() {
-  assembling.value = true; statusText.value = '正在拼成漫画页…'
+  assembling.value = true; statusText.value = tr('正在拼成漫画页…')
   try {
     const res = await apiFetch('/api/comic/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId: pageId.value, title: pageTitle.value, dialogue: panels.value.map(panel => panel.dialogue || ''), panels: panels.value.map(panel => panel.imageUrl || '') }) }); const data = await res.json()
-    if (!res.ok || data.error) throw new Error(data.error || '拼页失败')
+    if (!res.ok || data.error) throw new Error(data.error || tr('拼页失败'))
     assembledImage.value = await captureComicPage()
-    statusText.value = '漫画页已完成'
+    statusText.value = tr('漫画页已完成')
   }
-  catch (e) { statusText.value = '拼页失败: ' + e.message }
+  catch (e) { statusText.value = tr('拼页失败: ') + e.message }
   finally { assembling.value = false }
 }
 
 function openPanelDetail(index) { detailPanel.value = { ...panels.value[index], index }; showPanelDetail.value = true }
 function isNarration(panel) { return !String(panel.character || '').trim() || /^(旁白|叙述|画外音)[：:]/.test(String(panel.dialogue || '')) }
-function handlePanelImageError(index) { const panel = panels.value[index]; if (!panel) return; panel.imageUrl = ''; panel.renderError = '图片加载失败'; statusText.value = '第 ' + (index + 1) + ' 格图片加载失败，请重绘' }
+function handlePanelImageError(index) { const panel = panels.value[index]; if (!panel) return; panel.imageUrl = ''; panel.renderError = tr('图片加载失败'); statusText.value = tr('第 ') + (index + 1) + tr(' 格图片加载失败，请重绘') }
 function panelStyle(index) {
   const t = panels.value.length
   if (t <= 1) return { gridColumn: '1 / -1', gridRow: '1 / -1' }
@@ -311,9 +314,9 @@ async function exportPage() {
   try {
     const image = assembledImage.value || await captureComicPage()
     const a = document.createElement('a'); a.download = (pageTitle.value || 'comic') + '.png'; a.href = image; a.click()
-  } catch (e) { alert('导出失败: ' + e.message) }
+  } catch (e) { alert(tr('导出失败: ') + e.message) }
 }
-function resetPage() { panels.value = []; pageTitle.value = ''; pageId.value = ''; assembledImage.value = ''; statusText.value = '等待输入' }
+function resetPage() { panels.value = []; pageTitle.value = ''; pageId.value = ''; assembledImage.value = ''; statusText.value = tr('等待输入') }
 </script>
 
 <style scoped>

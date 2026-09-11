@@ -5,7 +5,7 @@
         <div v-for="t in toasts" :key="t.id" class="sk-toast">
           <div class="sk-icon">💡</div>
           <div class="sk-body">
-            <span class="sk-tag">技能习得</span>
+            <span class="sk-tag">{{ tr('技能习得') }}</span>
             <strong>{{ t.name }}</strong>
           </div>
           <span class="sk-xp">+30 XP</span>
@@ -17,6 +17,9 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const toasts = ref([])
 const seen = new Set()

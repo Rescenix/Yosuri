@@ -2,13 +2,13 @@
   <div class="pb-root">
     <div class="pb-toolbar">
       <div class="pb-nav-group">
-        <button class="pb-icon-btn" :disabled="historyIndex <= 0" @click="goBack" title="后退">
+        <button class="pb-icon-btn" :disabled="historyIndex <= 0" @click="goBack" :title="tr('后退')">
           <Icon icon="mdi:arrow-left" width="16" />
         </button>
-        <button class="pb-icon-btn" :disabled="historyIndex >= history.length - 1" @click="goForward" title="前进">
+        <button class="pb-icon-btn" :disabled="historyIndex >= history.length - 1" @click="goForward" :title="tr('前进')">
           <Icon icon="mdi:arrow-right" width="16" />
         </button>
-        <button class="pb-icon-btn" :disabled="!currentUrl" @click="reload" title="刷新">
+        <button class="pb-icon-btn" :disabled="!currentUrl" @click="reload" :title="tr('刷新')">
           <Icon icon="mdi:refresh" width="16" :class="{ 'pb-spin': loading }" />
         </button>
       </div>
@@ -20,7 +20,7 @@
           class="pb-url-input"
           :class="{ 'is-hidden': addressHidden }"
           type="text"
-          :placeholder="addressHidden ? '地址已隐藏' : '输入 URL'"
+          :placeholder="addressHidden ? tr('地址已隐藏') : tr('输入 URL')"
           :readonly="addressHidden"
           spellcheck="false"
           @input="onUrlInput"
@@ -30,8 +30,8 @@
           class="pb-url-privacy-btn"
           type="button"
           :class="{ active: addressHidden }"
-          :title="addressHidden ? '显示地址' : '隐藏地址'"
-          :aria-label="addressHidden ? '显示地址' : '隐藏地址'"
+          :title="addressHidden ? tr('显示地址') : tr('隐藏地址')"
+          :aria-label="addressHidden ? tr('显示地址') : tr('隐藏地址')"
           :aria-pressed="addressHidden"
           @click="toggleAddressVisibility"
         >
@@ -40,10 +40,10 @@
       </div>
 
       <div class="pb-actions">
-        <button class="pb-icon-btn" :class="{ active: viewport === 'mobile' }" @click="viewport = viewport === 'mobile' ? 'desktop' : 'mobile'" title="移动视口">
+        <button class="pb-icon-btn" :class="{ active: viewport === 'mobile' }" @click="viewport = viewport === 'mobile' ? 'desktop' : 'mobile'" :title="tr('移动视口')">
           <Icon icon="mdi:cellphone" width="15" />
         </button>
-        <button class="pb-icon-btn" :disabled="!currentUrl" @click="openExternal" title="外部打开">
+        <button class="pb-icon-btn" :disabled="!currentUrl" @click="openExternal" :title="tr('外部打开')">
           <Icon icon="mdi:open-in-new" width="15" />
         </button>
       </div>
@@ -54,7 +54,7 @@
          有本地服务时才有内容可看，没有就是纯空白。 -->
     <div v-if="!currentUrl" class="pb-empty-shell">
       <div v-if="filteredServers.length" class="pb-local-section">
-        <div class="pb-local-title">本地服务</div>
+        <div class="pb-local-title">{{ tr('本地服务') }}</div>
         <div class="pb-local-list">
           <button v-for="s in filteredServers" :key="s.port" class="pb-local-card" @click="navigateTo(s.url)">
             <span class="pb-local-left">
@@ -104,6 +104,9 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { previewRequest } from '../composables/previewBus.js'
 import { backendURL } from '../../../desktopTransport.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 const servers = ref([])
 const serversLoading = ref(true)
 const history = ref([])
@@ -127,7 +130,7 @@ const ADDRESS_VISIBILITY_KEY = 'preview-browser-address-hidden'
 
 const displayedUrl = computed(() => {
   if (!addressHidden.value) return urlInput.value
-  return urlInput.value ? '地址已隐藏' : ''
+  return urlInput.value ? tr('地址已隐藏') : ''
 })
 
 // Edge/WebView2 内建 PDF 查看器是插件，带 sandbox 的 iframe 会禁用全部插件，
@@ -197,26 +200,26 @@ function connectCDP(wsUrl, targetURL = '') {
         cdpError.value = ''
         loading.value = false
       } else if (m.type === 'error') {
-        cdpError.value = m.message || '预览不可用：Chrome CDP 未运行'
+        cdpError.value = m.message || tr('预览不可用：Chrome CDP 未运行')
         loading.value = false
       }
     }
     sock.onerror = () => {
       if (cdpSocket !== sock) return
-      cdpError.value = '预览不可用：Chrome CDP 未运行'
+      cdpError.value = tr('预览不可用：Chrome CDP 未运行')
       loading.value = false
     }
     sock.onclose = () => {
       if (cdpSocket !== sock) return
       cdpSocket = null
       if (!cdpFrame.value && !cdpError.value) {
-        cdpError.value = '预览不可用：Chrome CDP 连接已断开'
+        cdpError.value = tr('预览不可用：Chrome CDP 连接已断开')
         loading.value = false
       }
     }
   } catch {
     cdpSocket = null
-    cdpError.value = '预览不可用：Chrome CDP 未运行'
+    cdpError.value = tr('预览不可用：Chrome CDP 未运行')
     loading.value = false
   }
 }

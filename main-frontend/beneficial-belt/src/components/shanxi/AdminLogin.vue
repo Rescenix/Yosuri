@@ -4,17 +4,17 @@
       v-if="!auth.isLoggedIn.value"
       v-model="password"
       type="password"
-      placeholder="Admin密码"
+      :placeholder="tr('Admin密码')"
       @keypress.enter="login"
     />
-    <button v-if="!auth.isLoggedIn.value" @click="login">登录</button>
+    <button v-if="!auth.isLoggedIn.value" @click="login">{{ tr('登录') }}</button>
 
     <!-- 已登录：展示头像 + 用户名 -->
     <div v-else class="user-chip">
       <img v-if="auth.displayAvatar.value" :src="auth.displayAvatar.value" class="user-avatar" alt="avatar" />
       <Icon v-else icon="mdi:account-circle" width="20" color="#e2e8f0" />
       <span class="user-name">{{ auth.displayName.value }}</span>
-      <button class="logout-btn" @click="auth.logout()">退出</button>
+      <button class="logout-btn" @click="auth.logout()">{{ tr('退出') }}</button>
     </div>
   </div>
 </template>
@@ -23,6 +23,9 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from '../../composables/useAuth.js'
+import { useI18n, tr } from '../../composables/useI18n.js'
+
+
 
 const auth = useAuth()
 const password = ref('')
@@ -41,7 +44,7 @@ const login = async () => {
     window.dispatchEvent(new Event('login-state-changed'))
     window.dispatchEvent(new Event('auth-change'))
   } else {
-    alert('密码错误')
+    alert(tr('密码错误'))
   }
 }
 </script>

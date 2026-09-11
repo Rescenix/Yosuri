@@ -10,8 +10,8 @@
         @contextmenu.prevent="onTabRightClick($event, tab)"
       >
         <Icon v-if="isPinned(tab)" icon="mdi:pin" width="11" class="tab-pin-icon" />
-                <Icon v-if="externalChanges.includes(tab.path)" icon="mdi:alert-circle-outline" width="12" class="tab-conflict-icon" title="磁盘上的文件已被外部修改；请先保存或重新打开后再处理" />
-                <span v-if="tab.content !== tab.savedContent" class="tab-dirty-dot" title="有未保存的修改"></span>
+                <Icon v-if="externalChanges.includes(tab.path)" icon="mdi:alert-circle-outline" width="12" class="tab-conflict-icon" :title="tr('磁盘上的文件已被外部修改；请先保存或重新打开后再处理')" />
+                <span v-if="tab.content !== tab.savedContent" class="tab-dirty-dot" :title="tr('有未保存的修改')"></span>
                 <span class="tab-name">{{ tab.name }}</span>
         <span
           class="tab-close"
@@ -29,9 +29,9 @@
         :style="{ top: menu.y + 'px', left: menu.x + 'px' }"
         @click.stop
       >
-        <button v-if="!isPinned(menu.tab)" @click="handlePin">固定到侧边栏</button>
-        <button v-else @click="handleUnpin">取消固定</button>
-        <button @click="handleClose">关闭标签页</button>
+        <button v-if="!isPinned(menu.tab)" @click="handlePin">{{ tr('固定到侧边栏') }}</button>
+        <button v-else @click="handleUnpin">{{ tr('取消固定') }}</button>
+        <button @click="handleClose">{{ tr('关闭标签页') }}</button>
       </div>
     </Teleport>
 
@@ -49,12 +49,12 @@
           <Icon icon="mdi:code-braces" width="30" />
           <span class="editor-empty-spark">✦</span>
         </div>
-        <strong>打开文件开始编辑</strong>
-                <p>从文件树选择代码，或右键文件夹新建示例</p>
-                <div class="editor-empty-languages" aria-label="支持的语言">
+        <strong>{{ tr('打开文件开始编辑') }}</strong>
+                <p>{{ tr('从文件树选择代码，或右键文件夹新建示例') }}</p>
+                <div class="editor-empty-languages" :aria-label="tr('支持的语言')">
           <span>TS</span><span>GO</span><span>RS</span><span>PY</span>
         </div>
-        <div class="editor-empty-shortcut"><kbd>Ctrl</kbd><b>+</b><kbd>G</kbd><span>打开文件工具</span></div>
+        <div class="editor-empty-shortcut"><kbd>Ctrl</kbd><b>+</b><kbd>G</kbd><span>{{ tr('打开文件工具') }}</span></div>
       </div>
     </div>
   </aside>
@@ -67,6 +67,9 @@ import { Icon } from '@iconify/vue'
 import VueMonacoEditor from '@guolao/vue-monaco-editor'
 import * as monaco from 'monaco-editor'
 import { resolvedTheme } from '../composables/useTheme.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   tabs: { type: Array, default: () => [] },
@@ -150,7 +153,7 @@ function onEditorMount(editor) {
   // 默认行为（不改写内容），已注册的 HTML/CSS/JSON/JS 等直接格式化当前文档。
   editor.addAction({
     id: 'file-tool.format-document',
-    label: '格式化文档',
+    label: tr('格式化文档'),
     keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
     run: (instance) => instance.getAction('editor.action.formatDocument')?.run()
   })

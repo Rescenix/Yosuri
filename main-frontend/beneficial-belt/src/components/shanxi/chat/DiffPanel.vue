@@ -8,7 +8,7 @@
           v-model="searchQuery"
           class="diff-search-input"
           type="text"
-          placeholder="搜索文件名定位…"
+          :placeholder="tr('搜索文件名定位…')"
           spellcheck="false"
         />
         <button v-if="searchQuery" class="diff-search-clear" @click="searchQuery = ''">
@@ -19,14 +19,14 @@
         <span class="diff-adds">+{{ totals.add }}</span>
         <span class="diff-dels">−{{ totals.del }}</span>
       </span>
-      <button class="diff-refresh-btn" @click="fetchList" title="刷新">
+      <button class="diff-refresh-btn" @click="fetchList" :title="tr('刷新')">
         <Icon icon="mdi:refresh" width="14" :class="{ 'diff-spin': listLoading }" />
       </button>
     </div>
 
     <div v-if="!listLoading && filteredFiles.length === 0" class="diff-empty">
       <Icon icon="mdi:file-compare" width="24" color="#c4c4c4" />
-      <span>{{ files.length === 0 ? '工作树没有未提交改动' : '没有匹配的文件' }}</span>
+      <span>{{ files.length === 0 ? tr('工作树没有未提交改动') : tr('没有匹配的文件') }}</span>
     </div>
 
     <div v-else class="diff-body">
@@ -45,9 +45,9 @@
           <span class="diff-dels">−{{ df.deletions }}</span>
         </div>
         <div v-if="expanded[df.path]" class="diff-rows">
-          <div v-if="contentLoading[df.path]" class="diff-file-hint">加载 diff…</div>
-          <div v-else-if="contents[df.path]?.binary" class="diff-file-hint">二进制文件，不展示 diff</div>
-          <div v-else-if="contents[df.path]?.too_large" class="diff-file-hint">文件过大（&gt;300KB），不展示 diff</div>
+          <div v-if="contentLoading[df.path]" class="diff-file-hint">{{ tr('加载 diff…') }}</div>
+          <div v-else-if="contents[df.path]?.binary" class="diff-file-hint">{{ tr('二进制文件，不展示 diff') }}</div>
+          <div v-else-if="contents[df.path]?.too_large" class="diff-file-hint">{{ tr('文件过大（>300KB），不展示 diff') }}</div>
           <DiffViewer
             v-else-if="contents[df.path]"
             :old-content="contents[df.path].old_content"
@@ -68,7 +68,7 @@
       >
         <div class="diff-ctx-item" @click="copyFullPath">
           <Icon icon="mdi:content-copy" width="14" />
-          <span>{{ ctxCopied ? '已复制' : '复制完整路径' }}</span>
+          <span>{{ ctxCopied ? tr('已复制') : tr('复制完整路径') }}</span>
         </div>
       </div>
     </Teleport>
@@ -80,6 +80,9 @@ import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { fileBaseName } from './toolArgs.js'
 import DiffViewer from './DiffViewer.vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 // git 工作树全量 diff：列表秒出（只有元数据），文件内容点击展开时按需拉取
 const branch = ref('')

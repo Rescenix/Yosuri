@@ -1,34 +1,33 @@
 <template>
   <div class="update-modal-backdrop" @keydown.esc="$emit('close')">
-    <div class="update-modal-card" role="dialog" aria-label="发现新版本">
+    <div class="update-modal-card" role="dialog" :aria-label="tr('发现新版本')">
       <div class="update-modal-header">
         <div class="update-modal-title">
-          <span class="update-modal-badge">NEW</span>
-          发现新版本 {{ update.latest_version }}
+          <span class="update-modal-badge">NEW</span>{{ tr('发现新版本') }}{{ update.latest_version }}
         </div>
-        <button class="update-modal-close" type="button" title="稍后再说" aria-label="关闭" @click="$emit('close')">×</button>
+        <button class="update-modal-close" type="button" :title="tr('稍后再说')" :aria-label="tr('关闭')" @click="$emit('close')">×</button>
       </div>
 
       <div class="update-modal-meta">
-        <span>当前版本：v{{ update.current_version }}</span>
-        <span v-if="update.published_at">发布于 {{ formatDate(update.published_at) }}</span>
+        <span>{{ tr('当前版本：v') }}{{ update.current_version }}</span>
+        <span v-if="update.published_at">{{ tr('发布于') }}{{ formatDate(update.published_at) }}</span>
       </div>
 
       <div class="update-modal-body">
         <div v-if="update.release_notes" class="update-modal-notes" v-html="renderedNotes" />
-        <div v-else class="update-modal-notes-empty">本次更新没有附带更新说明。</div>
+        <div v-else class="update-modal-notes-empty">{{ tr('本次更新没有附带更新说明。') }}</div>
       </div>
 
       <div class="update-modal-footer">
-        <button class="update-modal-btn ghost" type="button" @click="$emit('close')">稍后再说</button>
-        <button class="update-modal-btn ghost" type="button" @click="onSkip" :disabled="dlState === 'downloading'">跳过此版本</button>
+        <button class="update-modal-btn ghost" type="button" @click="$emit('close')">{{ tr('稍后再说') }}</button>
+        <button class="update-modal-btn ghost" type="button" @click="onSkip" :disabled="dlState === 'downloading'">{{ tr('跳过此版本') }}</button>
         <button
           v-if="dlState === 'done'"
           class="update-modal-btn primary"
           type="button"
           :disabled="installing"
           @click="onInstall"
-        >{{ installing ? '正在安装，即将重启…' : '一键安装' }}</button>
+        >{{ installing ? tr('正在安装，即将重启…') : tr('一键安装') }}</button>
         <button
           v-else-if="dlState === 'downloading'"
           class="update-modal-btn primary dl-progress-btn"
@@ -43,7 +42,7 @@
           class="update-modal-btn primary"
           type="button"
           disabled
-        >安装包未就绪</button>
+        >{{ tr('安装包未就绪') }}</button>
       </div>
       <div v-if="dlState === 'error' || installError" class="update-modal-dlerr">{{ installError || dlError }}</div>
     </div>
@@ -54,6 +53,9 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { renderMarkdown } from './markdownRenderer.js'
 import { setSkippedVersion } from '../../../composables/updatePrefs.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   update: { type: Object, required: true }
@@ -66,9 +68,9 @@ const dlError = ref('')
 const dlPercent = ref(0)
 const dlPercentText = computed(() => {
   const p = Math.round(dlPercent.value)
-  if (p <= 0) return '正在下载…'
-  if (p >= 100) return '解压安装包…'
-  return `下载中 ${p}%`
+  if (p <= 0) return tr('正在下载…')
+  if (p >= 100) return tr('解压安装包…')
+  return (tr('下载中 ') + p + '%')
 })
 let dlTimer = null
 
@@ -99,11 +101,11 @@ async function onInstall() {
   try {
     const res = await fetch('/api/update/install', { method: 'POST' })
     const d = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(d.error || `安装失败 (${res.status})`)
+    if (!res.ok) throw new Error(d.error || (tr('安装失败 (') + res.status + ')'))
     // 成功：后端 3 秒后退出本进程替换 exe，这里保持「正在安装」提示，应用马上会重启
   } catch (err) {
     installing.value = false
-    installError.value = err.message || '安装失败，请稍后重试'
+    installError.value = err.message || tr('安装失败，请稍后重试')
   }
 }
 
@@ -124,15 +126,15 @@ async function refreshStatus() {
       pollStatus()
     } else if (d.state === 'error') {
       dlState.value = 'error'
-      dlError.value = d.error || '下载失败'
+      dlError.value = d.error || tr('下载失败')
     } else {
       // idle：后台未下载/重启后磁盘无补丁 → 不提供下载按钮，提示未就绪
       dlState.value = 'error'
-      dlError.value = '安装包未就绪，请下次启动时自动下载'
+      dlError.value = tr('安装包未就绪，请下次启动时自动下载')
     }
   } catch {
     dlState.value = 'error'
-    dlError.value = '安装包未就绪'
+    dlError.value = tr('安装包未就绪')
   }
 }
 
@@ -142,14 +144,14 @@ async function startDownload() {
   try {
     const res = await fetch('/api/update/download', { method: 'POST' })
     const d = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(d.error || `触发失败 (${res.status})`)
+    if (!res.ok) throw new Error(d.error || (tr('触发失败 (') + res.status + ')'))
     if (d.state === 'done') {
       dlState.value = 'done'
       return
     }
   } catch (err) {
     dlState.value = 'error'
-    dlError.value = err.message || '下载失败，请检查网络'
+    dlError.value = err.message || tr('下载失败，请检查网络')
     return
   }
   pollStatus()
@@ -171,7 +173,7 @@ function pollStatus() {
         dlTimer = null
       } else if (d.state === 'error') {
         dlState.value = 'error'
-        dlError.value = d.error || '下载失败'
+        dlError.value = d.error || tr('下载失败')
         clearInterval(dlTimer)
         dlTimer = null
       }

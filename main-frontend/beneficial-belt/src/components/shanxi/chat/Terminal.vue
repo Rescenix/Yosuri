@@ -11,7 +11,7 @@
           icon="mdi:stop-circle-outline"
           width="14"
           class="term-action-icon"
-          title="Ctrl+C 中断当前命令"
+          :title="tr('Ctrl+C 中断当前命令')"
           @click="sendInterrupt"
         />
         <Icon icon="mdi:chevron-down" width="16" class="collapse-chevron" :class="{ rotated: !open }" @click="$emit('update:open', !open)" />
@@ -29,7 +29,7 @@
           type="text"
           spellcheck="false"
           autocomplete="off"
-          placeholder="输入命令，回车执行…"
+          :placeholder="tr('输入命令，回车执行…')"
           @keydown.enter="sendCommand"
           @keydown.ctrl.c.exact="sendInterrupt"
         />
@@ -42,6 +42,9 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import Convert from 'ansi-to-html'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   open: { type: Boolean, default: true },

@@ -4,35 +4,35 @@
       <div class="stm-card">
         <!-- 标题栏 -->
         <div class="stm-header">
-          <h2 class="stm-title">新建定时任务</h2>
-          <button class="stm-close" @click="$emit('close')" title="关闭">
+          <h2 class="stm-title">{{ tr('新建定时任务') }}</h2>
+          <button class="stm-close" @click="$emit('close')" :title="tr('关闭')">
             <Icon icon="mdi:close" width="18" />
           </button>
         </div>
 
         <p class="stm-desc">
-          排程一个提示词，到点就会在右下角弹出系统通知提醒你。
+          {{ tr('排程一个提示词，到点就会在右下角弹出系统通知提醒你。') }}
         </p>
 
         <div class="stm-body">
           <!-- 名称 -->
           <div class="stm-field">
-            <label class="stm-label">名称 <span class="stm-optional">可选</span></label>
+            <label class="stm-label">{{ tr('名称') }} <span class="stm-optional">{{ tr('可选') }}</span></label>
             <input
               v-model="form.name"
               class="stm-input"
               type="text"
-              placeholder="晨间简报"
+              :placeholder="tr('晨间简报')"
             />
           </div>
 
           <!-- 提示词 -->
           <div class="stm-field">
-            <label class="stm-label">提示词</label>
+            <label class="stm-label">{{ tr('提示词') }}</label>
             <textarea
               v-model="form.prompt"
               class="stm-textarea"
-              placeholder="总结我未读的 Slack 话题，并把前 5 条邮件发给我..."
+              :placeholder="tr('总结我未读的 Slack 话题，并把前 5 条邮件发给我...')"
               rows="3"
             ></textarea>
           </div>
@@ -40,24 +40,24 @@
           <!-- 频率 + 投递至（并排） -->
           <div class="stm-row">
             <div class="stm-field stm-half">
-              <label class="stm-label">频率</label>
+              <label class="stm-label">{{ tr('频率') }}</label>
               <select v-model="form.frequency" class="stm-select">
-                <option value="every_1h">每小时</option>
-                <option value="every_2h">每 2 小时</option>
-                <option value="every_6h">每 6 小时</option>
-                <option value="every_12h">每 12 小时</option>
-                <option value="daily">每天</option>
-                <option value="weekdays">工作日</option>
-                <option value="weekly">每周</option>
-                <option value="monthly">每月</option>
+                <option value="every_1h">{{ tr('每小时') }}</option>
+                <option value="every_2h">{{ tr('每 2 小时') }}</option>
+                <option value="every_6h">{{ tr('每 6 小时') }}</option>
+                <option value="every_12h">{{ tr('每 12 小时') }}</option>
+                <option value="daily">{{ tr('每天') }}</option>
+                <option value="weekdays">{{ tr('工作日') }}</option>
+                <option value="weekly">{{ tr('每周') }}</option>
+                <option value="monthly">{{ tr('每月') }}</option>
               </select>
             </div>
             <div class="stm-field stm-half">
-              <label class="stm-label">投递至</label>
+              <label class="stm-label">{{ tr('投递至') }}</label>
               <select v-model="form.deliverTo" class="stm-select">
-                <option value="desktop">此桌面</option>
-                <option value="chat">此会话</option>
-                <option value="all">所有设备</option>
+                <option value="desktop">{{ tr('此桌面') }}</option>
+                <option value="chat">{{ tr('此会话') }}</option>
+                <option value="all">{{ tr('所有设备') }}</option>
               </select>
             </div>
           </div>
@@ -65,13 +65,13 @@
           <!-- 时间：左小时 + 右分钟（仅每天/工作日/每周/每月需要，每小时类自动整点触发） -->
           <div v-if="needsTime" class="stm-row">
             <div class="stm-field stm-half">
-              <label class="stm-label">小时</label>
+              <label class="stm-label">{{ tr('小时') }}</label>
               <select v-model="form.hour" class="stm-select">
                 <option v-for="h in HOUR_OPTIONS" :key="h" :value="h">{{ h }}</option>
               </select>
             </div>
             <div class="stm-field stm-half">
-              <label class="stm-label">分钟</label>
+              <label class="stm-label">{{ tr('分钟') }}</label>
               <select v-model="form.minute" class="stm-select">
                 <option v-for="m in MINUTE_OPTIONS" :key="m" :value="m">{{ m }}</option>
               </select>
@@ -80,9 +80,9 @@
 
           <!-- 模型 -->
           <div class="stm-field">
-            <label class="stm-label">模型 <span class="stm-optional">可选</span></label>
+            <label class="stm-label">{{ tr('模型') }} <span class="stm-optional">{{ tr('可选') }}</span></label>
             <select v-model="form.model" class="stm-select">
-              <option value="">默认 (全局模型)</option>
+              <option value="">{{ tr('默认 (全局模型)') }}</option>
               <option value="deepseek-v4-flash-free">DeepSeek V4 Flash</option>
               <option value="mimo-v2.5-free">Mimo 2.5</option>
               <option value="north-mini-code-free">North Mini Code</option>
@@ -96,8 +96,8 @@
         </div>
 
         <div class="stm-footer">
-          <button class="stm-btn stm-btn-cancel" @click="$emit('close')">取消</button>
-          <button class="stm-btn stm-btn-primary" :disabled="!form.prompt.trim()" @click="onCreate">创建定时任务</button>
+          <button class="stm-btn stm-btn-cancel" @click="$emit('close')">{{ tr('取消') }}</button>
+          <button class="stm-btn stm-btn-primary" :disabled="!form.prompt.trim()" @click="onCreate">{{ tr('创建定时任务') }}</button>
         </div>
       </div>
     </div>
@@ -107,6 +107,9 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const emit = defineEmits(['close', 'create'])
 
@@ -131,14 +134,14 @@ const needsTime = computed(() => ['daily', 'weekdays', 'weekly', 'monthly'].incl
 
 // 频率 → 时间占位格式（{t} 会被替换为 HH:MM）
 const FREQ_MAP = {
-  every_1h:  { text: '每小时', cron: () => '0 * * * *',       timeText: () => '每小时的整点' },
-  every_2h:  { text: '每 2 小时', cron: () => '0 */2 * * *',   timeText: () => '每 2 小时的整点' },
-  every_6h:  { text: '每 6 小时', cron: () => '0 */6 * * *',   timeText: () => '每 6 小时的整点' },
-  every_12h: { text: '每 12 小时', cron: () => '0 */12 * * *', timeText: () => '每 12 小时的整点' },
-  daily:     { text: '每天',   cron: t => `${t.m} ${t.h} * * *`,   timeText: t => `每天 ${t.t}` },
-  weekdays:  { text: '工作日', cron: t => `${t.m} ${t.h} * * 1-5`, timeText: t => `工作日 ${t.t}` },
-  weekly:    { text: '每周',   cron: t => `${t.m} ${t.h} * * 1`,   timeText: t => `每周一 ${t.t}` },
-  monthly:   { text: '每月',   cron: t => `${t.m} ${t.h} 1 * *`,   timeText: t => `每月 1 日 ${t.t}` }
+  every_1h:  { text: tr('每小时'), cron: () => '0 * * * *',       timeText: () => tr('每小时的整点') },
+  every_2h:  { text: tr('每 2 小时'), cron: () => '0 */2 * * *',   timeText: () => tr('每 2 小时的整点') },
+  every_6h:  { text: tr('每 6 小时'), cron: () => '0 */6 * * *',   timeText: () => tr('每 6 小时的整点') },
+  every_12h: { text: tr('每 12 小时'), cron: () => '0 */12 * * *', timeText: () => tr('每 12 小时的整点') },
+  daily:     { text: tr('每天'),   cron: t => `${t.m} ${t.h} * * *`,   timeText: t => (tr('每天 ') + t.t) },
+  weekdays:  { text: tr('工作日'), cron: t => `${t.m} ${t.h} * * 1-5`, timeText: t => (tr('工作日 ') + t.t) },
+  weekly:    { text: tr('每周'),   cron: t => `${t.m} ${t.h} * * 1`,   timeText: t => (tr('每周一 ') + t.t) },
+  monthly:   { text: tr('每月'),   cron: t => `${t.m} ${t.h} 1 * *`,   timeText: t => (tr('每月 1 日 ') + t.t) }
 }
 
 const freqMeta = computed(() => FREQ_MAP[form.frequency] || FREQ_MAP.daily)

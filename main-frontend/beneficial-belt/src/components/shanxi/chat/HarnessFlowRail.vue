@@ -1,6 +1,6 @@
 <template>
-  <aside class="harness-flow-rail" :class="{ compact }" aria-label="Harness 实时架构">
-    <div ref="canvasRef" class="harness-flow-canvas" title="滚轮滚动画布；Ctrl/⌘ + 滚轮缩放画布" @wheel="handleCanvasWheel">
+  <aside class="harness-flow-rail" :class="{ compact }" :aria-label="tr('Harness 实时架构')">
+    <div ref="canvasRef" class="harness-flow-canvas" :title="tr('滚轮滚动画布；Ctrl/⌘ + 滚轮缩放画布')" @wheel="handleCanvasWheel">
       <div class="harness-graph-viewport" :style="graphViewportStyle">
       <div class="harness-graph-stage" :style="graphStageStyle">
         <svg class="harness-edges" viewBox="0 0 360 620" preserveAspectRatio="xMidYMin meet" aria-hidden="true">
@@ -39,6 +39,9 @@
 
 <script setup>
 import { computed, nextTick, ref } from 'vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   flow: { type: Object, default: null },

@@ -7,14 +7,14 @@
           <div class="plugins-market-title-wrap">
             <div class="plugins-market-title">
               <Icon icon="mdi:puzzle-outline" width="22" />
-              <span>插件市场</span>
+              <span>{{ tr('插件市场') }}</span>
             </div>
-            <p class="plugins-market-subtitle">发现并安装插件和技能，扩展 Yosuri 的能力。</p>
+            <p class="plugins-market-subtitle">{{ tr('发现并安装插件和技能，扩展 Yosuri 的能力。') }}</p>
           </div>
           <div class="plugins-market-actions">
             <button class="pm-head-btn" @click="onManage">
               <Icon icon="mdi:tune" width="16" />
-              <span>管理</span>
+              <span>{{ tr('管理') }}</span>
             </button>
             <button class="plugins-market-close" @click="$emit('close')">
               <Icon icon="mdi:close" width="18" />
@@ -54,13 +54,13 @@
               <input
                 v-model="searchQuery"
                 type="text"
-                placeholder="搜索技能"
+                :placeholder="tr('搜索技能')"
                 class="pm-search-input"
               />
             </div>
             <button class="pm-upload-btn" @click="onUpload">
               <Icon icon="mdi:plus" width="16" />
-              <span>上传技能</span>
+              <span>{{ tr('上传技能') }}</span>
             </button>
           </div>
         </div>
@@ -87,7 +87,7 @@
                 class="pm-card-action"
                 :class="{ installed: isInstalled(plugin.id) }"
                 @click="toggleInstall(plugin.id)"
-                :title="isInstalled(plugin.id) ? '已安装' : '安装'"
+                :title="isInstalled(plugin.id) ? tr('已安装') : tr('安装')"
               >
                 <Icon
                   :icon="isInstalled(plugin.id) ? 'mdi:check' : 'mdi:plus'"
@@ -99,8 +99,8 @@
 
           <div v-if="filteredPlugins.length === 0" class="pm-empty">
             <Icon icon="mdi:store-search-outline" width="48" color="var(--app-text-faint)" />
-            <p>暂无相关插件</p>
-            <span>试试其他关键词或分类吧～</span>
+            <p>{{ tr('暂无相关插件') }}</p>
+            <span>{{ tr('试试其他关键词或分类吧～') }}</span>
           </div>
         </div>
       </div>
@@ -111,28 +111,31 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 defineEmits(['close'])
 
 const tabs = [
-  { key: 'plugins', label: '插件' },
-  { key: 'skills', label: '技能' }
+  { key: 'plugins', label: tr('插件') },
+  { key: 'skills', label: tr('技能') }
 ]
 
 const categories = [
-  { key: 'all', label: '全部' },
-  { key: 'devtools', label: '开发工具' },
-  { key: 'design', label: '界面设计' },
-  { key: 'content', label: '内容创作' },
-  { key: 'efficiency', label: '效率提升' },
-  { key: 'data', label: '数据分析' }
+  { key: 'all', label: tr('全部') },
+  { key: 'devtools', label: tr('开发工具') },
+  { key: 'design', label: tr('界面设计') },
+  { key: 'content', label: tr('内容创作') },
+  { key: 'efficiency', label: tr('效率提升') },
+  { key: 'data', label: tr('数据分析') }
 ]
 
 const allPlugins = [
   {
     id: 'github-mcp',
     name: 'GitHub MCP',
-    description: '通过 MCP 连接 GitHub，支持仓库搜索、Issue / PR 管理、代码审查等能力。',
+    description: tr('通过 MCP 连接 GitHub，支持仓库搜索、Issue / PR 管理、代码审查等能力。'),
     icon: 'mdi:github',
     iconColor: '#ffffff',
     iconBg: '#24292f',
@@ -142,7 +145,7 @@ const allPlugins = [
   {
     id: 'figma',
     name: 'Figma',
-    description: '通过 MCP 获取 Figma 设计上下文、截图、变量和资源，并将 Figma 节点转译为生产代码。',
+    description: tr('通过 MCP 获取 Figma 设计上下文、截图、变量和资源，并将 Figma 节点转译为生产代码。'),
     icon: 'simple-icons:figma',
     iconColor: '#ffffff',
     iconBg: 'linear-gradient(135deg, #ff7262, #a259ff)',
@@ -152,7 +155,7 @@ const allPlugins = [
   {
     id: 'canvas',
     name: 'Canvas',
-    description: '可视化画布工具，支持流程图、架构图绘制与 AI 辅助设计，让创意一键落地。',
+    description: tr('可视化画布工具，支持流程图、架构图绘制与 AI 辅助设计，让创意一键落地。'),
     icon: 'mdi:artboard',
     iconColor: '#ffffff',
     iconBg: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
@@ -168,7 +171,7 @@ const installed = ref(new Set())
 
 const currentCategoryLabel = computed(() => {
   const cat = categories.find(c => c.key === activeCategory.value)
-  return cat ? cat.label : '全部'
+  return cat ? cat.label : tr('全部')
 })
 
 const filteredPlugins = computed(() => {

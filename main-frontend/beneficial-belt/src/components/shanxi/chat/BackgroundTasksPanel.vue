@@ -2,14 +2,14 @@
   <template v-if="embedded">
     <div class="bgpanel embedded" @click.stop>
       <div class="bgpanel-header">
-        <span class="bgpanel-title">后台任务</span>
-        <span class="bgpanel-filter">已完成 {{ finishedCount }}</span>
+        <span class="bgpanel-title">{{ tr('后台任务') }}</span>
+        <span class="bgpanel-filter">{{ tr('已完成') }}{{ finishedCount }}</span>
       </div>
 
       <div class="bgpanel-list">
         <div v-if="tasks.length === 0" class="bgpanel-empty">
           <Icon icon="mdi:tray-outline" width="24" color="#c4c4c4" />
-          <span>暂无后台任务</span>
+          <span>{{ tr('暂无后台任务') }}</span>
         </div>
 
         <div v-for="t in tasks" :key="t.key || t.id" class="bgtask-card" @click="$emit('select-task', t.id)">
@@ -27,8 +27,8 @@
               {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
             </div>
             <div v-if="isBgTask(t) || t.status === 'running'" class="bgtask-actions">
-              <button v-if="isBgTask(t)" class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
-              <button v-if="t.status === 'running'" class="bgtask-log-btn kill" @click.stop="killTask(t)">终止</button>
+              <button v-if="isBgTask(t)" class="bgtask-log-btn" @click.stop="openLog(t)">{{ tr('查看日志') }}</button>
+              <button v-if="t.status === 'running'" class="bgtask-log-btn kill" @click.stop="killTask(t)">{{ tr('终止') }}</button>
             </div>
           </div>
           <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
@@ -42,7 +42,7 @@
     <div class="bgpanel" @click.stop>
       <div class="bgpanel-header">
         <span class="bgpanel-title">Background tasks</span>
-        <button class="bgpanel-close-btn" @click="$emit('close')" title="关闭">
+        <button class="bgpanel-close-btn" @click="$emit('close')" :title="tr('关闭')">
           <Icon icon="mdi:close" width="16" color="#8a8a8a" />
         </button>
       </div>
@@ -54,7 +54,7 @@
       <div class="bgpanel-list">
         <div v-if="tasks.length === 0" class="bgpanel-empty">
           <Icon icon="mdi:tray-outline" width="24" color="#c4c4c4" />
-          <span>暂无后台任务</span>
+          <span>{{ tr('暂无后台任务') }}</span>
         </div>
 
         <div v-for="t in tasks" :key="t.key || t.id" class="bgtask-card" @click="$emit('select-task', t.id)">
@@ -72,8 +72,8 @@
               {{ formatTok(t.totalTokens) }} tokens · {{ t.toolUseCount }} tool use{{ t.toolUseCount === 1 ? '' : 's' }}
             </div>
             <div v-if="isBgTask(t) || t.status === 'running'" class="bgtask-actions">
-              <button v-if="isBgTask(t)" class="bgtask-log-btn" @click.stop="openLog(t)">查看日志</button>
-              <button v-if="t.status === 'running'" class="bgtask-log-btn kill" @click.stop="killTask(t)">终止</button>
+              <button v-if="isBgTask(t)" class="bgtask-log-btn" @click.stop="openLog(t)">{{ tr('查看日志') }}</button>
+              <button v-if="t.status === 'running'" class="bgtask-log-btn kill" @click.stop="killTask(t)">{{ tr('终止') }}</button>
             </div>
           </div>
           <Icon icon="mdi:arrow-right" width="16" class="bgtask-jump-icon" />
@@ -86,14 +86,14 @@
   <div v-if="logPanel.open" class="bgtask-log-backdrop" @click.stop="closeLog">
     <div class="bgtask-log-panel" @click.stop>
       <div class="bgtask-log-header">
-        <span class="bgtask-log-title">任务日志</span>
+        <span class="bgtask-log-title">{{ tr('任务日志') }}</span>
         <span class="bgtask-log-sub">{{ logPanel.taskId }} · {{ logPanel.status }}</span>
-        <button class="bgpanel-close-btn" @click.stop="closeLog" title="关闭">
+        <button class="bgpanel-close-btn" @click.stop="closeLog" :title="tr('关闭')">
           <Icon icon="mdi:close" width="16" color="#8a8a8a" />
         </button>
       </div>
       <div class="bgtask-log-body">
-        <pre class="bgtask-log-pre">{{ logPanel.output || (logPanel.loading ? '加载中…' : '(无输出)') }}</pre>
+        <pre class="bgtask-log-pre">{{ logPanel.output || (logPanel.loading ? tr('加载中…') : tr('(无输出)')) }}</pre>
       </div>
     </div>
   </div>
@@ -102,6 +102,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   tasks: { type: Array, default: () => [] },
@@ -140,12 +143,12 @@ async function openLog(t) {
     const res = await fetch(`/api/bg-task/log?task_id=${encodeURIComponent(t.id)}&limit=500`)
     const data = await res.json()
     if (data.status === 'not_found') {
-      logPanel.output = '(任务已过期或不存在)'
+      logPanel.output = tr('(任务已过期或不存在)')
     } else {
-      logPanel.output = data.output || '(无输出)'
+      logPanel.output = data.output || tr('(无输出)')
     }
   } catch (e) {
-    logPanel.output = '加载失败: ' + (e.message || e)
+    logPanel.output = tr('加载失败: ') + (e.message || e)
   }
   logPanel.loading = false
 }

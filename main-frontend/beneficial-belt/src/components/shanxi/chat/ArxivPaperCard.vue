@@ -2,8 +2,8 @@
   <div v-if="papers.length" class="arxiv-cards">
     <div class="arxiv-cards-head">
       <Icon icon="mdi:book-open-page-variant" width="16" class="arxiv-cards-icon" />
-      <span>arXiv 论文检索</span>
-      <span class="arxiv-cards-count">{{ papers.length }} 篇</span>
+      <span>{{ tr('arXiv 论文检索') }}</span>
+      <span class="arxiv-cards-count">{{ papers.length }}{{ tr('篇') }}</span>
     </div>
     <div class="arxiv-cards-list">
       <a
@@ -34,10 +34,10 @@
             <span class="arxiv-card-link" title="PDF">
               <Icon icon="mdi:file-pdf-box" width="14" /> PDF
             </span>
-            <span class="arxiv-card-link" title="HTML 预览">
+            <span class="arxiv-card-link" :title="tr('HTML 预览')">
               <Icon icon="mdi:web" width="14" /> HTML
             </span>
-            <span class="arxiv-card-link" :href="p.abs_url" target="_blank" rel="noopener" title="arXiv 页面">
+            <span class="arxiv-card-link" :href="p.abs_url" target="_blank" rel="noopener" :title="tr('arXiv 页面')">
               <Icon icon="mdi:arrow-top-right" width="14" /> arXiv
             </span>
           </div>
@@ -47,13 +47,16 @@
   </div>
   <div v-else class="arxiv-empty">
     <Icon icon="mdi:book-search" width="20" />
-    <span>未找到相关论文</span>
+    <span>{{ tr('未找到相关论文') }}</span>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   output: { type: String, default: '' },
@@ -80,7 +83,7 @@ function onThumbError(e) {
 function formatAuthors(authors) {
   if (!authors || !authors.length) return ''
   if (authors.length <= 3) return authors.join(', ')
-  return `${authors[0]} 等 ${authors.length} 人`
+  return (authors[0] + tr(' 等 ') + authors.length + tr(' 人'))
 }
 </script>
 

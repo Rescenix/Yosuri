@@ -3,7 +3,7 @@
     <!-- 首条回复前的「正在思考」扫描线：不可折叠、无 chevron；首字一到（blockGroups 非空）自动消失 -->
     <div v-if="flow.status === 'running' && blockGroups.length === 0" class="flow-pending-scanline">
           <RoseParticleLoader :size="20" class="flow-pending-loader" />
-          <span class="flow-pending-label">正在思考</span>
+          <span class="flow-pending-label">{{ tr('正在思考') }}</span>
         </div>
     <!--
       ★ 按顺序渲染，但「回复(intent)」始终平铺可见；
@@ -71,9 +71,9 @@
           >{{ o.label }}</span>
         </div>
         <div class="flow-question-a">
-          <span class="flow-question-a-label">回答</span>
+          <span class="flow-question-a-label">{{ tr('回答') }}</span>
           <!-- answered=false = 超时/断线走 fallback 兜底，不是用户的选择，不伪装成用户回答 -->
-          <span class="flow-question-a-text">{{ group.block.answered ? (group.block.answer || '（等待中…）') : '（未回答，已按兜底继续）' }}</span>
+          <span class="flow-question-a-text">{{ group.block.answered ? (group.block.answer || tr('（等待中…）')) : tr('（未回答，已按兜底继续）') }}</span>
         </div>
       </div>
 
@@ -83,16 +83,16 @@
               class="flow-screenshot"
             >
               <span class="flow-screenshot-head">
-                <span><Icon icon="mdi:image-outline" width="14" /> 页面截图</span>
+                <span><Icon icon="mdi:image-outline" width="14" /> {{ tr('页面截图') }}</span>
               </span>
-              <img :src="group.block.image" :alt="group.block.content || 'Agent 截图'" />
+              <img :src="group.block.image" :alt="group.block.content || tr('Agent 截图')" />
             </div>
 
       <!-- 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式，默认展开可播） -->
       <div v-else-if="group.type === 'video'" class="flow-video">
         <div class="flow-video-head">
           <Icon icon="mdi:video-outline" width="14" />
-          <span>生成视频</span>
+          <span>{{ tr('生成视频') }}</span>
           <span v-if="group.block.size || group.block.seconds" class="flow-video-meta">
             {{ group.block.size || '' }}<template v-if="group.block.size && group.block.seconds"> · </template>{{ group.block.seconds ? group.block.seconds + 's' : '' }}
           </span>
@@ -111,7 +111,7 @@
                 <div v-else-if="group.type === 'audio'" class="flow-audio">
                   <div class="flow-audio-head">
                     <Icon icon="mdi:music-note-outline" width="14" />
-                    <span>生成音乐</span>
+                    <span>{{ tr('生成音乐') }}</span>
                     <span v-if="group.block.size" class="flow-video-meta">{{ group.block.size }}</span>
                   </div>
                   <audio :src="group.block.url" controls preload="metadata" class="flow-audio-player"></audio>
@@ -134,20 +134,20 @@
             <div class="flow-file-meta">
               <span class="flow-file-name" :title="group.block.name">{{ group.block.name }}</span>
               <span class="flow-file-sub">
-                <span>Agent 交付文件</span>
+                <span>{{ tr('Agent 交付文件') }}</span>
                 <template v-if="group.block.size"><span>·</span><span>{{ formatFileSize(group.block.size) }}</span></template>
               </span>
             </div>
             <div class="flow-file-actions">
               <button type="button" class="flow-file-btn" @click="previewDeliveredFile(group.block)">
-                <Icon icon="mdi:eye-outline" width="13" /> 预览
+                <Icon icon="mdi:eye-outline" width="13" /> {{ tr('预览') }}
               </button>
               <a
                 class="flow-file-btn download"
                 :href="(group.block.url || ('/api/agent/file?path=' + encodeURIComponent(group.block.path) + '&raw=1'))"
                 :download="group.block.name"
               >
-                <Icon icon="mdi:download-outline" width="13" /> 下载
+                <Icon icon="mdi:download-outline" width="13" /> {{ tr('下载') }}
               </a>
             </div>
           </div>
@@ -167,7 +167,7 @@
           <!-- 记忆写入：单行彩虹反馈（不占卡片，直接铺在聊天流里） -->
       <div v-else-if="group.type === 'memory-saved'" class="flow-memory-saved">
         <span class="fms-scanline"></span>
-        <span class="fms-label">已保存到记忆</span>
+        <span class="fms-label">{{ tr('已保存到记忆') }}</span>
         <span class="fms-text">{{ group.block.text }}</span>
       </div>
 
@@ -283,7 +283,7 @@
          生产者（搜索时暂存 searchRefs）→ 消费者（回复结束 visibleRefs
          逐条递增，TransitionGroup 流式渐变渲染）。 -->
     <div v-if="searchRefs.length && flow.status !== 'running'" class="flow-refs">
-      <div class="flow-refs-title">引用来源</div>
+      <div class="flow-refs-title">{{ tr('引用来源') }}</div>
       <TransitionGroup name="flow-ref" tag="div" class="flow-refs-list">
         <a
           v-for="(u, idx) in visibleRefs"
@@ -323,7 +323,7 @@
              列出本次会话改过的文件，逐个预览 diff / 一键回退到工作流前版本。
              数据源 flow.changedFiles（后端 workflow_done 下发，各收尾分支都有）。 -->
     <div v-if="flow.changedFiles && flow.changedFiles.length" class="flow-changed-files">
-      <div class="flow-refs-title">本次改动 {{ flow.changedFiles.length }} 个文件</div>
+      <div class="flow-refs-title">{{ tr('本次改动') }}{{ flow.changedFiles.length }}{{ tr('个文件') }}</div>
       <div class="flow-changed-list">
         <div v-for="f in flow.changedFiles" :key="f.rel_path" class="flow-changed-item">
           <div class="flow-changed-row">
@@ -334,13 +334,13 @@
               <b class="flow-changed-del">−{{ f.removed || 0 }}</b>
             </span>
             <button type="button" class="flow-changed-btn audit" :disabled="f.audit && f.audit.loading" @click="auditChangedFile(f)">
-              <Icon icon="mdi:shield-search" width="12" /> {{ (f.audit && f.audit.loading) ? '审查中…' : '审查' }}
+              <Icon icon="mdi:shield-search" width="12" /> {{ (f.audit && f.audit.loading) ? tr('审查中…') : tr('审查') }}
             </button>
             <button type="button" class="flow-changed-btn" :disabled="changedRestoring" @click="previewChangedFile(f)">
-              <Icon icon="mdi:eye-outline" width="12" /> 预览
+              <Icon icon="mdi:eye-outline" width="12" /> {{ tr('预览') }}
             </button>
             <button type="button" class="flow-changed-btn danger" :disabled="changedRestoring" @click="restoreChangedFile(f)">
-              <Icon icon="mdi:undo" width="12" /> 回退
+              <Icon icon="mdi:undo" width="12" /> {{ tr('回退') }}
             </button>
           </div>
           <!-- 该文件的审查结果：独立免费模型调用挑这一处 diff 的潜在问题 -->
@@ -348,10 +348,10 @@
           <div v-if="f.audit && f.audit.findings" class="flow-audit-card">
             <div class="flow-audit-title">
               <Icon icon="mdi:shield-search" width="13" />
-              <span>独立审查</span>
-              <span v-if="f.audit.findings.length" class="flow-audit-count">{{ f.audit.findings.length }} 个潜在问题</span>
+              <span>{{ tr('独立审查') }}</span>
+              <span v-if="f.audit.findings.length" class="flow-audit-count">{{ f.audit.findings.length }}{{ tr('个潜在问题') }}</span>
             </div>
-            <div v-if="!f.audit.findings.length" class="flow-audit-empty">未发现潜在问题</div>
+            <div v-if="!f.audit.findings.length" class="flow-audit-empty">{{ tr('未发现潜在问题') }}</div>
             <div v-else class="flow-audit-list">
               <div v-for="(a, ai) in f.audit.findings" :key="ai" class="flow-audit-row">
                 <span class="flow-audit-sev" :class="'sev-' + a.severity">{{ sevLabel(a.severity) }}</span>
@@ -367,14 +367,14 @@
       <div v-if="changedMsg" class="flow-changed-msg" :class="{ error: changedMsgErr }">{{ changedMsg }}</div>
       <!-- 预览 diff（点「预览」后内嵌展开，像工具 diff 一样） -->
       <div v-if="changedDiffOpen" class="flow-changed-diff">
-        <div v-if="changedDiffLoading" class="flow-changed-state">正在读取快照…</div>
+        <div v-if="changedDiffLoading" class="flow-changed-state">{{ tr('正在读取快照…') }}</div>
         <div v-else-if="changedDiffError" class="flow-changed-state error">{{ changedDiffError }}</div>
         <div v-else-if="changedDiffLines.length" class="flow-changed-code">
           <div v-for="(l, li) in changedDiffLines" :key="li" class="flow-changed-code-line" :class="l.kind">
                       <code>{{ l.text || ' ' }}</code>
           </div>
         </div>
-        <div v-else class="flow-changed-state">该文件没有可显示的文本差异</div>
+        <div v-else class="flow-changed-state">{{ tr('该文件没有可显示的文本差异') }}</div>
       </div>
     </div>
   </div>
@@ -384,8 +384,8 @@
       <div class="confirm-dialog">
         <p>{{ confirmRestoreMsg }}</p>
         <div class="confirm-actions">
-          <button type="button" class="confirm-btn cancel" @click="confirmRestoreTarget = null">取消</button>
-          <button type="button" class="confirm-btn ok" @click="doRestore()">确认回退</button>
+          <button type="button" class="confirm-btn cancel" @click="confirmRestoreTarget = null">{{ tr('取消') }}</button>
+          <button type="button" class="confirm-btn ok" @click="doRestore()">{{ tr('确认回退') }}</button>
         </div>
       </div>
     </div>
@@ -403,6 +403,9 @@ import { renderMarkdown } from './markdownRenderer.js'
 import { requestPreview } from '../composables/previewBus.js'
 import { pptxToHtml, xlsxToHtml, docxToHtml } from '../../../utils/officePreview.js'
 import ChartRenderer from './ChartRenderer.vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   flow: { type: Object, required: true }
@@ -443,7 +446,7 @@ async function previewDeliveredFile(block) {
     } else if (TEXT_PREVIEW_EXTS.has(ext)) {
       // 文本类（md/html/txt）：拉 content，前端渲染成独立 HTML blob 进右侧窗口。
       const res = await fetch('/api/agent/file?path=' + encodeURIComponent(block.path))
-      if (!res.ok) throw new Error('读取失败 (' + res.status + ')')
+      if (!res.ok) throw new Error(tr('读取失败 (') + res.status + ')')
       const data = await res.json()
       const body = ext === 'txt' ? escapeHtml(data.content || '')
         : renderMarkdown(data.content || '')
@@ -459,7 +462,7 @@ async function previewDeliveredFile(block) {
     } else {
       // pptx/xlsx/docx：前端解析渲染成 HTML 进右侧预览窗（不再是源码/下载）
       const binary = await fetch('/api/agent/file?path=' + encodeURIComponent(block.path) + '&raw=1')
-      if (!binary.ok) throw new Error('读取失败 (' + binary.status + ')')
+      if (!binary.ok) throw new Error(tr('读取失败 (') + binary.status + ')')
       const buf = await binary.arrayBuffer()
       if (ext === 'pptx') requestPreview(await pptxToHtml(buf))
       else if (ext === 'xlsx') requestPreview(await xlsxToHtml(buf))
@@ -467,7 +470,7 @@ async function previewDeliveredFile(block) {
       else window.open('/api/agent/file?path=' + encodeURIComponent(block.path) + '&raw=1', '_blank')
     }
   } catch (err) {
-    block.previewError = err.message || '预览失败'
+    block.previewError = err.message || tr('预览失败')
   } finally {
     block._previewing = false
   }
@@ -537,24 +540,24 @@ async function auditChangedFile(f) {
       body: JSON.stringify({ project: '', seq: f.first_seq })
     })
     const ddata = await dres.json()
-    if (!dres.ok) throw new Error(ddata.error || 'Diff 读取失败')
+    if (!dres.ok) throw new Error(ddata.error || tr('Diff 读取失败'))
     const ares = await fetch('/api/code/workflow/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: f.rel_path, diff: ddata.diff || '' })
     })
     const adata = await ares.json().catch(() => ({}))
-    if (!ares.ok) throw new Error(adata.error || `审查失败 (${ares.status})`)
+    if (!ares.ok) throw new Error(adata.error || (tr('审查失败 (') + ares.status + ')'))
     f.audit.findings = Array.isArray(adata.findings) ? adata.findings : []
   } catch (err) {
-    f.audit.error = err.message || '审查请求失败，请重试'
+    f.audit.error = err.message || tr('审查请求失败，请重试')
   } finally {
     f.audit.loading = false
   }
 }
 
 function sevLabel(s) {
-  return s === 'high' ? '高' : s === 'low' ? '低' : '中'
+  return s === 'high' ? tr('高') : s === 'low' ? tr('低') : tr('中')
 }
 
 // diff 原始文本 → 行数组（保留行首 +/− 符号作为增删标记，不做红绿双重显示）
@@ -591,10 +594,10 @@ async function previewChangedFile(f) {
       body: JSON.stringify({ project: '', seq: f.first_seq })
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || `Diff 读取失败 (${res.status})`)
+    if (!res.ok) throw new Error(data.error || (tr('Diff 读取失败 (') + res.status + ')'))
     changedDiffRaw.value = data.diff || ''
   } catch (err) {
-    changedDiffError.value = err.message || '无法读取该快照'
+    changedDiffError.value = err.message || tr('无法读取该快照')
   } finally {
     changedDiffLoading.value = false
   }
@@ -605,8 +608,8 @@ async function restoreChangedFile(f) {
   // 轻量确认弹窗，替代原生 window.confirm（2026-08-28 用户反馈）
   confirmRestoreTarget.value = f
   confirmRestoreMsg.value = f.exists_before === false
-    ? `删除 ${f.rel_path}？（本次工作流新建的文件，回退=删除）`
-    : `回退 ${f.rel_path} 到本次工作流开始前的版本？`
+    ? (tr('删除 ') + f.rel_path + tr('？（本次工作流新建的文件，回退=删除）'))
+    : (tr('回退 ') + f.rel_path + tr(' 到本次工作流开始前的版本？'))
 }
 
 async function doRestore() {
@@ -624,13 +627,13 @@ async function doRestore() {
       body: JSON.stringify({ project: '', seq: f.first_seq, before: true })
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || `回退失败 (${res.status})`)
-    changedMsg.value = data.deleted ? `已删除 ${data.restored}` : `已回退 ${data.restored}`
+    if (!res.ok) throw new Error(data.error || (tr('回退失败 (') + res.status + ')'))
+    changedMsg.value = data.deleted ? (tr('已删除 ') + data.restored) : (tr('已回退 ') + data.restored)
     // 回退后从列表移除；全部回退完收起到卡片标题状态
     props.flow.changedFiles = (props.flow.changedFiles || []).filter(x => x.rel_path !== f.rel_path)
     changedDiffOpen.value = false
   } catch (err) {
-    changedMsg.value = err.message || '回退失败'
+    changedMsg.value = err.message || tr('回退失败')
     changedMsgErr.value = true
   } finally {
     changedRestoring.value = false
@@ -657,12 +660,18 @@ const blockGroups = computed(() => {
         current = null
       }
       if (b.type === 'intent') {
-        // 缓存：只在 text 变化时重算 renderMarkdown（流式输出时避免 O(n²) 全量重解析）
-        if (b.text !== b._cachedText) {
-          b._cachedHtml = renderMarkdown(b.text, true)
-          b._cachedText = b.text
-        }
-        groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
+              // 流式期间节流 markdown 重算：模型吐得比渲染快时，每 token 全量 markdown-it+katex
+              // 重解析 + innerHTML 重设 = O(n²)，是「吐几个词卡一下、恢复时已吐完」的元凶。
+              // 流式中距上次重算 <100ms 就复用旧 html（视觉仍连续），停流后强制渲染最新全文。
+              const streaming = props.flow?.status === 'running' || props.flow?.status === 'waiting'
+              const now = Date.now()
+              const throttled = streaming && b._cachedAt && (now - b._cachedAt < 100)
+              if (!throttled && b.text !== b._cachedText) {
+                b._cachedHtml = renderMarkdown(b.text, true)
+                b._cachedText = b.text
+                b._cachedAt = now
+              }
+              groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
       } else if (b.type === 'thinking') {
         // 思考：单步平铺，不收束（推理轨迹全程可见）
         groups.push({ type: 'single-thinking', block: b })
@@ -788,12 +797,12 @@ function groupSummaryTitle(group) {
   const cur = currentActiveBlock(group)
   if (cur) {
     if (cur.type === 'tool') return actionText(cur)
-    if (cur.type === 'thinking') return '正在思考…'
-    return 'Agent 正在处理…'
+    if (cur.type === 'thinking') return tr('正在思考…')
+    return tr('Agent 正在处理…')
   }
   // 全部命令/思考都完成了，才收束成摘要
-  return '运行了多个命令'
-}
+    return tr('运行了多个命令')
+  }
 
 // 指令切换淡入淡出的 key：流式生成（generating）中 key 固定防闪；
 // 命令确定/执行中/下一条指令切换时以「块 id + 内容」为 key → out-in 淡出旧指令淡入新指令。
@@ -820,12 +829,12 @@ function fmtMs(ms) {
 function toolBadge(b) {
   if (b.status === 'generating') {
     const chars = Number(b.generatedChars || 0)
-    return chars >= 1000 ? `生成参数 ${(chars / 1000).toFixed(1)}k` : '生成参数'
+    return chars >= 1000 ? (tr('生成参数 ') + (chars / 1000).toFixed(1) + 'k') : tr('生成参数')
   }
-  if (b.status === 'running') return '进行中'
-  if (b.status === 'error') return '失败'
+  if (b.status === 'running') return tr('进行中')
+  if (b.status === 'error') return tr('失败')
   const t = fmtMs(b.elapsedMs)
-  return t ? '完成 ' + t : '完成'
+  return t ? tr('完成 ') + t : tr('完成')
 }
 
 // ==================== 思考块折叠 ====================
@@ -873,7 +882,7 @@ onUnmounted(() => { if (thinkTimer) clearInterval(thinkTimer) })
 
 function thinkLabelText(b) {
   if (!thinkDone(b)) {
-    const label = props.flow?.status === 'waiting' ? '等待后台任务' : '正在思考'
+    const label = props.flow?.status === 'waiting' ? tr('等待后台任务') : tr('正在思考')
     if (b.startTime) {
       const live = fmtMs((nowTick.value || Date.now()) - b.startTime)
       if (live) return `${label} ${live}`
@@ -881,7 +890,7 @@ function thinkLabelText(b) {
     return label
   }
   const t = fmtMs(b.elapsedMs)
-  return t ? `思考 ${t}` : '思考'
+  return t ? (tr('思考 ') + t) : tr('思考')
 }
 // 默认展开 = 仍在思考中；手工点过则按手工状态
 function thinkIsOpen(key, b) {
@@ -912,38 +921,38 @@ watch(
 // 一行白话，动词 + 对象，读起来跟正文一样（"编辑了 tools.go"），不靠图标传达语义。
 // 运行中把"了"换成"正在…"，这样连状态图标也省了。
 const VERBS = {
-  read_file: '读取',
-  grep: '搜索',
-  glob: '查找文件',
-  list_directory: '列目录',
-  directory_tree: '目录树',
-  get_file_info: '文件信息',
-  mcp__fs__read_file: '读取',
-  mcp__fs__read_text_file: '读取',
-  mcp__grep__read_range: '读取',
-  write_file: '写入',
-  mcp__fs__write_file: '写入',
-  mcp__fs__create_file: '新建',
-  edit_file: '编辑',
-  create_directory: '新建目录',
-  move_file: '移动',
-  delete_file: '删除',
-  delete_directory: '删除目录',
-  run_command: '执行命令',
-  web_fetch: '抓取网页',
-  view_image: '查看图片',
-  memory_search: '搜索记忆',
-  memory_append: '写入记忆',
-  mcp__fs__edit_file: '编辑',
-  inject_preview_js: '注入',
-  execute_command: '运行',
-  search_codebase: '搜索代码库',
-  codegraph_query: '分析调用链',
-  search_memory: '检索记忆',
-  dispatch_agent: '派发子代理',
-  web_search: '联网搜索',
-  mcp__web_search__web_search: '联网搜索',
-  mcp__web_fetch__web_fetch: '抓取网页'
+  read_file: tr('读取'),
+  grep: tr('搜索'),
+  glob: tr('查找文件'),
+  list_directory: tr('列目录'),
+  directory_tree: tr('目录树'),
+  get_file_info: tr('文件信息'),
+  mcp__fs__read_file: tr('读取'),
+  mcp__fs__read_text_file: tr('读取'),
+  mcp__grep__read_range: tr('读取'),
+  write_file: tr('写入'),
+  mcp__fs__write_file: tr('写入'),
+  mcp__fs__create_file: tr('新建'),
+  edit_file: tr('编辑'),
+  create_directory: tr('新建目录'),
+  move_file: tr('移动'),
+  delete_file: tr('删除'),
+  delete_directory: tr('删除目录'),
+  run_command: tr('执行命令'),
+  web_fetch: tr('抓取网页'),
+  view_image: tr('查看图片'),
+  memory_search: tr('搜索记忆'),
+  memory_append: tr('写入记忆'),
+  mcp__fs__edit_file: tr('编辑'),
+  inject_preview_js: tr('注入'),
+  execute_command: tr('运行'),
+  search_codebase: tr('搜索代码库'),
+  codegraph_query: tr('分析调用链'),
+  search_memory: tr('检索记忆'),
+  dispatch_agent: tr('派发子代理'),
+  web_search: tr('联网搜索'),
+  mcp__web_search__web_search: tr('联网搜索'),
+  mcp__web_fetch__web_fetch: tr('抓取网页')
 }
 
 function baseName(p) {
@@ -965,12 +974,12 @@ function target(b) {
 function actionText(b) {
   // load_tools 只是按需取 MCP 工具 schema 的内部动作，把一串 mcp__fs__read_file,
   // mcp__fs__edit_file 摊开念出来对用户没有信息量，只有噪音——统一成一句轻量提示
-  if (b.name === 'load_tools') return b.status === 'running' ? '加载 MCP 工具中…' : '加载了 MCP 工具'
+  if (b.name === 'load_tools') return b.status === 'running' ? tr('加载 MCP 工具中…') : tr('加载了 MCP 工具')
   // 联网搜索（Firecrawl 工具）：显示「搜索到 N 个来源」而不是把一堆
   // 搜索词原样摊开——图2 那种「搜索到 35 个网页」摘要形态。
   if (isWebSearch(b.name)) {
     const n = searchSources(b).length
-    const label = n > 0 ? `搜索到 ${n} 个来源` : (b.status === 'running' ? '联网搜索中…' : '联网搜索')
+    const label = n > 0 ? (tr('搜索到 ') + n + tr(' 个来源')) : (b.status === 'running' ? tr('联网搜索中…') : tr('联网搜索'))
     const q = (b.args && b.args.query) || ''
     return q ? `${label} · ${String(q).slice(0, 30)}${String(q).length > 30 ? '…' : ''}` : label
   }
@@ -980,8 +989,8 @@ function actionText(b) {
   // 读文件时把 head/tail/行范围（偏移和限制）显式带出来，否则用户以为每次都读全文
   const range = isRead(b.name) ? readRangeLabel(b) : ''
   const suffix = range ? `（${range}）` : ''
-  if (!obj) return running ? `正在${verb}` : `${verb}了`
-  return running ? `正在${verb} ${obj}${suffix}` : `${verb}了 ${obj}${suffix}`
+  if (!obj) return running ? (tr('正在') + verb) : (verb + tr('了'))
+  return running ? (tr('正在') + verb + ' ' + obj + suffix) : (verb + tr('了 ') + obj + suffix)
 }
 
 // 只有写/改文件才有增删行数（对齐设计稿的 "+11 −6"）；其它工具返回 null 不显示。
@@ -1039,16 +1048,16 @@ function searchHost(u) {
 // 常见中文站点域名 → 中文名（图2 那种「图标 + 中文名」的引用来源形态；
 // 未知域名回退显示域名本身）
 const SEARCH_SITE_NAMES = {
-  'thepaper.cn': '澎湃新闻', 'm.jiemian.com': '界面新闻', 'jiemian.com': '界面新闻',
-  'yicai.com': '第一财经', '36kr.com': '36氪', 'qq.com': '腾讯新闻',
-  '163.com': '网易新闻', 'ifeng.com': '凤凰网', 'news.cn': '新华网',
-  'people.com.cn': '人民网', 'cctv.com': '央视网', 'cntv.cn': '央视网',
-  'huanqiu.com': '环球网', 'chinanews.com.cn': '中新网', 'xinhuanet.com': '新华网',
-  'hgdaily.com.cn': '黄冈日报', 'cngold.org': '金投网', 'sina.com.cn': '新浪新闻',
-  'zhihu.com': '知乎', 'bilibili.com': '哔哩哔哩', 'sohu.com': '搜狐新闻',
-  'thecover.cn': '封面新闻', 'stdaily.com': '科技日报', 'ce.cn': '中国经济网',
-  'gov.cn': '中国政府网', 'cnr.cn': '央广网', '12371.cn': '共产党员网',
-  'gmw.cn': '光明网', 'china.com.cn': '中国网', 'cnstock.com': '上海证券报',
+  'thepaper.cn': tr('澎湃新闻'), 'm.jiemian.com': tr('界面新闻'), 'jiemian.com': tr('界面新闻'),
+  'yicai.com': tr('第一财经'), '36kr.com': tr('36氪'), 'qq.com': tr('腾讯新闻'),
+  '163.com': tr('网易新闻'), 'ifeng.com': tr('凤凰网'), 'news.cn': tr('新华网'),
+  'people.com.cn': tr('人民网'), 'cctv.com': tr('央视网'), 'cntv.cn': tr('央视网'),
+  'huanqiu.com': tr('环球网'), 'chinanews.com.cn': tr('中新网'), 'xinhuanet.com': tr('新华网'),
+  'hgdaily.com.cn': tr('黄冈日报'), 'cngold.org': tr('金投网'), 'sina.com.cn': tr('新浪新闻'),
+  'zhihu.com': tr('知乎'), 'bilibili.com': tr('哔哩哔哩'), 'sohu.com': tr('搜狐新闻'),
+  'thecover.cn': tr('封面新闻'), 'stdaily.com': tr('科技日报'), 'ce.cn': tr('中国经济网'),
+  'gov.cn': tr('中国政府网'), 'cnr.cn': tr('央广网'), '12371.cn': tr('共产党员网'),
+  'gmw.cn': tr('光明网'), 'china.com.cn': tr('中国网'), 'cnstock.com': tr('上海证券报'),
 }
 // 站点中文名/图标：不请求任何外部 favicon 服务（Google 在大陆会挂起超时，
 // 每张图卡几秒整个 UI 卡死）。用站点名首字生成本地圆形徽标，零网络依赖。
@@ -1064,7 +1073,7 @@ function searchSiteName(u) {
 function searchInitial(u) {
   const name = searchSiteName(u)
   const c = name.trim().charAt(0)
-  return c ? c.toUpperCase() : '网'
+  return c ? c.toUpperCase() : tr('网')
 }
 // 站点 favicon：favicon.im（国内可直连，实测 1.3s 返回真实图标）。
 // 不用 Google s2/favicons——大陆访问 Google 挂起超时（实测 HTTP 000 + 8s），
@@ -1119,7 +1128,7 @@ function searchQuery(b) {
 }
 // 搜索卡概要：head 只显示状态，不重复搜索词（搜索词在 body 完整展示）
 function searchSummary(b) {
-  return (b.status === 'running' || b.status === 'generating') ? '正在联网搜索…' : '联网搜索完成'
+  return (b.status === 'running' || b.status === 'generating') ? tr('正在联网搜索…') : tr('联网搜索完成')
 }
 
 // 把各种"读一段"的参数翻成人话贴在动作行尾（offset=起点, limit=实际行数）。
@@ -1270,9 +1279,9 @@ function editStartLine(b) {
 }
 
 function toolBodyText(b) {
-  const out = b.output || (b.status === 'running' ? '执行中…' : '(无输出)')
+  const out = b.output || (b.status === 'running' ? tr('执行中…') : tr('(无输出)'))
   if (b.name === 'execute_command') return `$ ${b.args.command || ''}\n\n${out}`
-  if (b.name === 'dispatch_agent') return `任务：${b.args.task || ''}\n\n${out}`
+  if (b.name === 'dispatch_agent') return (tr('任务：') + b.args.task || '' + '\n\n' + out)
   return out
 }
 </script>

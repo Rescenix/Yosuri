@@ -7,11 +7,15 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 import ChatWidget from '../components/shanxi/chat/ChatWidget.vue'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
+
 
 let prevOverflow = ''
 
 onMounted(() => {
-  document.title = '杉汐 | 对话'
+  document.title = tr('杉汐 | 对话')
   prevOverflow = document.body.style.overflow
   document.body.style.overflow = 'hidden'
 })

@@ -8,26 +8,26 @@
       <div class="command-copy">
         <div>
           <p class="command-kicker">LESS CHAT. MORE AUTOMATIC.</p>
-          <h1><span>{{ osStats.totalAgents || 0 }}</span> 个 Agent，<br>一家公司正在自己运转。</h1>
-          <p class="command-subtitle">不是群聊，不是角色扮演。每一次分工、接力、工具调用和交付都留下真实证据。</p>
+          <h1><span>{{ osStats.totalAgents || 0 }}</span> {{ tr('个 Agent，') }}<br>{{ tr('一家公司正在自己运转。') }}</h1>
+          <p class="command-subtitle">{{ tr('不是群聊，不是角色扮演。每一次分工、接力、工具调用和交付都留下真实证据。') }}</p>
         </div>
         <div class="zero-cost-seal">
-          <span>本次模型账单</span>
+          <span>{{ tr('本次模型账单') }}</span>
           <strong>￥0<span>.00</span></strong>
           <small>FREE MODEL ROUTER</small>
         </div>
       </div>
       <div class="command-metrics">
-        <div class="command-metric hot"><span>正在执行</span><strong>{{ osStats.workingCount || 0 }}</strong><small>AGENTS RUNNING</small></div>
-        <div class="command-metric"><span>真实交付</span><strong>{{ totalOutputs }}</strong><small>FILES ON DISK</small></div>
-        <div class="command-metric"><span>协作接力</span><strong>{{ totalHandoffs }}</strong><small>AGENT HANDOFFS</small></div>
-        <div class="command-metric"><span>等待人类</span><strong>{{ approvalProjects.length }}</strong><small>PROJECT GATES</small></div>
+        <div class="command-metric hot"><span>{{ tr('正在执行') }}</span><strong>{{ osStats.workingCount || 0 }}</strong><small>AGENTS RUNNING</small></div>
+        <div class="command-metric"><span>{{ tr('真实交付') }}</span><strong>{{ totalOutputs }}</strong><small>FILES ON DISK</small></div>
+        <div class="command-metric"><span>{{ tr('协作接力') }}</span><strong>{{ totalHandoffs }}</strong><small>AGENT HANDOFFS</small></div>
+        <div class="command-metric"><span>{{ tr('等待人类') }}</span><strong>{{ approvalProjects.length }}</strong><small>PROJECT GATES</small></div>
       </div>
       <div class="integration-strip">
         <span class="integration-title">CONNECTED SYSTEMS</span>
-        <span :class="{ ready: integrations.microsoft?.configured }"><i></i> Microsoft 365 · {{ integrations.microsoft?.configured ? 'Graph 已连接' : '待配置 Entra' }}</span>
-        <span :class="{ ready: integrations.database?.configured }"><i></i> Database · {{ integrations.database?.configured ? '已连接' : '待配置连接串' }}</span>
-        <span :class="{ ready: integrations.navicat?.installed }"><i></i> Navicat · {{ integrations.navicat?.installed ? '客户端就绪' : '未检测到' }}</span>
+        <span :class="{ ready: integrations.microsoft?.configured }"><i></i> Microsoft 365 · {{ integrations.microsoft?.configured ? tr('Graph 已连接') : tr('待配置 Entra') }}</span>
+        <span :class="{ ready: integrations.database?.configured }"><i></i> Database · {{ integrations.database?.configured ? tr('已连接') : tr('待配置连接串') }}</span>
+        <span :class="{ ready: integrations.navicat?.installed }"><i></i> Navicat · {{ integrations.navicat?.installed ? tr('客户端就绪') : tr('未检测到') }}</span>
       </div>
     </header>
 
@@ -36,32 +36,32 @@
       <nav class="section-tabs">
         <button class="section-tab" :class="{ active: activeSection === 'tags' }" @click="activeSection = 'tags'; loadTags(); loadIterate(); loadDirective()">
           <Icon icon="mdi:auto-fix" width="18" />
-          <span>预设</span>
+          <span>{{ tr('预设') }}</span>
           <span class="st-badge">{{ tagsList.length + iteratePlans.length }}</span>
         </button>
         <button class="section-tab" :class="{ active: activeSection === 'meeting' }" @click="activeSection = 'meeting'">
           <Icon icon="mdi:account-group-outline" width="18" />
-          <span>会议室</span>
+          <span>{{ tr('会议室') }}</span>
           <span class="st-badge">{{ meetings.length }}</span>
         </button>
         <button class="section-tab" :class="{ active: activeSection === 'live' }" @click="activeSection = 'live'">
           <Icon icon="mdi:chart-timeline-variant" width="18" />
-          <span>实时运行</span>
+          <span>{{ tr('实时运行') }}</span>
           <span class="st-badge">{{ osStats.totalAgents || 0 }}</span>
         </button>
         <button class="section-tab" :class="{ active: activeSection === 'office' }" @click="activeSection = 'office'">
           <Icon icon="mdi:office-building" width="18" />
-          <span>办公室</span>
+          <span>{{ tr('办公室') }}</span>
           <span class="st-badge">{{ officePeople.length || agents.length }}</span>
         </button>
         <button class="section-tab" :class="{ active: activeSection === 'market' }" @click="activeSection = 'market'; loadMarket()">
           <Icon icon="mdi:storefront-outline" width="18" />
-          <span>应用大厅</span>
+          <span>{{ tr('应用大厅') }}</span>
           <span class="st-badge">{{ marketGames.length }}</span>
         </button>
         <button class="section-tab" :class="{ active: activeSection === 'approval' }" @click="activeSection = 'approval'">
           <Icon icon="mdi:clipboard-check-outline" width="18" />
-          <span>审批台</span>
+          <span>{{ tr('审批台') }}</span>
           <span class="st-badge">{{ approvalProjects.length }}</span>
         </button>
       </nav>
@@ -71,19 +71,19 @@
     <section v-show="activeSection === 'meeting'" class="meeting-room">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">0 · 会议室</p>
-          <h2>{{ latestMeeting?.topic || '还没有可验证的会议' }}</h2>
+          <p class="section-kicker">{{ tr('0 · 会议室') }}</p>
+          <h2>{{ latestMeeting?.topic || tr('还没有可验证的会议') }}</h2>
         </div>
-        <span v-if="latestMeeting?.kind === 'ai_reconstruction'" class="meeting-live reconstructed"><span class="live-pulse"></span> AI 重建回放</span>
-        <span v-else-if="latestMeeting?.kind === 'project_review'" class="meeting-live reconstructed"><span class="live-pulse"></span> 项目交付评审</span>
-        <span v-else class="meeting-live muted">仅会议纪要</span>
+        <span v-if="latestMeeting?.kind === 'ai_reconstruction'" class="meeting-live reconstructed"><span class="live-pulse"></span> {{ tr('AI 重建回放') }}</span>
+        <span v-else-if="latestMeeting?.kind === 'project_review'" class="meeting-live reconstructed"><span class="live-pulse"></span> {{ tr('项目交付评审') }}</span>
+        <span v-else class="meeting-live muted">{{ tr('仅会议纪要') }}</span>
       </div>
 
       <template v-if="latestMeeting">
         <div v-if="latestMeeting.kind !== 'minutes_only'" class="meeting-proof-banner">
           <Icon icon="mdi:shield-check-outline" width="18" />
           <span>{{ latestMeeting.disclaimer }}</span>
-          <strong>{{ latestMeeting.speeches?.length || 0 }} 位发言 · {{ latestMeeting.time }}</strong>
+          <strong>{{ latestMeeting.speeches?.length || 0 }}{{ tr('位发言 ·') }}{{ latestMeeting.time }}</strong>
         </div>
 
         <div class="meeting-media-grid">
@@ -91,45 +91,45 @@
             <video v-if="latestMeeting.replayFile" controls preload="metadata" :src="meetingFileUrl(latestMeeting, latestMeeting.replayFile)"></video>
             <div v-else class="meeting-media-missing">
               <Icon icon="mdi:video-off-outline" width="30" />
-              <strong>回放尚未渲染</strong>
-              <span>{{ latestMeeting.replayError || '这份历史会议只有文字纪要。新会议才会生成 AI 重建 MP4。' }}</span>
+              <strong>{{ tr('回放尚未渲染') }}</strong>
+              <span>{{ latestMeeting.replayError || tr('这份历史会议只有文字纪要。新会议才会生成 AI 重建 MP4。') }}</span>
             </div>
           </div>
           <div class="meeting-assets">
             <p>{{ latestMeeting.kind === 'project_review' ? 'DELIVERY REVIEW PACKAGE' : 'MEETING PACKAGE' }}</p>
-            <button v-if="latestMeeting.pptFile" type="button" @click="previewFile(latestMeeting.agent, latestMeeting.pptFile)"><Icon icon="mdi:microsoft-powerpoint" width="19" /><span><strong>{{ latestMeeting.kind === 'project_review' ? '项目路演 PPT' : '会议 PPT' }}</strong><small>站内逐页预览</small></span></button>
-            <div v-else class="meeting-asset-disabled"><Icon icon="mdi:microsoft-powerpoint" width="19" /><span><strong>PPT 未生成</strong><small>{{ latestMeeting.pptError || '历史会议无演示稿' }}</small></span></div>
-            <button type="button" @click="previewFile(latestMeeting.agent, latestMeeting.file)"><Icon icon="mdi:file-document-check-outline" width="19" /><span><strong>{{ latestMeeting.kind === 'project_review' ? '评审决议' : '会议纪要' }}</strong><small>查看完整决策记录</small></span></button>
-            <a v-if="latestMeeting.transcriptFile" :href="meetingFileUrl(latestMeeting, latestMeeting.transcriptFile)" target="_blank" rel="noopener"><Icon icon="mdi:subtitles-outline" width="19" /><span><strong>VTT 时间轴</strong><small>逐席发言与证据</small></span></a>
+            <button v-if="latestMeeting.pptFile" type="button" @click="previewFile(latestMeeting.agent, latestMeeting.pptFile)"><Icon icon="mdi:microsoft-powerpoint" width="19" /><span><strong>{{ latestMeeting.kind === 'project_review' ? tr('项目路演 PPT') : tr('会议 PPT') }}</strong><small>{{ tr('站内逐页预览') }}</small></span></button>
+            <div v-else class="meeting-asset-disabled"><Icon icon="mdi:microsoft-powerpoint" width="19" /><span><strong>{{ tr('PPT 未生成') }}</strong><small>{{ latestMeeting.pptError || tr('历史会议无演示稿') }}</small></span></div>
+            <button type="button" @click="previewFile(latestMeeting.agent, latestMeeting.file)"><Icon icon="mdi:file-document-check-outline" width="19" /><span><strong>{{ latestMeeting.kind === 'project_review' ? tr('评审决议') : tr('会议纪要') }}</strong><small>{{ tr('查看完整决策记录') }}</small></span></button>
+            <a v-if="latestMeeting.transcriptFile" :href="meetingFileUrl(latestMeeting, latestMeeting.transcriptFile)" target="_blank" rel="noopener"><Icon icon="mdi:subtitles-outline" width="19" /><span><strong>{{ tr('VTT 时间轴') }}</strong><small>{{ tr('逐席发言与证据') }}</small></span></a>
           </div>
         </div>
 
         <div v-if="latestMeeting.speeches?.length" class="meeting-speeches">
-          <div class="meeting-speeches-head"><span>{{ latestMeeting.kind === 'project_review' ? '部门证据汇报' : '部门逐席发言' }}</span><small>每句话都绑定磁盘证据</small></div>
+          <div class="meeting-speeches-head"><span>{{ latestMeeting.kind === 'project_review' ? tr('部门证据汇报') : tr('部门逐席发言') }}</span><small>{{ tr('每句话都绑定磁盘证据') }}</small></div>
           <article v-for="speech in latestMeeting.speeches" :key="speech.agent + speech.order" class="meeting-speech">
             <div class="speech-order">{{ String(speech.order).padStart(2, '0') }}</div>
             <div class="speech-copy">
               <header><strong>{{ speech.department }}</strong><span>{{ speech.agent }}</span><time>{{ speech.start }} → {{ speech.end }}</time></header>
               <p>{{ speech.text }}</p>
-              <button type="button" @click="previewFile(speech.agent, speech.source)"><Icon icon="mdi:paperclip" width="14" /> 证据 · {{ speech.source }}</button>
+              <button type="button" @click="previewFile(speech.agent, speech.source)"><Icon icon="mdi:paperclip" width="14" />{{ tr('证据 ·') }}{{ speech.source }}</button>
             </div>
           </article>
         </div>
 
         <details class="meeting-minutes" :open="latestMeeting.kind === 'minutes_only'">
-          <summary>{{ latestMeeting.kind === 'project_review' ? '完整评审纪要' : '完整会议纪要' }}</summary>
+          <summary>{{ latestMeeting.kind === 'project_review' ? tr('完整评审纪要') : tr('完整会议纪要') }}</summary>
           <div class="meeting-note-body" v-html="renderMarkdown(latestMeeting.content)"></div>
         </details>
 
         <div v-if="meetings.length > 1" class="meeting-history">
-          <span>历史会议</span>
+          <span>{{ tr('历史会议') }}</span>
           <div v-for="m in meetings.slice(1, 4)" :key="m.agent + m.file" class="meeting-history-row">
-            <div><strong>{{ m.topic || m.file }}</strong><small>{{ m.time }} · {{ m.kind === 'project_review' ? `${m.speeches?.length || 0} 个部门评审` : (m.kind === 'ai_reconstruction' ? `${m.speeches?.length || 0} 位发言` : '仅纪要') }}</small></div>
-            <button type="button" @click="previewFile(m.agent, m.file)">查看纪要</button>
+            <div><strong>{{ m.topic || m.file }}</strong><small>{{ m.time }} · {{ m.kind === 'project_review' ? (m.speeches?.length || 0) + tr('个部门评审') : (m.kind === 'ai_reconstruction' ? (m.speeches?.length || 0) + tr('位发言') : tr('仅纪要')) }}</small></div>
+            <button type="button" @click="previewFile(m.agent, m.file)">{{ tr('查看纪要') }}</button>
           </div>
         </div>
       </template>
-      <div v-else class="meeting-empty">没有真实部门产物，因此系统没有生成空壳会议。先完成调研、设计、编码等交付，CEO 才能召集可验证会议。</div>
+      <div v-else class="meeting-empty">{{ tr('没有真实部门产物，因此系统没有生成空壳会议。先完成调研、设计、编码等交付，CEO 才能召集可验证会议。') }}</div>
     </section>
 
     <!-- 项目级审批工作台 -->
@@ -137,16 +137,16 @@
       <div class="approval-hero">
         <div>
           <p class="section-kicker">HUMAN APPROVAL GATE</p>
-          <h2>你审批项目，不审批文件。</h2>
-          <p>Agent 的过程文件自动归档；只有完整项目抵达这里，才需要人类做价值判断。</p>
+          <h2>{{ tr('你审批项目，不审批文件。') }}</h2>
+          <p>{{ tr('Agent 的过程文件自动归档；只有完整项目抵达这里，才需要人类做价值判断。') }}</p>
         </div>
-        <div class="approval-total"><strong>{{ approvalProjects.length }}</strong><span>个团队项目验收中</span></div>
+        <div class="approval-total"><strong>{{ approvalProjects.length }}</strong><span>{{ tr('个团队项目验收中') }}</span></div>
       </div>
       <div class="approval-policy">
-        <span><Icon icon="mdi:account-multiple-check-outline" width="17" /> {{ approvalProjects.length }} 个团队项目进入验收</span>
-        <span><Icon icon="mdi:account-arrow-right-outline" width="17" /> {{ soloProductionCount }} 个单 Agent 交付一并进入验收</span>
-        <span><Icon icon="mdi:archive-outline" width="17" /> {{ standalonePendingCount }} 份零散产出自动归档</span>
-        <span><Icon icon="mdi:shield-check-outline" width="17" /> 批准或退回将作用于整个项目</span>
+        <span><Icon icon="mdi:account-multiple-check-outline" width="17" /> {{ approvalProjects.length }}{{ tr('个团队项目进入验收') }}</span>
+        <span><Icon icon="mdi:account-arrow-right-outline" width="17" /> {{ soloProductionCount }}{{ tr('个单 Agent 交付一并进入验收') }}</span>
+        <span><Icon icon="mdi:archive-outline" width="17" /> {{ standalonePendingCount }}{{ tr('份零散产出自动归档') }}</span>
+        <span><Icon icon="mdi:shield-check-outline" width="17" /> {{ tr('批准或退回将作用于整个项目') }}</span>
       </div>
       <div v-if="approvalProjects.length" class="project-approval-grid">
         <article v-for="(project, index) in approvalProjects" :key="project.key" class="project-approval-card">
@@ -156,27 +156,27 @@
           </header>
           <h3>{{ project.title }}</h3>
           <div class="project-meta">
-            <span><Icon icon="mdi:robot-outline" width="15" /> {{ project.agents.length }} 个 Agent</span>
-            <span><Icon icon="mdi:package-variant-closed" width="15" /> {{ project.artifacts.length }} 份产物</span>
-            <span><Icon icon="mdi:source-branch" width="15" /> {{ project.roles.length }} 个部门接力</span>
+            <span><Icon icon="mdi:robot-outline" width="15" /> {{ project.agents.length }}{{ tr('个 Agent') }}</span>
+            <span><Icon icon="mdi:package-variant-closed" width="15" /> {{ project.artifacts.length }}{{ tr('份产物') }}</span>
+            <span><Icon icon="mdi:source-branch" width="15" /> {{ project.roles.length }}{{ tr('个部门接力') }}</span>
           </div>
 
           <div class="project-preview delivery-theater" :class="`preview-${selectedShowcaseArtifact(project)?.kind || 'empty'}`">
             <div class="preview-head">
               <span><Icon icon="mdi:monitor-eye" width="15" /> VERIFIED DELIVERY THEATER</span>
-              <button v-if="selectedShowcaseArtifact(project)" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))">沉浸预览 ↗</button>
+              <button v-if="selectedShowcaseArtifact(project)" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))">{{ tr('沉浸预览 ↗') }}</button>
             </div>
-            <iframe v-if="selectedShowcaseArtifact(project)?.kind === 'html'" sandbox="allow-forms allow-modals allow-scripts" :src="artifactRawUrl(selectedShowcaseArtifact(project))" title="可运行交付物预览"></iframe>
+            <iframe v-if="selectedShowcaseArtifact(project)?.kind === 'html'" sandbox="allow-forms allow-modals allow-scripts" :src="artifactRawUrl(selectedShowcaseArtifact(project))" :title="tr('可运行交付物预览')"></iframe>
             <video v-else-if="selectedShowcaseArtifact(project)?.kind === 'video'" :src="artifactRawUrl(selectedShowcaseArtifact(project))" controls playsinline preload="metadata"></video>
-            <img v-else-if="selectedShowcaseArtifact(project)?.kind === 'image'" :src="artifactRawUrl(selectedShowcaseArtifact(project))" alt="项目交付物预览" />
+            <img v-else-if="selectedShowcaseArtifact(project)?.kind === 'image'" :src="artifactRawUrl(selectedShowcaseArtifact(project))" :alt="tr('项目交付物预览')" />
             <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'text'" class="artifact-hero report-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:file-document-multiple" width="54" /><span><b>{{ textHeroLabel(selectedShowcaseArtifact(project).stage).en }}</b><strong>{{ textHeroLabel(selectedShowcaseArtifact(project).stage).cn }}</strong><small>{{ selectedShowcaseArtifact(project).name }}</small></span></button>
-            <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'spreadsheet'" class="artifact-hero excel-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:microsoft-excel" width="54" /><span><b>RESEARCH DATA</b><strong>打开可复算 Excel</strong><small>真实磁盘数据 · 筛选 · 数值类型 · 冻结表头</small></span></button>
-            <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'pptx'" class="artifact-hero ppt-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:microsoft-powerpoint" width="54" /><span><b>INVESTOR DECK</b><strong>逐页播放项目路演</strong><small>真实 PPTX · 16:9 · 站内解析</small></span></button>
-            <button v-else-if="selectedShowcaseArtifact(project)" class="artifact-hero receipt-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:certificate-outline" width="54" /><span><b>MACHINE RECEIPT</b><strong>查看机器发布回执</strong><small>渠道 · 时间 · 入口 · SHA-256</small></span></button>
-            <div v-else class="preview-missing"><Icon icon="mdi:package-variant-remove" width="24" /><span>尚未生成可预览的最终产物</span></div>
+            <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'spreadsheet'" class="artifact-hero excel-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:microsoft-excel" width="54" /><span><b>RESEARCH DATA</b><strong>{{ tr('打开可复算 Excel') }}</strong><small>{{ tr('真实磁盘数据 · 筛选 · 数值类型 · 冻结表头') }}</small></span></button>
+            <button v-else-if="selectedShowcaseArtifact(project)?.kind === 'pptx'" class="artifact-hero ppt-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:microsoft-powerpoint" width="54" /><span><b>INVESTOR DECK</b><strong>{{ tr('逐页播放项目路演') }}</strong><small>{{ tr('真实 PPTX · 16:9 · 站内解析') }}</small></span></button>
+            <button v-else-if="selectedShowcaseArtifact(project)" class="artifact-hero receipt-hero" type="button" @click="previewProjectArtifact(project, selectedShowcaseArtifact(project))"><Icon icon="mdi:certificate-outline" width="54" /><span><b>MACHINE RECEIPT</b><strong>{{ tr('查看机器发布回执') }}</strong><small>{{ tr('渠道 · 时间 · 入口 · SHA-256') }}</small></span></button>
+            <div v-else class="preview-missing"><Icon icon="mdi:package-variant-remove" width="24" /><span>{{ tr('尚未生成可预览的最终产物') }}</span></div>
             <div v-if="selectedShowcaseArtifact(project)" class="artifact-proof-strip">
               <span><i></i> {{ roleLabel(selectedShowcaseArtifact(project).producerRole) }}</span>
-              <strong>{{ selectedShowcaseArtifact(project).verification || '真实文件已落盘并通过哈希校验' }}</strong>
+              <strong>{{ selectedShowcaseArtifact(project).verification || tr('真实文件已落盘并通过哈希校验') }}</strong>
               <code>SHA {{ (selectedShowcaseArtifact(project).sha256 || '').slice(0, 12) }}</code>
             </div>
           </div>
@@ -197,26 +197,26 @@
               <span><Icon :icon="stage.icon" width="15" /></span><small>{{ stage.label }}</small>
             </button>
           </div>
-          <p v-if="!project.ready" class="project-gap"><Icon icon="mdi:alert-circle-outline" width="15" /> 还缺 {{ project.missingStages.map(stageLabel).join('、') }}，未达到项目审批条件。</p>
+          <p v-if="!project.ready" class="project-gap"><Icon icon="mdi:alert-circle-outline" width="15" />{{ tr('还缺') }}{{ project.missingStages.map(stageLabel).join('、') }}{{ tr('，未达到项目审批条件。') }}</p>
 
           <div class="project-agents">
             <span v-for="agent in project.agents.slice(0, 6)" :key="agent">{{ agent }}</span>
             <span v-if="project.agents.length > 6">+{{ project.agents.length - 6 }}</span>
           </div>
           <details class="project-deliveries">
-            <summary>查看项目交付清单 <b>{{ project.artifacts.length }}</b></summary>
+            <summary>{{ tr('查看项目交付清单') }} <b>{{ project.artifacts.length }}</b></summary>
             <button v-for="artifact in project.artifacts" :key="artifact.agent + artifact.path" type="button" @click="previewProjectArtifact(project, artifact)">
-              <span>{{ artifact.agent }}</span><code>{{ artifact.name }}</code><em>{{ stageLabel(artifact.stage) }}</em>
+              <span>{{ tr(artifact.agent) }}</span><code>{{ artifact.name }}</code><em>{{ stageLabel(artifact.stage) }}</em>
             </button>
           </details>
           <div class="project-actions">
-            <a v-if="project.project" class="package-project" :href="'/api/company/package?project=' + encodeURIComponent(project.project)" download><Icon icon="mdi:folder-zip-outline" width="16" /> 下载完整交付包</a>
-            <button class="reject-project" :disabled="decidingProject === project.key" @click="approveProject(project, 'reject')"><Icon icon="mdi:backup-restore" width="16" /> 整体退回</button>
-            <button class="approve-project" :disabled="decidingProject === project.key || !project.ready" :title="project.ready ? '批准整个项目' : '阶段未齐全，不能批准'" @click="approveProject(project, 'approve')"><Icon icon="mdi:check-bold" width="16" /> {{ decidingProject === project.key ? '处理中…' : (project.ready ? '批准整个项目' : '等待完整交付') }}</button>
+            <a v-if="project.project" class="package-project" :href="'/api/company/package?project=' + encodeURIComponent(project.project)" download><Icon icon="mdi:folder-zip-outline" width="16" /> {{ tr('下载完整交付包') }}</a>
+            <button class="reject-project" :disabled="decidingProject === project.key" @click="approveProject(project, 'reject')"><Icon icon="mdi:backup-restore" width="16" /> {{ tr('整体退回') }}</button>
+            <button class="approve-project" :disabled="decidingProject === project.key || !project.ready" :title="project.ready ? tr('批准整个项目') : tr('阶段未齐全，不能批准')" @click="approveProject(project, 'approve')"><Icon icon="mdi:check-bold" width="16" /> {{ decidingProject === project.key ? tr('处理中…') : (project.ready ? tr('批准整个项目') : tr('等待完整交付')) }}</button>
           </div>
         </article>
       </div>
-      <div v-else class="approval-empty">没有由多个 Agent 完成的团队项目。单 Agent 试验不会再伪装成可审批项目。</div>
+      <div v-else class="approval-empty">{{ tr('没有由多个 Agent 完成的团队项目。单 Agent 试验不会再伪装成可审批项目。') }}</div>
     </section>
 
     <!-- 多 Agent 作战室 -->
@@ -225,8 +225,8 @@
         <div class="production-overview">
           <div class="production-project">
             <span class="production-eyebrow"><i></i> CURRENT PROJECT</span>
-            <h2>{{ currentProductionProject?.title || activeGoal?.objective || '等待项目进入生产线' }}</h2>
-            <div class="production-tags" aria-label="项目标签">
+            <h2>{{ currentProductionProject?.title || activeGoal?.objective || tr('等待项目进入生产线') }}</h2>
+            <div class="production-tags" :aria-label="tr('项目标签')">
               <span v-for="tag in currentProjectTags" :key="tag">{{ tag }}</span>
             </div>
           </div>
@@ -235,7 +235,7 @@
             <small>{{ productionProgressLabel }}</small>
           </div>
         </div>
-        <div class="department-progress" role="progressbar" aria-label="项目部门进度"
+        <div class="department-progress" role="progressbar" :aria-label="tr('项目部门进度')"
           aria-valuemin="0" aria-valuemax="100" :aria-valuenow="productionProgressPercent">
           <div v-for="(phase, i) in departmentProgress" :key="phase.role" class="department-phase"
             :class="{ done: phase.done, current: phase.current, pending: !phase.done && !phase.current }"
@@ -253,7 +253,7 @@
       <!-- 生产大屏：SSE 实时直播 报告 → UI 设计 → 原型迭代 -->
       <section class="live-screen" :class="{ idle: !liveActive }">
         <div class="live-screen-head">
-          <span class="live-screen-eyebrow"><i></i> LIVE SCREEN · 生产大屏</span>
+          <span class="live-screen-eyebrow"><i></i> {{ tr('LIVE SCREEN · 生产大屏') }}</span>
           <div class="live-screen-stages">
             <span v-for="s in liveStageChips" :key="s.key" :class="{ on: s.on, done: s.done }">{{ s.label }}</span>
           </div>
@@ -261,15 +261,15 @@
         </div>
         <div class="live-screen-grid">
           <div class="live-screen-proto">
-            <iframe v-if="livePrototype.src" :key="livePrototype.src" :src="livePrototype.src" sandbox="allow-forms allow-modals allow-scripts" title="原型实时预览"></iframe>
-            <div v-else class="live-screen-wait"><Icon icon="mdi:monitor-share" width="34" /><span>最小原型生成后自动出现在这里</span></div>
+            <iframe v-if="livePrototype.src" :key="livePrototype.src" :src="livePrototype.src" sandbox="allow-forms allow-modals allow-scripts" :title="tr('原型实时预览')"></iframe>
+            <div v-else class="live-screen-wait"><Icon icon="mdi:monitor-share" width="34" /><span>{{ tr('最小原型生成后自动出现在这里') }}</span></div>
           </div>
           <div class="live-screen-feed" ref="liveFeedEl" @scroll="onLiveFeedScroll">
             <div v-for="block in liveFeedBlocks" :key="block.id" class="live-feed-block" :class="{ cur: block.cur }">
               <div class="live-feed-head"><Icon :icon="liveStageIcon(block.stage)" width="14" /><b>{{ block.role }}</b><span>{{ block.stageLabel }}</span><em>{{ block.time }}</em></div>
               <pre>{{ block.text }}</pre>
             </div>
-            <div v-if="!liveFeedBlocks.length" class="live-screen-wait"><Icon icon="mdi:text-box-search-outline" width="34" /><span>下达指令后，报告与设计的每个字都会实时流到这里</span></div>
+            <div v-if="!liveFeedBlocks.length" class="live-screen-wait"><Icon icon="mdi:text-box-search-outline" width="34" /><span>{{ tr('下达指令后，报告与设计的每个字都会实时流到这里') }}</span></div>
           </div>
         </div>
       </section>
@@ -277,21 +277,21 @@
       <div class="war-grid">
         <section class="graph-panel">
           <div class="panel-heading">
-            <div><span>HANDOFF GRAPH</span><h2>Agent 如何真正接力</h2></div>
+            <div><span>HANDOFF GRAPH</span><h2>{{ tr('Agent 如何真正接力') }}</h2></div>
             <div class="graph-head-actions">
-              <div class="graph-view-switch" aria-label="协作图密度">
-                <button type="button" :class="{ active: graphMode === 'focus' }" @click="setGraphMode('focus')">主干</button>
-                <button type="button" :class="{ active: graphMode === 'all' }" @click="setGraphMode('all')">全部</button>
+              <div class="graph-view-switch" :aria-label="tr('协作图密度')">
+                <button type="button" :class="{ active: graphMode === 'focus' }" @click="setGraphMode('focus')">{{ tr('主干') }}</button>
+                <button type="button" :class="{ active: graphMode === 'all' }" @click="setGraphMode('all')">{{ tr('全部') }}</button>
               </div>
-              <div class="panel-stat"><strong>{{ displayGraphLinks.length }}</strong><small>/ {{ graphState.links.length }} 引用链</small></div>
+              <div class="panel-stat"><strong>{{ displayGraphLinks.length }}</strong><small>/ {{ graphState.links.length }}{{ tr('引用链') }}</small></div>
             </div>
           </div>
           <div class="graph-stage" v-if="graphState.nodes.length">
-            <div class="graph-tools" aria-label="协作图控制">
-              <button type="button" title="放大" @click="zoomGraph(1.18)">＋</button>
-              <button type="button" title="缩小" @click="zoomGraph(0.85)">－</button>
-              <button type="button" title="适应画布" @click="fitGraph"><Icon icon="mdi:fit-to-screen-outline" width="15" /></button>
-              <button type="button" title="恢复初始布局" @click="resetGraph"><Icon icon="mdi:restore" width="15" /></button>
+            <div class="graph-tools" :aria-label="tr('协作图控制')">
+              <button type="button" :title="tr('放大')" @click="zoomGraph(1.18)">＋</button>
+              <button type="button" :title="tr('缩小')" @click="zoomGraph(0.85)">－</button>
+              <button type="button" :title="tr('适应画布')" @click="fitGraph"><Icon icon="mdi:fit-to-screen-outline" width="15" /></button>
+              <button type="button" :title="tr('恢复初始布局')" @click="resetGraph"><Icon icon="mdi:restore" width="15" /></button>
               <span>{{ Math.round(graphZoom * 100) }}%</span>
             </div>
             <svg ref="graphSvg" :viewBox="graphState.viewBox" class="collab-svg" :class="{ moving: graphGesture }"
@@ -300,7 +300,7 @@
               <g :transform="graphTransform">
                 <g v-for="d in graphState.deptLabels" :key="'lane' + d.key" class="cm-lane">
                   <line :x1="d.x" y1="62" :x2="d.x" y2="468" />
-                  <text :x="d.x" :y="d.y" text-anchor="middle" class="cm-dept-label">{{ d.name }}</text>
+                  <text :x="d.x" :y="d.y" text-anchor="middle" class="cm-dept-label">{{ tr(d.name) }}</text>
                 </g>
                 <g v-for="lk in displayGraphLinks" :key="lk.key" class="cm-link">
                   <line class="cm-link-glow" :x1="lk.x1" :y1="lk.y1" :x2="lk.x2" :y2="lk.y2" :stroke="lk.color"
@@ -321,17 +321,17 @@
                 </g>
               </g>
             </svg>
-            <div class="graph-caption"><span><i></i> {{ graphMode === 'focus' ? '主干中枢' : '全量中枢' }} {{ selectedNode?.name || graphState.hub }}</span><span>默认降噪 · 点击节点切换主干 · 可拖拽/缩放</span></div>
+            <div class="graph-caption"><span><i></i> {{ graphMode === 'focus' ? tr('主干中枢') : tr('全量中枢') }} {{ selectedNode?.name || graphState.hub }}</span><span>{{ tr('默认降噪 · 点击节点切换主干 · 可拖拽/缩放') }}</span></div>
           </div>
           <div v-if="selectedNode" class="node-inspector">
             <div><span>{{ roleLabel(selectedNode.role) }}</span><strong>{{ selectedNode.name }}</strong></div>
-            <p><b>输入</b>{{ selectedNodeOut }}</p><p><b>下游</b>{{ selectedNodeIn }}</p>
-            <button @click="selectedNode = null">关闭</button>
+            <p><b>{{ tr('输入') }}</b>{{ selectedNodeOut }}</p><p><b>{{ tr('下游') }}</b>{{ selectedNodeIn }}</p>
+            <button @click="selectedNode = null">{{ tr('关闭') }}</button>
           </div>
         </section>
 
         <section class="trace-panel">
-          <div class="panel-heading"><div><span>LIVE TRACE</span><h2>此刻正在发生</h2></div><span class="trace-live"><i></i> LIVE</span></div>
+          <div class="panel-heading"><div><span>LIVE TRACE</span><h2>{{ tr('此刻正在发生') }}</h2></div><span class="trace-live"><i></i> LIVE</span></div>
           <div class="trace-list">
             <div v-for="(e, i) in recentEvents" :key="i" class="trace-row">
               <span class="trace-time">{{ e.timeText || formatTime(e.createdAt) }}</span>
@@ -339,28 +339,28 @@
               <div><strong>{{ e.name || e.actor }}</strong><p>{{ e.message }}</p></div>
               <span class="trace-ok">✓</span>
             </div>
-            <div v-if="!recentEvents.length" class="trace-empty">等待执行事件…</div>
+            <div v-if="!recentEvents.length" class="trace-empty">{{ tr('等待执行事件…') }}</div>
           </div>
         </section>
       </div>
 
       <section class="agent-console">
         <div class="panel-heading">
-          <div><span>EXECUTION NODES</span><h2>{{ selectedDepartment.name }} · 执行现场</h2></div>
+          <div><span>EXECUTION NODES</span><h2>{{ selectedDepartment.name }}{{ tr('· 执行现场') }}</h2></div>
           <div class="dept-switcher">
-            <button v-for="dept in departments" :key="dept.key" :class="{ active: activeDept === dept.key }" @click="activeDept = dept.key">{{ dept.name }} <b>{{ dept.agents.length }}</b></button>
+            <button v-for="dept in departments" :key="dept.key" :class="{ active: activeDept === dept.key }" @click="activeDept = dept.key">{{ tr(dept.name) }} <b>{{ dept.agents.length }}</b></button>
           </div>
         </div>
         <div class="agent-rows">
           <article v-for="agent in selectedDepartment.agents" :key="agent.name" class="agent-row" :class="{ busy: isBusy(agent), dead: isDead(agent) }">
             <span class="agent-avatar"><Icon :icon="roleIcon(agent.role)" width="19" /></span>
-            <div class="agent-id"><strong>{{ agent.name }}</strong><small :class="statusClass(agent)">{{ statusText(agent) }}</small></div>
+            <div class="agent-id"><strong>{{ tr(agent.name) }}</strong><small :class="statusClass(agent)">{{ statusText(agent) }}</small></div>
             <p class="agent-doing">{{ agent.task || doingText(agent) }}</p>
-            <span v-if="agent.lastActive" class="agent-last" :title="'最后活动：' + agent.lastActive">{{ agent.lastActive }}</span>
+            <span v-if="agent.lastActive" class="agent-last" :title="tr('最后活动：') + agent.lastActive">{{ agent.lastActive }}</span>
             <div class="agent-handoff"><Icon icon="mdi:source-branch" width="15" /><span>{{ (agent.collabRefs || []).length }} handoffs</span></div>
             <div class="agent-artifacts">
               <button v-for="f in (agent.files || []).slice(0, 2)" :key="f" @click="previewFile(agent, f)">{{ fileType(f) }}</button>
-              <span v-if="!(agent.files || []).length">暂无交付</span>
+              <span v-if="!(agent.files || []).length">{{ tr('暂无交付') }}</span>
             </div>
             <strong class="agent-output">{{ agent.outputs || 0 }}</strong>
           </article>
@@ -372,10 +372,10 @@
       <section v-show="activeSection === 'office'" class="office-scene">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">GAME DEV STORY · 公司总部</p>
-            <h2>开发公司办公室</h2>
+            <p class="section-kicker">{{ tr('GAME DEV STORY · 公司总部') }}</p>
+            <h2>{{ tr('开发公司办公室') }}</h2>
           </div>
-          <span class="office-money"><b>💰 ¥{{ financeBalance.toLocaleString() }}</b><small>{{ financeTotalIn.toLocaleString() }} 累计销量收入</small></span>
+          <span class="office-money"><b>💰 ¥{{ financeBalance.toLocaleString() }}</b><small>{{ financeTotalIn.toLocaleString() }}{{ tr('累计销量收入') }}</small></span>
         </div>
         <div class="office-map">
           <!-- 摆件 -->
@@ -385,7 +385,7 @@
           <span class="office-prop prop-desk3">📦</span>
           <!-- CEO 办公室 -->
           <div class="office-dept dept-ceo" :style="deptStyle('ceo')">
-            <div class="dept-sign">👑 CEO 办公室 <b>{{ deptPeople('ceo').length }}</b></div>
+            <div class="dept-sign">{{ tr('👑 CEO 办公室') }} <b>{{ deptPeople('ceo').length }}</b></div>
             <div v-for="p in deptPeople('ceo')" :key="p.name" class="office-person" :class="p.cls" :style="personStyle(p)">
               <span class="op-bubble"><i :class="p.dot"></i>{{ p.task }}</span>
               <span class="op-face">{{ p.emoji }}</span>
@@ -394,7 +394,7 @@
           </div>
           <!-- 6 个部门 -->
           <div v-for="d in officeDepts" :key="d.key" class="office-dept" :style="deptStyle(d.key)">
-            <div class="dept-sign">{{ d.icon }} {{ d.name }} <b>{{ deptPeople(d.key).length }}</b></div>
+            <div class="dept-sign">{{ d.icon }} {{ tr(d.name) }} <b>{{ deptPeople(d.key).length }}</b></div>
             <div v-for="p in deptPeople(d.key)" :key="p.name" class="office-person" :class="p.cls" :style="personStyle(p)">
               <span class="op-bubble"><i :class="p.dot"></i>{{ p.task }}</span>
               <span class="op-face">{{ p.emoji }}</span>
@@ -408,27 +408,27 @@
       <section v-show="activeSection === 'market'" class="market-room">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">APP STORE · 算法推流</p>
-            <h2>应用大厅</h2>
+            <p class="section-kicker">{{ tr('APP STORE · 算法推流') }}</p>
+            <h2>{{ tr('应用大厅') }}</h2>
           </div>
-          <span class="reviews-total">{{ marketGames.length }} 款应用 · 推荐分 = 真实评分×人数 + 推广加权</span>
+          <span class="reviews-total">{{ marketGames.length }}{{ tr('款应用 · 推荐分 = 真实评分×人数 + 推广加权') }}</span>
         </div>
         <div class="market-grid">
           <article v-for="g in marketGames" :key="g.agent + g.project" class="market-card" :class="{ promoted: g.promoted, unreviewed: !g.has_review }">
             <div class="mc-cover">
               <span class="mc-icon">{{ g.promoted ? '⭐' : (g.award ? awardEmoji(g.award.title) : '📦') }}</span>
-              <span v-if="g.promoted" class="mc-promo">推广</span>
+              <span v-if="g.promoted" class="mc-promo">{{ tr('推广') }}</span>
               <span v-if="g.award" class="mc-award" :class="awardClass(g.award.title)">{{ g.award.title }}</span>
             </div>
             <div class="mc-body">
               <h3>{{ g.project }}</h3>
-              <p class="mc-agent">{{ g.agent }} 出品</p>
+              <p class="mc-agent">{{ g.agent }}{{ tr('出品') }}</p>
               <div class="mc-meta">
                 <template v-if="g.has_review">
                   <span class="mc-score" :class="{ good: g.avg_score >= 7, mid: g.avg_score >= 5 && g.avg_score < 7 }"><b>{{ g.avg_score.toFixed(1) }}</b>/10</span>
-                  <span class="mc-count">{{ g.count }} 位真实用户评分</span>
+                  <span class="mc-count">{{ g.count }}{{ tr('位真实用户评分') }}</span>
                 </template>
-                <span v-else class="mc-wait">⏳ 等待真实用户评测</span>
+                <span v-else class="mc-wait">{{ tr('⏳ 等待真实用户评测') }}</span>
               </div>
               <p v-if="g.promo_desc" class="mc-promo-desc">{{ g.promo_desc }}</p>
             </div>
@@ -436,53 +436,53 @@
         </div>
         <div v-if="!marketGames.length" class="reviews-empty">
           <Icon icon="mdi:storefront-outline" width="30" />
-          <p>还没有应用上架。等 coder 完成交付后，应用大厅自动展示。</p>
+          <p>{{ tr('还没有应用上架。等 coder 完成交付后，应用大厅自动展示。') }}</p>
         </div>
       </section>
 
       <section v-show="activeSection === 'tags'" class="tags-room">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">0 · 预设</p>
-          <h2>标签管理 · 前沿技术迭代</h2>
+          <p class="section-kicker">{{ tr('0 · 预设') }}</p>
+          <h2>{{ tr('标签管理 · 前沿技术迭代') }}</h2>
         </div>
       </div>
 
       <div class="tags-input-row">
-              <input v-model="tagInput" class="tags-input" placeholder="输入标签，如 AI Agent、多模态、融资…" @keyup.enter="addTag" />
-              <button class="tags-add-btn" :disabled="!tagInput.trim() || tagAdding" @click="addTag">{{ tagAdding ? '添加中…' : '添加标签' }}</button>
+              <input v-model="tagInput" class="tags-input" :placeholder="tr('输入标签，如 AI Agent、多模态、融资…')" @keyup.enter="addTag" />
+              <button class="tags-add-btn" :disabled="!tagInput.trim() || tagAdding" @click="addTag">{{ tagAdding ? tr('添加中…') : tr('添加标签') }}</button>
             </div>
 
             <!-- 下达指令：用户自定义考题/项目目标，立项最高优先级（1vs100 考题通道） -->
             <div class="directive-zone">
               <div class="directive-head">
-                <h3>📢 下达指令（考题）</h3>
-                <span class="directive-tip">指令优先于标签/热点，公司立项必须围绕它执行</span>
+                <h3>{{ tr('📢 下达指令（考题）') }}</h3>
+                <span class="directive-tip">{{ tr('指令优先于标签/热点，公司立项必须围绕它执行') }}</span>
               </div>
               <div class="directive-input-row">
-                        <input v-model="directiveInput" class="directive-input" placeholder="例：做一个番茄钟+待办小工具，要能运行，限 30 分钟" @input="directiveInputDirty = true" @keyup.enter="saveDirective" />
-                        <select v-model="directiveModel" class="directive-model-select" title="指定公司用哪个模型跑（留空=自动轮换）" @change="directiveModelTouched = true">
-                          <option value="">模型：自动轮换</option>
+                        <input v-model="directiveInput" class="directive-input" :placeholder="tr('例：做一个番茄钟+待办小工具，要能运行，限 30 分钟')" @input="directiveInputDirty = true" @keyup.enter="saveDirective" />
+                        <select v-model="directiveModel" class="directive-model-select" :title="tr('指定公司用哪个模型跑（留空=自动轮换）')" @change="directiveModelTouched = true">
+                          <option value="">{{ tr('模型：自动轮换') }}</option>
                           <option v-for="m in directiveModelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
                         </select>
-                        <button class="directive-save-btn" :disabled="directiveSaving" @click="saveDirective">{{ directiveSaving ? '下达中…' : '下达指令' }}</button>
-                        <button v-if="directiveText" class="directive-clear-btn" :disabled="directiveSaving" @click="clearDirective">清除</button>
+                        <button class="directive-save-btn" :disabled="directiveSaving" @click="saveDirective">{{ directiveSaving ? tr('下达中…') : tr('下达指令') }}</button>
+                        <button v-if="directiveText" class="directive-clear-btn" :disabled="directiveSaving" @click="clearDirective">{{ tr('清除') }}</button>
                       </div>
                       <div class="directive-output-row">
-                        <label>产出输出 token 数</label>
+                        <label>{{ tr('产出输出 token 数') }}</label>
                         <input v-model.number="modelMaxTokens" type="number" min="512" max="65536" step="512" class="directive-output-input" @change="saveModelMaxTokens" />
-                        <button class="directive-output-save" :disabled="tokenSaving" @click="saveModelMaxTokens">{{ tokenSaving ? '保存中…' : '保存' }}</button>
-                        <span class="directive-output-hint">较少的 token 预留会导致代码截断、产品无样式或互动；更多 token 让 Agents 更保证产品质量，但耗时更多（范围 512~65536）</span>
+                        <button class="directive-output-save" :disabled="tokenSaving" @click="saveModelMaxTokens">{{ tokenSaving ? tr('保存中…') : tr('保存') }}</button>
+                        <span class="directive-output-hint">{{ tr('较少的 token 预留会导致代码截断、产品无样式或互动；更多 token 让 Agents 更保证产品质量，但耗时更多（范围 512~65536）') }}</span>
                       </div>
                       <div v-if="directiveError" class="directive-error">{{ directiveError }}</div>
                       <div v-if="directiveText" class="directive-current">
                         <Icon icon="mdi:bullhorn" width="16" />
-                        <span>当前指令：<strong>{{ directiveText }}</strong><template v-if="directiveModel"><em> · 模型：{{ directiveModel }}</em></template></span>
+                        <span>{{ tr('当前指令：') }}<strong>{{ directiveText }}</strong><template v-if="directiveModel"><em>{{ tr('· 模型：') }}{{ directiveModel }}</em></template></span>
                       </div>
             </div>
 
       <div class="tags-hot" v-if="hotTags.length">
-        <h3>🔥 热门标签</h3>
+        <h3>{{ tr('🔥 热门标签') }}</h3>
         <div class="tags-shell">
           <span v-for="t in hotTags" :key="t.id" class="tag-pill hot" @click="tagInput = t.name; addTag()">
             {{ t.name }}
@@ -492,50 +492,50 @@
       </div>
 
       <div class="tags-list" v-if="tagsList.length">
-        <h3>我的标签（{{ tagsList.length }}）</h3>
+        <h3>{{ tr('我的标签（') }}{{ tagsList.length }}）</h3>
         <div class="tags-shell">
           <span v-for="t in tagsList" :key="t.id" class="tag-pill">
             {{ t.name }}
             <small>×{{ t.usedCount }}</small>
-            <button class="tag-del" @click="deleteTag(t.id)" title="删除标签">×</button>
+            <button class="tag-del" @click="deleteTag(t.id)" :title="tr('删除标签')">×</button>
           </span>
         </div>
       </div>
       <div v-else-if="!loadingTags" class="tags-empty">
         <Icon icon="mdi:tag-plus-outline" width="32" />
-        <p>还没有标签，输入一个开始记录调研方向吧</p>
+        <p>{{ tr('还没有标签，输入一个开始记录调研方向吧') }}</p>
       </div>
 
       <!-- 迭代区：从已审批项目选，每天调研前沿技术迭代产品 -->
       <div class="iterate-zone">
-        <h3 class="iterate-title">⚡ 前沿技术迭代</h3>
-        <p class="iterate-desc">从已审批的项目里选一个，让 agents 每天调研最前沿技术来迭代该产品。</p>
+        <h3 class="iterate-title">{{ tr('⚡ 前沿技术迭代') }}</h3>
+        <p class="iterate-desc">{{ tr('从已审批的项目里选一个，让 agents 每天调研最前沿技术来迭代该产品。') }}</p>
 
         <div v-if="iteratePlans.length" class="iterate-plans">
-          <h4>迭代中（{{ iteratePlans.length }}）</h4>
+          <h4>{{ tr('迭代中（') }}{{ iteratePlans.length }}）</h4>
           <div v-for="p in iteratePlans" :key="p.project" class="iterate-plan-card">
             <div class="iterate-plan-head">
-              <strong>{{ p.name }}</strong>
+              <strong>{{ tr(p.name) }}</strong>
               <div class="iterate-plan-actions">
                 <span class="iterate-badge">LIVE</span>
-                <button class="iterate-stop-btn" @click="stopIterate(p)">停止</button>
+                <button class="iterate-stop-btn" @click="stopIterate(p)">{{ tr('停止') }}</button>
               </div>
             </div>
-            <p class="iterate-summary">{{ p.lastReport || '报告生成中…' }}</p>
-            <small class="iterate-meta">开始于 {{ formatTime(p.startedAt) }}</small>
+            <p class="iterate-summary">{{ p.lastReport || tr('报告生成中…') }}</p>
+            <small class="iterate-meta">{{ tr('开始于') }}{{ formatTime(p.startedAt) }}</small>
           </div>
         </div>
 
         <div v-if="iterateCandidates.length && !iteratePlans.length" class="iterate-candidates">
-          <h4>候选项目（已审批，可开始迭代）</h4>
+          <h4>{{ tr('候选项目（已审批，可开始迭代）') }}</h4>
           <div v-for="cd in iterateCandidates" :key="cd.project" class="iterate-candidate-row">
             <span class="iterate-cand-name">{{ cd.name }}</span>
-            <button class="iterate-start-btn" :disabled="iterateStarting" @click="startIterate(cd)">{{ iterateStarting ? '启动中…' : '开始迭代' }}</button>
+            <button class="iterate-start-btn" :disabled="iterateStarting" @click="startIterate(cd)">{{ iterateStarting ? tr('启动中…') : tr('开始迭代') }}</button>
           </div>
         </div>
         <div v-else class="iterate-empty">
           <Icon icon="mdi:rocket-launch-outline" width="30" />
-          <p>还没有可迭代的已审批项目。去审批台通过一个项目后，就能在这里让它每天自我迭代。</p>
+          <p>{{ tr('还没有可迭代的已审批项目。去审批台通过一个项目后，就能在这里让它每天自我迭代。') }}</p>
         </div>
       </div>
     </section>
@@ -544,10 +544,10 @@
       <section class="reviews-room">
         <div class="section-heading">
           <div>
-            <p class="section-kicker">LIVE · 真实评分评奖</p>
-            <h2>真实用户打分 · 评奖</h2>
+            <p class="section-kicker">{{ tr('LIVE · 真实评分评奖') }}</p>
+            <h2>{{ tr('真实用户打分 · 评奖') }}</h2>
           </div>
-          <span v-if="reviewsList.length" class="reviews-total">{{ reviewsList.length }} 个产品已获真实评分</span>
+          <span v-if="reviewsList.length" class="reviews-total">{{ reviewsList.length }}{{ tr('个产品已获真实评分') }}</span>
         </div>
         <div v-if="reviewsList.length" class="reviews-list">
           <article v-for="rv in reviewsList" :key="rv.agent + rv.project" class="review-card">
@@ -558,7 +558,7 @@
                 <span v-if="rv.award" class="review-award" :class="awardClass(rv.award.title)">{{ rv.award.title }}</span>
               </div>
               <div class="review-score" :class="{ good: rv.avg_score >= 7, mid: rv.avg_score >= 5 && rv.avg_score < 7 }">
-                <strong>{{ rv.avg_score.toFixed(1) }}</strong><small>/10 · {{ rv.count }} 位真实用户</small>
+                <strong>{{ rv.avg_score.toFixed(1) }}</strong><small>/10 · {{ rv.count }}{{ tr('位真实用户') }}</small>
               </div>
             </header>
             <div class="review-users">
@@ -575,20 +575,20 @@
               </div>
             </div>
             <form class="review-form" @submit.prevent="submitReview(rv)">
-              <input v-model="rv._nick" :placeholder="reviewNickname || '你的昵称'" class="rf-nick" maxlength="12" />
+              <input v-model="rv._nick" :placeholder="reviewNickname || tr('你的昵称')" class="rf-nick" maxlength="12" />
               <div class="rf-stars">
                 <button v-for="s in 5" :key="s" type="button" class="rf-star" :class="{ on: rv._stars >= s }" @click="rv._stars = s">★</button>
-                <span v-if="rv._stars" class="rf-score-num">{{ rv._stars * 2 }} 分</span>
+                <span v-if="rv._stars" class="rf-score-num">{{ rv._stars * 2 }}{{ tr('分') }}</span>
               </div>
-              <input v-model="rv._comment" placeholder="说说你的真实体验（≤120字）" class="rf-comment" maxlength="120" />
-              <button type="submit" class="rf-submit" :disabled="rv._submitting">{{ rv._submitting ? '提交中…' : '提交评分' }}</button>
+              <input v-model="rv._comment" :placeholder="tr('说说你的真实体验（≤120字）')" class="rf-comment" maxlength="120" />
+              <button type="submit" class="rf-submit" :disabled="rv._submitting">{{ rv._submitting ? tr('提交中…') : tr('提交评分') }}</button>
               <span v-if="rv._msg" class="rf-msg">{{ rv._msg }}</span>
             </form>
           </article>
         </div>
         <div v-else class="reviews-empty">
           <Icon icon="mdi:star-outline" width="30" />
-          <p>还没有产品获得真实评分。等 coder 完成交付后，你——真实用户，来给第一个产品打分。</p>
+          <p>{{ tr('还没有产品获得真实评分。等 coder 完成交付后，你——真实用户，来给第一个产品打分。') }}</p>
         </div>
       </section>
 
@@ -602,7 +602,7 @@
           <div v-for="t in skillToasts" :key="t.id" class="skill-toast">
             <div class="st-icon"><Icon icon="mdi:lightbulb-on-outline" width="18" /></div>
             <div class="st-body">
-              <span class="st-tag">技能习得 · {{ t.agent }}</span>
+              <span class="st-tag">{{ tr('技能习得 ·') }}{{ t.agent }}</span>
               <strong>{{ t.name }}</strong>
             </div>
             <span class="st-xp">+{{ t.xp }} XP</span>
@@ -612,21 +612,21 @@
     </Teleport>
 
     <div v-if="artifactModal.open" class="modal-backdrop" @click.self="artifactModal.open = false">
-      <section class="artifact-modal" role="dialog" aria-modal="true" aria-label="交付物内容">
+      <section class="artifact-modal" role="dialog" aria-modal="true" :aria-label="tr('交付物内容')">
         <header>
           <div><p class="section-kicker">{{ artifactModal.agent }}</p><h2>{{ artifactModal.file }}</h2></div>
           <div class="artifact-actions">
             <span v-if="artifactModal.kind === 'pptx' && pptDeck.slides.length" class="slide-counter">{{ slideIndex + 1 }} / {{ pptDeck.slides.length }}</span>
-            <a v-if="artifactModal.rawUrl" :href="artifactModal.rawUrl" :download="artifactModal.file">下载原始产物</a>
-            <button type="button" aria-label="关闭" @click="artifactModal.open = false">×</button>
+            <a v-if="artifactModal.rawUrl" :href="artifactModal.rawUrl" :download="artifactModal.file">{{ tr('下载原始产物') }}</a>
+            <button type="button" :aria-label="tr('关闭')" @click="artifactModal.open = false">×</button>
           </div>
         </header>
-        <div v-if="artifactModal.loading" class="artifact-loading">正在解析真实产物…</div>
+        <div v-if="artifactModal.loading" class="artifact-loading">{{ tr('正在解析真实产物…') }}</div>
         <div v-else-if="artifactModal.kind === 'video'" class="media-preview video-preview">
           <video :src="artifactModal.rawUrl" controls autoplay playsinline preload="metadata"></video>
         </div>
         <div v-else-if="artifactModal.kind === 'html'" class="media-preview app-preview">
-          <iframe :srcdoc="artifactModal.content" sandbox="allow-forms allow-modals allow-scripts" title="可运行程序预览"></iframe>
+          <iframe :srcdoc="artifactModal.content" sandbox="allow-forms allow-modals allow-scripts" :title="tr('可运行程序预览')"></iframe>
         </div>
         <div v-else-if="artifactModal.kind === 'image'" class="media-preview image-preview">
           <img :src="artifactModal.rawUrl" :alt="artifactModal.file" />
@@ -639,18 +639,18 @@
             </template>
           </div>
           <div class="slide-nav">
-            <button :disabled="slideIndex === 0" @click="slideIndex--">‹ 上一页</button>
-            <button :disabled="slideIndex === pptDeck.slides.length - 1" @click="slideIndex++">下一页 ›</button>
+            <button :disabled="slideIndex === 0" @click="slideIndex--">{{ tr('‹ 上一页') }}</button>
+            <button :disabled="slideIndex === pptDeck.slides.length - 1" @click="slideIndex++">{{ tr('下一页 ›') }}</button>
           </div>
         </div>
         <div v-else-if="artifactModal.kind === 'spreadsheet' && spreadsheetRows.length" class="spreadsheet-preview">
           <table><tbody><tr v-for="(row, r) in spreadsheetRows" :key="r"><th>{{ r + 1 }}</th><td v-for="(cell, col) in row" :key="col">{{ cell }}</td></tr></tbody></table>
-          <span v-if="artifactModal.truncated">仅预览前 40 行，下载文件查看完整工作簿</span>
+          <span v-if="artifactModal.truncated">{{ tr('仅预览前 40 行，下载文件查看完整工作簿') }}</span>
         </div>
-        <div v-else-if="artifactModal.kind === 'spreadsheet'" class="artifact-empty">工作簿没有可显示的单元格，请下载后检查。</div>
-        <div v-else-if="artifactModal.kind === 'pptx'" class="artifact-empty">PPTX 已生成，但文件结构无法解析；请下载后用 PowerPoint 打开。</div>
-        <div v-else-if="isOutlineOnly" class="outline-warning"><strong>这不是成品 PPT / PV</strong><span>当前文件只是 Markdown 大纲或视频脚本，已从多媒体交付统计中剔除。</span></div>
-        <div v-else-if="artifactModal.kind === 'binary'" class="artifact-empty">该二进制产物暂不支持内嵌预览，请下载原始文件。</div>
+        <div v-else-if="artifactModal.kind === 'spreadsheet'" class="artifact-empty">{{ tr('工作簿没有可显示的单元格，请下载后检查。') }}</div>
+        <div v-else-if="artifactModal.kind === 'pptx'" class="artifact-empty">{{ tr('PPTX 已生成，但文件结构无法解析；请下载后用 PowerPoint 打开。') }}</div>
+        <div v-else-if="isOutlineOnly" class="outline-warning"><strong>{{ tr('这不是成品 PPT / PV') }}</strong><span>{{ tr('当前文件只是 Markdown 大纲或视频脚本，已从多媒体交付统计中剔除。') }}</span></div>
+        <div v-else-if="artifactModal.kind === 'binary'" class="artifact-empty">{{ tr('该二进制产物暂不支持内嵌预览，请下载原始文件。') }}</div>
         <div v-else class="artifact-body" v-html="renderMarkdown(artifactModal.content)"></div>
       </section>
     </div>
@@ -663,6 +663,9 @@ import { Icon } from '@iconify/vue'
 import { API_BASE_URL } from '../config.js'
 import { parsePptxPreview, pptxElementStyle } from '../utils/pptxPreview.js'
 import { parseXlsxPreview, parseDelimitedPreview } from '../utils/xlsxPreview.js'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 const goals = ref([])
 const agents = ref([])
 const osStats = ref({ totalAgents: 0, workingCount: 0 })
@@ -726,10 +729,10 @@ async function loadReviews() {
 const reviewNickname = ref(localStorage.getItem('rescene_reviewer') || '')
 async function submitReview(rv) {
   const nick = (rv._nick || reviewNickname.value || '').trim()
-  if (!nick) { rv._msg = '先填个昵称吧～'; return }
+  if (!nick) { rv._msg = tr('先填个昵称吧～'); return }
   const score = (rv._stars || 0) * 2
-  if (score < 2) { rv._msg = '先点星星打分'; return }
-  if (!(rv._comment || '').trim()) { rv._msg = '写一句真实感受再提交'; return }
+  if (score < 2) { rv._msg = tr('先点星星打分'); return }
+  if (!(rv._comment || '').trim()) { rv._msg = tr('写一句真实感受再提交'); return }
   rv._submitting = true
   rv._msg = ''
   try {
@@ -739,10 +742,10 @@ async function submitReview(rv) {
       body: JSON.stringify({ project: rv.project, nickname: nick, score, comment: rv._comment.trim() }),
       headers: { 'Content-Type': 'application/json' },
     })
-    rv._msg = d.award ? `提交成功！获得【${d.award.title}】` : '提交成功！'
+    rv._msg = d.award ? (tr('提交成功！获得【') + d.award.title + '】') : tr('提交成功！')
     await loadReviews()
   } catch (e) {
-    rv._msg = '提交失败：' + e.message
+    rv._msg = tr('提交失败：') + e.message
   } finally {
     rv._submitting = false
   }
@@ -797,7 +800,7 @@ async function loadDirective() {
       directiveRun.value = d.value.run || { status: 'idle', project: '', error: '', updatedAt: '' }
       directiveError.value = ''
     } else if (d.status === 'rejected') {
-      directiveError.value = d.reason?.message || '指令服务未启动'
+      directiveError.value = d.reason?.message || tr('指令服务未启动')
     }
     if (cfg.status === 'fulfilled' && cfg.value) {
           // 用户已经接入的自定义模型优先；再补免费池。旧逻辑只截前 60 个
@@ -836,7 +839,7 @@ async function saveDirective() {
       await Promise.allSettled([loadData({ quiet: true }), loadApprovals(), loadProductionAudit()])
     }
   } catch (e) {
-    directiveError.value = `下达失败：${e?.message || '交付服务不可用'}`
+    directiveError.value = (tr('下达失败：') + e?.message || tr('交付服务不可用'))
     console.error('saveDirective', e)
   } finally { directiveSaving.value = false }
 }
@@ -907,11 +910,11 @@ const recentEvents = computed(() => {
   }
   // 实时接力事件（/api/company/relays）：真实交接，插到 trace 流最新
   for (const r of relays.value) {
-    const stage = r.stage || r.artifact || '交接'
+    const stage = r.stage || r.artifact || tr('交接')
     events.push({
       role: String(r.to || r.from || '').split('-')[0],
       name: `${r.from} → ${r.to}`,
-      message: `接力 · ${stage}（${r.status === 'running' ? '进行中' : '已交接'}）`,
+      message: (tr('接力 · ') + stage + '（' + r.status === 'running' ? tr('进行中') : tr('已交接') + '）'),
       timeText: formatRelayTime(r.doneAt),
       relay: true,
     })
@@ -924,17 +927,17 @@ const totalHandoffs = computed(() => agents.value.reduce((sum, agent) => sum + (
 const standalonePendingCount = computed(() => pendingApprovals.value.filter(item => item.kind !== 'project').length)
 const projectApprovalItemCount = computed(() => pendingApprovals.value.filter(item => item.kind === 'project').length)
 const projectStages = [
-  { key: 'meeting', label: '开会', icon: 'mdi:account-group-outline' },
-  { key: 'research', label: '调研', icon: 'mdi:microscope' },
+  { key: 'meeting', label: tr('开会'), icon: 'mdi:account-group-outline' },
+  { key: 'research', label: tr('调研'), icon: 'mdi:microscope' },
   { key: 'data', label: 'Excel', icon: 'mdi:microsoft-excel' },
-  { key: 'requirements', label: '需求', icon: 'mdi:clipboard-text-outline' },
+  { key: 'requirements', label: tr('需求'), icon: 'mdi:clipboard-text-outline' },
   { key: 'ui', label: 'UI', icon: 'mdi:palette-outline' },
-  { key: 'docs', label: '文档', icon: 'mdi:file-document-outline' },
-  { key: 'code', label: '编码', icon: 'mdi:code-tags' },
-  { key: 'runnable', label: '程序', icon: 'mdi:play-box-outline' },
+  { key: 'docs', label: tr('文档'), icon: 'mdi:file-document-outline' },
+  { key: 'code', label: tr('编码'), icon: 'mdi:code-tags' },
+  { key: 'runnable', label: tr('程序'), icon: 'mdi:play-box-outline' },
   { key: 'ppt', label: 'PPT', icon: 'mdi:presentation' },
   { key: 'pv', label: 'PV', icon: 'mdi:movie-open-play-outline' },
-  { key: 'promotion', label: '宣传', icon: 'mdi:bullhorn-outline' },
+  { key: 'promotion', label: tr('宣传'), icon: 'mdi:bullhorn-outline' },
 ]
 const allApprovalProjects = computed(() => {
   const grouped = new Map()
@@ -942,7 +945,7 @@ const allApprovalProjects = computed(() => {
     if (item.kind !== 'project') continue
     // 项目身份由后端交付清单给出（标题、参与部门、产物路径），前端不再按目录名/文件名反推。
     const rawName = String(item.project || String(item.file || '').replace(/^project\//, ''))
-    const title = String(item.title || rawName.replace(/^\d+[-_]/, '')) || rawName || '未命名项目'
+    const title = String(item.title || rawName.replace(/^\d+[-_]/, '')) || rawName || tr('未命名项目')
     const key = title.toLocaleLowerCase()
     if (!grouped.has(key)) grouped.set(key, { key, title, project: rawName, items: [], agents: [], roles: [], score: 0, sourceCount: 0, artifacts: [], stageEvidence: {}, preview: '', previewKind: '', previewFile: null, packageUrl: item.packageUrl || '', qa: item.qa && item.qa.checked ? item.qa : null })
     const project = grouped.get(key)
@@ -978,18 +981,18 @@ const approvalProjects = computed(() => allApprovalProjects.value.filter(project
 const soloProductionCount = computed(() => allApprovalProjects.value.filter(project => project.agents.length < 2).length)
 
 const productionDepartmentPlan = [
-  { role: 'researcher', name: '研究部', icon: 'mdi:microscope', stages: ['research', 'data'], color: '#8b5cf6', rgb: '139, 92, 246' },
-  { role: 'writer', name: '作者部', icon: 'ph:pen-nib-bold', stages: ['meeting', 'requirements', 'docs'], color: '#f59e0b', rgb: '245, 158, 11' },
-  { role: 'designer', name: '设计部', icon: 'mdi:palette', stages: ['ui'], color: '#ec4899', rgb: '236, 72, 153' },
-  { role: 'coder', name: '程序部', icon: 'mdi:code-tags', stages: ['code', 'runnable'], color: '#2563eb', rgb: '37, 99, 235' },
-  { role: 'promoter', name: '宣传部', icon: 'mdi:megaphone', stages: ['ppt', 'pv'], color: '#14b8a6', rgb: '20, 184, 166' },
-  { role: 'publisher', name: '发布部', icon: 'mdi:bullhorn', stages: ['promotion'], color: '#ef4444', rgb: '239, 68, 68' },
+  { role: 'researcher', name: tr('研究部'), icon: 'mdi:microscope', stages: ['research', 'data'], color: '#8b5cf6', rgb: '139, 92, 246' },
+  { role: 'writer', name: tr('作者部'), icon: 'ph:pen-nib-bold', stages: ['meeting', 'requirements', 'docs'], color: '#f59e0b', rgb: '245, 158, 11' },
+  { role: 'designer', name: tr('设计部'), icon: 'mdi:palette', stages: ['ui'], color: '#ec4899', rgb: '236, 72, 153' },
+  { role: 'coder', name: tr('程序部'), icon: 'mdi:code-tags', stages: ['code', 'runnable'], color: '#2563eb', rgb: '37, 99, 235' },
+  { role: 'promoter', name: tr('宣传部'), icon: 'mdi:megaphone', stages: ['ppt', 'pv'], color: '#14b8a6', rgb: '20, 184, 166' },
+  { role: 'publisher', name: tr('发布部'), icon: 'mdi:bullhorn', stages: ['promotion'], color: '#ef4444', rgb: '239, 68, 68' },
 ]
 const latestReviewedProject = computed(() => {
   const meeting = meetings.value.find(item => item.kind === 'project_review')
   if (!meeting) return null
   return {
-    title: String(meeting.topic || '').replace(/\s*·\s*完整交付评审\s*$/, '') || '最近完整交付项目',
+    title: String(meeting.topic || '').replace(/\s*·\s*完整交付评审\s*$/, '') || tr('最近完整交付项目'),
     agents: meeting.agent ? [meeting.agent] : [],
     completedStageCount: projectStages.length,
     ready: true,
@@ -1002,7 +1005,7 @@ const currentIterationProject = computed(() => {
   if (!plan) return null
   const researchDelivered = Boolean(plan.reportFile) && !String(plan.lastReport || '').startsWith('首次调研失败')
   return {
-    title: `${plan.name || plan.project || '未命名项目'} · 迭代`,
+    title: (plan.name || plan.project || tr('未命名项目') + tr(' · 迭代')),
     iteration: true,
     researchDelivered,
     startedAt: plan.startedAt,
@@ -1031,14 +1034,14 @@ const directiveProductionProject = computed(() => {
 const currentProductionProject = computed(() => directiveProductionProject.value || currentIterationProject.value || approvalProjects.value[0] || allApprovalProjects.value[0] || latestReviewedProject.value || null)
 const currentProjectTags = computed(() => {
   const project = currentProductionProject.value
-  if (!project) return ['尚未排产', '等待真实交付']
-  if (project.directive && !project.ready) return ['用户指令', project.runStatus === 'failed' ? '生产失败' : project.runStatus === 'completed' ? '已交付 · 等待人类审批' : '多 Agent 生产中', '等待真实交付']
-  if (project.iteration) return ['迭代中', '前沿技术调研', project.researchDelivered ? '本轮报告已落盘' : '首轮调研中']
-  if (project.reviewed) return [`${project.completedStageCount}/${projectStages.length} 阶段`, '完整交付', '评审留痕']
+  if (!project) return [tr('尚未排产'), tr('等待真实交付')]
+  if (project.directive && !project.ready) return [tr('用户指令'), project.runStatus === 'failed' ? tr('生产失败') : project.runStatus === 'completed' ? tr('已交付 · 等待人类审批') : tr('多 Agent 生产中'), tr('等待真实交付')]
+  if (project.iteration) return [tr('迭代中'), tr('前沿技术调研'), project.researchDelivered ? tr('本轮报告已落盘') : tr('首轮调研中')]
+  if (project.reviewed) return [(project.completedStageCount + '/' + projectStages.length + tr(' 阶段')), tr('完整交付'), tr('评审留痕')]
   return [
     `${project.agents.length} AGENTS`,
-    `${project.completedStageCount}/${projectStages.length} 阶段`,
-    project.ready ? '完整交付' : '生产中',
+    (project.completedStageCount + '/' + projectStages.length + tr(' 阶段')),
+    project.ready ? tr('完整交付') : tr('生产中'),
   ]
 })
 const productionProgressPercent = computed(() => {
@@ -1050,14 +1053,14 @@ const productionProgressPercent = computed(() => {
 })
 const productionProgressLabel = computed(() => {
   if (currentProductionProject.value?.directive && !currentProductionProject.value.ready) {
-    if (currentProductionProject.value.runStatus === 'failed') return `生产失败 · ${currentProductionProject.value.runError || '请检查交付引擎'}`
-    if (currentProductionProject.value.runStatus === 'completed') return '已交付 · 等待人类审批'
-    return currentProductionProject.value.runStatus === 'queued' ? '已立项 · 正在唤醒多 Agent' : '多 Agent 正在生成完整交付'
+    if (currentProductionProject.value.runStatus === 'failed') return (tr('生产失败 · ') + currentProductionProject.value.runError || tr('请检查交付引擎'))
+    if (currentProductionProject.value.runStatus === 'completed') return tr('已交付 · 等待人类审批')
+    return currentProductionProject.value.runStatus === 'queued' ? tr('已立项 · 正在唤醒多 Agent') : tr('多 Agent 正在生成完整交付')
   }
-  if (currentProductionProject.value?.iteration) return currentProductionProject.value.researchDelivered ? '本轮调研已交付 · 迭代继续' : '研究部正在执行首轮调研'
-  if (productionProgressPercent.value === 100) return '已完成 · 等待人类审批'
-  if (productionProgressPercent.value > 0) return '多 Agent 正在接力'
-  return currentProductionProject.value ? '项目已排产' : '等待生产证据'
+  if (currentProductionProject.value?.iteration) return currentProductionProject.value.researchDelivered ? tr('本轮调研已交付 · 迭代继续') : tr('研究部正在执行首轮调研')
+  if (productionProgressPercent.value === 100) return tr('已完成 · 等待人类审批')
+  if (productionProgressPercent.value > 0) return tr('多 Agent 正在接力')
+  return currentProductionProject.value ? tr('项目已排产') : tr('等待生产证据')
 })
 const departmentProgress = computed(() => {
   const project = currentProductionProject.value
@@ -1075,7 +1078,7 @@ const departmentProgress = computed(() => {
       else if (current) fill = Math.round(((doneRatio - index * deptFrac) / deptFrac) * 100)
       return {
         ...phase, done, current, fill,
-        status: done ? '已交付' : (current ? '当前阶段' : '等待接力'),
+        status: done ? tr('已交付') : (current ? tr('当前阶段') : tr('等待接力')),
       }
     })
   }
@@ -1085,7 +1088,7 @@ const departmentProgress = computed(() => {
       ...phase,
       done: index === 0 && project.researchDelivered,
       current: index === 0,
-      status: index === 0 ? (project.researchDelivered ? '本轮已交付' : '正在调研') : '等待真实接力',
+      status: index === 0 ? (project.researchDelivered ? tr('本轮已交付') : tr('正在调研')) : tr('等待真实接力'),
     }))
   }
   const phases = productionDepartmentPlan.map(phase => {
@@ -1099,7 +1102,7 @@ const departmentProgress = computed(() => {
   return phases.map((phase, index) => ({
     ...phase,
     current: index === currentIndex,
-    status: phase.done ? (index === currentIndex ? '交付完成' : '已交付') : (index === currentIndex ? '当前阶段' : '等待接力'),
+    status: phase.done ? (index === currentIndex ? tr('交付完成') : tr('已交付')) : (index === currentIndex ? tr('当前阶段') : tr('等待接力')),
   }))
 })
 
@@ -1107,11 +1110,11 @@ const showcaseStageOrder = ['research', 'pv', 'runnable', 'ui', 'data', 'docs', 
 // text 类产物（md/json）的卡片文案按阶段区分，不能都叫「调研报告」。
 function textHeroLabel(stage) {
   switch (stage) {
-    case 'research': return { en: 'RESEARCH REPORT', cn: '查看调研报告' }
-    case 'docs': return { en: 'SOFTWARE DOCS', cn: '查看软件文档' }
-    case 'requirements': return { en: 'REQUIREMENTS', cn: '查看需求计划' }
-    case 'meeting': return { en: 'MEETING MINUTES', cn: '查看会议纪要' }
-    default: return { en: 'TEXT ARTIFACT', cn: '查看文档' }
+    case 'research': return { en: 'RESEARCH REPORT', cn: tr('查看调研报告') }
+    case 'docs': return { en: 'SOFTWARE DOCS', cn: tr('查看软件文档') }
+    case 'requirements': return { en: 'REQUIREMENTS', cn: tr('查看需求计划') }
+    case 'meeting': return { en: 'MEETING MINUTES', cn: tr('查看会议纪要') }
+    default: return { en: 'TEXT ARTIFACT', cn: tr('查看文档') }
   }
 }
 function projectShowcase(project) {
@@ -1131,12 +1134,12 @@ function artifactShowcaseIcon(artifact) {
 }
 
 const deptMeta = {
-  writer: { key: 'writer', name: '作者部', icon: 'ph:pen-nib-bold' },
-  researcher: { key: 'researcher', name: '研究部', icon: 'mdi:microscope' },
-  coder: { key: 'coder', name: '程序部', icon: 'mdi:code-tags' },
-  designer: { key: 'designer', name: '设计部', icon: 'mdi:palette' },
-  publisher: { key: 'publisher', name: '发布部', icon: 'mdi:bullhorn' },
-  promoter: { key: 'promoter', name: '宣传部', icon: 'mdi:megaphone' },
+  writer: { key: 'writer', name: tr('作者部'), icon: 'ph:pen-nib-bold' },
+  researcher: { key: 'researcher', name: tr('研究部'), icon: 'mdi:microscope' },
+  coder: { key: 'coder', name: tr('程序部'), icon: 'mdi:code-tags' },
+  designer: { key: 'designer', name: tr('设计部'), icon: 'mdi:palette' },
+  publisher: { key: 'publisher', name: tr('发布部'), icon: 'mdi:bullhorn' },
+  promoter: { key: 'promoter', name: tr('宣传部'), icon: 'mdi:megaphone' },
 }
 
 const departments = computed(() => {
@@ -1157,9 +1160,9 @@ const departments = computed(() => {
     return []
   }
 })
-const departmentAudits = computed(() => productionAudit.value.departments?.length ? productionAudit.value.departments : Object.values(deptMeta).map(dept => ({ role: dept.key, name: dept.name, responsibility: '等待磁盘审计', expected: [], evidence: [], passed: false, issue: '审计接口未就绪' })))
+const departmentAudits = computed(() => productionAudit.value.departments?.length ? productionAudit.value.departments : Object.values(deptMeta).map(dept => ({ role: dept.key, name: dept.name, responsibility: tr('等待磁盘审计'), expected: [], evidence: [], passed: false, issue: tr('审计接口未就绪') })))
 const selectedAudit = computed(() => departmentAudits.value.find(dept => dept.role === activeDept.value) || departmentAudits.value[0] || null)
-const selectedDepartment = computed(() => departments.value.find(dept => dept.key === activeDept.value) || departments.value[0] || { name: '执行节点', agents: [] })
+const selectedDepartment = computed(() => departments.value.find(dept => dept.key === activeDept.value) || departments.value[0] || { name: tr('执行节点'), agents: [] })
 
 // 被引用（入）聚合：name -> {count, agents} —— 卡片显示「被 N 人接力」（2026-08-09：被引用的 agent 不该显示独立工作）
 const collabIn = computed(() => {
@@ -1239,7 +1242,7 @@ function computeCollabGraph() {
       role, x, y, r, hub: isHub,
       fill: isHub ? colors[role] : '#ffffff',
       stroke: colors[role],
-      title: `${n.name}（${(deptMeta[role] || {}).name || role}）\n引用: ${(outRefs[n.name] || []).join('、') || '无'}\n被引用: ${inRefs[n.name] || 0} 次`,
+      title: `${n.name}（${(deptMeta[role] || {}).name || role}）\n引用: ${(outRefs[n.name] || []).join('、') || tr('无')}\n被引用: ${inRefs[n.name] || 0} 次`,
     }
   })
   // 连线（同对合并加权）
@@ -1486,22 +1489,22 @@ function linkOpacity(lk) {
 function byNameOf(name) {
   return agents.value.find(a => a.name === name) || null
 }
-const selectedNodeOut = computed(() => (selectedNode.value?.collabRefs || []).map(r => r.agent).join('、') || '无')
+const selectedNodeOut = computed(() => (selectedNode.value?.collabRefs || []).map(r => r.agent).join('、') || tr('无'))
 const selectedNodeIn = computed(() => {
   const m = collabIn.value[selectedNode.value?.name]
   return m ? `${m.agents.join('、')}（${m.count} 人）` : '无'
 })
 
 function statusLabel(status) {
-  return { active: '执行中', awaiting_approval: '等待终审', completed: '已完成', failed: '已停止' }[status] || status
+  return { active: tr('执行中'), awaiting_approval: tr('等待终审'), completed: tr('已完成'), failed: tr('已停止') }[status] || status
 }
 
 function taskStatusLabel(status) {
-  return { blocked: '等待上游', ready: '可领取', running: '执行中', rework: '返工中', approved: '已通过', waiting_human: '等你审批', failed: '失败' }[status] || status
+  return { blocked: tr('等待上游'), ready: tr('可领取'), running: tr('执行中'), rework: tr('返工中'), approved: tr('已通过'), waiting_human: tr('等你审批'), failed: tr('失败') }[status] || status
 }
 
 function roleLabel(role) {
-  return { researcher: '研究部', writer: '作者部', promoter: '宣传部', editor: '编辑部', manager: '管理部', coder: '程序部', designer: '设计部', publisher: '发布部' }[role] || role
+  return { researcher: tr('研究部'), writer: tr('作者部'), promoter: tr('宣传部'), editor: tr('编辑部'), manager: tr('管理部'), coder: tr('程序部'), designer: tr('设计部'), publisher: tr('发布部') }[role] || role
 }
 
 function roleIcon(role) {
@@ -1526,18 +1529,18 @@ function statusClass(agent) {
 }
 
 function statusText(agent) {
-  if (agent.status === '工作中') return '🟢 工作中'
-  if (agent.status === '空闲中') return '🟡 空闲中'
+  if (agent.status === '工作中') return tr('🟢 工作中')
+  if (agent.status === '空闲中') return tr('🟡 空闲中')
   if (isDead(agent)) return '🔴 ' + agent.status
-  return '⚪ 未知'
+  return tr('⚪ 未知')
 }
 
 function doingText(agent) {
   const log = agent.recentLog || ''
   const lines = log.split('\n').filter(Boolean)
   const last = lines[lines.length - 1] || ''
-  if (/失败|熔断|429|未成功|未完成|限流/.test(last)) return '⚡ 充电中…'
-  return last.replace(/^\[[^\]]*\]\s*/, '').replace(/·[^·]*$/, '').trim() || '待命中'
+  if (/失败|熔断|429|未成功|未完成|限流/.test(last)) return tr('⚡ 充电中…')
+  return last.replace(/^\[[^\]]*\]\s*/, '').replace(/·[^·]*$/, '').trim() || tr('待命中')
 }
 
 function fileType(f) {
@@ -1580,19 +1583,19 @@ async function previewFile(agent, f, cacheKey = '') {
     slideIndex.value = 0
     const r = await fetch('/api/company/file?' + query)
     const d = await r.json()
-    if (!r.ok) throw new Error(d.error || '读取失败')
+    if (!r.ok) throw new Error(d.error || tr('读取失败'))
     artifactModal.kind = d.kind || 'text'
     artifactModal.mime = d.mime || ''
     artifactModal.content = d.content || ''
     if (artifactModal.kind === 'pptx') {
       const binary = await fetch(artifactModal.rawUrl)
-      if (!binary.ok) throw new Error('PPTX 文件读取失败')
+      if (!binary.ok) throw new Error(tr('PPTX 文件读取失败'))
       const parsed = await parsePptxPreview(await binary.arrayBuffer())
       pptDeck.size = parsed.size
       pptDeck.slides = parsed.slides
     } else if (artifactModal.kind === 'spreadsheet') {
       const binary = await fetch(artifactModal.rawUrl)
-      if (!binary.ok) throw new Error('电子表格读取失败')
+      if (!binary.ok) throw new Error(tr('电子表格读取失败'))
       const lower = artifactModal.file.toLowerCase()
       const parsed = lower.endsWith('.xlsx')
         ? await parseXlsxPreview(await binary.arrayBuffer())
@@ -1601,7 +1604,7 @@ async function previewFile(agent, f, cacheKey = '') {
       artifactModal.truncated = parsed.truncated
     }
   } catch (e) {
-    artifactModal.content = e?.message || '读取失败'
+    artifactModal.content = e?.message || tr('读取失败')
     if (!artifactModal.kind) artifactModal.kind = 'text'
   } finally {
     artifactModal.loading = false
@@ -1628,7 +1631,7 @@ async function previewProjectFile(project, path, cacheKey = '') {
     slideIndex.value = 0
     const r = await fetch('/api/company/project-file?' + query)
     const d = await r.json()
-    if (!r.ok) throw new Error(d.error || '读取失败')
+    if (!r.ok) throw new Error(d.error || tr('读取失败'))
     const lower = fileName.toLowerCase()
     if (lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov')) artifactModal.kind = 'video'
     else if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.svg')) artifactModal.kind = 'image'
@@ -1640,13 +1643,13 @@ async function previewProjectFile(project, path, cacheKey = '') {
     artifactModal.content = d.content || ''
     if (artifactModal.kind === 'pptx') {
       const binary = await fetch(artifactModal.rawUrl)
-      if (!binary.ok) throw new Error('PPTX 文件读取失败')
+      if (!binary.ok) throw new Error(tr('PPTX 文件读取失败'))
       const parsed = await parsePptxPreview(await binary.arrayBuffer())
       pptDeck.size = parsed.size
       pptDeck.slides = parsed.slides
     } else if (artifactModal.kind === 'spreadsheet') {
       const binary = await fetch(artifactModal.rawUrl)
-      if (!binary.ok) throw new Error('电子表格读取失败')
+      if (!binary.ok) throw new Error(tr('电子表格读取失败'))
       const parsed = lower.endsWith('.xlsx')
         ? await parseXlsxPreview(await binary.arrayBuffer())
         : parseDelimitedPreview(await binary.text(), lower.endsWith('.tsv') ? '\t' : ',')
@@ -1654,7 +1657,7 @@ async function previewProjectFile(project, path, cacheKey = '') {
       artifactModal.truncated = parsed.truncated
     }
   } catch (e) {
-    artifactModal.content = e?.message || '读取失败'
+    artifactModal.content = e?.message || tr('读取失败')
     if (!artifactModal.kind) artifactModal.kind = 'text'
   } finally {
     artifactModal.loading = false
@@ -1666,7 +1669,7 @@ function stageLabel(key) {
 }
 function stageTitle(project, stage) {
   const evidence = project.stageEvidence[stage.key] || []
-  return evidence.length ? `${stage.label}：${evidence.map(item => `${item.agent} / ${item.name}`).join('；')}` : `${stage.label}：缺失`
+  return evidence.length ? `${stage.label}：${evidence.map(item => `item.agent / item.name`).join('；')}` : `${stage.label}：缺失`
 }
 function previewProjectArtifact(project, artifact) {
   if (!artifact?.path) return
@@ -1753,7 +1756,7 @@ async function approveProject(project, decision) {
     const visible = new Set(hiddenApprovalProjects.value)
     visible.delete(project.key)
     hiddenApprovalProjects.value = visible
-    error.value = `项目审批失败：${err.message}`
+    error.value = (tr('项目审批失败：') + err.message)
   } finally {
     decidingProject.value = ''
   }
@@ -1768,7 +1771,7 @@ function previewFile2(agent, file) {
 const workflowChain = ['researcher', 'writer', 'designer', 'coder', 'promoter', 'publisher']
 function interactWith(agent) {
   const idx = workflowChain.indexOf(agent.role)
-  if (idx < 0) return '部门成员'
+  if (idx < 0) return tr('部门成员')
   // 同部门：找另一个 agent
   const same = departments.value?.find(d => d.key === agent.role)
   if (same && same.agents.length > 1) {
@@ -1778,14 +1781,14 @@ function interactWith(agent) {
   // 下一个部门：上游→下游
   if (idx < workflowChain.length - 1) {
     const nextDept = departments.value?.find(d => d.key === workflowChain[idx + 1])
-    if (nextDept && nextDept.agents.length) return nextDept.agents[0].name + ' 等'
+    if (nextDept && nextDept.agents.length) return nextDept.agents[0].name + tr(' 等')
   }
   // 上一个部门：上游输入
   if (idx > 0) {
     const prevDept = departments.value?.find(d => d.key === workflowChain[idx - 1])
-    if (prevDept && prevDept.agents.length) return prevDept.agents[0].name + ' 等'
+    if (prevDept && prevDept.agents.length) return prevDept.agents[0].name + tr(' 等')
   }
-  return '部门成员'
+  return tr('部门成员')
 }
 
 // 简单 Markdown 渲染器（支持标题/加粗/列表/代码块/引用）
@@ -1811,14 +1814,14 @@ function renderMarkdown(text) {
 }
 
 function formatTime(value) {
-  if (!value) return '刚刚'
+  if (!value) return tr('刚刚')
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
 function formatRelayTime(value) {
-  if (!value) return '刚刚'
+  if (!value) return tr('刚刚')
   const d = new Date(value)
-  if (isNaN(d.getTime())) return '刚刚'
+  if (isNaN(d.getTime())) return tr('刚刚')
   return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(d)
 }
 
@@ -1833,9 +1836,9 @@ async function api(url, options) {
     try {
       data = JSON.parse(text)
     } catch {
-      throw new Error('公司工作流后端尚未启动或返回了无效响应')
+      throw new Error(tr('公司工作流后端尚未启动或返回了无效响应'))
     }
-    if (!response.ok) throw new Error(data.error || `请求失败 (${response.status})`)
+    if (!response.ok) throw new Error(data.error || (tr('请求失败 (') + response.status + ')'))
     return data
   } finally {
     clearTimeout(timer)
@@ -1852,16 +1855,16 @@ async function directiveApi(url, options) {
       const response = await fetch(`${base}${url}`, { ...options, signal: ctrl.signal })
       const text = await response.text()
       let data
-      try { data = JSON.parse(text) } catch { throw new Error('指令服务返回了无效响应') }
-      if (!response.ok) throw new Error(data.error || `指令服务请求失败 (${response.status})`)
+      try { data = JSON.parse(text) } catch { throw new Error(tr('指令服务返回了无效响应')) }
+      if (!response.ok) throw new Error(data.error || (tr('指令服务请求失败 (') + response.status + ')'))
       return data
     } catch (err) {
-      lastError = err?.name === 'AbortError' ? new Error('指令服务连接超时') : err
+      lastError = err?.name === 'AbortError' ? new Error(tr('指令服务连接超时')) : err
     } finally {
       clearTimeout(timer)
     }
   }
-  throw lastError || new Error('指令服务不可用')
+  throw lastError || new Error(tr('指令服务不可用'))
 }
 
 async function loadData({ quiet = false } = {}) {
@@ -1961,12 +1964,12 @@ let polling = false
 
 // ===== 开罗式办公室场景（游戏发展国风格：俯视公司，员工走动+头顶飘字）=====
 const officeDepts = [
-  { key: 'writer', name: '作者部', icon: '✍️' },
-  { key: 'researcher', name: '研究部', icon: '🔬' },
-  { key: 'coder', name: '程序部', icon: '💻' },
-  { key: 'designer', name: '设计部', icon: '🎨' },
-  { key: 'promoter', name: '宣传部', icon: '📣' },
-  { key: 'publisher', name: '发布部', icon: '📢' },
+  { key: 'writer', name: tr('作者部'), icon: '✍️' },
+  { key: 'researcher', name: tr('研究部'), icon: '🔬' },
+  { key: 'coder', name: tr('程序部'), icon: '💻' },
+  { key: 'designer', name: tr('设计部'), icon: '🎨' },
+  { key: 'promoter', name: tr('宣传部'), icon: '📣' },
+  { key: 'publisher', name: tr('发布部'), icon: '📢' },
 ]
 const officeArea = {
   ceo:        { left: '36%', top: '1.5%', width: '28%', height: '24%' },
@@ -2016,7 +2019,7 @@ function rebuildOfficePeople() {
       dept,
       emoji: officeEmoji[dept] || '🤖',
       short: String(a.name).split('-')[1] || a.name,
-      task: (a.task || '待命中').slice(0, 12),
+      task: (a.task || tr('待命中')).slice(0, 12),
       dot: a.status === '工作中' ? 'dot-green' : (isDead ? 'dot-red' : 'dot-yellow'),
       cls: isDead ? 'op-dead' : (a.status === '工作中' ? 'op-work' : 'op-idle'),
       x: 8 + Math.random() * 78,
@@ -2056,9 +2059,9 @@ const liveFollow = ref(true)
 let liveSource = null
 
 const liveStageNames = {
-  kickoff: '立项', meeting: '会议', mvp: '最小原型', requirements: '需求', research: '调研报告',
-  data: '研究数据', ui: 'UI 设计', docs: '文档', code: '编码', runnable: '终版程序',
-  qa: '真机质检', ppt: '路演', pv: '宣传片', promotion: '发布',
+  kickoff: tr('立项'), meeting: tr('会议'), mvp: tr('最小原型'), requirements: tr('需求'), research: tr('调研报告'),
+  data: tr('研究数据'), ui: tr('UI 设计'), docs: tr('文档'), code: tr('编码'), runnable: tr('终版程序'),
+  qa: tr('真机质检'), ppt: tr('路演'), pv: tr('宣传片'), promotion: tr('发布'),
 }
 function liveStageIcon(stage) {
   return ({ kickoff: 'mdi:flag-outline', meeting: 'mdi:account-group-outline', mvp: 'mdi:rocket-launch-outline', requirements: 'mdi:clipboard-text-outline', research: 'mdi:microscope', data: 'mdi:microsoft-excel', ui: 'mdi:palette-outline', docs: 'mdi:file-document-outline', code: 'mdi:code-tags', runnable: 'mdi:play-box-outline', qa: 'mdi:shield-check-outline', ppt: 'mdi:presentation', pv: 'mdi:movie-open-play-outline', promotion: 'mdi:bullhorn-outline' })[stage] || 'mdi:robot-outline'
@@ -2131,7 +2134,7 @@ function startLiveStream() {
 function stopLiveStream() { if (liveSource) { try { liveSource.close() } catch (e) { /* noop */ } liveSource = null } }
 
 onMounted(() => {
-  document.title = '杉汐 | 公司目标'
+  document.title = tr('杉汐 | 公司目标')
   loadData()
   loadApprovals()
   loadMeetings()

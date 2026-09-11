@@ -4,26 +4,26 @@
       <div class="stm-card">
         <!-- 标题栏 -->
         <div class="stm-header">
-          <h2 class="stm-title">定时任务</h2>
-          <button class="stm-close" @click="$emit('close')" title="关闭">
+          <h2 class="stm-title">{{ tr('定时任务') }}</h2>
+          <button class="stm-close" @click="$emit('close')" :title="tr('关闭')">
             <Icon icon="mdi:close" width="18" />
           </button>
         </div>
 
-        <p class="stm-desc">管理已排程的定时任务，到点会在右下角弹出系统通知提醒你。</p>
+        <p class="stm-desc">{{ tr('管理已排程的定时任务，到点会在右下角弹出系统通知提醒你。') }}</p>
 
         <div class="stm-body">
           <!-- 加载中 -->
           <div v-if="loading" class="stm-empty">
             <span class="stm-loading-spinner"></span>
-            <span>加载中...</span>
+            <span>{{ tr('加载中...') }}</span>
           </div>
 
           <!-- 空状态 -->
           <div v-else-if="!tasks.length" class="stm-empty">
             <Icon icon="mdi:clock-outline" width="36" color="#c5c5c5" />
-            <span class="stm-empty-title">还没有定时任务</span>
-            <span class="stm-empty-sub">排程一个提示词，到点自动提醒你</span>
+            <span class="stm-empty-title">{{ tr('还没有定时任务') }}</span>
+            <span class="stm-empty-sub">{{ tr('排程一个提示词，到点自动提醒你') }}</span>
           </div>
 
           <!-- 任务列表 -->
@@ -31,15 +31,15 @@
             <div v-for="t in tasks" :key="t.id" class="stm-item">
               <div class="stm-item-main">
                 <div class="stm-item-top">
-                  <span class="stm-item-name">{{ t.name || '定时任务' }}</span>
+                  <span class="stm-item-name">{{ t.name || tr('定时任务') }}</span>
                   <span class="stm-item-badge" :class="t.enabled ? 'on' : 'off'">
-                    {{ t.enabled ? '开启' : '关闭' }}
+                    {{ t.enabled ? tr('开启') : tr('关闭') }}
                   </span>
                 </div>
                 <div class="stm-item-prompt">{{ t.prompt }}</div>
                 <div class="stm-item-meta">
                   <span class="stm-item-schedule"><Icon icon="mdi:clock-outline" width="13" /> {{ formatSchedule(t) }}</span>
-                  <span v-if="t.lastFired" class="stm-item-last">上次触发 {{ formatLast(t.lastFired) }}</span>
+                  <span v-if="t.lastFired" class="stm-item-last">{{ tr('上次触发') }}{{ formatLast(t.lastFired) }}</span>
                 </div>
               </div>
               <div class="stm-item-actions">
@@ -48,7 +48,7 @@
                   :class="{ off: !t.enabled }"
                   :disabled="togglingId === t.id"
                   @click="onToggle(t)"
-                  :title="t.enabled ? '点击停用' : '点击启用'"
+                  :title="t.enabled ? tr('点击停用') : tr('点击启用')"
                 >
                   <Icon :icon="t.enabled ? 'mdi:pause-circle-outline' : 'mdi:play-circle-outline'" width="16" />
                 </button>
@@ -57,11 +57,11 @@
                   :class="{ confirm: confirmId === t.id }"
                   :disabled="deletingId === t.id"
                   @click="onDelete(t)"
-                  :title="confirmId === t.id ? '再次点击确认删除' : '删除任务'"
+                  :title="confirmId === t.id ? tr('再次点击确认删除') : tr('删除任务')"
                 >
                   <Icon v-if="deletingId !== t.id" icon="mdi:trash-can-outline" width="15" />
                   <span v-else class="stm-spinner"></span>
-                  <span>{{ confirmId === t.id ? '确认删除?' : '' }}</span>
+                  <span>{{ confirmId === t.id ? tr('确认删除?') : '' }}</span>
                 </button>
               </div>
             </div>
@@ -69,10 +69,10 @@
         </div>
 
         <div class="stm-footer">
-          <button class="stm-btn stm-btn-cancel" @click="$emit('close')">关闭</button>
+          <button class="stm-btn stm-btn-cancel" @click="$emit('close')">{{ tr('关闭') }}</button>
           <button class="stm-btn stm-btn-primary" @click="$emit('create')">
             <Icon icon="mdi:plus" width="15" />
-            新建定时任务
+            {{ tr('新建定时任务') }}
           </button>
         </div>
       </div>
@@ -83,6 +83,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const emit = defineEmits(['close', 'create', 'toast'])
 
@@ -94,14 +97,14 @@ const togglingId = ref(null)
 
 // 频率 → 中文描述（与 ScheduledTaskModal 的 FREQ_MAP 保持一致）
 const FREQ_TEXT = {
-  every_1h: '每小时',
-  every_2h: '每 2 小时',
-  every_6h: '每 6 小时',
-  every_12h: '每 12 小时',
-  daily: '每天',
-  weekdays: '工作日',
-  weekly: '每周',
-  monthly: '每月'
+  every_1h: tr('每小时'),
+  every_2h: tr('每 2 小时'),
+  every_6h: tr('每 6 小时'),
+  every_12h: tr('每 12 小时'),
+  daily: tr('每天'),
+  weekdays: tr('工作日'),
+  weekly: tr('每周'),
+  monthly: tr('每月')
 }
 
 // 从 cron 表达式里取出 HH:MM（5 段：分 时 日 月 周）
@@ -158,11 +161,11 @@ function onToggle(t) {
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(data => {
       t.enabled = !!data.enabled
-      emit('toast', (t.enabled ? '已启用：' : '已停用：') + (t.name || '定时任务'))
+      emit('toast', (t.enabled ? '已启用：' : '已停用：') + (t.name || tr('定时任务')))
     })
     .catch(e => {
       console.log('切换定时任务状态失败:', e)
-      emit('toast', '❌ 操作失败：' + (e.message || '网络错误'))
+      emit('toast', '❌ 操作失败：' + (e.message || tr('网络错误')))
     })
     .finally(() => { togglingId.value = null })
 }
@@ -186,7 +189,7 @@ function onDelete(t) {
     })
     .catch(e => {
       console.log('删除定时任务失败:', e)
-      emit('toast', '❌ 删除失败：' + (e.message || '网络错误'))
+      emit('toast', '❌ 删除失败：' + (e.message || tr('网络错误')))
     })
     .finally(() => { deletingId.value = null })
 }

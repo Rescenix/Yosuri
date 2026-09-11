@@ -28,17 +28,17 @@
         :style="{ top: menuY + 'px', left: menuX + 'px' }"
         @click.stop
       >
-        <button @click.stop="handleCopyPath">复制路径</button>
-        <button @click.stop="handleCopyName">复制文件名</button>
-        <button v-if="node.type === 'file'" @click.stop="handleOpenFile">在编辑器中打开</button>
+        <button @click.stop="handleCopyPath">{{ tr('复制路径') }}</button>
+        <button @click.stop="handleCopyName">{{ tr('复制文件名') }}</button>
+        <button v-if="node.type === 'file'" @click.stop="handleOpenFile">{{ tr('在编辑器中打开') }}</button>
         <template v-if="node.type === 'folder'">
           <div class="menu-separator"></div>
-          <button @click.stop="emitAction('create-file')">新建文件</button>
-          <button @click.stop="emitAction('create-folder')">新建文件夹</button>
+          <button @click.stop="emitAction('create-file')">{{ tr('新建文件') }}</button>
+          <button @click.stop="emitAction('create-folder')">{{ tr('新建文件夹') }}</button>
         </template>
         <div class="menu-separator"></div>
-        <button @click.stop="emitAction('rename')">重命名</button>
-        <button class="danger" @click.stop="emitAction('delete')">删除</button>
+        <button @click.stop="emitAction('rename')">{{ tr('重命名') }}</button>
+        <button class="danger" @click.stop="emitAction('delete')">{{ tr('删除') }}</button>
       </div>
     </Teleport>
 
@@ -62,6 +62,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 
 const props = defineProps({
   node: { type: Object, required: true },

@@ -43,7 +43,7 @@
         <div class="bgdiff-card">
           <div class="bgdiff-head">
             <Icon icon="mdi:file-outline" width="13" color="#a3a3a3" />
-            <span class="bgdiff-path">{{ readArgs(tc).path || '(未知路径)' }}</span>
+            <span class="bgdiff-path">{{ readArgs(tc).path || tr('(未知路径)') }}</span>
           </div>
           <div v-if="tc.result" class="bgstep-raw-block">{{ truncateText(tc.result, 600) }}</div>
         </div>
@@ -70,7 +70,11 @@ import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import { parseToolArgs, fileBaseName } from './toolArgs.js'
+import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
 import DiffViewer from './DiffViewer.vue'
+
 
 defineProps({
   tc: { type: Object, required: true }

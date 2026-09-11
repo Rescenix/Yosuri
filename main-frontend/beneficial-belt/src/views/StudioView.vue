@@ -6,16 +6,16 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" fill="var(--app-accent)"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--app-accent)" stroke-width="2" stroke-linecap="round"/></svg>
       </div>
       <nav class="side-menu">
-        <button class="side-nav" :class="{ active: studioTab === 'create' }" @click="studioTab = 'create'" title="创作">
+        <button class="side-nav" :class="{ active: studioTab === 'create' }" @click="studioTab = 'create'" :title="tr('创作')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 20l1.5-4.5L17 4a2.1 2.1 0 013 3L8.5 18.5 4 20z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
         </button>
-        <button class="side-nav" :class="{ active: studioTab === 'inspire' }" @click="studioTab = 'inspire'" title="灵感广场">
+        <button class="side-nav" :class="{ active: studioTab === 'inspire' }" @click="studioTab = 'inspire'" :title="tr('灵感广场')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 18h6M10 21h4M12 3a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1V18h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0012 3z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <button class="side-nav" :class="{ active: studioTab === 'assets' }" @click="studioTab = 'assets'" title="素材库">
+        <button class="side-nav" :class="{ active: studioTab === 'assets' }" @click="studioTab = 'assets'" :title="tr('素材库')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
         </button>
-        <button class="side-nav" :class="{ active: studioTab === 'canvas' }" @click="studioTab = 'canvas'" title="画布">
+        <button class="side-nav" :class="{ active: studioTab === 'canvas' }" @click="studioTab = 'canvas'" :title="tr('画布')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>
         </button>
       </nav>
@@ -23,13 +23,13 @@
         <button class="side-tool" title="API">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M8 5h8l4 7-4 7H8l-4-7 4-7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         </button>
-        <button class="side-tool" title="API 编辑">
+        <button class="side-tool" :title="tr('API 编辑')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20l1.5-4.5L17 4a2.1 2.1 0 013 3L8.5 18.5 4 20z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         </button>
-        <button class="side-tool" title="API 菜单">
+        <button class="side-tool" :title="tr('API 菜单')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.6" fill="var(--app-accent)"/><circle cx="12" cy="12" r="1.6" fill="var(--app-accent)"/><circle cx="19" cy="12" r="1.6" fill="var(--app-accent)"/></svg>
         </button>
-        <button class="side-avatar" title="账号">👤</button>
+        <button class="side-avatar" :title="tr('账号')">👤</button>
       </div>
     </aside>
 
@@ -40,19 +40,19 @@
       <!-- 资产 tab -->
       <template v-if="studioTab === 'assets'">
               <div class="assets-head">
-                <h2>素材库</h2>
+                <h2>{{ tr('素材库') }}</h2>
               </div>
               <div class="assets-filter">
-                              <button class="filter-tab" :class="{ active: assetFilter === 'all' }" @click="assetFilter = 'all'">全部</button>
-                              <button class="filter-tab" :class="{ active: assetFilter === 'image' }" @click="assetFilter = 'image'">图片</button>
-                              <button class="filter-tab" :class="{ active: assetFilter === 'video' }" @click="assetFilter = 'video'">视频</button>
+                              <button class="filter-tab" :class="{ active: assetFilter === 'all' }" @click="assetFilter = 'all'">{{ tr('全部') }}</button>
+                              <button class="filter-tab" :class="{ active: assetFilter === 'image' }" @click="assetFilter = 'image'">{{ tr('图片') }}</button>
+                              <button class="filter-tab" :class="{ active: assetFilter === 'video' }" @click="assetFilter = 'video'">{{ tr('视频') }}</button>
                               <span class="filter-divider"></span>
                               <button class="filter-tab" :class="{ active: assetFilter === 'private' }" @click="assetFilter = 'private'">
-                                <Icon icon="mdi:lock" width="13" /> 私密
+                                <Icon icon="mdi:lock" width="13" /> {{ tr('私密') }}
                               </button>
                             </div>
               <div class="assets-section">
-                <div class="section-date">昨天</div>
+                <div class="section-date">{{ tr('昨天') }}</div>
                 <div class="assets-grid">
                   <div v-for="(a, i) in visibleAssets" :key="i" class="asset-card" @click="openAssetPreview(a)">
                     <div class="asset-thumb-wrap">
@@ -60,16 +60,16 @@
                       <video v-else-if="a.kind === 'video'" :src="a.src" class="asset-thumb" muted></video>
                       <span v-if="a.dur" class="asset-dur">{{ a.dur }}</span>
                       <div class="asset-ops" @click.stop>
-                                              <button class="op-btn" title="删除" @click="askDelete(a)"><Icon icon="mdi:trash-can-outline" width="13" /></button>
-                                              <button v-if="assetFilter === 'private'" class="op-btn" title="取消私密" @click="togglePrivate(a)"><Icon icon="mdi:lock-open-variant" width="13" /></button>
-                                              <button v-else class="op-btn" title="设为私密" @click="togglePrivate(a)"><Icon icon="mdi:lock-outline" width="13" /></button>
+                                              <button class="op-btn" :title="tr('删除')" @click="askDelete(a)"><Icon icon="mdi:trash-can-outline" width="13" /></button>
+                                              <button v-if="assetFilter === 'private'" class="op-btn" :title="tr('取消私密')" @click="togglePrivate(a)"><Icon icon="mdi:lock-open-variant" width="13" /></button>
+                                              <button v-else class="op-btn" :title="tr('设为私密')" @click="togglePrivate(a)"><Icon icon="mdi:lock-outline" width="13" /></button>
                                             </div>
                     </div>
                     <div class="asset-name">{{ a.name }}</div>
                   </div>
                   <div v-if="!libraryAssets.length" class="empty-state">
                     <div class="empty-art"><Icon icon="mdi:view-grid-outline" width="34" /></div>
-                    <p>素材库是空的<br />生成视频后自动入库</p>
+                    <p>{{ tr('素材库是空的') }}<br />{{ tr('生成视频后自动入库') }}</p>
                   </div>
                 </div>
               </div>
@@ -78,8 +78,8 @@
       <!-- 灵感广场 tab -->
       <template v-else-if="studioTab === 'inspire'">
         <div class="assets-head">
-          <h2>💡 灵感广场</h2>
-          <span class="assets-sub">热门 AI 短剧创作灵感，一键填入</span>
+          <h2>{{ tr('💡 灵感广场') }}</h2>
+          <span class="assets-sub">{{ tr('热门 AI 短剧创作灵感，一键填入') }}</span>
         </div>
         <div class="template-row">
           <div v-for="t in inspireCards" :key="t.id" class="template-card" @click="applyTemplate(t)">
@@ -90,7 +90,7 @@
             <div class="template-info">
               <span class="template-title">{{ t.title }}</span>
               <div class="template-foot">
-                <span class="template-try">去看看</span>
+                <span class="template-try">{{ tr('去看看') }}</span>
               </div>
               <span class="template-desc">{{ t.desc }}</span>
             </div>
@@ -101,12 +101,12 @@
       <!-- 画布 tab -->
       <template v-else-if="studioTab === 'canvas'">
         <div class="assets-head">
-          <h2><Icon icon="mdi:view-grid-outline" width="18" /> 画布</h2>
-          <span class="assets-sub">多镜头时间线编辑</span>
+          <h2><Icon icon="mdi:view-grid-outline" width="18" /> {{ tr('画布') }}</h2>
+          <span class="assets-sub">{{ tr('多镜头时间线编辑') }}</span>
         </div>
         <div class="empty-state">
           <div class="empty-art"><Icon icon="mdi:view-grid-outline" width="34" /></div>
-          <p>画布编辑开发中<br />拖拽分镜、调整首尾帧、预览成片</p>
+          <p>{{ tr('画布编辑开发中') }}<br />{{ tr('拖拽分镜、调整首尾帧、预览成片') }}</p>
         </div>
       </template>
 
@@ -115,12 +115,12 @@
               <div v-show="!busy && !result" class="studio-top">
                       <button class="top-assets" @click="studioTab = 'assets'">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-                        素材库
+                        {{ tr('素材库') }}
                       </button>
                     </div>
 
               <div class="create-wrap">
-                              <h1 v-show="!busy && !result" class="create-hello">你好，想创作什么？</h1>
+                              <h1 v-show="!busy && !result" class="create-hello">{{ tr('你好，想创作什么？') }}</h1>
 
                               <!-- 生成中 / 结果视图（整页切换） -->
                               <div v-if="busy || result" class="gen-view">
@@ -128,7 +128,7 @@
                                   <img v-if="selectedRef && selectedRef.kind === 'image' && selectedRef.src" :src="selectedRef.src" class="gen-view-ref" />
                                   <div v-else class="gen-view-ref-placeholder">
                                     <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><path d="M5 5l14 7-14 7V5z" fill="var(--app-accent)"/></svg>
-                                    <span class="gen-view-ref-hint">未选择参考图<br />生成纯文生视频</span>
+                                    <span class="gen-view-ref-hint">{{ tr('未选择参考图') }}<br />{{ tr('生成纯文生视频') }}</span>
                                   </div>
                                 </div>
                                 <div class="gen-view-info">
@@ -140,8 +140,8 @@
                                   </div>
                                   <div v-if="busy" class="gen-view-loading">
                                     <div class="gen-shimmer-bar"><div class="gen-shimmer"></div></div>
-                                    <span class="gen-loading-text">已等待 {{ elapsed }}s（约 1-2 分钟）</span>
-                                    <button class="gen-view-regen" style="margin-top: 14px" @click="busy = false; clearInterval(elapsedTimer); clearInterval(pollTimer); logLines.push('× 已取消生成')">取消生成</button>
+                                    <span class="gen-loading-text">{{ tr('已等待') }}{{ elapsed }}{{ tr('s（约 1-2 分钟）') }}</span>
+                                    <button class="gen-view-regen" style="margin-top: 14px" @click="busy = false; clearInterval(elapsedTimer); clearInterval(pollTimer); logLines.push(tr('× 已取消生成'))">{{ tr('取消生成') }}</button>
                                     <div v-if="logLines.length" class="gen-log">
                                       <div v-for="(l, i) in logLines" :key="i" class="log-line" :class="{ err: l.startsWith('×') }">{{ l }}</div>
                                     </div>
@@ -150,8 +150,8 @@
                                     <video :src="result.video" controls class="gen-video" autoplay></video>
                                     <div class="gen-video-meta">{{ result.name }} · {{ result.size }} · {{ result.seconds }}s</div>
                                     <div class="gen-view-actions">
-                                      <button class="gen-view-regen" @click="result = null; busy = false; clearInterval(elapsedTimer); logLines = []"><Icon icon="mdi:arrow-left" width="14" /> 返回创作</button>
-                                      <button class="gen-view-regen" @click="result = null; logLines = []; generate()"><Icon icon="mdi:refresh" width="14" /> 再生成一次</button>
+                                      <button class="gen-view-regen" @click="result = null; busy = false; clearInterval(elapsedTimer); logLines = []"><Icon icon="mdi:arrow-left" width="14" /> {{ tr('返回创作') }}</button>
+                                      <button class="gen-view-regen" @click="result = null; logLines = []; generate()"><Icon icon="mdi:refresh" width="14" /> {{ tr('再生成一次') }}</button>
                                     </div>
                                   </div>
                                 </div>
@@ -162,8 +162,8 @@
                       <div v-for="t in templates" :key="t.id" class="template-card" @click="applyTemplate(t)">
                         <div class="template-img-wrap">
                           <img :src="t.thumb" class="template-thumb" />
-                          <span class="template-model-tag">免费模型</span>
-                          <span class="template-try">试一试</span>
+                          <span class="template-model-tag">{{ tr('免费模型') }}</span>
+                          <span class="template-try">{{ tr('试一试') }}</span>
                         </div>
                         <div class="template-info">
                           <span class="template-title">{{ t.title }}</span>
@@ -181,7 +181,7 @@
                         <input ref="refInput" type="file" accept="image/*" style="display:none" @change="onRefFile" />
                         <div v-if="!selectedRef" class="ref-slot" @click="pickRef">
                           <Icon icon="mdi:plus" width="20" />
-                          <span>参考</span>
+                          <span>{{ tr('参考') }}</span>
                         </div>
                         <div v-else class="ref-slot ref-selected" @click="pickRef" :title="selectedRef.name">
                           <img v-if="selectedRef.kind === 'image'" :src="selectedRef.src" class="ref-thumb" />
@@ -193,47 +193,47 @@
                                               <div class="compose-theme-row">
                                                 <select v-model="selectedTheme" class="theme-select" @change="onThemeChange">
                                                   <option v-for="t in themePresets" :key="t.id" :value="t.id">{{ t.name }}</option>
-                                                  <option value="custom">自定义主题</option>
+                                                  <option value="custom">{{ tr('自定义主题') }}</option>
                                                 </select>
-                                                <input v-if="selectedTheme === 'custom'" v-model="customTheme" class="theme-custom-input" placeholder="输入你的主题，比如：赛博朋克少女" @input="text = customTheme" />
+                                                <input v-if="selectedTheme === 'custom'" v-model="customTheme" class="theme-custom-input" :placeholder="tr('输入你的主题，比如：赛博朋克少女')" @input="text = customTheme" />
                                               </div>
                                               <textarea v-model="text" class="compose-input" placeholder="输入想法、剧本或上传参考，支持 &quot;/&quot; 使用技能，@ 添加主体，和 Agent 一起创作"></textarea>
                         <div class="compose-toolbar">
                           <span class="tool-chip">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 5l14 7-14 7V5z" fill="currentColor"/></svg>
-                            视频生成
+                            {{ tr('视频生成') }}
                           </span>
-                          <select v-model="agenModel" class="tool-select" title="模型">
-                            <option value="agnes-video-2.5-flash">Agnes 2.5 flash 免费</option>
-                            <option value="agnes-video-2.0">Agnes 2.0 1080p 免费</option>
+                          <select v-model="agenModel" class="tool-select" :title="tr('模型')">
+                            <option value="agnes-video-2.5-flash">{{ tr('Agnes 2.5 flash 免费') }}</option>
+                            <option value="agnes-video-2.0">{{ tr('Agnes 2.0 1080p 免费') }}</option>
                           </select>
-                          <select v-model="refMode" class="tool-select" title="参考模式" @change="onRefModeChange">
-                            <option value="reference">全能参考</option>
-                            <option value="keyframe">首尾帧</option>
-                            <option value="multi">智能多帧</option>
-                            <option value="edit">智能编辑</option>
-                            <option value="long">超长视频</option>
+                          <select v-model="refMode" class="tool-select" :title="tr('参考模式')" @change="onRefModeChange">
+                            <option value="reference">{{ tr('全能参考') }}</option>
+                            <option value="keyframe">{{ tr('首尾帧') }}</option>
+                            <option value="multi">{{ tr('智能多帧') }}</option>
+                            <option value="edit">{{ tr('智能编辑') }}</option>
+                            <option value="long">{{ tr('超长视频') }}</option>
                           </select>
-                          <select v-model="videoSpec" class="tool-select" title="比例/分辨率">
+                          <select v-model="videoSpec" class="tool-select" :title="tr('比例/分辨率')">
                             <option value="landscape-720">16:9 720P</option>
                             <option value="landscape-1080">16:9 1080P</option>
                             <option value="portrait-720">9:16 720P</option>
                             <option value="portrait-1080">9:16 1080P</option>
                           </select>
-                          <select v-model="videoSeconds" class="tool-select" title="时长">
+                          <select v-model="videoSeconds" class="tool-select" :title="tr('时长')">
                                                       <option value="4">4s</option>
                                                       <option value="5">5s</option>
                                                       <option value="8">8s</option>
                                                       <option value="10">10s</option>
                                                       <option value="12">12s</option>
                                                     </select>
-                                                    <select v-if="refMode === 'long'" v-model="segments" class="tool-select" title="链式段数（每段末尾自动接续下一段）">
-                                                      <option :value="2">2 段</option>
-                                                      <option :value="3">3 段</option>
-                                                      <option :value="4">4 段</option>
-                                                      <option :value="6">6 段</option>
+                                                    <select v-if="refMode === 'long'" v-model="segments" class="tool-select" :title="tr('链式段数（每段末尾自动接续下一段）')">
+                                                      <option :value="2">{{ tr('2 段') }}</option>
+                                                      <option :value="3">{{ tr('3 段') }}</option>
+                                                      <option :value="4">{{ tr('4 段') }}</option>
+                                                      <option :value="6">{{ tr('6 段') }}</option>
                                                     </select>
-                                                    <input v-model="seedInput" class="seed-input" placeholder="Seed（留空随机）" title="随机种子，相同 seed+prompt 出片一致" />
+                                                    <input v-model="seedInput" class="seed-input" :placeholder="tr('Seed（留空随机）')" :title="tr('随机种子，相同 seed+prompt 出片一致')" />
                           <div class="toolbar-right">
                             <button class="compose-send" :disabled="busy" @click="generate">
                               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -251,8 +251,8 @@
     <div v-if="showRefPicker" class="ref-picker-modal" @click.self="showRefPicker = false">
       <div class="ref-picker">
         <div class="ref-picker-head">
-          <span class="ref-picker-title">选择参考素材</span>
-          <button class="ref-picker-upload" @click="uploadRef">上传新素材</button>
+          <span class="ref-picker-title">{{ tr('选择参考素材') }}</span>
+          <button class="ref-picker-upload" @click="uploadRef">{{ tr('上传新素材') }}</button>
           <button class="ref-picker-close" @click="showRefPicker = false"><Icon icon="mdi:close" width="14" /></button>
         </div>
         <div class="ref-picker-grid">
@@ -266,7 +266,7 @@
           </div>
           <div v-if="!libraryAssets.length" class="empty-state">
             <div class="empty-art"><Icon icon="mdi:folder-open-outline" width="34" /></div>
-            <p>素材库是空的<br />点右上角上传，或先去生成素材</p>
+            <p>{{ tr('素材库是空的') }}<br />{{ tr('点右上角上传，或先去生成素材') }}</p>
           </div>
         </div>
       </div>
@@ -275,11 +275,11 @@
     <!-- 删除确认弹窗（轻量） -->
     <div v-if="confirmMsg" class="confirm-modal" @click.self="confirmMsg = null">
       <div class="confirm-box">
-        <div class="confirm-title">删除素材</div>
-        <p class="confirm-text">确定删除「{{ confirmMsg }}」吗？此操作不可恢复。</p>
+        <div class="confirm-title">{{ tr('删除素材') }}</div>
+        <p class="confirm-text">{{ tr('确定删除「') }}{{ confirmMsg }}{{ tr('」吗？此操作不可恢复。') }}</p>
         <div class="confirm-actions">
-          <button class="confirm-cancel" @click="confirmMsg = null">取消</button>
-          <button class="confirm-danger" @click="doDelete">删除</button>
+          <button class="confirm-cancel" @click="confirmMsg = null">{{ tr('取消') }}</button>
+          <button class="confirm-danger" @click="doDelete">{{ tr('删除') }}</button>
         </div>
       </div>
     </div>
@@ -298,38 +298,38 @@
             </div>
             <button class="pv-download" @click="downloadAsset">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              下载
+              {{ tr('下载') }}
             </button>
             <button class="pv-icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.9-5.4 2.9 1-6L3.3 9.4l6-.9L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
             <button class="pv-icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg></button>
           </div>
           <div class="pv-prompt">
-            <div class="pv-label">视频提示词</div>
+            <div class="pv-label">{{ tr('视频提示词') }}</div>
             <p class="pv-prompt-text">{{ assetPreview.name }}</p>
-            <div class="pv-meta">Agnes 2.5 免费 | {{ assetPreview.dur || '5s' }} | 16:9 | 720P</div>
-            <div class="pv-detail"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5M12 8v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> 详细信息</div>
+            <div class="pv-meta">{{ tr('Agnes 2.5 免费 |') }}{{ assetPreview.dur || '5s' }} | 16:9 | 720P</div>
+            <div class="pv-detail"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5M12 8v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> {{ tr('详细信息') }}</div>
           </div>
           <div class="pv-actions">
                       <button class="pv-act" @click="useAsReference">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="5" width="20" height="14" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M10 9l5 3-5 3V9z" fill="currentColor"/></svg>
-                        设为参考素材
+                        {{ tr('设为参考素材') }}
                       </button>
                       <button v-if="assetPreview.kind === 'video'" class="pv-act" @click="extractFrame">
-                        <Icon icon="mdi:camera-outline" width="15" /> 抽帧为图片参考
+                        <Icon icon="mdi:camera-outline" width="15" /> {{ tr('抽帧为图片参考') }}
                       </button>
             <div class="pv-act-grid">
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>局部重绘</button>
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>画质增强</button>
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>续写时长</button>
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20l1.5-4.5L17 4a2.1 2.1 0 013 3L8.5 18.5 4 20z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>片段剪辑</button>
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9L9.5 8 12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>流畅补帧</button>
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 0116 0M7 12a5 5 0 0110 0M10 12a2 2 0 014 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>智能音效</button>
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="4" y="8" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M9 3h6M10 8v5M14 8v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>口型同步</button>
-              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.6"/></svg>智能配乐</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{{ tr('局部重绘') }}</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>{{ tr('画质增强') }}</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{{ tr('续写时长') }}</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20l1.5-4.5L17 4a2.1 2.1 0 013 3L8.5 18.5 4 20z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>{{ tr('片段剪辑') }}</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9L9.5 8 12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>{{ tr('流畅补帧') }}</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 0116 0M7 12a5 5 0 0110 0M10 12a2 2 0 014 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{{ tr('智能音效') }}</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="4" y="8" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M9 3h6M10 8v5M14 8v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{{ tr('口型同步') }}</button>
+              <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.6"/></svg>{{ tr('智能配乐') }}</button>
             </div>
-            <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 4v16M4 4h16M4 4l16 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>再次编辑</button>
-            <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 11-2.3-5.6M20 4v6h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>重新生成</button>
-            <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>查看生成记录</button>
+            <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 4v16M4 4h16M4 4l16 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>{{ tr('再次编辑') }}</button>
+            <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 11-2.3-5.6M20 4v6h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>{{ tr('重新生成') }}</button>
+            <button class="pv-act"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{{ tr('查看生成记录') }}</button>
           </div>
         </div>
       </div>
@@ -342,6 +342,9 @@ import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { API_BASE_URL } from '../config.js'
 import { backendURL } from '../desktopTransport.js'
+import { useI18n, tr } from '../composables/useI18n.js'
+
+
 
 const topic = ref('')
 const voice = ref('zh-TW-HsiaoChenNeural')  // 曉臻默认
@@ -376,7 +379,7 @@ function togglePrivate(a) {
   if (i >= 0) privateAssets.value.splice(i, 1)
   else privateAssets.value.push(a.name)
   localStorage.setItem('studio_private_assets', JSON.stringify(privateAssets.value))
-  toastMsg.value = i >= 0 ? `🔓 ${a.name} 已设为公开` : `🔒 ${a.name} 已设为私密`
+  toastMsg.value = i >= 0 ? ('🔓 ' + a.name + tr(' 已设为公开')) : ('🔒 ' + a.name + tr(' 已设为私密'))
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
 }
 const confirmMsg = ref('')
@@ -388,9 +391,9 @@ async function doDelete() {
   if (!a) return
   try {
     await fetch(API_BASE_URL + '/api/studio/library/' + encodeURIComponent(a.name), { method: 'DELETE' })
-    toastMsg.value = `🗑 已删除 ${a.name}`
+    toastMsg.value = (tr('🗑 已删除 ') + a.name)
   } catch (e) {
-    toastMsg.value = `❌ 删除失败`
+    toastMsg.value = (tr('❌ 删除失败'))
   }
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
   try {
@@ -409,7 +412,7 @@ const visibleAssets = computed(() => {
 })
 function applyFromLibrary(a) {
   selectedAsset.value = a
-  toastMsg.value = a.kind === 'video' ? `📎 已选素材：${a.name}` : `📎 已选基准图：${a.name}`
+  toastMsg.value = a.kind === 'video' ? (tr('📎 已选素材：') + a.name) : (tr('📎 已选基准图：') + a.name)
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
 }
@@ -426,7 +429,7 @@ function downloadAsset() {
   }
 }
 function useAsReference() {
-  toastMsg.value = `已用作参考：${assetPreview.value?.name}`
+  toastMsg.value = (tr('已用作参考：') + assetPreview.value?.name)
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
 }
@@ -437,7 +440,7 @@ async function extractFrame() {
   if (!a || a.kind !== 'video') return
   const v = previewVideo.value
   const t = v && v.currentTime ? v.currentTime : 0
-  toastMsg.value = `抽帧中…（${t.toFixed(1)}s）`
+  toastMsg.value = (tr('抽帧中…（') + t.toFixed(1) + 's）')
   try {
     const r = await fetch(API_BASE_URL + '/api/studio/frames', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -445,15 +448,15 @@ async function extractFrame() {
     })
     const d = await r.json()
     if (d.ok) {
-      toastMsg.value = `已抽帧：${d.name}（可作图片参考）`
+      toastMsg.value = (tr('已抽帧：') + d.name + tr('（可作图片参考）'))
       // 刷新素材库
       const rr = await fetch(API_BASE_URL + '/api/studio/library')
       if (rr.ok) { const dd = await rr.json(); if (dd.assets) libraryAssets.value = dd.assets.map(a => ({...a, src: backendURL(a.src)})) }
     } else {
-      toastMsg.value = `抽帧失败：${d.error || ''}`
+      toastMsg.value = (tr('抽帧失败：') + d.error || '')
     }
   } catch (e) {
-    toastMsg.value = '抽帧失败'
+    toastMsg.value = tr('抽帧失败')
   }
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2600)
 }
@@ -461,24 +464,24 @@ async function extractFrame() {
 const templates = ref([
   {
     id: 'sakura',
-        title: '日系青春短片',
-        desc: '清新柔光与胶片质感，温柔细腻的青春故事',
+        title: tr('日系青春短片'),
+        desc: tr('清新柔光与胶片质感，温柔细腻的青春故事'),
         icon: 'mdi:flower',
         thumb: '/studio_sakura.png',
         text: '红发少女站在樱花树下回眸，柔光\n她伸手接住飘落的花瓣\n她抱着小猫坐在石阶上微笑\n她在樱花雨中漫步，裙摆飘动',
   },
   {
     id: 'tokyo',
-    title: '东京绘梨衣短剧',
-    desc: '红发少女独自在东京寻找，场景快速切换',
+    title: tr('东京绘梨衣短剧'),
+    desc: tr('红发少女独自在东京寻找，场景快速切换'),
     icon: 'mdi:city',
     thumb: '/studio_tokyo.png',
     text: '涩谷十字路口，红发少女逆着人潮而立\n东京塔黄昏，她仰望塔尖\n目黑川樱花步道，她沿河岸行走\n新宿歌舞伎町夜，霓虹映在她脸上',
   },
   {
     id: 'jk',
-    title: 'JK 白丝日常',
-    desc: '从裙摆到全身的细节特写机位，宅男最爱',
+    title: tr('JK 白丝日常'),
+    desc: tr('从裙摆到全身的细节特写机位，宅男最爱'),
     icon: 'mdi:shoe-sneaker',
     thumb: '/studio_jk.png',
     text: 'JK红发少女白丝脚部特写，低角度仰拍\n镜头从脚踝上移，扫过腿部线条\n定格全身，JK制服红发飘动\n她回头微笑，樱花飘落',
@@ -490,9 +493,9 @@ function applyTemplate(t) {
 }
 // 灵感广场卡片（撑门面：热门灵感一键填入）
 const inspireCards = ref([
-  { id: 'i1', title: '银发少女东京樱花街景', desc: 'AI 虚拟人漫步东京，樱花与霓虹交错', hot: '1.2万', icon: 'mdi:city', thumb: '/studio_tokyo.png', text: '银发少女在东京街头漫步\n樱花飘落，霓虹闪烁\n她回头微笑' },
-  { id: 'i2', title: '日系青春校园日常', desc: '清新柔光与胶片质感，青春朦胧故事', hot: '8900', icon: 'mdi:flower', thumb: '/studio_sakura.png', text: '少女在樱花树下回眸\n她伸手接住花瓣\n她在校园走廊奔跑' },
-  { id: 'i3', title: 'JK 白丝氛围感短片', desc: '从裙摆到全身的细节特写机位', hot: '6500', icon: 'mdi:shoe-sneaker', thumb: '/studio_jk.png', text: 'JK少女白丝脚部特写\n镜头从脚踝上移\n定格全身微笑' },
+  { id: 'i1', title: tr('银发少女东京樱花街景'), desc: tr('AI 虚拟人漫步东京，樱花与霓虹交错'), hot: tr('1.2万'), icon: 'mdi:city', thumb: '/studio_tokyo.png', text: '银发少女在东京街头漫步\n樱花飘落，霓虹闪烁\n她回头微笑' },
+  { id: 'i2', title: tr('日系青春校园日常'), desc: tr('清新柔光与胶片质感，青春朦胧故事'), hot: '8900', icon: 'mdi:flower', thumb: '/studio_sakura.png', text: '少女在樱花树下回眸\n她伸手接住花瓣\n她在校园走廊奔跑' },
+  { id: 'i3', title: tr('JK 白丝氛围感短片'), desc: tr('从裙摆到全身的细节特写机位'), hot: '6500', icon: 'mdi:shoe-sneaker', thumb: '/studio_jk.png', text: 'JK少女白丝脚部特写\n镜头从脚踝上移\n定格全身微笑' },
 ])
 function pickRef() {
   showRefPicker.value = true
@@ -500,7 +503,7 @@ function pickRef() {
 function selectRefAsset(a) {
   selectedRef.value = { name: a.name, kind: a.kind, src: a.src, file: null }
   showRefPicker.value = false
-  toastMsg.value = `已选参考：${a.name}`
+  toastMsg.value = (tr('已选参考：') + a.name)
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2000)
 }
 function uploadRef() {
@@ -511,7 +514,7 @@ function onRefFile(e) {
   const file = e.target.files?.[0]
   if (!file) return
   if (file.type.startsWith('video/')) {
-    toastMsg.value = '仅支持图片参考'
+    toastMsg.value = tr('仅支持图片参考')
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
     return
   }
@@ -525,11 +528,11 @@ function onRefFile(e) {
       if (d.ok) {
         selectedRef.value.src = d.src
         selectedRef.value.name = d.name
-        toastMsg.value = `已上传参考：${d.name}`
+        toastMsg.value = (tr('已上传参考：') + d.name)
       } else {
-        toastMsg.value = '❌ 上传失败'
+        toastMsg.value = tr('❌ 上传失败')
       }
-    }).catch(() => { toastMsg.value = '❌ 上传失败' })
+    }).catch(() => { toastMsg.value = tr('❌ 上传失败') })
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2200)
 }
 const selectedRef = ref(null)
@@ -545,13 +548,13 @@ const lastFrameRef = ref(null) // 尾帧图（首尾帧模式）
 const segments = ref(3) // 超长视频：链式段数
 function onRefModeChange() {
   if (refMode.value === 'keyframe') {
-    toastMsg.value = '首尾帧：选首帧图（参考）+ 尾帧图'
+    toastMsg.value = tr('首尾帧：选首帧图（参考）+ 尾帧图')
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2500)
   } else if (refMode.value === 'long') {
-    toastMsg.value = '超长视频：分多段递进生成 + 抽帧接续 + 自动拼接成片'
+    toastMsg.value = tr('超长视频：分多段递进生成 + 抽帧接续 + 自动拼接成片')
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2500)
   } else if (refMode.value !== 'reference') {
-    toastMsg.value = '暂不支持，请使用「全能参考」或「首尾帧」'
+    toastMsg.value = tr('暂不支持，请使用「全能参考」或「首尾帧」')
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastMsg.value = '' }, 2500)
     refMode.value = 'reference'
   }
@@ -559,22 +562,22 @@ function onRefModeChange() {
 // 预设主题（点选自动填入提示词 + 参数）
 const themePresets = [
   {
-    id: 'sakura', name: '日系青春',
+    id: 'sakura', name: tr('日系青春'),
     prompt: 'cinematic shot, a beautiful girl with long crimson red hair and ruby red eyes, wearing white kimono with red flower pattern, standing under cherry blossom tree at night in Tokyo, neon signs glowing in bokeh background, petals falling in slow motion, soft rim light, shallow depth of field, anime-real style, 8k',
     model: 'agnes-video-2.5-flash', seconds: '8', ratio: '16:9',
   },
   {
-    id: 'tokyo', name: '东京绘梨衣',
+    id: 'tokyo', name: tr('东京绘梨衣'),
     prompt: 'cinematic night shot, a girl with long crimson red hair in white kimono standing in Shibuya crossing, neon billboards reflecting, rain mist, cars light trails, cinematic slow motion, shallow depth of field, anime-real style, 8k',
     model: 'agnes-video-2.5-flash', seconds: '8', ratio: '16:9',
   },
   {
-    id: 'jk', name: 'JK 白丝',
+    id: 'jk', name: tr('JK 白丝'),
     prompt: 'low angle cinematic shot, camera tilt up from a girl\'s white thigh-high socks and legs, up her JK school uniform, ending on her beautiful face with crimson red hair, Tokyo street at dusk, cherry petals, anime-real style, 8k',
     model: 'agnes-video-2.5-flash', seconds: '5', ratio: '16:9',
   },
   {
-    id: 'gufeng', name: '古风侠女',
+    id: 'gufeng', name: tr('古风侠女'),
     prompt: 'cinematic wuxia shot, a beautiful girl with long black hair in flowing red hanfu, standing on bamboo forest mountain at misty dawn, wind blowing her sleeves, sword in hand, soft golden light, shallow depth of field, anime-real style, 8k',
     model: 'agnes-video-2.5-flash', seconds: '8', ratio: '16:9',
   },
@@ -600,10 +603,10 @@ function onThemeChange() {
 // ---- 生成平台 API Key（localStorage 持久化）----
 const KEY_STORE = 'studio_platform_keys'
 const platformKeys = ref([
-  { id: 'jimeng', label: '即梦', placeholder: '即梦 API Key / Cookie', show: false },
-  { id: 'hailuo', label: '海螺 MiniMax', placeholder: '海螺 API Key', show: false },
+  { id: 'jimeng', label: tr('即梦'), placeholder: tr('即梦 API Key / Cookie'), show: false },
+  { id: 'hailuo', label: tr('海螺 MiniMax'), placeholder: tr('海螺 API Key'), show: false },
   { id: 'agnes', label: 'Agnes', placeholder: 'Agnes API Key', show: false },
-  { id: 'kling', label: 'Kling', placeholder: 'Kling API Key（留空则每日白嫖）', show: false },
+  { id: 'kling', label: 'Kling', placeholder: tr('Kling API Key（留空则每日白嫖）'), show: false },
 ])
 const keysOpen = ref(false)
 const platformKeysMap = ref(loadPlatformKeys())
@@ -638,7 +641,7 @@ function srcShort(src) {
   const s = String(src)
   if (s.includes('Bing')) return '🌐 联网素材'
   if (s.includes('素材池')) return '📁 本地素材'
-  return '🎨 动态背景'
+  return tr('🎨 动态背景')
 }
 function fmtDur(d) {
   const m = Math.floor(d / 60), s = Math.round(d % 60)
@@ -648,7 +651,7 @@ function pushLog(l) { logLines.value.push(l) }
 
 async function doTranslate() {
   const src = text.value.trim()
-  if (!src) { transError.value = '× 先在上方贴入要翻译的文章'; return }
+  if (!src) { transError.value = tr('× 先在上方贴入要翻译的文章'); return }
   transBusy.value = true
   transError.value = ''
   transResult.value = ''
@@ -665,7 +668,7 @@ async function doTranslate() {
     }
     transResult.value = data.translated
   } catch (e) {
-    transError.value = '× 请求失败：' + e.message
+    transError.value = tr('× 请求失败：') + e.message
   } finally {
     transBusy.value = false
   }
@@ -680,7 +683,7 @@ function showToast(msg, duration = 3200) {
 
 async function generate() {
   const prompt = text.value.trim()
-  if (!prompt) { showToast('× 请填写提示词或选个主题'); return }
+  if (!prompt) { showToast(tr('× 请填写提示词或选个主题')); return }
   busy.value = true
   result.value = null
   logLines.value = []
@@ -713,7 +716,7 @@ async function generate() {
     delete base.first_frame
     delete base.last_frame
   }
-  pushLog(isChain ? `Ameko 链式生成 ${segments.value} 段长视频中…` : 'Ameko 视频生成中…')
+  pushLog(isChain ? (tr('Ameko 链式生成 ') + segments.value + tr(' 段长视频中…')) : tr('Ameko 视频生成中…'))
   try {
     const resp = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
@@ -722,7 +725,7 @@ async function generate() {
     })
     const data = await resp.json()
     if (!resp.ok || !data.ok) {
-      const err = data.error || `提交失败 (${resp.status})`
+      const err = data.error || (tr('提交失败 (') + resp.status + ')')
       pushLog('× ' + err)
       showToast('× ' + err)
       busy.value = false
@@ -730,7 +733,7 @@ async function generate() {
       return
     }
     if (!data.task_id) {
-      const err = '后端未返回任务 ID'
+      const err = tr('后端未返回任务 ID')
       pushLog('× ' + err)
       showToast('× ' + err)
       busy.value = false
@@ -740,10 +743,10 @@ async function generate() {
     // 异步任务：存 localStorage（跳走聊天回来能恢复），开始轮询
     taskId.value = data.task_id
     localStorage.setItem('studio_agnes_task', JSON.stringify({ task_id: data.task_id, ts: Date.now() }))
-    pushLog('已提交后台生成，等待期间可以去和 Ameko 聊天')
+    pushLog(tr('已提交后台生成，等待期间可以去和 Ameko 聊天'))
     pollTask()
   } catch (e) {
-    const err = '提交失败：' + (e?.message || String(e))
+    const err = tr('提交失败：') + (e?.message || String(e))
     pushLog('× ' + err)
     showToast('× ' + err)
     busy.value = false
@@ -769,7 +772,7 @@ async function pollTask() {
       if (!r.ok || d.status === 'lost') {
         // 任务记录丢失（应用重启/热更新换过进程）：必须明确报错并退出「生成中」，
         // 否则界面永远停在等待态，用户看到的就是点了没反应、也没有任何错误反馈。
-        const err = d.error || `任务查询失败 (${r.status})`
+        const err = d.error || (tr('任务查询失败 (') + r.status + ')')
         pushLog('× ' + err)
         showToast('× ' + err)
         stopAll()
@@ -777,23 +780,23 @@ async function pollTask() {
       }
       if (d.status === 'done') {
         result.value = { video: d.video, name: d.name || '', size: d.size || '', seconds: d.seconds || 0 }
-        pushLog(`视频生成完成：${result.value.name}（用时 ${elapsed.value}s）`)
+        pushLog((tr('视频生成完成：') + result.value.name + tr('（用时 ') + elapsed.value + 's）'))
         stopAll()
       } else if (d.status === 'failed') {
-        const err = d.error || '生成失败'
+        const err = d.error || tr('生成失败')
         pushLog('× ' + err)
         showToast('× ' + err)
         stopAll()
       } else if (elapsed.value > 720) {
         // 兜底超时：后端单次生成上限 6 分钟，超过 12 分钟仍 pending 视为已中断。
-        const err = '生成超时，任务可能已中断，请重新生成'
+        const err = tr('生成超时，任务可能已中断，请重新生成')
         pushLog('× ' + err)
         showToast('× ' + err)
         stopAll()
       }
     } catch (e) {
       // 轮询接口异常时不打断用户，但累计多次后给出提示
-      pushLog('× 轮询状态失败：' + (e?.message || String(e)))
+      pushLog(tr('× 轮询状态失败：') + (e?.message || String(e)))
     }
   }
   check()
@@ -804,7 +807,7 @@ async function genShot(i) {
   const shot = plan.value.shots[i]
   if (!shot || shot.status === 'busy') return
   shot.status = 'busy'
-  pushLog(`🎥 生成镜头 ${shot.shot_no}（${shot.platform}）…`)
+  pushLog((tr('🎥 生成镜头 ') + shot.shot_no + '（' + shot.platform + '）…'))
   try {
     const resp = await fetch(`${API_BASE_URL}/api/studio/manga/shot`, {
       method: 'POST',
@@ -819,14 +822,14 @@ async function genShot(i) {
     const data = await resp.json()
     if (resp.ok && data.ok) {
       shot.status = 'done'
-      pushLog(`镜头 ${shot.shot_no} 已提交生成`)
+      pushLog((tr('镜头 ') + shot.shot_no + tr(' 已提交生成')))
     } else {
       shot.status = ''
-      pushLog('× ' + (data.error || '生成失败'))
+      pushLog('× ' + (data.error || tr('生成失败')))
     }
   } catch (e) {
     shot.status = ''
-    pushLog('× 请求失败：' + e.message)
+    pushLog(tr('× 请求失败：') + e.message)
   }
 }
 
@@ -841,7 +844,7 @@ function remove(i) {
 }
 
 onMounted(async () => {
-  document.title = '短剧工作台'
+  document.title = tr('短剧工作台')
   // 素材库：动态扫描本地素材目录（不硬编码）
   try {
     const r = await fetch(API_BASE_URL + '/api/studio/library')
