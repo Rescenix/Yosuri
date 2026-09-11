@@ -11,14 +11,17 @@
       <div v-else class="attach-chip-icon">
         <Icon v-if="att.kind === 'folder'" icon="mdi:folder-outline" width="20" color="#94a3b8" />
         <Icon v-else-if="att.kind === 'video'" icon="mdi:video-outline" width="20" color="#94a3b8" />
-        <Icon v-else-if="att.kind === 'text'" icon="mdi:file-document-outline" width="20" color="#94a3b8" />
+        <Icon v-else-if="att.kind === 'text'" icon="mdi:file-document-outline" width="20" :color="pasteAction ? '#4d6bfe' : '#94a3b8'" />
         <span v-else>{{ att.ext }}</span>
       </div>
       <div class="attach-chip-meta">
-        <span class="attach-chip-name" :title="att.name">{{ att.name }}</span>
+        <span class="attach-chip-name" :title="att.name">{{ chipTitle(att) }}</span>
         <span v-if="att.status === 'analyzing'" class="attach-chip-status">{{ tr('分析中…') }}</span>
         <span v-else-if="att.status === 'error'" class="attach-chip-status error">{{ att.errorMsg }}</span>
         <span v-else-if="att.kind === 'folder'" class="attach-chip-status">{{ att.fileCount }}{{ tr('个文件') }}</span>
+        <button v-else-if="att.kind === 'text' && pasteAction" type="button" class="attach-chip-paste" :title="tr('把原文粘回输入框编辑')" @click="$emit('paste', att.id)">
+          <Icon icon="mdi:content-paste" width="12" />{{ tr('粘贴原文至输入框') }}
+        </button>
         <span v-else-if="att.kind === 'text'" class="attach-chip-status">{{ att.charCount }}{{ tr('字') }}</span>
       </div>
       <button v-if="removable" class="attach-chip-remove" type="button" @click="$emit('remove', att.id)" :title="tr('移除')">
@@ -98,9 +101,19 @@ import { useI18n, tr } from '../../../composables/useI18n.js'
 
 const props = defineProps({
   attachments: { type: Array, default: () => [] },
-  removable: { type: Boolean, default: false }
+  removable: { type: Boolean, default: false },
+  // 长文本附件卡是否带「粘贴原文至输入框」按钮：只在输入框上方那一条（待发送态）
+  // 开启，消息气泡里的回放卡只读，不给点。
+  pasteAction: { type: Boolean, default: false }
 })
-defineEmits(['remove'])
+defineEmits(['remove', 'paste'])
+
+// 长文本卡的标题显示正文首行预览（去掉 .txt 后缀），跟 DeepSeek 一致；
+// 其它附件仍显示文件名。
+function chipTitle(att) {
+  if (att.kind === 'text') return String(att.name || '').replace(/\.txt$/i, '')
+  return att.name
+}
 
 const imageAttachments = computed(() => props.attachments.filter(a => a.kind === 'image'))
 const currentIndex = ref(-1)
@@ -228,6 +241,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .attach-chip-name { font-size: 12px; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attach-chip-status { font-size: 10.5px; color: var(--app-text-faint); }
 .attach-chip-status.error { color: #d94834; }
+/* 长文本卡的「粘贴原文至输入框」：DS 同款蓝色文字链，带粘贴小图标 */
+.attach-chip-paste {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 0; border: none; background: none; cursor: pointer;
+  font-size: 10.5px; line-height: 1.4; font-weight: 500;
+  color: #4d6bfe; text-align: left;
+}
+.attach-chip-paste:hover { text-decoration: underline; }
+.attach-chip.text { width: 208px; }
 .attach-chip-remove {
   position: absolute; top: -5px; right: -5px;
   width: 16px; height: 16px; border-radius: 50%;

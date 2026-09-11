@@ -16,7 +16,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -195,8 +197,18 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 	}
 
 	var cmd *exec.Cmd
+	var batFile string
 	if runtime.GOOS == "windows" {
-		cmd = hiddenCommand("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+		// 与前台 callNativeCommand 对齐：PowerShell -Command 对 cmd 语法（&、2>nul、
+		// findstr 无文件读 stdin）会 ParserError / 设备错误 / 挂死，统一写临时 .bat 以 cmd 执行。
+		tmpDir := os.TempDir()
+		batFile = filepath.Join(tmpDir, fmt.Sprintf("rescene_cmd_%d.bat", time.Now().UnixNano()))
+		batContent := "@echo off\r\n" + command + "\r\n"
+		if err := os.WriteFile(batFile, []byte(batContent), 0o644); err != nil {
+			cmd = hiddenCommand("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+		} else {
+			cmd = hiddenCommand(batFile)
+		}
 	} else {
 		cmd = exec.Command("/bin/sh", "-lc", command)
 	}
@@ -234,6 +246,10 @@ func startBgTask(workflow, command string, ch chan<- bgTaskResult) (string, erro
 	// 等待 + 收尾：进程退出 → 记退出码 → 关 done → 推完成通知
 	go func() {
 		err := cmd.Wait()
+		// 临时 .bat 在进程退出后清理（前台用 defer 删，后台要等进程真正结束）
+		if batFile != "" {
+			_ = os.Remove(batFile)
+		}
 		exitCode := 0
 		if err != nil {
 			if ee, ok := err.(*exec.ExitError); ok {

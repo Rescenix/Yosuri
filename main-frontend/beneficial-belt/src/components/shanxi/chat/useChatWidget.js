@@ -208,11 +208,13 @@ function watchInputClearance() {
     // 启动「目标会话」自己的工作流实例（并行：别的会话的流不受影响）
     const wf = workflowOf(sid)
     const members = (opts && opts.groupIds) || agentStore.groupOf(sid)
-    // 没挂群聊成员：单 Agent 老链路，行为完全不变。
+    // 没挂群聊成员：单 Agent 老链路，不传 agent_id——后端不标 agent、
+    // 历史不拼「【某某 说】」前缀（拼了模型会照着模仿，回复开头自己吐名牌）。
+    // 人设走 persona 参数（_personaParam 优先读当前选中角色卡，不丢）。
     if (!members || members.length <= 1) {
       wf.startCodeWorkflow(task, display, {
         ...opts,
-        agentId: (members && members[0]) || agentStore.currentAgentId.value || '',
+        agentId: (members && members.length === 1) ? members[0] : '',
       })
       return
     }

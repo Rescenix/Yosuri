@@ -381,7 +381,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 
 	// 上下文装配全部交给 ContextProvider（见 context_provider.go）：
 	// 系统提示词分段声明、稳定段排前面（前缀缓存友好）、分类占用与提示词同源、
-	// 按需加载的工具激活集也归它管。SwiftNet 的无条件记忆注入是其中一段。
+	// 按需加载的工具激活集也归它管；常驻记忆与记忆索引的无条件注入是其中一段。
 	// agentID 非空时额外注入该 Agent 的私有记忆（通用记忆照旧共享）。
 	provider := newWorkflowContextProviderFor(agentID, task)
 	// 人设优先级：角色卡（agent_id 命中注册表）> 前端 persona query > 中性基底。
@@ -498,7 +498,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
 			finalIn, finalOut, agentID,
 		)
-		// 用户通过 remember 工具主动写入 MEMORY.md，此处不自动写
+		// 记忆由 remember 工具主动写入 memorydir（~/rescene_data/memory/<file>.md），此处不自动写
 		historyPersisted = true
 	}
 	// 收尾时序（2026-08-28 实锤 bug）：persistHistory 内推进水位线会误伤 SSE。
@@ -1496,8 +1496,8 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 
 // buildCodeWorkflowTools 已挪到 tool_ondemand.go：MCP 工具改为按需加载，
 // 不再无条件全量塞进每一轮请求（实测省 6000+ tok/轮）。
-// search_memory 内置工具已随 core.ExecuteToolCall 一并退役：SwiftNet 的无条件记忆
-// 注入已把身份/工作态/收件箱塞进每轮系统提示词，显式再搜一遍实测收益甚微。
+// search_memory 内置工具已随 core.ExecuteToolCall 一并退役：常驻记忆与记忆索引
+// 每轮直接注入系统提示词，显式再搜一遍实测收益甚微。
 
 // calcEditStartLine 在 MCP edit_file 执行前读文件，计算 oldText 的起始行号。
 func (r *WorkflowRunner) calcEditStartLine(argsJSON string) int {

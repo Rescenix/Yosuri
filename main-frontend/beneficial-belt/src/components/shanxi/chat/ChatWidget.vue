@@ -755,7 +755,7 @@
 
                 <!-- 附件预览：图片缩略图 / 文件与文件夹占位卡，横向排在输入文字上方，
                      真正的文字内容只在发送那一刻才拼进正文（buildOutgoingMessage） -->
-                <AttachmentChipRow :attachments="attachments" removable @remove="removeAttachment" />
+                <AttachmentChipRow :attachments="attachments" removable paste-action @remove="removeAttachment" @paste="pasteAttachmentToInput" />
 
                                 <div class="input-row">
                   <!-- 渐变动画的浮动占位符 -->
@@ -785,7 +785,7 @@
                     </div>
                   </div>
 
-                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="onChatInput" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
+                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown="onChatInputUndo" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="onChatInput" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
 
                   <!-- 模型切换：常态显示完整模型名；右边工具窗口打开挤压输入框时收成紧凑图标按钮 -->
                                     <div class="sch-model" :class="{ collapsed: hasVisibleDockPanels }" ref="modelPillRef" @click.stop="toggleModelMenu"
@@ -4926,12 +4926,14 @@ function fileToBase64(file) {
 // 机会确认。跟"+"菜单选图（onAttachFilesSelected）保持一致："先附加，用户自己
 // 决定何时发送"，不再有这个隐藏的自动发送时机。
 // WebView2 桌面版右键菜单粘贴不触发 @paste 事件（浏览器/JS 触发不到原生菜单），
-// 在 @input 里按长度兜底：任何路径进来的内容超 2000 字就转 TXT 附件。
-// 打字是逐字上屏，不可能一次输入事件就超 2000，所以不按 inputType 过滤更稳。
+// 在 @input 里兜底。⚠️ 不能只查总长度：框里已有两千字时用户改一个字就会被再次
+// 误转成卡。改成查「单次事件插入量」——e.data 是这次事件带进来的文本，粘贴是
+// 一大块、打字只有一个字，>50 字才算粘贴场景。
 function onChatInput(e) {
   adjustInputHeight()
   const t = (e.target.value || '').trim()
   if (t.length <= 2000) return
+  if ((e.data || '').length <= 50) return
   e.target.value = ''
   userInput.value = ''
   attachPastedText(t)
@@ -4964,12 +4966,12 @@ function handlePaste(e) {
   }
 }
 
-// 长文本转「粘贴文本.txt」附件：名字取首行前 14 字（去非法字符），
+// 长文本转「粘贴文本.txt」附件：名字取首行前 24 字（去非法字符），
 // 正文全文保留，发送时由 serializeOutgoing 拼进消息给 agent 看。
 function attachPastedText(text) {
   const trimmed = text.trim()
   if (!trimmed) return
-  const firstLine = (trimmed.split('\n')[0] || '').replace(/[\\/:*?"<>|\r\n]/g, '').trim().slice(0, 14)
+  const firstLine = (trimmed.split('\n')[0] || '').replace(/[\\/:*?"<>|\r\n]/g, '').trim().slice(0, 24)
   const name = (firstLine || tr('粘贴文本')) + '.txt'
   attachments.value.push({
     id: ++attachmentSeq,
@@ -4977,7 +4979,53 @@ function attachPastedText(text) {
     name,
     content: trimmed,
     status: 'ready',
-    charCount: trimmed.length
+    charCount: trimmed.length,
+    auto: true // 自动转的卡才允许 Ctrl+Z 撤销回输入框
+  })
+}
+
+// 长文本自动转卡后 Ctrl+Z 撤销：preventDefault + 清空输入框把原生撤销栈掏空了，
+// 所以自己接一层——输入框为空时按 Ctrl+Z，把最近一张自动转的长文本卡放回输入框。
+// 还原那一步（restoreAttToInput）同样是程序化赋值、原生栈接不住，所以再撤一次时
+// 走 restoreSnapshot 快照：把卡塞回去、输入框回到还原前。
+let restoreSnapshot = null
+function onChatInputUndo(e) {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return
+  if (restoreSnapshot) {
+    e.preventDefault()
+    const { att, prevInput } = restoreSnapshot
+    restoreSnapshot = null
+    userInput.value = prevInput
+    if (!attachments.value.some(a => a.id === att.id)) {
+      attachments.value.push({ ...att, auto: true })
+    }
+    nextTick(adjustInputHeight)
+    return
+  }
+  if (userInput.value.trim()) return // 框里还有字：让位给原生撤销（改错字）
+  const idx = attachments.value.findLastIndex(a => a.kind === 'text' && a.auto)
+  if (idx === -1) return
+  e.preventDefault()
+  const [att] = attachments.value.splice(idx, 1)
+  restoreAttToInput(att)
+}
+
+// 「粘贴原文至输入框」/ Ctrl+Z 共用的还原动作：卡片消失、全文进输入框。JS 赋值
+// .value 不触发 input 事件，不会被 onChatInput 的粘贴兜底再次转卡。
+function pasteAttachmentToInput(id) {
+  const idx = attachments.value.findIndex(a => a.id === id && a.kind === 'text')
+  if (idx === -1) return
+  const [att] = attachments.value.splice(idx, 1)
+  restoreAttToInput(att)
+}
+function restoreAttToInput(att) {
+  // 程序化赋值会清空 textarea 原生撤销栈，Ctrl+Z 回不去——自己记一份快照：
+  // 还原前的输入框内容 + 被摘掉的卡，撤销时原样塞回去。
+  restoreSnapshot = { att, prevInput: userInput.value }
+  userInput.value = (userInput.value ? userInput.value + '\n' : '') + att.content
+  nextTick(() => {
+    adjustInputHeight()
+    chatInputRef.value?.focus()
   })
 }
 
@@ -5016,6 +5064,7 @@ function removeAttachment(id) {
 // 发送前点掉某个附件（removeAttachment），那时确实再没人会用到这张图了。
 function clearAttachments() {
   attachments.value = []
+  restoreSnapshot = null // 发送后旧快照作废，防止 Ctrl+Z 把已发消息的卡又塞回来
 }
 const hasPendingAttachments = computed(() => attachments.value.some(a => a.status === 'analyzing'))
 

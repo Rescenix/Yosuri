@@ -71,24 +71,25 @@ export async function migrateLegacyPersona() {
         await createCard(p.name, p.prompt)
       }
     }
-    // 2) 当前生效人设 → 对下落成角色卡并设为当前 Agent（每次都补漏，
-    //    防旧版清键/中途抖动丢掉「当前选中」状态）。
-    //    _personaParam 现在优先读 activeAgentId 对应卡的人设，行为与改造前完全一致。
+    // 2) 当前生效人设 → 对下落成角色卡（每次都补漏，防旧版清键/中途抖动丢数据）。
+    //    但 activeAgentId 已有值 = 用户在角色卡里明确选过，绝不覆盖——
+    //    旧 persona 键是迁移前的残留，拿它冲掉用户新选择会导致「刷新回到旧角色卡」。
     const active = (localStorage.getItem('persona') || '').trim()
+    const userPicked = !!localStorage.getItem('activeAgentId')
     if (active) {
       const hit = agents.value.find((a) => a.persona === active)
       const builtin = BUILTIN_AGENT_CARDS.find((c) => c.persona === active)
-      if (hit) {
+      if (hit && !userPicked) {
         // 已有同名同文案的卡（用户自己建的）：直接用
         localStorage.setItem('activeAgentId', hit.id)
-      } else if (builtin) {
+      } else if (builtin && !userPicked) {
         // 内置预设原文：指到内置卡 id，播种紧接着会建（顺序：迁移→播种）
         localStorage.setItem('activeAgentId', builtin.id)
-      } else {
-        // 自定义人设：落成「我的人设」卡
+      } else if (!hit && !builtin) {
+        // 自定义人设：落成「我的人设」卡（数据不丢），仅用户还没选过卡时才顺带选中
         const card = await createCard('我的人设', active)
         const mine = card || agents.value.find((a) => a.name === '我的人设')
-        if (mine) localStorage.setItem('activeAgentId', mine.id)
+        if (mine && !userPicked) localStorage.setItem('activeAgentId', mine.id)
       }
     }
     // 3) 数据已保证落进 agents.json 才标记完成。

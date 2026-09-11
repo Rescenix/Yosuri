@@ -365,7 +365,7 @@ func (p *contextProvider) RestoreActivatedTools(set map[string]bool) {
 
 // projectWorkdirPrompt 把当前项目的 workdir.md（~/rescene_data/projects/<项目名>/workdir.md）
 // 注入系统提示词，让 agent 每次会话一开始就了解「这个项目现在在做什么、关键上下文、
-// 待办、约定」——跨对话的项目状态，避免失忆。与全局 MEMORY.md 互补：MEMORY.md 是
+// 待办、约定」——跨对话的项目状态，避免失忆。与通用记忆（memorydir）互补：通用记忆是
 // 用户/系统级常驻，workdir.md 是按项目隔离的。文件不存在时静默跳过（项目尚无笔记）。
 // 路径隔离在 rescene_data 下，不污染 repo 本身。
 func projectWorkdirPrompt() string {

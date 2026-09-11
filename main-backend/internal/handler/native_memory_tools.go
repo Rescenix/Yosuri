@@ -60,7 +60,7 @@ func callNativeMemoryTool(ctx context.Context, name, argsJSON string) (nativeToo
 				return nativeToolResult{}, fmt.Errorf("写入私有记忆失败: %w", err)
 			}
 			// 私有记忆不进云端同步白名单，也不参与通用性格蒸馏：只属于这个 Agent。
-			return nativeToolResult{Text: fmt.Sprintf("已写入我的私有记忆 %s（agents/%s/memory/%s.md）", file, agentID, file)}, nil
+			return nativeToolResult{Text: "已记住 ✓ 写进了我的私有记忆：" + filepath.Join(memorydir.AgentDir(agentID), "memory", file+".md") + "（检查时直接读这个文件）"}, nil
 		}
 		if err := memorydir.Remember(file, summary, text); err != nil {
 			return nativeToolResult{}, fmt.Errorf("写入失败: %w", err)
@@ -71,7 +71,7 @@ func callNativeMemoryTool(ctx context.Context, name, argsJSON string) (nativeToo
 		schedulePersonalityDistill()
 		// 记忆摘要蒸馏（防抖 30s）：事实变了，前端视图要跟着更新
 		scheduleSummaryDistill()
-		return nativeToolResult{Text: fmt.Sprintf("已写入记忆 %s（memory/%s.md）", file, file)}, nil
+		return nativeToolResult{Text: "已记住 ✓ 写进了长期记忆：" + filepath.Join(memorydir.MemoryDir(), file+".md") + "（检查时直接读这个文件）"}, nil
 	case "memory_pin":
 		pid, text := stringArg(args, "pid"), stringArg(args, "text")
 		if pid == "" || text == "" {

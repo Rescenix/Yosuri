@@ -2480,7 +2480,7 @@ min-height: 90px !important;
    overflow-y 改回 auto：hidden 时内容超过 max-height(150px) 会把光标那行裁掉、
    看不见输入，配合上面拿掉 scrollTop=0，光标现在能正常跟随滚动。
    line-height 提到 24px，让光标（高度=行高）更饱满，不再显得"太矮"。 */
-.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 8px 0 !important; resize: none; min-height: 34px !important; max-height: 150px; line-height: 20px; font-size: 14px; color: var(--app-text); font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
+.chat-input { flex: 1; border: none; outline: none; background: transparent; padding: 8px 0 !important; resize: none; min-height: 34px !important; max-height: min(45vh, 480px); line-height: 20px; font-size: 14px; color: var(--app-text); font-family: inherit; box-sizing: border-box; overflow-y: auto; -ms-overflow-style: none; scrollbar-width: none; position: relative; z-index: 1; }
 .chat-input::-webkit-scrollbar { display: none; }
 .chat-input::placeholder { color: var(--app-text-faint); font-style: italic; }
 

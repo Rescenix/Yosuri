@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 
 	"backend/internal/ai/core"
@@ -28,7 +29,9 @@ var rememberToolDef = core.ToolDefinition{
 			"  - 工作流完成摘要——「每次工作流都写？一次对话多少工作流多少md？」（用户原话，严禁）\n" +
 			"判断标准就一条：这条信息三个月后还成立吗？成立就记，不成立就不记。\n" +
 			"file 参数指定写入哪个文件（不含 .md），summary 参数指定 index.md 中这行的摘要描述。\n" +
-			"常用的 file：preferences（用户偏好）、project（项目）、decisions（决策）。",
+			"常用的 file：preferences（用户偏好）、project（项目）、decisions（决策）。\n" +
+			"落盘位置：通用记忆写 ~/rescene_data/memory/<file>.md，scope=private 写 ~/rescene_data/agents/<id>/memory/<file>.md。\n" +
+			"用户要「检查/看看记忆」时，直接 read 上面这些绝对路径的文件，不要拿 <file>.md 去项目目录里找。",
 		Parameters: core.ToolParameters{
 			Type: "object",
 			Properties: map[string]core.ToolProperty{
@@ -97,7 +100,8 @@ func handleRemember(ctx context.Context, argsJSON string) string {
 			if err := memorydir.AgentRemember(agentID, args.File, args.Summary, args.Text); err != nil {
 				return "写入私有记忆失败: " + err.Error()
 			}
-			return "已写入我的私有记忆 agents/" + agentID + "/memory/" + args.File + ".md，下次我还会记得。"
+			return "已记住 ✓ 写进了我的私有记忆：" + filepath.Join(memorydir.AgentDir(agentID), "memory", args.File+".md") +
+				"（检查时直接读这个文件，下次对话我会自动想起）"
 		}
 		// 没有 Agent 身份（单 Agent 老链路）：private 退回通用记忆，不报错打断任务
 	}
@@ -107,5 +111,6 @@ func handleRemember(ctx context.Context, argsJSON string) string {
 	// 云端记忆同步（可选）：记忆变了，异步推送
 	pushMemorySync()
 	// 去 emoji 保留精髓：「下次对话时我会自动想起」是这句话的灵魂，不能删
-	return "已写入 memory/" + args.File + ".md，下次对话时我会自动想起。"
+	return "已记住 ✓ 写进了长期记忆：" + filepath.Join(memorydir.MemoryDir(), args.File+".md") +
+		"（检查时直接读这个文件，下次对话我会自动想起）"
 }

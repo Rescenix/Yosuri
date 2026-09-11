@@ -43,6 +43,9 @@ func path() string {
 	return filepath.Join(home, "rescene_data", "memory")
 }
 
+// MemoryDir 通用记忆目录的绝对路径（工具回显/检查时用，别让调用方猜位置）。
+func MemoryDir() string { return path() }
+
 func indexPath() string {
 	return filepath.Join(path(), "index.md")
 }
@@ -234,7 +237,7 @@ func DeleteMemory(file string) error {
 	return os.WriteFile(indexPath(), []byte(strings.Join(lines, "\n")+"\n"), 0644)
 }
 
-// ── 常驻 / 交接 / 搜索（SwiftNet 记忆工具的 memorydir 落点） ──
+// ── 常驻 / 交接 / 搜索 ──
 
 func pinnedPath() string  { return filepath.Join(path(), "pinned.md") }
 func handoffPath() string { return filepath.Join(path(), "handoff.md") }
@@ -340,7 +343,7 @@ func Search(query string) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// ── bigram 选择器（精简版，与 swiftnet 同算法） ──
+// ── bigram 选择器 ──
 
 func norm(s string) []string {
 	s = strings.ToLower(s)

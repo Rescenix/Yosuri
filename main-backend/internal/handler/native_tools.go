@@ -106,7 +106,7 @@ func coreToolDefs() []core.ToolDefinition {
 			"old_string": {Type: "string", Description: "要替换的原始文本"},
 			"new_string": {Type: "string", Description: "替换后的文本"},
 		}, []string{"path", "old_string", "new_string"}),
-		nativeTool("bash", "执行系统命令并返回退出码、stdout、stderr；默认前台等待完成。background=true 后台执行并立即返回 task_id，之后用 action=status/log/wait/kill + task_id 管理。", map[string]core.ToolProperty{
+		nativeTool("bash", "执行系统命令并返回退出码、stdout、stderr；默认前台等待完成。background=true 后台执行并立即返回 task_id，之后用 action=status/log/wait/kill + task_id 管理。本机 Windows，命令用 cmd 语法（dir /b、type、findstr、where、copy、if exist、set 等），不是 bash/powershell 语法；findstr 等过滤器必须明确带输入源（文件路径，或 type 文件 | findstr 模式），禁止 findstr 不带文件——会读 stdin 挂死。", map[string]core.ToolProperty{
 			"command":    {Type: "string", Description: "要执行的命令"},
 			"timeout":    {Type: "integer", Description: "前台超时秒数，默认 120，最大 600"},
 			"background": {Type: "boolean", Description: "后台执行（默认 false）"},
@@ -210,7 +210,7 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 			"query": {Type: "string", Description: "检索问题或关键词"},
 			"scope": {Type: "string", Description: "可选：shared 只查通用记忆 / private 只查我的私有记忆 / 不传=两层都查"},
 		}, []string{"query"}),
-		nativeTool("memory_append", "向长期记忆写入一条可复用事实；会自动做相似项防重。scope=shared 写通用记忆（用户层面的事实，所有 Agent 共享），scope=private 写我自己的私有记忆（只有我这个 Agent 记得）。", map[string]core.ToolProperty{
+		nativeTool("memory_append", "向长期记忆写入一条可复用事实；会自动做相似项防重。scope=shared 写通用记忆（~/rescene_data/memory/<file>.md，所有 Agent 共享），scope=private 写我自己的私有记忆（~/rescene_data/agents/<id>/memory/<file>.md，只有我这个 Agent 记得）。用户要「检查/看看记忆」时直接 read 这些绝对路径文件，不要去项目目录里找。", map[string]core.ToolProperty{
 			"text":     {Type: "string", Description: "要记住的事实"},
 			"cluster":  {Type: "string", Description: "分类，如 UserBase/CodeWork/Decisions"},
 			"keywords": {Type: "string", Description: "可选同义关键词，用 / 分隔"},
