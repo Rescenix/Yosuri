@@ -41,5 +41,19 @@ export default {
 "天真活泼，可爱软萌": "Innocent, lively, adorably soft",
 "温柔知性，耐心照顾": "Gentle, wise, patiently caring",
 "今天想写点什么？": "What would you like to write today?",
-"今日": "Today"
+"今日": "Today",
+"组件下载": "Components",
+"这些功能引擎不随安装包捆绑；用到视频、音频处理时在这里一键补齐。": "These engines aren't bundled with the installer; grab them here in one click when you need video or audio processing.",
+"正在检查组件状态…": "Checking component status…",
+"已就绪（系统）": "Ready (system)",
+"已就绪": "Ready",
+"解压中…": "Extracting…",
+"下载中": "Downloading",
+"下载安装": "Download & install",
+"当前平台暂不支持自动下载": "Auto-download isn't available on this platform",
+"下载": "Download",
+"不支持": "N/A",
+"也可以自行安装 ffmpeg 并加入 PATH，应用会自动识别。": "You can also install ffmpeg yourself and add it to PATH — the app picks it up automatically.",
+"组件状态获取失败": "Failed to fetch component status",
+"启动下载失败": "Failed to start download"
 }

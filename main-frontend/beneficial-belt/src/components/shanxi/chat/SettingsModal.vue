@@ -88,6 +88,8 @@
               <Icon icon="mdi:account-circle-outline" width="16" />{{ tr('我的') }}</button>
             <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion(); loadAutoStart()">
               <Icon icon="mdi:update" width="16" />{{ tr('版本') }}</button>
+            <button class="settings-tab" :class="{ on: activeTab === 'feedback' }" @click="activeTab = 'feedback'">
+              <Icon icon="mdi:message-text-outline" width="16" />{{ tr('反馈') }}</button>
           </div>
 
           <!-- 右侧内容区 -->
@@ -110,15 +112,15 @@
               <div class="param-row">
                 <span class="param-label">{{ tr('风格') }}</span>
                 <div class="seg-control">
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'plain' }" type="button" @click="setFollowUpStyle('plain')">{{ tr('默认') }}</button>
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'tavern' }" type="button" @click="setFollowUpStyle('tavern')">{{ tr('酒馆') }}</button>
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'xianxia' }" type="button" @click="setFollowUpStyle('xianxia')">{{ tr('修真') }}</button>
-                  <button class="seg-btn" :class="{ on: followUpStyle === 'custom' }" type="button" @click="setFollowUpStyle('custom')">{{ tr('自定义') }}</button>
+                  <button class="seg-btn" :class="{ on: steerStyle === 'plain' }" type="button" @click="setSteerStyle('plain')">{{ tr('默认') }}</button>
+                  <button class="seg-btn" :class="{ on: steerStyle === 'tavern' }" type="button" @click="setSteerStyle('tavern')">{{ tr('酒馆') }}</button>
+                  <button class="seg-btn" :class="{ on: steerStyle === 'xianxia' }" type="button" @click="setSteerStyle('xianxia')">{{ tr('修真') }}</button>
+                  <button class="seg-btn" :class="{ on: steerStyle === 'custom' }" type="button" @click="setSteerStyle('custom')">{{ tr('自定义') }}</button>
                 </div>
               </div>
-              <div v-if="followUpStyle === 'custom'" class="param-row">
+              <div v-if="steerStyle === 'custom'" class="param-row">
                 <span class="param-label">{{ tr('自定义前缀') }}</span>
-                <input class="settings-text-input" v-model="followUpCustom" @change="saveFollowUpCustom" :placeholder="tr('如：【道友】')" style="flex:1; min-width:0;" />
+                <input class="settings-text-input" v-model="steerCustom" @change="saveSteerCustom" :placeholder="tr('如：【道友】')" style="flex:1; min-width:0;" />
               </div>
 
               <div class="settings-section-title" style="margin-top: 18px;">{{ tr('启动') }}</div>
@@ -897,8 +899,24 @@
                                   accept="image/png,image/jpeg,image/webp,image/gif" @change="onAgentAvatarFile" />
                               </div>
                             </div>
-                            <div class="profile-row">
-                              <span class="profile-label">{{ tr('角色卡') }}</span>
+                                                        <div class="profile-row">
+                                                          <span class="profile-label">{{ tr('发言颜色') }}</span>
+                                                          <div class="agent-voice-colors">
+                                                            <button
+                                                              v-for="c in AGENT_VOICE_COLORS"
+                                                              :key="c"
+                                                              type="button"
+                                                              class="agent-voice-color"
+                                                              :class="{ on: agentDraft.color === c }"
+                                                              :style="{ background: c }"
+                                                              @click="agentDraft.color = agentDraft.color === c ? '' : c"
+                                                              :title="c"
+                                                            ></button>
+                                                            <span v-if="agentDraft.color" class="agent-voice-color-clear" @click="agentDraft.color = ''">{{ tr('重置') }}</span>
+                                                          </div>
+                                                        </div>
+                                                        <div class="profile-row">
+                                                          <span class="profile-label">{{ tr('角色卡') }}</span>
                               <textarea class="persona-textarea" rows="6" v-model="agentDraft.persona"
                                 :placeholder="tr('写下这个 Agent 是谁：自称、语气、性格、口头禅、忌讳……')"></textarea>
                             </div>
@@ -1298,6 +1316,10 @@
                   <span v-if="memorySyncToast" class="mem-guard-tip" role="status" aria-live="polite">
                     <Icon icon="mdi:lock-outline" width="14" />{{ tr('云端备份仅对登录账号开放，登录后即可开启') }}
                   </span>
+                  <span v-else-if="memorySyncError" class="mem-guard-tip" role="status" aria-live="polite">
+                    <Icon icon="mdi:key-alert-outline" width="14" />{{ memorySyncError }}
+                    <button v-if="memorySyncNeedLogin" class="mem-guard-link" type="button" @click="openLoginForSync">{{ tr('重新登录') }}</button>
+                  </span>
                 </Transition>
               </div>
               <!-- 记忆归属：通用记忆（所有 Agent 共享）+ 各角色 Agent 私有记忆 -->
@@ -1454,6 +1476,30 @@
                 <span v-if="profileSaved" class="profile-saved">{{ tr('已保存') }}</span>
                 <button class="api-form-btn save" type="button" @click="saveProfile" :disabled="profileSaving">{{ profileSaving ? tr('保存中…') : tr('保存') }}</button>
               </div>
+
+              <!-- ========== 账号安全（2026-09-12：恢复码备份，忘密码找回记忆） ========== -->
+              <div class="settings-section-title" style="margin-top: 18px;">{{ tr('账号安全') }}</div>
+              <div class="settings-section-desc">{{ tr('记忆跟账号绑定，密码忘了也能找回来。') }}</div>
+              <div class="profile-row">
+                <span class="profile-label">{{ tr('备份恢复码') }}</span>
+                <div class="recovery-wrap">
+                  <button class="profile-email-action primary" type="button" @click="showRecoveryCode">{{ recoveryCodeShow ? tr('隐藏') : tr('查看恢复码') }}</button>
+                  <div class="settings-section-desc">{{ tr('忘密码时用它找回云端记忆。建议截图保存到手机相册，或抄在纸上。') }}</div>
+                  <div v-if="recoveryCodeShow" class="recovery-code-box">
+                    <code class="recovery-code-text">{{ recoveryCode || tr('加载中…') }}</code>
+                    <button class="profile-email-action" type="button" @click="copyRecoveryCode">{{ tr('复制') }}</button>
+                  </div>
+                  <div v-if="recoveryCodeError" class="profile-avatar-error" role="alert">{{ recoveryCodeError }}</div>
+                </div>
+              </div>
+
+              <div class="profile-row" style="align-items: flex-start;">
+                <span class="profile-label">{{ tr('修改密码') }}</span>
+                <div class="recovery-wrap">
+                  <div class="settings-section-desc">{{ tr('改密码、找回密码统一在官网处理（登录后账号安全页），改密码不影响记忆。') }}</div>
+                  <a class="profile-email-action primary" style="text-decoration:none; display:inline-block;" :href="'https://yosuri.com/change-password.html'" target="_blank" rel="noopener">{{ tr('去官网修改') }}</a>
+                </div>
+              </div>
             </div>
 
             <!-- ========== 版本与更新 ========== -->
@@ -1473,11 +1519,13 @@
               </div>
 
               <div class="param-row" style="align-items: flex-start;">
-                <span class="param-label">{{ tr('更新内容') }}</span>
-                <div v-if="versionLoading" class="settings-loading">{{ tr('检查中…') }}</div>
-                <div v-else-if="versionInfo.release_notes" class="update-notes" v-html="renderMarkdown(versionInfo.release_notes)"></div>
-                <div v-else class="memory-empty">{{ versionInfo.has_update ? tr('本次更新没有附带更新说明。') : '—' }}</div>
-              </div>
+                              <span class="param-label">{{ tr('更新内容') }}</span>
+                              <!-- 英文界面 release_notes 已在 loadVersion 里替换为 GitHub Release 英文原文 body，
+                                   直接渲染；拉不到时回退链接 + 中文原文 -->
+                              <div v-if="versionLoading" class="settings-loading">{{ tr('检查中…') }}</div>
+                              <div v-else-if="versionInfo.release_notes" class="update-notes" v-html="renderMarkdown(versionInfo.release_notes)"></div>
+                              <div v-else class="memory-empty">{{ versionInfo.has_update ? tr('本次更新没有附带更新说明。') : '—' }}</div>
+                            </div>
 
               <div v-if="versionInfo.has_update" class="profile-actions" style="margin-top: 14px; align-items: center;">
                 <button
@@ -1514,9 +1562,51 @@
                                   <span class="param-value">{{ tr('不提示版本更新') }}</span>
                                 </div>
                               </div>
-                            </div>
 
-          <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
+                                        <!-- ========== 反馈（2026-09-12 方案A：需求走用户主动提交） ========== -->
+                                        <div v-show="activeTab === 'feedback'" class="settings-panel">
+                                          <div class="settings-section-title">{{ tr('反馈与建议') }}</div>
+            <div class="settings-section-desc">{{ tr('想加的功能、遇到的 Bug、任何想法，直接告诉我们。你的反馈会直达开发者。') }}</div>
+
+            <div class="param-row">
+              <span class="param-label">{{ tr('类型') }}</span>
+              <div class="feedback-cats">
+                <button
+                  v-for="cat in feedbackCats"
+                  :key="cat.id"
+                  type="button"
+                  class="feedback-cat"
+                  :class="{ on: feedbackCat === cat.id }"
+                  @click="feedbackCat = cat.id"
+                >{{ tr(cat.label) }}</button>
+              </div>
+            </div>
+
+            <div class="param-row" style="align-items: flex-start;">
+              <span class="param-label">{{ tr('内容') }}</span>
+              <textarea
+                v-model="feedbackText"
+                class="feedback-text"
+                :placeholder="tr('写点什么…（1-2000 字）')"
+                rows="5"
+                maxlength="2000"
+              ></textarea>
+            </div>
+
+            <div class="profile-actions" style="margin-top: 14px; align-items: center;">
+              <button
+                class="api-form-btn save"
+                type="button"
+                :disabled="!feedbackText.trim() || feedbackSending"
+                @click="submitFeedback"
+              >{{ feedbackSending ? tr('提交中…') : tr('提交反馈') }}</button>
+              <span v-if="feedbackDone" class="feedback-done">{{ tr('已收到，感谢反馈 🎉') }}</span>
+              <span v-else-if="feedbackError" class="feedback-err">{{ feedbackError }}</span>
+                          </div>
+                        </div>
+                        </div>
+
+                        <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
         </div>
       </div>
     </div>
@@ -1539,6 +1629,7 @@ import { useI18n, tr } from '../../../composables/useI18n.js'
 import { streamFadeConfig, resetStreamFadeConfig } from '../composables/streamFadeConfig.js'
 import FreeOrderModal from './FreeOrderModal.vue'
 const { isZh, setLocale } = useI18n()
+const { authHeaders } = useAuth()
 
 
 const props = defineProps({
@@ -1548,15 +1639,16 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 
-// 插话风格：follow up 送达模型时的口吻（默认/酒馆/修真/小学生/自定义前缀）
-const followUpStyle = ref(localStorage.getItem('follow_up_style') || 'plain')
-const followUpCustom = ref(localStorage.getItem('follow_up_custom') || '')
-function setFollowUpStyle(s) {
-  followUpStyle.value = s
+// 插话风格：steer 送达模型时的口吻（默认/酒馆/修真/小学生/自定义前缀）
+// 注意：localStorage 键沿用 follow_up_style / follow_up_custom，改名会让用户已有设置丢失。
+const steerStyle = ref(localStorage.getItem('follow_up_style') || 'plain')
+const steerCustom = ref(localStorage.getItem('follow_up_custom') || '')
+function setSteerStyle(s) {
+  steerStyle.value = s
   localStorage.setItem('follow_up_style', s)
 }
-function saveFollowUpCustom() {
-  localStorage.setItem('follow_up_custom', (followUpCustom.value || '').trim())
+function saveSteerCustom() {
+  localStorage.setItem('follow_up_custom', (steerCustom.value || '').trim())
 }
 
 // 左侧边栏当前 tab：默认落在第一个 tab「通用/语言」，不再写死模型页
@@ -1627,6 +1719,9 @@ const agentStore = useAgentsStore()
 const agentEditing = ref(false)
 const agentAvatarInputRef = ref(null)
 const agentDraft = reactive({ id: '', name: '', persona: '', avatar: '', color: '', character: '' })
+// 角色发言可选色板：多 agent 对话时每个角色正文用自己颜色，一眼分清谁在说话。
+// 单 agent 通用对话不套色（正文落回默认文字色），只在群聊里生效。
+const AGENT_VOICE_COLORS = ['#8b5e7c', '#c2506c', '#4d7c0f', '#0e7490', '#6d28d9', '#be123c', '#0369a1', '#b45309', '#3f6212', '#7c2d12']
 
 onMounted(() => { if (!agentStore.agentsLoaded.value) agentStore.loadAgents() })
 
@@ -3111,6 +3206,8 @@ function applyDefaultMemoryScope() {
 const memorySyncEnabled = ref(true)
 const memorySyncEnvOverride = ref(false)
 const memorySyncLocked = computed(() => memorySyncEnvOverride.value || !auth.isLoggedIn.value)
+const memorySyncError = ref('')
+const memorySyncNeedLogin = ref(false)
 const humanReadableMemoryMarkdown = computed(() => {
   if (memoryScope.value !== 'shared') {
     // 私有记忆：后端返回该 Agent memory/ 目录下全部 .md 文件
@@ -3248,12 +3345,25 @@ async function loadMemorySyncSetting() {
 }
 async function saveMemorySyncSetting() {
   try {
-    await fetch('/api/memory/sync/settings', {
+    const res = await fetch('/api/memory/sync/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: memorySyncEnabled.value })
     })
-  } catch (e) {}
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      const msg = data.error || (tr('操作失败（HTTP ') + res.status + '）')
+      // 回滚开关（弹回去），提示原因（未登录 / 需重新登录解锁记忆密钥）
+      memorySyncEnabled.value = !memorySyncEnabled.value
+      memorySyncError.value = msg
+      if (res.status === 409 && /重新登录/.test(msg)) {
+        memorySyncNeedLogin.value = true
+      }
+    } else {
+      memorySyncError.value = ''
+      memorySyncNeedLogin.value = false
+    }
+  } catch (e) { memorySyncError.value = tr('网络异常，请稍后重试') }
 }
 
 // 未登录点开关：不直接禁用（禁用点不动、没反馈），而是让开关「弹一下又弹回去」
@@ -3348,6 +3458,83 @@ const notifyDisabled = ref(isUpdateNotifyDisabled())
 const dlState = ref('idle')
 const dlError = ref('')
 const dlWorking = ref(false)
+
+// ============ 反馈（2026-09-12 方案A：需求走用户主动提交） ============
+const feedbackCats = [
+  { id: 'suggestion', label: '功能建议' },
+  { id: 'bug', label: 'Bug 反馈' },
+  { id: 'other', label: '其他' },
+]
+const feedbackCat = ref('suggestion')
+const feedbackText = ref('')
+const feedbackSending = ref(false)
+const feedbackDone = ref(false)
+const feedbackError = ref('')
+
+async function submitFeedback() {
+  const content = feedbackText.value.trim()
+  if (!content || feedbackSending.value) return
+  feedbackSending.value = true
+  feedbackDone.value = false
+  feedbackError.value = ''
+  try {
+    const res = await fetch('/api/feedback', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ content, category: feedbackCat.value }),
+        })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error || '提交失败')
+    }
+    feedbackDone.value = true
+    feedbackText.value = ''
+  } catch (e) {
+    feedbackError.value = e.message || '提交失败，请稍后再试'
+  } finally {
+    feedbackSending.value = false
+  }
+}
+// ============ 账号安全（恢复码备份，2026-09-12） ============
+const recoveryCode = ref('')
+const recoveryCodeShow = ref(false)
+const recoveryCodeError = ref('')
+
+async function showRecoveryCode() {
+  if (recoveryCodeShow.value) {
+    recoveryCodeShow.value = false
+    return
+  }
+  recoveryCodeError.value = ''
+  try {
+    const res = await fetch('/api/memory/ak/recovery-code')
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error || '获取失败')
+    }
+    const d = await res.json()
+    recoveryCode.value = d.recovery_code || ''
+    recoveryCodeShow.value = true
+  } catch (e) {
+    recoveryCodeError.value = e.message || '获取恢复码失败'
+  }
+}
+
+async function copyRecoveryCode() {
+  try {
+    await navigator.clipboard.writeText(recoveryCode.value)
+    recoveryCodeError.value = ''
+  } catch (e) {
+    recoveryCodeError.value = '复制失败，请手动选择复制'
+  }
+}
+
+// 开启记忆同步需要重新登录解锁密钥 → 关掉设置弹窗，触发登录面板
+function openLoginForSync() {
+  emit('close')
+  window.dispatchEvent(new Event('open-account-login'))
+}
+
 // 下载进度（后端 /api/update/download/status 返回 percent 0~100；下载完自动应用在下次启动）
 const dlPercent = ref(0)
 const dlPercentText = computed(() => {
@@ -3366,6 +3553,20 @@ async function loadVersion() {
           const data = await res.json()
           const u = data.ok && data.update ? data.update : {}
           versionInfo.value = u
+    }
+    // 英文界面：update.json 的 release_notes 是中文公告，直接改从 GitHub Release
+    // 拉英文原文 body 内嵌显示（GitHub API 允许 CORS）。失败就保持原样<=中文文本，
+    // 不打扰用户（release_url 链接仍在最新版本行下方可点）。
+    if (versionInfo.value && !isZh.value) {
+      try {
+        const gh = await fetch('https://api.github.com/repos/Rescenix/Yosuri/releases/latest')
+        if (gh.ok) {
+          const d = await gh.json()
+          if (d && typeof d.body === 'string' && d.body.trim()) {
+            versionInfo.value = { ...versionInfo.value, release_notes: d.body.trim() }
+          }
+        }
+      } catch { /* GH 不可达：保留 update.json 原文，静默 */ }
     }
   } catch (e) {
     versionInfo.value = {}
@@ -4096,6 +4297,17 @@ onUnmounted(() => {
   background: var(--app-surface-2);
 }
 .agent-edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 发言颜色色板（角色卡编辑）：一排色块单选，点选即赋予该角色正文色 */
+.agent-voice-colors { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.agent-voice-color {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid transparent; cursor: pointer; padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+}
+.agent-voice-color:hover { transform: scale(1.12); }
+.agent-voice-color.on { border-color: var(--app-accent, #7c6cf0); box-shadow: 0 0 0 2px var(--app-surface), 0 0 0 4px var(--app-accent, #7c6cf0); }
+.agent-voice-color-clear { font-size: 12px; color: var(--app-text-soft); cursor: pointer; }
+.agent-voice-color-clear:hover { color: var(--app-accent, #7c6cf0); }
 /* 角色卡编辑里的多行人设输入（沿用原人设框样式） */
 .persona-textarea { width: 100%; box-sizing: border-box; background: var(--app-surface-2); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; font-size: 13px; font-family: inherit; line-height: 1.6; resize: vertical; }
 .persona-textarea:focus { outline: none; border-color: var(--app-accent, #7c6cf0); }
@@ -4732,5 +4944,44 @@ onUnmounted(() => {
   transition: border-color 0.15s;
 }
 .model-input:focus { border-color: var(--app-accent, #1950be); }
+
+/* ===== 反馈（2026-09-12） ===== */
+.feedback-cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.feedback-cat {
+  padding: 5px 12px; border: 1px solid var(--app-border, #e2e5ea); border-radius: 999px;
+  background: var(--app-surface-2, #f5f6f8); color: var(--app-text-soft, #5b6470);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.feedback-cat:hover { border-color: var(--app-accent, #1950be); }
+.feedback-cat.on { color: #fff; border-color: var(--app-accent, #1950be); background: var(--app-accent, #1950be); }
+.feedback-text {
+  flex: 1; min-width: 0; width: 100%; padding: 8px 10px;
+  border: 1px solid var(--app-border, #e2e5ea); border-radius: 9px;
+  background: var(--app-surface, #fff); color: var(--app-text, #1b1f27);
+  font: inherit; font-size: 12.5px; line-height: 1.6; resize: vertical;
+}
+.feedback-text:focus { outline: none; border-color: var(--app-accent, #1950be); }
+.feedback-done { color: #2e9e5b; font-size: 12px; }
+.feedback-err { color: #d64541; font-size: 12px; }
+
+/* ===== 账号安全（恢复码） ===== */
+.recovery-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.recovery-code-box {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin-top: 4px; border: 1px dashed var(--app-accent, #1950be);
+  border-radius: 10px; background: color-mix(in srgb, var(--app-accent) 6%, transparent);
+}
+.recovery-code-text {
+  font-size: 15px; font-weight: 700; letter-spacing: 1px;
+  color: var(--app-text, #1b1f27); font-family: ui-monospace, Consolas, monospace;
+}
+
+/* 记忆同步需登录提示条内的按钮 */
+.mem-guard-link {
+  margin-left: 8px; padding: 2px 10px; border: 1px solid var(--app-accent, #1950be);
+  border-radius: 999px; background: transparent; color: var(--app-accent, #1950be);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.mem-guard-link:hover { background: var(--app-accent, #1950be); color: #fff; }
 </style>
 

@@ -20,9 +20,10 @@
 
       <!-- 单步思考：不收束，直接平铺（思考中展开，结束后自动收起+显示耗时） -->
             <div v-else-if="group.type === 'single-thinking'" class="flow-thinking flow-thinking-single">
-              <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`, group.block)">
-                              <RoseParticleLoader :size="18" :active="!thinkDone(group.block)" class="flow-row-icon icon-think" />
-                <span class="flow-thinking-text-label">{{ thinkLabelText(group.block) }}</span>
+                          <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`, group.block)">
+                                          <RoseParticleLoader v-if="!thinkDone(group.block)" :size="18" class="flow-row-icon icon-think" />
+                                                                        <Icon v-else icon="mdi:thought-bubble-outline" class="flow-row-icon icon-think" width="16" />
+                            <span class="flow-thinking-text-label">{{ thinkLabelText(group.block) }}</span>
                 <span v-if="thinkCollapsed(`single-${gIdx}`, group.block) && group.block.text" class="flow-row-preview">{{ onelinePreview(group.block.text) }}</span>
                 <span v-else class="flow-spacer"></span>
                 <span class="flow-chevron" :class="{ open: thinkIsOpen(`single-${gIdx}`, group.block) }">›</span>
@@ -144,7 +145,7 @@
               </button>
               <a
                 class="flow-file-btn download"
-                :href="(group.block.url || ('/api/agent/file?path=' + encodeURIComponent(group.block.path) + '&raw=1'))"
+                :href="backendURL(group.block.url || ('/api/agent/file?path=' + encodeURIComponent(group.block.path) + '&raw=1'))"
                 :download="group.block.name"
               >
                 <Icon icon="mdi:download-outline" width="13" /> {{ tr('下载') }}
@@ -207,7 +208,8 @@
               <!-- 思考 -->
                             <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
                               <div class="flow-row-head" @click.stop="toggleThink(`${gIdx}-${i}`, b)">
-                                                              <RoseParticleLoader :size="18" :active="!thinkDone(b)" class="flow-row-icon icon-think" />
+                                                              <RoseParticleLoader v-if="!thinkDone(b)" :size="18" class="flow-row-icon icon-think" />
+                              <Icon v-else icon="mdi:thought-bubble-outline" class="flow-row-icon icon-think" width="16" />
                                 <span class="flow-thinking-text-label">{{ thinkLabelText(b) }}</span>
                                 <span v-if="thinkCollapsed(`${gIdx}-${i}`, b) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
                                 <span v-else class="flow-spacer"></span>
@@ -221,8 +223,11 @@
               <!-- 操作 -->
               <div v-else-if="b.type === 'tool'" class="flow-tool flow-tool-timeline">
                 <div class="flow-row-head" @click.stop="b.expanded = !b.expanded">
-                  <Icon icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
-                  <span class="flow-tool-label">{{ actionText(b) }}</span>
+                  <!-- 执行中：静态扳手换成玫瑰粒子动画（与思考行同源，小号+灰色），
+                       完成/失败后落回静态图标，不再空转消耗 rAF -->
+                  <RoseParticleLoader v-if="b.status === 'running'" :size="14" :particle-count="28" class="flow-row-icon icon-tool icon-tool-live" />
+                  <Icon v-else icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
+                  <span class="flow-tool-label" :class="{ 'is-running': b.status === 'running' }">{{ actionText(b) }}</span>
                   <span v-if="diffCounts(b)" class="flow-tool-counts">
                     <span class="flow-add">+{{ diffCounts(b).added }}</span>
                     <span v-if="diffCounts(b).removed" class="flow-del">−{{ diffCounts(b).removed }}</span>
@@ -272,6 +277,12 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 中间意图（「我先看看这个文件」）：收进过程的短说明，一行预览 -->
+              <div v-else-if="b.type === 'intent'" class="flow-intent-inline">
+                <Icon icon="mdi:message-processing-outline" width="12" class="flow-intent-inline-icon" />
+                <span class="flow-intent-inline-text">{{ onelinePreview(b.text) }}</span>
+              </div>
             </template>
           </div>
         </Transition>
@@ -305,21 +316,10 @@
       </TransitionGroup>
     </div>
 
-    <!-- 建议按钮：工作流结束后模型自己觉得有值得一键推进的建议，出一行按钮，点击即填入输入框发送。
-             沿 Hermes 风格轻量悬浮卡片，紧贴 changed-files 上方。 -->
-        <div v-if="flow.suggestions && flow.suggestions.length" class="flow-suggestions">
-                  <div class="flow-suggestions-row">
-            <button
-              v-for="(s, i) in flow.suggestions"
-              :key="i"
-              type="button"
-              class="flow-suggestion-btn"
-              @click="sendSuggestion(s)"
-            >{{ s }}</button>
-          </div>
-        </div>
+    <!-- 建议按钮已移至 ChatWidget（工具条下方，2026-09-12：与 workflow_done 解耦，
+          done 后独立拉取，晚到不顶聊天内容）。面板内不再渲染。 -->
 
-        <!-- 改动文件：工作流收尾固定内嵌在最底部（像引用来源一样平铺）。
+    <!-- 改动文件：工作流收尾固定内嵌在最底部（像引用来源一样平铺）。
              列出本次会话改过的文件，逐个预览 diff / 一键回退到工作流前版本。
              数据源 flow.changedFiles（后端 workflow_done 下发，各收尾分支都有）。 -->
     <div v-if="flow.changedFiles && flow.changedFiles.length" class="flow-changed-files">
@@ -401,6 +401,9 @@ import ArxivPaperCard from './ArxivPaperCard.vue'
 import RoseParticleLoader from './RoseParticleLoader.vue'
 import { renderMarkdown } from './markdownRenderer.js'
 import { requestPreview } from '../composables/previewBus.js'
+// 桌面版页面源是 https://wails.localhost，<a href> 原生加载不走 fetch 桥，
+// 下载/预览链接必须绝对化到后端 http 源（详见 desktopTransport.js）。
+import { backendURL } from '../../../desktopTransport.js'
 import { pptxToHtml, xlsxToHtml, docxToHtml } from '../../../utils/officePreview.js'
 import ChartRenderer from './ChartRenderer.vue'
 import { useI18n, tr } from '../../../composables/useI18n.js'
@@ -515,14 +518,6 @@ function currentProjectName() {
     }
   } catch {}
   return ''
-}
-
-// 建议按钮：把模型给出的 follow-up 建议抛给 ChatWidget，由它填入输入框并发送。
-// 用 window 自定义事件跨组件通信（AgentWorkflowPanel 只有 flow prop，无 emit 通道；
-// ChatWidget 侧监听 'workflow-suggestion' 后填输入框 + handleSend）。
-function sendSuggestion(text) {
-  if (!text || !text.trim()) return
-  window.dispatchEvent(new CustomEvent('workflow-suggestion', { detail: { text: text.trim() } }))
 }
 
 // 审查按钮（每个改动文件一个）：拉该文件本次 diff，交给后端独立免费模型审查，
@@ -643,68 +638,158 @@ async function doRestore() {
 // ★ 工具调用收进概要组；回复(intent)单独平铺，不收纳
 // thinking（思考）与 web_search（联网搜索）也不收束——思考是推理轨迹要
 // 全程可见，搜索卡片自带引用来源，收进概要卡片会被折叠看不见。
+
+// intent 的 markdown 节流只做「省」，必须配一次「补」：被节流吃掉的那一帧
+// 之后如果模型正好吐完，就再没有 onStreamUpdate 触发重算，屏幕会停在半句话上，
+// 直到 workflow_done 把 status 翻成非 running 才「恢复」——这就是收尾必现的
+// 「最后几个词生成一半卡住、恢复才显示」。下面的尾随定时器补上那一帧。
+const intentFlushTick = ref(0)
+const intentFlushTimers = new Map() // block 对象 -> timer；同一 block 只排一个
+function scheduleIntentFlush(b, delay) {
+  if (intentFlushTimers.has(b)) return
+  const t = setTimeout(() => {
+    intentFlushTimers.delete(b)
+    b._cachedAt = 0         // 清掉节流时间戳，下一次计算必定重算 html
+    intentFlushTick.value++ // 触发 blockGroups 重算 → 渲染最新全文
+  }, Math.max(delay, 16))
+  intentFlushTimers.set(b, t)
+}
+
 const blockGroups = computed(() => {
+  // 依赖：尾随补刷定时器到点后强制重算本 computed
+  void intentFlushTick.value
   const groups = []
-  let current = null
-  for (const b of props.flow?.blocks || []) {
-    if (b.type === 'tool' && b.name !== 'web_search') {
-      if (!current || current.type === 'visible' || current.type === 'single-thinking' || current.type === 'search-tool') {
-        if (current) groups.push(current)
-        current = { type: 'summary', blocks: [b] }
+  const blocks = props.flow?.blocks || []
+  const streaming = props.flow?.status === 'running' || props.flow?.status === 'waiting'
+
+  // 流式中：全平铺，思考实时可见（用户爱看思考，禁提前收束）。
+  if (streaming) {
+    let current = null
+    for (const b of blocks) {
+      if (b.type === 'tool' && b.name !== 'web_search') {
+        if (!current || current.type === 'visible' || current.type === 'single-thinking' || current.type === 'search-tool') {
+          if (current) groups.push(current)
+          current = { type: 'summary', blocks: [b] }
+        } else {
+          current.blocks.push(b)
+        }
       } else {
-        current.blocks.push(b)
+        if (current) {
+          groups.push(current)
+          current = null
+        }
+        if (b.type === 'intent') {
+            const now = Date.now()
+            const throttled = b._cachedAt && (now - b._cachedAt < 100)
+            if (throttled) {
+              scheduleIntentFlush(b, 100 - (now - b._cachedAt))
+            } else if (b.text !== b._cachedText) {
+              b._cachedHtml = renderMarkdown(b.text, true)
+              b._cachedText = b.text
+              b._cachedAt = now
+            }
+            groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
+        } else if (b.type === 'thinking') {
+          groups.push({ type: 'single-thinking', block: b })
+        } else if (b.type === 'question') {
+          groups.push({ type: 'question', block: b })
+        } else if (b.type === 'image') {
+          groups.push({ type: 'image', block: b })
+        } else if (b.type === 'video') {
+          groups.push({ type: 'video', block: b })
+        } else if (b.type === 'file') {
+          groups.push({ type: 'file', block: b })
+        } else if (b.type === 'chart') {
+          groups.push({ type: 'chart', block: b })
+        } else if (b.type === 'tool' && b.name === 'web_search') {
+          groups.push({ type: 'search-tool', block: b })
+        } else if (b.type === 'steer') {
+          groups.push({ type: 'steer', block: b })
+        } else if (b.type === 'memory-saved') {
+          groups.push({ type: 'memory-saved', block: b })
+        } else if (b.type === 'preview') {
+          groups.push({ type: 'preview', block: b })
+        }
       }
+    }
+    if (current) groups.push(current)
+    return groups
+  }
+
+  // 收尾后：「过程 → 总结」收束。LLM 习惯 大量思考→工具调用→最后总结；
+  // 最后一个 intent（总结）之前的所有 thinking/tool/短意图都是过程，
+  // 收进一个 process 概要组（一行，可展开看时间线）；最终总结平铺。
+  let lastIntentIdx = -1
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i].type === 'intent') lastIntentIdx = i
+  }
+  let processBlocks = [] // 收束中的过程块（thinking/tool/中间 intent）
+    const flushProcess = () => {
+      if (processBlocks.length) {
+        // 单个思考不收束：只有一条 thinking、没有工具没有中间意图时，直接平铺
+        // （单步思考本身就是完整推理轨迹，收进概要组反而把推理藏起来了）
+        if (processBlocks.length === 1 && processBlocks[0].type === 'thinking') {
+          groups.push({ type: 'single-thinking', block: processBlocks[0] })
+        } else {
+          groups.push({ type: 'process', blocks: processBlocks })
+        }
+        processBlocks = []
+      }
+    }
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]
+    if (b.type === 'tool' && b.name !== 'web_search') {
+      processBlocks.push(b)
     } else {
-      if (current) {
-        groups.push(current)
-        current = null
-      }
       if (b.type === 'intent') {
-              // 流式期间节流 markdown 重算：模型吐得比渲染快时，每 token 全量 markdown-it+katex
-              // 重解析 + innerHTML 重设 = O(n²)，是「吐几个词卡一下、恢复时已吐完」的元凶。
-              // 流式中距上次重算 <100ms 就复用旧 html（视觉仍连续），停流后强制渲染最新全文。
-              const streaming = props.flow?.status === 'running' || props.flow?.status === 'waiting'
-              const now = Date.now()
-              const throttled = streaming && b._cachedAt && (now - b._cachedAt < 100)
-              if (!throttled && b.text !== b._cachedText) {
-                b._cachedHtml = renderMarkdown(b.text, true)
-                b._cachedText = b.text
-                b._cachedAt = now
-              }
-              groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
+        if (i === lastIntentIdx) {
+          flushProcess()
+          const now = Date.now()
+          const throttled = b._cachedAt && (now - b._cachedAt < 100)
+          if (throttled) {
+            scheduleIntentFlush(b, 100 - (now - b._cachedAt))
+          } else if (b.text !== b._cachedText) {
+            b._cachedHtml = renderMarkdown(b.text, true)
+            b._cachedText = b.text
+            b._cachedAt = now
+          }
+          groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
+        } else {
+          processBlocks.push(b)
+        }
       } else if (b.type === 'thinking') {
-        // 思考：单步平铺，不收束（推理轨迹全程可见）
-        groups.push({ type: 'single-thinking', block: b })
+        processBlocks.push(b)
       } else if (b.type === 'question') {
-        // ask_user 提问：单独平铺，让用户直接看到「问了什么 / 答了什么」
+        flushProcess()
         groups.push({ type: 'question', block: b })
       } else if (b.type === 'image') {
+        flushProcess()
         groups.push({ type: 'image', block: b })
       } else if (b.type === 'video') {
-              groups.push({ type: 'video', block: b })
-            } else if (b.type === 'file') {
-              // Agent 落盘的可交付文件：单独平铺成交付卡片（预览送右侧窗口/下载）
-              groups.push({ type: 'file', block: b })
-            } else if (b.type === 'chart') {
-              // Agent 调 chart 工具产出的 ECharts 图表：单独平铺，前端 ChartRenderer 直出
-              groups.push({ type: 'chart', block: b })
-            } else if (b.type === 'tool' && b.name === 'web_search') {
-              // 联网搜索：单独平铺成卡片（自带引用来源，不进概要折叠）
-              groups.push({ type: 'search-tool', block: b })
-            } else if (b.type === 'steer') {
-              // 中途插话：轻量提示条，用户插话后模型会按此转向，给个可见反馈
-              groups.push({ type: 'steer', block: b })
-            } else if (b.type === 'memory-saved') {
-              // 记忆写入：单行彩虹反馈，直接平铺
-              groups.push({ type: 'memory-saved', block: b })
+        flushProcess()
+        groups.push({ type: 'video', block: b })
+      } else if (b.type === 'file') {
+        flushProcess()
+        groups.push({ type: 'file', block: b })
+      } else if (b.type === 'chart') {
+        flushProcess()
+        groups.push({ type: 'chart', block: b })
+      } else if (b.type === 'tool' && b.name === 'web_search') {
+        flushProcess()
+        groups.push({ type: 'search-tool', block: b })
+      } else if (b.type === 'steer') {
+        flushProcess()
+        groups.push({ type: 'steer', block: b })
+      } else if (b.type === 'memory-saved') {
+        flushProcess()
+        groups.push({ type: 'memory-saved', block: b })
       } else if (b.type === 'preview') {
-        // 自动预览提示：弱化条，不抢正文注意力
+        flushProcess()
         groups.push({ type: 'preview', block: b })
       }
-      // 其他类型（compressed）暂不收纳也不平铺，避免污染回复
     }
   }
-  if (current) groups.push(current)
+  flushProcess()
   return groups
 })
 
@@ -825,13 +910,20 @@ function fmtMs(ms) {
   if (!ms || ms < 0) return ''
   return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's'
 }
-// 状态徽章文案：完成带耗时、进行中、失败
+// 状态徽章文案：完成带耗时、进行中实时跳动、失败。
+// 长命令（配音/合成/下载）干等最像卡死：running 时徽章显示实时秒数，
+// 超过 20s 切「仍在执行」文案，明确告诉用户没卡、还在跑。
 function toolBadge(b) {
   if (b.status === 'generating') {
     const chars = Number(b.generatedChars || 0)
     return chars >= 1000 ? (tr('生成参数 ') + (chars / 1000).toFixed(1) + 'k') : tr('生成参数')
   }
-  if (b.status === 'running') return tr('进行中')
+  if (b.status === 'running') {
+    const live = fmtMs(nowTick.value ? (nowTick.value - (b.startTime || nowTick.value)) : 0)
+    if (!live) return tr('进行中')
+    const secs = (nowTick.value - b.startTime) / 1000
+    return secs >= 20 ? (tr('仍在执行 ') + live) : live
+  }
   if (b.status === 'error') return tr('失败')
   const t = fmtMs(b.elapsedMs)
   return t ? tr('完成 ') + t : tr('完成')
@@ -868,7 +960,10 @@ watch(
         b.elapsedMs = Math.max(0, (next.startTime || Date.now()) - b.startTime)
       }
     }
-    const hasLive = blocks.some((b) => b.type === 'thinking' && !thinkDone(b))
+    // 计时器驱动两类实时跳动：流式书写中的思考块 + 执行中的工具块（长命令秒数）
+    const hasLive = blocks.some((b) =>
+      (b.type === 'thinking' && !thinkDone(b)) ||
+      (b.type === 'tool' && b.status === 'running'))
     if (hasLive && !thinkTimer) {
       thinkTimer = setInterval(() => { nowTick.value = Date.now() }, 250)
     } else if (!hasLive && thinkTimer) {
@@ -878,7 +973,11 @@ watch(
   },
   { immediate: true }
 )
-onUnmounted(() => { if (thinkTimer) clearInterval(thinkTimer) })
+onUnmounted(() => {
+  if (thinkTimer) clearInterval(thinkTimer)
+  for (const t of intentFlushTimers.values()) clearTimeout(t)
+  intentFlushTimers.clear()
+})
 
 function thinkLabelText(b) {
   if (!thinkDone(b)) {
@@ -1597,6 +1696,17 @@ function toolBodyText(b) {
 .icon-think { color: var(--app-accent); }
 .icon-search { color: #8b5cf6; }
 .icon-tool { color: var(--app-text-soft); }
+/* 执行中的玫瑰粒子：跟静态扳手同色，不抢思考行的品牌色 */
+.icon-tool-live { color: var(--app-text-soft); }
+/* 执行中的动作文字：与思考标签同款的微光扫过，暗示"还在动" */
+.flow-tool-label.is-running {
+  animation: reasonShimmer 3s linear infinite;
+  background: linear-gradient(100deg, var(--app-text-soft) 40%, var(--app-text) 50%, var(--app-text-soft) 60%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 
 /* ---------- 联网搜索独立卡片（透明背景，非工具卡片） ---------- */
 .flow-search-card {
@@ -1942,7 +2052,9 @@ function toolBodyText(b) {
   margin: 6px 0;
   font-size: 17px;
   line-height: 1.75;
-  color: var(--app-text);
+  /* 多 agent 群聊：正文沿用本角色名牌色（--agent-flow-color 由外层 agentflow-wrap 注入）；
+     未注入（单 agent 通用对话）落回默认文字色，不影响既有样式 */
+  color: var(--agent-flow-color, var(--app-text));
   word-break: break-word;
 }
 
@@ -2279,37 +2391,28 @@ function toolBodyText(b) {
   word-break: break-word;
 }
 
-/* ============ 建议按钮（工作流结束后模型 follow-up） ============ */
-.flow-suggestions {
-  margin-top: 8px;
-  padding: 8px 0;
-  border-top: 1px dashed var(--app-border);
-}
-.flow-suggestions-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.flow-suggestion-btn {
-  padding: 8px 14px;
-  font-size: 13.5px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 30%, transparent);
-  background: color-mix(in srgb, var(--app-accent) 6%, transparent);
-  color: var(--app-accent);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: normal;
-  text-align: left;
-  line-height: 1.4;
-  max-width: 100%;
-}
-.flow-suggestion-btn:hover {
-  background: color-mix(in srgb, var(--app-accent) 16%, transparent);
-  border-color: var(--app-accent);
-}
-
 /* ============ 独立审查（改动文件行内按钮 + 结果卡片） ============ */
+/* 收进过程组的中间意图：一行弱化预览，不抢工具/思考时间线 */
+.flow-intent-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 3px 24px;
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--app-border);
+  font-size: 12.5px;
+  color: var(--app-text-soft);
+  min-width: 0;
+}
+.flow-intent-inline-icon {
+  flex-shrink: 0;
+  color: var(--app-text-faint);
+}
+.flow-intent-inline-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .flow-changed-item {
   display: flex;
   flex-direction: column;

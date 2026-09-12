@@ -244,7 +244,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 不再用 resolveBackends 的 auto 分支——后者 180s 单源超时拖死 failover 导致「auto 一直卡住」，
 	// 而 aggAutoChain 排序更完善（探活/真实成功/熔断优先）+ failover 快（断了秒切）。
 	// 精确模型（model != auto）仍走 resolveBackends：保持 per-openID 的 key + 精准单源不 failover 铁律。
-	// token 上报不受影响：streamRouterRound 用 usedBackend.Model 记（与聚合端口同口径，见 aggStatsInc）。
+	// token 上报不受影响：streamRouterRound 用 usedBackend.Model 记（与应用内 user_stats 同口径）。
 	if model == "auto" {
 		backends = aggAutoChain()
 	}
@@ -386,10 +386,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	provider := newWorkflowContextProviderFor(agentID, task)
 	// 人设优先级：角色卡（agent_id 命中注册表）> 前端 persona query > 中性基底。
 	// 群聊里每个 Agent 的人设存在后端角色卡上，前端只传 id，避免把长文案塞进 URL。
-	if persona := AgentPersona(agentID); persona != "" {
-		provider.WithPersona(persona)
-	} else {
-		provider.WithPersona(c.Query("persona"))
+	// 这份生效人设同样要交给 follow-up 建议：建议得按这场对话的语域生成
+	// （RP 角色卡→戏内对话选项，工程任务→下一步动作，闲聊→可聊的话题）。
+	personaText := AgentPersona(agentID)
+	if personaText == "" {
+		personaText = c.Query("persona")
+	}
+	if personaText != "" {
+		provider.WithPersona(personaText)
 	}
 	contextBreakdown := provider.Breakdown()
 	staticSum := provider.StaticSum()
@@ -801,10 +805,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 			}
 			persistHistory()
 			deleteWorkflowCheckpoint(workflowID)
-			// agent 决定结束对话：跑一次 build + 截图校验（旁路，失败不阻断）
-			verifyOnWorkflowDone(c, workflowID)
+			// agent 决定结束对话：跑一次 build + 截图校验（旁路，失败不阻断）。
+			// 必须异步：同步跑 go build / npm run build（各 120s 上限）会卡住 workflow_done，
+			// 前端收尾工具条（建议按钮/改动卡片）跟着延迟弹出，体验就是"答完卡一会儿"。
+			// 前端不消费 verification 事件（grep 全仓为空），SSE 不推，只保留预览副作用。
+			go verifyOnWorkflowDone(nil, workflowID)
 			// follow-up 建议（旁路，失败不阻断）：模型生成的继续推进方向，
 			// 前端渲染成按钮行，用户免打字直接点。和 QuestionModal 无关——那是 ask_user。
+			// 仍保持同步收尾（workflow_done 携带），但内部 6s 硬超时，拿不到就 nil 不渲染。
 			suggestions := suggestFollowUp(task, content, transcript)
 			// 本次会话改过的文件列表（AgentFS 审计聚合），随 workflow_done 下发，
 			// 前端收到后弹「改动文件卡片」：逐个预览 diff / 一键回退到工作流前版本。

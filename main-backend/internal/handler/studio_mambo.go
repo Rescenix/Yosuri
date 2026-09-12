@@ -404,10 +404,15 @@ func HandleStudioExtractFrame(c *gin.Context) {
 		req.Time = 0
 	}
 	// ffmpeg 抽帧（毫秒级）
+	ffmpegPath, ferr := findComponentBin("ffmpeg")
+	if ferr != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": ferr.Error()})
+		return
+	}
 	outName := strings.TrimSuffix(name, filepath.Ext(name)) + "_frame.png"
 	outPath := filepath.Join(videoOutputDir(), outName)
 	args := []string{"-y", "-ss", fmt.Sprintf("%.2f", req.Time), "-i", srcPath, "-frames:v", "1", "-q:v", "2", outPath}
-	cmd := exec.Command("ffmpeg", args...)
+	cmd := exec.Command(ffmpegPath, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "抽帧失败: " + err.Error() + " " + truncateChars(string(out), 200)})
 		return

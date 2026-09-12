@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -106,8 +105,9 @@ func HandleVideoAnalyze(c *gin.Context) {
 
 // extractVideoFrames 用 ffmpeg 把视频均匀抽 N 帧（区间中点采样），返回 jpeg base64 列表。
 func extractVideoFrames(srcPath, tmpDir string, n int) ([]string, error) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return nil, fmt.Errorf("未找到 ffmpeg，无法抽帧（请安装 ffmpeg 并加入 PATH）")
+	ffmpegBin, err := findComponentBin("ffmpeg")
+	if err != nil {
+		return nil, err
 	}
 
 	// 先拿时长，决定均匀分布的时间点；拿不到就退化为每秒一帧的近似
@@ -140,7 +140,7 @@ func extractVideoFrames(srcPath, tmpDir string, n int) ([]string, error) {
 			"-q:v", "3",
 			outPath,
 		}
-		cmd := hiddenCommand("ffmpeg", args...)
+		cmd := hiddenCommand(ffmpegBin, args...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			// ffmpeg 的 banner（版本 + 编译配置）有一千多字符，真正的报错总在
 			// 输出的末尾——只取尾部，否则会被 banner 淹没看不到真因。
@@ -157,7 +157,11 @@ func extractVideoFrames(srcPath, tmpDir string, n int) ([]string, error) {
 
 // videoDuration 用 ffprobe 读视频时长（秒）；失败返回 0。
 func videoDuration(srcPath string) float64 {
-	cmd := hiddenCommand("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", srcPath)
+	ffprobe, err := findComponentBin("ffprobe")
+	if err != nil {
+		return 0
+	}
+	cmd := hiddenCommand(ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", srcPath)
 	out, err := cmd.Output()
 	if err != nil {
 		return 0

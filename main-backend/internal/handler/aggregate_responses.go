@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
@@ -42,9 +41,6 @@ func HandleAggregateResponses(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
 	}
-	// 聚合 responses 调用审计（与 chat/completions 同口径）。
-	log.Printf("[agg-call] UA=%q model=%q stream=%v",
-		c.GetHeader("User-Agent"), req.Model, req.Stream)
 	msgs, err := responsesInputToMessages(req.Input, req.Instructions)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

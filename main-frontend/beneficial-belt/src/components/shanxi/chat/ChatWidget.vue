@@ -152,9 +152,12 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
-              <button class="gem-icon-btn" @click="showSettings = true" :title="tr('设置')">
-                <Icon icon="mdi:cog-outline" width="18" />
-              </button>
+                          <button class="gem-icon-btn" @click="showComponentModal = true" :title="tr('组件下载')">
+                            <Icon icon="mdi:download-outline" width="18" />
+                          </button>
+                          <button class="gem-icon-btn" @click="showSettings = true" :title="tr('设置')">
+                            <Icon icon="mdi:cog-outline" width="18" />
+                          </button>
               <img v-if="railAuth.displayAvatar.value" :src="railAuth.displayAvatar.value" class="gem-rail-avatar" :title="railAuth.displayName.value" />
               <div v-else class="gem-rail-avatar" :title="railAuth.displayName.value">{{ (railAuth.displayName.value || '?').charAt(0).toUpperCase() }}</div>
             </div>
@@ -387,7 +390,7 @@
                     />
                     <!-- 必须包一层竖向容器：.message-row 是 flex-direction:row，
                          面板和工具栏平铺进去的话工具栏会变成"面板右边被拉满高的一竖条" -->
-                    <div v-else-if="item.kind === 'agentflow'" class="agentflow-wrap">
+                    <div v-else-if="item.kind === 'agentflow'" class="agentflow-wrap" :style="{ '--agent-flow-color': (flowAgent(item) && flowAgent(item).color) || '' }">
                       <!-- 群聊名牌：只在真正的多 Agent 群聊（本会话勾了 2 个以上成员）才显示，
                            单 Agent 通用对话不挂「XX 说」名牌——是通用 agent，不是酒馆软件。 -->
                       <div v-if="flowAgent(item) && currentGroup.length > 1" class="flow-agent-badge">
@@ -421,6 +424,27 @@
                             <path class="speak-wave" d="M2.6 10.4 C4.4 5.8, 6.6 5.8, 8 9 C9.4 12.2, 11.6 12.2, 13 9 C13.8 7.2, 14.8 6.6, 15.4 6.9" />
                           </svg>
                         </button>
+                      </div>
+                      <!-- 建议按钮行（2026-09-12 起在工具条下方）：模型工作流结束后提出的
+                           follow-up 建议，点击即填入输入框发送。与 workflow_done 解耦——
+                           done 后立刻出占位骨架，后台流式逐条生成、逐条补进来，
+                           用户看到的是「一条条冒出来」，不是「卡几秒整块蹦出来」。 -->
+                      <div v-if="item.suggestionsPending || (item.suggestions && item.suggestions.length)" class="flow-suggestions">
+                        <div class="flow-suggestions-row">
+                          <button
+                            v-for="(s, i) in item.suggestions"
+                            :key="i"
+                            type="button"
+                            class="flow-suggestion-btn"
+                            @click="sendSuggestion(s)"
+                          >{{ s }}</button>
+                          <span
+                            v-for="n in (item.suggestionsPending ? Math.max(0, 3 - item.suggestions.length) : 0)"
+                            :key="'sk' + n"
+                            class="flow-suggestion-skeleton"
+                            :style="{ width: (n === 1 ? 168 : n === 2 ? 132 : 96) + 'px' }"
+                          ></span>
+                        </div>
                       </div>
                     </div>
                     <div v-else class="assistant-message" :class="{ streaming: item.isStreaming }">
@@ -1261,7 +1285,9 @@
       </div>
 
       <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
-      <ScheduledTaskManager
+      <ComponentModal v-if="showComponentModal" @close="showComponentModal = false" />
+            <ComponentModal v-if="showComponentModal" @close="showComponentModal = false" />
+            <ScheduledTaskManager
               v-if="showScheduledTaskManager"
               @close="showScheduledTaskManager = false"
               @create="openScheduledTaskCreate"
@@ -1414,6 +1440,7 @@ import RainbowToast from './RainbowToast.vue'
 import ScheduledTaskModal from './ScheduledTaskModal.vue'
 import ScheduledTaskManager from './ScheduledTaskManager.vue'
 import SettingsModal from './SettingsModal.vue'
+import ComponentModal from './ComponentModal.vue'
 import ModelManagerModal from './ModelManagerModal.vue'
 import PluginsMarketModal from './PluginsMarketModal.vue'
 import QuestionModal from './QuestionModal.vue'
@@ -3496,6 +3523,7 @@ async function onDeleteModelKey(modelId) {
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
+const showComponentModal = ref(false)
 const showScheduledTask = ref(false)
 const showScheduledTaskManager = ref(false)
 const showMailPanel = ref(false)
@@ -3807,7 +3835,7 @@ const {
   dismissBackgroundTask,
   clearAllBackgroundTasks,
   flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-  todoState, sendSteerMessage, pushFollowUp,
+  todoState, sendSteerMessage, pushSteerMessage,
   questionState, answerQuestion,
   agentStore,
   toggleChat, updateParams,
@@ -4530,19 +4558,19 @@ function onFollowUpClick(card) {
   handleSend()
 }
 
-// 插话风格：follow up 送达模型时的口吻（设置面板可配：默认/酒馆/修真/自定义前缀）
-const FOLLOW_UP_STYLES = {
+// 插话风格：steer 送达模型时的口吻（设置面板可配：默认/酒馆/修真/自定义前缀）
+const STEER_STYLES = {
   plain: (t) => t,
   tavern: (t) => (tr('【你】') + t),
   xianxia: (t) => (tr('【道友】') + t),
 }
-function applyFollowUpStyle(text) {
+function applySteerStyle(text) {
   const s = localStorage.getItem('follow_up_style') || 'plain'
   if (s === 'custom') {
     const prefix = (localStorage.getItem('follow_up_custom') || '').trim()
     return prefix ? `${prefix}${text}` : text
   }
-  const fn = FOLLOW_UP_STYLES[s]
+  const fn = STEER_STYLES[s]
   return fn ? fn(text) : text
 }
 
@@ -4557,20 +4585,20 @@ async function handleSend() {
   // 流在别的会话（切会话后旧会话还在跑）：先停掉它再发本会话的新消息，
   // 否则输入会被误当插话喂给别的会话的流（2026-09-06 重大 bug）。
   if (flowState.value.active && runningSessions.value.has(activeSession.value)) {
-      const followUpText = userInput.value.trim()
-      if (!followUpText) return
+      const steerText = userInput.value.trim()
+      if (!steerText) return
       userInput.value = ''
       nextTick(() => { if (chatInputRef.value) chatInputRef.value.style.height = 'auto' })
-      // follow up 秒出：渲染进当前工作流卡末尾（工具时间线下方，竖列），
+      // 插话秒出：渲染进当前工作流卡末尾（工具时间线下方，竖列），
       // 不插独立气泡（避免消息流被顶一下）。旧流停掉后主模型自动续上
       // （skipUserBubble 防重复插气泡）。免费模型首 token 前插话卡队列、
       // 屏幕零反馈 = 消息被静默吞掉——直接换主模型新起流，历史落盘接上。
-      pushChatHistory(followUpText)
+      pushChatHistory(steerText)
       // 按设置的插话风格包装后送达模型（设置面板「插话风格」可配）
-      const styled = applyFollowUpStyle(followUpText)
-      pushFollowUp(styled)
+      const styled = applySteerStyle(steerText)
+      pushSteerMessage(styled)
       stopCodeWorkflow().then(() => {
-        startCodeWorkflow(styled, { text: followUpText, attachments: [], skipUserBubble: true }, { model: selectedModel.value })
+        startCodeWorkflow(styled, { text: steerText, attachments: [], skipUserBubble: true }, { model: selectedModel.value })
       })
       return
     }
@@ -5321,6 +5349,10 @@ onMounted(() => {
       stopNotifPoll()
     })
     // 工作流建议按钮点击：把建议文本填进输入框并发送，用户不用打字。
+    function sendSuggestion(text) {
+      if (!text || !text.trim()) return
+      window.dispatchEvent(new CustomEvent('workflow-suggestion', { detail: { text: text.trim() } }))
+    }
     function onWorkflowSuggestion(e) {
     const text = e.detail && e.detail.text
     if (!text || !text.trim()) return
@@ -5460,6 +5492,62 @@ async function refreshGitGraph() {
 
 <style>
 @import './chat-global.css';
+
+/* ==================== 建议按钮行（工具条下方，2026-09-12 迁移至此） ==================== */
+.flow-suggestions {
+  margin-top: 8px;
+  padding: 8px 0;
+  border-top: 1px dashed var(--app-border);
+  /* 淡入 + 轻微下滑：按钮行出现的瞬间不把聊天内容生硬顶上去 */
+  animation: flow-suggestions-in 0.28s ease;
+}
+@keyframes flow-suggestions-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* 竖列：一条建议一行，逐条往下长。横排 wrap 的话三条挤一行、
+   每条宽度随文字长短跳动，逐条流式补进来时视觉很乱。 */
+.flow-suggestions-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.flow-suggestion-btn {
+  padding: 8px 14px;
+  font-size: 13.5px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--app-accent) 6%, transparent);
+  color: var(--app-accent);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+  max-width: 100%;
+}
+.flow-suggestion-btn:hover {
+  background: color-mix(in srgb, var(--app-accent) 16%, transparent);
+  border-color: var(--app-accent);
+}
+/* 占位骨架：建议还没生成时先占住位置，逐条生成完就地替换成按钮。
+   shimmer 与正文「正在思考」同款节奏，高度对齐按钮避免补进来时跳动。 */
+.flow-suggestion-skeleton {
+  height: 37px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--app-accent) 8%, transparent) 25%,
+    color-mix(in srgb, var(--app-accent) 18%, transparent) 50%,
+    color-mix(in srgb, var(--app-accent) 8%, transparent) 75%);
+  background-size: 200% 100%;
+  animation: flow-suggestion-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes flow-suggestion-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
 
 /* ==================== AI 流式瀑布渐变 ==================== */
 /* 时长/间隔的权威值在 streamFadeConfig（JS 会内联覆盖这里的 .5s 与 --sf-blur） */

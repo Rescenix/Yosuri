@@ -41,6 +41,14 @@
               </span>
             </button>
           </div>
+
+          <label class="ob-autostart">
+            <input v-model="autoStart" type="checkbox" />
+            <span class="ob-autostart-body">
+              <span class="ob-autostart-title">{{ tr('开机自动启动') }}</span>
+              <span class="ob-autostart-desc">{{ tr('随 Windows 启动后台常驻，随时响应；可在「设置 → 版本」随时关闭。') }}</span>
+            </span>
+          </label>
         </section>
 
         <!-- 2 功能导航 + 用户协议 -->
@@ -131,6 +139,8 @@ const agreed = ref(!!localStorage.getItem('studio_api_agreed'))
 // 「不再显示」默认勾上：走完一次引导即静默，想再看回来取消勾选。
 const dontShow = ref(true)
 const showAgreement = ref(false)
+// 开机自启：引导里默认勾选，用户确认过才落盘，避免后台静默写注册表（2026-09-12，issue #17 杀软误报）。
+const autoStart = ref(true)
 
 const LANGS = [
   { id: 'zh', name: tr('简体中文'), tag: tr('默认') },
@@ -180,6 +190,14 @@ function go(item) {
 }
 function finish() {
   if (agreed.value) localStorage.setItem('studio_api_agreed', '1')
+  // 引导里确认的自启意愿落盘（后端写 HKCU Run 注册表；失败静默，用户可在设置里再改）。
+  try {
+    fetch('/api/desktop/autostart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: autoStart.value }),
+    })
+  } catch { /* 后端没起：保持出厂默认，设置页仍可调 */ }
   emit('close', { dontShow: dontShow.value })
 }
 </script>
@@ -227,6 +245,16 @@ function finish() {
 .ob-persona-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .ob-persona-name { font-size: 13px; font-weight: 600; }
 .ob-persona-desc { color: var(--app-text-faint); font-size: 11.5px; line-height: 1.4; }
+.ob-autostart {
+  display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 10px 12px;
+  border: 1px solid var(--app-border); border-radius: 13px; background: var(--app-surface-2);
+  cursor: pointer; color: var(--app-text);
+}
+.ob-autostart:hover { border-color: var(--app-accent); }
+.ob-autostart input { margin-top: 2px; accent-color: var(--app-accent); }
+.ob-autostart-body { display: flex; flex-direction: column; gap: 2px; }
+.ob-autostart-title { font-size: 13px; font-weight: 600; }
+.ob-autostart-desc { color: var(--app-text-faint); font-size: 11.5px; line-height: 1.4; }
 .ob-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ob-item {
   display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px;

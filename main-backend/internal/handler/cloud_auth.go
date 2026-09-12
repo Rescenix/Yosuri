@@ -12,11 +12,15 @@ package handler
 // 这样开源的 re0 不含任何付费/鉴权密钥，商业闭环留在私有 ResceneCloud。
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,6 +28,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// sha256Hex 老协议登录迁移用：客户端算的 SHA-256 摘要（与云端 account.go 同口径）。
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
 
 // cloudHTTPClient 转发到 ResceneCloud 的专用客户端，带超时兜底。
 //
@@ -116,15 +126,181 @@ func cloudErrorMessage(err error) string {
 	return "连接 ResceneCloud 失败: " + err.Error()
 }
 
-// CloudLoginProxy 转发到 ResceneCloud 的账号登录（用户名+密码 → JWT）。
-// 双模式：{username,password}=账号登录，{password}=管理员密码登录。
+// CloudLoginProxy 转发到 ResceneCloud 的账号登录。
+// 安全升级（2026-09-12 方案A）：密码明文只在本机回环进本地后端；转发云端时
+// 替换成 PBKDF2 登录哈希（600k 迭代），云端永远收不到密码明文。老账号迁移带
+// legacy_sha256（云端 v0 账号比对通过后自动升级 v2，无感）。登录成功后后台
+// 解锁账号密钥 AK（云端 wrapped_ak → KEK 解开 → 落盘），记忆同步自动加密。
+// 双模式保留：{username,password_hash}=账号登录，{password}=管理员密码登录。
 func CloudLoginProxy(c *gin.Context) {
-	proxyToCloud(c, "/api/login")
+	body, _ := io.ReadAll(c.Request.Body)
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.Unmarshal(body, &req); err == nil && req.Username != "" && req.Password != "" {
+		rewritten, _ := json.Marshal(map[string]any{
+			"username":      req.Username,
+			"password_hash": MemLoginHash(req.Password, req.Username),
+			"legacy_sha256": sha256Hex(req.Password),
+			"pow_id":        "",
+			"pow_nonce":     "",
+		})
+		body = rewritten
+	}
+	// 转发改写后的请求体
+	target := cloudAuthBase() + "/api/login"
+	upReq, err := http.NewRequest(http.MethodPost, target, strings.NewReader(string(body)))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "构造鉴权请求失败: " + err.Error()})
+		return
+	}
+	if ct := c.GetHeader("Content-Type"); ct != "" {
+		upReq.Header.Set("Content-Type", ct)
+	}
+	resp, err := cloudHTTPClient.Do(upReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": cloudErrorMessage(err)})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := readUpstreamBody(resp)
+	// 登录成功 → 后台解锁账号密钥 AK（不阻塞登录响应；失败保持无密钥态，下次登录重试）
+	if resp.StatusCode == http.StatusOK {
+		var loginResp struct {
+			UID       int64  `json:"uid"`
+			Token     string `json:"token"`
+			Username  string `json:"login"`
+			WrappedAK string `json:"wrapped_ak"`
+		}
+		if err := json.Unmarshal(respBody, &loginResp); err == nil && loginResp.UID > 0 {
+			username := req.Username
+			if loginResp.Username != "" {
+				username = loginResp.Username
+			}
+			token := loginResp.Token
+			go func() {
+				// token 直传：登录响应还没返回前端/未落盘时，postAKSet 也能带鉴权
+				// （否则首次登录 AK 解锁永远失败 → 用户改密时报「没有记忆密钥」，2026-09-12 实锤）
+				if EnsureAccountAK(loginResp.UID, username, req.Password, loginResp.WrappedAK, token) != nil {
+					log.Printf("🔑 账号 %d 记忆密钥已就绪", loginResp.UID)
+				}
+				// 恢复码副本自动同步（本地恢复码锁 AK 上传云端，用户无感；失败静默下次登录重试）
+				if SetRecoveryEnvelopeWithToken(loginResp.UID, username, token) != nil {
+					log.Printf("🔐 账号 %d 恢复副本已同步", loginResp.UID)
+				}
+				// 存量 uid 合并（方案B）：本机游客 token 的 uid 数据并入登录账号（统计/记忆不分裂）
+				if guest := guestUIDFromDisk(); guest > 0 && guest != loginResp.UID {
+					if mergeGuestIntoAccount(guest, loginResp.UID, token) {
+						log.Printf("🔀 游客 %d 数据已并入账号 %d", guest, loginResp.UID)
+					}
+				}
+				// 聊天记录云端同步（2026-09-12）：先拉云端会话（换设备恢复）再推本机（上云）
+				syncChatFromCloud()
+				syncChatToCloud()
+			}()
+		}
+	}
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
 }
 
-// CloudRegisterProxy 转发到 ResceneCloud 的开放注册（用户名+密码 → 建号 + JWT）。
+// guestUIDFromDisk 读本机游客 token 解出游客 uid（合并存量分裂用）。
+func guestUIDFromDisk() int64 {
+	b, err := os.ReadFile(filepath.Join(dataRootDir(), "cloud_guest_token"))
+	if err != nil {
+		return 0
+	}
+	return uidFromToken(strings.TrimSpace(string(b)))
+}
+
+// mergeGuestIntoAccount 调云端 /api/account/merge：游客 uid 的统计/记忆并入账号 uid。
+func mergeGuestIntoAccount(guestUID, accountUID int64, token string) bool {
+	body, _ := json.Marshal(map[string]any{"guest_uid": guestUID})
+	req, err := http.NewRequest("POST", cloudAuthBase()+"/api/account/merge", strings.NewReader(string(body)))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := cloudHTTPClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == 200
+}
+
+// CloudRegisterProxy 转发到 ResceneCloud 的开放注册。
+// 方案A：本地派生登录哈希 + 生成账号密钥 AK（KEK 包装成信封），云端只收哈希+密文信封；
+// 本机已有游客 uid（guest token 解出）→ 一并带上，云端升级游客行（沿用 uid，记忆不分裂）。
 func CloudRegisterProxy(c *gin.Context) {
-	proxyToCloud(c, "/api/auth/register")
+	body, _ := io.ReadAll(c.Request.Body)
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+	guestUID := int64(0)
+	if b, err := os.ReadFile(filepath.Join(dataRootDir(), "cloud_guest_token")); err == nil {
+		if g := uidFromToken(strings.TrimSpace(string(b))); g > 0 {
+			guestUID = g
+		}
+	}
+	if err := json.Unmarshal(body, &req); err == nil && req.Username != "" && req.Password != "" {
+		ak := make([]byte, 32)
+		if _, err := rand.Read(ak); err == nil {
+			kek := memDeriveKEK(req.Password, req.Username)
+			if wrapped, err := memSeal(kek, ak); err == nil {
+				rewritten, _ := json.Marshal(map[string]any{
+					"username":      req.Username,
+					"password_hash": MemLoginHash(req.Password, req.Username),
+					"wrapped_ak":    wrapped,
+					"email":         req.Email,
+					"invite_code":   "",
+					"guest_uid":     guestUID,
+				})
+				body = rewritten
+			}
+		}
+	}
+	target := cloudAuthBase() + "/api/auth/register"
+	upReq, err := http.NewRequest(http.MethodPost, target, strings.NewReader(string(body)))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "构造注册请求失败: " + err.Error()})
+		return
+	}
+	if ct := c.GetHeader("Content-Type"); ct != "" {
+		upReq.Header.Set("Content-Type", ct)
+	}
+	resp, err := cloudHTTPClient.Do(upReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": cloudErrorMessage(err)})
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := readUpstreamBody(resp)
+	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+}
+
+// CloudFeedbackProxy 用户反馈（2026-09-12 方案A）：转发到 ResceneCloud，
+// 登录态（Authorization 透传）。POST=提交，GET=列表（管理）。
+func CloudFeedbackProxy(c *gin.Context) {
+	proxyToCloudAuth(c, "/api/feedback")
+}
+
+// 记忆密钥邮箱恢复通道代理（2026-09-12）：忘密码找回记忆（本地恢复码 + 邮箱验证码）。
+// start=发验证码；claim=验证码证明邮箱所有权，云端返回恢复副本密文；
+// finalize=客户端用恢复码解副本后提交新密码+新信封（Bearer 恢复 JWT，透传）。
+func CloudAKRecoverStartProxy(c *gin.Context) {
+	proxyToCloud(c, "/api/auth/ak-recover-start")
+}
+
+func CloudAKRecoverClaimProxy(c *gin.Context) {
+	proxyToCloud(c, "/api/auth/ak-recover-claim")
+}
+
+func CloudAKRecoverFinalizeProxy(c *gin.Context) {
+	proxyToCloudAuth(c, "/api/memory/ak/recover-finalize")
 }
 
 // CloudCaptchaProxy 登录图形验证码（2026-09-05）：GET 转发到 ResceneCloud

@@ -42,12 +42,14 @@ func memorySyncEnabled() bool {
 	if strings.ToLower(os.Getenv("RESCENE_MEMORY_SYNC")) == "off" {
 		return false
 	}
+	// 2026-09-12 用户定稿：记忆同步默认关闭（升级零打扰，无盗号感），
+	// 只有用户主动在设置里开启（文件写 on）才同步；开启时若无记忆密钥需重新登录解锁。
 	if p := memorySyncSettingPath(); p != "" {
-		if data, err := os.ReadFile(p); err == nil && strings.TrimSpace(strings.ToLower(string(data))) == "off" {
-			return false
+		if data, err := os.ReadFile(p); err == nil {
+			return strings.TrimSpace(strings.ToLower(string(data))) == "on"
 		}
 	}
-	return true
+	return false
 }
 
 // memorySyncSettingPath 前端记忆 tab 开关的本地落盘位置。
@@ -260,13 +262,29 @@ func HandleMemorySyncSettingsUpdate(c *gin.Context) {
 		return
 	}
 	os.MkdirAll(filepath.Dir(p), 0o755)
+	// 开启加密同步前必须已有记忆密钥（无 AK = 从未在新代码下登录，需重新登录解锁一次）。
+	if req.Enabled {
+		_, uid, isLogin := syncIdentity()
+		if !isLogin || uid <= 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "请先登录 Rescene Cloud 账号"})
+			return
+		}
+		if len(loadAKFromDisk(uid)) != 32 {
+			c.JSON(http.StatusConflict, gin.H{"error": "已开启记忆加密，请重新登录一次以解锁记忆密钥（只需一次，以后无感）"})
+			return
+		}
+	}
 	val := "on"
 	if !req.Enabled {
 		val = "off"
 	}
-	if err := os.WriteFile(p, []byte(val+"\n"), 0o644); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入失败: " + err.Error()})
+	if err := os.WriteFile(p, []byte(val), 0o644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存设置失败"})
 		return
+	}
+	// 开启成功 → 立即推一次（不等 60s 循环），用户立刻看到记忆上云。
+	if req.Enabled {
+		go pushMemorySync()
 	}
 	c.JSON(http.StatusOK, gin.H{"enabled": req.Enabled})
 }
@@ -295,6 +313,10 @@ func memorySyncPayload() string {
 // cloudUpdatedAt 是云端包最近更新时间：早于本地文件 mtime 说明本地更新（鉴权断链
 // 期云端会停更，直接拉回会把新记忆覆盖成旧版），跳过不覆盖。
 func applyMemorySyncPayload(payload string, cloudUpdatedAt time.Time) {
+	// 方案A：云端密文（{"v":2,...}）→ 用本机 AK 解出明文再合并；老明文格式直接透传。
+	if ak := loadAKFromDisk(uidFromToken(mustAuthToken())); len(ak) == 32 {
+		payload = DecryptMemoryPayload(payload, ak)
+	}
 	var m map[string]string
 	if err := json.Unmarshal([]byte(payload), &m); err != nil {
 		return
@@ -336,6 +358,20 @@ func pushMemorySync() {
 	if payload == "" {
 		return
 	}
+	// 方案A（2026-09-12）：本机已解锁账号密钥 AK → payload 加密成 {"v":2,...} 上云；
+	// 无 AK（未登录成功/信封解不开）→ 跳过推送，绝不明文上传（2026-09-12 审计：
+	// 之前明文兼容会导致改密后的旧设备用新密码登录时，本地记忆明文覆盖云端已加密记忆）。
+	ak := loadAKFromDisk(uid)
+	if len(ak) != 32 {
+		log.Printf("⚠️ 账号 %d 无记忆密钥，跳过云端推送（避免明文上云）", uid)
+		return
+	}
+	enc, err := EncryptMemoryPayload(payload, ak)
+	if err != nil {
+		log.Printf("⚠️ 账号 %d 记忆加密失败: %v（跳过本次推送）", uid, err)
+		return
+	}
+	payload = enc
 	body, _ := json.Marshal(map[string]any{"uid": uid, "payload": payload})
 	client := &http.Client{Timeout: 8 * time.Second}
 	target := cloudAuthBase() + "/api/memory/sync"

@@ -26,6 +26,8 @@ func NewAPIRouter() *gin.Engine {
 		c.Next()
 	})
 	sessionStore := NewSessionStore(ChatSessionsDomain)
+	// 聊天记录云端同步入口（2026-09-12）：把 sessionStore 实例交给同步 handler（读文件/重载用）
+	SetChatSyncSessionStore(sessionStore)
 	RegisterRoutes(r, sessionStore)
 	// 启动时跑一次存量清洗（幂等）：去掉 mock/演示噪音 + key 归一合并。
 	// 异步不阻塞启动——清洗在后台跑，前端刷新记忆 tab 时已是干净数据。

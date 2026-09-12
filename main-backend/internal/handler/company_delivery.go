@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -959,9 +958,9 @@ func deliveryBuildProject(projectName, brief string) (string, error) {
 // ffmpeg 竖屏合成，--no-online 只用本地素材兜底）。有 ffmpeg + python + edge_tts 时出真片；
 // 否则返回 error，由上层把 pv 标记为缺省阶段（不阻塞完整交付）。
 func deliveryRenderVideoDirect(projectDir, project, brief string) (string, error) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
+	if _, err := findComponentBin("ffmpeg"); err != nil {
 		// 视频引擎不可用：返回错误，让上层把 pv 阶段标记为缺省（不交付假视频）。
-		return "", fmt.Errorf("视频引擎不可用: %w", err)
+		return "", err
 	}
 	py, err := findPython()
 	if err != nil {

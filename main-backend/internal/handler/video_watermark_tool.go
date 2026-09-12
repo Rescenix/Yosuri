@@ -236,9 +236,9 @@ func callWatermarkDelogo(ctx context.Context, in, out string, args struct {
 
 // probeVideoSize 用 ffprobe 读取视频分辨率（宽x高）。
 func probeVideoSize(ctx context.Context, path string) (w, h int, err error) {
-	ffprobe, err := exec.LookPath("ffprobe")
+	ffprobe, err := findComponentBin("ffprobe")
 	if err != nil {
-		return 0, 0, fmt.Errorf("找不到 ffprobe（请确认 ffmpeg 已安装并在 PATH）")
+		return 0, 0, err
 	}
 	cmd := hiddenCommandContext(ctx, ffprobe,
 		"-v", "error",
@@ -259,13 +259,7 @@ func probeVideoSize(ctx context.Context, path string) (w, h int, err error) {
 	return dim[0], dim[1], nil
 }
 
-// findFFmpeg 定位 ffmpeg：PATH 优先，找不到时报错。
+// findFFmpeg 定位 ffmpeg：PATH 优先，其次组件下载目录。
 func findFFmpeg() (string, error) {
-	if p, err := exec.LookPath("ffmpeg"); err == nil {
-		return p, nil
-	}
-	if p, err := exec.LookPath("ffmpeg.exe"); err == nil {
-		return p, nil
-	}
-	return "", fmt.Errorf("找不到 ffmpeg（请安装并加入 PATH）")
+	return findComponentBin("ffmpeg")
 }

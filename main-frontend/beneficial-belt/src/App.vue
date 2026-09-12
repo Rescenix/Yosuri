@@ -113,7 +113,7 @@ const railItems = ref([...railItemDefinitions])
 const railEditorOpen = ref(false)
 
 // 首次打开应用的功能导航弹窗：只弹一次，关闭或跳转即写标记；勾「不再显示」永久静默。
-const WELCOME_NAV_KEY = '***'
+const WELCOME_NAV_KEY = 'rescene_welcome_nav_v1'
 const showWelcomeNav = ref(false)
 function closeWelcomeNav(payload) {
   showWelcomeNav.value = false

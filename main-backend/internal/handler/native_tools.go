@@ -40,27 +40,27 @@ type chartPayload struct {
 
 // chartOptions 前端渲染选项（颜色、坐标轴、图例等）。
 type chartOptions struct {
-	Color     string         `json:"color,omitempty"`
-	XLabel    string         `json:"x_label,omitempty"`
-	YLabel    string         `json:"y_label,omitempty"`
-	Fill      bool           `json:"fill,omitempty"`
-	Smooth    bool           `json:"smooth,omitempty"`
-	Stacked   bool           `json:"stacked,omitempty"`
-	Horizontal bool          `json:"horizontal,omitempty"`
-	Radius    []string       `json:"radius,omitempty"`
-	Palette   []string       `json:"palette,omitempty"`
-	Extra     map[string]any `json:"extra,omitempty"`
+	Color      string         `json:"color,omitempty"`
+	XLabel     string         `json:"x_label,omitempty"`
+	YLabel     string         `json:"y_label,omitempty"`
+	Fill       bool           `json:"fill,omitempty"`
+	Smooth     bool           `json:"smooth,omitempty"`
+	Stacked    bool           `json:"stacked,omitempty"`
+	Horizontal bool           `json:"horizontal,omitempty"`
+	Radius     []string       `json:"radius,omitempty"`
+	Palette    []string       `json:"palette,omitempty"`
+	Extra      map[string]any `json:"extra,omitempty"`
 }
 
 // chartDataUnion 统一数据格式：折线/柱状/饼图/散点/雷达共用。
 type chartDataUnion struct {
-	X      []any              `json:"x"`               // 类目轴（折线/柱/散点）
-	Y      []float64          `json:"y,omitempty"`      // 数值轴（折线/柱/散点）
-	Series []chartSeries       `json:"series,omitempty"` // 多系列（分组柱/多条折线）
-	Items  []chartPieItem     `json:"items,omitempty"`  // 饼图数据
-	Labels []string           `json:"labels,omitempty"` // 雷达维度
-	Min    float64            `json:"min,omitempty"`    // 雷达最小值
-	Max    float64            `json:"max,omitempty"`    // 雷达最大值
+	X      []any          `json:"x"`                // 类目轴（折线/柱/散点）
+	Y      []float64      `json:"y,omitempty"`      // 数值轴（折线/柱/散点）
+	Series []chartSeries  `json:"series,omitempty"` // 多系列（分组柱/多条折线）
+	Items  []chartPieItem `json:"items,omitempty"`  // 饼图数据
+	Labels []string       `json:"labels,omitempty"` // 雷达维度
+	Min    float64        `json:"min,omitempty"`    // 雷达最小值
+	Max    float64        `json:"max,omitempty"`    // 雷达最大值
 }
 
 type chartSeries struct {
@@ -249,16 +249,18 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, generateOfficeToolDef)
 	// mambo_video：曼波视频一键生成（配音+字幕+素材匹配+ffmpeg 合成）
 	defs = append(defs, mamboToolDef)
+	// component_download：可选组件按需下载（ffmpeg 等）
+	defs = append(defs, componentDownloadToolDef)
 	// video_watermark_remove：AI 视频去水印（ffmpeg delogo + 清元数据）
 	defs = append(defs, watermarkToolDef)
 	// video_generate：AI 生视频（Agnes 免费 API，$0/秒）
-		defs = append(defs, videoGenToolDef)
-		// music_generate：AI 生成音乐并内嵌聊天（云端代理，用户零 key 零配置）
-		defs = append(defs, musicGenToolDef)
-		// speak：本地 TTS 语音合成，内嵌播放条（edge-tts，零 key）
-		defs = append(defs, speakVoiceToolDef)
-		// fetch_media：网络素材（图/音/视/文件）抓取落盘，聊天内嵌展示
-		defs = append(defs, fetchMediaToolDef)
+	defs = append(defs, videoGenToolDef)
+	// music_generate：AI 生成音乐并内嵌聊天（云端代理，用户零 key 零配置）
+	defs = append(defs, musicGenToolDef)
+	// speak：本地 TTS 语音合成，内嵌播放条（edge-tts，零 key）
+	defs = append(defs, speakVoiceToolDef)
+	// fetch_media：网络素材（图/音/视/文件）抓取落盘，聊天内嵌展示
+	defs = append(defs, fetchMediaToolDef)
 	// chart：数学建模图表渲染（前端 ECharts 直出，零后端依赖）
 	defs = append(defs, chartToolDef)
 	// 原常驻工具简化为按需加载（2026-08-29 收敛）：skill_view 提回常驻
@@ -339,6 +341,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return nativeToolResult{Text: text}, nil
 	case "mambo_video":
 		return callMamboVideo(ctx, argsJSON)
+	case "component_download":
+		return callComponentDownload(ctx, argsJSON)
 	case "video_watermark_remove":
 		return callWatermarkRemove(ctx, argsJSON)
 	case "web_search":
@@ -348,13 +352,13 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 	case "image_generate":
 		return callNativeImageGenerate(ctx, argsJSON)
 	case "video_generate":
-			return callNativeVideoGenerate(ctx, argsJSON)
-		case "music_generate":
-			return callNativeMusicGenerate(ctx, argsJSON)
-		case "speak":
-			return callNativeSpeakVoice(ctx, argsJSON)
-		case "fetch_media":
-			return callNativeFetchMedia(ctx, argsJSON)
+		return callNativeVideoGenerate(ctx, argsJSON)
+	case "music_generate":
+		return callNativeMusicGenerate(ctx, argsJSON)
+	case "speak":
+		return callNativeSpeakVoice(ctx, argsJSON)
+	case "fetch_media":
+		return callNativeFetchMedia(ctx, argsJSON)
 	case "chart":
 		return callNativeChartTool(argsJSON)
 	case "memory_search", "memory_append", "memory_pin", "memory_handoff",

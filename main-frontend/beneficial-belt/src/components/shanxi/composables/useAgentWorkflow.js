@@ -1,5 +1,10 @@
 import { reactive } from 'vue'
 import { requestPreview } from './previewBus.js'
+// 桌面版（Wails）页面源是 https://wails.localhost，而媒体文件由后端 gin 挂在
+// http://127.0.0.1:<随机端口> 上。<video>/<audio>/<a href> 是浏览器原生加载，
+// 不走 desktopTransport 的 fetch 桥，相对路径会被解析到 wails.localhost 上 404。
+// 所以 artifact 的 url 必须先用 backendURL 绝对化到后端源。
+import { backendURL } from '../../../desktopTransport.js'
 import { generatePptxFile, generatePptxHtml } from '../../../utils/pptx.js'
 import { contextBreakdown, setContextBreakdownFromBackend, setConversationTokens } from './contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats, persistSessionTokens } from './sessionTokenStats.js'
@@ -118,11 +123,11 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
             flowState.active = false
             clearAllApprovals() // 流结束清掉残留审批条与倒计时
             onStreamUpdate?.()
-            // 群聊点名收尾：一条流结束就通知编排方（可能点名下一位同事发言）
-            if (onDone) { const fn = onDone; onDone = null; fn() }
-        }
+                        // 群聊点名收尾：一条流结束就通知编排方（可能点名下一位同事发言）
+                        if (onDone) { const fn = onDone; onDone = null; fn() }
+                    }
 
-    // display 可选：{ text, attachments } —— 气泡展示用的"用户实际打的字 + 附件 chip"，
+                // display 可选：{ text, attachments } —— 气泡展示用的"用户实际打的字 + 附件 chip"，
     // 跟真正发给模型的 task（附件内容已经拍平拼接）分开，不然气泡里会把图片解析原文/
     // 文件全文都摊开显示，等于把输入框背后的东西又倒回来给用户看一遍
     // opts.resumeId：从后端检查点续跑。续跑时这条任务的
@@ -236,8 +241,24 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                             ? { type, text, startTime: Date.now() }
                             : { type, text })
                     }
-                    onStreamUpdate?.()
+                    scheduleStreamPaint()
                 }
+
+        // 流式增量节流：thinking/intent 每 token 来一次，若每次都 onStreamUpdate，
+        // 会触发 messages.value = [...messages.value] 整树重建 → 思考块上千字
+        // 每字付一次全组件重渲染，主线程卡死（表现 = 吐一个词后卡住、恢复后
+        // 全部一次渲染）。合批到 ~100ms 一次刷新，视觉连续但渲染量降 ~10x。
+        let paintTimer = null
+        let paintScheduled = false
+        function scheduleStreamPaint() {
+            if (paintScheduled) return
+            paintScheduled = true
+            // 模型可能停下来等工具结果，不能无限等合批——100ms 后至少刷一次
+            paintTimer = setTimeout(() => {
+                paintScheduled = false
+                onStreamUpdate?.()
+            }, 100)
+        }
 
         // 大多数上游会在流式 tool call 一开始就给 id；少数兼容服务会在最终 action
         // 才补 id，导致 action_delta 创建的“生成预览”卡片无法按 id 找回，永久卡住。
@@ -497,7 +518,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                             flow.blocks.push({
                                 type: 'video',
                                 id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
-                                url: d.url,
+                                url: backendURL(d.url),
                                 file: d.file || '',
                                 mime: d.mime || 'video/mp4',
                                 size: d.size || '',
@@ -509,7 +530,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                             flow.blocks.push({
                                 type: 'audio',
                                 id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
-                                url: d.url,
+                                url: backendURL(d.url),
                                 file: d.file || '',
                                 mime: d.mime || 'audio/mpeg',
                                 size: d.size || '',
@@ -523,7 +544,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     type: 'file',
                     id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
                     path: d.path,
-                    url: d.url || '',
+                    url: backendURL(d.url || ''),
                     name: d.name || d.path.split('/').pop() || d.path,
                     ext: d.ext || '',
                     size: d.size || 0
@@ -731,16 +752,16 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                 latencyMs: 0
             }, localStorage.getItem('prism_session_id') || '')
             // 改动文件卡片：工作流收尾固定内嵌在工作流卡片最底部（像引用来源一样）。
-            // 无论正常/失败/停止/预算耗尽收尾都展示，可预览 diff / 一键回退。
-            flow.changedFiles = Array.isArray(d.changed_files) ? d.changed_files : []
-            // 模型自己提出的 follow-up 建议（workflow_done 附带，模型判断有值得一键推进
-            // 的建议才给，没有就是空）：卡片底部渲染一行按钮，点击即把建议填进输入框发送，
-            // 不用打字。
-            flow.suggestions = Array.isArray(d.suggestions) ? d.suggestions : []
-            currentFlow = null
-            closeStream()
-                        // 工作流结束 = 可能改了文件，通知文件树刷新
-                        window.dispatchEvent(new Event('file-tree-changed'))
+                        // 无论正常/失败/停止/预算耗尽收尾都展示，可预览 diff / 一键回退。
+                        flow.changedFiles = Array.isArray(d.changed_files) ? d.changed_files : []
+                        // follow-up 建议：随 workflow_done 同步下发（后端收尾旁路生成，6s 硬超时），
+                        // 拿不到就是空数组、按钮行不出现，0 打扰。
+                        flow.suggestions = Array.isArray(d.suggestions) ? d.suggestions : []
+                        flow.suggestionsPending = false
+                        currentFlow = null
+                        closeStream()
+                                    // 工作流结束 = 可能改了文件，通知文件树刷新
+                                    window.dispatchEvent(new Event('file-tree-changed'))
         })
 
         // Hermes 式后台任务：agent 回答已送达但后台任务还在跑——不关流，
@@ -890,9 +911,11 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         closeStream()
             }
 
-    // follow up 竖列显示：直接渲染进当前工作流卡的末尾（工具时间线下方），
+    // 插话（steer）竖列显示：直接渲染进当前工作流卡的末尾（工具时间线下方），
     // 不插独立用户气泡（避免消息流被顶一下）。停流换主模型由调用方负责。
-    function pushFollowUp(text) {
+    // 命名说明：这条链路是「运行中插话」，与收尾的 follow-up 建议按钮无关，
+    // 统一用 steer 命名，避免两个概念撞名（v0.3.7 曾误改成 followUp）。
+    function pushSteerMessage(text) {
         text = (text || '').trim()
         if (!text || !currentFlow) return
         currentFlow.blocks.push({ type: 'steer', text })
@@ -961,7 +984,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
 
     return {
         flowState, approvalState, respondApproval, startCodeWorkflow, stopCodeWorkflow,
-                todoState, sendSteerMessage, pushFollowUp, questionState, answerQuestion
+                todoState, sendSteerMessage, pushSteerMessage, questionState, answerQuestion
     }
 }
 

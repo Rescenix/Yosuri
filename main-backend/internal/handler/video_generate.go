@@ -906,9 +906,11 @@ func HandleStudioAgnesChain(c *gin.Context) {
 			// 抽尾帧 → 下一段首帧
 			lastPNG := filepath.Join(workDir, fmt.Sprintf("last_%d.png", i+1))
 			args := []string{"-y", "-sseof", "-0.1", "-i", res.File, "-frames:v", "1", lastPNG}
-			if _, err := exec.Command("ffmpeg", args...).CombinedOutput(); err == nil {
-				if data, err := os.ReadFile(lastPNG); err == nil {
-					prevURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+			if ff, ferr := findComponentBin("ffmpeg"); ferr == nil {
+				if _, err := exec.Command(ff, args...).CombinedOutput(); err == nil {
+					if data, err := os.ReadFile(lastPNG); err == nil {
+						prevURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+					}
 				}
 			}
 		}
@@ -931,7 +933,10 @@ func HandleStudioAgnesChain(c *gin.Context) {
 		finalPath := filepath.Join(videoOutputDir(), finalName)
 		concatArgs := []string{"-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", finalPath}
 		var concatErr error
-		if _, err := exec.Command("ffmpeg", concatArgs...).CombinedOutput(); err != nil {
+		ff, ferr := findComponentBin("ffmpeg")
+		if ferr != nil {
+			concatErr = ferr
+		} else if _, err := exec.Command(ff, concatArgs...).CombinedOutput(); err != nil {
 			concatErr = err
 		}
 		task.Mu.Lock()

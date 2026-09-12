@@ -185,7 +185,7 @@ function watchInputClearance() {
   const respondApproval = (...a) => currentWF().respondApproval(...a)
   const answerQuestion = (...a) => currentWF().answerQuestion(...a)
   const sendSteerMessage = (...a) => currentWF().sendSteerMessage(...a)
-  const pushFollowUp = (...a) => currentWF().pushFollowUp(...a)
+  const pushSteerMessage = (...a) => currentWF().pushSteerMessage(...a)
   function stopCodeWorkflow() { return currentWF().stopCodeWorkflow() }
 
   // 当前会话的流结束等灯维护已由每个 workflow 实例各自的 watch 负责（见 workflowOf）
@@ -891,7 +891,7 @@ async function switchSession(id) {
     dismissBackgroundTask,
     clearAllBackgroundTasks,
     flowState, runningSessions, questionSessions, startCodeWorkflow, stopCodeWorkflow, approvalState, respondApproval,
-    todoState, sendSteerMessage, pushFollowUp,
+    todoState, sendSteerMessage, pushSteerMessage,
     questionState, answerQuestion,
     agentStore,
     toggleExpand, toggleChat, updateParams,

@@ -282,6 +282,21 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	r.POST("/api/login", CloudLoginProxy)
 	r.POST("/api/auth/register", CloudRegisterProxy)
+	// 用户反馈（2026-09-12 方案A）：需求走用户主动提交，管理员不再读用户记忆
+	r.POST("/api/feedback", CloudFeedbackProxy)
+	r.GET("/api/feedback", CloudFeedbackProxy)
+	// 记忆密钥邮箱恢复通道（2026-09-12）：忘密码也能拿回记忆（本地恢复码 + 邮箱验证码）
+	r.POST("/api/auth/ak-recover-start", CloudAKRecoverStartProxy)
+	r.POST("/api/auth/ak-recover-claim", CloudAKRecoverClaimProxy)
+	r.POST("/api/memory/ak/recover-finalize", CloudAKRecoverFinalizeProxy)
+	// 桌面端：备份恢复码 + 忘密码一站式恢复（本地恢复码解副本，用户只需邮箱验证码+新密码）
+	r.GET("/api/memory/ak/recovery-code", HandleRecoveryCodeGet)
+	r.POST("/api/memory/ak/recover-do", HandleRecoverDo)
+	// 正常改密码（记得旧密码，AK 不变记忆不丢）
+	r.POST("/api/memory/ak/change-pwd", HandleChangePwd)
+	// 聊天记录云端加密同步（2026-09-12）：前端会话 JSON 经后端加密上云/解密拉回
+	r.POST("/api/chat/sync", HandleChatSyncPush)
+	r.GET("/api/chat/sync", HandleChatSyncPull)
 	// 登录图形验证码（2026-09-05，自绘零依赖）：前端拉取图片，登录时带回校验
 	r.GET("/api/auth/captcha", CloudCaptchaProxy)
 	// 登录工作量证明（2026-09-07，双门禁之二）：GET 拿 challenge，前端算 nonce 随登录带回
@@ -361,6 +376,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.PUT("/api/models/config", HandlePutModelConfig)
 	r.POST("/api/models/discover", HandleDiscoverProviderModels)
 	r.PUT("/api/models/free-order", HandlePutFreeModelOrder)
+	// 可选组件（ffmpeg 等）按需下载：状态查询 + 触发安装/轮询进度
+	r.GET("/api/components", HandleGetComponentStatus)
+	r.POST("/api/components/:id/install", HandleComponentInstall)
 
 	// Rescene 聚合 API：OpenAI 兼容端点，聚合免费模型池 + 自定义提供方
 	r.POST("/v1/chat/completions", HandleAggregateChat)

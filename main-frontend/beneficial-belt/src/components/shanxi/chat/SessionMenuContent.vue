@@ -411,8 +411,23 @@
             <div v-if="rcError" class="smc-rc-err">{{ rcError }}</div>
             <div class="smc-rc-hint">
                           <template v-if="rcMode === 'login'">{{ tr('login.noAccount') }}<a class="smc-rc-link" :href="'https://yosuri.com'" target="_blank" rel="noopener">{{ tr('login.registerLink') }}</a></template>
-                                        <template v-else>{{ tr('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; loadCaptcha()">{{ tr('login.loginLink') }}</a></template>
+                                        <template v-else-if="rcMode === 'register'">{{ tr('login.hasAccount') }}<a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; loadCaptcha()">{{ tr('login.loginLink') }}</a></template>
+              <template v-else><a class="smc-rc-link" @click="rcMode = 'login'; rcError = ''; rcRecoverMsg = ''; loadCaptcha()">{{ tr('返回登录') }}</a></template>
+              <span v-if="rcMode === 'login'" style="margin-left: 8px;"><a class="smc-rc-link" @click="rcMode = 'recover'; rcError = ''">{{ tr('忘记密码？') }}</a></span>
                         </div>
+                      <!-- 忘密码找回（2026-09-12：邮箱验证码 + 新密码，记忆自动找回） -->
+                      <div v-if="rcMode === 'recover'" class="smc-rc-recover">
+                        <div class="smc-rc-recover-desc">{{ tr('输入绑定的邮箱，验证后设置新密码，云端记忆自动找回。') }}</div>
+                        <input v-model="rcRecoverEmail" type="email" class="smc-rc-input" :placeholder="tr('绑定邮箱')" @keyup.enter="recoverSendCode" />
+                        <div class="smc-rc-captcha">
+                          <input v-model="rcRecoverCode" class="smc-rc-input" style="flex:1" :placeholder="tr('邮箱验证码')" maxlength="6" @keyup.enter="recoverDo" />
+                          <button class="smc-rc-btn smc-rc-btn-ghost" type="button" :disabled="rcRecoverCooldown > 0 || !rcRecoverEmail" @click="recoverSendCode">{{ rcRecoverCooldown > 0 ? rcRecoverCooldown + 's' : tr('发送验证码') }}</button>
+                        </div>
+                        <input v-model="rcRecoverNewPwd" type="password" class="smc-rc-input" :placeholder="tr('新密码（8-64 位字母+数字）')" @keyup.enter="recoverDo" />
+                        <input v-model="rcRecoverCodeBackup" type="text" class="smc-rc-input" :placeholder="tr('备份恢复码（换设备找回记忆时填）')" @keyup.enter="recoverDo" />
+                        <button class="smc-rc-btn" :disabled="rcLoading" @click="recoverDo">{{ rcLoading ? tr('处理中…') : tr('找回记忆') }}</button>
+                        <div v-if="rcRecoverMsg" class="smc-rc-err">{{ rcRecoverMsg }}</div>
+                      </div>
           </div>
           <div class="smc-login-footer">
             <span><Icon icon="mdi:shield-account-outline" width="15" /> {{ tr('login.footer') }}</span>
@@ -1096,7 +1111,77 @@ const rcPwd = ref('')
 const rcPwd2 = ref('')
 const rcLoading = ref(false)
 const rcError = ref('')
-const rcMode = ref('login') // 'login' | 'register'
+const rcMode = ref('login') // 'login' | 'register' | 'recover'
+// 忘密码找回（2026-09-12）：邮箱验证码 + 新密码，记忆自动找回
+const rcRecoverEmail = ref('')
+const rcRecoverCode = ref('')
+const rcRecoverNewPwd = ref('')
+const rcRecoverCodeBackup = ref('')
+const rcRecoverMsg = ref('')
+const rcRecoverCooldown = ref(0)
+let rcRecoverTimer = null
+
+async function recoverSendCode() {
+  if (!rcUser.value || !rcRecoverEmail.value) {
+    rcRecoverMsg.value = '请先输入账号和绑定邮箱'
+    return
+  }
+  rcRecoverMsg.value = ''
+  try {
+    const res = await fetch('/api/auth/ak-recover-start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: rcUser.value.trim(), email: rcRecoverEmail.value.trim() }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(d.error || '发送失败')
+    rcRecoverMsg.value = '验证码已发送，请查收邮件'
+    rcRecoverCooldown.value = 60
+    if (rcRecoverTimer) clearInterval(rcRecoverTimer)
+    rcRecoverTimer = setInterval(() => {
+      rcRecoverCooldown.value--
+      if (rcRecoverCooldown.value <= 0) clearInterval(rcRecoverTimer)
+    }, 1000)
+  } catch (e) {
+    rcRecoverMsg.value = e.message || '发送失败，请稍后再试'
+  }
+}
+
+async function recoverDo() {
+  if (!rcUser.value || !rcRecoverEmail.value || !rcRecoverCode.value || !rcRecoverNewPwd.value) {
+    rcRecoverMsg.value = '请填写完整：账号、邮箱、验证码、新密码'
+    return
+  }
+  if (!/[a-zA-Z]/.test(rcRecoverNewPwd.value) || !/[0-9]/.test(rcRecoverNewPwd.value) || rcRecoverNewPwd.value.length < 8) {
+    rcRecoverMsg.value = '新密码需 8-64 位，且同时包含字母和数字'
+    return
+  }
+  rcLoading.value = true
+  rcRecoverMsg.value = ''
+  try {
+    const res = await fetch('/api/memory/ak/recover-do', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: rcUser.value.trim(),
+        email: rcRecoverEmail.value.trim(),
+        code: rcRecoverCode.value.trim(),
+        new_password: rcRecoverNewPwd.value,
+        recovery_code: rcRecoverCodeBackup.value.trim() || undefined,
+      }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(d.error || '找回失败')
+    rcRecoverMsg.value = '密码已重置，记忆已找回，请用新密码登录'
+    rcMode.value = 'login'
+    rcPwd.value = ''
+    loadCaptcha()
+  } catch (e) {
+    rcRecoverMsg.value = e.message || '找回失败，请稍后再试'
+  } finally {
+    rcLoading.value = false
+  }
+}
 // 登录图形验证码（2026-09-05）：拉取图片 + id，登录时带回校验（双门禁之一）
 const rcCaptchaId = ref('')
 const rcCaptchaCode = ref('')
@@ -1288,6 +1373,8 @@ function openLoginPanel() {
   loadCaptcha()
   fetchPow()
 }
+// 记忆同步开启需重新登录时，设置页通过全局事件唤出登录面板
+window.addEventListener('open-account-login', openLoginPanel)
 // 打开注册面板：应用内不直接注册（2026-09-07 用户拍板：注册只走官网邀请码闸门），跳官网
 function openRegisterPanel() {
   accountMenuOpen.value = false

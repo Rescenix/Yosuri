@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -262,9 +261,6 @@ func HandleAggregateChat(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
 	}
-	// 聚合调用审计：每次真实请求记 客户端UA + model + 消息数 + 流式标记。
-	log.Printf("[agg-call] UA=%q model=%q msgs=%d stream=%v",
-		c.GetHeader("User-Agent"), req.Model, len(req.Messages), req.Stream)
 	if len(req.Messages) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "messages 不能为空"})
 		return

@@ -55,10 +55,14 @@ def find_ffmpeg() -> str:
         p = shutil.which(name)
         if p:
             return p
+    # Yosuri 组件下载目录（与后端 component_download 同一约定）
+    cand = os.path.join(os.path.expanduser("~"), "rescene_data", "components", "ffmpeg", "bin", "ffmpeg.exe")
+    if os.path.exists(cand):
+        return cand
     for cand in (r"C:\ffmpeg\bin\ffmpeg.exe", r"C:\Program Files\ffmpeg\bin\ffmpeg.exe"):
         if os.path.exists(cand):
             return cand
-    raise RuntimeError("找不到 ffmpeg，请安装并加入 PATH")
+    raise RuntimeError("找不到 ffmpeg：点侧栏「组件下载」安装 FFmpeg，或安装并加入 PATH")
 
 
 def find_font() -> str:

@@ -36,6 +36,7 @@ export async function loadAgents() {
     agents.value = d.agents || []
     await migrateLegacyPersona()
     await seedBuiltinAgents()
+    await backfillBuiltinAgentColors()
   } catch (e) {
     console.error('加载 Agent 失败', e)
   } finally {
@@ -125,7 +126,7 @@ export async function seedBuiltinAgents() {
       // 按 id 或按名字跳过：旧版人设里用户自己建过同名卡（中文名 slugify 成
       // agent/agent-2），播种只查 id 会再建一张一模一样的 → 双卡。同名不播。
       if (agents.value.some(a => a.id === c.id || a.name === c.name)) continue
-      const saved = await saveAgent({ id: c.id, name: c.name, persona: c.persona })
+      const saved = await saveAgent({ id: c.id, name: c.name, persona: c.persona, color: c.color || '' })
       if (c.id === BUILTIN_AGENT_CARDS[0].id) {
         if (!mascot) mascot = await imageToDataURL(MASCOT_AVATAR_URL).catch(() => '')
         if (mascot) await saveAgentAvatar(saved.id, mascot)
@@ -134,6 +135,22 @@ export async function seedBuiltinAgents() {
     localStorage.setItem(SEEDED_KEY, '1')
   } catch (e) {
     console.error('内置角色卡播种失败', e)
+  }
+}
+
+// 内置卡补色（2026-09-12 发言颜色功能上线）：老用户已播种的内置卡 color 为空，
+// 播种只跑一次不会重来——这里把缺色的内置卡补上各自默认色。仅补内置 id，
+// 用户自定义卡不碰；用户自己改过色的不覆盖（color 已有值 = 用户选过）。
+export async function backfillBuiltinAgentColors() {
+  try {
+    for (const c of BUILTIN_AGENT_CARDS) {
+      const hit = agents.value.find(a => a.id === c.id)
+      if (hit && !hit.color && c.color) {
+        await saveAgent({ ...hit, color: c.color })
+      }
+    }
+  } catch (e) {
+    console.error('内置角色卡补色失败', e)
   }
 }
 

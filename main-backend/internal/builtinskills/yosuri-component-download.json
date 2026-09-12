@@ -1,0 +1,15 @@
+{
+  "name": "yosuri-component-download",
+  "description": "功能报「未找到 ffmpeg」或需要视频/音频处理引擎时，引导用户或自助完成组件下载",
+  "status": "active",
+  "trigger": "未找到 ffmpeg、视频引擎不可用、抽帧失败、拼接失败、组件下载、装组件",
+  "verification": "component_download 返回 state=ready 或安装任务 done；重试原功能不再报缺组件",
+  "steps": [
+    "先判断：报错里出现「未找到 ffmpeg / 组件下载」字样，说明缺的是可选组件，不是 bug，不要重复重试原功能。",
+    "查状态：调用 component_download 工具（不传 id），看各组件 on_path / installed 字段。",
+    "缺组件时先征得用户同意再安装：下载约 100MB，用一句话说明用途（视频拼接、抽帧、配音合成都要它），用户答应后调 component_download 传 id=ffmpeg、install=true，等待完成。",
+    "用户也可以自己装：侧栏设置旁的「组件下载」按钮，或自行安装 ffmpeg 并加入 PATH——两条路殊途同归，不要强推其中一条。",
+    "装好后直接重试原任务；如果仍报缺组件，检查 PATH 与组件目录是否同时为空，并如实告诉用户失败原因。",
+    "下载失败时读 job.error：所有源均失败通常是网络问题，建议用户换网络或稍后在「组件下载」面板重试，不要自行找第三方镜像。"
+  ]
+}
