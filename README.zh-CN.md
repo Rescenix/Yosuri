@@ -22,7 +22,7 @@
     <img src="https://img.shields.io/badge/官网-yosuri.com-4FC08D.svg?style=for-the-badge" alt="官网">
   </a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0"></a>
-  <img src="https://img.shields.io/badge/Release-v0.2.4-blue" alt="Release v0.2.4">
+  <img src="https://img.shields.io/badge/Release-v0.3.9-blue" alt="Release v0.3.9">
   <img src="https://img.shields.io/badge/Backend-Go-00ADD8" alt="Go">
   <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
 </p>

@@ -22,20 +22,20 @@
     <img src="https://img.shields.io/badge/Website-yosuri.com-4FC08D.svg?style=for-the-badge" alt="Website">
   </a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg" alt="AGPL-3.0"></a>
-  <img src="https://img.shields.io/badge/Release-v0.2.9-blue" alt="Release v0.2.9">
+  <img src="https://img.shields.io/badge/Release-v0.3.9-blue" alt="Release v0.3.9">
   <img src="https://img.shields.io/badge/Backend-Go-00ADD8" alt="Go">
-    <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
-  </p>
+  <img src="https://img.shields.io/badge/Frontend-Vue%203-42b883" alt="Vue 3">
+</p>
 
-  ---
+---
 
-  ## ⚡ Core capabilities
+## ⚡ Core capabilities
 
-  | Capability | What it does |
-  | --- | --- |
-  | **🔄 Five-platform sync** | Sessions and long-term memory continue naturally across Windows / Linux / macOS / Android / CLI. You change screens, not your working context |
-  | **🔐 Encrypted sync between desktop & phone** | Chat and memory sync across devices with E2E encryption — the cloud stores only ciphertext and cannot read your content, so nothing is ever used for training |
-  | **🤖 Automation loop** | Browser, terminal and real tools form a verifiable execution chain — tasks don't stop at answers, they run to completion |
+| Capability | What it does |
+| --- | --- |
+| **🔄 Five-platform sync** | Sessions and long-term memory continue naturally across Windows / Linux / macOS / Android / CLI. You change screens, not your working context |
+| **🔐 Encrypted sync between desktop & phone** | Chat and memory sync across devices with E2E encryption — the cloud stores only ciphertext and cannot read your content, so nothing is ever used for training |
+| **🤖 Automation loop** | Browser, terminal and real tools form a verifiable execution chain — tasks don't stop at answers, they run to completion |
 | **🔌 Aggregated API** | 98 free models + custom providers unified behind one OpenAI & Anthropic-compatible endpoint, with smart routing that automatically picks the fastest healthy source |
 | **♾️ Unlimited concurrent workflows** | Every session runs its own workflow on its own goroutine, with its own live stream and its own message buffer — no thread pool, no queue, no artificial cap. Open ten tasks in ten sessions and switch freely: each stream keeps writing only to its own session |
 
