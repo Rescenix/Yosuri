@@ -264,7 +264,8 @@ function openUpdateModal() {
 // 2026-08-25 秒弹定稿：检测到新版本 → 立刻弹轻量横幅（同一版本 4 小时节流，
 // 一天最多 6 次），同时后台静默下载；安装包就绪后下次启动再确认弹窗。不再等下载完才提示。
 async function checkAndDownload(silent) {
-  if (isUpdateNotifyDisabled()) return
+  // 通知开关只控制提示条（banner），绝不掐断自动下载（2026-09-13 修复：
+  // 此前关闭「更新通知」会连带停掉后台下载 → 用户永远收不到新版本）
   let res
   try {
     res = await fetch('/api/update/check')
@@ -275,7 +276,7 @@ async function checkAndDownload(silent) {
   if (getSkippedVersion() === data.update.latest_version) return
   updateInfo.value = data.update
   // 秒弹：新版本一被检测到就提示（8 小时节流，同版本一天最多弹 3 次），不等待下载完成
-  if (shouldShowUpdateBanner(data.update.latest_version)) {
+  if (!isUpdateNotifyDisabled() && shouldShowUpdateBanner(data.update.latest_version)) {
     markUpdateBannerShown(data.update.latest_version)
     showBanner()
   }

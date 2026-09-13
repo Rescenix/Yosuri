@@ -128,9 +128,9 @@ async function refreshStatus() {
       dlState.value = 'error'
       dlError.value = d.error || tr('下载失败')
     } else {
-      // idle：后台未下载/重启后磁盘无补丁 → 不提供下载按钮，提示未就绪
-      dlState.value = 'error'
-      dlError.value = tr('安装包未就绪，请下次启动时自动下载')
+      // idle：和设置页一致，兜底触发一次后台下载并轮询进度（2026-09-13 归一修复：
+      // 此前提示条弹窗 idle 只显示「未就绪」不触发下载，需开设置页才触发）
+      startDownload()
     }
   } catch {
     dlState.value = 'error'

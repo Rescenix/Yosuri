@@ -490,7 +490,10 @@ func HandleAutoDownload(c *gin.Context) {
 	// updateDL 是内存状态，重启后丢失，必须落到磁盘判断。
 	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
 	dest := filepath.Join(localDir, updateHotPatchFileName)
-	ready := isLikelyWindowsExecutable(dest)
+	// ⚠️ 就绪判断必须校验版本（2026-09-13 实锤）：只查 isLikelyWindowsExecutable
+	// 会把旧版残留 rescene-new.exe 当「已就绪」→ 前端显示一键安装 → 装完还是旧版本。
+	// 版本不匹配强制重下（与 downloadHotPatchZip 缓存校验同规则）。
+	ready := isLikelyWindowsExecutable(dest) && exeContainsVersion(dest, info.LatestVersion)
 	if ready {
 		updateDL.mu.Lock()
 		updateDL.State = "done"
@@ -498,6 +501,11 @@ func HandleAutoDownload(c *gin.Context) {
 		updateDL.mu.Unlock()
 		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "done", "path": dest})
 		return
+	}
+	// 残留旧包不能复用：清掉走重新下载
+	if isLikelyWindowsExecutable(dest) {
+		_ = os.Remove(dest)
+		_ = os.Remove(filepath.Join(localDir, updateHotPatchVersionFileName))
 	}
 
 	updateDL.mu.Lock()
@@ -984,6 +992,14 @@ func HandleInstallUpdate(c *gin.Context) {
 	// 免 NSIS 安装向导（2026-08-13）。脚本流程：等本进程退出（释放文件锁）→ copy 覆盖
 	// 安装目录 exe → 删除临时 exe → 启动新版 → 删除脚本。
 	if filepath.Base(path) == updateHotPatchFileName {
+		// ⚠️ 安装前必须校验补丁版本（2026-09-13 实锤）：磁盘残留旧版补丁时直接替换，
+		// 会把应用装回旧版本（现象：一键安装完还是旧版本）。版本确认不匹配 → 拒绝并提示重下；
+		// 无法确认（网络异常）时放行，避免卡死用户。
+		if info, err := checkUpdate(); err == nil && info != nil && !exeContainsVersion(path, info.LatestVersion) {
+			resetApplying()
+			c.JSON(http.StatusConflict, gin.H{"error": "安装包版本与最新版本不匹配，请重新下载后再安装"})
+			return
+		}
 		exePath, err := os.Executable() // 运行中的 rescene.exe 完整路径（含安装目录）
 		if err != nil {
 			resetApplying()

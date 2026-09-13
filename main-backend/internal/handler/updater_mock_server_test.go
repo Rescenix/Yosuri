@@ -60,6 +60,15 @@ func newMockReleaseServer(t *testing.T, version string) *httptest.Server {
 	return srv
 }
 
+// setAppVersionForTest 临时覆盖 AppVersion 并在测试结束后恢复原值。
+// 同一包内测试共享全局变量，不恢复会污染其他测试（如 TestFetchRelease_buildsUpdateInfo）。
+func setAppVersionForTest(t *testing.T, v string) {
+	t.Helper()
+	orig := AppVersion
+	AppVersion = v
+	t.Cleanup(func() { AppVersion = orig })
+}
+
 func resetUpdateCacheForTest() {
 	updateCache = nil
 	updateCachedAt = time.Time{}
@@ -68,7 +77,7 @@ func resetUpdateCacheForTest() {
 func TestCheckUpdate_FromMockServer(t *testing.T) {
 	resetUpdateCacheForTest()
 	srv := newMockReleaseServer(t, "0.3.10-mock")
-	AppVersion = "0.3.9"
+	setAppVersionForTest(t, "0.3.9")
 	t.Setenv("RESCENE_UPDATE_URL", srv.URL+"/update.json")
 
 	info, err := checkUpdate()
@@ -93,7 +102,7 @@ func TestCheckUpdate_FromMockServer(t *testing.T) {
 func TestDownloadHotPatch_FromMockServer(t *testing.T) {
 	resetUpdateCacheForTest()
 	srv := newMockReleaseServer(t, "0.3.10-mock")
-	AppVersion = "0.3.9"
+	setAppVersionForTest(t, "0.3.9")
 	t.Setenv("RESCENE_UPDATE_URL", srv.URL+"/update.json")
 
 	info, err := checkUpdate()
