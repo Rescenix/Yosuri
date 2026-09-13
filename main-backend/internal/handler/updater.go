@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/zip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -308,25 +310,70 @@ var errNoRelease = fmt.Errorf("no release yet")
 // alpha 预发布补丁启动时静默自动应用后写入；前端启动读一次显示升级完成提示即删。
 const lastAppliedVersionFileName = "last-applied.txt"
 
-// writeLastAppliedVersion 从补丁 exe 二进制里提取新版本号，写入一次性标记。
-// 版本串取自 ldflags 注入的 UTF-8 版本（versionRe 不匹配 UTF-16 版本资源）。
-// 提取失败静默跳过（提示非关键路径）。
-func writeLastAppliedVersion(newExe, localDir string) error {
-	data, err := os.ReadFile(newExe)
-	if err != nil {
-		return err
-	}
-	ms := versionRe.FindAll(data, -1)
-	if len(ms) == 0 {
-		return nil
-	}
-	best := string(ms[0])
-	for _, m := range ms[1:] {
-		if len(m) > len(best) {
-			best = string(m)
+// goPseudoVersionRe 匹配 Go module 伪版本（build info 注入，如
+// v0.0.0-20250511090121-5959a4027728）。它比真正的发布版本串长，旧实现按
+// 「最长」选取时总被它抢走，导致「已更新到 vX」提示显示乱码版本号
+// （2026-09-13 实测 bug，本地 mock 与官方 v0.3.9 均复现）。
+var goPseudoVersionRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+-\d{14}-[0-9a-f]{7,}`)
+
+// pickAppVersion 从二进制里提取"最可能是发布版本号"的串：先剔除 Go 伪版本，
+// 再取剩余匹配中最长者。二进制里的候选仍含内嵌库版本，天生多义，所以只作
+// 兜底——正常路径优先用下载时确知的目标版本（rescene-new.version 标记）。
+func pickAppVersion(data []byte) string {
+	best := ""
+	for _, m := range versionRe.FindAll(data, -1) {
+		s := string(m)
+		if goPseudoVersionRe.MatchString(s) {
+			continue
+		}
+		if len(s) > len(best) {
+			best = s
 		}
 	}
-	return os.WriteFile(filepath.Join(localDir, lastAppliedVersionFileName), []byte(best), 0o600)
+	return best
+}
+
+// writePendingPatchVersion 在下载完成时把确知的目标版本写入旁路标记，
+// 供启动自动应用/「已更新到 vX」提示使用（比扫 exe 二进制可靠）。
+func writePendingPatchVersion(localDir, version string) error {
+	if version == "" {
+		return nil
+	}
+	return os.WriteFile(filepath.Join(localDir, updateHotPatchVersionFileName), []byte(version), 0o600)
+}
+
+// pendingPatchVersion 返回待应用补丁的版本号：优先读下载时写下的目标版本
+// （确定可信），缺失时（旧版本下载的残留补丁）才扫 exe 二进制兜底。
+func pendingPatchVersion(newExe, localDir string) string {
+	if v := strings.TrimSpace(readFileQuiet(filepath.Join(localDir, updateHotPatchVersionFileName))); v != "" {
+		return v
+	}
+	data, err := os.ReadFile(newExe)
+	if err != nil {
+		return ""
+	}
+	return pickAppVersion(data)
+}
+
+// readFileQuiet 读文件，失败返回空串（非关键路径不报错）。
+func readFileQuiet(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// writeLastAppliedVersion 写入「已更新到 vX」一次性标记版本号。
+// 只取下载时确知的目标版本（rescene-new.version 旁路标记）；扫二进制兜底
+// 会命中内嵌库版本（0.55.1 之类），不可信——提示非关键路径，宁可静默也不错报。
+// 返回 nil 且不写文件 = 无旁路标记（旧版本下载的残留补丁），前端不弹提示。
+func writeLastAppliedVersion(newExe, localDir string) error {
+	v := strings.TrimSpace(readFileQuiet(filepath.Join(localDir, updateHotPatchVersionFileName)))
+	if v == "" {
+		return nil
+	}
+	return os.WriteFile(filepath.Join(localDir, lastAppliedVersionFileName), []byte(v), 0o600)
 }
 
 // HandleLastAppliedUpdate 返回上次静默自动应用的新版本号（一次性：读完即删）。
@@ -345,6 +392,7 @@ func HandleLastAppliedUpdate(c *gin.Context) {
 
 // HandleClearPendingHotPatch 删除待应用的热补丁 exe（用户「跳过此版本」时调用，
 // 防止下次启动被自动应用；「稍后再说」不删——那是下次启动更新的入口）。
+// 连带删除并列的版本标记，避免残留旧版本串影响下次提示。
 func HandleClearPendingHotPatch(c *gin.Context) {
 	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
 	newExe := filepath.Join(localDir, updateHotPatchFileName)
@@ -352,6 +400,7 @@ func HandleClearPendingHotPatch(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	_ = os.Remove(filepath.Join(localDir, updateHotPatchVersionFileName))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -401,6 +450,11 @@ const updateSetupFileName = "Rescene-windows-amd64-setup.exe"
 
 // updateHotPatchFileName 热补丁通道下载的新版 exe 文件名（直接替换运行中 exe）。
 const updateHotPatchFileName = "rescene-new.exe"
+
+// updateHotPatchVersionFileName 与热补丁 exe 并列的版本标记：下载完成时写入本次
+// 目标版本，启动自动应用/提示时优先读取。扫二进制提取版本天生多义（内嵌库版本、
+// Go 伪版本都会命中），下载时已知的目标版本才是唯一确定可信的来源（2026-09-13）。
+const updateHotPatchVersionFileName = "rescene-new.version"
 
 // HandleAutoDownload 触发后台下载最新安装包。
 // 下载目录：%LOCALAPPDATA%\Rescene\updates\（用户可写，不必管理员权限）。
@@ -478,6 +532,78 @@ func HandleAutoDownload(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "state": "downloading"})
 }
 
+// replaceFileWithRetry 处理 Windows 上文件刚写完就被占用的瞬时失败：
+// 杀软/Defender 实时扫描刚下载的包、或热补丁重启窗口期旧实例未完全退出时，
+// os.Remove（清旧目标）与 os.Rename 都会报 ERROR_SHARING_VIOLATION(32)/
+// ERROR_LOCK_VIOLATION(33)："The process cannot access the file because it is
+// being used by another process"。
+// 清理旧目标 + rename 合并为一个整体，命中共享冲突则指数退避重试 8 次
+// （200ms→2s 封顶，累计约 16s），扛过瞬时占用；其他错误原样透传，不做无谓重试。
+// 实测（2026-09-13）：旧实现 Remove 与 Rename 分开，Remove 被锁时直接 return，
+// 根本走不到 rename——必须整体重试才有效。
+func replaceFileWithRetry(src, dst string) error {
+	delay := 200 * time.Millisecond
+	var lastErr error
+	for attempt := 0; attempt < 8; attempt++ {
+		// Windows 的 Rename 不保证覆盖已存在目标；先清掉旧目标（残留小包/旧版本包）。
+		if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+			lastErr = err
+			if !sharingViolation(err) {
+				return err
+			}
+		} else if err := os.Rename(src, dst); err != nil {
+			lastErr = err
+			if !sharingViolation(err) {
+				return err
+			}
+		} else {
+			return nil
+		}
+		if attempt < 7 {
+			time.Sleep(delay)
+			if delay < 2*time.Second {
+				delay *= 2
+			}
+		}
+	}
+	return fmt.Errorf("文件替换被持续占用：%s → %s（多次重试仍失败，最后错误：%v）", src, dst, lastErr)
+}
+
+// sharingViolation 判断错误是否为 Windows 共享/锁定冲突（ERROR_SHARING_VIOLATION=32 /
+// ERROR_LOCK_VIOLATION=33），即"文件正被另一进程使用"类瞬时错误。
+func sharingViolation(err error) bool {
+	var errno syscall.Errno
+	return errors.As(err, &errno) && (errno == 32 || errno == 33)
+}
+
+// acquireDownloadLock 跨进程下载单飞锁：双实例（旧进程未退出 + 新实例已启动）同时下载
+// 同一个 .part 会互相踩文件，进程内 updateDL.mu 拦不住跨进程并发，必须落盘锁。
+// 锁文件 <updates>/.download.lock，O_CREATE|O_EXCL 原子创建并写入 PID；
+// 已存在且 30 分钟内 → 判定有实例在下载，直接返回错误（不排队，省得用户挂起）；
+// 超过 30 分钟判定为崩溃残留，强制接管。
+func acquireDownloadLock(localDir string) (release func(), err error) {
+	lockPath := filepath.Join(localDir, ".download.lock")
+	release = func() { _ = os.Remove(lockPath) }
+	for attempt := 0; attempt < 3; attempt++ {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err == nil {
+			fmt.Fprintf(f, "pid=%d\n", os.Getpid())
+			f.Close()
+			return release, nil
+		}
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		fi, serr := os.Stat(lockPath)
+		if serr != nil || time.Since(fi.ModTime()) > 30*time.Minute {
+			_ = os.Remove(lockPath) // 崩溃残留，接管
+			continue
+		}
+		return nil, fmt.Errorf("已有另一个更新下载在运行，请稍后重试")
+	}
+	return nil, fmt.Errorf("下载锁获取失败，请稍后重试")
+}
+
 // downloadHotPatchZip 下载官网 zip（内含 rescene.exe + setup.exe）→ 解压提取 rescene.exe
 // → 存为待应用热补丁（rescene-new.exe）→ 删除 zip。更新包只传 zip 一个文件（2026-08-13）。
 //
@@ -491,6 +617,12 @@ func downloadHotPatchZip(zipURL, dest, version string) error {
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		return err
 	}
+	// 跨进程单飞锁：旧实例未完全退出 + 新实例同时下载同一个 .part 会互相踩文件。
+	lockRelease, lockErr := acquireDownloadLock(localDir)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer lockRelease()
 	// 已下载完成且版本匹配 → 复用
 	// ⚠️ 2026-09-04 实锤：缓存按目标版本命名，但本地残留旧包（同一版本号
 	// 线上覆盖重传、或 CDN 缓存窗下载到旧包）时，exe 已存在且 >1MB 就直接复用
@@ -500,6 +632,7 @@ func downloadHotPatchZip(zipURL, dest, version string) error {
 		updateDL.mu.Lock()
 		updateDL.Path = dest
 		updateDL.mu.Unlock()
+		_ = writePendingPatchVersion(localDir, version)
 		return nil
 	}
 	// 缓存不匹配目标版本：清掉，走重新下载
@@ -511,6 +644,8 @@ func downloadHotPatchZip(zipURL, dest, version string) error {
 		zipName = fmt.Sprintf("rescene-update-%s.zip", sanitizeVersionForFilename(version))
 	}
 	zipPath := filepath.Join(localDir, zipName)
+	// 清掉上次崩溃/中断残留的 .part，避免它对本次下载 rename 造成占用。
+	_ = os.Remove(zipPath + ".part")
 	var fi os.FileInfo
 	var err error
 	fi, err = os.Stat(zipPath)
@@ -565,11 +700,8 @@ func downloadHotPatchZip(zipURL, dest, version string) error {
 		if err := out.Close(); err != nil {
 			return err
 		}
-		// Windows 的 Rename 不会覆盖已有文件；先清掉可能残留的小包。
-		if err := os.Remove(zipPath); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		if err := os.Rename(zipPath+".part", zipPath); err != nil {
+		// 清理旧目标 + rename 合并重试（Remove 被 Defender 锁时不能直接 return）
+		if err := replaceFileWithRetry(zipPath+".part", zipPath); err != nil {
 			return err
 		}
 	}
@@ -610,11 +742,7 @@ func downloadHotPatchZip(zipURL, dest, version string) error {
 			_ = os.Remove(extractPath)
 			return fmt.Errorf("更新包中的 rescene.exe 无效")
 		}
-		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
-			_ = os.Remove(extractPath)
-			return err
-		}
-		if err := os.Rename(extractPath, dest); err != nil {
+		if err := replaceFileWithRetry(extractPath, dest); err != nil {
 			_ = os.Remove(extractPath)
 			return err
 		}
@@ -625,6 +753,7 @@ func downloadHotPatchZip(zipURL, dest, version string) error {
 	if !found {
 		return fmt.Errorf("更新包 zip 里没有 rescene.exe")
 	}
+	_ = writePendingPatchVersion(localDir, version)
 	updateDL.mu.Lock()
 	updateDL.Path = dest
 	updateDL.mu.Unlock()
@@ -810,7 +939,7 @@ func downloadInstaller(url, dest string) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(dest+".part", dest); err != nil {
+	if err := replaceFileWithRetry(dest+".part", dest); err != nil {
 		return err
 	}
 
@@ -1130,16 +1259,29 @@ exit /b 0
 func ApplyPendingHotPatch() bool {
 	localDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Rescene", "updates")
 	newExe := filepath.Join(localDir, updateHotPatchFileName)
-	fi, err := os.Stat(newExe)
-	if err != nil || fi.Size() < 1024*1024 {
-		return false // 没有待应用的热补丁
+	// 完整校验（≥1MB + MZ 头）替代仅 size 判断：防损坏/非 exe 残留被盲目应用
+	if !isLikelyWindowsExecutable(newExe) {
+		return false // 没有可用的待应用热补丁
 	}
-	// 写「已更新到 vX」一次性标记：前端启动时读取并显示升级完成提示（2026-08-18 用户定稿）
-	_ = writeLastAppliedVersion(newExe, localDir)
 	exePath, err := os.Executable()
 	if err != nil {
 		return false
 	}
+
+	// 防「残留补丁无条件重应用」（2026-09-13 实测 bug）：pending 版本与当前运行
+	// 版本相同 → 已是该版本，应用是纯冗余（还触发无谓重启 + 重复更新提示），
+	// 删掉残留补丁直接进正常启动。AppVersion 未知（0.0.0-dev）时不拦截，保持旧行为。
+	if cur := strings.TrimPrefix(strings.TrimPrefix(AppVersion, "v"), "V"); cur != "" {
+		if pv := pendingPatchVersion(newExe, localDir); pv != "" &&
+			strings.TrimPrefix(strings.TrimPrefix(pv, "v"), "V") == cur {
+			_ = os.Remove(newExe)
+			_ = os.Remove(filepath.Join(localDir, updateHotPatchVersionFileName))
+			return false
+		}
+	}
+
+	// 写「已更新到 vX」一次性标记：前端启动时读取并显示升级完成提示（2026-08-18 用户定稿）
+	_ = writeLastAppliedVersion(newExe, localDir)
 	if err := startHotPatch(newExe, exePath); err != nil {
 		return false
 	}
