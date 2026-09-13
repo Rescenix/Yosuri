@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // newMockReleaseServer 自建模拟更新源：update.json + portable.zip。
@@ -130,4 +132,84 @@ func TestDownloadHotPatch_FromMockServer(t *testing.T) {
 	}
 	t.Logf("✓ 模拟更新全链路成功: 下载 %s → 解压 → 补丁落盘 %s (%d bytes), sidecar=%s",
 		info.DownloadExe, dest, fi.Size(), sv)
+}
+
+// TestHandleAutoDownload_StaleDoneAndOldResidual 防回归（2026-09-13 实测洞）：
+// 磁盘残留旧版 rescene-new.exe（不含最新版本串）+ 内存 State=done 时，
+// HandleAutoDownload 必须清残留强制重下，绝不能短路放行旧包（现象：一键安装装旧版）。
+func TestHandleAutoDownload_StaleDoneAndOldResidual(t *testing.T) {
+	resetUpdateCacheForTest()
+	srv := newMockReleaseServer(t, "0.3.10-mock")
+	setAppVersionForTest(t, "0.3.9")
+	t.Setenv("RESCENE_UPDATE_URL", srv.URL+"/update.json")
+
+	// 旧残留：MZ 头 + ≥1MB + 但版本串是旧的（不含 v0.3.10-mock）
+	dir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", dir)
+	updDir := filepath.Join(dir, "Rescene", "updates")
+	if err := os.MkdirAll(updDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(updDir, updateHotPatchFileName)
+	oldExe := make([]byte, 1024*1024+4096)
+	copy(oldExe, "MZ")
+	copy(oldExe[1024*1024:], []byte("v0.3.9-stale-residual"))
+	if err := os.WriteFile(dest, oldExe, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// 模拟进程内残留 done 态（旧代码的洞：内存 State=done 直接短路放行）
+	updateDL.mu.Lock()
+	updateDL.State = "done"
+	updateDL.Path = dest
+	updateDL.mu.Unlock()
+	t.Cleanup(func() {
+		updateDL.mu.Lock()
+		updateDL.State = ""
+		updateDL.Path = ""
+		updateDL.mu.Unlock()
+	})
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/api/update/download", nil)
+	HandleAutoDownload(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("HandleAutoDownload status=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		State string `json:"state"`
+		Path  string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	// 关键断言：内存 done + 旧残留 → 必须返回 downloading（正重新下载），不能是 done 放行旧包
+	if resp.State == "done" && resp.Path == dest {
+		t.Fatal("BUG 复现：内存 done 态短路放行了旧残留（一键安装会装旧版）")
+	}
+
+	// 等后台下载完成（最多 10s），最终产物应含最新版本串
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		updateDL.mu.Lock()
+		st := updateDL.State
+		updateDL.mu.Unlock()
+		if st == "done" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	updateDL.mu.Lock()
+	final := updateDL.State
+	updateDL.mu.Unlock()
+	if final != "done" {
+		t.Fatalf("重新下载未完成，state=%s", final)
+	}
+	if !exeContainsVersion(dest, "v0.3.10-mock") {
+		t.Fatalf("下载产物应包含 v0.3.10-mock 版本串（旧残留未被替换）")
+	}
+	t.Log("✓ 内存 done + 旧残留 → 强制重下，产物为新版本（旧包不再被放行安装）")
 }

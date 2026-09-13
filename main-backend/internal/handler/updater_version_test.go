@@ -60,13 +60,15 @@ func TestPendingPatchVersion_SidecarWins(t *testing.T) {
 	if got != "v0.3.10-mock" {
 		t.Fatalf("sidecar 优先级失败: got %q, want v0.3.10-mock", got)
 	}
-	// 旁路缺失时回退扫描（且不吐伪版本）
+	// 旁路缺失 = 旧版本下载的残留补丁（版本不可信）→ 返回空，自动应用路径必须拒绝
+	// （2026-09-13 实锤：扫二进制会命中官方 exe 内字体/坐标垃圾串如 68.267.847-113-...，
+	// 误判残留版本导致旧补丁被放行自动应用 = 用户「自动装回旧版」）
 	if err := os.Remove(filepath.Join(localDir, "rescene-new.version")); err != nil {
 		t.Fatal(err)
 	}
 	got = pendingPatchVersion(newExe, localDir)
-	if strings.Contains(got, "20250511") || strings.Contains(got, "0.0.0-") {
-		t.Fatalf("兜底扫描仍吐伪版本: %q", got)
+	if got != "" {
+		t.Fatalf("无 sidecar 时必须返回空（不得扫二进制兜底），got %q", got)
 	}
 }
 
@@ -107,4 +109,38 @@ func TestWriteLastAppliedVersion_EmptySidecarSkips(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(localDir, lastAppliedVersionFileName)); !os.IsNotExist(err) {
 		t.Fatal("无版本信息时不应写入 last-applied.txt")
 	}
+}
+
+// TestApplyPendingHotPatch_RejectsNoSidecarResidual 防回归（2026-09-13 实锤洞）：
+// 磁盘残留 rescene-new.exe 但无 sidecar（旧版本下载的补丁，版本不可信）→
+// ApplyPendingHotPatch 必须删除残留、拒绝自动应用，绝不能把旧版装回去。
+func TestApplyPendingHotPatch_RejectsNoSidecarResidual(t *testing.T) {
+	// 模拟官方 exe：合法 MZ 头 + ≥1MB + 字体/坐标垃圾版本串（曾误判残留版本导致放行）
+	blob := make([]byte, 1024*1024+4096)
+	copy(blob, "MZ")
+	copy(blob[1024*1024:], []byte("68.267.847-113-73.952-191-73.952z v0.3.10"))
+
+	localRoot := t.TempDir()
+	updDir := filepath.Join(localRoot, "Rescene", "updates")
+	if err := os.MkdirAll(updDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	newExe := filepath.Join(updDir, updateHotPatchFileName)
+	if err := os.WriteFile(newExe, blob, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// 无 sidecar 文件（rescene-new.version 不存在）= 旧版本下载的残留
+
+	// AppVersion 注入已知版本（0.3.17），对抗「垃圾串 68.267 > 0.3.17 不许拦截」旧洞
+	setAppVersionForTest(t, "0.3.17")
+	t.Setenv("LOCALAPPDATA", localRoot)
+
+	applied := ApplyPendingHotPatch()
+	if applied {
+		t.Fatal("无 sidecar 的旧残留被自动应用了（= 用户自动装回旧版）")
+	}
+	if _, err := os.Stat(newExe); !os.IsNotExist(err) {
+		t.Fatal("无 sidecar 旧残留应被删除，让 HandleAutoDownload 按最新清单重下")
+	}
+	t.Log("✓ 无 sidecar 旧残留被拒绝应用并清除")
 }

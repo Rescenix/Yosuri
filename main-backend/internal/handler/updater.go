@@ -342,17 +342,13 @@ func writePendingPatchVersion(localDir, version string) error {
 	return os.WriteFile(filepath.Join(localDir, updateHotPatchVersionFileName), []byte(version), 0o600)
 }
 
-// pendingPatchVersion 返回待应用补丁的版本号：优先读下载时写下的目标版本
-// （确定可信），缺失时（旧版本下载的残留补丁）才扫 exe 二进制兜底。
+// pendingPatchVersion 返回待应用补丁的版本号——**只信下载时写下的 sidecar 标记**
+// （rescene-new.version）。绝不扫 exe 二进制兜底（2026-09-13 实锤：官方 exe 内
+// 字体/坐标数据会被 versionRe 误匹配成 68.267.847-113-... 这类垃圾串，pickAppVersion
+// 的"取最长"启发式会返回它 → 自动应用路径误判残留补丁版本 → 旧补丁被放行应用）。
+// 无 sidecar = 旧版本下载的残留补丁（版本不可信），返回空，调用方不得应用。
 func pendingPatchVersion(newExe, localDir string) string {
-	if v := strings.TrimSpace(readFileQuiet(filepath.Join(localDir, updateHotPatchVersionFileName))); v != "" {
-		return v
-	}
-	data, err := os.ReadFile(newExe)
-	if err != nil {
-		return ""
-	}
-	return pickAppVersion(data)
+	return strings.TrimSpace(readFileQuiet(filepath.Join(localDir, updateHotPatchVersionFileName)))
 }
 
 // readFileQuiet 读文件，失败返回空串（非关键路径不报错）。
@@ -460,21 +456,8 @@ const updateHotPatchVersionFileName = "rescene-new.version"
 // 下载目录：%LOCALAPPDATA%\Rescene\updates\（用户可写，不必管理员权限）。
 // 重复调用不重复下载：已 done 直接返回；正在下返回进行中。
 func HandleAutoDownload(c *gin.Context) {
-	updateDL.mu.Lock()
-	if updateDL.State == "done" {
-		updateDL.mu.Unlock()
-		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "done", "path": updateDL.Path})
-		return
-	}
-	if updateDL.State == "downloading" {
-		updateDL.mu.Unlock()
-		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "downloading"})
-		return
-	}
-	updateDL.mu.Unlock()
-
-	// 更新通道已经统一为 portable zip 热更新。清单不可用或没有 ZIP 时明确报错，
-	// 绝不能再静默走已经下线的 setup.exe 地址。
+	// 先拿清单，再统一用「磁盘 + 版本」判定就绪——内存 State 只是展示缓存，
+	// 绝不能当权威（2026-09-13 实测洞：进程内 State=done 短路直接放行旧包）。
 	info, err := checkUpdate()
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "error": "无法读取更新清单：" + err.Error()})
@@ -483,6 +466,10 @@ func HandleAutoDownload(c *gin.Context) {
 	exeURL := info.DownloadExe
 	if exeURL == "" {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "error": "更新清单缺少 ZIP 下载地址"})
+		return
+	}
+	if updateDL.State == "downloading" {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "state": "downloading"})
 		return
 	}
 
@@ -1286,10 +1273,21 @@ func ApplyPendingHotPatch() bool {
 
 	// 防「残留补丁无条件重应用」（2026-09-13 实测 bug）：pending 版本与当前运行
 	// 版本相同 → 已是该版本，应用是纯冗余（还触发无谓重启 + 重复更新提示），
-	// 删掉残留补丁直接进正常启动。AppVersion 未知（0.0.0-dev）时不拦截，保持旧行为。
+	// 删掉残留补丁直接进正常启动；pending **旧于**当前版本 → 是历史残留，
+	// 应用会把版本装回去（= 自动装旧版），同样删掉，让 HandleAutoDownload 重下新版。
+	// AppVersion 未知（0.0.0-dev）时不拦截，保持旧行为。
 	if cur := strings.TrimPrefix(strings.TrimPrefix(AppVersion, "v"), "V"); cur != "" {
-		if pv := pendingPatchVersion(newExe, localDir); pv != "" &&
-			strings.TrimPrefix(strings.TrimPrefix(pv, "v"), "V") == cur {
+		pv := pendingPatchVersion(newExe, localDir)
+		// 无 sidecar = 旧版本下载的残留补丁（版本不可信）→ 绝不自动应用，
+		// 删除让 HandleAutoDownload 按最新清单重下（2026-09-13 实锤：官方 exe 二进制
+		// 扫描会误判版本，曾导致旧残留被放行自动应用 = 用户「自动装回旧版」）。
+		if pv == "" {
+			_ = os.Remove(newExe)
+			_ = os.Remove(filepath.Join(localDir, updateHotPatchVersionFileName))
+			return false
+		}
+		pv = strings.TrimPrefix(strings.TrimPrefix(pv, "v"), "V")
+		if pv == cur || compareVersions(pv, cur) {
 			_ = os.Remove(newExe)
 			_ = os.Remove(filepath.Join(localDir, updateHotPatchVersionFileName))
 			return false
