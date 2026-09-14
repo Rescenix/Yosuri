@@ -197,12 +197,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if resumed != nil && sessionID == "" {
 		sessionID = resumed.SessionID
 	}
-	// mode: yolo(全自动,默认) / ask(危险工具每步问)。
+	// mode: yolo(全自动,默认) / ask(危险工具每步问) / rp(角色扮演，零工具纯演出)。
 	mode := strings.ToLower(c.Query("mode"))
 	if mode == "" && resumed != nil {
 		mode = resumed.Mode
 	}
-	if mode != "ask" {
+	if mode != "ask" && mode != "rp" {
 		mode = "yolo"
 	}
 
@@ -217,6 +217,11 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if agentID != "" {
 		// 工具执行链（executeCodeCalls → callNativeTool → 记忆工具）经 ctx 取身份。
 		c.Request = c.Request.WithContext(withAgentID(c.Request.Context(), agentID))
+	}
+	// RP cast（多角色同框）也进 ctx：rp_battle_start 开战要带全场角色。
+	if mode == "rp" {
+		cast := parseCastParam(c.Query("cast"), agentID)
+		c.Request = c.Request.WithContext(withRPCast(c.Request.Context(), cast))
 	}
 
 	// 模型路由链：前端选了具体模型就精确路由到那一个；否则走用户配置>env DeepSeek>
@@ -384,6 +389,17 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	// 按需加载的工具激活集也归它管；常驻记忆与记忆索引的无条件注入是其中一段。
 	// agentID 非空时额外注入该 Agent 的私有记忆（通用记忆照旧共享）。
 	provider := newWorkflowContextProviderFor(agentID, task)
+	if mode == "rp" {
+		// 角色扮演：换成 RP 导演契约 + 角色卡人设 + 世界书，工具面只留 Yosuri 的笔。
+		// cast 参数（逗号分隔的角色卡 id）支持多角色同框；没传就用 agent_id 单卡。
+		cast := parseCastParam(c.Query("cast"), agentID)
+		provider = newRoleplayContextProviderForCast(cast)
+		// @呼人：rp_target 是用户点名要对话的对象（角色名或 Yosuri）。
+		// 注入到系统提示词最前，导演据此让被点名者优先回应、其他人不抢戏。
+		if t := strings.TrimSpace(c.Query("rp_target")); t != "" {
+			provider.WithRPAtMention(t)
+		}
+	}
 	// 人设优先级：角色卡（agent_id 命中注册表）> 前端 persona query > 中性基底。
 	// 群聊里每个 Agent 的人设存在后端角色卡上，前端只传 id，避免把长文案塞进 URL。
 	// 这份生效人设同样要交给 follow-up 建议：建议得按这场对话的语域生成
@@ -392,7 +408,7 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 	if personaText == "" {
 		personaText = c.Query("persona")
 	}
-	if personaText != "" {
+	if personaText != "" && mode != "rp" {
 		provider.WithPersona(personaText)
 	}
 	contextBreakdown := provider.Breakdown()
@@ -498,9 +514,15 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				ChangedFiles: files,
 			})
 		}
+		// RP 是单人对手戏：不落 agent 标记。落了的后果是 buildChatMessages
+		// 给历史拼「【某某 说】」前缀，模型会照着模仿、回复开头自己吐名牌。
+		persistAgent := agentID
+		if mode == "rp" {
+			persistAgent = ""
+		}
 		r.persistWorkflowHistory(
 			sessionID, workflowID, task, historyStatus, historyFinal, model, transcript, flowBlocks,
-			finalIn, finalOut, agentID,
+			finalIn, finalOut, persistAgent,
 		)
 		// 记忆由 remember 工具主动写入 memorydir（~/rescene_data/memory/<file>.md），此处不自动写
 		historyPersisted = true
@@ -865,6 +887,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 		runIdx := make([]int, 0, len(calls))
 		allBlocked := true
 		for i, tc := range calls {
+			// 角色扮演闸：RP 模式只放行 Yosuri 的笔（rp_set_stat 改参数/补世界书），
+			// 其余工具一律拦下不执行——个别模型仍可能幻觉出别的 tool_call，
+			// 绝不让 RP 会话碰到文件/命令/网络。被拦时回一句留在戏内的提示。
+			if mode == "rp" && !rpToolNames()[tc.Function.Name] {
+				handled[i] = "（当前是角色扮演场景，只有 rp_set_stat 可用。请留在角色内，用角色的方式继续这场戏。）"
+				blocked[i] = true
+				continue
+			}
 			if shouldBlockRepeat(callSignatureCount, tc.Function.Name, tc.Function.Arguments, codeRepeatCallLimit) {
 				blocked[i] = true
 				continue
@@ -1039,6 +1069,14 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				resultEvt["urls"] = results[i].urls
 			}
 			writeCodeSSE(c, "result", resultEvt)
+			// RP 战斗工具开战：战场快照 + 完整事件时间轴走 battle_start SSE，
+			// 前端收到即弹出聊天内嵌战场（已含自动结算全过程，直接回放）。
+			if tc.Function.Name == "rp_battle_start" && results[i].battle != nil {
+				writeCodeSSE(c, "battle_start", map[string]any{
+					"battle": results[i].battle,
+					"events": results[i].battleEvents,
+				})
+			}
 			// 图像是 MCP 工具的通用返回工件：Agent 无论在何种任务里主动截图，
 			// 都会自动作为一条聊天交付消息出现，不依赖某个写死的工作流分支或 UI 按钮。
 			for imageIndex, image := range results[i].images {
@@ -1208,6 +1246,10 @@ type codeExecResult struct {
 	files []fileDeliverable
 	// urls 是 web_search（Firecrawl 联网搜索）的引用来源，透出给前端来源卡片
 	urls []string
+	// battle 是 rp_battle_start 产出的战场快照；非空时执行层发 battle_start SSE
+	battle *RPBattle
+	// battleEvents 是这场战斗的完整事件时间轴，随 battle_start SSE 一并下发
+	battleEvents []BattleEvent
 }
 
 // frontendEditTools 会真正改动文件内容的 MCP 文件工具。读类工具不算——
@@ -1417,7 +1459,7 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 			if name == "edit_file" && preEditLine > 0 && !strings.Contains(out, "第") {
 				out = fmt.Sprintf("%s（第 %d 行）", out, preEditLine)
 			}
-			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, audios: nativeResult.Audios, charts: nativeResult.Charts, files: nativeResult.Files, urls: nativeResult.URLs}
+			results[i] = codeExecResult{output: out, images: nativeResult.Images, videos: nativeResult.Videos, audios: nativeResult.Audios, charts: nativeResult.Charts, files: nativeResult.Files, urls: nativeResult.URLs, battle: nativeResult.Battle, battleEvents: nativeResult.BattleEvents}
 			return
 		}
 		if strings.HasPrefix(name, "mcp__") {

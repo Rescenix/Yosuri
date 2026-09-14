@@ -69,6 +69,9 @@ type agentfsAudit struct {
 	Tool         string    `json:"tool"` // write_file / edit_file（兼容外部 mcp__fs__*）
 	SessionID    string    `json:"session_id"`
 	ExistsBefore bool      `json:"exists_before"`
+	// PatchRef 是本次写操作的补丁/参数原文 blob 引用（sha256，内容寻址同 before/after）。
+	// write 类存新内容原文，edit/patch 类存补丁原文，供「查看本次改动原文/重放」用。
+	PatchRef string `json:"patch_ref,omitempty"`
 }
 
 // historyStore 单个项目的历史存储。
@@ -130,12 +133,14 @@ func (s *historyStore) loadBlob(hash string) ([]byte, error) {
 	return io.ReadAll(gr)
 }
 
-// RecordWrite 记录一次写操作：保存 before/after blob、追加审计日志。
-func (s *historyStore) RecordWrite(sess *agentfsSession, op, relPath, tool string, before, after []byte, existsBefore bool) (*agentfsAudit, error) {
+// RecordWrite 记录一次写操作：保存 before/after blob、补丁原文、追加审计日志。
+// patchText 为本次写操作的补丁/参数原文（可为空：旧记录或无原文场景）。
+func (s *historyStore) RecordWrite(sess *agentfsSession, op, relPath, tool string, before, after []byte, existsBefore bool, patchText string) (*agentfsAudit, error) {
 	beforeHash := ""
 	afterHash := sha256Of(after)
 	beforeBlob := ""
 	afterBlob := ""
+	patchRef := ""
 
 	if existsBefore {
 		beforeHash = sha256Of(before)
@@ -152,6 +157,15 @@ func (s *historyStore) RecordWrite(sess *agentfsSession, op, relPath, tool strin
 		}
 		afterBlob = h
 	}
+	if patchText != "" {
+		h, err := s.saveBlob([]byte(patchText))
+		if err != nil {
+			// 补丁原文留档失败不阻断主审计：降级为无 patch_ref 的记录。
+			log.Printf("⚠️ AgentFS: 保存 patch blob 失败 %s: %v", relPath, err)
+		} else {
+			patchRef = h
+		}
+	}
 
 	audit := &agentfsAudit{
 		Seq:          sess.Seq,
@@ -167,6 +181,7 @@ func (s *historyStore) RecordWrite(sess *agentfsSession, op, relPath, tool strin
 		Tool:         tool,
 		SessionID:    sess.SessionID,
 		ExistsBefore: existsBefore,
+		PatchRef:     patchRef,
 	}
 
 	historyMu.Lock()
@@ -248,6 +263,31 @@ func (s *historyStore) Restore(seq int) ([]byte, error) {
 		return nil, fmt.Errorf("该记录没有保存 after 状态")
 	}
 	return s.loadBlob(a.AfterBlob)
+}
+
+// PatchText 返回某条审计记录的补丁/参数原文（重放与审查用）。
+// 无 patch_ref 的旧记录：write 类退化为「after 全量内容」（新建/整写语义等价），
+// edit 类无原文可考返回空。
+func (s *historyStore) PatchText(seq int) (string, error) {
+	a, err := s.Find(seq)
+	if err != nil {
+		return "", err
+	}
+	if a.PatchRef != "" {
+		data, err := s.loadBlob(a.PatchRef)
+		if err != nil {
+			return "", fmt.Errorf("读取补丁原文失败: %w", err)
+		}
+		return string(data), nil
+	}
+	if a.Op == "write" && a.AfterBlob != "" {
+		data, err := s.loadBlob(a.AfterBlob)
+		if err != nil {
+			return "", nil
+		}
+		return string(data), nil
+	}
+	return "", nil
 }
 
 // RestoreBefore 返回某条审计记录写操作之前的文件内容（回退到工作流前版本）。
@@ -415,6 +455,9 @@ func (s *historyStore) gc(cfg gcConfig) error {
 		}
 		if a.AfterBlob != "" {
 			referenced[a.AfterBlob] = true
+		}
+		if a.PatchRef != "" {
+			referenced[a.PatchRef] = true
 		}
 	}
 	return pruneBlobs(s.project, referenced)

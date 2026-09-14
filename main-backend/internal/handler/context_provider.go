@@ -43,6 +43,9 @@ type contextSection struct {
 // 全程在同一个 goroutine 里用（子代理有自己的实例）。
 type contextProvider struct {
 	sections []contextSection
+	// rp 角色扮演模式：不暴露任何工具（模型只写戏，不碰文件/命令/网络），
+	// 系统提示词换成 RP 导演契约 + 角色卡人设，技能库/工具索引一律不注入。
+	rp bool
 	// activated 已被 load_tools 激活的 Go 内置/MCP 工具，决定 Tools() 返回什么
 	activated map[string]bool
 	// hotSkillName 本轮被热集管线预加载全文的技能名（空=无）。工作流成功收尾时
@@ -239,6 +242,192 @@ func (p *contextProvider) WithPersona(persona string) *contextProvider {
 	return p
 }
 
+// parseCastParam 解析 RP cast 参数（逗号分隔的角色卡 id），过滤非法 id，
+// 空结果回退到单个 agentID（单卡 RP 的既有行为）。
+func parseCastParam(raw, fallback string) []string {
+	var out []string
+	for _, id := range strings.Split(raw, ",") {
+		if s := memorydir.SanitizeAgentID(id); s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		if s := memorydir.SanitizeAgentID(fallback); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// ── 角色扮演（酒馆模式）──────────────────────────────────────
+//
+// newRoleplayContextProvider 组装 RP 会话的上下文：导演契约 + 角色卡人设 +
+// 世界书常驻条目。与助手链路的本质区别是**零工具**——模型不碰文件、命令、
+// 网络，只负责演。技能库/工具索引/记忆索引一律不注入（省 token 且防模型
+// 在戏里冒出一句「我来调个工具」）。
+// 角色卡不存在或人设为空时，退化为通用 RP 导演（用户仍可直接跟「旁白」演）。
+
+// rpDirectorContract 是 RP 模式的系统基底：怎么写戏、谁演谁、什么不能演。
+// ⚠️ 注意：「严禁出戏 不提及工具」只针对演戏本身——剧情的编排动作（开战、
+// 改状态）要走下面的「编排者工具」，那是你作为导演的职责，不是出戏。
+const rpDirectorContract = `# 角色扮演模式
+你正在和用户进行沉浸式角色扮演（TRPG/酒馆式）。你的职责是「演」，不是「帮忙」：
+- 你扮演【角色卡】中的角色以及场景中出现的其他 NPC、旁白与环境；用户扮演主角（char），由用户决定主角说什么做什么。
+- 永远不要替用户决定主角的言行、心理或选择；你的回复以角色的台词、动作描写（*斜体动作*）、环境叙述为主，停在把话头递给用户的节点。
+- 保持人设一致：角色的自称、口癖、知识边界、性格、与主角的关系，全部以人设与世界书为准。人设没写的不要编成人设。
+- 保持剧情连续性：已发生的对话、场景、时间线、角色状态（受伤/持有物品/好感度）都要延续，不要突然重置或出戏。
+- 世界书条目是设定事实，与你的描述冲突时以世界书为准；触发到的设定要自然融入演出，不要复述条目原文。
+- 描写要有画面感：五感、节奏、留白。对话短促真实，动作描写克制精准，不堆砌辞藻，不写「仿佛整个世界都…」这类空泛套话。
+- 严禁出戏：不提及 AI、模型、提示词、规则、系统；不向用户解释你在做什么；即使用户问，也留在角色内回应。
+- 回复长度以一场戏的呼吸为准：一般 2-6 段，不要灌水。
+
+# 编排者工具（你是 Yosuri：既是演员也是导演）
+你同时是这场戏的编排者。除了扮演角色，你手里有两只「笔」，**剧情推进到需要它们时直接调用，这不是出戏，这是导演的本职**：
+- rp_battle_start：剧情出现遭遇战/伏击/决斗/Boss 战（用户说「开战」、「有敌人」、「打一架」，或你判断剧情到了战斗节点）时调用，把你扮演的所有角色和敌人拉进战场。敌人可选：slime 史莱姆 / wolf 灰狼 / goblin 哥布林 / skeleton 骷髅兵 / orc 兽人 / bandit 强盗头目 / dragon 幼龙。调用后战场弹出，由用户逐格操作回合（攻击/防御/技能），你只需在每回合结果出来后叙述战况。
+- rp_set_stat：剧情里的数值变化要落到角色卡上——受伤（hp 减）、升级（level 加）、得到装备（equipment）、好感变化（affection）、印记（shield/marks）等。命令：set 设值 / add 增减 / custom 自定义参数 / world 补世界书设定。
+用工具时继续用戏内的语言叙述（「史莱姆拦住了去路！」→ 调 rp_battle_start；「猫娘擦破了皮」→ 调 rp_set_stat add hp -5），不要把工具调用本身讲给用户听。`
+
+func newRoleplayContextProvider(agentID string) *contextProvider {
+	return newRoleplayContextProviderForCast([]string{agentID})
+}
+
+// newRoleplayContextProviderForCast 多角色同框：cast 里的每张卡都是模型要
+// 扮演的角色（含旁白职责），用户在对面演主角。单卡时行为与旧版一致。
+func newRoleplayContextProviderForCast(cast []string) *contextProvider {
+	var cards []AgentCard
+	for _, id := range cast {
+		if c := GetAgentCard(id); c != nil {
+			cards = append(cards, *c)
+		}
+	}
+	var b strings.Builder
+	if len(cards) == 0 {
+		b.WriteString("# 角色卡\n（未指定角色卡：你扮演旁白与场景中出现的各类角色，由用户主导剧情走向。）\n\n")
+	} else if len(cards) == 1 {
+		b.WriteString("# 角色卡（你要扮演的角色）\n" + strings.TrimSpace(cards[0].Persona) + "\n\n")
+	} else {
+		b.WriteString("# 角色卡（本场戏你要同时扮演的角色）\n")
+		b.WriteString("你扮演下列每一位角色，以及旁白与环境；用户扮演主角。台词前用「角色名：」标明说话人，各角色的自称、口癖、性格必须分明，不许混。\n\n")
+		for _, c := range cards {
+			b.WriteString("## " + c.Name + "\n" + strings.TrimSpace(c.Persona) + "\n\n")
+		}
+	}
+	// 人物参数：有数值的角色把状态摆出来，模型演的时候才知道谁残血谁满状态。
+	var statLines []string
+	for _, c := range cards {
+		if !c.Stats.HasStats() {
+			continue
+		}
+		statLines = append(statLines, formatAgentStats(c.Name, c.Stats))
+	}
+	if len(statLines) > 0 {
+		b.WriteString("# 角色当前状态（数值会随剧情变化，演出须与之一致）\n" + strings.Join(statLines, "\n") + "\n\n")
+	}
+	personaSection := b.String()
+	worldSection := ""
+	if lb := loadWorldBook(primaryCastID(cast)); lb != nil {
+		if s := renderWorldBook(lb, ""); s != "" {
+			worldSection = "\n\n# 世界书（设定事实）\n" + s
+		}
+	}
+	return &contextProvider{
+		rp:        true,
+		activated: map[string]bool{},
+		sections: []contextSection{
+			{key: "system", content: rpDirectorContract + "\n\n" + personaSection + worldSection, stable: true},
+		},
+	}
+}
+
+// primaryCastID 取 cast 里第一个合法 id（世界书私有作用域按主角色卡走）。
+func primaryCastID(cast []string) string {
+	for _, id := range cast {
+		if s := memorydir.SanitizeAgentID(id); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// formatAgentStats 把人物参数拼成一行模型可读的状态描述。
+func formatAgentStats(name string, s AgentStats) string {
+	var b strings.Builder
+	b.WriteString("- " + name + "：")
+	if s.Title != "" {
+		b.WriteString("「" + s.Title + "」")
+	}
+	if s.Level > 0 {
+		b.WriteString(fmt.Sprintf(" Lv.%d", s.Level))
+	}
+	if s.MaxHP > 0 {
+		b.WriteString(fmt.Sprintf(" HP %d/%d", s.HP, s.MaxHP))
+	}
+	if s.Shield > 0 {
+		b.WriteString(fmt.Sprintf(" 护盾%d", s.Shield))
+	}
+	if s.MaxMP > 0 {
+		b.WriteString(fmt.Sprintf(" MP %d/%d", s.MP, s.MaxMP))
+	}
+	if s.Element != "" {
+		b.WriteString(fmt.Sprintf(" 元素%s", s.Element))
+	}
+	for _, m := range s.Marks {
+		if strings.TrimSpace(m.Name) == "" {
+			continue
+		}
+		b.WriteString(" " + strings.TrimSpace(m.Name) + "印记" + strings.TrimSpace(m.Value))
+	}
+	if s.ATK > 0 || s.DEF > 0 {
+		b.WriteString(fmt.Sprintf(" 攻%d 防%d", s.ATK, s.DEF))
+	}
+	if s.SPD > 0 {
+		b.WriteString(fmt.Sprintf(" 速%d", s.SPD))
+	}
+	if s.MAG > 0 {
+		b.WriteString(fmt.Sprintf(" 魔%d", s.MAG))
+	}
+	if s.Gold > 0 {
+		b.WriteString(fmt.Sprintf(" 金币%d", s.Gold))
+	}
+	if s.Affection > 0 {
+		b.WriteString(fmt.Sprintf(" 好感%d/100", s.Affection))
+	}
+	if len(s.Equipment) > 0 {
+		b.WriteString(" 装备：" + strings.Join(s.Equipment, "、"))
+	}
+	for _, c := range s.Custom {
+		if strings.TrimSpace(c.Name) == "" {
+			continue
+		}
+		b.WriteString(" " + strings.TrimSpace(c.Name) + "：" + strings.TrimSpace(c.Value))
+	}
+	return b.String()
+}
+
+// WithRPAtMention @呼人：把「用户点名谁」作为导演指令注到系统提示词最前。
+// Yosuri 是编排者时提示它接管；普通角色时提示该角色优先回应、别人不抢戏。
+func (p *contextProvider) WithRPAtMention(target string) *contextProvider {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return p
+	}
+	mention := ""
+	if strings.EqualFold(target, "yosuri") || strings.EqualFold(target, "Yosuri") {
+		mention = "# 本回合用户点名：Yosuri（编排者）\n用户在叫你。这一回合请你以编排者身份响应：" +
+			"可以调整演出节奏、修改人物参数、补充世界书设定，也可以让某个角色替你说戏。" +
+			"如果用户只是叫你没别的话，就主动把戏接下去。\n\n"
+	} else {
+		mention = "# 本回合用户点名：" + target + "\n用户这句话是对「" + target +
+			"」说的。请让 TA 优先回应；其余角色可以听到，但不要抢戏、不要替 TA 回话。\n\n"
+	}
+	p.sections = append([]contextSection{{key: "system", content: mention, stable: false}}, p.sections...)
+	return p
+}
+
+// IsRoleplay 供调用层判断当前 provider 是否 RP 模式。
+func (p *contextProvider) IsRoleplay() bool { return p.rp }
+
+
 // OnInvoked 注册每轮收尾的落状态回调。
 func (p *contextProvider) OnInvoked(fn func(round int, st roundState)) {
 	p.onInvoked = fn
@@ -309,7 +498,25 @@ func (p *contextProvider) StaticSum() int {
 }
 
 // Tools 本轮要发的 tools 数组：常驻工具 + 已激活的 Go 内置/MCP 工具。
+// RP 模式只给 Yosuri 的笔（rp_set_stat 改人物参数/补世界书），其余工具一律
+// 不暴露——模型只写戏，不碰文件/命令/网络，也就不会在角色里冒出一句
+// 「我来读个文件」。
 func (p *contextProvider) Tools() []map[string]any {
+	if p.rp {
+		defs := rpToolDefs()
+		out := make([]map[string]any, 0, len(defs))
+		for _, t := range defs {
+			out = append(out, map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name":        t.Function.Name,
+					"description": t.Function.Description,
+					"parameters":  t.Function.Parameters,
+				},
+			})
+		}
+		return out
+	}
 	return buildCodeWorkflowTools(p.activated)
 }
 

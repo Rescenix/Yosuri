@@ -274,10 +274,40 @@ func nativePatchWritableArgs(argsJSON string) []map[string]any {
 	out := make([]map[string]any, 0, len(ops))
 	for _, op := range ops {
 		if op.kind != nativePatchDelete {
-			out = append(out, map[string]any{"path": op.path})
+			// patch_text 供 AgentFS 审计落盘该文件本次的补丁原文（可追溯/重放），
+			// 写工具本身只认 path，多余键无副作用。
+			out = append(out, map[string]any{"path": op.path, "patch_text": renderNativePatchOp(op)})
 		}
 	}
 	return out
+}
+
+// renderNativePatchOp 把一个已解析的文件操作还原成标准补丁文本（*** Begin/End Patch 包裹），
+// 用于 AgentFS 审计的 patch 原文留档。
+func renderNativePatchOp(op nativePatchOperation) string {
+	var b strings.Builder
+	b.WriteString("*** Begin Patch\n")
+	switch op.kind {
+	case nativePatchAdd:
+		b.WriteString("*** Add File: " + op.path + "\n")
+		for _, ln := range op.addLines {
+			b.WriteString("+" + ln + "\n")
+		}
+	case nativePatchUpdate:
+		b.WriteString("*** Update File: " + op.path + "\n")
+		for _, h := range op.hunks {
+			b.WriteString("@@ " + h.header + "\n")
+			for _, ln := range h.lines {
+				b.WriteByte(ln.kind)
+				b.WriteString(ln.text + "\n")
+			}
+			if h.atEOF {
+				b.WriteString("*** End of File\n")
+			}
+		}
+	}
+	b.WriteString("*** End Patch")
+	return b.String()
 }
 
 func nativePatchContainsDelete(argsJSON string) bool {

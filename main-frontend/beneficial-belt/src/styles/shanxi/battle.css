@@ -1,0 +1,279 @@
+/* RpBattleCard.vue + ChatWidget 战斗入口 —— 聊天内嵌战场样式 */
+
+/* ── 战斗浮层：盖在聊天区上方 ── */
+.rp-battle-overlay {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  width: min(640px, calc(100% - 48px));
+  max-height: calc(100% - 96px);
+  overflow-y: auto;
+  border-radius: 14px;
+  background: rgba(var(--app-surface-rgb, 255, 255, 255), 0.97);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+}
+
+/* ── 战场布局：左我右敌 ── */
+.rp-battle-card { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.rp-battle-field {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rp-battle-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rp-battle-vs {
+  align-self: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.rp-battle-unit {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rp-battle-unit.dead { opacity: 0.45; }
+.rp-battle-unit-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+.rp-battle-hpbar, .rp-battle-mpbar {
+  position: relative;
+  height: 14px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.10);
+}
+.rp-battle-hpfill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #f5564a, #ff8a5c);
+  transition: width 0.3s ease;
+}
+.rp-battle-shield {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 3px;
+  background: rgba(143, 208, 255, 0.55);
+  transition: width 0.3s ease;
+  z-index: 2;
+}
+.rp-battle-mpfill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #3c8dff, #6fb4ff);
+  transition: width 0.3s ease;
+}
+.rp-battle-hptext {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  z-index: 3;
+}
+
+/* ── 回合日志 ── */
+.rp-battle-log {
+  border: 1px dashed rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 96px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.02);
+}
+.rp-battle-logline { font-size: 12px; color: var(--app-text-muted, #6b6b6b); }
+.rp-battle-logline.crit { color: #ff8a3c; font-weight: 700; }
+.rp-battle-logline.skill { color: #7b5cff; }
+
+/* ── 结果 ── */
+.rp-battle-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--app-text);
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 90, 60, 0.08);
+}
+.rp-battle-result.win { background: rgba(82, 196, 26, 0.10); }
+.rp-battle-gold { font-size: 12px; color: #b07a2e; font-weight: 600; }
+.rp-battle-close {
+  margin-left: auto;
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--app-text);
+}
+
+/* ── 终局结算面板：主角倒下 → 世界线终局 ── */
+.rp-battle-ending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(20, 20, 30, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.rp-ending-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #c2506c;
+  letter-spacing: 2px;
+}
+.rp-ending-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--app-text-muted, #6b6b6b);
+}
+.rp-ending-row b { color: var(--app-text); font-size: 13px; }
+.rp-ending-sub { font-size: 12px; color: var(--app-text-muted, #8a8a8a); }
+
+/* ── 行动按钮 ── */
+.rp-battle-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rp-battle-wait { font-size: 12px; color: var(--app-text-muted, #8a8a8a); }
+.rp-battle-actor { font-size: 12px; font-weight: 700; color: var(--app-text); }
+.rp-battle-btn {
+  appearance: none;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text);
+  padding: 6px 14px;
+  border-radius: 8px;
+}
+.rp-battle-btn:hover { border-color: rgba(0, 0, 0, 0.25); }
+.rp-battle-btn.atk { border-color: rgba(245, 86, 74, 0.4); color: #f5564a; }
+.rp-battle-btn.def { border-color: rgba(47, 111, 237, 0.4); color: #2f6fed; }
+.rp-battle-btn.skill { border-color: rgba(123, 92, 255, 0.4); color: #7b5cff; }
+
+/* ── 标题栏战斗按钮 + 敌人选择 ── */
+.rp-battle-btn { margin-left: 4px; }
+.rp-battle-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 240px;
+  max-height: 340px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(var(--app-surface-rgb, 255, 255, 255), 0.97);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+.rp-battle-picker-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--app-text);
+  padding: 2px 6px 6px;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
+  margin-bottom: 2px;
+}
+.rp-battle-picker-item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+  width: 100%;
+}
+.rp-battle-picker-item:hover { background: rgba(245, 86, 74, 0.08); }
+.rp-battle-picker-icon { font-size: 18px; flex-shrink: 0; }
+.rp-battle-picker-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rp-battle-picker-name { font-size: 13px; font-weight: 700; color: var(--app-text); }
+.rp-battle-picker-sub { font-size: 11px; color: var(--app-text-muted, #8a8a8a); }
+
+/* ── 逐格操作：每人一行按钮 + 结束回合 ── */
+.rp-battle-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.05);
+}
+.rp-battle-actor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rp-battle-actor-row.dead { opacity: 0.5; }
+.rp-battle-actor-row .rp-battle-actor { min-width: 56px; }
+.rp-battle-btn.picked {
+  box-shadow: 0 0 0 2px currentColor;
+  transform: translateY(-1px);
+}
+.rp-battle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.rp-battle-turnbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.rp-battle-endturn {
+  background: rgba(47, 111, 237, 0.08);
+  border: 1px solid rgba(47, 111, 237, 0.35);
+  color: #2f6fed;
+  font-weight: 700;
+}
+.rp-battle-endturn:disabled { opacity: 0.5; cursor: wait; }

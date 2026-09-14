@@ -1074,6 +1074,30 @@
                 </div>
               </div>
 
+              <div class="settings-section-title appearance-mode-title">{{ tr('性能模式') }}</div>
+              <div class="settings-section-desc">
+                {{ tr('低配或核显电脑如果感觉界面卡顿、任务管理器里 Yosuri 的 GPU 占用飙高，可打开此开关关闭界面硬件加速，改走软件渲染（GPU 占用归零，渲染压力转到 CPU）。改动需要重启应用才生效。') }}
+              </div>
+              <div class="param-row">
+                <span class="param-label">{{ tr('关闭硬件加速') }}</span>
+                <div class="seg-control">
+                  <button
+                    class="seg-btn"
+                    :class="{ on: !perfGpuDisabled }"
+                    type="button"
+                    :disabled="perfSaving"
+                    @click="setPerfGpuDisabled(false)"
+                  >{{ tr('关闭') }}</button>
+                  <button
+                    class="seg-btn"
+                    :class="{ on: perfGpuDisabled }"
+                    type="button"
+                    :disabled="perfSaving"
+                    @click="setPerfGpuDisabled(true)"
+                  >{{ tr('开启') }}</button>
+                </div>
+              </div>
+
               <div class="settings-section-title">{{ tr('流式输出') }}</div>
               <div class="settings-section-desc">
                 {{ tr('AI 回复时新到的文字逐字符级联淡入（瀑布渐变）。如果看起来一闪一闪，先关掉这个开关。') }}
@@ -2216,7 +2240,7 @@ watch(activeTab, (t) => {
     loadAggConfig()
     aggRefreshStatus()
   }
-  if (t === 'appearance') loadOverlayConfig()
+  if (t === 'appearance') { loadOverlayConfig(); loadPerfConfig() }
   if (t === 'safety') loadProtectedWorkspace()
 })
 onMounted(() => {
@@ -2225,7 +2249,7 @@ onMounted(() => {
     loadAggConfig()
     aggRefreshStatus()
   }
-  if (activeTab.value === 'appearance') loadOverlayConfig()
+  if (activeTab.value === 'appearance') { loadOverlayConfig(); loadPerfConfig() }
   if (activeTab.value === 'safety') loadProtectedWorkspace()
 })
 
@@ -2782,6 +2806,29 @@ async function setOverlayEnabled(next) {
     })
     overlayEnabled.value = next
   } finally { overlaySaving.value = false }
+}
+
+// ============ 性能模式开关（关 WebView2 硬件加速，默认关闭，改动需要重启应用才生效） ============
+const perfGpuDisabled = ref(false)
+const perfSaving = ref(false)
+async function loadPerfConfig() {
+  try {
+    const res = await fetch('/api/perf/config')
+    if (!res.ok) return
+    const data = await res.json()
+    perfGpuDisabled.value = !!data.gpu_disabled
+  } catch (e) { /* 旧后端无此接口时静默保持默认关闭 */ }
+}
+async function setPerfGpuDisabled(next) {
+  perfSaving.value = true
+  try {
+    await fetch('/api/perf/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gpu_disabled: next }),
+    })
+    perfGpuDisabled.value = next
+  } finally { perfSaving.value = false }
 }
 
 // ============ 受保护工作区（默认关闭；后端才是实际的执行边界） ============

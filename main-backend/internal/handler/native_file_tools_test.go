@@ -74,36 +74,59 @@ func TestNativeEditRejectsAmbiguousMatch(t *testing.T) {
 	}
 }
 
-// TestNativeReadSensitiveFileBlocked 验证敏感文件读取拦截：.env/.pem/.ssh 等
-// 密钥文件被 read 时必须返回安全闸门错误，不能返回文件内容。
-func TestNativeReadSensitiveFileBlocked(t *testing.T) {
+// TestNativeReadSecretFileMasked 验证「堵不如疏」（09-14 纠正）：密钥类文件
+// （.env/.pem 等）不再整文件禁读，改为出口脱敏——能读到文件，但密钥值被
+// maskSecretText 掩成 ***，模型拿不到明文。
+func TestNativeReadSecretFileMasked(t *testing.T) {
 	root := t.TempDir()
-	sensitiveFiles := []string{
+	secretFiles := []string{
 		".env", ".env.local", ".env.production",
 		"server.pem", "id_rsa", "id_ed25519",
 		"credentials.json", "service-account.json",
 	}
-	for _, name := range sensitiveFiles {
+	// 值长度 >= 8 才会触发掩码（maskMinValueLen）
+	content := "SECRET_KEY=abcdefgh123456\n"
+	for _, name := range secretFiles {
 		path := filepath.Join(root, name)
-		if err := os.WriteFile(path, []byte("SECRET_KEY=abc123\n"), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		_, err := callNativeFileTool("read_file", nativeArgs(t, map[string]any{"path": path}))
-		if err == nil {
-			t.Errorf("敏感文件 %s 被 read 拦截失败——返回了内容", name)
+		res, err := callNativeFileTool("read_file", nativeArgs(t, map[string]any{"path": path}))
+		if err != nil {
+			t.Errorf("密钥文件 %s 应可读（脱敏而非拦截），实得拦截: %v", name, err)
 			continue
 		}
-		if !strings.Contains(err.Error(), "安全闸门") {
-			t.Errorf("敏感文件 %s 被拦但错误信息不含「安全闸门」: %v", name, err)
+		if strings.Contains(res.Text, "abcdefgh123456") {
+			t.Errorf("密钥文件 %s 泄漏了明文密钥值: %q", name, res.Text)
+		}
+		if !strings.Contains(res.Text, "SECRET_KEY=***") {
+			t.Errorf("密钥文件 %s 应显示掩码 SECRET_KEY=***，实得: %q", name, res.Text)
 		}
 	}
-	// 反测：普通文件必须能正常读到
-	normalPath := filepath.Join(root, "normal.txt")
-	if err := os.WriteFile(normalPath, []byte("hello world\n"), 0o644); err != nil {
-		t.Fatal(err)
+}
+
+// TestNativeReadNonSecretDocsAllowed 回归（2026-09-14 实锤）：门面文档/依赖清单/
+// 协作规范是**写保护**名单（readme/license/package.json/agents.md），不是禁读名单。
+// 只读它们没有泄密风险，必须能正常读取；密钥值靠出口脱敏兜底，不做整文件拦截。
+func TestNativeReadNonSecretDocsAllowed(t *testing.T) {
+	root := t.TempDir()
+	docs := []string{
+		"README.md", "README.zh-CN.md", "LICENSE", "license.txt",
+		"package.json", "go.mod", "AGENTS.md", ".cursorrules", ".gitignore",
 	}
-	res, err := callNativeFileTool("read_file", nativeArgs(t, map[string]any{"path": normalPath}))
-	if err != nil || !strings.Contains(res.Text, "hello world") {
-		t.Errorf("普通文件 normal.txt 读取应成功，实得 err=%v text=%q", err, res.Text)
+	for _, name := range docs {
+		path := filepath.Join(root, name)
+		if err := os.WriteFile(path, []byte("# doc\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range docs {
+		path := filepath.Join(root, name)
+		res, err := callNativeFileTool("read_file", nativeArgs(t, map[string]any{"path": path}))
+		if err != nil {
+			t.Errorf("门面文档 %s 应可读，实得拦截: %v", name, err)
+		} else if !strings.Contains(res.Text, "# doc") {
+			t.Errorf("门面文档 %s 读到了但内容不对: %q", name, res.Text)
+		}
 	}
 }

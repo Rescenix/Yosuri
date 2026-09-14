@@ -66,6 +66,7 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.POST("/api/agentfs/open", AgentFSOpen)
 	r.GET("/api/agentfs/log", AgentFSLog)
 	r.POST("/api/agentfs/diff", AgentFSDiff)
+	r.POST("/api/agentfs/patch-text", AgentFSPatchText)
 	r.POST("/api/agentfs/restore", AgentFSRestore)
 	// 真实交互式终端：SSE 输出 + POST 写 stdin，会话按 id 常驻（详见 terminal_handler.go）
 	r.GET("/api/terminal/stream", HandleTerminalStream)
@@ -90,6 +91,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 悬浮球演示功能开关（测试功能，默认关闭，见 overlay_config.go）
 	r.GET("/api/overlay/config", HandleGetOverlayConfig)
 	r.PUT("/api/overlay/config", HandlePutOverlayConfig)
+	// 性能模式开关（低配/核显机器关硬件加速，改动需重启，见 perf_config.go）
+	r.GET("/api/perf/config", HandleGetPerfConfig)
+	r.PUT("/api/perf/config", HandlePutPerfConfig)
 	// 主动停止：先通知后端取消并落盘部分上下文，再由前端关闭 EventSource。
 	r.POST("/api/code/workflow/stop", workflowRunner.HandleCodeWorkflowStop)
 	// 工具审批回调：Ask 模式下前端批准条「允许/拒绝」写回，恢复四态机执行
@@ -161,6 +165,17 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.DELETE("/api/agents/:id", HandleDeleteAgent)
 	r.POST("/api/agents/:id/avatar", HandleSaveAgentAvatar)
 	r.GET("/api/agents/:id/memory", HandleAgentMemory)
+	// 世界书（Lorebook）：全局 + 角色卡私有，关键词触发注入
+	r.GET("/api/worldbook", HandleWorldbookGet)
+	r.POST("/api/worldbook", HandleWorldbookSave)
+	r.POST("/api/worldbook/entry", HandleWorldbookUpsertEntry)
+	r.DELETE("/api/worldbook/entry", HandleWorldbookDeleteEntry)
+	r.POST("/api/worldbook/test", HandleWorldbookTest)
+	// RP 酒馆战斗：回合制结算（服务端权威，打完写回角色卡）
+	r.POST("/api/rp/battle/start", HandleRPBattleStart)
+	r.POST("/api/rp/battle/action", HandleRPBattleAction)
+	r.POST("/api/rp/battle/turn", HandleRPBattleTurn)
+	r.GET("/api/rp/battle/:id", HandleRPBattleGet)
 
 	// 自定义语音：云端/外部 TTS 代理（MiniMax / OpenAI 兼容）
 	r.GET("/api/tts/config", HandleGetTTSConfig)
@@ -406,6 +421,17 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.GET("/api/notifications", CloudNotificationProxy)
 	r.POST("/api/notifications/read", CloudNotificationProxy)
 	r.POST("/api/notifications/clear", CloudNotificationProxy)
+	// 好友系统 + 好友私聊（DM）：透传 JWT 到 ResceneCloud，身份云端裁决
+	r.GET("/api/friends", CloudFriendsProxy)
+	r.POST("/api/friends/request", CloudFriendsProxy)
+	r.POST("/api/friends/respond", CloudFriendsProxy)
+	r.POST("/api/friends/delete", CloudFriendsProxy)
+	r.GET("/api/friends/search", CloudFriendsProxy)
+	r.GET("/api/friends/suggest", CloudFriendsProxy)
+	r.POST("/api/dm/send", CloudDMProxy)
+	r.POST("/api/dm/read", CloudDMProxy)
+	r.GET("/api/dm/conversations", CloudDMProxy)
+	r.GET("/api/dm/history", CloudDMProxy)
 	// 本地通知：不依赖云端，脚本/前端可直接创建（人设周报等）
 	r.GET("/api/notifications/local", HandleLocalNotifList)
 	r.POST("/api/notifications/local", HandleLocalNotifCreate)

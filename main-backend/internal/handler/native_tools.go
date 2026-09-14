@@ -28,6 +28,11 @@ type nativeToolResult struct {
 	Files []fileDeliverable
 	// URLs 是 web_search（Firecrawl 联网搜索）结果的引用来源，透出给前端来源卡片
 	URLs []string
+	// Battle 是 RP 战斗工具（rp_battle_start）产出的战场快照；执行层发现非空
+	// 就发 battle_start SSE 事件，前端据此弹出聊天内嵌战场（酒馆杀手锏）。
+	Battle *RPBattle
+	// BattleEvents 是这场战斗的完整事件时间轴（自动结算产物），前端逐条回放。
+	BattleEvents []BattleEvent
 }
 
 // chartPayload 是 chart 工具产出的单个图表，前端据此渲染 ECharts 配置。
@@ -82,15 +87,19 @@ func coreToolDefs() []core.ToolDefinition {
 		// 文件/命令/检索的日常操作全部收敛到这 4 个；旧的文件系统工具
 		// （read_file/grep/glob/run_command/task_* 等）被吸收为 legacy，
 		// 执行层仍兼容，但不再出现在模型可见的工具索引里。
-		nativeTool("read", "读取与检索：读取文件内容、在文件内容中搜索正则(pattern)、按文件名匹配(glob)、列目录或查看文件/目录信息。给了 pattern 做内容搜索，给了 glob 做文件名搜索，path 指向目录且无 pattern/glob 时列目录，info=true 只看元信息。", map[string]core.ToolProperty{
+		nativeTool("read", "读取文件内容、查看目录结构。path 指向文件时按行读取（行号:内容，offset/limit 分页）；path 指向目录时列目录（depth 控制递归深度）；info=true 只看元信息。不要用 read 做搜索——搜文件内容用 search(target=content)，按文件名找用 search(target=files)。", map[string]core.ToolProperty{
 			"path":    {Type: "string", Description: "文件或目录路径；相对路径按当前工作目录解析"},
 			"offset":  {Type: "integer", Description: "读文件起始行号，1-indexed，默认 1"},
 			"limit":   {Type: "integer", Description: "读文件行数，默认 200，最大 400"},
-			"pattern": {Type: "string", Description: "可选：在文件内容中搜索的正则表达式"},
-			"glob":    {Type: "string", Description: "可选：按文件名/路径匹配，如 **/*.go"},
-			"depth":   {Type: "integer", Description: "可选：path 为目录时递归列目录的深度，默认 4，最大 8"},
+			"depth":   {Type: "integer", Description: "可选：path 为目录时递归列出的深度，默认 4，最大 8"},
 			"info":    {Type: "boolean", Description: "可选：只返回文件/目录的大小、修改时间、类型"},
 		}, []string{"path"}),
+		nativeTool("search", "搜索文件：target=content 在文件内容中搜正则（返回 文件:行号:匹配行）；target=files 按文件名/路径模式匹配（如 **/*.go）。搜文件一律用 search，不要用 read 凑。", map[string]core.ToolProperty{
+			"pattern": {Type: "string", Description: "target=content 时是 Go 正则表达式；target=files 时是 glob 模式（支持 *、?、**）"},
+			"target":  {Type: "string", Description: "搜索对象：content（默认，文件内容）/ files（文件名/路径）"},
+			"path":    {Type: "string", Description: "搜索起点，默认当前工作目录"},
+			"type":    {Type: "string", Description: "可选文件类型过滤：go/vue/js/ts/py/json/md/css/html"},
+		}, []string{"pattern"}),
 		nativeTool("write", "写文件：写入完整文件内容（自动创建父目录，整文件覆盖旧内容）；action=create_dir 只建目录。仅限文本文件：pdf/docx/pptx/xlsx 是二进制容器，写入必坏，一律改用 generate_office。删除/移动文件是独立操作，用 remove，不要塞进 write。", map[string]core.ToolProperty{
 			"path":    {Type: "string", Description: "目标路径"},
 			"content": {Type: "string", Description: "文件完整内容（action=write 时必填）"},
@@ -259,7 +268,7 @@ func nativeOnDemandToolDefs() []core.ToolDefinition {
 	defs = append(defs, musicGenToolDef)
 	// speak：本地 TTS 语音合成，内嵌播放条（edge-tts，零 key）
 	defs = append(defs, speakVoiceToolDef)
-	// fetch_media：网络素材（图/音/视/文件）抓取落盘，聊天内嵌展示
+	// fetch_media：本地素材（图/音/视/文件）归入媒体目录，聊天内嵌展示
 	defs = append(defs, fetchMediaToolDef)
 	// chart：数学建模图表渲染（前端 ECharts 直出，零后端依赖）
 	defs = append(defs, chartToolDef)
@@ -304,7 +313,10 @@ func isNativeOnDemandTool(name string) bool {
 func isNativeExecutableTool(name string) bool {
 	// 五个核心工具常驻后仍必须走原生执行链（callNativeTool 有对应分支）；
 	// 2026-09-07 曾因只查 isNativeOnDemandTool 导致核心工具被甩「未知工具」。
-	return isCoreTool(name) || name == "apply_patch" || name == "web_search" || name == "session_search" || isNativeOnDemandTool(name)
+	// RP 模式两个编排工具（rp_set_stat / rp_battle_start）也走原生执行链，
+	// 不挂这里会在 executeCodeCalls 兜底分支被甩「未知工具」。
+	return isCoreTool(name) || name == "apply_patch" || name == "web_search" || name == "session_search" ||
+		name == "rp_set_stat" || name == "rp_battle_start" || isNativeOnDemandTool(name)
 }
 
 func allOnDemandToolDefs() []core.ToolDefinition {
@@ -316,6 +328,8 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 	switch name {
 	case "read":
 		return callNativeReadTool(argsJSON)
+	case "search":
+		return callNativeSearchTool(argsJSON)
 	case "write":
 		return callNativeWriteTool(argsJSON)
 	case "remove":
@@ -370,6 +384,14 @@ func callNativeTool(ctx context.Context, name, argsJSON string) (nativeToolResul
 		return callGenerateOffice(argsJSON)
 	case "session_search":
 		return callNativeSessionSearch(argsJSON)
+	case "rp_set_stat":
+		text, err := callRPSetStat(argsJSON)
+		if err != nil {
+			return nativeToolResult{}, err
+		}
+		return nativeToolResult{Text: text}, nil
+	case "rp_battle_start":
+		return callRPBattleStart(ctx, argsJSON)
 	case "computer_screenshot", "computer_mouse_move", "computer_mouse_click",
 		"computer_mouse_drag", "computer_type", "computer_key",
 		"computer_screen_size", "computer_scroll":
@@ -405,9 +427,39 @@ func coreToolIndexDefs() []core.ToolDefinition {
 	return out
 }
 
-// isCoreTool 判断名字是否是 read/write/remove/patch/bash 之一。
+// isCoreTool 判断名字是否是常驻核心工具（read/search/write/remove/patch/bash）。
 func isCoreTool(name string) bool {
-	return name == "read" || name == "write" || name == "remove" || name == "patch" || name == "bash"
+	return name == "read" || name == "search" || name == "write" || name == "remove" || name == "patch" || name == "bash"
+}
+
+// callNativeSearchTool 独立的搜索工具：target=content → grep（文件内容正则），
+// target=files → glob（文件名/路径匹配）。与 read 解耦后，模型"想搜"不再需要
+// 记得在 read 里塞 pattern/glob——直接调 search（2026-09-14 新增）。
+func callNativeSearchTool(argsJSON string) (nativeToolResult, error) {
+	var a struct {
+		Pattern string `json:"pattern"`
+		Target  string `json:"target"`
+		Path    string `json:"path"`
+		Type    string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &a); err != nil {
+		return nativeToolResult{}, fmt.Errorf("参数解析失败: %w", err)
+	}
+	if strings.TrimSpace(a.Pattern) == "" {
+		return nativeToolResult{}, fmt.Errorf("search 需要 pattern 参数")
+	}
+	target := strings.ToLower(strings.TrimSpace(a.Target))
+	if target == "" {
+		target = "content"
+	}
+	switch target {
+	case "content":
+		return callNativeFileTool("grep", jsonMap("pattern", a.Pattern, "path", a.Path, "type", a.Type))
+	case "files":
+		return callNativeFileTool("glob", jsonMap("pattern", a.Pattern, "path", a.Path))
+	default:
+		return nativeToolResult{}, fmt.Errorf("target 只能是 content 或 files，收到 %q", a.Target)
+	}
 }
 
 // callNativeReadTool 把 read 的多种模式分发到底层文件/检索实现：

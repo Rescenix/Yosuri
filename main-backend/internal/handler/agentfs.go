@@ -268,10 +268,37 @@ func OnAfterWrite(fullName string, args map[string]any) {
 
 	sess.Seq++
 	store := newHistoryStore(sess.Project)
-	_, recordErr := store.RecordWrite(sess, opName(fullName), rel, fullName, before, after, existsBefore)
+	_, recordErr := store.RecordWrite(sess, opName(fullName), rel, fullName, before, after, existsBefore, patchTextFromArgs(fullName, args))
 	if recordErr != nil {
 		log.Printf("⚠️ AgentFS: 记录历史失败 %s: %v", rel, recordErr)
 	}
+}
+
+// patchTextFromArgs 从写工具参数里提取本次改动的补丁原文，供审计留档。
+// write 类的新内容就是 after 状态本身（blob 已存），不重复留档返回空；
+// edit/patch 类保留补丁/编辑参数原文——这是 after-before 之外的「意图」信息。
+func patchTextFromArgs(fullName string, args map[string]any) string {
+	switch fullName {
+	case "write", "write_file", "mcp__fs__write_file":
+		return ""
+	}
+	if pt, ok := args["patch_text"].(string); ok && pt != "" {
+		return pt // apply_patch 拆分出的单文件补丁（nativePatchWritableArgs 注入）
+	}
+	if p, ok := args["patch"].(string); ok && p != "" {
+		return p // patch 工具的补丁原文
+	}
+	if edits, ok := args["edits"]; ok && edits != nil {
+		if buf, err := json.Marshal(edits); err == nil {
+			return string(buf)
+		}
+	}
+	if old, ok1 := args["old_string"].(string); ok1 {
+		if nw, ok2 := args["new_string"].(string); ok2 {
+			return "old_string:\n" + old + "\nnew_string:\n" + nw
+		}
+	}
+	return ""
 }
 
 // opName 把工具名映射成写操作类型。
@@ -584,6 +611,43 @@ func AgentFSDiff(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"project": body.Project, "seq": body.Seq, "rel_path": a.RelPath, "diff": diff})
+}
+
+// AgentFSPatchText POST /api/agentfs/patch-text {project?, seq}
+// 返回该审计记录的补丁/参数原文（重放与审查用）。project 为空时用当前会话项目。
+func AgentFSPatchText(c *gin.Context) {
+	var body struct {
+		Project string `json:"project"`
+		Seq     int    `json:"seq"`
+	}
+	_ = c.BindJSON(&body)
+	if body.Seq <= 0 {
+		c.JSON(400, gin.H{"error": "seq 必填"})
+		return
+	}
+	if body.Project == "" {
+		agentfsMu.Lock()
+		if activeSession != nil {
+			body.Project = activeSession.Project
+		}
+		agentfsMu.Unlock()
+	}
+	if body.Project == "" {
+		c.JSON(400, gin.H{"error": "project 必填（当前无 AgentFS 会话）"})
+		return
+	}
+	store := newHistoryStore(body.Project)
+	a, err := store.Find(body.Seq)
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
+	}
+	text, err := store.PatchText(body.Seq)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"project": body.Project, "seq": body.Seq, "rel_path": a.RelPath, "op": a.Op, "patch_text": text})
 }
 
 // AgentFSRestore POST /api/agentfs/restore {project?, seq, before?}

@@ -200,7 +200,8 @@ var sensitiveWriteToolSet = map[string]bool{
 // isSensitiveFile 判定路径是否命中「敏感文件」名单：仓库门面文档（README*/
 // LICENSE）、依赖清单与锁文件、密钥凭据（.env*/证书/私钥/SSH）、协作规范
 // （AGENTS.md/CLAUDE.md/.cursorrules/.gitignore）。这些被整体覆写 = 信息丢失
-// 或安全风险。
+// 或安全风险。注意这是**写保护**名单（isSensitiveOverwrite 用），不是禁读名单；
+// 读取一律放行，密钥值由出口 maskSecretText 行内脱敏兜底（堵不如疏，09-14）。
 func isSensitiveFile(p string) bool {
 	base := strings.ToLower(filepath.Base(absAgainstRoot(p)))
 	// 仓库门面文档（覆盖四语 README.*）

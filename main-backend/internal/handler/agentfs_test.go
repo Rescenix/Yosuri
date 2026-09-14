@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -221,6 +222,113 @@ func TestCollectChangedFiles(t *testing.T) {
 	if got := collectChangedFiles(sess2); got != nil {
 		t.Errorf("无改动会话应返回 nil, got %+v", got)
 	}
+}
+
+// TestAgentFSPatchTextReplay 验证补丁原文留档与重放可用性：
+//  1. patch 工具落盘后审计行带 patch_ref，PatchText 取回的原文能被
+//     parseNativePatch 重新解析（即可原样重放）。
+//  2. write 工具不留档（新内容即 after blob），PatchText 退化为 after 内容。
+//  3. apply_patch 拆分参数（nativePatchWritableArgs）自带 patch_text 且可解析。
+func TestAgentFSPatchTextReplay(t *testing.T) {
+	tmpData := t.TempDir()
+	t.Setenv("RESCENE_DATA_DIR", tmpData)
+	t.Setenv("SHANXI_WORKDIR_STATE_FILE", filepath.Join(tmpData, "workdir.txt"))
+	tmpWork := t.TempDir()
+	if err := core.SetProjectRoot(tmpWork); err != nil {
+		t.Fatalf("SetProjectRoot: %v", err)
+	}
+
+	const project = "replay-project"
+	sess := OpenAgentFSSession(project, tmpWork)
+	if sess == nil {
+		t.Fatal("OpenAgentFSSession 返回 nil")
+	}
+	store := newHistoryStore(project)
+
+	// 1) patch 工具：先造老文件，再打补丁
+	abs := filepath.Join(tmpWork, "p.go")
+	if err := os.WriteFile(abs, []byte("line1\nline2\nline3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	patchRaw := "*** Begin Patch\n*** Update File: p.go\n@@\n-line2\n+line2-edited\n*** End Patch"
+	args := map[string]any{"path": "p.go", "patch": patchRaw}
+	OnBeforeWrite("patch", args)
+	if err := os.WriteFile(abs, []byte("line1\nline2-edited\nline3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	OnAfterWrite("patch", args)
+
+	rec, err := store.Find(sess.Seq)
+	if err != nil {
+		t.Fatalf("Find seq=%d: %v", sess.Seq, err)
+	}
+	if rec.PatchRef == "" {
+		t.Fatalf("patch 审计行应带 patch_ref，got 空")
+	}
+	got, err := store.PatchText(rec.Seq)
+	if err != nil {
+		t.Fatalf("PatchText: %v", err)
+	}
+	if got != patchRaw {
+		t.Errorf("PatchText = %q, want %q", got, patchRaw)
+	}
+	// 可重放性：取回的原文必须能重新解析成文件操作
+	ops, err := parseNativePatch(got)
+	if err != nil || len(ops) != 1 || ops[0].path != "p.go" {
+		t.Errorf("补丁原文重解析失败: ops=%+v err=%v", ops, err)
+	}
+
+	// 2) write 工具：不留档，PatchText 退化为 after 内容
+	wArgs := map[string]any{"path": "w.txt", "content": "fresh\n"}
+	OnBeforeWrite("write", wArgs)
+	if err := os.WriteFile(filepath.Join(tmpWork, "w.txt"), []byte("fresh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	OnAfterWrite("write", wArgs)
+	wRec, err := store.Find(sess.Seq)
+	if err != nil {
+		t.Fatalf("Find write seq: %v", err)
+	}
+	if wRec.PatchRef != "" {
+		t.Errorf("write 审计行不应有 patch_ref, got %q", wRec.PatchRef)
+	}
+	if wText, _ := store.PatchText(wRec.Seq); wText != "fresh\n" {
+		t.Errorf("write 的 PatchText 应退化为 after 内容, got %q", wText)
+	}
+
+	// 3) apply_patch 拆分参数自带可解析的单文件补丁
+	sub := `*** Begin Patch
+*** Add File: s.go
++package s
+*** End Patch`
+	splitArgsJSON := `{"patch":` + mustJSONString(t, sub) + `}`
+	split := nativePatchWritableArgs(splitArgsJSON)
+	if len(split) != 1 {
+		t.Fatalf("nativePatchWritableArgs = %+v, want 1 项", split)
+	}
+	pt, _ := split[0]["patch_text"].(string)
+	if pt == "" {
+		t.Fatalf("拆分参数应带 patch_text")
+	}
+	if sops, err := parseNativePatch(pt); err != nil || len(sops) != 1 || sops[0].path != "s.go" {
+		t.Errorf("patch_text 重解析失败: %+v err=%v", sops, err)
+	}
+
+	// RecordWrite 会异步触发 GC goroutine；GC 全程持 historyMu，
+	// 这里拿一次锁即等其收尾，否则 Windows 下 t.TempDir 的 RemoveAll
+	// 撞上正在重写的 audit.jsonl 报「not empty」。
+	historyMu.Lock()
+	historyMu.Unlock()
+}
+
+// mustJSONString 把 s 编码成 JSON 字符串字面量（含引号）。
+func mustJSONString(t *testing.T, s string) string {
+	t.Helper()
+	buf, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(buf)
 }
 
 // splitLines 按 \n 切分并清理末尾空行（与历史写入格式对齐）。

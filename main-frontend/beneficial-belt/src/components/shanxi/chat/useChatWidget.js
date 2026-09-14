@@ -2,7 +2,8 @@ import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 
 import { useWelcome } from '../composables/useWelcome.js'
 import { useAgentWorkflow } from '../composables/useAgentWorkflow.js'
-import { useAgentsStore } from '../composables/useAgents.js'
+import { useAgentsStore, refreshAgents } from '../composables/useAgents.js'
+import { rpCast, rpPrimary, isRp, setRp, rpLast } from '../composables/useRoleplay.js'
 import { useStatusPolling } from '../composables/useStatusPolling.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
 import { loadContextBreakdown } from '../composables/contextBreakdown.js'
@@ -31,6 +32,15 @@ export function useChatWidget(props) {
 )
 if (!localStorage.getItem('prism_session_id')) {
   localStorage.setItem('prism_session_id', sessionId.value)
+}
+
+// ── 角色扮演模式（会话级）──
+// rpCastIds：当前会话的扮演角色卡数组；空 = 默认 Agent（助手链路）。
+// rpPrimaryId：主扮演角色（第一张卡）。依赖 useRoleplay 的 rpMap ref。
+const rpCastIds = computed(() => rpCast(sessionId.value))
+const rpPrimaryId = computed(() => rpPrimary(sessionId.value))
+function setSessionRp(agentIds) {
+  setRp(sessionId.value, agentIds)
 }
 
 // 正在跑工作流的会话集合 + 有未决提问/审批的会话集合（多会话并行，各自独立亮灯）。
@@ -207,6 +217,19 @@ function watchInputClearance() {
     // 灯由实例 watch 维护：流启动即点亮（workflowOf 内 watch flowState.active→add）
     // 启动「目标会话」自己的工作流实例（并行：别的会话的流不受影响）
     const wf = workflowOf(sid)
+    // 角色扮演模式：cast 多角色同框，走 mode=rp 零工具链路（只留 Yosuri 的笔）。
+    // opts.rpTarget 是 @ 呼人的点名对象（角色名或 Yosuri），没有则默认主角色回应。
+    const cast = rpCast(sid)
+    if (cast.length > 0) {
+      wf.startCodeWorkflow(task, display, {
+        ...opts,
+        agentId: rpPrimary(sid),
+        rp: true,
+        rpCast: cast,
+        rpTarget: opts.rpTarget || '',
+      })
+      return
+    }
     const members = (opts && opts.groupIds) || agentStore.groupOf(sid)
     // 没挂群聊成员：单 Agent 老链路，不传 agent_id——后端不标 agent、
     // 历史不拼「【某某 说】」前缀（拼了模型会照着模仿，回复开头自己吐名牌）。
@@ -894,6 +917,8 @@ async function switchSession(id) {
     todoState, sendSteerMessage, pushSteerMessage,
     questionState, answerQuestion,
     agentStore,
+    // 角色扮演：当前会话的扮演角色列表（空 = 默认 Agent）+ 主角色 + 设定函数 + 上次选卡
+    rpCastIds, rpPrimaryId, setSessionRp, rpLast,
     toggleExpand, toggleChat, updateParams,
     groupedMessages, formatChatTime,
     kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,

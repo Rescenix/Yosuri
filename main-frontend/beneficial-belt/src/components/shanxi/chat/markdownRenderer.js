@@ -132,6 +132,57 @@ export function renderMarkdown(text, skipSanitize = false) {
   return cachedRender(text, skipSanitize)
 }
 
+// ── RP 酒馆台词染色（对模型任意说话格式宽容，不匹配就原样）──
+// 策略：不赌模型固定格式，用多模式正则抓「说话人标识」：
+//   1) 行首「名字：/名字说：/【名字】/ **名字**：」—— 命中即按名字染色
+//   2) 行首「引号台词」且没有名字 —— 沿用上一个说话人颜色（默认色兜底）
+//   3) 抓不到的台词保持原样 —— 永远不会误伤/破坏 markdown
+// 色相：cast 名单按索引均分色环（稳定可区分），名单外名字用字符串哈希。
+let rpDyeSpeakers = []
+export function setRpDyeSpeakers(names) {
+  rpDyeSpeakers = Array.isArray(names) ? names.filter(Boolean) : []
+}
+function rpDyeHue(name, idx) {
+  if (idx != null && idx >= 0) return Math.round((idx * 137.5) % 360)
+  let h = 0
+  for (const ch of String(name)) h = (h * 31 + ch.codePointAt(0)) % 360
+  return h
+}
+// 行首说话人：`名字`（1-12 字，无空格/引号/冒号，可带 ** 或 【】 壳）+ 可选说/道/喊/问等
+// + 分隔符（冒号【猫娘：…】或引号【猫娘"…"】都算），台词随行染色
+const RP_DYE_SPEAKER_RE = /^(\s*)((?:\*\*)?(?:【)?([^【】*：:\s"「]{1,12}?)(?:】)?(?:\*\*)?)(\s*(?:说|道|喊|问|答|笑道|嘀咕|叹气|低声|自言自语)?\s*)([：:]|[「“"])([\s\S]*)$/
+// 行首引号台词（无名字）：「…」/ "…" / “…”
+const RP_DYE_QUOTE_RE = /^(\s*)([「“"])([\s\S]*?)([」”"])$/
+function rpDyeLine(line, state) {
+  let m = line.match(RP_DYE_SPEAKER_RE)
+  if (m) {
+    const name = m[3].trim()
+    const idx = rpDyeSpeakers.indexOf(name)
+    const hue = rpDyeHue(name, idx)
+    state.last = name
+    const nameSpan = '<span class="rp-dye-name" style="color:hsl(' + hue + ' 68% 42%)">' + name + '</span>'
+    const sep = m[5]
+    const rest = m[6]
+    // 台词本身也染色（浅一档），内含 markdown 由 markdown-it 继续解析
+    return m[1] + nameSpan + '<span class="rp-dye" style="color:hsl(' + hue + ' 42% 34%)">' + m[4] + sep + rest + '</span>'
+  }
+  m = line.match(RP_DYE_QUOTE_RE)
+  if (m) {
+    const hue = state.last != null ? rpDyeHue(state.last, rpDyeSpeakers.indexOf(state.last)) : 220
+    return m[1] + '<span class="rp-dye" style="color:hsl(' + hue + ' 46% 34%)">' + m[2] + m[3] + m[4] + '</span>'
+  }
+  return line
+}
+function rpDyeText(src) {
+  if (!rpDyeSpeakers.length) return src
+  const state = { last: null }
+  return src.split('\n').map(function (line) { return rpDyeLine(line, state) }).join('\n')
+}
+// 供 ChatWidget/AgentWorkflowPanel 在 RP 会话调用的渲染入口：先染色再走标准管线
+export function renderRpMarkdown(text, skipSanitize = false) {
+  return renderMarkdown(rpDyeText(text), skipSanitize)
+}
+
 // ── mermaid 图表（嵌入聊天正文，不算交付文件）──
 // 渲染时先把 ```mermaid 围栏转成占位 div（图源码 base64 存 data 属性，躲开
 // DOMPurify 对 <svg> 的清洗——mermaid 的 SVG 带 style/foreignObject，sanitize

@@ -33,3 +33,28 @@ func agentIDFromCtx(ctx context.Context) string {
 	}
 	return ""
 }
+
+type rpCastCtxKey struct{}
+
+// withRPCast 把 RP 会话的 cast（多角色同框的角色卡 id 列表）塞进 ctx，
+// 供 rp_battle_start 工具开战时读（战斗要带全场角色上场，不是只带主卡）。
+func withRPCast(ctx context.Context, cast []string) context.Context {
+	var clean []string
+	for _, id := range cast {
+		if s := memorydir.SanitizeAgentID(id); s != "" {
+			clean = append(clean, s)
+		}
+	}
+	if len(clean) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, rpCastCtxKey{}, clean)
+}
+
+// rpCastFromCtx 取当前 RP 会话的 cast；无则空。
+func rpCastFromCtx(ctx context.Context) []string {
+	if v, ok := ctx.Value(rpCastCtxKey{}).([]string); ok {
+		return v
+	}
+	return nil
+}

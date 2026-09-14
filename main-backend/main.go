@@ -51,7 +51,12 @@ func main() {
 		OnStartup:         app.Startup,
 		OnShutdown:        app.Shutdown,
 		Bind:              []interface{}{app},
-		Windows:           &windows.Options{Theme: windows.SystemDefault},
+		Windows: &windows.Options{
+			Theme: windows.SystemDefault,
+			// 性能模式：低配/核显机器上关掉 WebView2 硬件加速，界面走软件渲染，
+			// 避免 GPU 进程重绘吃满 3D 引擎导致"带不动"。默认关，见 perf_config.go。
+			WebviewGpuIsDisabled: handler.GPUDisabled(),
+		},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId:               "com.rescenix.rescene-agent",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) { app.showWindow() },

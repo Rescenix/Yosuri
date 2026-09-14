@@ -1,6 +1,8 @@
 <template>
-  <!-- 可拖动的折角导航：默认 ┐ 形，避开输入区并压缩右下角占位。 -->
+  <!-- 可拖动的折角导航：默认 ┐ 形，避开输入区并压缩右下角占位。
+       RP 角色扮演会话中整条隐藏：公司/站点/星迹那些 tab 是工作区导航，演戏时不该出现。 -->
   <nav
+    v-if="!railHiddenByRP"
     class="app-tool-rail"
     :class="[`is-${railLayout}`, { dragging: railDragging, compact: railItems.length <= 4 }]"
     :style="railPositionStyle"
@@ -87,28 +89,23 @@ import DesktopFloatingMenu from './components/shanxi/chat/DesktopFloatingMenu.vu
 import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
 import OnboardingModal from './components/shanxi/chat/OnboardingModal.vue'
 import { useI18n, tr } from './composables/useI18n.js'
+import { railItemDefinitions } from './appNav.js'
 const { locale } = useI18n()
 
 
 const auth = useAuth()
 const route = useRoute()
 const router = useRouter()
+
+// 聊天页（Agent 或 RP）隐藏折角导航：公司/站点/星迹等 tab 是工作区导航，
+// 聊天时不该悬浮在界面上，收束到左侧折叠栏的「功能」悬浮菜单里。
+const railHiddenByRP = computed(() => route.path === '/chat')
 const showUpdate = ref(false)
 const updateInfo = ref(null)
 // 聚合 API 快捷入口：点开直接跳到设置弹窗的「聚合 API」tab。
 const showAggApi = ref(false)
 const RAIL_POSITION_KEY = 'app_tool_rail_position_v1'
 const RAIL_ITEMS_KEY = 'app_tool_rail_items_v1'
-const railItemDefinitions = [
-  { id: 'chat', label: tr('编码'), icon: 'mdi:code-tags', to: '/chat' },
-  { id: 'company', label: tr('Agent 公司'), icon: 'mdi:domain', to: '/company' },
-  { id: 'sites', label: tr('站点'), icon: 'mdi:web', to: '/sites' },
-  { id: 'publish', label: tr('网文创作'), icon: 'mdi:book-open-page-variant-outline', to: '/publish' },
-  { id: 'comic', label: tr('漫画创作'), icon: 'mdi:brush', to: '/comic' },
-  { id: 'game', label: tr('星迹游戏'), icon: 'mdi:gamepad-variant', to: '/game' },
-  { id: 'studio', label: tr('视频剪辑'), icon: 'mdi:movie-edit-outline', to: '/studio' },
-  { id: 'agg', label: tr('聚合 API'), icon: 'mdi:api' }
-]
 const railItems = ref([...railItemDefinitions])
 const railEditorOpen = ref(false)
 

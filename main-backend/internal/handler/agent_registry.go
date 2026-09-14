@@ -24,17 +24,72 @@ import (
 	"backend/internal/memorydir"
 )
 
+// AgentStats 人物参数：角色在世界里「处于什么状态」的数值。
+// 与 persona（角色是谁）不同，这些值会随剧情涨掉——受伤掉 HP、升级涨
+// 等级、买到装备、好感随互动变化。战斗引擎直接读它们。
+// 全 0 视为「未设定」：不显示血条、不进战斗，纯聊天 RP 不受影响。
+// 视觉沿用星迹风格：HP 条 + 护盾覆盖层 + MP 条 + 印记图标（只抄表现，不抄逻辑）。
+type AgentStats struct {
+	Level     int      `json:"level,omitempty"`
+	HP        int      `json:"hp,omitempty"`
+	MaxHP     int      `json:"maxHp,omitempty"`
+	MP        int      `json:"mp,omitempty"`
+	MaxMP     int      `json:"maxMp,omitempty"`
+	Shield    int      `json:"shield,omitempty"` // 护盾值（盖在 HP 条上的浅色层）
+	ATK       int      `json:"atk,omitempty"`
+	DEF       int      `json:"def,omitempty"`
+	SPD       int      `json:"spd,omitempty"`
+	MAG       int      `json:"mag,omitempty"`
+	Element   string   `json:"element,omitempty"` // 元素（fire/water/…，决定印记图标颜色）
+	Gold      int      `json:"gold,omitempty"`
+	Affection int      `json:"affection,omitempty"` // 对主角好感 0-100
+	Equipment []string `json:"equipment,omitempty"`
+	Title     string   `json:"title,omitempty"` // 称号/身份（"银剑骑士"）
+	// Marks 印记/效果（盾/中毒/印记…）：name + value，面板渲染成图标行。
+	Marks []CustomStat `json:"marks,omitempty"`
+	// Inventory 背包：战斗掉落/剧情获得的物品（name + 数量）。
+	Inventory []InvItem `json:"inventory,omitempty"`
+	// Custom 自定义参数：名字任意（灵力/san值/体力/声望…），值统一存字符串，
+	// 数值比较时尽力转 int/float，转不了就当文本。编排 Agent（Yosuri）用
+	// rp_set_stat 工具写它，用户也能在角色面板里手填。
+	Custom []CustomStat `json:"custom,omitempty"`
+}
+
+// InvItem 背包里的一格物品。
+type InvItem struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+	Icon  string `json:"icon,omitempty"` // 展示用 emoji（可空）
+	Desc  string `json:"desc,omitempty"` // 一句话说明
+}
+
+// CustomStat 一条自定义人物参数。
+type CustomStat struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// HasStats 是否设定过任何人物参数（全零 = 未设定）。
+func (s AgentStats) HasStats() bool {
+	return s.Level != 0 || s.MaxHP != 0 || s.HP != 0 || s.MaxMP != 0 || s.MP != 0 ||
+		s.Shield != 0 || s.ATK != 0 || s.DEF != 0 || s.SPD != 0 || s.MAG != 0 ||
+		s.Gold != 0 || s.Affection != 0 || s.Element != "" ||
+		len(s.Equipment) > 0 || s.Title != "" || len(s.Marks) > 0 || len(s.Inventory) > 0 || len(s.Custom) > 0
+}
+
 // AgentCard 一个 Agent 的角色卡（不含头像二进制，头像单独落文件）。
 type AgentCard struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Persona   string `json:"persona"`
-	Avatar    string `json:"avatar,omitempty"` // base64 dataURL，读接口时现拼
-	Icon      string `json:"icon,omitempty"`   // 无头像时的图标兜底（mdi:xxx）
-	Color     string `json:"color,omitempty"`  // 头像底色/名牌色
-	Character string `json:"character,omitempty"`
-	CreatedAt string `json:"created_at,omitempty"`
-	UpdatedAt string `json:"updated_at,omitempty"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Persona   string     `json:"persona"`
+	Avatar    string     `json:"avatar,omitempty"` // base64 dataURL，读接口时现拼
+	Icon      string     `json:"icon,omitempty"`   // 无头像时的图标兜底（mdi:xxx）
+	Color     string     `json:"color,omitempty"`  // 头像底色/名牌色
+	Character string     `json:"character,omitempty"`
+	Stats     AgentStats `json:"stats,omitempty"` // 人物参数（等级/血量/装备/好感）
+	Portrait  string     `json:"portrait,omitempty"`
+	CreatedAt string     `json:"created_at,omitempty"`
+	UpdatedAt string     `json:"updated_at,omitempty"`
 }
 
 var agentRegistry = struct {

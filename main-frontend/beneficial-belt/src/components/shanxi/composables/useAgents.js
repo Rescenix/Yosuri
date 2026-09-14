@@ -44,6 +44,15 @@ export async function loadAgents() {
   }
 }
 
+// refreshAgents 轻量轮询刷新：只拉列表换掉内存数组，不跑迁移/播种
+// （那些只在启动时做一次，轮询里跑会每 5 秒扫一遍 localStorage，纯浪费）。
+export async function refreshAgents() {
+  try {
+    const d = await req('/api/agents')
+    agents.value = d.agents || []
+  } catch { /* 轮询失败静默，下轮再试 */ }
+}
+
 // ── 旧版人设迁移（2026-09-11 人设→角色卡）────────────────────
 // 老用户的人设活在 localStorage：myPersonas（我的预设）、persona（当前生效）。
 // 改造后这套 UI 删了，必须把它们落成真实角色卡，否则数据留着也永远看不到。

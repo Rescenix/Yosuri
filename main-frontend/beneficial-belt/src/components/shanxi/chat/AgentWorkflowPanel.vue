@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-flow" :class="{ streaming: flow.status === 'running' }">
+  <div class="agent-flow" :class="{ streaming: flow.status === 'running' }" ref="flowRoot">
     <!-- 首条回复前的「正在思考」扫描线：不可折叠、无 chevron；首字一到（blockGroups 非空）自动消失 -->
     <div v-if="flow.status === 'running' && blockGroups.length === 0" class="flow-pending-scanline">
           <RoseParticleLoader :size="20" class="flow-pending-loader" />
@@ -10,12 +10,15 @@
       连续出现的「思考 + 工具调用」才收纳进同一个概要栏 + 可折叠时间线。
     -->
     <template v-for="(group, gIdx) in blockGroups" :key="gIdx">
-      <!-- 可直接见的回复文本 -->
+      <!-- 可直接见的回复文本：无 v-html！DOM 由 updateVisibleIntents watch 手动管理
+           （html 变了才写 innerHTML；fence 未闭合只增量 textContent）。刻意不用 v-html：
+           v-html 每次 patch 都重写 innerHTML，且 v-if 分支切换会销毁重建 div——多个
+           代码块场景每个新代码块开启都整段重写 = 抖动。div 恒存在、节点复用、永不销毁。 -->
       <div
         v-if="group.type === 'visible'"
         class="flow-intent markdown-body"
         :class="{ 'flow-retry-note': group.retryNote }"
-        v-html="group.html"
+        data-intent-visible="1"
       ></div>
 
       <!-- 单步思考：不收束，直接平铺（思考中展开，结束后自动收起+显示耗时） -->
@@ -30,6 +33,75 @@
               </div>
               <div v-if="thinkIsOpen(`single-${gIdx}`, group.block)" class="flow-detail flow-thinking-detail">
                 <div class="flow-thinking-text">{{ group.block.text }}</div>
+              </div>
+            </div>
+
+      <!-- patch 编辑结果：平铺不收束（diff 是交付物，收进概要组会被折叠看不见） -->
+            <div v-else-if="group.type === 'tool-pinned'" class="flow-tool flow-tool-pinned">
+              <div class="flow-row-head" @click.stop="group.block.expanded = !group.block.expanded">
+                <RoseParticleLoader v-if="group.block.status === 'running'" :size="14" :particle-count="28" class="flow-row-icon icon-tool icon-tool-live" />
+                <Icon v-else icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
+                <span class="flow-tool-label" :class="{ 'is-running': group.block.status === 'running' }">{{ actionText(group.block) }}</span>
+                <span v-if="diffCounts(group.block)" class="flow-tool-counts">
+                  <span class="flow-add">+{{ diffCounts(group.block).added }}</span>
+                  <span v-if="diffCounts(group.block).removed" class="flow-del">−{{ diffCounts(group.block).removed }}</span>
+                </span>
+                <span class="flow-spacer"></span>
+                <span class="flow-tool-badge" :class="'st-' + group.block.status">
+                  <span v-if="group.block.status === 'running'" class="flow-badge-dot"></span>{{ toolBadge(group.block) }}
+                </span>
+                <span class="flow-chevron" :class="{ open: group.block.expanded }">›</span>
+              </div>
+              <div v-if="group.block.expanded" class="flow-detail flow-tool-detail">
+                <div class="flow-tool-body">
+                  <div v-if="group.block.status === 'generating' && (isEdit(group.block.name) || isWrite(group.block.name))" class="flow-live-diff">
+                    <div
+                      v-for="row in livePreviewRows(group.block)"
+                      :key="`${row.type}-${row.no}`"
+                      class="flow-live-line"
+                      :class="'is-' + row.type"
+                    >
+                      <span class="flow-live-no">{{ row.no }}</span>
+                      <span class="flow-live-sign">{{ row.type === 'add' ? '+' : '−' }}</span>
+                      <code>{{ row.text || ' ' }}</code>
+                    </div>
+                  </div>
+                  <DiffViewer
+                    v-else-if="isEdit(group.block.name)"
+                    :old-content="editOld(group.block) || ''"
+                    :new-content="editNew(group.block) || ''"
+                    :path="filePath(group.block) || ''"
+                    :start-line="editStartLine(group.block)"
+                  />
+                  <DiffViewer
+                    v-else-if="isWrite(group.block.name)"
+                    old-content=""
+                    :new-content="fileContent(group.block) || ''"
+                    :path="filePath(group.block) || ''"
+                  />
+                  <div v-else-if="isRead(group.block.name)" class="flow-read">
+                    <div v-for="row in readRows(group.block)" :key="row.no" class="flow-read-line">
+                      <span class="flow-read-no">{{ row.no }}</span>
+                      <code class="flow-read-code">{{ row.text || ' ' }}</code>
+                    </div>
+                  </div>
+                  <div v-else-if="isSearch(group.block.name)" class="flow-search">
+                    <div v-for="(row, ri) in searchRows(group.block)" :key="ri" class="flow-search-row">
+                      <span class="flow-search-file" :title="row.file">{{ row.file }}</span>
+                      <span v-if="row.line" class="flow-search-line">{{ row.line }}</span>
+                      <code v-if="row.hit" class="flow-search-code">
+                        <span
+                          v-for="(s, si) in row.segments"
+                          :key="si"
+                          class="flow-search-seg"
+                          :class="{ 'is-hit': s.hit }"
+                        >{{ s.txt }}</span>
+                      </code>
+                      <code v-else class="flow-search-code">{{ row.file }}</code>
+                    </div>
+                  </div>
+                  <pre v-else class="flow-output">{{ toolBodyText(group.block) }}</pre>
+                </div>
               </div>
             </div>
 
@@ -99,12 +171,12 @@
           </span>
         </div>
         <video
-          :src="group.block.url"
-          controls
-          playsinline
-          preload="metadata"
-          class="flow-video-player"
-        ></video>
+                  :src="mediaBlobSrc(group.block.url)"
+                  controls
+                  playsinline
+                  preload="metadata"
+                  class="flow-video-player"
+                ></video>
         <div v-if="group.block.caption" class="flow-video-caption">{{ group.block.caption }}</div>
                 </div>
 
@@ -115,7 +187,7 @@
                     <span>{{ tr('生成音乐') }}</span>
                     <span v-if="group.block.size" class="flow-video-meta">{{ group.block.size }}</span>
                   </div>
-                  <audio :src="group.block.url" controls preload="metadata" class="flow-audio-player"></audio>
+                  <audio :src="mediaBlobSrc(group.block.url)" controls preload="metadata" class="flow-audio-player"></audio>
                   <div v-if="group.block.caption" class="flow-video-caption">{{ group.block.caption }}</div>
                 </div>
 
@@ -266,11 +338,27 @@
                       :path="filePath(b) || ''"
                     />
                     <div v-else-if="isRead(b.name)" class="flow-read">
-                      <div v-for="row in readRows(b)" :key="row.no" class="flow-read-line">
-                        <span class="flow-read-no">{{ row.no }}</span>
-                        <code class="flow-read-code">{{ row.text || ' ' }}</code>
-                      </div>
-                    </div>
+                                          <div v-for="row in readRows(b)" :key="row.no" class="flow-read-line">
+                                            <span class="flow-read-no">{{ row.no }}</span>
+                                            <code class="flow-read-code">{{ row.text || ' ' }}</code>
+                                          </div>
+                                        </div>
+                                        <!-- 搜索命中：文件:行号:内容 三栏 + 命中片段高亮（search/grep） -->
+                                        <div v-else-if="isSearch(b.name)" class="flow-search">
+                                          <div v-for="(row, ri) in searchRows(b)" :key="ri" class="flow-search-row">
+                                            <span class="flow-search-file" :title="row.file">{{ row.file }}</span>
+                                            <span v-if="row.line" class="flow-search-line">{{ row.line }}</span>
+                                            <code v-if="row.hit" class="flow-search-code">
+                                              <span
+                                                v-for="(s, si) in row.segments"
+                                                :key="si"
+                                                class="flow-search-seg"
+                                                :class="{ 'is-hit': s.hit }"
+                                              >{{ s.txt }}</span>
+                                            </code>
+                                            <code v-else class="flow-search-code">{{ row.file }}</code>
+                                          </div>
+                                        </div>
                     <!-- arXiv 论文检索：可视化卡片预览 -->
                     <ArxivPaperCard v-else-if="b.name === 'arxiv_search'" :output="b.output || ''" />
                     <pre v-else class="flow-output">{{ toolBodyText(b) }}</pre>
@@ -333,52 +421,42 @@
               <b class="flow-changed-add">+{{ f.added || 0 }}</b>
               <b class="flow-changed-del">−{{ f.removed || 0 }}</b>
             </span>
-            <button type="button" class="flow-changed-btn audit" :disabled="f.audit && f.audit.loading" @click="auditChangedFile(f)">
-              <Icon icon="mdi:shield-search" width="12" /> {{ (f.audit && f.audit.loading) ? tr('审查中…') : tr('审查') }}
-            </button>
             <button type="button" class="flow-changed-btn" :disabled="changedRestoring" @click="previewChangedFile(f)">
-              <Icon icon="mdi:eye-outline" width="12" /> {{ tr('预览') }}
-            </button>
+                          <Icon icon="mdi:eye-outline" width="12" /> {{ tr('预览') }}
+                        </button>
+                        <button type="button" class="flow-changed-btn" :disabled="changedRestoring" @click="showChangedPatch(f)">
+                          <Icon icon="mdi:file-restore-outline" width="12" /> {{ tr('原文') }}
+                        </button>
             <button type="button" class="flow-changed-btn danger" :disabled="changedRestoring" @click="restoreChangedFile(f)">
-              <Icon icon="mdi:undo" width="12" /> {{ tr('回退') }}
-            </button>
-          </div>
-          <!-- 该文件的审查结果：独立免费模型调用挑这一处 diff 的潜在问题 -->
-          <div v-if="f.audit && f.audit.error" class="flow-audit-error">{{ f.audit.error }}</div>
-          <div v-if="f.audit && f.audit.findings" class="flow-audit-card">
-            <div class="flow-audit-title">
-              <Icon icon="mdi:shield-search" width="13" />
-              <span>{{ tr('独立审查') }}</span>
-              <span v-if="f.audit.findings.length" class="flow-audit-count">{{ f.audit.findings.length }}{{ tr('个潜在问题') }}</span>
-            </div>
-            <div v-if="!f.audit.findings.length" class="flow-audit-empty">{{ tr('未发现潜在问题') }}</div>
-            <div v-else class="flow-audit-list">
-              <div v-for="(a, ai) in f.audit.findings" :key="ai" class="flow-audit-row">
-                <span class="flow-audit-sev" :class="'sev-' + a.severity">{{ sevLabel(a.severity) }}</span>
-                <div class="flow-audit-body">
-                  <div class="flow-audit-issue">{{ a.issue }}</div>
-                  <div v-if="a.hint" class="flow-audit-hint">{{ a.hint }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-if="changedMsg" class="flow-changed-msg" :class="{ error: changedMsgErr }">{{ changedMsg }}</div>
-      <!-- 预览 diff（点「预览」后内嵌展开，像工具 diff 一样） -->
-      <div v-if="changedDiffOpen" class="flow-changed-diff">
-        <div v-if="changedDiffLoading" class="flow-changed-state">{{ tr('正在读取快照…') }}</div>
-        <div v-else-if="changedDiffError" class="flow-changed-state error">{{ changedDiffError }}</div>
-        <div v-else-if="changedDiffLines.length" class="flow-changed-code">
-          <div v-for="(l, li) in changedDiffLines" :key="li" class="flow-changed-code-line" :class="l.kind">
-                      <code>{{ l.text || ' ' }}</code>
-          </div>
-        </div>
-        <div v-else class="flow-changed-state">{{ tr('该文件没有可显示的文本差异') }}</div>
-      </div>
-    </div>
-  </div>
-  <!-- 回退确认弹窗（轻量模态，替代原生 window.confirm） -->
+                          <Icon icon="mdi:undo" width="12" /> {{ tr('回退') }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="changedMsg" class="flow-changed-msg" :class="{ error: changedMsgErr }">{{ changedMsg }}</div>
+                  <!-- 预览 diff（点「预览」后内嵌展开，像工具 diff 一样） -->
+                  <div v-if="changedDiffOpen" class="flow-changed-diff">
+                    <div v-if="changedDiffLoading" class="flow-changed-state">{{ tr('正在读取快照…') }}</div>
+                    <div v-else-if="changedDiffError" class="flow-changed-state error">{{ changedDiffError }}</div>
+                    <div v-else-if="changedDiffLines.length" class="flow-changed-code">
+                      <div v-for="(l, li) in changedDiffLines" :key="li" class="flow-changed-code-line" :class="l.kind">
+                        <code>{{ l.text || ' ' }}</code>
+                      </div>
+                    </div>
+                    <div v-else class="flow-changed-state">{{ tr('该文件没有可显示的文本差异') }}</div>
+                  </div>
+                  <!-- 补丁原文（点「原文」后内嵌展开：本次改动的原始 patch/参数，可追溯可重放） -->
+                  <div v-if="changedPatchOpen" class="flow-changed-patch">
+                    <div v-if="changedPatchLoading" class="flow-changed-state">{{ tr('正在读取原文…') }}</div>
+                    <div v-else-if="changedPatchError" class="flow-changed-state error">{{ changedPatchError }}</div>
+                    <div v-else-if="changedPatchRaw" class="flow-changed-patch-code">
+                      <pre><code>{{ changedPatchRaw }}</code></pre>
+                    </div>
+                    <div v-else class="flow-changed-state">{{ tr('该快照没有留档原文（可能是旧记录或纯写文件）') }}</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <!-- 回退确认弹窗（轻量模态，替代原生 window.confirm） -->
   <Teleport to="body">
     <div v-if="confirmRestoreTarget" class="confirm-overlay" @click.self="confirmRestoreTarget = null">
       <div class="confirm-dialog">
@@ -393,13 +471,13 @@
 </template>
 
 <script setup>
-import { reactive, computed, ref, watch, nextTick, onUnmounted } from 'vue'
+import { reactive, computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
 import ArxivPaperCard from './ArxivPaperCard.vue'
 import RoseParticleLoader from './RoseParticleLoader.vue'
-import { renderMarkdown } from './markdownRenderer.js'
+import { renderMarkdown, renderRpMarkdown } from './markdownRenderer.js'
 import { requestPreview } from '../composables/previewBus.js'
 // 桌面版页面源是 https://wails.localhost，<a href> 原生加载不走 fetch 桥，
 // 下载/预览链接必须绝对化到后端 http 源（详见 desktopTransport.js）。
@@ -501,6 +579,10 @@ const changedDiffOpen = ref(false)
 const changedDiffLoading = ref(false)
 const changedDiffError = ref('')
 const changedDiffRaw = ref('')
+const changedPatchOpen = ref(false)
+const changedPatchLoading = ref(false)
+const changedPatchError = ref('')
+const changedPatchRaw = ref('')
 const changedMsg = ref('')
 const changedMsgErr = ref(false)
 const changedRestoring = ref(false)
@@ -518,44 +600,9 @@ function currentProjectName() {
     }
   } catch {}
   return ''
-}
-
-// 审查按钮（每个改动文件一个）：拉该文件本次 diff，交给后端独立免费模型审查，
-// 挑这一处改动的潜在问题。结果挂在 f.audit 上内联渲染。
-async function auditChangedFile(f) {
-  if (!f || !f.first_seq) return
-  if (f.audit && f.audit.loading) return
-  if (!f.audit) f.audit = { loading: false, findings: null, error: '' }
-  f.audit.loading = true
-  f.audit.error = ''
-  try {
-    const dres = await fetch('/api/agentfs/diff', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: '', seq: f.first_seq })
-    })
-    const ddata = await dres.json()
-    if (!dres.ok) throw new Error(ddata.error || tr('Diff 读取失败'))
-    const ares = await fetch('/api/code/workflow/audit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: f.rel_path, diff: ddata.diff || '' })
-    })
-    const adata = await ares.json().catch(() => ({}))
-    if (!ares.ok) throw new Error(adata.error || (tr('审查失败 (') + ares.status + ')'))
-    f.audit.findings = Array.isArray(adata.findings) ? adata.findings : []
-  } catch (err) {
-    f.audit.error = err.message || tr('审查请求失败，请重试')
-  } finally {
-    f.audit.loading = false
   }
-}
 
-function sevLabel(s) {
-  return s === 'high' ? tr('高') : s === 'low' ? tr('低') : tr('中')
-}
-
-// diff 原始文本 → 行数组（保留行首 +/− 符号作为增删标记，不做红绿双重显示）
+  // diff 原始文本 → 行数组（保留行首 +/− 符号作为增删标记，不做红绿双重显示）
 const changedDiffLines = computed(() => {
   const rows = []
   for (const line of changedDiffRaw.value.split('\n')) {
@@ -595,6 +642,35 @@ async function previewChangedFile(f) {
     changedDiffError.value = err.message || tr('无法读取该快照')
   } finally {
     changedDiffLoading.value = false
+  }
+}
+
+async function showChangedPatch(f) {
+  if (!f || !f.first_seq) return
+  // 已展开 → 再次点击收回
+  if (changedPatchOpen.value) {
+    changedPatchOpen.value = false
+    changedPatchRaw.value = ''
+    return
+  }
+  changedPatchOpen.value = true
+  changedPatchLoading.value = true
+  changedPatchError.value = ''
+  changedPatchRaw.value = ''
+  try {
+    const res = await fetch('/api/agentfs/patch-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // project 留空：后端自动用当前 AgentFS 会话的项目
+      body: JSON.stringify({ project: '', seq: f.first_seq })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || (tr('原文读取失败 (') + res.status + ')'))
+    changedPatchRaw.value = data.patch_text || ''
+  } catch (err) {
+    changedPatchError.value = err.message || tr('无法读取该快照的原文')
+  } finally {
+    changedPatchLoading.value = false
   }
 }
 
@@ -645,6 +721,78 @@ async function doRestore() {
 // 「最后几个词生成一半卡住、恢复才显示」。下面的尾随定时器补上那一帧。
 const intentFlushTick = ref(0)
 const intentFlushTimers = new Map() // block 对象 -> timer；同一 block 只排一个
+// 流式半截判断：``` 或 ~~~ 围栏出现奇数次 = 未闭合 = 模型正在写代码块。
+// 与 markdownRenderer 的 CODE_SPLIT_RE / fixCjkEmphasis「奇数=流式半截」同一启发式。
+function inOpenFence(text) {
+  if (!text) return false
+  let fences = 0
+  for (const m of String(text).matchAll(/```|`{3,}|~{3,}/g)) fences++
+  return fences % 2 === 1
+}
+// 取未闭合 fence 之后的纯代码内容（去掉 ```lang 行）。markdown-it 会把未闭合
+// fence 到文末全部渲染进同一个 <pre>，所以增量更新只需替换最后一个 pre 的文本。
+function extractOpenFenceCode(text) {
+  if (!text) return ''
+  let lastIdx = -1, lastLen = 0
+  for (const m of String(text).matchAll(/```|`{3,}|~{3,}/g)) { lastIdx = m.index; lastLen = m[0].length }
+  if (lastIdx === -1) return ''
+  let code = text.slice(lastIdx + lastLen)
+  const nl = code.indexOf('\n')
+  return nl !== -1 ? code.slice(nl + 1) : ''
+}
+// ── intent 可见正文的 DOM 管理（取代 v-html）──
+// v-html 每次 patch 都无条件重写 innerHTML；v-if 分支切换销毁重建 div。
+// 两者叠加 = 多个代码块场景每个新代码块开启都整段重写 → 抖动。
+// 这里 div 恒存在（节点复用、dataset 保留），写入规则：
+//   fence 未闭合（_prevOdd）→ innerHTML 只写首次，之后仅增量最后一个 <pre> 的
+//     textContent（Text 节点平滑增长，DOM 永不销毁重建）
+//   fence 闭合 / 普通文本 → html 变了才写 innerHTML（一次成型，不重复写）
+const flowRoot = ref(null)
+function updateVisibleIntents() {
+  const root = flowRoot.value
+  if (!root) return
+  // 必须在组件根内查找：document 全局查找会把历史消息/其它实例的
+  // data-intent-visible div 全捞进来，oi 顺序错位 → 当前 intent 写入失败 → 正文空白
+  const els = root.querySelectorAll('.flow-intent[data-intent-visible="1"]')
+  if (!els.length) return
+  let oi = 0
+  for (const b of props.flow?.blocks || []) {
+    if (b.type !== 'intent') continue
+    const el = els[oi++]
+    if (!el) continue
+    const html = b._cachedHtml || ''
+    if (b._prevOdd) {
+      // 首次进入未闭合：写入 markdown 渲染结果（含未闭合 pre）
+      if (el.dataset.inited !== '1') {
+        el.innerHTML = html
+        el.dataset.inited = '1'
+        el.dataset.lastHtml = html
+      }
+      // 之后只增量最后一个 pre（markdown-it 把未闭合 fence 到文末全渲染进它）
+      const pres = el.querySelectorAll('pre')
+      if (pres.length) {
+        const code = pres[pres.length - 1].querySelector('code')
+        if (code) {
+          const next = extractOpenFenceCode(b._openFenceText || '')
+          if (code.textContent !== next) code.textContent = next
+        }
+      }
+    } else if (el.dataset.lastHtml !== html) {
+      // 闭合 / 普通文本：html 变了才写，一次成型
+      el.innerHTML = html
+      el.dataset.lastHtml = html
+      el.dataset.inited = '1'
+    }
+  }
+}
+watch(
+  [() => props.flow?.blocks, intentFlushTick],
+  () => { nextTick(updateVisibleIntents) },
+  { deep: true, immediate: true }
+)
+// 挂载后补一次：历史消息加载时 blocks 可能不再变化，immediate 时 DOM 未就绪，
+// 靠这里把已渲染的 visible 组写进内容
+onMounted(() => { nextTick(updateVisibleIntents) })
 function scheduleIntentFlush(b, delay) {
   if (intentFlushTimers.has(b)) return
   const t = setTimeout(() => {
@@ -666,7 +814,11 @@ const blockGroups = computed(() => {
   if (streaming) {
     let current = null
     for (const b of blocks) {
-      if (b.type === 'tool' && b.name !== 'web_search') {
+      if (b.type === 'tool' && b.name === 'patch') {
+        // patch 编辑结果平铺不收束：diff 是交付物，收进概要组被折叠看不见
+        if (current) { groups.push(current); current = null }
+        groups.push({ type: 'tool-pinned', block: b })
+      } else if (b.type === 'tool' && b.name !== 'web_search') {
         if (!current || current.type === 'visible' || current.type === 'single-thinking' || current.type === 'search-tool') {
           if (current) groups.push(current)
           current = { type: 'summary', blocks: [b] }
@@ -679,16 +831,39 @@ const blockGroups = computed(() => {
           current = null
         }
         if (b.type === 'intent') {
-            const now = Date.now()
-            const throttled = b._cachedAt && (now - b._cachedAt < 100)
-            if (throttled) {
-              scheduleIntentFlush(b, 100 - (now - b._cachedAt))
-            } else if (b.text !== b._cachedText) {
-              b._cachedHtml = renderMarkdown(b.text, true)
-              b._cachedText = b.text
-              b._cachedAt = now
+            // 流式代码块增量渲染状态机：
+            //   fence 奇数（未闭合）= 正在写代码 → 首次进入全量渲染一次（markdown-it
+            //     把未闭合 fence 渲染成 <pre>，围栏不显示），之后【跳过 v-html 重渲染】，
+            //     由下方的增量 watch 只更新该 pre 的 textContent（Text 节点平滑增长，
+            //     DOM 不销毁重建 = 消除果冻抖动/抽搐）。
+            //   fence 偶数（闭合）= 一次全量 markdown 渲染成型。
+            const openFence = inOpenFence(b.text)
+            if (openFence) {
+              if (!b._prevOdd) {
+                b._cachedHtml = renderRpMarkdown(b.text, true)
+                b._cachedText = b.text
+              }
+              b._prevOdd = true
+              b._openFenceText = b.text
+              groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, openFence: true, retryNote: !!b.retryNote })
+            } else {
+              if (b._prevOdd) {
+                b._cachedHtml = renderRpMarkdown(b.text, true)
+                b._cachedText = b.text
+                b._cachedAt = Date.now()
+              }
+              b._prevOdd = false
+              const now = Date.now()
+              const throttled = b._cachedAt && (now - b._cachedAt < 100)
+              if (throttled) {
+                scheduleIntentFlush(b, 100 - (now - b._cachedAt))
+              } else if (b.text !== b._cachedText) {
+                b._cachedHtml = renderRpMarkdown(b.text, true)
+                b._cachedText = b.text
+                b._cachedAt = now
+              }
+              groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
             }
-            groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
         } else if (b.type === 'thinking') {
           groups.push({ type: 'single-thinking', block: b })
         } else if (b.type === 'question') {
@@ -697,6 +872,10 @@ const blockGroups = computed(() => {
           groups.push({ type: 'image', block: b })
         } else if (b.type === 'video') {
           groups.push({ type: 'video', block: b })
+        } else if (b.type === 'audio') {
+          // 音乐块（music_generate 产物）。09-14 内嵌不了的真正根因：push 了
+          // audio 块但这里漏了映射分支，块进了 flow 却永远进不了渲染分组。
+          groups.push({ type: 'audio', block: b })
         } else if (b.type === 'file') {
           groups.push({ type: 'file', block: b })
         } else if (b.type === 'chart') {
@@ -738,7 +917,11 @@ const blockGroups = computed(() => {
     }
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i]
-    if (b.type === 'tool' && b.name !== 'web_search') {
+    if (b.type === 'tool' && b.name === 'patch') {
+      // patch 编辑结果平铺不收束（diff 是交付物）
+      flushProcess()
+      groups.push({ type: 'tool-pinned', block: b })
+    } else if (b.type === 'tool' && b.name !== 'web_search') {
       processBlocks.push(b)
     } else {
       if (b.type === 'intent') {
@@ -749,7 +932,7 @@ const blockGroups = computed(() => {
           if (throttled) {
             scheduleIntentFlush(b, 100 - (now - b._cachedAt))
           } else if (b.text !== b._cachedText) {
-            b._cachedHtml = renderMarkdown(b.text, true)
+            b._cachedHtml = renderRpMarkdown(b.text, true)
             b._cachedText = b.text
             b._cachedAt = now
           }
@@ -768,6 +951,11 @@ const blockGroups = computed(() => {
       } else if (b.type === 'video') {
         flushProcess()
         groups.push({ type: 'video', block: b })
+      } else if (b.type === 'audio') {
+        // 收尾收束里同样要有 audio 分支：否则 audio 块不匹配任何分支，
+        // 工作流一 completed 音乐块就凭空消失（流式中可见，收尾后没了）。
+        flushProcess()
+        groups.push({ type: 'audio', block: b })
       } else if (b.type === 'file') {
         flushProcess()
         groups.push({ type: 'file', block: b })
@@ -910,9 +1098,8 @@ function fmtMs(ms) {
   if (!ms || ms < 0) return ''
   return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's'
 }
-// 状态徽章文案：完成带耗时、进行中实时跳动、失败。
-// 长命令（配音/合成/下载）干等最像卡死：running 时徽章显示实时秒数，
-// 超过 20s 切「仍在执行」文案，明确告诉用户没卡、还在跑。
+// 状态徽章：不加「完成/失败」文字——状态用颜色表达（st-ok 绿 / st-error 红），
+// 徽章只放耗时秒数，干净不土。
 function toolBadge(b) {
   if (b.status === 'generating') {
     const chars = Number(b.generatedChars || 0)
@@ -922,11 +1109,15 @@ function toolBadge(b) {
     const live = fmtMs(nowTick.value ? (nowTick.value - (b.startTime || nowTick.value)) : 0)
     if (!live) return tr('进行中')
     const secs = (nowTick.value - b.startTime) / 1000
-    return secs >= 20 ? (tr('仍在执行 ') + live) : live
+    if (secs >= 20) {
+      const cap = runningCapLabel(b)
+      return tr('仍在执行 ') + live + (cap ? ' / ' + cap : '')
+    }
+    return live
   }
-  if (b.status === 'error') return tr('失败')
+  if (b.status === 'error') return ''
   const t = fmtMs(b.elapsedMs)
-  return t ? tr('完成 ') + t : tr('完成')
+  return t || ''
 }
 
 // ==================== 思考块折叠 ====================
@@ -991,7 +1182,8 @@ function thinkLabelText(b) {
   const t = fmtMs(b.elapsedMs)
   return t ? (tr('思考 ') + t) : tr('思考')
 }
-// 默认展开 = 仍在思考中；手工点过则按手工状态
+// 默认展开 = 仍在思考中；思考结束自动收起（用户确认这是预期行为）；
+// 手工点过则按手工状态
 function thinkIsOpen(key, b) {
   return thinkOpen[key] ?? !thinkDone(b)
 }
@@ -1020,6 +1212,14 @@ watch(
 // 一行白话，动词 + 对象，读起来跟正文一样（"编辑了 tools.go"），不靠图标传达语义。
 // 运行中把"了"换成"正在…"，这样连状态图标也省了。
 const VERBS = {
+  // 核心工具（2026-09-14 工具面收敛后的新名，前端渲染器必须同步认）
+  read: tr('读取'),
+  search: tr('搜索'),
+  write: tr('写入'),
+  patch: tr('编辑'),
+  remove: tr('删除'),
+  bash: tr('执行命令'),
+  // 旧工具名（legacy，历史消息仍会渲染到）
   read_file: tr('读取'),
   grep: tr('搜索'),
   glob: tr('查找文件'),
@@ -1122,14 +1322,52 @@ function computeDiffCounts(b) {
   return (added || removed) ? { added, removed } : null
 }
 
-function isEdit(name) { return name === 'edit_file' || name === 'mcp__fs__edit_file' }
+function isEdit(name) { return name === 'patch' || name === 'edit_file' || name === 'mcp__fs__edit_file' }
 function isWrite(name) {
-  return name === 'write_file' || name === 'mcp__fs__write_file' ||
+  return name === 'write' || name === 'write_file' || name === 'mcp__fs__write_file' ||
     name === 'mcp__fs__create_file' || name === 'inject_preview_js'
 }
 function isRead(name) {
-  return name === 'read_file' || name === 'mcp__fs__read_file' ||
+  return name === 'read' || name === 'read_file' || name === 'mcp__fs__read_file' ||
     name === 'mcp__fs__read_text_file' || name === 'mcp__grep__read_range'
+}
+// 独立搜索工具 search（target=content/files）与 legacy grep：输出 文件:行号:匹配行
+function isSearch(name) {
+  return name === 'search' || name === 'grep'
+}
+// search 结果解析：content 命中行切出 文件/行号/内容 三栏，命中片段标亮；
+// files 模式（纯路径列表）整行当文件路径展示。
+function searchRows(b) {
+  const raw = b.output || ''
+  if (!raw) return []
+  const pattern = (b.args && (b.args.pattern || '')) || ''
+  const rows = []
+  for (const line of raw.split('\n')) {
+    if (!line) continue
+    const m = /^(.+):(\d+):(.*)$/.exec(line)
+    if (m) {
+      rows.push({ file: m[1], line: m[2], text: m[3], hit: true, segments: searchSegments(m[3], pattern) })
+    } else {
+      rows.push({ file: line, line: '', text: '', hit: false, segments: [] })
+    }
+  }
+  return rows
+}
+// 把匹配行按搜索 pattern 切成 命中/未命中 片段（正则非法时整行算未命中）。
+// 不用 v-html 拼接 <mark>，纯数据分段渲染，躲开 XSS。
+function searchSegments(text, pattern) {
+  if (!pattern || !text) return [{ hit: false, txt: text || '' }]
+  let re
+  try { re = new RegExp(pattern, 'gi') } catch { return [{ hit: false, txt: text }] }
+  const out = []
+  let last = 0
+  for (const m of text.matchAll(re)) {
+    if (m.index > last) out.push({ hit: false, txt: text.slice(last, m.index) })
+    out.push({ hit: true, txt: m[0] })
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push({ hit: false, txt: text.slice(last) })
+  return out.length ? out : [{ hit: false, txt: text }]
 }
 // Firecrawl 联网搜索的 web_search 工具卡片（工具结果 URL 由后端 result 事件透出）
 function isWebSearch(name) {
@@ -1246,21 +1484,29 @@ function readRangeLabel(b) {
   const tail = parseInt(a.tail, 10)
   const s = parseInt(a.start ?? a.start_line, 10)
   const e = parseInt(a.end ?? a.end_line, 10)
+  // 核心 read 工具（2026-09-14）：offset = 起始行号（1-indexed），limit = 行数
+  // 展示用「第 X–Y 行」白话，不暴露 offset/limit 工程参数（目标用户含小学生）
+  const o = parseInt(b.name === 'read' ? a.offset : undefined, 10)
+  const l = parseInt(b.name === 'read' ? a.limit : undefined, 10)
+  if (Number.isFinite(o)) {
+    const last = Number.isFinite(l) ? o + l - 1 : o + 199
+    return last > o ? tr('第 ') + o + tr('–') + last + tr(' 行') : tr('第 ') + o + tr(' 行')
+  }
   // read_range 的元信息行 "# path 第 X-Y 行（共 N 行）"：X=真实起点, Y=真实终点
   // 只有成功时才有元信息行，失败时看 agent 传的参数
   if (b.status !== 'error' && b.output) {
     const metaMatch = /^#\s.+\s第\s(\d+)-(\d+)\s行/.exec(b.output.split('\n')[0] || '')
     if (metaMatch) {
       const ms = parseInt(metaMatch[1], 10), me = parseInt(metaMatch[2], 10)
-      if (Number.isFinite(ms) && Number.isFinite(me)) return `offset=${ms}, limit=${me - ms + 1}`
+      if (Number.isFinite(ms) && Number.isFinite(me)) return tr('第 ') + ms + tr('–') + me + tr(' 行')
     }
   }
-  if (Number.isFinite(head)) return `offset=0, limit=${head}`
-  if (Number.isFinite(tail)) return `offset=-${tail}, limit=${tail}`
-  if (Number.isFinite(s) && Number.isFinite(e)) return `offset=${s}, limit=${e - s + 1}`
-  if (Number.isFinite(s)) return `offset=${s}, limit=400`
-  if (a.mode === 'outline') return 'offset=0, limit=outline'
-  return 'offset=0, limit=full'
+  if (Number.isFinite(head)) return tr('开头 ') + head + tr(' 行')
+  if (Number.isFinite(tail)) return tr('末尾 ') + tail + tr(' 行')
+  if (Number.isFinite(s) && Number.isFinite(e)) return tr('第 ') + s + tr('–') + e + tr(' 行')
+  if (Number.isFinite(s)) return tr('第 ') + s + tr(' 行起')
+  if (a.mode === 'outline') return tr('大纲')
+  return tr('全文')
 }
 
 function compactChars(n) {
@@ -1378,10 +1624,72 @@ function editStartLine(b) {
 }
 
 function toolBodyText(b) {
-  const out = b.output || (b.status === 'running' ? tr('执行中…') : tr('(无输出)'))
-  if (b.name === 'execute_command') return `$ ${b.args.command || ''}\n\n${out}`
+  // 执行中文案接上 nowTick 实时计时（250ms 跳动，与徽章同源）：干等的长命令
+  // 看到「执行中 12.4s」比死的「执行中…」有安全感，不会以为是卡死（09-14）。
+  // 同时带出 timeout 上限：bash 的 args.timeout 是模型传的（没传=后端默认 120s），
+  // 用户知道最坏等多久才不会被「一直转」整慌。
+  let out = b.output
+  if (!out && b.status === 'running') {
+    const live = (nowTick.value || Date.now()) - (b.startTime || Date.now())
+    if (live > 0) {
+      const cap = runningCapLabel(b)
+      out = tr('执行中 ') + fmtMs(live) + (cap ? tr(' · 最多 ') + cap : '')
+    } else {
+      out = tr('执行中…')
+    }
+  }
+  if (!out) out = tr('(无输出)')
+  if (b.name === 'execute_command' || b.name === 'bash') return `$ ${b.args.command || ''}\n\n${out}`
   if (b.name === 'dispatch_agent') return (tr('任务：') + b.args.task || '' + '\n\n' + out)
   return out
+}
+
+// ==================== 媒体 blob 本地播放（09-14） ====================
+// Wails 沙箱里 <audio>/<video> 直接加载 http://127.0.0.1 媒体 = 混合内容被 Chromium
+// 拦（页面是 https://wails.localhost）。正解：fetch 桥（聊天全程在走，天然可用）把
+// 音频/视频拉成 blob → URL.createObjectURL 页面内协议，免疫混合内容/跨源。
+// 结果按原始 url 缓存；mediaBlobTick 驱动模板在加载完成后重新取 src。
+const mediaBlobCache = new Map() // 原始相对路径 -> objectURL
+const mediaBlobTick = ref(0)
+function mediaBlobSrc(rawUrl) {
+  void mediaBlobTick.value // 建立响应式依赖：fetch 完成后 tick++ 驱动模板重新取 src
+  if (!rawUrl) return ''
+  const cached = mediaBlobCache.get(rawUrl)
+  if (cached) return cached
+  if (mediaBlobCache.has(rawUrl)) return '' // 加载中（占位，防并发重复拉）
+  mediaBlobCache.set(rawUrl, '')
+  const abs = backendURL(rawUrl)
+  fetch(abs)
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.blob()
+    })
+    .then(blob => {
+      const objUrl = URL.createObjectURL(blob)
+      mediaBlobCache.set(rawUrl, objUrl)
+      mediaBlobTick.value++
+    })
+    .catch(err => {
+      console.warn('[media] 加载失败:', abs, err)
+      mediaBlobCache.delete(rawUrl)
+      mediaBlobTick.value++
+    })
+  return ''
+}
+onUnmounted(() => {
+  for (const url of mediaBlobCache.values()) {
+    if (url) URL.revokeObjectURL(url)
+  }
+  mediaBlobCache.clear()
+})
+
+// 命令类工具的超时上限（秒）：模型显式传了 timeout 用它的，没传默认 120
+//（与后端 callNativeCommand 的默认一致）。非命令类返回空，不显示。
+function runningCapLabel(b) {
+  if (b.name !== 'bash' && b.name !== 'execute_command' && b.name !== 'run_command' && b.name !== 'run_task') return ''
+  const t = parseInt(b.args?.timeout, 10)
+  const secs = Number.isFinite(t) && t > 0 ? Math.min(t, 600) : 120
+  return secs + 's'
 }
 </script>
 
@@ -2318,6 +2626,56 @@ function toolBodyText(b) {
   white-space: pre-wrap;
   word-break: break-all;
 }
+/* 搜索结果卡片：文件:行号:内容 三栏 + 命中片段高亮（search/grep） */
+.flow-search {
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.flow-search-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+.flow-search-file {
+  flex-shrink: 0;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 6px;
+  color: var(--app-text-faint);
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 11.5px;
+}
+.flow-search-line {
+  flex-shrink: 0;
+  width: 38px;
+  text-align: right;
+  padding-right: 10px;
+  color: var(--app-text-faint);
+  user-select: none;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 11.5px;
+}
+.flow-search-code {
+  flex: 1;
+  min-width: 0;
+  color: var(--app-text);
+  background: transparent;
+  font-family: var(--app-mono-font, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.flow-search-seg.is-hit {
+  background: color-mix(in srgb, #e0a800 30%, transparent);
+  color: #7a5b00;
+  border-radius: 2px;
+  padding: 0 1px;
+}
 .flow-output {
   margin: 0;
   max-height: 320px;
@@ -2416,72 +2774,6 @@ function toolBodyText(b) {
 .flow-changed-item {
   display: flex;
   flex-direction: column;
-}
-.flow-audit-error {
-  margin-top: 6px;
-  font-size: 12.5px;
-  color: #c0392b;
-}
-.flow-audit-card {
-  margin-top: 6px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--app-border);
-  background: var(--app-surface-2);
-}
-.flow-audit-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--app-text);
-}
-.flow-audit-count {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--app-text-faint);
-}
-.flow-audit-empty {
-  margin-top: 6px;
-  font-size: 12.5px;
-  color: var(--app-text-faint);
-}
-.flow-audit-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
-}
-.flow-audit-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.flow-audit-sev {
-  flex-shrink: 0;
-  margin-top: 1px;
-  padding: 1px 7px;
-  font-size: 11.5px;
-  border-radius: 6px;
-  color: #fff;
-}
-.flow-audit-sev.sev-high { background: #d64545; }
-.flow-audit-sev.sev-medium { background: #e08a2e; }
-.flow-audit-sev.sev-low { background: #8a94a6; }
-.flow-audit-body { flex: 1; min-width: 0; }
-.flow-audit-issue {
-  font-size: 13px;
-  color: var(--app-text);
-  line-height: 1.5;
-  word-break: break-word;
-}
-.flow-audit-hint {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--app-text-faint);
-  line-height: 1.4;
-  word-break: break-word;
 }
 
 /* ============ 改动文件卡片（内嵌工作流底部） ============ */
@@ -2621,6 +2913,31 @@ function toolBodyText(b) {
   color: var(--app-text-faint);
   text-align: right;
   user-select: none;
+}
+/* 补丁原文区：与 diff 区同构的展开卡片（可追溯可重放） */
+.flow-changed-patch {
+  margin-top: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--app-surface-2);
+}
+.flow-changed-patch-code {
+  margin: 0;
+  padding: 10px 12px;
+}
+.flow-changed-patch-code pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--app-text);
+}
+.flow-changed-patch-code code {
+  font-family: Consolas, ui-monospace, 'Cascadia Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
 }
 
 /* 回退确认弹窗：Teleport 到 body 后没有 ChatWidget 的 scope id，

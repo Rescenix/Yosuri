@@ -2,9 +2,59 @@ package handler
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"backend/internal/ai/core"
 )
+
+// search 工具双模式回归：content 搜文件内容（文件:行号:匹配行），
+// files 按文件名 glob 匹配。用 isolateTestProjectRoot 隔离，不碰真实 workdir。
+func TestSearchToolContentAndFiles(t *testing.T) {
+	isolateTestProjectRoot(t)
+	dir := core.GetProjectRoot()
+
+	if err := os.WriteFile(filepath.Join(dir, "alpha.go"), []byte("package main\n\n// TODO: portal hook\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "beta.vue"), []byte("<template><p>hello</p></template>\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// content 模式：搜 TODO 应命中 alpha.go 且带  行号
+	content, err := callNativeSearchTool(`{"pattern":"TODO","target":"content"}`)
+	if err != nil {
+		t.Fatalf("content 搜索失败: %v", err)
+	}
+	if !strings.Contains(content.Text, "alpha.go") || !strings.Contains(content.Text, ":3:") {
+		t.Errorf("content 搜索应命中 alpha.go 且带行号:3，实际: %s", content.Text)
+	}
+
+	// files 模式：glob *.go 应只命中 alpha.go
+	files, err := callNativeSearchTool(`{"pattern":"*.go","target":"files"}`)
+	if err != nil {
+		t.Fatalf("files 搜索失败: %v", err)
+	}
+	if !strings.Contains(files.Text, "alpha.go") || strings.Contains(files.Text, "beta.vue") {
+		t.Errorf("files 搜索应命中 alpha.go 且不含 beta.vue，实际: %s", files.Text)
+	}
+
+	// target 缺省默认 content
+	def, err := callNativeSearchTool(`{"pattern":"hello"}`)
+	if err != nil {
+		t.Fatalf("默认 content 搜索失败: %v", err)
+	}
+	if !strings.Contains(def.Text, "beta.vue") {
+		t.Errorf("默认 target=content 应命中 beta.vue，实际: %s", def.Text)
+	}
+
+	// 非法 target 报错
+	if _, err := callNativeSearchTool(`{"pattern":"x","target":"nope"}`); err == nil {
+		t.Error("非法 target 应报错")
+	}
+}
 
 // 常驻工具集必须包含 load_tools 本身——否则模型没有任何办法把按需工具拿回来，
 // 整个按需加载机制会变成"永远加载不了"。
@@ -54,14 +104,14 @@ func TestCoreToolsAreResident(t *testing.T) {
 		fn := tl["function"].(map[string]any)
 		resident[fn["name"].(string)] = true
 	}
-	for _, name := range []string{"read", "write", "remove", "patch", "bash"} {
-		if !resident[name] {
-			t.Errorf("核心工具 %s 未常驻，第一轮只能盲调", name)
+	for _, name := range []string{"read", "search", "write", "remove", "patch", "bash"} {
+			if !resident[name] {
+				t.Errorf("核心工具 %s 未常驻，第一轮只能盲调", name)
+			}
+			if isOnDemandTool(name) {
+				t.Errorf("核心工具 %s 不应同时出现在按需池", name)
+			}
 		}
-		if isOnDemandTool(name) {
-			t.Errorf("核心工具 %s 不应同时出现在按需池", name)
-		}
-	}
 }
 
 // 核心工具移出按需池后，执行链必须仍认识它们——2026-09-07 曾回归为

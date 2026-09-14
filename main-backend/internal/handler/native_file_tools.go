@@ -110,11 +110,10 @@ func nativeReadFile(args map[string]any) (nativeToolResult, error) {
 	if err != nil {
 		return nativeToolResult{}, err
 	}
-	// 敏感文件读取拦截：.env/.pem/.ssh 等密钥文件禁止 Agent 直读。
-	// 教训：写保护只防改不防读，Agent 被注入时一个 read 就能把 API key 全吸进上下文。
-	if isSensitiveFile(path) {
-		return nativeToolResult{}, fmt.Errorf("⛔ 安全闸门：%s 是敏感文件（密钥/凭据），禁止读取。如需排查配置问题，请在终端手动查看", displayNativePath(path))
-	}
+	// 读取不做整文件拦截（堵不如疏，09-14 纠正）：所有文件都可读，密钥值由
+	// 出口 maskSecretText 行内掩码成 ***，模型拿不到明文。Hermes 同款思路——
+	// 权限交给用户（写 .env 走审批），AgentFS 影子仓可回滚。曾几何时把写保护
+	// 名单当禁读名单用，README.md 连读都被打回，用户直接跑光（08-16 教训）。
 	offset := intArg(args, "offset", 1)
 	limit := intArg(args, "limit", 200)
 	if offset < 1 {
@@ -162,12 +161,15 @@ func nativeReadFile(args map[string]any) (nativeToolResult, error) {
 		return nativeToolResult{}, fmt.Errorf("起始行 %d 超出文件范围（共 %d 行）", offset, total)
 	}
 	shownEnd := offset + len(lines) - 1
-	header := fmt.Sprintf("文件 %s（共 %d 行，显示 %d-%d", displayNativePath(path), total, offset, maxInt(offset-1, shownEnd))
-	if shownEnd < total {
-		header += fmt.Sprintf("，还有 %d 行，续读 offset=%d", total-shownEnd, shownEnd+1)
-	}
-	header += "）"
-	return nativeToolResult{Text: header + "\n" + strings.Join(lines, "\n")}, nil
+		// 头部元信息行必须带 "# " 前缀才合规：前端 readRows 靠 "#" 识别并跳过
+		// 元信息行（MCP read_range 同款约定）。裸文本会被前端当成正文第一行渲染，
+		// 造成「读取了 README.md（第 5-6 行）」却冒出个误导性预览头（09-14 实锤）。
+		header := fmt.Sprintf("# 文件 %s（共 %d 行，显示 %d-%d", displayNativePath(path), total, offset, maxInt(offset-1, shownEnd))
+		if shownEnd < total {
+			header += fmt.Sprintf("，还有 %d 行，续读 offset=%d", total-shownEnd, shownEnd+1)
+		}
+		header += "）"
+		return nativeToolResult{Text: header + "\n" + strings.Join(lines, "\n")}, nil
 }
 
 func nativeGrep(args map[string]any) (nativeToolResult, error) {

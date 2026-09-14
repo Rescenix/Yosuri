@@ -449,6 +449,20 @@ func CloudNotificationProxy(c *gin.Context) {
 	proxyToCloudAuth(c, c.Request.URL.Path)
 }
 
+// CloudFriendsProxy 透传 /api/friends* 到 ResceneCloud（带 Authorization，含 query）。
+// 好友申请/同意/删除/列表/搜索身份一律云端取 JWT，re0 只转发。
+// search 依赖 ?username= 查询参数，故拼上原始 query。
+func CloudFriendsProxy(c *gin.Context) {
+	proxyToCloudAuth(c, c.Request.URL.Path+"?"+c.Request.URL.Query().Encode())
+}
+
+// CloudDMProxy 透传 /api/dm/* 到 ResceneCloud（带 Authorization，含 query）。
+// 好友私聊收发/会话列表/历史/已读，身份同样云端取 JWT。
+// history 依赖 ?peer=&before=&limit= 查询参数，故拼上原始 query。
+func CloudDMProxy(c *gin.Context) {
+	proxyToCloudAuth(c, c.Request.URL.Path+"?"+c.Request.URL.Query().Encode())
+}
+
 // CloudAuthConfig 把 ResceneCloud 基址暴露给前端，供其发起账号登录（/api/login）。
 func CloudAuthConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{

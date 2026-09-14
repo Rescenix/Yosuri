@@ -201,8 +201,14 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
         // effort 只有当前 backend 真支持 reasoning 时后端才会真的采用（否则安静忽略），
         // 前端不需要自己先判断"这个模型支不支持"再决定发不发
         const effort = localStorage.getItem('debugReasoning') || ''
-        // mode 已删除（自研沙盒），默认全自动 yolo
-                const mode = 'yolo'
+        // mode 已删除（自研沙盒），默认全自动 yolo；opts.rp 时走角色扮演链路。
+                const mode = opts.rp ? 'rp' : 'yolo'
+        // RP cast：多角色同框的角色卡 id 列表（逗号分隔，后端合并人设与状态）
+        const castQs = (opts.rp && opts.rpCast && opts.rpCast.length)
+          ? `&cast=${encodeURIComponent(opts.rpCast.join(','))}` : ''
+        // RP @呼人：本条消息点名谁（角色名或 Yosuri），后端注入导演指令
+        const targetQs = (opts.rp && opts.rpTarget)
+          ? `&rp_target=${encodeURIComponent(opts.rpTarget)}` : ''
         // 生图提供商：设置面板选的，Go 侧拦截 image_generate 工具调用时自动注入，
         // 不走提示词——跟识图模型路由一个思路，模型不感知、不浪费 token
         const imageProvider = localStorage.getItem('imageProvider') || 'pollinations'
@@ -221,7 +227,7 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     : `task=${encodeURIComponent(task)}`
                 const url = opts.resumeId
                     ? `/api/code/workflow?resume=${encodeURIComponent(opts.resumeId)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}`
-                    : `/api/code/workflow?${taskQs}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}${personaQs}${agentQs}`
+                    : `/api/code/workflow?${taskQs}&session_id=${encodeURIComponent(sid)}&model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}&mode=${encodeURIComponent(mode)}&image_provider=${encodeURIComponent(imageProvider)}${personaQs}${agentQs}${castQs}${targetQs}`
         // 人设随每次新工作流发送（续跑分支不传：检查点 msgs[0] 已含当初完整系统提示词）。
         es = new EventSource(url)
 
@@ -292,6 +298,18 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     // 后端回传的分类上下文占用（system/subagent/skill/memory/tools），落盘持久化
                     setContextBreakdownFromBackend(flow.modelInfo.context_breakdown, flow.modelInfo.context_window)
                 })
+                // RP 战斗：Yosuri 用 rp_battle_start 开战 → 后端推 battle_start SSE，
+                                // 转发成全局事件（含完整事件时间轴），ChatWidget 收到后弹出聊天内嵌战场。
+                                es.addEventListener('battle_start', e => {
+                                    try {
+                                        const d = JSON.parse(e.data)
+                                        if (d && d.battle) {
+                                            window.dispatchEvent(new CustomEvent('rp-battle-start', {
+                                                detail: { battle: d.battle, events: d.events || [], sid },
+                                            }))
+                                        }
+                                    } catch { /* 解析失败忽略 */ }
+                                })
                 // 第一条 intent 增量到达 = 模型开始给最终回答；此时用当前选中模型
                 // 根据用户第一条消息 AI 生成语义化标题（"你好"→"友好的问候"），
                 // 失败/超时回退用户原始提问（去掉附件前缀）
@@ -514,28 +532,30 @@ const _randKaomoji = () => KAOMOJI[Math.floor(Math.random() * KAOMOJI.length)]
                     expanded: false
                 })
             } else if (d.kind === 'video' && d.url) {
-                            // 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式）
-                            flow.blocks.push({
-                                type: 'video',
-                                id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
-                                url: backendURL(d.url),
-                                file: d.file || '',
-                                mime: d.mime || 'video/mp4',
-                                size: d.size || '',
-                                seconds: d.seconds || '',
-                                caption: d.caption || 'Agent 已生成视频，可拖动进度条播放。'
-                            })
-                        } else if (d.kind === 'audio' && d.url) {
-                            // 生成音乐：内嵌音频播放条（同视频块模式）
-                            flow.blocks.push({
-                                type: 'audio',
-                                id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
-                                url: backendURL(d.url),
-                                file: d.file || '',
-                                mime: d.mime || 'audio/mpeg',
-                                size: d.size || '',
-                                caption: d.caption || 'Agent 已生成音乐，可点击播放。'
-                            })
+                                        // 生成视频：内嵌可拖动进度条播放块（同图片内嵌块模式）。
+                                        // url 存原始相对路径，渲染层（模板 backendURL）再转绝对——
+                                        // push 时转换会跟异步的 desktop backendBase 竞争，抢输就 404（09-14）
+                                        flow.blocks.push({
+                                            type: 'video',
+                                            id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                                            url: d.url,
+                                            file: d.file || '',
+                                            mime: d.mime || 'video/mp4',
+                                            size: d.size || '',
+                                            seconds: d.seconds || '',
+                                            caption: d.caption || 'Agent 已生成视频，可拖动进度条播放。'
+                                        })
+                                    } else if (d.kind === 'audio' && d.url) {
+                                        // 生成音乐：内嵌音频播放条（同视频块模式）。同上：url 存相对路径
+                                        flow.blocks.push({
+                                            type: 'audio',
+                                            id: d.id || `artifact_${Date.now()}_${msgSeq++}`,
+                                            url: d.url,
+                                            file: d.file || '',
+                                            mime: d.mime || 'audio/mpeg',
+                                            size: d.size || '',
+                                            caption: d.caption || 'Agent 已生成音乐，可点击播放。'
+                                        })
                         } else if (d.kind === 'file' && d.path) {
                 // Agent 落盘的可交付文件（md/pdf/pptx/docx/xlsx/html 等）：
                 // 交付卡片，点「预览」把内容送进右侧预览窗口（md/html/txt 本地渲染，

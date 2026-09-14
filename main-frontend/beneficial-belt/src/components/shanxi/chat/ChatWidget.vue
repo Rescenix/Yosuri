@@ -152,6 +152,12 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
+              <!-- 功能导航：收束在折叠栏，点开从折叠栏右侧弹出菜单（rail-card 同款定位） -->
+              <div class="gem-rail-fn-wrap">
+                <button class="gem-icon-btn" @click.stop="openFnMenu($event)" :class="{ on: fnMenuOpen }" :title="tr('功能')">
+                  <Icon icon="mdi:apps" width="18" />
+                </button>
+              </div>
                           <button class="gem-icon-btn" @click="showComponentModal = true" :title="tr('组件下载')">
                             <Icon icon="mdi:download-outline" width="18" />
                           </button>
@@ -161,6 +167,23 @@
               <img v-if="railAuth.displayAvatar.value" :src="railAuth.displayAvatar.value" class="gem-rail-avatar" :title="railAuth.displayName.value" />
               <div v-else class="gem-rail-avatar" :title="railAuth.displayName.value">{{ (railAuth.displayName.value || '?').charAt(0).toUpperCase() }}</div>
             </div>
+
+            <!-- 功能导航菜单：贴着折叠栏右侧弹出（与悬停会话卡片同款定位） -->
+            <Teleport to="body">
+              <div v-if="fnMenuOpen" class="rail-fn-menu" :style="fnMenuStyle" @click.stop>
+                <div class="rail-fn-title">{{ tr('功能') }}</div>
+                <button
+                  v-for="item in fnRailItems"
+                  :key="item.id"
+                  type="button"
+                  class="rail-fn-item"
+                  @click="goFnItem(item)"
+                >
+                  <Icon :icon="item.icon" width="15" />
+                  <span>{{ tr(item.label) }}</span>
+                </button>
+              </div>
+            </Teleport>
 
             <Teleport to="body">
               <Transition name="agentfs-card">
@@ -294,13 +317,250 @@
           <!-- 共享聊天列 -->
           <div class="chat-content studio">
 
-            <!-- 会话标题：消息列上方，靠左，背景透明 -->
-            <div v-if="messages.length && activeSessionObj?.name" class="chat-session-titlebar">
-              <span class="chat-session-title-text">{{ activeSessionObj.name }}</span>
+            <!-- RP 左侧栏：角色卡（右键 = 默认数值预设面板） -->
+            <div v-if="rpPrimaryId && rpCastIds.length" class="rp-side-panel rp-side-left">
+              <div
+                v-for="id in rpCastIds"
+                :key="id"
+                class="rp-avatar-item"
+                :class="{ on: atMentionTarget === (agentStore.agentById(id)?.name || id) }"
+                @click="atMentionTarget = atMentionTarget === (agentStore.agentById(id)?.name || id) ? '' : (agentStore.agentById(id)?.name || id)"
+                @contextmenu.prevent.stop="openRpPresetMenu(id, $event)"
+              >
+                <img v-if="agentStore.agentById(id)?.avatar" :src="agentStore.agentById(id).avatar" class="rp-avatar" alt="" />
+                <span v-else class="rp-avatar rp-avatar-text" :style="{ background: agentStore.agentById(id)?.color || '#8b5e7c' }">
+                  {{ (agentStore.agentById(id)?.name || '?').charAt(0) }}
+                </span>
+                <div class="rp-avatar-info">
+                  <div class="rp-avatar-name">
+                    {{ agentStore.agentById(id)?.name || id }}
+                    <span v-if="agentStore.agentById(id)?.stats?.level" class="rp-avatar-lv">Lv.{{ agentStore.agentById(id).stats.level }}</span>
+                    <span v-else-if="agentStore.agentById(id)?.stats?.title" class="rp-avatar-title">{{ agentStore.agentById(id).stats.title }}</span>
+                  </div>
+                  <!-- 有数值：星迹风格状态条（HP 条+护盾层 / MP 条）+ 印记 -->
+                  <template v-if="agentStore.agentById(id)?.stats?.maxHp">
+                    <div class="rp-bar-row">
+                      <span class="rp-bar-label">HP</span>
+                      <div class="rp-hp-bar">
+                        <div v-if="rpShieldPct(agentStore.agentById(id).stats) > 0" class="rp-shield-fill" :style="{ width: rpShieldPct(agentStore.agentById(id).stats) + '%' }"></div>
+                        <div class="rp-hp-fill" :style="{ width: rpHpPct(agentStore.agentById(id).stats) + '%' }"></div>
+                        <span class="rp-bar-num">{{ agentStore.agentById(id).stats.hp ?? agentStore.agentById(id).stats.maxHp }}/{{ agentStore.agentById(id).stats.maxHp }}</span>
+                      </div>
+                    </div>
+                    <div v-if="agentStore.agentById(id)?.stats?.maxMp" class="rp-bar-row">
+                      <span class="rp-bar-label">MP</span>
+                      <div class="rp-mp-bar">
+                        <div class="rp-mp-fill" :style="{ width: rpMpPct(agentStore.agentById(id).stats) + '%' }"></div>
+                        <span class="rp-bar-num">{{ agentStore.agentById(id).stats.mp ?? 0 }}/{{ agentStore.agentById(id).stats.maxMp }}</span>
+                      </div>
+                    </div>
+                    <div v-if="rpMarkIcons(agentStore.agentById(id)?.stats).length" class="rp-mark-row">
+                                          <span
+                                            v-for="mk in rpMarkIcons(agentStore.agentById(id)?.stats)"
+                                            :key="mk.name"
+                                            class="rp-mark-badge"
+                                            :title="mk.tip"
+                                          >
+                                            <Icon :icon="mk.icon" width="12" :color="mk.color" />
+                                            <span class="rp-mark-val">{{ mk.value }}</span>
+                                          </span>
+                                        </div>
+                                        <!-- 背包入口：战利品数量徽标，点开看背包 -->
+                                        <button
+                                          v-if="(agentStore.agentById(id)?.stats?.inventory || []).length"
+                                          type="button"
+                                          class="rp-inv-btn"
+                                          @click.stop="openRpInventory(id, $event)"
+                                        >
+                                          <Icon icon="mdi:bag-personal-outline" width="12" color="#b07a2e" />
+                                          {{ tr('背包') }} {{ agentStore.agentById(id).stats.inventory.length }}
+                                        </button>
+                                      </template>
+                  <!-- 没设数值：显示角色卡人设摘要（这就是角色卡，不是光头像） -->
+                  <div v-else class="rp-avatar-desc">{{ rpCardBlurb(agentStore.agentById(id)) }}</div>
+                </div>
+              </div>
+
+              <div v-if="atMentionTarget" class="rp-side-target-hint">
+                              {{ tr('正在对') }} <b>{{ atMentionTarget }}</b> {{ tr('说话') }}
+                            </div>
+                          </div>
+
+                          <!-- 背包浮层：Teleport 到 body 用 fixed 定位——
+                              原来 absolute 嵌在 .rp-side-panel(overflow-y:auto) 里，
+                              left:calc(100%+8px) 溢出面板被裁掉 = 点开看不见（09-14 修复） -->
+                          <Teleport to="body">
+                            <div v-if="rpInvOpen" class="rp-inv-pop" :style="rpInvStyle">
+                              <div class="rp-inv-head">
+                                <span>{{ rpInvName }} {{ tr('的背包') }}</span>
+                                <span class="rp-preset-close" @click="rpInvOpen = false">✕</span>
+                              </div>
+                              <div v-if="!(agentStore.agentById(rpInvAgentId)?.stats?.inventory || []).length" class="rp-inv-empty">
+                                {{ tr('背包空空如也，去打点什么吧') }}
+                              </div>
+                              <div
+                                v-for="(it, i) in (agentStore.agentById(rpInvAgentId)?.stats?.inventory || [])"
+                                :key="i"
+                                class="rp-inv-item"
+                              >
+                                <span class="rp-inv-icon">{{ it.icon || '🎒' }}</span>
+                                <span class="rp-inv-info">
+                                  <span class="rp-inv-name">{{ it.name }} <b v-if="it.count > 1">×{{ it.count }}</b></span>
+                                  <span v-if="it.desc" class="rp-inv-desc">{{ it.desc }}</span>
+                                </span>
+                              </div>
+                            </div>
+                          </Teleport>
+
+            <!-- 右键数值预设面板：选职业模板 + 元素印记 + buff 印记 -->
+            <div
+              v-if="rpPresetMenu.open"
+              class="rp-preset-menu"
+              :style="{ top: rpPresetMenu.y + 'px', left: rpPresetMenu.x + 'px' }"
+              @click.stop
+            >
+              <div class="rp-preset-head">
+                <span>{{ tr('为') }} <b>{{ rpPresetName }}</b> {{ tr('设置数值') }}</span>
+                <span class="rp-preset-close" @click="rpPresetMenu.open = false">✕</span>
+              </div>
+              <button
+                v-for="p in RP_STAT_PRESETS"
+                :key="p.key"
+                type="button"
+                class="rp-preset-item"
+                @click="applyRpPreset(p)"
+              >
+                <span class="rp-preset-icon">{{ p.icon }}</span>
+                <span class="rp-preset-info">
+                  <span class="rp-preset-name">{{ p.name }}</span>
+                  <span class="rp-preset-sub">{{ p.summary }}</span>
+                </span>
+              </button>
+
+              <!-- 元素印记：一排元素图标，点击设 element -->
+              <div class="rp-preset-sec-title">{{ tr('元素印记') }}</div>
+              <div class="rp-preset-elems">
+                <button
+                  v-for="(e, k) in RP_ELEMENT_ICONS"
+                  :key="k"
+                  type="button"
+                  class="rp-preset-elem"
+                  :class="{ on: rpPresetElem === k }"
+                  :title="e.label"
+                  @click="setRpPresetElement(k)"
+                >
+                  <Icon :icon="e.icon" width="15" :color="e.color" />
+                </button>
+                <button
+                  type="button"
+                  class="rp-preset-elem"
+                  :class="{ on: !rpPresetElem }"
+                  title="无元素"
+                  @click="setRpPresetElement('')"
+                >✕</button>
+              </div>
+
+              <!-- buff 印记：名称 + 数值，回车添加 -->
+              <div class="rp-preset-sec-title">{{ tr('buff / 印记') }}</div>
+              <div class="rp-preset-mark-add">
+                <input
+                  v-model="rpPresetMarkName"
+                  class="rp-preset-mark-input"
+                  :placeholder="tr('印记名（中毒/燃魂…）')"
+                  @keyup.enter="addRpPresetMark"
+                />
+                <input
+                  v-model="rpPresetMarkVal"
+                  class="rp-preset-mark-val-input"
+                  :placeholder="tr('值')"
+                  @keyup.enter="addRpPresetMark"
+                />
+                <button type="button" class="rp-preset-mark-add-btn" @click="addRpPresetMark">＋</button>
+              </div>
+              <div v-if="rpPresetMarks.length" class="rp-preset-mark-list">
+                <span
+                  v-for="(m, i) in rpPresetMarks"
+                  :key="i"
+                  class="rp-preset-mark-chip"
+                >
+                  <Icon icon="mdi:star-four-points" width="11" color="#ff9f43" />
+                  {{ m.name }}{{ m.value }}
+                  <span class="rp-preset-mark-del" @click="rpPresetMarks.splice(i, 1)">✕</span>
+                </span>
+              </div>
+
+              <!-- 护盾：盾值即时写卡（血条上盖浅蓝层 + 蓝盾标） -->
+              <div class="rp-preset-sec-title">{{ tr('护盾') }}</div>
+              <div class="rp-preset-mark-add">
+                <input
+                  v-model.number="rpPresetShield"
+                  class="rp-preset-mark-input"
+                  type="number"
+                  min="0"
+                  :placeholder="tr('盾值')"
+                  @keyup.enter="setRpPresetShield"
+                  @change="setRpPresetShield"
+                />
+                <button type="button" class="rp-preset-mark-add-btn" @click="setRpPresetShield">✓</button>
+              </div>
+
+              <div class="rp-preset-note">{{ tr('元素与印记即刻显示在角色卡上；也可选上方职业预设一键填充') }}</div>
             </div>
 
-            <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。 -->
-            <div v-if="inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
+            <!-- RP 右侧栏：世界书（书本/条目双视图） -->
+            <div v-if="rpPrimaryId" class="rp-side-panel rp-side-right">
+              <WorldbookPanel :agent-id="rpPrimaryId" />
+            </div>
+
+            <!-- RP 战斗场景浮层：开战时盖在聊天区上方（消息可滚动到下面） -->
+                        <div v-if="activeBattle" class="rp-battle-overlay">
+                          <RpBattleCard :battle="activeBattle" :events="activeBattleEvents" @close="activeBattle = null" @settled="onBattleSettled" />
+                        </div>
+
+            <!-- 会话标题：消息列上方，靠左，背景透明。右侧是模式切换（Agent / 角色扮演） -->
+            <div v-if="messages.length && activeSessionObj?.name" class="chat-session-titlebar">
+              <div class="chat-session-title-text">{{ activeSessionObj.name }}</div>
+              <!-- 模式切换：选中的模式交换到第一位成为默认，切换时滑动换位 -->
+              <TransitionGroup tag="div" class="rp-mode-switch" :class="{ on: !!rpPrimaryId }" name="mode-swap">
+                <button
+                  v-for="m in modeOrder"
+                  :key="m.key"
+                  type="button"
+                  class="rp-mode-seg"
+                  :class="{ active: m.key === currentModeKey }"
+                  :title="m.title"
+                  @click="m.action"
+                >{{ m.label }}</button>
+              </TransitionGroup>
+              <!-- 扮演对象选择：点「角色扮演」且还没选卡时弹出（可多选，多角色同框） -->
+              <div v-if="rpPickerOpen" class="rp-picker-pop">
+                <div v-if="!agentStore.agents.value.length" class="agent-picker-empty">
+                  {{ tr('还没有角色卡，去「设置 → 角色卡」创建吧～') }}
+                </div>
+                <button
+                  v-for="a in agentStore.agents.value"
+                  :key="a.id"
+                  class="agent-picker-item"
+                  :class="{ on: rpCastIds.includes(a.id) }"
+                  type="button"
+                  @click.stop="toggleRpAgent(a.id)"
+                >
+                  <img v-if="a.avatar" :src="a.avatar" class="agent-picker-avatar" alt="" />
+                  <span v-else class="agent-picker-avatar agent-picker-avatar-text" :style="{ background: a.color || '#8b5e7c' }">
+                    {{ (a.name || '?').charAt(0) }}
+                  </span>
+                  <span class="agent-picker-name">{{ tr(a.name) }}</span>
+                  <Icon v-if="rpCastIds.includes(a.id)" icon="mdi:check-circle" width="16" class="agent-picker-check" />
+                </button>
+                <div class="rp-picker-actions">
+                  <button type="button" class="rp-picker-done" @click.stop="rpPickerOpen = false">{{ tr('开始') }}</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。
+                 RP 角色扮演模式整条不显示：纯演戏不需要终端/文件工具入口。 -->
+            <div v-if="!rpPrimaryId && inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" :title="tr('终端')">
                 <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
               </button>
@@ -402,9 +662,10 @@
                       </div>
                       <AgentWorkflowPanel :id="'group-' + item.id" :flow="item" />
                       <!-- 复制栏：以前只挂在纯文本 assistant 气泡上，而现在所有回复
-                           都走四态机(agentflow)，等于这一栏彻底消失了。跑完再显示，跑的过程中
-                           内容还在变，复制没意义。 -->
-                      <div v-if="item.status === 'completed' && flowFinalText(item)" class="flow-tools">
+                                                 都走四态机(agentflow)，等于这一栏彻底消失了。跑完再显示，跑的过程中
+                                                 内容还在变，复制没意义。条件用「非 running」而非「completed」：
+                                                 断线兜底会把 status 置 failed/stopped，但内容已完整，照样可复制（09-14）。 -->
+                                            <div v-if="item.status !== 'running' && flowFinalText(item)" class="flow-tools">
                         <button class="tool-btn" @click="copyText(flowFinalText(item))" :title="tr('复制')">
                           <Icon icon="mdi:content-copy" width="16" />
                         </button>
@@ -459,7 +720,7 @@
                         <span>{{ tr('正在调用工具：') }}{{ item.toolCallName }}</span>
                         <span v-if="item.toolCallDetail" class="tool-call-detail">{{ item.toolCallDetail }}</span>
                       </div>
-                      <div class="markdown-body" v-html="renderMarkdown(item.content, true)"></div>
+                      <div class="markdown-body" v-html="rpRender(item.content)"></div>
                       <div class="assistant-tools">
                         <button class="tool-btn" @click="copyText(item.content)" :title="tr('复制')">
                           <Icon icon="mdi:content-copy" width="16" />
@@ -809,7 +1070,23 @@
                     </div>
                   </div>
 
-                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown="onChatInputUndo" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="onChatInput" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
+                  <textarea ref="chatInputRef" class="chat-input" v-model="userInput" @keydown="onRpInputKeydown" @keydown.enter.prevent="handleSend" @keydown.up="onChatInputKeydown" @keydown.down="onChatInputKeydown" @input="onRpAtInput" @paste="handlePaste" @focus="inputFocused = true" @blur="inputFocused = false" rows="1"></textarea>
+                  <!-- RP @呼人菜单：@Yosuri / @角色 -->
+                  <div v-if="atMenuOpen" class="rp-at-menu">
+                    <button
+                      v-for="(it, i) in atMenuItems"
+                      :key="it.id"
+                      type="button"
+                      class="rp-at-item"
+                      :class="{ hl: i === atMenuHl }"
+                      @mousedown.prevent="insertAtMention(it)"
+                      @mouseenter="atMenuHl = i"
+                    >
+                      <span class="rp-at-name">{{ it.name }}</span>
+                      <span class="rp-at-desc">{{ it.desc }}</span>
+                    </button>
+                    <div v-if="!atMenuItems.length" class="rp-at-empty">{{ tr('没有匹配的角色') }}</div>
+                  </div>
 
                   <!-- 模型切换：常态显示完整模型名；右边工具窗口打开挤压输入框时收成紧凑图标按钮 -->
                                     <div class="sch-model" :class="{ collapsed: hasVisibleDockPanels }" ref="modelPillRef" @click.stop="toggleModelMenu"
@@ -1127,9 +1404,10 @@
             </div>
           </div>
 
-          <!-- ★ Windows / VS Code 风格双停靠工作区：标签可在右侧与底部之间拖放。 -->
+          <!-- ★ Windows / VS Code 风格双停靠工作区：标签可在右侧与底部之间拖放。
+               RP 角色扮演模式整个停靠区不渲染：纯演戏不需要终端/文件/预览工具。 -->
           <aside
-            v-for="dockLocation in visibleDockLocations"
+            v-for="dockLocation in (rpPrimaryId ? [] : visibleDockLocations)"
             :key="dockLocation"
             class="tool-panel tool-panel-tabbed"
             :class="[
@@ -1427,7 +1705,7 @@ import { Icon } from '@iconify/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
 import 'katex/dist/katex.min.css'
-import { renderMarkdown, renderMermaidIn } from './markdownRenderer.js'
+import { renderMarkdown, renderRpMarkdown, renderMermaidIn, setRpDyeSpeakers } from './markdownRenderer.js'
 import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
@@ -1457,6 +1735,9 @@ import AgentWorkflowPanel from './AgentWorkflowPanel.vue'
 import AttachmentChipRow from './AttachmentChipRow.vue'
 import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
+import WorldbookPanel from './WorldbookPanel.vue'
+import RpBattleCard from './RpBattleCard.vue'
+import { railItemDefinitions } from '../../../appNav.js'
 import KnowledgeGraph from './KnowledgeGraph.vue'
 import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
@@ -2828,6 +3109,8 @@ async function runGitCommit() {
 // 就进入 git 态——但 git 状态条不再默认铺开，改成由底部工具栏的 git 按钮
 // 手动开关（showGitBar），默认收起，需要看分支/提交时才点开
 const inputTopBarMode = computed(() => {
+  // RP 角色扮演：工具条/分支条/目录条全关——纯演戏不需要任何工作区工具。
+  if (rpPrimaryId.value) return ''
   if (messages.value.length === 0) return 'dir'
   return 'git'
 })
@@ -3666,7 +3949,7 @@ function truncateOneLine(s, max) {
 // markdown 语法全部裸奔成纯文本
 function highlightAllCodeBlocks() {
   requestAnimationFrame(() => {
-    document.querySelectorAll('.chat-messages .markdown-body pre').forEach(pre => {
+    document.querySelectorAll('.chat-messages .markdown-body pre, .chat-messages .flow-intent-code pre').forEach(pre => {
       const code = pre.querySelector('code')
       if (!code) return
       const classList = [...code.classList]
@@ -3811,11 +4094,9 @@ function streamFadePass() {
   // （09-05 实测）。结论：主链路不做渐变（同 09-02 之前行为），瀑布渐变只对旧的
   // 纯文本流式消息生效。若真要主链路渐变，必须改成增量 DOM 渲染，v-html 路不通。
   document.querySelectorAll(
-    '.chat-messages .assistant-message.streaming .markdown-body, ' +
-    '.chat-messages .assistant-message.streaming .reasoning-text, ' +
-    '.agent-flow.streaming .flow-intent.markdown-body, ' +
-    '.agent-flow.streaming .flow-thinking-text'
-  ).forEach(applyStreamFade)
+      '.chat-messages .assistant-message.streaming .markdown-body, ' +
+      '.chat-messages .assistant-message.streaming .reasoning-text'
+    ).forEach(applyStreamFade)
   const t1 = performance.now()
   if (t1 - t0 > 16) console.warn('[perf] streamFadePass', (t1 - t0).toFixed(1), 'ms')
 }
@@ -3838,6 +4119,8 @@ const {
   todoState, sendSteerMessage, pushSteerMessage,
   questionState, answerQuestion,
   agentStore,
+  // 角色扮演：当前会话的扮演角色列表（空 = 默认 Agent）+ 主角色 + 设定函数
+  rpCastIds, rpPrimaryId, setSessionRp, rpLast,
   toggleChat, updateParams,
   groupedMessages, formatChatTime,
   kbOpen, kbFiles, kbDragOver, kbUploadInputRef, kbLoading,
@@ -3846,6 +4129,24 @@ const {
   addKbFiles, removeKbFile, insertKbRef, fileIcon, formatKbSize,
   kbGraph, kbGraphLoading, kbGraphError, kbGraphFile, fetchKnowledgeGraph
 } = useChatWidget(props, { renderMarkdown })
+
+// RP 台词染色：当前会话是 RP（cast 非空）时，把 cast 角色名字喂给渲染器，
+// 聊天正文/agentflow 流式回复都会按说话人染色；非 RP 会话名单为空 = 原样渲染。
+// 这里顺带解决「模型吐出不一样说话格式」：染色靠宽容正则（行首名字+冒号/
+// 引号台词），命中才染，没命中保持原样，永远不会破坏 markdown。
+watch(
+  () => [rpCastIds.value, agentStore.agentsLoaded.value],
+  () => {
+    const ids = rpCastIds.value || []
+    const names = ids.map(id => agentStore.agentById(id)?.name || '').filter(Boolean)
+    setRpDyeSpeakers(names)
+  },
+  { immediate: true }
+)
+// RP 会话正文入口：有 cast 走染色管线，否则普通渲染（零开销分支）
+function rpRender(text) {
+  return rpCastIds.value && rpCastIds.value.length ? renderRpMarkdown(text, true) : renderMarkdown(text, true)
+}
 
 // 知识库文件 hover / 点击：控制图谱弹窗
 const kbHoverFile = ref(null)
@@ -3949,6 +4250,462 @@ function pickAgent(id) {
 function removeFromGroup(id) {
   pickAgent(id) // 同样的 toggle 语义
 }
+
+// ── 角色扮演模式切换（标题栏右侧的分段按钮）──
+// rpCastIds / rpPrimaryId / setSessionRp 来自 useChatWidget（会话级，落 localStorage）。
+// 点「角色扮演」：已在 RP 就直接退出；没有就弹角色选择（可多选，全员同框）。
+// 点角色站牌：选中为目标同时展开就地编辑；再点一次收起。
+const rpPickerOpen = ref(false)
+const worldbookOpen = ref(false)
+
+// ── 背包：点角色卡上的背包按钮，浮层展示战利品（Teleport 到 body + fixed 定位，
+// 绕开 .rp-side-panel 的 overflow 裁剪）。位置记在 rpInvStyle，随按钮实时定位。
+const rpInvOpen = ref(false)
+const rpInvAgentId = ref('')
+const rpInvName = ref('')
+const rpInvStyle = ref({})
+function openRpInventory(id, evt) {
+  rpInvAgentId.value = id
+  rpInvName.value = agentStore.agentById(id)?.name || id
+  // fixed 定位在按钮右侧：取按钮真实屏幕坐标（Teleport 后脱离滚动容器）
+  const btn = evt?.currentTarget
+  if (btn) {
+    const r = btn.getBoundingClientRect()
+    const popW = 240
+    let left = r.right + 8
+    if (left + popW > window.innerWidth - 8) left = Math.max(8, r.left - popW - 8) // 右侧放不下就翻到左边
+    rpInvStyle.value = { position: 'fixed', left: left + 'px', top: Math.max(8, r.top) + 'px', zIndex: 100 }
+  }
+  rpInvOpen.value = true
+}
+// 点空白处收起背包浮层
+function onDocClickCloseRpInv(e) {
+  if (!rpInvOpen.value) return
+  if (e?.target?.closest?.('.rp-inv-pop')) return
+  rpInvOpen.value = false
+}
+onMounted(() => window.addEventListener('click', onDocClickCloseRpInv))
+onUnmounted(() => window.removeEventListener('click', onDocClickCloseRpInv))
+// ── RP 战斗（酒馆杀手锏）：Yosuri 用 rp_battle_start 开战 → SSE 弹战场 ──
+const activeBattle = ref(null)
+const activeBattleEvents = ref([]) // 战斗完整事件时间轴（后台自动结算产物）
+// 战斗结束：把战果作为消息推进聊天（让 Yosuri 写战利品剧情），并刷新角色卡
+function onBattleSettled(b) {
+  let result
+  if (b.victory) {
+    result = `战斗胜利！${b.goldGain > 0 ? `获得 ${b.goldGain} 金币。` : ''}角色们的 HP 已按战况更新。`
+  } else if (b.gameOver) {
+    result = '主角倒下了……这个世界线走向了终局。'
+  } else {
+    result = '战斗落败……有人倒下了。角色状态已更新。'
+  }
+  pushBattleNarration(result)
+  refreshAgents()
+}
+// 战斗消息推进聊天（用户气泡风格，进输入历史）
+function pushBattleNarration(text) {
+  messages.value.push({
+    id: `battle_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    kind: 'agentflow',
+    sender: 'bot',
+    status: 'completed',
+    task: text,
+    blocks: [{ type: 'text', text }],
+    timestamp: new Date(),
+  })
+  onStreamUpdate?.()
+}
+// 点空白处收起敌人选择（旧按钮入口已删，保留空壳防残留引用报错）
+function onDocClickCloseBattlePicker(e) { /* 按钮入口已移除 */ }
+
+// Yosuri 用 rp_battle_start 开战 → useAgentWorkflow 转发全局事件 → 这里弹战场。
+// 只在 RP 会话收到才弹（事件带 sid，防串会话）。
+function onRPBattleStart(e) {
+  const d = e.detail || {}
+  if (!d.battle) return
+  if (d.sid && d.sid !== (localStorage.getItem('prism_session_id') || sessionId.value)) return
+  activeBattle.value = d.battle
+  activeBattleEvents.value = d.events || []
+  // 开场词进聊天，让 Yosuri 接戏叙述遭遇
+  const first = d.battle.units.find(u => u.side === 'enemy')
+  pushBattleNarration(`⚔️ 遭遇战！${first ? first.name : ''} 拦住了去路——战斗开始！`)
+}
+onMounted(() => window.addEventListener('rp-battle-start', onRPBattleStart))
+onUnmounted(() => window.removeEventListener('rp-battle-start', onRPBattleStart))
+const rpPrimaryName = computed(() => {
+  const id = rpPrimaryId.value
+  if (!id) return ''
+  return agentStore.agentById(id)?.name || ''
+})
+// 模式切换交换动画：当前模式永远排在第一位（默认位），切换时两个按钮滑动换位。
+// currentModeKey 驱动高亮，modeOrder 驱动 v-for 顺序 —— 顺序一变 TransitionGroup
+// 的 FLIP move 过渡自动补出滑行动画，激活态跟着落到第一位。
+const currentModeKey = computed(() => (rpPrimaryId.value ? 'rp' : 'agent'))
+const modeOrder = computed(() => {
+  const modes = [
+    {
+      key: 'agent',
+      label: tr('Agent'),
+      title: tr('助手模式：带工具，能读写文件、执行命令'),
+      action: switchToAgentMode,
+    },
+    {
+      key: 'rp',
+      label: rpPrimaryName.value || tr('角色扮演'),
+      title: rpPrimaryId.value ? tr('退出角色扮演') : tr('角色扮演：由角色卡接管对话'),
+      action: switchToRpMode,
+    },
+  ]
+  return currentModeKey.value === 'rp' ? [modes[1], modes[0]] : modes
+})
+function switchToAgentMode() {
+  rpPickerOpen.value = false
+  if (rpPrimaryId.value) setSessionRp([])
+}
+function switchToRpMode() {
+  if (rpPrimaryId.value) { // 已在 RP 中，再点 = 退出
+    setSessionRp([])
+    rpPickerOpen.value = false
+    return
+  }
+  // 上次选过卡直接恢复（左边角色面板本来就默认显示 cast），不弹选择框
+  const last = rpLast()
+  const valid = last.filter(id => agentStore.agentById(id))
+  if (valid.length) {
+    setSessionRp(valid)
+    return
+  }
+  rpPickerOpen.value = !rpPickerOpen.value
+  if (rpPickerOpen.value && !agentStore.agentsLoaded.value) agentStore.loadAgents()
+}
+function toggleRpAgent(id) {
+  const cur = rpCastIds.value.includes(id)
+  const next = cur ? rpCastIds.value.filter(x => x !== id) : [...rpCastIds.value, id]
+  setSessionRp(next)
+}
+// 点空白处收起角色选择弹层 / 世界书面板
+function onDocClickCloseRpPicker(e) {
+  if (e?.target?.closest?.('.rp-picker-pop, .rp-mode-switch, .wb-panel-host, .wb-open-btn')) return
+  rpPickerOpen.value = false
+  worldbookOpen.value = false
+}
+onMounted(() => window.addEventListener('click', onDocClickCloseRpPicker))
+onUnmounted(() => window.removeEventListener('click', onDocClickCloseRpPicker))
+// 切会话时收起弹层（避免弹层跟着悬在别的会话标题下）
+watch(sessionId, () => { rpPickerOpen.value = false })
+
+// ── 人物参数实时同步 ──
+// RP 模式激活时每 5 秒轻量拉一次 /api/agents：剧情里 Yosuri 用 rp_set_stat
+// 改了血/等级/装备，左侧站牌要实时跟上（不然演到残血面板还是满血）。
+// 编辑区打开时暂停轮询，避免保存瞬间被旧数据覆盖。
+// ⚠️ 必须在 rpEditingId 声明之后定义（watch 创建时就求值依赖，靠前会撞 TDZ）。
+let rpPollTimer = null
+
+// ── @ 呼人（RP 模式）：输入框打 @ 弹出场上角色（cast 成员 + Yosuri 导演）──
+// 选中后在输入框插入「@名字 」；发送时若消息以 @X 开头，就把 X 作为 rpTarget
+// 传给后端（导演让 TA 优先回应）。这样用户能直接点名 Yosuri 编排、或单拎一个角色。
+const atMenuOpen = ref(false)
+const atMenuItems = ref([])
+const atMenuPos = ref({ x: 0, y: 0 })
+const atQuery = ref('')
+const atMenuHl = ref(0)
+// atMentionTarget 侧栏点选的目标（角色名或 Yosuri）。有目标时发送消息自动
+// 带上 rpTarget，等效于输入框 @；输入框手动 @ 会覆盖它。
+const atMentionTarget = ref('')
+
+// 人物参数实时轮询：RP 激活时每 5 秒轻量刷新角色卡，剧情里 Yosuri 改了
+// 血/等级/装备，头像列实时跟上。rpPollTimer 声明在 setup 顶部。
+watch(rpPrimaryId, (rp) => {
+  if (rpPollTimer) { clearInterval(rpPollTimer); rpPollTimer = null }
+  if (rp) {
+    rpPollTimer = setInterval(() => refreshAgents(), 5000)
+  }
+})
+
+function rpHpPct(s) {
+  const max = s.maxHp || 1
+  const cur = (s.hp ?? s.maxHp) || 0
+  return Math.max(0, Math.min(100, Math.round((cur / max) * 100)))
+}
+function rpShieldPct(s) {
+  const max = s.maxHp || 1
+  return Math.max(0, Math.min(100, Math.round(((s.shield || 0) / max) * 100)))
+}
+function rpMpPct(s) {
+  const max = s.maxMp || 1
+  return Math.max(0, Math.min(100, Math.round(((s.mp ?? 0) / max) * 100)))
+}
+// 星迹风格印记图标：护盾 / 元素印记（按元素配色）/ 自定义印记。
+// 只抄表现语言（图标+颜色+数值），结算逻辑留在 Yosuri/后端，不搬星迹战斗逻辑。
+const RP_ELEMENT_ICONS = {
+  fire: { icon: 'mdi:fire', color: '#ff5a3c', label: '火' },
+  water: { icon: 'mdi:water', color: '#3c8dff', label: '水' },
+  thunder: { icon: 'mdi:lightning-bolt', color: '#ffc93c', label: '雷' },
+  wind: { icon: 'mdi:weather-windy', color: '#7fd8a4', label: '风' },
+  grass: { icon: 'mdi:leaf', color: '#52c41a', label: '草' },
+  ice: { icon: 'mdi:snowflake', color: '#6fd3ff', label: '冰' },
+  holy: { icon: 'mdi:white-balance-sunny', color: '#ffd75e', label: '光' },
+  dark: { icon: 'mdi:weather-night', color: '#9b6bff', label: '暗' },
+}
+function rpMarkIcons(s) {
+  if (!s) return []
+  const out = []
+  if (s.shield > 0) out.push({ name: '盾', icon: 'mdi:shield', color: '#8fd0ff', value: s.shield, tip: `护盾 ${s.shield} 点` })
+  if (s.element && RP_ELEMENT_ICONS[s.element]) {
+    const e = RP_ELEMENT_ICONS[s.element]
+    out.push({ name: '元素', icon: e.icon, color: e.color, value: e.label, tip: `元素 · ${e.label}` })
+  }
+  for (const m of s.marks || []) {
+    if (!m || !m.name) continue
+    out.push({ name: m.name, icon: 'mdi:star-four-points', color: '#ff9f43', value: m.value ?? '', tip: `${m.name} 印记` })
+  }
+  return out
+}
+// rpCardBlurb 角色卡文案：人设第一段（角色卡不是光头像，没数值时它撑起卡片）。
+function rpCardBlurb(card) {
+  if (!card) return ''
+  const p = (card.persona || '').trim()
+  if (p) {
+    const first = p.split('\n')[0] || ''
+    return first.length > 34 ? first.slice(0, 34) + '…' : first
+  }
+  return card.desc || card.character || ''
+}
+
+// ── 右键默认数值预设面板 ──
+// 职业模板一键填充角色卡 stats。只提供数值模板（表现层），结算逻辑仍归 Yosuri/后端。
+const RP_STAT_PRESETS = [
+  {
+    key: 'knight', icon: '🛡️', name: '骑士', element: 'holy',
+    summary: 'Lv1 · HP120 · 攻12 防14 魔4',
+    stats: { level: 1, hp: 120, maxHp: 120, mp: 20, maxMp: 20, atk: 12, def: 14, spd: 6, mag: 4, gold: 50, affection: 0, title: '见习骑士', element: 'holy', shield: 0, equipment: ['铁剑', '木盾'] },
+  },
+  {
+    key: 'mage', icon: '🔮', name: '法师', element: 'fire',
+    summary: 'Lv1 · HP70 · 攻6 防5 魔18',
+    stats: { level: 1, hp: 70, maxHp: 70, mp: 60, maxMp: 60, atk: 6, def: 5, spd: 7, mag: 18, gold: 40, affection: 0, title: '学徒法师', element: 'fire', shield: 0, equipment: ['学徒法杖'] },
+  },
+  {
+    key: 'rogue', icon: '🗡️', name: '刺客', element: 'dark',
+    summary: 'Lv1 · HP85 · 攻16 防6 速15',
+    stats: { level: 1, hp: 85, maxHp: 85, mp: 25, maxMp: 25, atk: 16, def: 6, spd: 15, mag: 3, gold: 80, affection: 0, title: '影行者', element: 'dark', shield: 0, equipment: ['双匕'] },
+  },
+  {
+    key: 'priest', icon: '✨', name: '牧师', element: 'holy',
+    summary: 'Lv1 · HP90 · 攻7 防8 魔14',
+    stats: { level: 1, hp: 90, maxHp: 90, mp: 50, maxMp: 50, atk: 7, def: 8, spd: 6, mag: 14, gold: 40, affection: 0, title: '巡礼者', element: 'holy', shield: 0, equipment: ['圣徽'] },
+  },
+  {
+    key: 'citizen', icon: '🧑', name: '普通人', element: '',
+    summary: 'Lv1 · HP100 · 攻8 防6 速8',
+    stats: { level: 1, hp: 100, maxHp: 100, mp: 20, maxMp: 20, atk: 8, def: 6, spd: 8, mag: 5, gold: 30, affection: 0, title: '普通人', element: '', shield: 0, equipment: [] },
+  },
+]
+const rpPresetMenu = reactive({ open: false, id: '', x: 0, y: 0 })
+const rpPresetName = computed(() => agentStore.agentById(rpPresetMenu.id)?.name || '')
+// 印记/元素编辑态（打开面板时从角色卡现读，改完即存）
+const rpPresetElem = ref('')
+const rpPresetMarks = ref([])
+const rpPresetMarkName = ref('')
+const rpPresetMarkVal = ref('')
+const rpPresetShield = ref(0)
+
+function openRpPresetMenu(id, e) {
+  rpPresetMenu.id = id
+  rpPresetMenu.x = Math.min(e.clientX, window.innerWidth - 260)
+  rpPresetMenu.y = Math.min(e.clientY, window.innerHeight - 420)
+  const card = agentStore.agentById(id)
+  rpPresetElem.value = card?.stats?.element || ''
+  rpPresetMarks.value = (card?.stats?.marks || []).map(m => ({ name: m.name || '', value: m.value ?? '' }))
+  rpPresetShield.value = card?.stats?.shield || 0
+  rpPresetMenu.open = true
+}
+// 设置元素印记：立即写卡并刷新
+async function setRpPresetElement(k) {
+  rpPresetElem.value = k
+  await saveRpStatsPatch({ element: k })
+}
+// 添加 buff/印记（名称+值），追加到 marks
+async function addRpPresetMark() {
+  const name = (rpPresetMarkName.value || '').trim()
+  const val = (rpPresetMarkVal.value || '').trim()
+  if (!name) return
+  const list = [...rpPresetMarks.value]
+  const i = list.findIndex(m => m.name === name)
+  if (i >= 0) list[i] = { name, value: val }
+  else list.push({ name, value: val })
+  rpPresetMarks.value = list
+  rpPresetMarkName.value = ''
+  rpPresetMarkVal.value = ''
+  await saveRpStatsPatch({ marks: list })
+}
+// 设置护盾：盾值即时写卡（>0 时血条上盖浅蓝层 + 蓝盾标）
+async function setRpPresetShield() {
+  const v = Math.max(0, rpPresetShield.value || 0)
+  rpPresetShield.value = v
+  await saveRpStatsPatch({ shield: v })
+}
+// 局部改 stats：读现有卡，只覆盖 patch 里的字段，POST 保存
+async function saveRpStatsPatch(patch) {
+  const card = agentStore.agentById(rpPresetMenu.id)
+  if (!card) return
+  const stats = { ...(card.stats || {}), ...patch }
+  try {
+    const res = await fetch('/api/agents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...card, stats }),
+    })
+    if (res.ok) {
+      const d = await res.json()
+      if (d.agent) await agentStore.loadAgents()
+    }
+  } catch { /* 静默 */ }
+}
+// 应用预设：整卡 POST /api/agents 更新 stats（后端 UpsertAgent 已支持），
+// 保留用户已有的 persona/avatar/color，只换数值。
+async function applyRpPreset(p) {
+  const card = agentStore.agentById(rpPresetMenu.id)
+  if (!card) { rpPresetMenu.open = false; return }
+  const stats = { ...(card.stats || {}), ...p.stats }
+  rpPresetElem.value = p.stats.element || ''
+  rpPresetMarks.value = []
+  rpPresetShield.value = 0
+  try {
+    const res = await fetch('/api/agents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...card, stats }),
+    })
+    if (res.ok) {
+      const d = await res.json()
+      if (d.agent) await agentStore.loadAgents()
+      atMentionTarget.value = card.name || rpPresetMenu.id
+    }
+  } catch { /* 静默 */ }
+  rpPresetMenu.open = false
+}
+// 点空白处收起预设面板
+function onDocClickClosePreset() {
+  rpPresetMenu.open = false
+}
+watch(rpPresetMenu, (m) => {
+  if (m.open) window.addEventListener('click', onDocClickClosePreset, { once: true })
+})
+
+// RP 模式 @ 可呼对象：Yosuri（导演）+ 当前 cast 角色。
+function rpAtCandidates() {
+  const items = [{ id: 'yosuri', name: 'Yosuri', desc: '编排者（导演）' }]
+  const cast = rpCastIds.value
+  if (cast.length) {
+    for (const id of cast) {
+      const a = agentStore.agentById(id)
+      if (a) items.push({ id: a.id, name: a.name, desc: '角色' })
+    }
+  } else if (agentStore.agents.value.length) {
+    // 没 cast 也允许 @ 任意角色卡（点到谁算谁）
+    for (const a of agentStore.agents.value.slice(0, 12)) {
+      items.push({ id: a.id, name: a.name, desc: '角色' })
+    }
+  }
+  return items
+}
+
+// 输入框 keydown：RP 模式 @ 唤菜单 + 原 undo 逻辑合并
+function onRpInputKeydown(e) {
+  onChatInputUndo(e)
+  if (rpPrimaryId.value && e.key === '@' && !atMenuOpen.value) {
+    atMenuItems.value = rpAtCandidates()
+    atMenuOpen.value = true
+    atQuery.value = ''
+    return
+  }
+  if (!atMenuOpen.value) return
+  if (e.key === 'Escape') { atMenuOpen.value = false; return }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    const step = e.key === 'ArrowDown' ? 1 : -1
+    atMenuHl.value = (atMenuHl.value + step + atMenuItems.value.length) % Math.max(1, atMenuItems.value.length)
+    return
+  }
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    if (atMenuHl.value >= 0 && atMenuItems.value[atMenuHl.value]) {
+      e.preventDefault()
+      insertAtMention(atMenuItems.value[atMenuHl.value])
+    }
+  }
+}
+// 输入框 input：RP @ 过滤 + 原粘贴兜底合并
+function onRpAtInput(e) {
+  onChatInput(e)
+  if (!atMenuOpen.value) return
+  const v = userInput.value
+  const idx = v.lastIndexOf('@')
+  atQuery.value = idx >= 0 ? v.slice(idx + 1) : ''
+  atMenuItems.value = rpAtCandidates().filter(it =>
+    !atQuery.value || it.name.toLowerCase().includes(atQuery.value.toLowerCase())
+  )
+  atMenuHl.value = 0
+}
+function insertAtMention(item) {
+  const v = userInput.value
+  const idx = v.lastIndexOf('@')
+  const before = idx >= 0 ? v.slice(0, idx) : v
+  const after = idx >= 0 ? v.slice(idx + 1).replace(/^\S*/, '') : ''
+  const prefix = (before && !before.endsWith(' ')) ? before + ' ' : before
+  userInput.value = prefix + '@' + item.name + ' ' + after
+  atMenuOpen.value = false
+  nextTick(() => {
+    if (chatInputRef.value) {
+      chatInputRef.value.focus()
+      const pos = userInput.value.length
+      chatInputRef.value.setSelectionRange(pos, pos)
+    }
+  })
+}
+// 解析输入框里的 @点名 → { target, text }（text 去掉 @名字 前缀）
+function parseAtMention(raw) {
+  const m = /^\s*@([^\s@]+(?:\s+[^\s@]+)?)(?:\s*[:：]?\s*)([\s\S]*)$/.exec(raw || '')
+  if (!m) return { target: '', text: raw || '' }
+  const name = m[1].trim()
+  const rest = (m[2] || '').trim()
+  const cands = rpAtCandidates()
+  const hit = cands.find(c => c.name.toLowerCase() === name.toLowerCase())
+  return { target: hit ? hit.name : '', text: rest }
+}
+
+// ── 功能导航收束：折叠栏「功能」按钮 → 菜单贴着折叠栏右侧弹出（rail-card 同款），
+// 列出 App 级 tab。聊天页（Agent/RP）本身不悬浮那排 tab。
+// 站点/聚合 API 没人点，从菜单里剔除（appNav.js 全量定义保留给 App 级 rail）。 ──
+const fnRailItems = railItemDefinitions.filter(it => it.id !== 'sites' && it.id !== 'agg')
+const fnMenuOpen = ref(false)
+const fnMenuStyle = ref({})
+function openFnMenu(e) {
+  const rect = e?.currentTarget?.getBoundingClientRect()
+  if (!rect) { fnMenuOpen.value = true; return }
+  // 从按钮右下角向上生长：bottom 钉住按钮底部，菜单往上长，
+  // 高度再大也不会顶出视口底部（对比 top 定位会把下方截断）。
+  const menuHeight = Math.min(360, window.innerHeight - 16)
+  const bottom = window.innerHeight - rect.bottom + 10
+  fnMenuStyle.value = {
+    left: `${rect.right + 10}px`,
+    bottom: `${Math.max(8, Math.min(bottom, window.innerHeight - menuHeight - 8))}px`,
+    maxHeight: `${menuHeight}px`,
+    overflowY: 'auto',
+  }
+  fnMenuOpen.value = true
+}
+function goFnItem(item) {
+  fnMenuOpen.value = false
+  if (item.to) window.location.href = item.to
+  else if (item.id === 'agg') showSettings.value = true // 聚合 API 走设置弹窗
+}
+// 点空白处收起功能菜单
+function onDocClickCloseFnMenu(e) {
+  if (!fnMenuOpen.value) return
+  if (e?.target?.closest?.('.gem-rail-fn-wrap, .rail-fn-menu')) return
+  fnMenuOpen.value = false
+}
+onMounted(() => window.addEventListener('click', onDocClickCloseFnMenu))
+onUnmounted(() => window.removeEventListener('click', onDocClickCloseFnMenu))
 
 // ==================== 语音输出开关（喇叭按钮，Hermes 布局） ====================
 // ⚠️ 必须放在 useChatWidget 解构之后：watch(messages) 在 setup 同步执行，解构前引用会 TDZ 白屏
@@ -4636,12 +5393,20 @@ async function handleSend() {
     attachments.value = []
     // 占位等待期间用户又主动发新消息：旧占位作废（防分析完自动启动双流）
     pendingSend = null
-    launchWorkflow(combined, displayText, displayAttachments)
+    // RP @呼人：侧栏点选目标（atMentionTarget）优先，其次输入框 @名字 前缀。
+    // 展示文本保留完整（用户打的 @Yosuri：xxx 原样上屏，不发空气）。
+    let rpTarget = ''
+    if (rpPrimaryId.value) {
+      rpTarget = atMentionTarget.value
+      const at = parseAtMention(displayText)
+      if (at.target) rpTarget = at.target
+    }
+    launchWorkflow(combined, displayText, displayAttachments, false, rpTarget)
 }
 
 // 真正启动工作流（共享池 / 超长暂存 / startCodeWorkflow 三段，供 handleSend 与
 // 图片分析完成后的自动启动共用）。
-async function launchWorkflow(combined, displayText, displayAttachments, skipUserBubble = false) {
+async function launchWorkflow(combined, displayText, displayAttachments, skipUserBubble = false, rpTarget = '') {
   // 公益免费模型：发消息瞬间就把「用户气泡 + bot 正在思考框」都建出来，
     // 鉴权/配额在后台并行——绝不让首屏等云往返（否则气泡、思考框都要卡到配额回来才显示）
     if (sharedPoolModelIds.value.has(selectedModel.value)) {
@@ -4711,7 +5476,7 @@ async function launchWorkflow(combined, displayText, displayAttachments, skipUse
         if (res.ok && data.prepare_id) prepareId = data.prepare_id
       } catch { /* 暂存失败回退 URL 直传（极端场景，短任务不受影响） */ }
     }
-    startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value, prepareId, skipUserBubble })
+    startCodeWorkflow(combined, { text: displayText, attachments: displayAttachments }, { model: selectedModel.value, prepareId, skipUserBubble, rpTarget })
   }
 
   // 确保本机已有云端游客 UID（未登录时公益免费的身份依据）。
@@ -4866,7 +5631,14 @@ async function launchWorkflow(combined, displayText, displayAttachments, skipUse
                   for (const line of lines) {
                     if (!line.startsWith('data: ')) continue
                     const data = line.slice(6)
-                    if (data === '[DONE]') { flow.status = 'completed'; return true }
+                    if (data === '[DONE]') {
+                      // 早退路径必须同样刷新 UI：否则 status=completed 改完没人
+                      // onStreamUpdate，复制栏/收尾块要等下次工作流开始才出现（09-14）
+                      flow.status = 'completed'
+                      flow.endTime = Date.now()
+                      onStreamUpdate?.()
+                      return true
+                    }
                     try {
                       const parsed = JSON.parse(data)
                       const content = parsed.choices?.[0]?.delta?.content || ''
@@ -5492,6 +6264,8 @@ async function refreshGitGraph() {
 
 <style>
 @import './chat-global.css';
+@import '../../../styles/shanxi/worldbook.css';
+@import '../../../styles/shanxi/battle.css';
 
 /* ==================== 建议按钮行（工具条下方，2026-09-12 迁移至此） ==================== */
 .flow-suggestions {
