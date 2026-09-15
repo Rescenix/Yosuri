@@ -127,6 +127,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { tr } from '../composables/useI18n.js'
 import { useAuth } from '../composables/useAuth.js'
+import { getBackendBase } from '../desktopTransport.js'
 
 const { isLoggedIn, uid: myUidRef } = useAuth()
 const authed = computed(() => isLoggedIn.value)
@@ -140,7 +141,10 @@ function hd(extra) {
   return Object.assign({ 'Content-Type': 'application/json' }, extra, tk() ? { Authorization: 'Bearer ' + tk() } : {})
 }
 async function api(method, path, body) {
-  const res = await fetch(path, { method, headers: hd(), body: body ? JSON.stringify(body) : undefined })
+  // 桌面版必须打绝对地址：相对路径会被解析到 https://wails.localhost 的 AssetServer，
+  // 后端 gin 在 127.0.0.1 上收不到 → 搭子界面全部请求 404（wails 前缀没洗掉）。
+  const base = await getBackendBase()
+  const res = await fetch(base + path, { method, headers: hd(), body: body ? JSON.stringify(body) : undefined })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status))
   return data

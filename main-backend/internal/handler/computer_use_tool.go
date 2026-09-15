@@ -8,7 +8,6 @@ package handler
 import (
 	"backend/internal/ai/core"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -25,9 +24,9 @@ import (
 func computerUseToolDefs() []core.ToolDefinition {
 	return []core.ToolDefinition{
 		nativeTool("computer_screenshot",
-			"截取当前桌面屏幕截图，返回 base64 编码的 PNG 图片，可供视觉模型分析。可指定区域或全屏。",
+			"截取当前前台窗口（默认）或整屏，落盘成图片文件并把**路径**回给你。这是你看清画面的唯一方式：拿到路径后必须用 view_image(path=该路径) 才能真正读到画面内容。只在「不知道下一步该点哪里」时才截图；同一画面不要重复截图确认，那只会刷用户桌面。截图属内部感知步骤，不会也不需要作为交付物展示给用户。",
 			map[string]core.ToolProperty{
-				"region": {Type: "string", Description: `可选，截图区域： "full"（全屏，默认）、"active"（活动窗口）`},
+				"region": {Type: "string", Description: `可选，截图区域："active"（前台窗口，默认，隐私友好）、"full"（整个桌面，含用户其它窗口，仅在确实需要全局视野时显式指定）`},
 			}, nil),
 		nativeTool("computer_mouse_move",
 			"将鼠标移动到指定屏幕坐标 (x, y)。坐标从屏幕左上角 (0,0) 开始。",
@@ -141,46 +140,43 @@ func callComputerScreenshot(argsJSON string) (nativeToolResult, error) {
 		var img image.Image
 		var err error
 
-		switch args.Region {
-		case "active":
-			// 活动窗口截图（仅 Windows 通过 API 实现）
-			img, err = captureActiveWindow()
-		default:
-			// 全屏截图
+		switch strings.ToLower(args.Region) {
+		case "full", "fullscreen", "screen":
+			// 显式要求整屏：会拍到用户其它窗口，仅在确实需要全局视野时用
 			img, err = captureFullScreen()
+		default:
+			// 默认（含 "active" 与留空）：只截前台窗口，隐私友好，不把用户整个桌面拍进图里
+			img, err = captureActiveWindow()
 		}
 		if err != nil {
 			return nativeToolResult{}, fmt.Errorf("截图失败: %w", err)
 		}
 
-		// 编码为 PNG base64
-		tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("reshot_%d.png", time.Now().UnixNano()))
+		// 截图落盘成文件，把**路径**回给模型——模型靠 view_image(path=...) 才真正读得到画面。
+		// 关键：不再把 base64 塞进 Images 工件。之前那样做，图片只走 SSE 弹成聊天里的
+		// 「页面截图」大卡片糊在用户脸上，而模型上下文里根本没有这张图（mcpImageArtifact
+		// 不进文本上下文），于是模型"看不见"自己截了什么 → 反复重截确认 → 每张都刷屏，
+		// 用户被满屏桌面截图吓跑。截图是 agent 的内部感知步骤，不该作为交付物展示。
+		dir := filepath.Join(resceneUserDataDir(), "screenshots")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nativeToolResult{}, fmt.Errorf("创建截图目录失败: %w", err)
+		}
+		tmpFile := filepath.Join(dir, fmt.Sprintf("shot_%d.png", time.Now().UnixNano()))
 		f, err := os.Create(tmpFile)
 		if err != nil {
-			return nativeToolResult{}, fmt.Errorf("创建临时文件失败: %w", err)
+			return nativeToolResult{}, fmt.Errorf("创建截图文件失败: %w", err)
 		}
-		defer os.Remove(tmpFile)
 		if err := png.Encode(f, img); err != nil {
 			f.Close()
+			os.Remove(tmpFile)
 			return nativeToolResult{}, fmt.Errorf("PNG 编码失败: %w", err)
 		}
 		f.Close()
 
-		data, err := os.ReadFile(tmpFile)
-		if err != nil {
-			return nativeToolResult{}, fmt.Errorf("读取临时文件失败: %w", err)
-		}
-
-		b64 := base64.StdEncoding.EncodeToString(data)
 		bounds := img.Bounds()
-
 		return nativeToolResult{
-			Text: fmt.Sprintf("截图完成：%dx%d，大小 %.1fKB。图片已通过本工具返回（可直接用 view_image 分析）。",
-				bounds.Dx(), bounds.Dy(), float64(len(data))/1024),
-			Images: []mcpImageArtifact{{
-				Data:     b64,
-				MimeType: "image/png",
-			}},
+			Text: fmt.Sprintf("已截图：%dx%d，存到 %s。要「看清」画面内容，调用 view_image(path=%q, question=你想确认的东西)；不要为了确认而重复截同一画面。",
+				bounds.Dx(), bounds.Dy(), tmpFile, tmpFile),
 		}, nil
 	})
 }
@@ -443,7 +439,7 @@ func callComputerOpenURL(argsJSON string) (nativeToolResult, error) {
 	if err := cmd.Start(); err != nil {
 		return nativeToolResult{}, fmt.Errorf("打开网址失败: %v", err)
 	}
-	return nativeToolResult{Text: "已用系统浏览器打开 " + a.URL + "。等待页面加载后，调用 computer_screenshot 查看页面内容。"}, nil
+	return nativeToolResult{Text: "已用系统浏览器打开 " + a.URL + "。等页面加载后，若需看清内容，用 computer_screenshot 截图（返回路径）再接 view_image(path=该路径) 读画面；能凭已打开的 URL 判断就不要盲目截图。"}, nil
 }
 
 type robotgoBitmap struct {

@@ -28,10 +28,10 @@ const SoulTemplateCodeProtocol = `
 - 扩展能力（搜索/识图/生图/记忆/视频/检索）是自研内置，工具名不带前缀，直接调；索引里列出的名字都可直接使用。
 - 用户要求「打开/操作某个网站、点外卖、抢票、填表、下单、查某个网页内容」这类网页任务时，自动进入 computer use 流程，不要只给文字建议：
   1. 先 computer_open_url 打开目标网址（用户给了网址直接用；没给就打开用户提到的网站或搜索引擎）；
-  2. computer_screenshot 截图看页面，识别输入框/按钮位置；
-  3. 用 computer_mouse_click 点击、computer_type 输入、computer_key 回车/切换，循环「截图 → 看清 → 操作 → 再截图确认」直到任务完成；
-  4. 完成或失败都要 computer_screenshot 确认最终状态再回复用户。
-  操作浏览器以外的桌面任务（移动鼠标、滚动、复制粘贴等）同样优先用 computer_* 工具完成。
+  2. 需要看清画面时才 computer_screenshot（默认只截前台窗口），它返回一个图片**路径**；再用 view_image(path=该路径, question=你想确认的) 读画面，识别输入框/按钮位置。截图本身你「看不见」，必须接 view_image 才有视觉。
+  3. 用 computer_mouse_click 点击、computer_type 输入、computer_key 回车/切换。节奏是「不确定 → 截一次 → view_image 看清 → 连续做几步能做的操作」，**严禁每点一下就重截一次**；同一页面状态只截一次，不要为了"确认成功"反复重截。
+  4. 截图是内部感知步骤，绝不作为交付物贴给用户——用户不需要看到自己桌面的截图，那会吓到人。收尾时用文字说明你做了什么、结果如何即可。
+  操作浏览器以外的桌面任务（移动鼠标、滚动、复制粘贴等）同样优先用 computer_* 工具完成，遵守同样的"少截、截了必 view_image、不外发截图"纪律。
 - read 用 path 读文件（offset/limit 分段，最多 400 行），给 pattern 是内容搜索，给 glob 是文件名匹配；patch 用 old_string/new_string 做唯一替换（old_string 从 read 结果原样复制）。
 - **必须按行读取文件**：用 read 的 offset/limit 分段读取，offset 从 1 开始，一次最多 400 行；禁止无目的地把大文件全文塞进上下文。
 - 先在需要改动的文件上用 read 或 grep 定位再动手，避免重复劳动。

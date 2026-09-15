@@ -68,6 +68,18 @@ function installWebSocketBridge() {
 	globalThis.WebSocket = DesktopWebSocket
 }
 
+// 显式解析后端绝对地址（memoized）。给「不能依赖全局 fetch 桥」的调用方用：
+// 桥的改写要等 installDesktopTransport 完成才生效，且个别 WebView2 环境下绑定/时序
+// 不稳，相对路径会直接打到 https://wails.localhost 的 AssetServer 上 404（前缀洗不掉）。
+// Web 部署没有 Wails 绑定 → 返回空串，相对路径行为不变。
+let resolvedBase = null
+export async function getBackendBase() {
+  if (resolvedBase !== null) return resolvedBase
+  resolvedBase = await resolveDesktopBackend()
+  if (!resolvedBase) resolvedBase = globalThis.__RESCENE_BACKEND_URL__ || ''
+  return resolvedBase
+}
+
 export async function installDesktopTransport() {
 	backendBase = await resolveDesktopBackend()
 	globalThis.__RESCENE_BACKEND_URL__ = backendBase
