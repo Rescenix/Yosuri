@@ -1,0 +1,14 @@
+{
+  "name": "memory-architecture",
+  "description": "记忆文件在哪、什么结构、怎么更新：更新长期记忆前先看这个，不用到处找文件",
+  "status": "active",
+  "trigger": "要写记忆、读记忆、用户问记忆存哪了、记忆不同步、记忆找不到、检查记忆、整理记忆",
+  "verification": "更新记忆走 remember/memory_delete 工具且落在正确的目录（通用或私有）；读记忆直接读绝对路径，不在项目目录里乱找",
+  "steps": [
+    "记忆就两个目录：通用记忆 ~/rescene_data/memory/（所有 Agent 共享），私有记忆 ~/rescene_data/agents/<我的agent id>/memory/（只属于我自己）。两个都是「index.md 索引 + 若干 .md 文件」结构，index.md 里一行 [[文件名]] 加一句摘要。",
+    "写记忆一律用 remember 工具（scope 不传=写通用，scope=private=写我的私有记忆），但 remember 只能追加新条目——它会读旧文件拼上新内容整个写回，不能更新某一行。要修正/更新已有的某条记忆：用 patch 工具直接改 ~/rescene_data/memory/<file>.md 里对应的那行（私有记忆改 ~/rescene_data/agents/<我的agent id>/memory/<file>.md），改完记得顺手把 index.md 里对应行的摘要也 patch 掉；整条不要了用 memory_delete 删。",
+    "通用记忆各文件用途：preferences=用户偏好与画像，project=项目信息，decisions=决策，pinned=常驻记忆（每轮必注入），handoff=会话交接工作态，intimacy=亲密度缓存，personality=性格档案（自动蒸馏，别手改）。拿不准写哪个就写 preferences。",
+    "读记忆：index.md 每轮已经注入给你了，按索引里的 [[链接]] 联想展开；用户说「看看我的记忆」时直接 read 上面两个目录里对应的 .md 绝对路径，别去项目目录、别拿文件名在别处搜。",
+    "记忆会同步到云端（设置→记忆 开关，默认开），写了通用记忆会异步推送；发现记忆不在了先看目录里文件还在不在，再判断是没写入还是同步问题。"
+  ]
+}

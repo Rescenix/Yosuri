@@ -7,22 +7,32 @@
     :width="size"
     :height="size"
     viewBox="0 0 100 100"
-    fill="none"
+    :fill="filled ? 'currentColor' : 'none'"
     aria-hidden="true"
   >
-    <path :d="skeleton" stroke="currentColor" stroke-opacity="0.18" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-    <g>
-      <circle
-        v-for="(c, i) in particles"
-        :key="i"
-        :cx="c.x"
-        :cy="c.y"
-        :r="c.r"
-        fill="currentColor"
-        :opacity="c.op"
-      />
-    </g>
-    <circle cx="50" cy="50" r="4" fill="currentColor" opacity="0.9" />
+    <!-- filled：5 瓣玫瑰曲线闭合涂满（实心矢量玫瑰，收束概要栏用）。
+         曲线本身只占 viewBox ~61%，放大 1.55 倍让花瓣顶到边缘，避免显小。 -->
+    <path
+      v-if="filled"
+      :d="skeleton + ' Z'"
+      fill="currentColor"
+      transform="translate(50 50) scale(1.35) translate(-50 -50)"
+    />
+    <template v-else>
+      <path :d="skeleton" stroke="currentColor" stroke-opacity="0.18" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+      <g>
+        <circle
+          v-for="(c, i) in particles"
+          :key="i"
+          :cx="c.x"
+          :cy="c.y"
+          :r="c.r"
+          fill="currentColor"
+          :opacity="c.op"
+        />
+      </g>
+      <circle cx="50" cy="50" r="4" fill="currentColor" opacity="0.9" />
+    </template>
   </svg>
 </template>
 
@@ -31,6 +41,8 @@ import { computed } from 'vue'
 
 const props = defineProps({
   size: { type: Number, default: 14 },
+  // filled：曲线闭合后整体涂满（实心矢量玫瑰），不画骨架线与粒子
+  filled: { type: Boolean, default: false },
 })
 
 // 5 瓣玫瑰曲线（与 RoseParticleLoader / Hermes loader.tsx 同参数），静态采样

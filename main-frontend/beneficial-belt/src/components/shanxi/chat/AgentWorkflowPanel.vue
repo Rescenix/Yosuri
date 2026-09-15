@@ -25,7 +25,7 @@
             <div v-else-if="group.type === 'single-thinking'" class="flow-thinking flow-thinking-single">
                           <div class="flow-row-head" @click="toggleThink(`single-${gIdx}`, group.block)">
                                           <RoseParticleLoader v-if="!thinkDone(group.block)" :size="18" class="flow-row-icon icon-think" />
-                                                                        <Icon v-else icon="mdi:thought-bubble-outline" class="flow-row-icon icon-think" width="16" />
+                                          <RoseIcon v-else :size="15" filled class="flow-row-icon icon-think" />
                             <span class="flow-thinking-text-label">{{ thinkLabelText(group.block) }}</span>
                 <span v-if="thinkCollapsed(`single-${gIdx}`, group.block) && group.block.text" class="flow-row-preview">{{ onelinePreview(group.block.text) }}</span>
                 <span v-else class="flow-spacer"></span>
@@ -39,9 +39,8 @@
       <!-- patch 编辑结果：平铺不收束（diff 是交付物，收进概要组会被折叠看不见） -->
             <div v-else-if="group.type === 'tool-pinned'" class="flow-tool flow-tool-pinned">
               <div class="flow-row-head" @click.stop="group.block.expanded = !group.block.expanded">
-                <RoseParticleLoader v-if="group.block.status === 'running'" :size="14" :particle-count="28" class="flow-row-icon icon-tool icon-tool-live" />
-                <Icon v-else icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
-                <span class="flow-tool-label" :class="{ 'is-running': group.block.status === 'running' }">{{ actionText(group.block) }}</span>
+                <StarSpark :size="14" :done="group.block.status !== 'running' && group.block.status !== 'generating'" class="flow-row-icon icon-tool" :class="{ 'icon-tool-live': group.block.status === 'running' || group.block.status === 'generating' }" />
+                <MarqueeText class="flow-tool-label" :class="{ 'is-running': group.block.status === 'running' }" :text="actionText(group.block)" />
                 <span v-if="diffCounts(group.block)" class="flow-tool-counts">
                   <span class="flow-add">+{{ diffCounts(group.block).added }}</span>
                   <span v-if="diffCounts(group.block).removed" class="flow-del">−{{ diffCounts(group.block).removed }}</span>
@@ -239,7 +238,6 @@
 
           <!-- 记忆写入：单行彩虹反馈（不占卡片，直接铺在聊天流里） -->
       <div v-else-if="group.type === 'memory-saved'" class="flow-memory-saved">
-        <span class="fms-scanline"></span>
         <span class="fms-label">{{ tr('已保存到记忆') }}</span>
         <span class="fms-text">{{ group.block.text }}</span>
       </div>
@@ -262,7 +260,7 @@
           @click="toggleSummary(group, gIdx)"
         >
           <div class="flow-summary-main">
-            <Icon icon="mdi:console" width="13" class="flow-summary-icon" />
+            <StarSpark :size="15" :done="!currentActiveBlock(group)" class="flow-summary-icon icon-rose" />
             <span class="flow-summary-text">
               <!-- 概要栏外显「当前正在执行的指令」，指令切换时淡入淡出；
                    全部命令/思考完成才收束成摘要（groupSummaryTitle 兜底态） -->
@@ -281,7 +279,7 @@
                             <div v-if="b.type === 'thinking'" class="flow-thinking flow-thinking-timeline">
                               <div class="flow-row-head" @click.stop="toggleThink(`${gIdx}-${i}`, b)">
                                                               <RoseParticleLoader v-if="!thinkDone(b)" :size="18" class="flow-row-icon icon-think" />
-                              <Icon v-else icon="mdi:thought-bubble-outline" class="flow-row-icon icon-think" width="16" />
+                                                              <RoseIcon v-else :size="15" filled class="flow-row-icon icon-think" />
                                 <span class="flow-thinking-text-label">{{ thinkLabelText(b) }}</span>
                                 <span v-if="thinkCollapsed(`${gIdx}-${i}`, b) && b.text" class="flow-row-preview">{{ onelinePreview(b.text) }}</span>
                                 <span v-else class="flow-spacer"></span>
@@ -295,11 +293,12 @@
               <!-- 操作 -->
               <div v-else-if="b.type === 'tool'" class="flow-tool flow-tool-timeline">
                 <div class="flow-row-head" @click.stop="b.expanded = !b.expanded">
-                  <!-- 执行中：静态扳手换成玫瑰粒子动画（与思考行同源，小号+灰色），
-                       完成/失败后落回静态图标，不再空转消耗 rAF -->
-                  <RoseParticleLoader v-if="b.status === 'running'" :size="14" :particle-count="28" class="flow-row-icon icon-tool icon-tool-live" />
-                  <Icon v-else icon="mynaui:tool" class="flow-row-icon icon-tool" width="13" />
-                  <span class="flow-tool-label" :class="{ 'is-running': b.status === 'running' }">{{ actionText(b) }}</span>
+                  <!-- 搜索类→放大镜、读取类→文件图标（Iconify 静态）；其余工具→星尘凝星
+                       （运行=光点汇聚，完成=星芒定格） -->
+                  <Icon v-if="isSearch(b.name)" icon="mdi:magnify" :width="13" class="flow-row-icon icon-search" />
+                  <Icon v-else-if="isRead(b.name)" icon="mdi:file-document-outline" :width="13" class="flow-row-icon icon-read" />
+                  <StarSpark v-else :size="14" :done="b.status !== 'running' && b.status !== 'generating'" class="flow-row-icon icon-tool" :class="{ 'icon-tool-live': b.status === 'running' || b.status === 'generating' }" />
+                  <MarqueeText class="flow-tool-label" :class="{ 'is-running': b.status === 'running' }" :text="actionText(b)" />
                   <span v-if="diffCounts(b)" class="flow-tool-counts">
                     <span class="flow-add">+{{ diffCounts(b).added }}</span>
                     <span v-if="diffCounts(b).removed" class="flow-del">−{{ diffCounts(b).removed }}</span>
@@ -477,6 +476,9 @@ import { diffLines } from 'diff'
 import DiffViewer from './DiffViewer.vue'
 import ArxivPaperCard from './ArxivPaperCard.vue'
 import RoseParticleLoader from './RoseParticleLoader.vue'
+import RoseIcon from './RoseIcon.vue'
+import StarSpark from './StarSpark.vue'
+import MarqueeText from './MarqueeText.vue'
 import { renderMarkdown, renderRpMarkdown } from './markdownRenderer.js'
 import { requestPreview } from '../composables/previewBus.js'
 // 桌面版页面源是 https://wails.localhost，<a href> 原生加载不走 fetch 桥，
@@ -756,10 +758,15 @@ function updateVisibleIntents() {
   const els = root.querySelectorAll('.flow-intent[data-intent-visible="1"]')
   if (!els.length) return
   let oi = 0
-  for (const b of props.flow?.blocks || []) {
-    if (b.type !== 'intent') continue
+  // 必须按「实际渲染的 visible 分组」对齐 DOM，而不是按原始 blocks 里的
+  // intent 顺序——收束后中间 intent 全进概要组不再渲染，DOM 里只剩最终总结
+  // 那一个 div；按 blocks 遍历会把第一句写进唯一的 div（重大 bug：收束后
+  // 留下的是第一句而不是最后总结）。
+  for (const g of blockGroups.value) {
+    if (g.type !== 'visible') continue
+    const b = g.block
     const el = els[oi++]
-    if (!el) continue
+    if (!el || !b) continue
     const html = b._cachedHtml || ''
     if (b._prevOdd) {
       // 首次进入未闭合：写入 markdown 渲染结果（含未闭合 pre）
@@ -814,11 +821,7 @@ const blockGroups = computed(() => {
   if (streaming) {
     let current = null
     for (const b of blocks) {
-      if (b.type === 'tool' && b.name === 'patch') {
-        // patch 编辑结果平铺不收束：diff 是交付物，收进概要组被折叠看不见
-        if (current) { groups.push(current); current = null }
-        groups.push({ type: 'tool-pinned', block: b })
-      } else if (b.type === 'tool' && b.name !== 'web_search') {
+      if (b.type === 'tool' && b.name !== 'web_search') {
         if (!current || current.type === 'visible' || current.type === 'single-thinking' || current.type === 'search-tool') {
           if (current) groups.push(current)
           current = { type: 'summary', blocks: [b] }
@@ -845,7 +848,7 @@ const blockGroups = computed(() => {
               }
               b._prevOdd = true
               b._openFenceText = b.text
-              groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, openFence: true, retryNote: !!b.retryNote })
+              groups.push({ type: 'visible', block: b, text: b.text, html: b._cachedHtml, openFence: true, retryNote: !!b.retryNote })
             } else {
               if (b._prevOdd) {
                 b._cachedHtml = renderRpMarkdown(b.text, true)
@@ -862,7 +865,7 @@ const blockGroups = computed(() => {
                 b._cachedText = b.text
                 b._cachedAt = now
               }
-              groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
+              groups.push({ type: 'visible', block: b, text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
             }
         } else if (b.type === 'thinking') {
           groups.push({ type: 'single-thinking', block: b })
@@ -917,11 +920,9 @@ const blockGroups = computed(() => {
     }
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i]
-    if (b.type === 'tool' && b.name === 'patch') {
-      // patch 编辑结果平铺不收束（diff 是交付物）
-      flushProcess()
-      groups.push({ type: 'tool-pinned', block: b })
-    } else if (b.type === 'tool' && b.name !== 'web_search') {
+    if (b.type === 'tool' && b.name !== 'web_search') {
+      // 编辑类工具（patch/apply_patch）同样收束：diff 归进过程时间线，
+      // 收尾后概要组折叠，只留最终总结平铺可见。
       processBlocks.push(b)
     } else {
       if (b.type === 'intent') {
@@ -936,7 +937,7 @@ const blockGroups = computed(() => {
             b._cachedText = b.text
             b._cachedAt = now
           }
-          groups.push({ type: 'visible', text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
+          groups.push({ type: 'visible', block: b, text: b.text, html: b._cachedHtml, retryNote: !!b.retryNote })
         } else {
           processBlocks.push(b)
         }
@@ -1073,9 +1074,24 @@ function groupSummaryTitle(group) {
     if (cur.type === 'thinking') return tr('正在思考…')
     return tr('Agent 正在处理…')
   }
-  // 全部命令/思考都完成了，才收束成摘要
-    return tr('运行了多个命令')
+  // 全部命令/思考都完成了，收束成摘要：显示整组耗时「已进行x秒」
+  return groupElapsedText(group)
+}
+
+// 概要组耗时：遍历组内所有块，start 取最早 startTime，end 取最晚完成时刻
+// （endTime 优先，无则 startTime+elapsedMs 推算）。兜底显示「运行了多个命令」。
+function groupElapsedText(group) {
+  const blocks = group.blocks || []
+  let start = 0, end = 0
+  for (const b of blocks) {
+    if (b.startTime && (!start || b.startTime < start)) start = b.startTime
+    const done = b.endTime || (b.startTime ? b.startTime + (b.elapsedMs || 0) : 0)
+    if (done > end) end = done
   }
+  if (!start || !end || end <= start) return tr('运行了多个命令')
+  const sec = Math.max(1, Math.round((end - start) / 1000))
+  return tr(`已进行${sec}秒`)
+}
 
 // 指令切换淡入淡出的 key：流式生成（generating）中 key 固定防闪；
 // 命令确定/执行中/下一条指令切换时以「块 id + 内容」为 key → out-in 淡出旧指令淡入新指令。
@@ -1266,8 +1282,7 @@ function target(b) {
   const path = filePath(b)
   if (path) return baseName(path)
   const v = a.command || a.task || a.query || Object.values(a)[0] || ''
-  const s = String(v)
-  return s.length > 48 ? s.slice(0, 48) + '…' : s
+  return String(v)
 }
 
 function actionText(b) {
@@ -1280,7 +1295,7 @@ function actionText(b) {
     const n = searchSources(b).length
     const label = n > 0 ? (tr('搜索到 ') + n + tr(' 个来源')) : (b.status === 'running' ? tr('联网搜索中…') : tr('联网搜索'))
     const q = (b.args && b.args.query) || ''
-    return q ? `${label} · ${String(q).slice(0, 30)}${String(q).length > 30 ? '…' : ''}` : label
+    return q ? `${label} · ${q}` : label
   }
   const verb = VERBS[b.name] || (b.name.startsWith('mcp__') ? b.name.split('__').slice(1).join(' · ') : b.name)
   const obj = target(b)
@@ -1792,6 +1807,12 @@ function runningCapLabel(b) {
   height: 13px;
   color: var(--app-text-faint);
 }
+/* 收束概要栏的实心玫瑰：品牌玫瑰色，比默认 13px 大一档 */
+.flow-summary-icon.icon-rose {
+  color: var(--app-accent);
+  width: 15px;
+  height: 15px;
+}
 .flow-summary-text {
   font-size: 11.5px;
   font-weight: 400;
@@ -1925,32 +1946,16 @@ function runningCapLabel(b) {
   line-height: 1.6;
 }
 .flow-steer-text { flex: 1; min-width: 0; }
-/* 记忆写入反馈：单行彩虹渐变文字 + 左侧发光扫描线，不占卡片 */
+/* 记忆写入反馈：单行彩虹渐变文字，不占卡片 */
 .flow-memory-saved {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 8px 0 8px 14px;
-  padding: 5px 0 5px 14px;
-  font-size: 15px;
+  gap: 8px;
+  margin: 6px 0 6px 14px;
+  padding: 2px 0;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.5;
-  border-left: 3px solid rgba(179, 157, 219, 0.6);
-}
-.fms-scanline {
-  position: absolute;
-  left: -14px;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #ff9a5c, #ff7eb3, #b39ddb);
-  animation: fms-pulse 1.6s ease-in-out infinite;
-  border-radius: 2px;
-}
-@keyframes fms-pulse {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
 }
 .fms-label {
   background: linear-gradient(90deg, #ff9a5c, #ff7eb3, #b39ddb);
@@ -2003,6 +2008,7 @@ function runningCapLabel(b) {
 .flow-row-icon { flex-shrink: 0; }
 .icon-think { color: var(--app-accent); }
 .icon-search { color: #8b5cf6; }
+.icon-read { color: var(--app-text-soft); }
 .icon-tool { color: var(--app-text-soft); }
 /* 执行中的玫瑰粒子：跟静态扳手同色，不抢思考行的品牌色 */
 .icon-tool-live { color: var(--app-text-soft); }
@@ -2548,13 +2554,12 @@ function runningCapLabel(b) {
   margin: 6px 0;
 }
 .flow-tool-label {
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 60%;
   font-size: inherit;
   line-height: 1.5;
   color: inherit;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 /* 概要栏当前指令切换淡入淡出 */
