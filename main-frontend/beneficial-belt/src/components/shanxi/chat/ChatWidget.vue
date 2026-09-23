@@ -1737,7 +1737,7 @@ import PreviewBrowser from './PreviewBrowser.vue'
 import NewSessionHome from './NewSessionHome.vue'
 import WorldbookPanel from './WorldbookPanel.vue'
 import RpBattleCard from './RpBattleCard.vue'
-import { railItemDefinitions } from '../../../appNav.js'
+import { railItemDefinitions, navTo } from '../../../appNav.js'
 import KnowledgeGraph from './KnowledgeGraph.vue'
 import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
@@ -4695,7 +4695,8 @@ function openFnMenu(e) {
 }
 function goFnItem(item) {
   fnMenuOpen.value = false
-  if (item.to) window.location.href = item.to
+  // 必须走 router：window.location.href 在桌面版会向 wails.localhost/<path> 发真实请求 → 404 页顶掉整个窗口
+  if (item.to) navTo(item.to)
   else if (item.id === 'agg') showSettings.value = true // 聚合 API 走设置弹窗
 }
 // 点空白处收起功能菜单

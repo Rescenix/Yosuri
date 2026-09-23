@@ -114,17 +114,15 @@ var freeModelCatalog = []FreeModelDef{
 	{ID: "free_llm7_llama_3_1_8b", Vendor: "LLM7.io", Name: "Llama 3.1 8B Turbo（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "meta-Llama-3.1-8B-Instruct-Turbo", KeyEnv: "", ParamsB: 8, Note: "LLM7 免 key Turbo·工具调用·128K", Keyless: true, ContextWindow: 128000},
 	{ID: "free_llm7_minimax_m2_7", Vendor: "LLM7.io", Name: "MiniMax M2.7（LLM7·免 key）", Endpoint: "https://api.llm7.io/v1", Model: "minimax-m2.7", KeyEnv: "", ParamsB: 0, Note: "LLM7 免 key Turbo·工具调用·180K", Keyless: true, Reasoning: true, ContextWindow: 180000},
 
-	// —— B.AI（api.b.ai/v1，OpenAI 兼容）——
-	// 2026-08-23 官方文档确认：DeepSeek V4 Flash、Vision Exp 与 Hy3 均处于
-	// 0 Credits 限时活动；活动结束时间与最终计费以平台展示为准。需要用户自己的 B.AI API Key。
-	{ID: "free_bai_deepseek_v4_flash", Vendor: "B.AI", Name: "DeepSeek V4 Flash（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "deepseek-v4-flash", KeyEnv: "BAI_API_KEY", ParamsB: 284, Note: "B.AI 限时 0 Credits·工具调用·文本模型·1M 上下文", KeyURL: "https://b.ai", Reasoning: true, ContextWindow: 1048576},
-	{ID: "free_bai_deepseek_v4_flash_vision", Vendor: "B.AI", Name: "DeepSeek V4 Flash Vision Exp（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "deepseek-v4-flash-vision-exp", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI API 限时 0 Credits·实验视觉模型·1M 上下文", KeyURL: "https://b.ai", Vision: true, Reasoning: true, ContextWindow: 1048576},
-	{ID: "free_bai_hy3", Vendor: "B.AI", Name: "Tencent Hy3（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "hy3", KeyEnv: "BAI_API_KEY", ParamsB: 295, Note: "B.AI 限时 0 Credits·295B MoE·工具调用·256K", KeyURL: "https://b.ai", Reasoning: true, ContextWindow: 262144},
-	// 2026-09-03 实测新增（B.AI 新免费档，deepseek 下架后顶上）：均经 api.b.ai/v1 逐模型
-	// 最小 chat 请求验证 200 可用；MiniMax 系实测全不能加（m2.5 404 不存在 / m2.7 400 余额不足 / m3 403 付费墙），故未收录。
-	{ID: "free_bai_mimo_v2_5", Vendor: "B.AI", Name: "Mimo 2.5（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "mimo-v2.5", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI 限时 0 Credits·MixAI·agent 可用（实测 2026-09-03）", KeyURL: "https://b.ai", Reasoning: true},
-	{ID: "free_bai_glm_5_3_flash", Vendor: "B.AI", Name: "GLM 5.3 Flash（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "glm-5.3-flash", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI 限时 0 Credits·思考模型（需足量 max_tokens 才有正文）·agent 可用（实测 2026-09-03）", KeyURL: "https://b.ai", Reasoning: true},
-	{ID: "free_bai_qwen3_8_flash", Vendor: "B.AI", Name: "Qwen 3.8 Flash（B.AI·限时免费）", Endpoint: "https://api.b.ai/v1", Model: "qwen3.8-flash", KeyEnv: "BAI_API_KEY", ParamsB: 0, Note: "B.AI 限时 0 Credits·Agent 可用·实测快（2026-09-03）", KeyURL: "https://b.ai", Reasoning: true},
+	// —— Cavoti（cavoti.com/v1，OpenAI 兼容）——
+	// 2026-09-16 实测：每日限免档模型经 /v1/chat/completions 最小请求逐一验证 200 可用；
+	// MiMo-V2.5 实测返回 402 余额不足，故未收录。需要用户自己的 Cavoti API Key。
+	// 限免档共享 10 RPM / 5 并发，适合轻量交互，不做并发批处理。
+	{ID: "free_cavoti_hy3", Vendor: "Cavoti", Name: "Tencent Hy3（Cavoti·限免）", Endpoint: "https://cavoti.com/v1", Model: "hy3", KeyEnv: "CAVOTI_API_KEY", ParamsB: 295, Note: "Cavoti 每日限免档·295B MoE·工具调用·256K", KeyURL: "https://cavoti.com", Reasoning: true, ContextWindow: 262144},
+	{ID: "free_cavoti_deepseek_v4_flash_0731", Vendor: "Cavoti", Name: "DeepSeek V4 Flash 0731（Cavoti·限免）", Endpoint: "https://cavoti.com/v1", Model: "deepseek-v4-flash-0731", KeyEnv: "CAVOTI_API_KEY", ParamsB: 0, Note: "Cavoti 每日限免档·工具调用·文本模型·1M 上下文", KeyURL: "https://cavoti.com", Reasoning: true, ContextWindow: 1048576},
+	{ID: "free_cavoti_qwen3_8_flash", Vendor: "Cavoti", Name: "Qwen 3.8 Flash（Cavoti·限免）", Endpoint: "https://cavoti.com/v1", Model: "qwen3.8-flash", KeyEnv: "CAVOTI_API_KEY", ParamsB: 0, Note: "Cavoti 每日限免档·工具调用", KeyURL: "https://cavoti.com", Reasoning: true},
+	{ID: "free_cavoti_glm_5_3_flash", Vendor: "Cavoti", Name: "GLM 5.3 Flash（Cavoti·限免）", Endpoint: "https://cavoti.com/v1", Model: "glm-5.3-flash", KeyEnv: "CAVOTI_API_KEY", ParamsB: 0, Note: "Cavoti 每日限免档·思考模型（需足量 max_tokens 才有正文）", KeyURL: "https://cavoti.com", Reasoning: true},
+	{ID: "free_cavoti_minimax_m3", Vendor: "Cavoti", Name: "MiniMax M3（Cavoti·限免）", Endpoint: "https://cavoti.com/v1", Model: "minimax-m3", KeyEnv: "CAVOTI_API_KEY", ParamsB: 0, Note: "Cavoti 每日限免档·思考模型", KeyURL: "https://cavoti.com", Reasoning: true},
 
 	// —— OpenRouter（openrouter.ai/api/v1，OpenAI 兼容）——
 	// 2026-08-23 公共 /models 实测：openrouter/free 为零价格自动路由；Ox Alpha

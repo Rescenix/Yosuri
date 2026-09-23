@@ -16,6 +16,9 @@ import (
 type desktopPrefs struct {
 	// AutoStartEnabled 开机自启开关。nil = 用户从未设置过，按出厂默认「开」处理。
 	AutoStartEnabled *bool `json:"auto_start_enabled,omitempty"`
+	// CloseToTray 点关闭按钮的行为：true = 缩到右下角托盘继续后台，false = 直接退出进程。
+	// nil = 用户从未设置过，按出厂默认「缩到托盘」处理（与历史行为一致）。
+	CloseToTray *bool `json:"close_to_tray,omitempty"`
 }
 
 const desktopPrefsFileName = "desktop_prefs.json"
@@ -46,6 +49,14 @@ func loadDesktopPrefs() *desktopPrefs {
 	}
 	desktopPrefsVal = &p
 	return &p
+}
+
+// ResetDesktopPrefsCacheForTest 丢掉偏好内存缓存。测试切换 RESCENE_DATA_DIR 后必须调用，
+// 否则会读到上一个用例缓存下来的偏好（loadDesktopPrefs 命中缓存就直接返回，不再读盘）。
+func ResetDesktopPrefsCacheForTest() {
+	desktopPrefsMu.Lock()
+	desktopPrefsVal = nil
+	desktopPrefsMu.Unlock()
 }
 
 // saveDesktopPrefs 增量写偏好（读-改-写，避免覆盖掉其他字段）。
@@ -84,6 +95,19 @@ func autoStartDesired() bool {
 
 // AutoStartDesired 供桌面壳（package main）在启动路径上读取用户意愿。
 func AutoStartDesired() bool { return autoStartDesired() }
+
+// closeToTrayDesired 返回点关闭按钮时是否缩到右下角托盘（未设置过 = true，保持历史行为）。
+// 由用户在设置面板「常规 → 启动」里决定，而不是由程序写死（2026-09-23 用户要求）。
+func closeToTrayDesired() bool {
+	p := loadDesktopPrefs()
+	if p == nil || p.CloseToTray == nil {
+		return true
+	}
+	return *p.CloseToTray
+}
+
+// CloseToTrayDesired 供桌面壳在窗口关闭回调（OnBeforeClose）里实时读取。
+func CloseToTrayDesired() bool { return closeToTrayDesired() }
 
 // EnableAutoStart / DisableAutoStart 供桌面壳复用同一套注册表读写实现。
 func EnableAutoStart() error  { return enableAutoStart() }
@@ -132,4 +156,28 @@ func HandleSetAutoStart(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "enabled": enabled, "registered": autoStartRegistered()})
+}
+
+// HandleGetCloseBehavior GET /api/desktop/close-behavior —— 点关闭按钮时的行为。
+func HandleGetCloseBehavior(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"ok": true, "close_to_tray": closeToTrayDesired()})
+}
+
+// HandleSetCloseBehavior POST /api/desktop/close-behavior  body: {close_to_tray: bool}
+// 只落盘偏好，无需重启：OnBeforeClose 每次点关闭按钮都实时读这个值。
+func HandleSetCloseBehavior(c *gin.Context) {
+	var req struct {
+		CloseToTray *bool `json:"close_to_tray"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.CloseToTray == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 close_to_tray"})
+		return
+	}
+	want := *req.CloseToTray
+	if err := saveDesktopPrefs(func(p *desktopPrefs) { p.CloseToTray = &want }); err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error(),
+			"close_to_tray": closeToTrayDesired()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "close_to_tray": want})
 }

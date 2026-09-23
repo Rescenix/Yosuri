@@ -297,9 +297,6 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 
 	r.POST("/api/login", CloudLoginProxy)
 	r.POST("/api/auth/register", CloudRegisterProxy)
-	// 用户反馈（2026-09-12 方案A）：需求走用户主动提交，管理员不再读用户记忆
-	r.POST("/api/feedback", CloudFeedbackProxy)
-	r.GET("/api/feedback", CloudFeedbackProxy)
 	// 记忆密钥邮箱恢复通道（2026-09-12）：忘密码也能拿回记忆（本地恢复码 + 邮箱验证码）
 	r.POST("/api/auth/ak-recover-start", CloudAKRecoverStartProxy)
 	r.POST("/api/auth/ak-recover-claim", CloudAKRecoverClaimProxy)
@@ -375,6 +372,9 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	// 桌面行为偏好：开机自启开关（设置面板「常规」用，issue #14）
 	r.GET("/api/desktop/autostart", HandleGetAutoStart)
 	r.POST("/api/desktop/autostart", HandleSetAutoStart)
+	// 关闭窗口行为：缩到右下角托盘 vs 直接退出，由用户决定（2026-09-23）
+	r.GET("/api/desktop/close-behavior", HandleGetCloseBehavior)
+	r.POST("/api/desktop/close-behavior", HandleSetCloseBehavior)
 
 	// 定时任务：前端 ScheduledTaskModal 创建 → 调度器到点弹 Windows 原生通知（右下角）
 	r.POST("/api/cron/create", HandleCronCreate)

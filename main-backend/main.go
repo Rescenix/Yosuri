@@ -44,10 +44,19 @@ func main() {
 		MinWidth:          1024,
 		MinHeight:         720,
 		WindowStartState:  options.Normal,
-		StartHidden:       hasBackgroundFlag(os.Args[1:]),
-		HideWindowOnClose: true,
+		StartHidden: hasBackgroundFlag(os.Args[1:]),
+		// 关闭按钮行为改由用户决定（缩到托盘 / 直接退出，见设置面板「常规 → 启动」）。
+		// HideWindowOnClose 是编译期常量，置 true 就把「关闭 = 缩托盘」写死了，
+		// 所以关掉它，交给 OnBeforeClose 每次实时按偏好判断（2026-09-23）。
+		HideWindowOnClose: false,
+		OnBeforeClose:     app.OnBeforeClose,
 		BackgroundColour:  &options.RGBA{R: 248, G: 247, B: 252, A: 255},
-		AssetServer:       &assetserver.Options{Assets: frontendAssets},
+		AssetServer: &assetserver.Options{
+			Assets: frontendAssets,
+			// 未知前端路由兜底：整页跳转到 /social 这类 vue-router 路由时不会死在
+			// AssetServer 的 404 页上（见 asset_spa_fallback.go）。
+			Middleware: spaFallbackMiddleware,
+		},
 		OnStartup:         app.Startup,
 		OnShutdown:        app.Shutdown,
 		Bind:              []interface{}{app},

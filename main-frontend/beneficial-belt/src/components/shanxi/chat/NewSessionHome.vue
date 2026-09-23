@@ -6,10 +6,29 @@
       
       <!-- 加入 Vue 的 Transition 过渡组件，负责文字的上下浮入淡出 -->
       <Transition name="slide-fade" mode="out-in">
-        <span class="home-greeting-text" :key="currentGreeting">{{ displayGreeting }}</span>
-      </Transition>
-    </div>
-    <div class="home-stats-card">
+              <span class="home-greeting-text" :key="currentGreeting">{{ displayGreeting }}</span>
+            </Transition>
+          </div>
+
+          <!-- 推荐位：星迹内测开放中，送一千金币。点击跳转 /game（走 router.push，避免 wails 404） -->
+          <div class="home-reco-card" role="link" tabindex="0"
+            @click="goGame" @keydown.enter="goGame" @keydown.space.prevent="goGame">
+            <span class="reco-spark" aria-hidden="true">✦</span>
+            <div class="reco-body">
+              <div class="reco-title">
+                <span class="reco-badge">{{ tr('星迹内测') }}</span>
+                <span class="reco-open">{{ tr('限时开放中') }}</span>
+              </div>
+              <div class="reco-desc">{{ tr('登录星迹 · 送一千金币 · 先到先得') }}</div>
+            </div>
+            <span class="reco-cta">
+              {{ tr('立即体验') }}
+              <Icon icon="mdi:arrow-right" width="14" />
+            </span>
+            <!-- 特效保留：卡片扫光/闪烁由 reco-shine 驱动 -->
+          </div>
+
+          <div class="home-stats-card">
       <div class="home-stats-header">
         <div class="home-tabs">
           <span class="home-user-name" :title="auth.uid.value ? 'UID ' + auth.uid.value : ''">{{ auth.displayName.value }}</span>
@@ -84,6 +103,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '../../../composables/useAuth.js'
 import { useI18n, tr } from '../../../composables/useI18n.js'
 
@@ -93,6 +113,12 @@ const props = defineProps({ showContent: { type: Boolean, default: true } })
 
 const apiBase = import.meta.env.VITE_API_BASE || ''
 const auth = useAuth()
+const router = useRouter()
+
+// 推荐位跳转：星迹内测入口，走 router.push（禁止 <a href>，避免 wails 404）
+function goGame() {
+  router.push('/game')
+}
 
 const greetingMessages = [
   "接下来做什么，{name}？",
@@ -323,6 +349,93 @@ const heatmapCaption = computed(() => {
   font-size: 24px;
   font-weight: 600;
   color: var(--app-text);
+}
+
+/* ================== 推荐位：星迹内测 ================== */
+.home-reco-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  outline: none;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 45%, transparent);
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--app-accent) 12%, var(--app-surface-2)) 0%,
+    var(--app-surface-2) 60%);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  /* 流光扫过 */
+  animation: reco-shine 3.2s ease-in-out infinite;
+}
+.home-reco-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg,
+    transparent 40%,
+    color-mix(in srgb, var(--app-accent) 22%, transparent) 50%,
+    transparent 60%);
+  background-size: 200% 100%;
+  animation: reco-swipe 2.8s linear infinite;
+  pointer-events: none;
+}
+.home-reco-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--app-accent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--app-accent) 22%, transparent);
+}
+.home-reco-card:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 35%, transparent);
+}
+
+.reco-spark {
+  font-size: 20px;
+  color: var(--app-accent);
+  flex-shrink: 0;
+  animation: reco-twinkle 1.6s ease-in-out infinite;
+}
+.reco-body { flex: 1; min-width: 0; }
+.reco-title { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.reco-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--app-accent);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.reco-open {
+  font-size: 12px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--app-accent) 80%, #000);
+  white-space: nowrap;
+}
+.reco-desc { font-size: 12.5px; color: var(--app-text-faint); }
+.reco-cta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-accent);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@keyframes reco-swipe {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes reco-shine {
+  0%, 100% { box-shadow: 0 2px 10px color-mix(in srgb, var(--app-accent) 10%, transparent); }
+  50%      { box-shadow: 0 4px 18px color-mix(in srgb, var(--app-accent) 20%, transparent); }
+}
+@keyframes reco-twinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  50%      { transform: scale(1.25) rotate(20deg); opacity: 0.65; }
 }
 
 .home-stats-card {

@@ -80,7 +80,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useAuth } from './composables/useAuth.js'
 import { getSkippedVersion, isUpdateNotifyDisabled, shouldShowUpdateBanner, markUpdateBannerShown } from './composables/updatePrefs.js'
@@ -89,13 +89,12 @@ import DesktopFloatingMenu from './components/shanxi/chat/DesktopFloatingMenu.vu
 import SettingsModal from './components/shanxi/chat/SettingsModal.vue'
 import OnboardingModal from './components/shanxi/chat/OnboardingModal.vue'
 import { useI18n, tr } from './composables/useI18n.js'
-import { railItemDefinitions } from './appNav.js'
+import { railItemDefinitions, navTo } from './appNav.js'
 const { locale } = useI18n()
 
 
 const auth = useAuth()
 const route = useRoute()
-const router = useRouter()
 
 // 聊天页（Agent 或 RP）隐藏折角导航：公司/站点/星迹等 tab 是工作区导航，
 // 聊天时不该悬浮在界面上，收束到左侧折叠栏的「功能」悬浮菜单里。
@@ -129,7 +128,7 @@ function saveRailItems() {
   localStorage.setItem(RAIL_ITEMS_KEY, JSON.stringify(railItems.value.map(item => item.id)))
 }
 function activateRailItem(item) {
-  if (item.to) router.push(item.to)
+  if (item.to) navTo(item.to)
   else if (item.id === 'agg') showAggApi.value = true
 }
 function onRailItemDragStart(event, id) {

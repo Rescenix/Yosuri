@@ -350,6 +350,9 @@ func (a *DesktopApp) showWindow() {
 }
 
 func (a *DesktopApp) requestQuit() {
+	// 托盘「退出」是明确退出：先置放行位，否则 OnBeforeClose 会把关闭拦回去，
+	// 「缩到托盘」模式下就永远退不掉了（2026-09-23）。
+	a.forceQuit.Store(true)
 	a.mu.RLock()
 	ctx := a.ctx
 	a.mu.RUnlock()

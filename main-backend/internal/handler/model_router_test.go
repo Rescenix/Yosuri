@@ -179,9 +179,11 @@ func TestKeyedFreeProviderCatalog(t *testing.T) {
 	}{
 		"free_openrouter_router":            {"OpenRouter", "openrouter/free", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
 		"free_openrouter_ox_alpha":          {"OpenRouter", "stealth/ox-alpha", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"},
-		"free_bai_deepseek_v4_flash":        {"B.AI", "deepseek-v4-flash", "BAI_API_KEY", "https://api.b.ai/v1"},
-		"free_bai_deepseek_v4_flash_vision": {"B.AI", "deepseek-v4-flash-vision-exp", "BAI_API_KEY", "https://api.b.ai/v1"},
-		"free_bai_hy3":                      {"B.AI", "hy3", "BAI_API_KEY", "https://api.b.ai/v1"},
+		"free_cavoti_hy3":                      {"Cavoti", "hy3", "CAVOTI_API_KEY", "https://cavoti.com/v1"},
+		"free_cavoti_deepseek_v4_flash_0731":   {"Cavoti", "deepseek-v4-flash-0731", "CAVOTI_API_KEY", "https://cavoti.com/v1"},
+		"free_cavoti_qwen3_8_flash":            {"Cavoti", "qwen3.8-flash", "CAVOTI_API_KEY", "https://cavoti.com/v1"},
+		"free_cavoti_glm_5_3_flash":            {"Cavoti", "glm-5.3-flash", "CAVOTI_API_KEY", "https://cavoti.com/v1"},
+		"free_cavoti_minimax_m3":               {"Cavoti", "minimax-m3", "CAVOTI_API_KEY", "https://cavoti.com/v1"},
 	}
 
 	found := map[string]bool{}
@@ -205,36 +207,38 @@ func TestKeyedFreeProviderCatalog(t *testing.T) {
 	}
 }
 
-func TestBAIDeepSeekFlashIsResolvableWithKey(t *testing.T) {
-	t.Setenv("BAI_API_KEY", "test-bai-key")
-	b := resolveExact("nonexistent_user_for_test", "free_bai_deepseek_v4_flash")
+func TestCavotiDeepSeekFlashIsResolvableWithKey(t *testing.T) {
+	t.Setenv("CAVOTI_API_KEY", "test-cavoti-key")
+	b := resolveExact("nonexistent_user_for_test", "free_cavoti_deepseek_v4_flash_0731")
 	if b == nil {
-		t.Fatal("配置 BAI_API_KEY 后应能精确解析 B.AI DeepSeek V4 Flash")
+		t.Fatal("配置 CAVOTI_API_KEY 后应能精确解析 Cavoti DeepSeek V4 Flash 0731")
 	}
-	if b.BaseURL != "https://api.b.ai/v1" || b.Model != "deepseek-v4-flash" || b.APIKey != "test-bai-key" {
-		t.Fatalf("B.AI 精确路由错误: %+v", b)
+	if b.BaseURL != "https://cavoti.com/v1" || b.Model != "deepseek-v4-flash-0731" || b.APIKey != "test-cavoti-key" {
+		t.Fatalf("Cavoti 精确路由错误: %+v", b)
 	}
 	if b.Keyless || b.Source != "free" || !b.Reasoning || b.ContextWindow != 1048576 {
-		t.Fatalf("B.AI 能力或鉴权元数据错误: %+v", b)
+		t.Fatalf("Cavoti 能力或鉴权元数据错误: %+v", b)
 	}
 }
 
-func TestBAIAdditionalFreeModelsAreResolvableWithKey(t *testing.T) {
-	t.Setenv("BAI_API_KEY", "test-bai-key")
+func TestCavotiAdditionalFreeModelsAreResolvableWithKey(t *testing.T) {
+	t.Setenv("CAVOTI_API_KEY", "test-cavoti-key")
 	want := map[string]struct {
 		model         string
 		vision        bool
 		contextWindow int
 	}{
-		"free_bai_deepseek_v4_flash_vision": {"deepseek-v4-flash-vision-exp", true, 1048576},
-		"free_bai_hy3":                      {"hy3", false, 262144},
+		"free_cavoti_hy3":            {"hy3", false, 262144},
+		"free_cavoti_qwen3_8_flash":  {"qwen3.8-flash", false, 0},
+		"free_cavoti_glm_5_3_flash":  {"glm-5.3-flash", false, 0},
+		"free_cavoti_minimax_m3":     {"minimax-m3", false, 0},
 	}
 	for id, expect := range want {
 		b := resolveExact("nonexistent_user_for_test", id)
 		if b == nil {
-			t.Fatalf("配置 BAI_API_KEY 后应能精确解析 %s", id)
+			t.Fatalf("配置 CAVOTI_API_KEY 后应能精确解析 %s", id)
 		}
-		if b.BaseURL != "https://api.b.ai/v1" || b.Model != expect.model || b.APIKey != "test-bai-key" {
+		if b.BaseURL != "https://cavoti.com/v1" || b.Model != expect.model || b.APIKey != "test-cavoti-key" {
 			t.Errorf("%s 精确路由错误: %+v", id, b)
 		}
 		if b.Keyless || b.Source != "free" || b.Vision != expect.vision || !b.Reasoning || b.ContextWindow != expect.contextWindow {

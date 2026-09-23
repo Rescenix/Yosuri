@@ -7,7 +7,10 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"backend/internal/handler"
 )
@@ -20,6 +23,9 @@ type DesktopApp struct {
 	ctx        context.Context
 	trayOnce   sync.Once
 	trayWindow uintptr
+	// forceQuit 是显式退出放行位：托盘「退出」置位后，OnBeforeClose 不再拦截关闭。
+	// 没有它的话，「关闭即缩托盘」模式下用户永远退不出应用。
+	forceQuit atomic.Bool
 }
 
 func NewDesktopApp() *DesktopApp {
@@ -77,6 +83,23 @@ func (a *DesktopApp) Startup(ctx context.Context) {
 	a.mu.Lock()
 	a.ctx = ctx
 	a.mu.Unlock()
+}
+
+// OnBeforeClose 决定点关闭按钮时是缩到右下角托盘还是真的退出。
+// Wails 的 HideWindowOnClose 是编译期写死的 true，没法运行时切换，所以改成
+// 关掉它 + 挂这个回调：返回 true = 拦下关闭（此时窗口已隐藏，进程继续驻留托盘）。
+// 2026-09-23 用户要求：关闭行为由用户决定（设置面板「常规 → 启动 → 关闭窗口时缩到托盘」）。
+func (a *DesktopApp) OnBeforeClose(ctx context.Context) bool {
+	// 托盘「退出」是明确退出，放行（否则「缩到托盘」模式下关不掉应用）
+	if a.forceQuit.Load() {
+		return false
+	}
+	// 用户选了「关闭即退出」：不拦，Wails 正常结束进程
+	if !handler.CloseToTrayDesired() {
+		return false
+	}
+	wailsruntime.WindowHide(ctx)
+	return true
 }
 
 func (a *DesktopApp) Shutdown(ctx context.Context) {

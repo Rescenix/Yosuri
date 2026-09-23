@@ -282,12 +282,6 @@ func CloudRegisterProxy(c *gin.Context) {
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
 }
 
-// CloudFeedbackProxy 用户反馈（2026-09-12 方案A）：转发到 ResceneCloud，
-// 登录态（Authorization 透传）。POST=提交，GET=列表（管理）。
-func CloudFeedbackProxy(c *gin.Context) {
-	proxyToCloudAuth(c, "/api/feedback")
-}
-
 // 记忆密钥邮箱恢复通道代理（2026-09-12）：忘密码找回记忆（本地恢复码 + 邮箱验证码）。
 // start=发验证码；claim=验证码证明邮箱所有权，云端返回恢复副本密文；
 // finalize=客户端用恢复码解副本后提交新密码+新信封（Bearer 恢复 JWT，透传）。

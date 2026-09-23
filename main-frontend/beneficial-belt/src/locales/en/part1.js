@@ -112,6 +112,7 @@ export default {
  "关闭搜索": "Close search",
  "关闭标签页": "Close tab",
  "关闭登录": "Close login",
+ "关闭窗口时缩到托盘": "Minimize to tray on close",
  "关闭角色卡": "Close profile card",
  "关闭语音朗读": "Turn off read-aloud",
  "其他": "Other",
@@ -301,5 +302,7 @@ export default {
  "图片分析中...": "Analyzing image...",
  "图片加载失败": "Image failed to load",
  "图片已复制，可直接粘贴发送": "Image copied — paste to send",
- "图片读取失败": "Failed to read image"
+ "图片读取失败": "Failed to read image",
+ "开启后点关闭按钮只缩到右下角托盘，应用继续后台运行；关闭则直接退出进程。": "When on, the close button hides Yosuri to the notification area and keeps it running; when off, the close button exits the app.",
+ "开启：点关闭按钮后缩到右下角托盘继续常驻，点托盘图标恢复，右键托盘可退出。关闭：点关闭按钮直接结束进程。": "On: the close button keeps Yosuri running in the notification area - click the tray icon to restore it, right-click it to quit. Off: the close button ends the process directly.",
 }

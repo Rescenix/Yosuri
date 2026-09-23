@@ -23,7 +23,7 @@
           <!-- 左侧边栏 -->
           <div class="settings-sidebar">
             <div class="settings-nav-label">{{ tr('通用') }}</div>
-                        <button class="settings-tab" :class="{ on: activeTab === 'general' }" @click="activeTab = 'general'; loadAutoStart()">
+                        <button class="settings-tab" :class="{ on: activeTab === 'general' }" @click="activeTab = 'general'; loadAutoStart(); loadCloseBehavior()">
                                                   <Icon icon="mdi:cog-outline" width="16" />{{ tr('通用') }}</button>
             <div class="settings-nav-label">{{ tr('模型与连接') }}</div>
             <button class="settings-tab" :class="{ on: activeTab === 'models' }" @click="activeTab = 'models'">
@@ -86,10 +86,8 @@
                                       <div class="settings-nav-label">{{ tr('账户与产品') }}</div>
             <button class="settings-tab" :class="{ on: activeTab === 'profile' }" @click="activeTab = 'profile'">
               <Icon icon="mdi:account-circle-outline" width="16" />{{ tr('我的') }}</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion(); loadAutoStart()">
+            <button class="settings-tab" :class="{ on: activeTab === 'version' }" @click="activeTab = 'version'; loadVersion(); loadAutoStart(); loadCloseBehavior()">
               <Icon icon="mdi:update" width="16" />{{ tr('版本') }}</button>
-            <button class="settings-tab" :class="{ on: activeTab === 'feedback' }" @click="activeTab = 'feedback'">
-              <Icon icon="mdi:message-text-outline" width="16" />{{ tr('反馈') }}</button>
           </div>
 
           <!-- 右侧内容区 -->
@@ -133,6 +131,15 @@
                               <span v-if="autoStartHint" class="param-value" style="opacity:.65; font-size:12px;">{{ autoStartHint }}</span>
                             </div>
                             <div class="settings-section-desc">{{ tr('关闭后不再随 Windows 开机启动；已开机的本次会话不受影响。') }}</div>
+                            <div class="profile-actions" style="margin-top: 10px; align-items: center;">
+                              <label class="param-switch" :title="tr('开启后点关闭按钮只缩到右下角托盘，应用继续后台运行；关闭则直接退出进程。')">
+                                <input type="checkbox" v-model="closeToTray" @change="onCloseBehaviorChange" />
+                                <span class="param-switch-track"></span>
+                              </label>
+                              <span class="param-value">{{ tr('关闭窗口时缩到托盘') }}</span>
+                              <span v-if="closeBehaviorHint" class="param-value" style="opacity:.65; font-size:12px;">{{ closeBehaviorHint }}</span>
+                            </div>
+                            <div class="settings-section-desc">{{ tr('开启：点关闭按钮后缩到右下角托盘继续常驻，点托盘图标恢复，右键托盘可退出。关闭：点关闭按钮直接结束进程。') }}</div>
                           </div>
 
             <!-- ========== 模型 ========== -->
@@ -1586,48 +1593,6 @@
                                   <span class="param-value">{{ tr('不提示版本更新') }}</span>
                                 </div>
                               </div>
-
-                                        <!-- ========== 反馈（2026-09-12 方案A：需求走用户主动提交） ========== -->
-                                        <div v-show="activeTab === 'feedback'" class="settings-panel">
-                                          <div class="settings-section-title">{{ tr('反馈与建议') }}</div>
-            <div class="settings-section-desc">{{ tr('想加的功能、遇到的 Bug、任何想法，直接告诉我们。你的反馈会直达开发者。') }}</div>
-
-            <div class="param-row">
-              <span class="param-label">{{ tr('类型') }}</span>
-              <div class="feedback-cats">
-                <button
-                  v-for="cat in feedbackCats"
-                  :key="cat.id"
-                  type="button"
-                  class="feedback-cat"
-                  :class="{ on: feedbackCat === cat.id }"
-                  @click="feedbackCat = cat.id"
-                >{{ tr(cat.label) }}</button>
-              </div>
-            </div>
-
-            <div class="param-row" style="align-items: flex-start;">
-              <span class="param-label">{{ tr('内容') }}</span>
-              <textarea
-                v-model="feedbackText"
-                class="feedback-text"
-                :placeholder="tr('写点什么…（1-2000 字）')"
-                rows="5"
-                maxlength="2000"
-              ></textarea>
-            </div>
-
-            <div class="profile-actions" style="margin-top: 14px; align-items: center;">
-              <button
-                class="api-form-btn save"
-                type="button"
-                :disabled="!feedbackText.trim() || feedbackSending"
-                @click="submitFeedback"
-              >{{ feedbackSending ? tr('提交中…') : tr('提交反馈') }}</button>
-              <span v-if="feedbackDone" class="feedback-done">{{ tr('已收到，感谢反馈 🎉') }}</span>
-              <span v-else-if="feedbackError" class="feedback-err">{{ feedbackError }}</span>
-                          </div>
-                        </div>
                         </div>
 
                         <div v-if="errorMsg" class="settings-error">{{ errorMsg }}</div>
@@ -3506,42 +3471,6 @@ const dlState = ref('idle')
 const dlError = ref('')
 const dlWorking = ref(false)
 
-// ============ 反馈（2026-09-12 方案A：需求走用户主动提交） ============
-const feedbackCats = [
-  { id: 'suggestion', label: '功能建议' },
-  { id: 'bug', label: 'Bug 反馈' },
-  { id: 'other', label: '其他' },
-]
-const feedbackCat = ref('suggestion')
-const feedbackText = ref('')
-const feedbackSending = ref(false)
-const feedbackDone = ref(false)
-const feedbackError = ref('')
-
-async function submitFeedback() {
-  const content = feedbackText.value.trim()
-  if (!content || feedbackSending.value) return
-  feedbackSending.value = true
-  feedbackDone.value = false
-  feedbackError.value = ''
-  try {
-    const res = await fetch('/api/feedback', {
-          method: 'POST',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ content, category: feedbackCat.value }),
-        })
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}))
-      throw new Error(d.error || '提交失败')
-    }
-    feedbackDone.value = true
-    feedbackText.value = ''
-  } catch (e) {
-    feedbackError.value = e.message || '提交失败，请稍后再试'
-  } finally {
-    feedbackSending.value = false
-  }
-}
 // ============ 账号安全（恢复码备份，2026-09-12） ============
 const recoveryCode = ref('')
 const recoveryCodeShow = ref(false)
@@ -3734,6 +3663,35 @@ async function onAutoStartChange() {
   } catch (err) {
     autoStartOn.value = !want
     autoStartHint.value = err.message || tr('设置失败')
+  }
+}
+
+// ============ 关闭窗口行为：缩到托盘 vs 直接退出（2026-09-23 用户要求由用户决定） ============
+const closeToTray = ref(true)
+const closeBehaviorHint = ref('')
+async function loadCloseBehavior() {
+  try {
+    const res = await fetch('/api/desktop/close-behavior')
+    if (!res.ok) return
+    const d = await res.json()
+    if (!d || d.ok !== true) return
+    closeToTray.value = !!d.close_to_tray
+  } catch (e) { /* 非桌面环境/后端未就绪：保持默认 */ }
+}
+async function onCloseBehaviorChange() {
+  const want = closeToTray.value
+  closeBehaviorHint.value = ''
+  try {
+    const res = await fetch('/api/desktop/close-behavior', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ close_to_tray: want }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok || d.ok === false) throw new Error(d.error || (tr('设置失败 (') + res.status + ')'))
+    closeToTray.value = d.close_to_tray !== undefined ? !!d.close_to_tray : want
+  } catch (err) {
+    closeToTray.value = !want
+    closeBehaviorHint.value = err.message || tr('设置失败')
   }
 }
 
@@ -4991,25 +4949,6 @@ onUnmounted(() => {
   transition: border-color 0.15s;
 }
 .model-input:focus { border-color: var(--app-accent, #1950be); }
-
-/* ===== 反馈（2026-09-12） ===== */
-.feedback-cats { display: flex; flex-wrap: wrap; gap: 6px; }
-.feedback-cat {
-  padding: 5px 12px; border: 1px solid var(--app-border, #e2e5ea); border-radius: 999px;
-  background: var(--app-surface-2, #f5f6f8); color: var(--app-text-soft, #5b6470);
-  font: inherit; font-size: 12px; cursor: pointer;
-}
-.feedback-cat:hover { border-color: var(--app-accent, #1950be); }
-.feedback-cat.on { color: #fff; border-color: var(--app-accent, #1950be); background: var(--app-accent, #1950be); }
-.feedback-text {
-  flex: 1; min-width: 0; width: 100%; padding: 8px 10px;
-  border: 1px solid var(--app-border, #e2e5ea); border-radius: 9px;
-  background: var(--app-surface, #fff); color: var(--app-text, #1b1f27);
-  font: inherit; font-size: 12.5px; line-height: 1.6; resize: vertical;
-}
-.feedback-text:focus { outline: none; border-color: var(--app-accent, #1950be); }
-.feedback-done { color: #2e9e5b; font-size: 12px; }
-.feedback-err { color: #d64541; font-size: 12px; }
 
 /* ===== 账号安全（恢复码） ===== */
 .recovery-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
