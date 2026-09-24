@@ -78,6 +78,7 @@ func (b *RPBattle) resolveUnit(unitID, action string) ([]BattleEvent, error) {
 
 // resolveTurn 结算一回合：按速度排序轮流行动，返回事件列表。
 // 调用方持锁。我方动作来自 pending 队列（玩家在回合开始前提交）；敌方自动。
+// 防御：行动前解除上一回合姿态，行动时选防御则设标记，本回合后续攻击减伤。
 func (b *RPBattle) resolveTurn(actions map[string]string) []BattleEvent {
 	var evs []BattleEvent
 	order := make([]int, 0, len(b.Units))
@@ -93,7 +94,7 @@ func (b *RPBattle) resolveTurn(actions map[string]string) []BattleEvent {
 		if !u.Alive {
 			continue
 		}
-		// 防御状态回合末自动解除（下一回合行动前）
+		// 防御状态行动前自动解除（上一回合摆防御的）
 		if u.Defending {
 			u.Defending = false
 		}
@@ -104,7 +105,7 @@ func (b *RPBattle) resolveTurn(actions map[string]string) []BattleEvent {
 				action = "attack"
 			}
 		} else {
-			// 敌方 AI
+			// 敌方 AI：70% 攻 / 30% 防，残血 50% 技能
 			action = "attack"
 			if rand.Intn(10) < 3 {
 				action = "defend"
@@ -165,21 +166,23 @@ func (b *RPBattle) applyAttack(u *BattleUnit, evs *[]BattleEvent) {
 		return
 	}
 	atk := float64(u.ATK)
-	if u.Defending {
-		atk *= 0.6 // 防御回合攻击也打折？不——防御只加防，这里保持原攻
-		atk = float64(u.ATK)
-	}
 	crit := rand.Intn(100) < 15
 	mult := elementBonus(u.Element, target.Element)
 	dmg := atk - float64(target.DEF)*0.5
-	if dmg < 1 {
-		dmg = 1
+	// 防御：本回合摆出防御姿态的单位受伤减半（行动前标记已由上一回合解除）
+	if target.Defending {
+		dmg *= 0.5
 	}
 	dmg *= (0.8 + rand.Float64()*0.4) // ±20%
 	if crit {
 		dmg *= 1.6
 	}
 	dmg *= mult
+	// 保底 1 点：所有倍率算完后再兜底——之前写在防御减半前面，
+	// 防御 ×0.5 再乘随机下限 → 0.4 → int() 归 0，防御单位永远打不死（战斗结束不了的根因）。
+	if dmg < 1 {
+		dmg = 1
+	}
 	deal := target.absorb(int(dmg + 0.5))
 	msg := fmt.Sprintf("%s 攻击 %s，造成 %d 点伤害", u.Name, target.Name, deal)
 	if crit {
@@ -282,6 +285,11 @@ func (b *RPBattle) finish() {
 			if b.Victory {
 				if b.GoldGain > 0 {
 					st.Gold += b.GoldGain / b.allyCount()
+				}
+				// 经验：胜利每人拿敌人经验（仅存活者；阵亡不拿）
+				if u.Alive && ep.Exp > 0 {
+					st.Exp += ep.Exp
+					st = levelUpIfNeeded(st)
 				}
 				// 战利品进背包：同名叠加数量
 				if ep.Loot.Name != "" {

@@ -44,6 +44,7 @@ const toasts = ref([])
 let idSeq = 0
 const seen = new Set()
 let timer = 0
+let lastAt = 0 // 首次轮询的基准时间：只弹比它新的技能文件
 
 // 亮/暗自适应：跟随 html[data-theme]（useTheme.js 运行时注入）
 const isDark = ref(document.documentElement.getAttribute('data-theme') === 'dark')
@@ -91,12 +92,15 @@ async function poll() {
     if (!r.ok) return
     const { events } = await r.json()
     if (!Array.isArray(events)) return
-    if (seen.size === 0) {
+    // 首次轮询：记录基准时间，历史技能不弹（seen 只在内存，刷新就失效，
+    // 靠时间戳去重才能避免每次刷新都把历史技能当新事件重播）
+    if (lastAt === 0) {
+      lastAt = Date.now()
       for (const e of events) seen.add(e.name)
       return
     }
     for (const e of events) {
-      if (!seen.has(e.name)) {
+      if (e.at && new Date(e.at).getTime() > lastAt && !seen.has(e.name)) {
         seen.add(e.name)
         push({ title: tr('新技能已习得'), sub: e.name, count: '+XP', ms: tr('已入库') })
       }

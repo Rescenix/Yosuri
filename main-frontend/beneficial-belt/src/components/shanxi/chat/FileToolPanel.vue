@@ -17,10 +17,6 @@
             @unpin-file="unpinFile"
           >
             <template #tab-actions>
-              <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? tr('保存并在终端运行当前文件') : tr('当前文件暂不支持一键运行')" @click="runActiveFile">
-                <Icon icon="mdi:play" width="15" />
-                <span>{{ tr('运行') }}</span>
-              </button>
               <span v-if="saveState" class="file-tool-save-state" :class="saveState">
                 {{ saveState === 'saving' ? tr('保存中…') : saveState === 'saved' ? tr('已保存') : tr('保存失败') }}
               </span>
@@ -120,10 +116,6 @@
               @unpin-file="unpinFile"
             >
               <template #tab-actions>
-                <button class="file-tool-run-btn" type="button" :disabled="!activeTab || !runnableCommand" :title="runnableCommand ? tr('保存并在终端运行当前文件') : tr('当前文件暂不支持一键运行')" @click="runActiveFile">
-                  <Icon icon="mdi:play" width="15" />
-                  <span>{{ tr('运行') }}</span>
-                </button>
                 <span v-if="saveState" class="file-tool-save-state" :class="saveState">
                   {{ saveState === 'saving' ? tr('保存中…') : saveState === 'saved' ? tr('已保存') : tr('保存失败') }}
                 </span>
@@ -233,7 +225,7 @@ import { useI18n, tr } from '../../../composables/useI18n.js'
 
 
 
-const emit = defineEmits(['close', 'run-command'])
+const emit = defineEmits(['close'])
 const props = defineProps({
   embedded: { type: Boolean, default: false },
   workdirPath: { type: String, default: '' },
@@ -269,7 +261,6 @@ const externalChanges = ref(new Set())
 let fileChangesStream = null
 
 const activeTab = computed(() => tabs.value.find(t => t.path === activeFilePath.value) || null)
-const runnableCommand = computed(() => activeTab.value ? commandFor(activeTab.value) : '')
 
 // ---- 搜索：点搜索图标后整块替换树视图（仿 Cursor），不是叠加一层筛选框 ----
 const treeSearchOpen = ref(false)
@@ -366,7 +357,8 @@ async function createFile(folder) {
     if (!res.ok) throw new Error(await res.text())
     await loadTree()
     const tab = { path, name: path.split('/').pop(), content: '', savedContent: '' }
-    tabs.value.push(tab)
+    flushAutoSave()
+    tabs.value = [tab]
     activeFilePath.value = path
     selectedNode.value = { type: 'file', path, name: tab.name }
   } catch (e) { window.alert(tr('新建文件失败：') + (e.message || tr('未知错误'))) }
@@ -409,26 +401,6 @@ async function deleteNode(node) {
   } catch (e) { window.alert(tr('删除失败：') + (e.message || tr('未知错误'))) }
 }
 
-function quotePowerShell(value) { return "'" + value.replaceAll("'", "''") + "'" }
-function commandFor(tab) {
-  const path = quotePowerShell(tab.path)
-  switch (languageOf(tab.name)) {
-    case 'typescript': return `npx --no-install tsx ${path}`
-    case 'python': return `python ${path}`
-    case 'go': return `go run ${path}`
-    case 'rust': return `rustc ${path} -o \"$env:TEMP\\rescene-lesson.exe\"; if ($LASTEXITCODE -eq 0) { & \"$env:TEMP\\rescene-lesson.exe\" }`
-    default: return ''
-  }
-}
-
-async function runActiveFile() {
-  if (!runnableCommand.value) return
-  clearTimeout(autoSaveTimer)
-  // 一键运行必须等保存成功；否则终端很容易读到上一版文件，录教学视频会显得像“代码没生效”。
-  if (await saveActiveFile() === false) return
-  emit('run-command', runnableCommand.value)
-}
-
 // 单击直接打开——原来是"点一下选中、再点一下（哪怕是同一下）才真正打开"，
 // 等于强制双击，体验上跟 Cursor 点文件立刻显示的预期完全对不上。现在选中和
 // 打开是同一个动作，selectedNode 只留给 FileTreeNode 做高亮用。
@@ -449,7 +421,7 @@ async function openFile(node) {
     await previewFile(node)
     return
   }
-  // 去重：已经开着就切过去，不再新开一个标签
+  // 单标签页：已经打开的就是当前标签，直接停留
   const existing = tabs.value.find(t => t.path === node.path)
   if (existing) {
     activeFilePath.value = existing.path
@@ -459,7 +431,10 @@ async function openFile(node) {
     const res = await fetch('/api/file?path=' + encodeURIComponent(node.path))
     if (!res.ok) throw new Error(await res.text() || (tr('打开失败 (') + res.status + ')'))
     const content = await res.text()
-    tabs.value.push({ path: node.path, name: node.name, content, savedContent: content })
+    // 单标签：新文件顶替当前标签，不堆出第二个标签页。替换前先把上一个文件的
+    // 未保存输入冲掉落盘（await 期间用户可能还在敲字）。
+    flushAutoSave()
+    tabs.value = [{ path: node.path, name: node.name, content, savedContent: content }]
     activeFilePath.value = node.path
   } catch (e) {
     openError.value = e.message || tr('打开文件失败')
@@ -680,18 +655,20 @@ async function restoreOpenTabs() {
   let saved = null
   try { saved = JSON.parse(localStorage.getItem(tabsCacheKey()) || 'null') } catch { saved = null }
   if (!saved || !Array.isArray(saved.tabs) || !saved.tabs.length) return
+  // 单标签页：旧缓存里可能存着多个标签，这里只恢复上次激活的那一个。
+  const target = saved.tabs.find(t => t.path === saved.active) || saved.tabs[saved.tabs.length - 1]
+  if (!target?.path) return
   const restored = []
-  for (const item of saved.tabs) {
-    try {
-      const res = await fetch('/api/file?path=' + encodeURIComponent(item.path))
-      if (!res.ok) continue
+  try {
+    const res = await fetch('/api/file?path=' + encodeURIComponent(target.path))
+    if (res.ok) {
       const content = await res.text()
-      restored.push({ path: item.path, name: item.name || item.path.split('/').pop(), content, savedContent: content })
-    } catch { /* 文件被删/改名：跳过该标签 */ }
-  }
+      restored.push({ path: target.path, name: target.name || target.path.split('/').pop(), content, savedContent: content })
+    }
+  } catch { /* 文件被删/改名：跳过该标签 */ }
   if (!restored.length) return
   tabs.value = restored
-  activeFilePath.value = restored.some(t => t.path === saved.active) ? saved.active : restored[0].path
+  activeFilePath.value = restored[0].path
   pinnedPaths.value = (saved.pinned || []).filter(p => restored.some(t => t.path === p))
   const matched = tabs.value.find(t => t.path === activeFilePath.value)
   if (matched) selectedNode.value = { type: 'file', path: matched.path, name: matched.name }
@@ -761,24 +738,6 @@ onUnmounted(() => {
   color: var(--app-text-faint);
   padding: 0 4px;
 }
-.file-tool-run-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 25px;
-  margin-right: 2px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 46%, var(--app-border));
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--app-accent) 12%, var(--app-surface));
-  color: var(--app-accent);
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.file-tool-run-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--app-accent) 20%, var(--app-surface)); }
-.file-tool-run-btn:disabled { opacity: .4; cursor: not-allowed; }
-
 .file-tool-save-state.saved { color: #12b76a; }
 .file-tool-save-state.error { color: #d94834; }
 

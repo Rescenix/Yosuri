@@ -186,6 +186,20 @@ overflow-y: auto;
   margin-bottom: 12px;
 }
 
+/* Hermes 式系统消息：居中灰条，战斗战果/系统通知专用（kind:'system' 独立渲染） */
+.chat-system-msg {
+  margin: 4px auto;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--app-text-muted, #6b6b6b);
+  font-size: 12px;
+  text-align: center;
+  max-width: 90%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .message-row.user {
   justify-content: flex-start;
 }
@@ -4318,12 +4332,14 @@ img.gem-rail-avatar {
   display: flex;
   flex-direction: column;
   padding: 12px 8px;
+  box-sizing: border-box;
   overflow-y: auto;
+  overflow-x: hidden;
   pointer-events: auto;
 }
 .rp-side-left {
-  left: 8px;
-  width: 150px;
+  left: 48px;
+  width: 132px;
   gap: 8px;
 }
 .rp-side-right {
@@ -4331,20 +4347,31 @@ img.gem-rail-avatar {
   width: 300px;
 }
 
-/* 角色头像项：头像 + 名字 + 实时状态一行 */
+/* RP 布局：左右面板是 absolute 浮层，聊天正文必须让出两侧的宽度，
+   否则窗口不够宽时聊天区右缘会钻到世界书面板底下（用户实测重叠）。
+   left: 48(rail) + 132(卡) + 12 间距；right: 8 + 300(世界书) + 12 间距。
+   消息列/输入框都是 max-width:720 + margin auto 居中，父级 padding 一加，
+   它们的可用区自动缩到两面板之间，且两者天然保持同宽同中线对齐。 */
+.chat-content.rp-layout {
+  padding-left: calc(48px + 132px + 12px);
+  padding-right: calc(8px + 300px + 12px);
+}
+
+/* 角色头像项：头像置顶居中 + 名字/状态竖排下方（省宽度，200→130 级） */
 .rp-avatar-item {
   appearance: none;
   border: 1px solid rgba(0, 0, 0, 0.06);
   background: rgba(var(--app-surface-rgb, 255, 255, 255), 0.9);
   cursor: pointer;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: 5px;
+  padding: 8px 6px 9px;
   border-radius: 12px;
   width: 100%;
   box-sizing: border-box;
-  text-align: left;
+  text-align: center;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .rp-avatar-item:hover { border-color: rgba(47, 111, 237, 0.35); }
@@ -4353,8 +4380,8 @@ img.gem-rail-avatar {
   box-shadow: 0 0 0 1px rgba(47, 111, 237, 0.35), 0 4px 12px rgba(47, 111, 237, 0.12);
 }
 .rp-avatar {
-  width: 40px;
-  height: 40px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
@@ -4365,16 +4392,18 @@ img.gem-rail-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
   color: #fff;
 }
 .rp-avatar-info {
   flex: 1;
   min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  align-items: center;
 }
 .rp-avatar-name {
   font-size: 13px;
@@ -4386,6 +4415,8 @@ img.gem-rail-avatar {
   display: flex;
   align-items: baseline;
   gap: 5px;
+  justify-content: center;
+  max-width: 100%;
 }
 .rp-avatar-title {
   font-size: 10px;
@@ -4406,6 +4437,20 @@ img.gem-rail-avatar {
   overflow: hidden;
   white-space: normal;
 }
+/* 空白角色卡 + 加号：引导新建角色卡（虚线边框 + 浅底 + 加号居中） */
+.rp-avatar-add {
+  border: 1px dashed rgba(0, 0, 0, 0.18);
+  background: rgba(var(--app-surface-rgb, 255, 255, 255), 0.45);
+  cursor: pointer;
+}
+.rp-avatar-add:hover {
+  border-color: rgba(47, 111, 237, 0.5);
+  background: rgba(var(--app-surface-rgb, 255, 255, 255), 0.8);
+}
+.rp-avatar-add-icon {
+  color: #8a8a8a;
+  margin: 14px 0;
+}
 .rp-avatar-lv {
   font-size: 10px;
   color: #2f6fed;
@@ -4418,18 +4463,19 @@ img.gem-rail-avatar {
 .rp-avatar-hptext,
 .rp-avatar-mini { display: none; }
 
-/* 星迹风格状态条：HP 条（护盾覆盖层）+ MP 条 + 印记图标行 */
+/* 星迹风格状态条：HP 条（护盾覆盖层）+ MP 条 + 印记图标行（窄栏纵向布局适配） */
 .rp-bar-row {
   display: flex;
   align-items: center;
   gap: 4px;
+  width: 100%;
 }
 .rp-bar-label {
   font-size: 9px;
   font-weight: 700;
   color: var(--app-text-muted, #8a8a8a);
   flex-shrink: 0;
-  width: 18px;
+  width: 15px;
 }
 .rp-hp-bar, .rp-mp-bar {
   position: relative;
@@ -4466,6 +4512,25 @@ img.gem-rail-avatar {
   bottom: 0;
   border-radius: 3px;
   background: linear-gradient(90deg, #3c8dff, #6fb4ff);
+  transition: width 0.3s ease;
+}
+/* 经验条：绿色系，跟 HP/MP 同构但一眼区分 */
+.rp-exp-bar {
+  position: relative;
+  flex: 1;
+  height: 12px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.10);
+  min-width: 0;
+}
+.rp-exp-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #52c41a, #8fe37a);
   transition: width 0.3s ease;
 }
 .rp-bar-num {

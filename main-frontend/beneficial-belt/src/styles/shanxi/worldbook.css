@@ -154,10 +154,11 @@
   inset: 0;
   padding: 22px 26px;
   overflow-y: auto;
+  overflow-x: hidden;
   line-height: 1.85;
   color: #3a3835;
 }
-.wb-book-page-content { white-space: pre-wrap; word-break: break-word; }
+.wb-book-page-content { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 .wb-book-nav-zone {
   position: absolute;
   top: 0;
@@ -174,6 +175,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px;
   display: flex;
   flex-direction: column;

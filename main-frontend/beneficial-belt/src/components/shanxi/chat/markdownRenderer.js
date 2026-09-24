@@ -178,6 +178,16 @@ function rpDyeText(src) {
   const state = { last: null }
   return src.split('\n').map(function (line) { return rpDyeLine(line, state) }).join('\n')
 }
+// 解析一段 RP 正文里第一个说话的「角色名」：对话气泡挂角色头像用。
+// 与 rpDyeLine 同正则，命中即返回说话人，没抓到（旁白/纯叙述）返回 ''。
+export function rpFirstSpeaker(text) {
+  if (!text) return ''
+  for (const line of String(text).split('\n')) {
+    const m = line.match(RP_DYE_SPEAKER_RE)
+    if (m) return m[3].trim()
+  }
+  return ''
+}
 // 供 ChatWidget/AgentWorkflowPanel 在 RP 会话调用的渲染入口：先染色再走标准管线
 export function renderRpMarkdown(text, skipSanitize = false) {
   return renderMarkdown(rpDyeText(text), skipSanitize)

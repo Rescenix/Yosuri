@@ -31,6 +31,7 @@ import (
 // 视觉沿用星迹风格：HP 条 + 护盾覆盖层 + MP 条 + 印记图标（只抄表现，不抄逻辑）。
 type AgentStats struct {
 	Level     int      `json:"level,omitempty"`
+	Exp       int      `json:"exp,omitempty"` // 当前经验（升级阈值 = level*100，满级封顶 99）
 	HP        int      `json:"hp,omitempty"`
 	MaxHP     int      `json:"maxHp,omitempty"`
 	MP        int      `json:"mp,omitempty"`
@@ -75,6 +76,74 @@ func (s AgentStats) HasStats() bool {
 		s.Shield != 0 || s.ATK != 0 || s.DEF != 0 || s.SPD != 0 || s.MAG != 0 ||
 		s.Gold != 0 || s.Affection != 0 || s.Element != "" ||
 		len(s.Equipment) > 0 || s.Title != "" || len(s.Marks) > 0 || len(s.Inventory) > 0 || len(s.Custom) > 0
+}
+
+// ExpForLevel / LevelUp 经验与升级规则（RP 战斗胜利发经验，累积升级）。
+// 阈值 = level*100 经验升 1 级，封顶 Lv.99。升级按职业系数涨属性：
+// 战士攻防大、法师魔大、其余均衡——没有职业就用均衡系数。
+const maxAgentLevel = 99
+
+func expThreshold(level int) int {
+	if level <= 0 {
+		return 100
+	}
+	return level * 100
+}
+
+// levelUpIfNeeded 结算后调用：经验够就连续升级（可一次跳多级），并回满血魔。
+func levelUpIfNeeded(st AgentStats) AgentStats {
+	for st.Level < maxAgentLevel && st.Exp >= expThreshold(st.Level) {
+		st.Exp -= expThreshold(st.Level)
+		st.Level++
+
+		// 成长系数：有面具职业按职业，否则均衡。
+		// 血魔按百分比成长（MaxHP 先存在才有得涨），攻防速魔保底 +2。
+		hpGrow := 12
+		if st.MaxHP > 0 {
+			hpGrow = st.MaxHP / 8
+		}
+		mpGrow := 8
+		if st.MaxMP > 0 {
+			mpGrow = st.MaxMP / 8
+		}
+		switch st.Element {
+		case "fire", "earth", "light":
+			st.ATK += 3
+			st.DEF += 3
+			st.SPD += 2
+			st.MAG += 1
+		case "water", "dark", "holy":
+			st.MAG += 3
+			st.ATK += 2
+			st.DEF += 2
+			st.SPD += 1
+		default: // 均衡
+			st.ATK += 2
+			st.DEF += 2
+			st.SPD += 2
+			st.MAG += 2
+		}
+		if hpGrow > 0 {
+			st.MaxHP += hpGrow
+			st.HP += hpGrow
+		}
+		if mpGrow > 0 {
+			st.MaxMP += mpGrow
+			st.MP += mpGrow
+		}
+	}
+	return st
+}
+
+// rpStatSummary 给编排 Agent/前端的中文状态摘要（含等级/经验进度）。
+func (s AgentStats) rpStatSummary() string {
+	if s.Level == 0 && s.MaxHP == 0 {
+		return ""
+	}
+	need := expThreshold(s.Level)
+	return fmt.Sprintf("Lv.%d 经验%d/%d HP%d/%d MP%d/%d 攻%d 防%d 速%d 魔%d 金币%d 好感%d",
+		s.Level, s.Exp, need, s.HP, s.MaxHP, s.MP, s.MaxMP,
+		s.ATK, s.DEF, s.SPD, s.MAG, s.Gold, s.Affection)
 }
 
 // AgentCard 一个 Agent 的角色卡（不含头像二进制，头像单独落文件）。

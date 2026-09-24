@@ -152,9 +152,9 @@
               ></button>
             </div>
             <div class="gem-rail-bottom">
-              <!-- 功能导航：收束在折叠栏，点开从折叠栏右侧弹出菜单（rail-card 同款定位） -->
-              <div class="gem-rail-fn-wrap">
-                <button class="gem-icon-btn" @click.stop="openFnMenu($event)" :class="{ on: fnMenuOpen }" :title="tr('功能')">
+              <!-- 功能导航：收束在折叠栏，鼠标悬浮按钮右侧显示菜单 -->
+              <div class="gem-rail-fn-wrap" @mouseenter="openFnMenu" @mouseleave="onFnWrapLeave">
+                <button class="gem-icon-btn" :class="{ on: fnMenuOpen }" :title="tr('功能')">
                   <Icon icon="mdi:apps" width="18" />
                 </button>
               </div>
@@ -168,9 +168,16 @@
               <div v-else class="gem-rail-avatar" :title="railAuth.displayName.value">{{ (railAuth.displayName.value || '?').charAt(0).toUpperCase() }}</div>
             </div>
 
-            <!-- 功能导航菜单：贴着折叠栏右侧弹出（与悬停会话卡片同款定位） -->
+            <!-- 功能导航菜单：鼠标悬浮按钮时贴在右侧显示（rail-card 同款定位） -->
             <Teleport to="body">
-              <div v-if="fnMenuOpen" class="rail-fn-menu" :style="fnMenuStyle" @click.stop>
+              <div
+                v-if="fnMenuOpen"
+                class="rail-fn-menu"
+                :style="fnMenuStyle"
+                @mouseenter="cancelCloseFnMenu"
+                @mouseleave="scheduleCloseFnMenu"
+                @click.stop
+              >
                 <div class="rail-fn-title">{{ tr('功能') }}</div>
                 <button
                   v-for="item in fnRailItems"
@@ -315,71 +322,87 @@
 
                 <div class="chat-body studio">
           <!-- 共享聊天列 -->
-          <div class="chat-content studio">
+                    <div class="chat-content studio" :class="{ 'rp-layout': rpPrimaryId }">
 
-            <!-- RP 左侧栏：角色卡（右键 = 默认数值预设面板） -->
-            <div v-if="rpPrimaryId && rpCastIds.length" class="rp-side-panel rp-side-left">
-              <div
-                v-for="id in rpCastIds"
-                :key="id"
-                class="rp-avatar-item"
-                :class="{ on: atMentionTarget === (agentStore.agentById(id)?.name || id) }"
-                @click="atMentionTarget = atMentionTarget === (agentStore.agentById(id)?.name || id) ? '' : (agentStore.agentById(id)?.name || id)"
-                @contextmenu.prevent.stop="openRpPresetMenu(id, $event)"
-              >
-                <img v-if="agentStore.agentById(id)?.avatar" :src="agentStore.agentById(id).avatar" class="rp-avatar" alt="" />
-                <span v-else class="rp-avatar rp-avatar-text" :style="{ background: agentStore.agentById(id)?.color || '#8b5e7c' }">
-                  {{ (agentStore.agentById(id)?.name || '?').charAt(0) }}
-                </span>
-                <div class="rp-avatar-info">
-                  <div class="rp-avatar-name">
-                    {{ agentStore.agentById(id)?.name || id }}
-                    <span v-if="agentStore.agentById(id)?.stats?.level" class="rp-avatar-lv">Lv.{{ agentStore.agentById(id).stats.level }}</span>
-                    <span v-else-if="agentStore.agentById(id)?.stats?.title" class="rp-avatar-title">{{ agentStore.agentById(id).stats.title }}</span>
-                  </div>
-                  <!-- 有数值：星迹风格状态条（HP 条+护盾层 / MP 条）+ 印记 -->
-                  <template v-if="agentStore.agentById(id)?.stats?.maxHp">
-                    <div class="rp-bar-row">
-                      <span class="rp-bar-label">HP</span>
-                      <div class="rp-hp-bar">
-                        <div v-if="rpShieldPct(agentStore.agentById(id).stats) > 0" class="rp-shield-fill" :style="{ width: rpShieldPct(agentStore.agentById(id).stats) + '%' }"></div>
-                        <div class="rp-hp-fill" :style="{ width: rpHpPct(agentStore.agentById(id).stats) + '%' }"></div>
-                        <span class="rp-bar-num">{{ agentStore.agentById(id).stats.hp ?? agentStore.agentById(id).stats.maxHp }}/{{ agentStore.agentById(id).stats.maxHp }}</span>
-                      </div>
-                    </div>
-                    <div v-if="agentStore.agentById(id)?.stats?.maxMp" class="rp-bar-row">
-                      <span class="rp-bar-label">MP</span>
-                      <div class="rp-mp-bar">
-                        <div class="rp-mp-fill" :style="{ width: rpMpPct(agentStore.agentById(id).stats) + '%' }"></div>
-                        <span class="rp-bar-num">{{ agentStore.agentById(id).stats.mp ?? 0 }}/{{ agentStore.agentById(id).stats.maxMp }}</span>
-                      </div>
-                    </div>
-                    <div v-if="rpMarkIcons(agentStore.agentById(id)?.stats).length" class="rp-mark-row">
-                                          <span
-                                            v-for="mk in rpMarkIcons(agentStore.agentById(id)?.stats)"
-                                            :key="mk.name"
-                                            class="rp-mark-badge"
-                                            :title="mk.tip"
-                                          >
-                                            <Icon :icon="mk.icon" width="12" :color="mk.color" />
-                                            <span class="rp-mark-val">{{ mk.value }}</span>
-                                          </span>
-                                        </div>
-                                        <!-- 背包入口：战利品数量徽标，点开看背包 -->
-                                        <button
-                                          v-if="(agentStore.agentById(id)?.stats?.inventory || []).length"
-                                          type="button"
-                                          class="rp-inv-btn"
-                                          @click.stop="openRpInventory(id, $event)"
-                                        >
-                                          <Icon icon="mdi:bag-personal-outline" width="12" color="#b07a2e" />
-                                          {{ tr('背包') }} {{ agentStore.agentById(id).stats.inventory.length }}
-                                        </button>
-                                      </template>
-                  <!-- 没设数值：显示角色卡人设摘要（这就是角色卡，不是光头像） -->
-                  <div v-else class="rp-avatar-desc">{{ rpCardBlurb(agentStore.agentById(id)) }}</div>
-                </div>
-              </div>
+            <!-- RP 左侧栏：角色卡（头像置顶省宽度；右键 = 默认数值预设面板） -->
+                        <div v-if="rpPrimaryId && rpCastIds.length" class="rp-side-panel rp-side-left">
+                          <div
+                            v-for="id in rpCastIds"
+                            :key="id"
+                            class="rp-avatar-item"
+                            :class="{ on: atMentionTarget === (agentStore.agentById(id)?.name || id) }"
+                            @click="atMentionTarget = atMentionTarget === (agentStore.agentById(id)?.name || id) ? '' : (agentStore.agentById(id)?.name || id)"
+                            @contextmenu.prevent.stop="openRpPresetMenu(id, $event)"
+                          >
+                            <img v-if="agentStore.agentById(id)?.avatar" :src="agentStore.agentById(id).avatar" class="rp-avatar" alt="" />
+                            <span v-else class="rp-avatar rp-avatar-text" :style="{ background: agentStore.agentById(id)?.color || '#8b5e7c' }">
+                              {{ (agentStore.agentById(id)?.name || '?').charAt(0) }}
+                            </span>
+                            <div class="rp-avatar-info">
+                              <div class="rp-avatar-name">
+                                {{ agentStore.agentById(id)?.name || id }}
+                                <span v-if="agentStore.agentById(id)?.stats?.level" class="rp-avatar-lv">Lv.{{ agentStore.agentById(id).stats.level }}</span>
+                                <span v-else-if="agentStore.agentById(id)?.stats?.title" class="rp-avatar-title">{{ agentStore.agentById(id).stats.title }}</span>
+                              </div>
+                              <!-- 有数值：星迹风格状态条（HP 条+护盾层 / MP 条）+ 印记 -->
+                              <template v-if="agentStore.agentById(id)?.stats?.maxHp">
+                                <div class="rp-bar-row">
+                                  <span class="rp-bar-label">HP</span>
+                                  <div class="rp-hp-bar">
+                                    <div v-if="rpShieldPct(agentStore.agentById(id).stats) > 0" class="rp-shield-fill" :style="{ width: rpShieldPct(agentStore.agentById(id).stats) + '%' }"></div>
+                                    <div class="rp-hp-fill" :style="{ width: rpHpPct(agentStore.agentById(id).stats) + '%' }"></div>
+                                    <span class="rp-bar-num">{{ agentStore.agentById(id).stats.hp ?? agentStore.agentById(id).stats.maxHp }}/{{ agentStore.agentById(id).stats.maxHp }}</span>
+                                  </div>
+                                </div>
+                                <div v-if="agentStore.agentById(id)?.stats?.maxMp" class="rp-bar-row">
+                                                                  <span class="rp-bar-label">MP</span>
+                                                                  <div class="rp-mp-bar">
+                                                                    <div class="rp-mp-fill" :style="{ width: rpMpPct(agentStore.agentById(id).stats) + '%' }"></div>
+                                                                    <span class="rp-bar-num">{{ agentStore.agentById(id).stats.mp ?? 0 }}/{{ agentStore.agentById(id).stats.maxMp }}</span>
+                                                                  </div>
+                                                                </div>
+                                                                <div v-if="agentStore.agentById(id)?.stats?.level" class="rp-bar-row">
+                                                                  <span class="rp-bar-label">EXP</span>
+                                                                  <div class="rp-exp-bar">
+                                                                    <div class="rp-exp-fill" :style="{ width: rpExpPct(agentStore.agentById(id).stats) + '%' }"></div>
+                                                                    <span class="rp-bar-num">{{ agentStore.agentById(id).stats.exp ?? 0 }}/{{ agentStore.agentById(id).stats.level * 100 }}</span>
+                                                                  </div>
+                                                                </div>
+                                <div v-if="rpMarkIcons(agentStore.agentById(id)?.stats).length" class="rp-mark-row">
+                                                      <span
+                                                        v-for="mk in rpMarkIcons(agentStore.agentById(id)?.stats)"
+                                                        :key="mk.name"
+                                                        class="rp-mark-badge"
+                                                        :title="mk.tip"
+                                                      >
+                                                        <Icon :icon="mk.icon" width="12" :color="mk.color" />
+                                                        <span class="rp-mark-val">{{ mk.value }}</span>
+                                                      </span>
+                                                    </div>
+                                                    <!-- 背包入口：战利品数量徽标，点开看背包 -->
+                                                    <button
+                                                      v-if="(agentStore.agentById(id)?.stats?.inventory || []).length"
+                                                      type="button"
+                                                      class="rp-inv-btn"
+                                                      @click.stop="openRpInventory(id, $event)"
+                                                    >
+                                                      <Icon icon="mdi:bag-personal-outline" width="12" color="#b07a2e" />
+                                                      {{ tr('背包') }} {{ agentStore.agentById(id).stats.inventory.length }}
+                                                    </button>
+                                                  </template>
+                              <!-- 没设数值：显示角色卡人设摘要（这就是角色卡，不是光头像） -->
+                                                            <div v-else class="rp-avatar-desc">{{ rpCardBlurb(agentStore.agentById(id)) }}</div>
+                                                          </div>
+                                                        </div>
+
+                                                        <!-- 空白角色卡 + 加号：点它打开设置 → 角色卡 tab 新建（小学生一眼能懂） -->
+                                                                                                                <button
+                                                                                                                  type="button"
+                                                                                                                  class="rp-avatar-item rp-avatar-add"
+                                                                                                                  @click="openSettingsWithTab('persona')"
+                                                                                                                >
+                                                                                                                  <Icon icon="mdi:plus" class="rp-avatar-add-icon" width="32" />
+                                                                                                                </button>
 
               <div v-if="atMentionTarget" class="rp-side-target-hint">
                               {{ tr('正在对') }} <b>{{ atMentionTarget }}</b> {{ tr('说话') }}
@@ -508,16 +531,16 @@
             </div>
 
             <!-- RP 右侧栏：世界书（书本/条目双视图） -->
-            <div v-if="rpPrimaryId" class="rp-side-panel rp-side-right">
-              <WorldbookPanel :agent-id="rpPrimaryId" />
-            </div>
-
-            <!-- RP 战斗场景浮层：开战时盖在聊天区上方（消息可滚动到下面） -->
-                        <div v-if="activeBattle" class="rp-battle-overlay">
-                          <RpBattleCard :battle="activeBattle" :events="activeBattleEvents" @close="activeBattle = null" @settled="onBattleSettled" />
+                        <div v-if="rpPrimaryId" class="rp-side-panel rp-side-right">
+                          <WorldbookPanel :agent-id="rpPrimaryId" />
                         </div>
 
-            <!-- 会话标题：消息列上方，靠左，背景透明。右侧是模式切换（Agent / 角色扮演） -->
+                        <!-- RP 战斗场景浮层：开战时盖在聊天区底部（贴输入框上方） -->
+                        <div v-if="activeBattle" class="rp-battle-overlay">
+                          <RpBattleCard :battle="activeBattle" :events="activeBattleEvents" @close="activeBattle = null" @settled="onBattleSettled" @tick="onBattleTick" />
+                        </div>
+
+                        <!-- 会话标题：消息列上方，靠左，背景透明。右侧是模式切换（Agent / 角色扮演） -->
             <div v-if="messages.length && activeSessionObj?.name" class="chat-session-titlebar">
               <div class="chat-session-title-text">{{ activeSessionObj.name }}</div>
               <!-- 模式切换：选中的模式交换到第一位成为默认，切换时滑动换位 -->
@@ -561,9 +584,6 @@
             <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。
                  RP 角色扮演模式整条不显示：纯演戏不需要终端/文件工具入口。 -->
             <div v-if="!rpPrimaryId && inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
-              <button class="header-icon-btn" :class="{ active: dockPanels.includes('terminal') }" @click="toggleDockPanel('terminal')" :title="tr('终端')">
-                <Icon icon="ri:terminal-line" width="17" color="#6b6b6b" />
-              </button>
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
                 <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
               </button>
@@ -643,17 +663,29 @@
                       </button>
                     </div>
                     <MessageStepGroup
-                      v-else-if="item.kind === 'group'"
-                      :id="'group-' + item.id"
-                      :group="item"
-                      :ref="(el) => setGroupRef(item.id, el)"
-                    />
-                    <!-- 必须包一层竖向容器：.message-row 是 flex-direction:row，
+                                                                                  v-else-if="item.kind === 'group'"
+                                                                                  :id="'group-' + item.id"
+                                                                                  :group="item"
+                                                                                  :ref="(el) => setGroupRef(item.id, el)"
+                                                                                />
+                                                                                <!-- 系统消息（Hermes 式）：居中灰条，战斗战果/开场词走这里，独立渲染不被滤 -->
+                                                                                <div v-else-if="item.kind === 'system'" class="chat-system-msg">
+                                                                                  {{ item.content }}
+                                                                                </div>
+                                                                                <!-- 必须包一层竖向容器：.message-row 是 flex-direction:row，
                          面板和工具栏平铺进去的话工具栏会变成"面板右边被拉满高的一竖条" -->
                     <div v-else-if="item.kind === 'agentflow'" class="agentflow-wrap" :style="{ '--agent-flow-color': (flowAgent(item) && flowAgent(item).color) || '' }">
-                      <!-- 群聊名牌：只在真正的多 Agent 群聊（本会话勾了 2 个以上成员）才显示，
-                           单 Agent 通用对话不挂「XX 说」名牌——是通用 agent，不是酒馆软件。 -->
-                      <div v-if="flowAgent(item) && currentGroup.length > 1" class="flow-agent-badge">
+                                          <!-- RP 说话人名牌：角色扮演回合开头挂说话角色头像+名字 -->
+                                          <div v-if="rpFlowMention(item)" class="rp-flow-badge">
+                                            <img v-if="rpFlowMention(item).avatar" :src="rpFlowMention(item).avatar" class="rp-flow-badge-avatar" alt="" />
+                                            <span v-else class="rp-flow-badge-avatar rp-flow-badge-avatar-text" :style="{ background: (rpFlowMention(item).color || '#8b5e7c') }">
+                                              {{ (rpFlowMention(item).name || '?').charAt(0) }}
+                                            </span>
+                                            <span class="rp-flow-badge-name">{{ rpFlowMention(item).name }}</span>
+                                          </div>
+                                          <!-- 群聊名牌：只在真正的多 Agent 群聊（本会话勾了 2 个以上成员）才显示，
+                                               单 Agent 通用对话不挂「XX 说」名牌——是通用 agent，不是酒馆软件。 -->
+                                          <div v-if="flowAgent(item) && currentGroup.length > 1" class="flow-agent-badge">
                         <img v-if="flowAgent(item).avatar" :src="flowAgent(item).avatar" class="flow-agent-avatar" alt="" />
                         <span v-else class="flow-agent-avatar flow-agent-avatar-text" :style="{ background: flowAgent(item).color || '#8b5e7c' }">
                           {{ (flowAgent(item).name || '?').charAt(0) }}
@@ -1469,47 +1501,8 @@
             <div class="tool-dock-pane tool-dock-pane-single">
               <div class="tool-dock-pane-body">
                 <DiffPanel v-if="activeDockPanelFor(dockLocation) === 'diff'" />
-                <div v-else-if="activeDockPanelFor(dockLocation) === 'terminal'" class="terminal-group">
-                  <div class="terminal-tabs-bar">
-                    <button
-                      v-for="tab in terminalTabs"
-                      :key="tab.id"
-                      class="terminal-tab-item"
-                      :class="{ active: tab.id === activeTerminalId }"
-                      @click="activeTerminalId = tab.id"
-                    >
-                      <Icon icon="ri:terminal-line" width="12" />
-                      <span>{{ tab.name }}</span>
-                      <span v-if="terminalTabs.length > 1" class="terminal-tab-close" @click.stop="closeTerminalTab(tab.id)">
-                        <Icon icon="mdi:close" width="11" />
-                      </span>
-                    </button>
-                    <button class="terminal-tab-add" @click="addTerminalTab" :title="tr('新建终端')">
-                      <Icon icon="mdi:plus" width="14" />
-                    </button>
-                    <div class="terminal-tabs-spacer"></div>
-                    <button class="terminal-tab-snippet-btn" :class="{ active: showSnippet }" @click="showSnippet = !showSnippet" :title="tr('脚本片段')">
-                      <Icon icon="mdi:code-braces" width="15" />
-                    </button>
-                  </div>
-                  <div class="terminal-with-snippet">
-                    <Terminal
-                      v-for="tab in terminalTabs"
-                      :key="tab.id"
-                      v-show="tab.id === activeTerminalId"
-                      class="tool-panel-terminal"
-                      :open="true"
-                      :embedded="true"
-                      :terminal-id="tab.id"
-                      :snippet-visible="showSnippet && tab.id === activeTerminalId"
-                      :snippet-insert-cmd="tab.id === activeTerminalId ? snippetInsertCmd : ''"
-                      @toggle-snippet="showSnippet = !showSnippet"
-                    />
-                    <SnippetPanel v-if="showSnippet" @insert="onSnippetInsert" />
-                  </div>
-                </div>
                 <PreviewBrowser v-else-if="activeDockPanelFor(dockLocation) === 'preview'" />
-                <FileToolPanel v-else-if="activeDockPanelFor(dockLocation) === 'file'" :embedded="true" :workdir-path="currentWorkDir.path" :workdir-name="currentWorkDir.name" @run-command="runEditorCommand" />
+                <FileToolPanel v-else-if="activeDockPanelFor(dockLocation) === 'file'" :embedded="true" :workdir-path="currentWorkDir.path" :workdir-name="currentWorkDir.name" />
                 <BackgroundTasksPanel v-else-if="activeDockPanelFor(dockLocation) === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" @kill-task="dismissBackgroundTask" />
               </div>
             </div>
@@ -1562,7 +1555,7 @@
       </div>
       </div>
 
-      <SettingsModal v-if="showSettings" @close="onSettingsClosed" />
+      <SettingsModal v-if="showSettings" :default-tab="settingsDefaultTab" @close="onSettingsClosed" />
       <ComponentModal v-if="showComponentModal" @close="showComponentModal = false" />
             <ComponentModal v-if="showComponentModal" @close="showComponentModal = false" />
             <ScheduledTaskManager
@@ -1705,12 +1698,13 @@ import { Icon } from '@iconify/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.min.css'
 import 'katex/dist/katex.min.css'
-import { renderMarkdown, renderRpMarkdown, renderMermaidIn, setRpDyeSpeakers } from './markdownRenderer.js'
+import { renderMarkdown, renderRpMarkdown, renderMermaidIn, setRpDyeSpeakers, rpFirstSpeaker } from './markdownRenderer.js'
 import { computeHardwareFingerprint } from '../../../utils/hardwareFingerprint.js'
 import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
 import UserMessageRail from './UserMessageRail.vue'
 import { useChatWidget } from './useChatWidget.js'
+import { rpDefaultsForNewSession } from '../composables/useRoleplay.js'
 import { useResizableHeight, useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
@@ -1725,9 +1719,7 @@ import QuestionModal from './QuestionModal.vue'
 import FileToolPanel from './FileToolPanel.vue'
 import DiffPanel from './DiffPanel.vue'
 import { parseToolArgs } from './toolArgs.js'
-import Terminal from './Terminal.vue'
 import { useAuth } from '../../../composables/useAuth.js'
-import SnippetPanel from './SnippetPanel.vue'
 import BackgroundTasksPanel from './BackgroundTasksPanel.vue'
 import ResceneStatusIcon from './ResceneStatusIcon.vue'
 import MessageStepGroup from './MessageStepGroup.vue'
@@ -1742,6 +1734,7 @@ import KnowledgeGraph from './KnowledgeGraph.vue'
 import { hiddenModelIds, toggleHidden, syncHidden } from '../composables/modelVisibility.js'
 import { contextBreakdown, loadContextBreakdown, setConversationTokens } from '../composables/contextBreakdown.js'
 import { sessionTokenStats, loadSessionTokenStats } from '../composables/sessionTokenStats.js'
+import { refreshAgents } from '../composables/useAgents.js'
 
 const props = defineProps({
   autoOpen: { type: Boolean, default: false },
@@ -1930,15 +1923,18 @@ async function newSession(project) {
     ? project.name
     : (findProjectByPath(currentWorkDir.value?.path)?.name || '')
   sessionList.value = [{ id, name: tr('新对话'), parentId: '', forkIndex: 0, workdir }, ...sessionList.value]
-  recordSessionWorkdir(id)
-  switchSession(id)
-}
+    recordSessionWorkdir(id)
+    switchSession(id)
+    // 新对话自动恢复最后停留的模式：最后在 RP → 直接带上次角色卡进角色扮演，
+    // 不用再弹选卡/切模式（之前每次新对话都落回 Agent，RP 用户被反复折腾）。
+    const rpDef = rpDefaultsForNewSession()
+    if (rpDef.mode === 'rp' && rpDef.cast.length) setSessionRp(rpDef.cast)
+  }
 
-
-function updateSessionTitle(title, fallback, sid) {
-  // 标题请求已结算（成功/失败/超时），解除「AI 标题生成中保持显示名」的保护
-  if (sid) pendingTitleSessions.delete(sid)
-  if (!title) return
+  function updateSessionTitle(title, fallback, sid) {
+    // 标题请求已结算（成功/失败/超时），解除「AI 标题生成中保持显示名」的保护
+    if (sid) pendingTitleSessions.delete(sid)
+    if (!title) return
   // 精确作用到发起标题生成的会话：用户可能在生成期间切到别的会话，标题不能安错家
   const targetId = sid || sessionId.value
   const current = sessionList.value.find(s => s.id === targetId)
@@ -2198,7 +2194,6 @@ const currentCapability = computed(() => {
 const DOCK_LAYOUT_STORAGE_KEY = 'rescene_tool_dock_layout_v4'
 const DEFAULT_DOCK_PLACEMENT = {
   diff: 'right',
-  terminal: 'bottom',
   preview: 'right',
   file: 'right',
   tasks: 'bottom'
@@ -2285,30 +2280,10 @@ function persistDockPlacement() {
   } catch {}
 }
 
-// ==================== 终端标签组 ====================
-let terminalSeq = 0
-const terminalTabs = ref([{ id: 'term_' + Date.now().toString(36), name: tr('终端 1') }])
-const activeTerminalId = ref(terminalTabs.value[0].id)
-function addTerminalTab() {
-  terminalSeq++
-  const id = 'term_' + Date.now().toString(36) + terminalSeq
-  const tab = { id, name: tr('终端 ') + (terminalTabs.value.length + 1) }
-  terminalTabs.value = [...terminalTabs.value, tab]
-  activeTerminalId.value = tab.id
-}
-function closeTerminalTab(id) {
-  if (terminalTabs.value.length <= 1) return
-  const idx = terminalTabs.value.findIndex(t => t.id === id)
-  terminalTabs.value = terminalTabs.value.filter(t => t.id !== id)
-  if (activeTerminalId.value === id) {
-    activeTerminalId.value = terminalTabs.value[Math.min(idx, terminalTabs.value.length - 1)].id
-  }
-}
 // shortcut 只标真的注册了全局快捷键的（见下面 onGlobalDockShortcut）——不给
 // Diff/任务挂一个中看不中用的提示文字，那是纯粹的视觉谎言。
 const DOCK_PANEL_META = {
   diff: { label: 'Diff', icon: 'proicons:diff' },
-  terminal: { label: tr('终端'), icon: 'ri:terminal-line', shortcut: 'Ctrl+J' },
   preview: { label: tr('预览'), icon: 'mage:preview', shortcut: 'Ctrl+Shift+B' },
   file: { label: tr('文件'), icon: 'mdi:file-code-outline', shortcut: 'Ctrl+G' },
   tasks: { label: tr('任务'), icon: 'mdi:task-minus' }
@@ -2317,15 +2292,14 @@ const dockPanelOptions = Object.entries(DOCK_PANEL_META).map(([key, meta]) => ({
 function dockPanelLabel(key) { return DOCK_PANEL_META[key]?.label || key }
 function dockPanelIcon(key) { return DOCK_PANEL_META[key]?.icon || 'mdi:application-outline' }
 
-// 真·全局快捷键，跟菜单上标的提示一一对应——Ctrl+G/Ctrl+J 在 Monaco 编辑器里
-// 有原生含义（跳转行/…），焦点在输入框或编辑器里时让开，不抢它们的按键。
+// 真·全局快捷键，跟菜单上标的提示一一对应——Ctrl+G 在 Monaco 编辑器里
+// 有原生含义（跳转行），焦点在输入框或编辑器里时让开，不抢它们的按键。
 function onGlobalDockShortcut(e) {
   if (!(e.ctrlKey || e.metaKey)) return
   const t = e.target
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.monaco-editor'))) return
   const key = e.key.toLowerCase()
   if (key === 'g' && !e.shiftKey) { e.preventDefault(); openDockPanel('file') }
-  else if (key === 'j' && !e.shiftKey) { e.preventDefault(); openDockPanel('terminal') }
   else if (key === 'b' && e.shiftKey) { e.preventDefault(); openDockPanel('preview') }
 }
 function ensureActiveDockPanels() {
@@ -2342,24 +2316,12 @@ function setActiveDockPanel(key, location = dockPlacement[key] || DEFAULT_DOCK_P
   activeDockPanels[location] = key
   dockHidden[location] = false
 }
-const showSnippet = ref(false)
-const snippetInsertCmd = ref('')
 function toggleDockExpanded(location) {
   dockExpandedLocation.value = dockExpandedLocation.value === location ? '' : location
 }
 function toggleDockHidden(location) {
   dockHidden[location] = !dockHidden[location]
   if (dockHidden[location] && dockExpandedLocation.value === location) dockExpandedLocation.value = ''
-}
-function onSnippetInsert(cmd) {
-  // 先清空再设值，确保 watcher 即使值相同也会触发
-  snippetInsertCmd.value = ''
-  nextTick(() => { snippetInsertCmd.value = cmd })
-}
-function runEditorCommand(cmd) {
-  // 文件面板的一键运行复用真实常驻终端，而不是再造一个只显示假日志的“运行窗口”。
-  openDockPanel('terminal')
-  onSnippetInsert(cmd)
 }
 function moveDockPanel(key, location, beforeKey = '') {
   const previousLocation = dockPlacement[key] || DEFAULT_DOCK_PLACEMENT[key] || 'right'
@@ -3806,6 +3768,12 @@ async function onDeleteModelKey(modelId) {
 
 // ==================== 设置面板 ====================
 const showSettings = ref(false)
+// 打开设置时默认停到哪个 tab：'' = 默认第一个（通用）；左侧角色卡加号 → persona（角色卡）。
+const settingsDefaultTab = ref('')
+function openSettingsWithTab(tab) {
+  settingsDefaultTab.value = tab || ''
+  showSettings.value = true
+}
 const showComponentModal = ref(false)
 const showScheduledTask = ref(false)
 const showScheduledTaskManager = ref(false)
@@ -4225,6 +4193,20 @@ function flowAgent(item) {
   return agentStore.agentById(id)
 }
 
+// RP 名牌：本回合回复由谁开口说话 → 从正文解析说话人名字，映射回 cast 角色卡。
+// RP 模式后端不落 agent 标记（防模型自吐名牌），这里靠台词反推：
+//   「猫娘：…」→ 猫娘卡；解析不到（导演/旁白/纯叙述）→ 回退主角色卡。
+// 返回 { name, avatar, color } 或 null（非 RP 或 cast 未加载）。
+function rpFlowMention(item) {
+  if (!rpPrimaryId.value || !rpCastIds.value.length) return null
+  const cards = rpCastIds.value.map(id => agentStore.agentById(id)).filter(Boolean)
+  if (!cards.length) return null
+  const spk = rpFirstSpeaker(flowFinalText(item))
+  const hit = spk && cards.find(c => (c.name || '') === spk)
+  const c = hit || cards[0]
+  return { name: c.name || '', avatar: c.avatar || '', color: c.color || '' }
+}
+
 // ── 群聊成员选择器 ──
 // currentGroup：当前会话挂了哪几个 Agent（按序发言）。持久化在 localStorage
 // （agentGroup:<sessionId>），后端不存——会话归属前端管，切 Agent 不改历史。
@@ -4286,10 +4268,11 @@ function onDocClickCloseRpInv(e) {
 }
 onMounted(() => window.addEventListener('click', onDocClickCloseRpInv))
 onUnmounted(() => window.removeEventListener('click', onDocClickCloseRpInv))
-// ── RP 战斗（酒馆杀手锏）：Yosuri 用 rp_battle_start 开战 → SSE 弹战场 ──
+// ── RP 战斗（酒馆杀手锏）：Yosuri 用 rp_battle_start 开战 → 战斗浮层（底部）──
 const activeBattle = ref(null)
-const activeBattleEvents = ref([]) // 战斗完整事件时间轴（后台自动结算产物）
-// 战斗结束：把战果作为消息推进聊天（让 Yosuri 写战利品剧情），并刷新角色卡
+const activeBattleEvents = ref([])
+// 战斗结束：①战果立即作为系统消息显示（不依赖 LLM，必现）
+//           ②再作为任务发给 Yosuri 接戏叙述战况、推进剧情。
 function onBattleSettled(b) {
   let result
   if (b.victory) {
@@ -4299,18 +4282,33 @@ function onBattleSettled(b) {
   } else {
     result = '战斗落败……有人倒下了。角色状态已更新。'
   }
-  pushBattleNarration(result)
+  refreshAgents()
+  // ① 系统消息必显示：独立 try，绝不让后续异常吞掉它
+  try {
+    pushBattleNarration(result)
+  } catch (e) { console.error('系统消息插入失败', e) }
+  // ② 伪造用户消息推动剧情：尽力而为，任何异常都不能冒泡回去（否则 closeAndMaybeSettle
+  //    的 emit('settled') 抛错 → emit('close') 不执行 → 浮层要点两次才关）
+  try {
+    launchWorkflow(result, result, [], true)
+  } catch (e) { console.error('战斗接戏工作流启动失败', e) }
+}
+
+// 每回合结算后 tick：刷新左侧角色卡状态（血条/MP/装备跟战斗实时同步），
+// 并同步更新浮层里的 battle 快照。
+function onBattleTick(battleSnap) {
+  if (battleSnap) activeBattle.value = battleSnap
   refreshAgents()
 }
-// 战斗消息推进聊天（用户气泡风格，进输入历史）
+
+// 战斗系统消息插入聊天（Hermes 式：独立 kind:'system' 消息，不走 agentflow
+// 渲染管线——之前用 agentflow 假消息会被 flowFinalText/四态机过滤，静默不显示）。
 function pushBattleNarration(text) {
   messages.value.push({
     id: `battle_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    kind: 'agentflow',
+    kind: 'system',
     sender: 'bot',
-    status: 'completed',
-    task: text,
-    blocks: [{ type: 'text', text }],
+    content: text,
     timestamp: new Date(),
   })
   onStreamUpdate?.()
@@ -4318,17 +4316,15 @@ function pushBattleNarration(text) {
 // 点空白处收起敌人选择（旧按钮入口已删，保留空壳防残留引用报错）
 function onDocClickCloseBattlePicker(e) { /* 按钮入口已移除 */ }
 
-// Yosuri 用 rp_battle_start 开战 → useAgentWorkflow 转发全局事件 → 这里弹战场。
+// Yosuri 用 rp_battle_start 开战 → useAgentWorkflow 转发全局事件 → 这里弹底部浮层。
 // 只在 RP 会话收到才弹（事件带 sid，防串会话）。
+// 不播开场词：战斗浮层本身就是反馈，聊天里那句「遭遇战」是多余的噪音（用户 09-24 要求删）。
 function onRPBattleStart(e) {
   const d = e.detail || {}
   if (!d.battle) return
   if (d.sid && d.sid !== (localStorage.getItem('prism_session_id') || sessionId.value)) return
   activeBattle.value = d.battle
   activeBattleEvents.value = d.events || []
-  // 开场词进聊天，让 Yosuri 接戏叙述遭遇
-  const first = d.battle.units.find(u => u.side === 'enemy')
-  pushBattleNarration(`⚔️ 遭遇战！${first ? first.name : ''} 拦住了去路——战斗开始！`)
 }
 onMounted(() => window.addEventListener('rp-battle-start', onRPBattleStart))
 onUnmounted(() => window.removeEventListener('rp-battle-start', onRPBattleStart))
@@ -4368,12 +4364,21 @@ function switchToRpMode() {
     rpPickerOpen.value = false
     return
   }
-  // 上次选过卡直接恢复（左边角色面板本来就默认显示 cast），不弹选择框
+  // 恢复上次选卡，优先会话级备份，其次全局最后停留的 RP 卡（2026-09-24：
+  // 新会话点「角色扮演」也要直接回上次的卡，别每次都弹选卡）。
   const last = rpLast()
   const valid = last.filter(id => agentStore.agentById(id))
   if (valid.length) {
     setSessionRp(valid)
     return
+  }
+  const rpDef = rpDefaultsForNewSession()
+  if (rpDef.mode === 'rp' && rpDef.cast.length) {
+    const cast = rpDef.cast.filter(id => agentStore.agentById(id))
+    if (cast.length) {
+      setSessionRp(cast)
+      return
+    }
   }
   rpPickerOpen.value = !rpPickerOpen.value
   if (rpPickerOpen.value && !agentStore.agentsLoaded.value) agentStore.loadAgents()
@@ -4434,6 +4439,10 @@ function rpShieldPct(s) {
 function rpMpPct(s) {
   const max = s.maxMp || 1
   return Math.max(0, Math.min(100, Math.round(((s.mp ?? 0) / max) * 100)))
+}
+function rpExpPct(s) {
+  const max = (s.level || 1) * 100
+  return Math.max(0, Math.min(100, Math.round(((s.exp ?? 0) / max) * 100)))
 }
 // 星迹风格印记图标：护盾 / 元素印记（按元素配色）/ 自定义印记。
 // 只抄表现语言（图标+颜色+数值），结算逻辑留在 Yosuri/后端，不搬星迹战斗逻辑。
@@ -4672,26 +4681,47 @@ function parseAtMention(raw) {
   return { target: hit ? hit.name : '', text: rest }
 }
 
-// ── 功能导航收束：折叠栏「功能」按钮 → 菜单贴着折叠栏右侧弹出（rail-card 同款），
+// ── 功能导航收束：折叠栏「功能」按钮 → 鼠标悬浮时菜单贴着按钮右侧显示。
 // 列出 App 级 tab。聊天页（Agent/RP）本身不悬浮那排 tab。
-// 站点/聚合 API 没人点，从菜单里剔除（appNav.js 全量定义保留给 App 级 rail）。 ──
-const fnRailItems = railItemDefinitions.filter(it => it.id !== 'sites' && it.id !== 'agg')
+// 站点/聚合 API 没人点、编码(=当前页/chat)点了也是原地 → 一起剔除
+// （appNav.js 全量定义保留给 App 级 rail）。 ──
+const fnRailItems = railItemDefinitions.filter(it => it.id !== 'sites' && it.id !== 'agg' && it.id !== 'chat')
 const fnMenuOpen = ref(false)
 const fnMenuStyle = ref({})
-function openFnMenu(e) {
-  const rect = e?.currentTarget?.getBoundingClientRect()
-  if (!rect) { fnMenuOpen.value = true; return }
+let fnMenuCloseTimer = 0
+function openFnMenu() {
+  cancelCloseFnMenu()
+  positionFnMenu()
+  fnMenuOpen.value = true
+}
+function scheduleCloseFnMenu() {
+  cancelCloseFnMenu()
+  fnMenuCloseTimer = window.setTimeout(() => { fnMenuOpen.value = false }, 400)
+}
+// 鼠标离开按钮时的真正去向判断：如果正滑向右侧的菜单（relatedTarget 在菜单内），
+// 不触发关闭——否则按钮→菜单移动稍慢菜单就关了，点击落在空气上（实测的坑）。
+function onFnWrapLeave(e) {
+  const rt = e?.relatedTarget
+  if (rt && rt.closest && rt.closest('.rail-fn-menu')) return
+  scheduleCloseFnMenu()
+}
+function cancelCloseFnMenu() {
+  if (fnMenuCloseTimer) { clearTimeout(fnMenuCloseTimer); fnMenuCloseTimer = 0 }
+}
+function positionFnMenu() {
+  const btn = document.querySelector('.gem-rail-fn-wrap .gem-icon-btn')
+  if (!btn) return
+  const rect = btn.getBoundingClientRect()
   // 从按钮右下角向上生长：bottom 钉住按钮底部，菜单往上长，
   // 高度再大也不会顶出视口底部（对比 top 定位会把下方截断）。
   const menuHeight = Math.min(360, window.innerHeight - 16)
   const bottom = window.innerHeight - rect.bottom + 10
   fnMenuStyle.value = {
-    left: `${rect.right + 10}px`,
+    left: `${rect.right - 4}px`,
     bottom: `${Math.max(8, Math.min(bottom, window.innerHeight - menuHeight - 8))}px`,
     maxHeight: `${menuHeight}px`,
     overflowY: 'auto',
   }
-  fnMenuOpen.value = true
 }
 function goFnItem(item) {
   fnMenuOpen.value = false
@@ -4699,14 +4729,11 @@ function goFnItem(item) {
   if (item.to) navTo(item.to)
   else if (item.id === 'agg') showSettings.value = true // 聚合 API 走设置弹窗
 }
-// 点空白处收起功能菜单
-function onDocClickCloseFnMenu(e) {
-  if (!fnMenuOpen.value) return
-  if (e?.target?.closest?.('.gem-rail-fn-wrap, .rail-fn-menu')) return
-  fnMenuOpen.value = false
-}
-onMounted(() => window.addEventListener('click', onDocClickCloseFnMenu))
-onUnmounted(() => window.removeEventListener('click', onDocClickCloseFnMenu))
+onMounted(() => window.addEventListener('resize', positionFnMenu))
+onUnmounted(() => {
+  window.removeEventListener('resize', positionFnMenu)
+  cancelCloseFnMenu()
+})
 
 // ==================== 语音输出开关（喇叭按钮，Hermes 布局） ====================
 // ⚠️ 必须放在 useChatWidget 解构之后：watch(messages) 在 setup 同步执行，解构前引用会 TDZ 白屏
@@ -5339,6 +5366,13 @@ let pendingSend = null
 async function handleSend() {
   // 亲密度 +1（fire-and-forget，失败静默不阻断发送）
   railAuth.incIntimacy()
+  // 首页（本会话还无消息）发首条：自动恢复全局最后停留的 RP 选卡。
+  // 覆盖两个入口：①新建对话已由 newSession 套好；②启动落在旧会话但无消息、
+  // 或从侧栏直接点进空会话 —— 这里兜底，让 RP 用户首页发消息直接进角色扮演。
+  if (messages.value.length === 0 && !rpPrimaryId.value) {
+    const rpDef = rpDefaultsForNewSession()
+    if (rpDef.mode === 'rp' && rpDef.cast.length) setSessionRp(rpDef.cast)
+  }
   // 工作流跑着且是本会话的流：回车是「插话」。
   // 流在别的会话（切会话后旧会话还在跑）：先停掉它再发本会话的新消息，
   // 否则输入会被误当插话喂给别的会话的流（2026-09-06 重大 bug）。
@@ -6683,6 +6717,40 @@ async function refreshGitGraph() {
   font-size: 12px;
   font-weight: 600;
   color: #8b5e7c;
+}
+
+/* ===== 角色扮演：回合说话人名牌（头像+名字，副会长条） ===== */
+.rp-flow-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  padding: 2px 10px 2px 3px;
+  border-radius: 999px;
+  background: rgba(var(--app-surface-rgb, 255, 255, 255), 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+.rp-flow-badge-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+}
+.rp-flow-badge-avatar-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+.rp-flow-badge-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--app-text);
 }
 
 .agent-chip-row {

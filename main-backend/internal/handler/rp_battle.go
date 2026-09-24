@@ -15,9 +15,10 @@ import (
 
 // BattleUnit 一个战斗单位（我方=角色卡，敌方=敌人模板）。
 type BattleUnit struct {
-	ID        string `json:"id"`        // 我方=agent id；敌方=enemy:<key>
+	ID        string `json:"id"` // 我方=agent id；敌方=enemy:<key>
 	Name      string `json:"name"`
-	Side      string `json:"side"`      // ally | enemy
+	Avatar    string `json:"avatar,omitempty"` // 我方=角色卡头像 base64；敌方=元素 emoji 图标
+	Side      string `json:"side"`             // ally | enemy
 	HP        int    `json:"hp"`
 	MaxHP     int    `json:"maxHp"`
 	Shield    int    `json:"shield"`
@@ -42,9 +43,9 @@ type EnemyPreset struct {
 	DEF     int
 	SPD     int
 	MAG     int
-	Gold    int      // 掉落金币
+	Gold    int // 掉落金币
 	Exp     int
-	Loot    InvItem  // 掉落的战利品（进背包）
+	Loot    InvItem // 掉落的战利品（进背包）
 }
 
 // enemyPresets 内置敌人池：等级从弱到强，酒馆开荒够用。每只都有战利品，
@@ -57,6 +58,28 @@ var enemyPresets = map[string]EnemyPreset{
 	"orc":      {Key: "orc", Name: "兽人", Element: "fire", HP: 140, ATK: 16, DEF: 10, SPD: 7, MAG: 6, Gold: 80, Exp: 35, Loot: InvItem{Name: "兽人战斧", Icon: "🪓", Desc: "沉重、粗糙、要命的斧头"}},
 	"bandit":   {Key: "bandit", Name: "强盗头目", Element: "dark", HP: 120, ATK: 14, DEF: 8, SPD: 10, MAG: 7, Gold: 100, Exp: 40, Loot: InvItem{Name: "强盗的宝箱钥匙", Icon: "🗝️", Desc: "开某处财宝箱的钥匙"}},
 	"dragon":   {Key: "dragon", Name: "幼龙", Element: "fire", HP: 200, ATK: 20, DEF: 12, SPD: 8, MAG: 15, Gold: 200, Exp: 80, Loot: InvItem{Name: "龙鳞", Icon: "🐉", Desc: "火烧不尽的一小块龙鳞"}},
+}
+
+// elementEmoji 敌方按元素给个占位图标（战斗场景头像位）。
+func elementEmoji(el string) string {
+	switch el {
+	case "fire":
+		return "🔥"
+	case "water":
+		return "💧"
+	case "wind":
+		return "🌪️"
+	case "dark":
+		return "🌑"
+	case "light", "holy":
+		return "✨"
+	case "ice":
+		return "❄️"
+	case "thunder":
+		return "⚡"
+	default:
+		return "👾"
+	}
 }
 
 // BattleEvent 一回合的一条结算事件（前端逐条渲染：伤害数字/闪避/暴击…）。
@@ -79,9 +102,9 @@ type RPBattle struct {
 	Log       []BattleEvent `json:"log"`
 	Over      bool          `json:"over"`
 	Victory   bool          `json:"victory"`
-	GameOver  bool          `json:"gameOver"`   // 主角死亡：游戏结束
-	GoldGain  int           `json:"goldGain"`   // 掉落金币
-	Loot      *InvItem      `json:"loot"`       // 战利品快照（胜利时 set，前端展示）
+	GameOver  bool          `json:"gameOver"` // 主角死亡：游戏结束
+	GoldGain  int           `json:"goldGain"` // 掉落金币
+	Loot      *InvItem      `json:"loot"`     // 战利品快照（胜利时 set，前端展示）
 	CreatedAt int64         `json:"createdAt"`
 }
 
@@ -111,6 +134,7 @@ func newRPBattle(sessionID string, agentIDs []string, enemyKey string) (*RPBattl
 		u := BattleUnit{ID: id, Side: "ally", Alive: true}
 		if c := GetAgentCard(id); c != nil {
 			u.Name = c.Name
+			u.Avatar = c.Avatar // 角色卡头像（base64 dataURL）带进战场
 			s := c.Stats
 			u.MaxHP = s.MaxHP
 			if u.MaxHP <= 0 {
@@ -146,7 +170,8 @@ func newRPBattle(sessionID string, agentIDs []string, enemyKey string) (*RPBattl
 	// 敌方
 	b.Units = append(b.Units, BattleUnit{
 		ID: "enemy:" + ep.Key, Name: ep.Name, Side: "enemy",
-		MaxHP: ep.HP, HP: ep.HP, ATK: ep.ATK, DEF: ep.DEF,
+		Avatar: elementEmoji(ep.Element),
+		MaxHP:  ep.HP, HP: ep.HP, ATK: ep.ATK, DEF: ep.DEF,
 		SPD: ep.SPD, MAG: ep.MAG, Element: ep.Element, Alive: true,
 	})
 	rpBattles.Lock()

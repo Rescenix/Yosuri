@@ -66,8 +66,13 @@ func HandleEvolveEvents(c *gin.Context) {
 			}
 			name := strings.TrimSuffix(e.Name(), ".json")
 			var meta struct {
-				Name string `json:"name"`
+				Name      string `json:"name"`
+				CreatedAt string `json:"created_at"`
 			}
+			// ⚠️ 习得时间必须读 JSON 里的 created_at，不能用文件 mtime——
+			// markSkillUsed 每次使用都会重写文件把 mtime 刷成现在，
+			// 用 mtime 会把所有「被用过的旧技能」伪装成新技能（用户报的
+			// 「莫名其妙刷出一大堆技能已学习」就是它）。
 			if data, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil {
 				json.Unmarshal(data, &meta)
 				if meta.Name != "" {
@@ -78,10 +83,13 @@ func HandleEvolveEvents(c *gin.Context) {
 				continue
 			}
 			seenName[name] = true
-			info, _ := e.Info()
-			var at string
-			if info != nil {
-				at = info.ModTime().Format(time.RFC3339)
+			at := strings.TrimSpace(meta.CreatedAt)
+			if at == "" {
+				// 极老文件没有 created_at：退回 mtime（首次轮询的 lastAt
+				// 基准在客户端兜底，不会重播历史）。
+				if info, err := e.Info(); err == nil {
+					at = info.ModTime().Format(time.RFC3339)
+				}
 			}
 			events = append(events, ev{Name: name, At: at})
 		}

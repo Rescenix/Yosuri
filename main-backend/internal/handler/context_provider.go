@@ -130,11 +130,11 @@ func newWorkflowContextProviderFor(agentID string, tasks ...string) *contextProv
 		personalitySection = "\n\n# 性格档案（从你的记忆蒸馏，千人千面）\n" + strings.TrimSpace(personalitySection) + "\n"
 	}
 	// 用户偏好：无条件注入（2026-09-08 用户拍板：跟 Hermes 画像同待遇，不设亲密度门槛）。
-		// 之前 Lv≥2 才回填——新用户前 100 互动看不到偏好，等于画像白攒。现在每轮常驻。
-		prefSection := ""
-		if pref := memorydir.ReadRaw("preferences"); pref != "" {
-			prefSection = "\n\n# 用户偏好（自动提取，常驻）\n" + pref
-		}
+	// 之前 Lv≥2 才回填——新用户前 100 互动看不到偏好，等于画像白攒。现在每轮常驻。
+	prefSection := ""
+	if pref := memorydir.ReadRaw("preferences"); pref != "" {
+		prefSection = "\n\n# 用户偏好（自动提取，常驻）\n" + pref
+	}
 
 	// 反向链接联想召回：根据当前任务匹配 index.md 中的行，
 	// 命中的 [[文件]] 自动读取对应文件内容（亲密等级越高召回越深）
@@ -358,6 +358,9 @@ func formatAgentStats(name string, s AgentStats) string {
 	}
 	if s.Level > 0 {
 		b.WriteString(fmt.Sprintf(" Lv.%d", s.Level))
+		if s.Exp > 0 {
+			b.WriteString(fmt.Sprintf(" 经验%d/%d", s.Exp, expThreshold(s.Level)))
+		}
 	}
 	if s.MaxHP > 0 {
 		b.WriteString(fmt.Sprintf(" HP %d/%d", s.HP, s.MaxHP))
@@ -426,7 +429,6 @@ func (p *contextProvider) WithRPAtMention(target string) *contextProvider {
 
 // IsRoleplay 供调用层判断当前 provider 是否 RP 模式。
 func (p *contextProvider) IsRoleplay() bool { return p.rp }
-
 
 // OnInvoked 注册每轮收尾的落状态回调。
 func (p *contextProvider) OnInvoked(fn func(round int, st roundState)) {

@@ -1,6 +1,6 @@
 /* RpBattleCard.vue + ChatWidget 战斗入口 —— 聊天内嵌战场样式 */
 
-/* ── 战斗浮层：盖在聊天区上方 ── */
+/* ── 战斗浮层：盖在聊天区顶部（默认位，不挡输入框） ── */
 .rp-battle-overlay {
   position: absolute;
   top: 56px;
@@ -19,39 +19,89 @@
   pointer-events: auto;
 }
 
-/* ── 战场布局：左我右敌 ── */
+/* ── 战场布局：左我右敌（大场景） ── */
 .rp-battle-card { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .rp-battle-field {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  min-height: 150px;
+  padding: 12px;
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.06), transparent 60%),
+    linear-gradient(160deg, rgba(90, 120, 200, 0.05), rgba(60, 60, 90, 0.06));
+}
+.rp-battle-field.shake { animation: rpBattleShake 0.26s ease; }
+@keyframes rpBattleShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
 }
 .rp-battle-side {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  max-width: 260px;
 }
 .rp-battle-vs {
   align-self: center;
-  font-size: 18px;
+  font-size: 26px;
   flex-shrink: 0;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 .rp-battle-unit {
   border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.6);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  position: relative;
 }
-.rp-battle-unit.dead { opacity: 0.45; }
+.rp-battle-unit.defending { border-color: #2f6fed; box-shadow: 0 0 0 1px rgba(47,111,237,0.25); }
+.rp-battle-unit.dead { opacity: 0.4; filter: grayscale(1); }
+/* 头像 + 元素角标 */
+.rp-battle-avatar-wrap { position: relative; width: 72px; height: 72px; align-self: center; }
+.rp-battle-avatar {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(0,0,0,0.08);
+  background: #f0f0f0;
+  display: flex; align-items: center; justify-content: center;
+}
+.rp-battle-avatar-text { font-size: 26px; font-weight: 700; color: #fff; }
+.rp-battle-avatar-emoji { font-size: 40px; }
+.rp-battle-element {
+  position: absolute; right: -2px; bottom: -2px;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
 .rp-battle-unit-name {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px; font-weight: 700;
   color: var(--app-text);
+  text-align: center;
+}
+/* 状态栏：攻/防/速/魔 */
+.rp-battle-statbar {
+  display: flex; justify-content: center; gap: 6px;
+}
+.rp-battle-statbar span {
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px; border-radius: 999px;
+  background: rgba(0,0,0,0.05);
+  color: var(--app-text-muted, #6b6b6b);
 }
 .rp-battle-hpbar, .rp-battle-mpbar {
   position: relative;
@@ -66,6 +116,19 @@
   border-radius: 3px;
   background: linear-gradient(90deg, #f5564a, #ff8a5c);
   transition: width 0.3s ease;
+}
+/* 血条流动动画：光斑从左往右扫（星迹式流光） */
+.rp-battle-hpfill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  width: 40%;
+  animation: rpHpFlow 1.6s linear infinite;
+}
+@keyframes rpHpFlow {
+  from { transform: translateX(-120%); }
+  to   { transform: translateX(320%); }
 }
 .rp-battle-shield {
   position: absolute;
@@ -95,21 +158,87 @@
   z-index: 3;
 }
 
-/* ── 回合日志 ── */
+/* ── 回合日志（宝可梦式播报：逐条浮出、行动行+效果行、按动作分级配色）── */
 .rp-battle-log {
   border: 1px dashed rgba(0, 0, 0, 0.08);
   border-radius: 8px;
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: 96px;
+  gap: 3px;
+  max-height: 108px;
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.02);
 }
-.rp-battle-logline { font-size: 12px; color: var(--app-text-muted, #6b6b6b); }
-.rp-battle-logline.crit { color: #ff8a3c; font-weight: 700; }
+.rp-battle-logline {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--app-text-muted, #6b6b6b);
+  animation: rpLogIn 0.25s ease;
+}
+@keyframes rpLogIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.rp-log-actor { flex-shrink: 0; font-weight: 800; }
+.rp-log-actor.ally { color: #2f6fed; }
+.rp-log-actor.enemy { color: #e74c3c; }
+.rp-log-action { flex-shrink: 0; font-size: 11px; padding: 0 5px; border-radius: 4px; background: rgba(0,0,0,0.05); }
+.rp-log-arrow { color: #b0b0b0; font-weight: 700; }
+.rp-log-target { flex-shrink: 0; font-weight: 700; }
+.rp-log-target.ally { color: #2f6fed; }
+.rp-log-target.enemy { color: #e74c3c; }
+/* 伤害数字徽标：普通白底红字，技能紫、暴击金 */
+.rp-log-dmg {
+  flex-shrink: 0;
+  font-weight: 900;
+  font-size: 13px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.65);
+  color: #c0392b;
+}
+.rp-log-dmg.skill { color: #7b5cff; }
+.rp-log-dmg.crit { color: #ff3b30; font-size: 15px; }
+.rp-log-dmg.super { color: #d68910; }
+/* 效果行：暴击红 / 克制金 */
+.rp-log-effect { flex-shrink: 0; font-weight: 800; font-size: 12px; }
+.rp-battle-logline.crit .rp-log-effect { color: #ff3b30; }
+.rp-battle-logline.super .rp-log-effect { color: #d68910; }
 .rp-battle-logline.skill { color: #7b5cff; }
+.rp-battle-logline.defend { color: #2f6fed; }
+.rp-battle-logline.miss { color: #9aa0a6; font-style: italic; }
+.rp-battle-logline.shield { color: #2980b9; }
+.rp-battle-logline.error { color: #e74c3c; font-weight: 700; background: rgba(231, 76, 60, 0.08); border-radius: 4px; padding: 1px 4px; }
+
+/* 受击反馈：白闪 + 伤害飘字 */
+.rp-battle-unit { position: relative; }
+.rp-battle-unit.just-hit { animation: rpHitFlash 0.35s ease; }
+@keyframes rpHitFlash {
+  0% { background: rgba(255, 90, 60, 0.35); }
+  100% { background: rgba(0, 0, 0, 0.02); }
+}
+.rp-pop-dmg {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  z-index: 6;
+  font-size: 15px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 0 6px rgba(255, 60, 50, 0.5);
+  animation: rpDmgPop 1.05s ease-out forwards;
+}
+.rp-pop-dmg.crit { font-size: 18px; color: #ffd166; text-shadow: 0 0 8px rgba(255, 60, 50, 0.8); }
+@keyframes rpDmgPop {
+  0%   { opacity: 0; transform: translateY(4px) scale(0.7); }
+  15%  { opacity: 1; transform: translateY(0) scale(1.15); }
+  30%  { transform: translateY(-6px) scale(1); }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-22px) scale(0.95); }
+}
 
 /* ── 结果 ── */
 .rp-battle-result {

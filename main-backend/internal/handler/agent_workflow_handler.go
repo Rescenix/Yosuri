@@ -846,7 +846,12 @@ func (r *WorkflowRunner) HandleCodeWorkflow(c *gin.Context) {
 				"changed_files":       changedFilesPayload(),
 				"suggestions":         suggestions,
 			})
-			go generateSkillAsync(task, transcript)
+			// 技能沉淀只对 Agent 工程模式：RP 是演绎对话，不是可复用任务，
+			// 每次 RP 对话都跑一遍提炼既浪费免费池额度，又触发「新技能已习得」
+			// toast 骚扰（用户报过 RP 里左下角一直弹）。
+			if mode != "rp" {
+				go generateSkillAsync(task, transcript)
+			}
 			// 热门技能管线：本轮预加载了热集技能且任务成功 → 补记一次使用，
 			// 否则预加载会饿死自己的入选理由（模型不再 skill_view，分数衰减掉出）。
 			provider.RecordHotSkillUse()
