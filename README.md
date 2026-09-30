@@ -43,7 +43,7 @@
 
 | Capability | What it does |
 | --- | --- |
-| **🔍 Free web search** | Built-in Bing fallback — search the web with **zero API key**; Firecrawl, custom models and MCP tools also supported |
+| **🔍 Free web search** | Built-in Bing fallback — search the web with **zero API key**; You.com, Firecrawl, custom models and MCP tools also supported |
 | **👁️ Native free vision** | All vision models load-balanced by success rate, auto-failover — paste an image and get it understood, no vendor lock-in, no key needed |
 | **🎬 Free short-drama studio** | Built-in AI short-drama workbench: reference images / first & last frames / storyboard chaining — free, no credits |
 | **👨‍👩‍👧 Sub-agents & background tasks** | Concurrent sub-agent workflows and background tasks (run_task) with completion notifications, all visible on a timeline panel |

@@ -390,7 +390,7 @@ func HandleGetModelConfig(c *gin.Context) {
 		agnesKeySet = true
 	}
 
-	// 联网来源（web_search 工具）配置状态：bing（默认，免 key）/ firecrawl / custom / mcp。
+	// 联网来源（web_search 工具）配置状态：bing（默认，免 key）/ youcom / firecrawl / custom / mcp。
 	// 前端「模型」tab 能力区据此恢复用户选过的来源与自定义参数。
 	websearchStatus := gin.H{"mode": "bing", "endpoint": "", "model": "", "api_key_set": false, "mcp_tool": ""}
 	if e, ok := entryByID[websearchCapabilityID]; ok {
