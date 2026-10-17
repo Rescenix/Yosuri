@@ -5,7 +5,9 @@ package handler
 // 与 firecrawl/agnes 同一机制：存放在 user_configs 的特殊条目里，
 // 由设置面板「模型」tab 的能力区读写：
 //
-//	id=websearch: 联网来源。mode = firecrawl（默认）/ custom / mcp
+//	id=websearch: 联网来源。mode = bing（默认）/ parallel / firecrawl / custom / mcp
+//	  - bing:      免费无 key 的 Bing 网页搜索
+//	  - parallel:  免费无 key 的 Parallel Search MCP（Fast 模式）
 //	  - firecrawl: 走 Firecrawl /v1/search（免费额度 500 次/月）
 //	  - custom:    走自定义 OpenAI 兼容 Endpoint 的 /v1/responses（内置 web_search 工具）
 //	  - mcp:       走用户指定的已装 MCP 工具（mcp__server__tool）

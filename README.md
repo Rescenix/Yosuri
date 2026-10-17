@@ -72,6 +72,17 @@
 
 ---
 
+### Optional Parallel web search
+
+Select **Settings → Models → Web source → Parallel**, then **Save**, to use
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) for the
+agent's `web_search` tool. Search uses Fast mode and returns cited excerpts with
+no account, API key, or local MCP process required. Bing remains the default;
+your other configured sources stay available. Parallel errors are reported to
+the agent so you can retry later or choose another source. The anonymous service
+has usage limits. This source handles search; the existing page-fetch tools are
+unchanged.
+
 ## 🚀 Download & Install
 
 👉 **[https://yosuri.com/download.html](https://yosuri.com/download.html)** 👈

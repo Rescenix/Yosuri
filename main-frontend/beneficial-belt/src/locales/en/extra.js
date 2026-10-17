@@ -1,6 +1,8 @@
 // 运行时动态 key（tr(变量) 传入的中文在代码里不以字面量出现，提取器收不到，
 // 单独维护这份：角色卡预设、时段、占位符、导航等）。
 export default {
+"Parallel（免费，无 key）": "Parallel (free, no API key)",
+"Parallel Search MCP：免费搜索，无需账号或 API Key，搜索使用 Fast 模式。": "Parallel Search MCP: free search with no account or API key. Search uses Fast mode.",
 "当前仅覆盖侧栏、账户菜单、登录等核心界面，其余界面陆续接入。": "Currently covers the sidebar, account menu and login; the rest is coming soon.",
 "今天我们要创造什么？": "What shall we create today?",
 "随机提问": "Random question",
