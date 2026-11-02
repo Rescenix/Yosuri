@@ -157,8 +157,12 @@ type AgentCard struct {
 	Character string     `json:"character,omitempty"`
 	Stats     AgentStats `json:"stats,omitempty"` // 人物参数（等级/血量/装备/好感）
 	Portrait  string     `json:"portrait,omitempty"`
-	CreatedAt string     `json:"created_at,omitempty"`
-	UpdatedAt string     `json:"updated_at,omitempty"`
+	// 以下三项来自酒馆角色卡导入（V1/V2/V3 通用格式），手写卡可留空。
+	Greeting     string   `json:"greeting,omitempty"`      // 开场白 first_mes
+	AltGreetings []string `json:"alt_greetings,omitempty"` // 备选开场白 alternate_greetings
+	MesExample   string   `json:"mes_example,omitempty"`   // 示例对话 mes_example
+	CreatedAt    string   `json:"created_at,omitempty"`
+	UpdatedAt    string   `json:"updated_at,omitempty"`
 }
 
 var agentRegistry = struct {

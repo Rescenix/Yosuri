@@ -2,7 +2,9 @@
   <div class="pb-root">
     <div class="pb-toolbar">
       <div class="pb-nav-group">
-        <button class="pb-icon-btn" :disabled="historyIndex <= 0" @click="goBack" :title="tr('后退')">
+        <!-- 没有历史可退时不再是死按钮：点它回到空态（本地服务列表），
+             保证「打开网址后」永远有出路，不用关掉面板/重启。 -->
+        <button class="pb-icon-btn" @click="goBackOrHome" :title="historyIndex > 0 ? tr('后退') : tr('返回')">
           <Icon icon="mdi:arrow-left" width="16" />
         </button>
         <button class="pb-icon-btn" :disabled="historyIndex >= history.length - 1" @click="goForward" :title="tr('前进')">
@@ -45,6 +47,10 @@
         </button>
         <button class="pb-icon-btn" :disabled="!currentUrl" @click="openExternal" :title="tr('外部打开')">
           <Icon icon="mdi:open-in-new" width="15" />
+        </button>
+        <!-- 显式关闭：小 × 在标签栏上不好找，工具栏给一个直白的出口 -->
+        <button class="pb-icon-btn" @click="$emit('close')" :title="tr('关闭预览')">
+          <Icon icon="mdi:close" width="15" />
         </button>
       </div>
     </div>
@@ -105,6 +111,9 @@ import { Icon } from '@iconify/vue'
 import { previewRequest } from '../composables/previewBus.js'
 import { backendURL } from '../../../desktopTransport.js'
 import { useI18n, tr } from '../../../composables/useI18n.js'
+
+
+const emit = defineEmits(['close'])
 
 
 const servers = ref([])
@@ -327,6 +336,23 @@ function goBack() {
   if (historyIndex.value <= 0) return
   historyIndex.value--
   loadUrl(history.value[historyIndex.value])
+}
+
+// goBackOrHome 工具栏左箭头：有历史就后退；没历史就回到空态（本地服务列表）。
+// 原来 historyIndex<=0 时按钮直接 disabled，用户打开网址后「没有返回键」只能关面板。
+function goBackOrHome() {
+  if (historyIndex.value > 0) {
+    goBack()
+    return
+  }
+  try { disconnectCDP() } catch { /* CDP 没连上也正常 */ }
+  currentUrl.value = ''
+  urlInput.value = ''
+  frameSrc.value = ''
+  history.value = []
+  historyIndex.value = -1
+  loading.value = false
+  cdpError.value = ''
 }
 
 function goForward() {

@@ -218,7 +218,9 @@ func HandleLoginTokenStore(c *gin.Context) {
 func HandleLoginTokenGet(c *gin.Context) {
 	tok := readLoginToken()
 	if tok == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "无缓存登录态"})
+		// 「没有缓存登录态」是正常状态，不是资源不存在。
+		// 返 404 会让浏览器控制台每次开页都标红一条（前端本来也是 res.ok 判断后静默跳过）。
+		c.JSON(http.StatusOK, gin.H{"token": ""})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"token": tok})

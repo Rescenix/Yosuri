@@ -581,8 +581,48 @@
               </div>
             </div>
 
-            <!-- 没有工具窗口时才显示横向入口；一旦打开工具窗就完全隐藏，避免遮挡内容。
-                 RP 角色扮演模式整条不显示：纯演戏不需要终端/文件工具入口。 -->
+            <!-- 主页点「角色扮演」：不选卡，直接给「继续上次的 RP 会话 / 开新对话」 -->
+            <Teleport to="body">
+              <div v-if="rpQuickOpen && !messages.length" class="rp-picker-pop rp-picker-home">
+                <div class="rp-picker-title">{{ tr('角色扮演') }}</div>
+                <button class="agent-picker-item rp-resume-item" type="button" @click.stop="resumeRpSession">
+                  <Icon icon="mdi:play-circle-outline" width="20" />
+                  <span class="agent-picker-name">{{ tr('继续') }}「{{ rpResumeName }}」</span>
+                  <span class="rp-picker-hint">{{ rpResumeCast.join('、') }}</span>
+                </button>
+                <button class="agent-picker-item rp-resume-item" type="button" @click.stop="startFreshRp">
+                  <Icon icon="mdi:plus-circle-outline" width="20" />
+                  <span class="agent-picker-name">{{ tr('开新对话') }}</span>
+                </button>
+              </div>
+            </Teleport>
+
+            <!-- 空会话（主页）点了「开新对话」但还没选过卡：给一个屏幕居中的选卡层 -->
+            <Teleport to="body">
+              <div v-if="rpPickerOpen && !messages.length" class="rp-picker-pop rp-picker-home">
+                <div v-if="!agentStore.agents.value.length" class="agent-picker-empty">
+                  {{ tr('还没有角色卡，去「设置 → 角色卡」创建吧～') }}
+                </div>
+                <button
+                  v-for="a in agentStore.agents.value"
+                  :key="a.id"
+                  class="agent-picker-item"
+                  :class="{ on: rpCastIds.includes(a.id) }"
+                  type="button"
+                  @click.stop="toggleRpAgent(a.id)"
+                >
+                  <img v-if="a.avatar" :src="a.avatar" class="agent-picker-avatar" alt="" />
+                  <span v-else class="agent-picker-avatar agent-picker-avatar-text" :style="{ background: a.color || '#8b5e7c' }">
+                    {{ (a.name || '?').charAt(0) }}
+                  </span>
+                  <span class="agent-picker-name">{{ tr(a.name) }}</span>
+                  <Icon v-if="rpCastIds.includes(a.id)" icon="mdi:check-circle" width="16" class="agent-picker-check" />
+                </button>
+                <div class="rp-picker-actions">
+                  <button type="button" class="rp-picker-done" @click.stop="rpPickerOpen = false">{{ tr('开始') }}</button>
+                </div>
+              </div>
+            </Teleport>
             <div v-if="!rpPrimaryId && inputTopBarMode === 'git' && !hasVisibleDockPanels" class="floating-tools">
               <button class="header-icon-btn" :class="{ active: dockPanels.includes('diff') }" @click="toggleDockPanel('diff')" title="Diff">
                 <Icon icon="proicons:diff" width="17" color="#6b6b6b" />
@@ -604,6 +644,7 @@
               <NewSessionHome
                 :show-content="showHeatmapPopup"
                 @send-followup="onFollowUpClick"
+                @start-roleplay="switchToRpMode"
               />
             </div>
 
@@ -1501,7 +1542,7 @@
             <div class="tool-dock-pane tool-dock-pane-single">
               <div class="tool-dock-pane-body">
                 <DiffPanel v-if="activeDockPanelFor(dockLocation) === 'diff'" />
-                <PreviewBrowser v-else-if="activeDockPanelFor(dockLocation) === 'preview'" />
+                <PreviewBrowser v-else-if="activeDockPanelFor(dockLocation) === 'preview'" @close="closeDockPanel('preview')" />
                 <FileToolPanel v-else-if="activeDockPanelFor(dockLocation) === 'file'" :embedded="true" :workdir-path="currentWorkDir.path" :workdir-name="currentWorkDir.name" />
                 <BackgroundTasksPanel v-else-if="activeDockPanelFor(dockLocation) === 'tasks'" :embedded="true" :tasks="backgroundTaskList" @select-task="jumpToGroup" @kill-task="dismissBackgroundTask" />
               </div>
@@ -1704,7 +1745,7 @@ import { streamFadeConfig } from '../composables/streamFadeConfig.js'
 import { previewRequest } from '../composables/previewBus.js'
 import UserMessageRail from './UserMessageRail.vue'
 import { useChatWidget } from './useChatWidget.js'
-import { rpDefaultsForNewSession } from '../composables/useRoleplay.js'
+import { rpDefaultsForNewSession, rpCast } from '../composables/useRoleplay.js'
 import { useResizableHeight, useResizableWidth } from './useResizable.js'
 import SessionList from './SessionList.vue'
 import SessionMenuContent from './SessionMenuContent.vue'
@@ -4358,13 +4399,69 @@ function switchToAgentMode() {
   rpPickerOpen.value = false
   if (rpPrimaryId.value) setSessionRp([])
 }
+// 主页「角色扮演」快捷入口的候选状态：不选角色卡，改选「继续上次 RP 会话 / 开新对话」。
+const rpResumeSid = ref('')
+const rpResumeName = ref('')
+const rpResumeCast = ref([])
+// rpQuickOpen 是主页那张「继续 / 开新对话」面板，跟下面的选卡弹层（rpPickerOpen）分开——
+// 两者都可能在空会话出现，混用一个状态会互相弹回自己。
+const rpQuickOpen = ref(false)
+
+// findLastRpSession 会话列表里最近一个进入过 RP 的会话。
+// sessionList 由后端按 updatedAt 倒序下发，所以第一个命中的就是「最后用的」。
+function findLastRpSession() {
+  for (const s of sessionList.value) {
+    if (s.id === sessionId.value) continue // 当前这个空会话自己不算
+    if (rpCast(s.id).length) return s
+  }
+  return null
+}
+
+function resumeRpSession() {
+  const sid = rpResumeSid.value
+  rpQuickOpen.value = false
+  if (sid) switchSession(sid)
+}
+
+async function startFreshRp() {
+  rpQuickOpen.value = false
+  // newSession 会自动按 rpDefaultsForNewSession() 把上次的角色卡带上
+  await newSession()
+  // 从没选过卡的用户：新会话没有 RP 状态，补弹选卡（空会话的居中版）
+  if (!rpPrimaryId.value) {
+    const rpDef = rpDefaultsForNewSession()
+    if (rpDef.mode === 'rp' && rpDef.cast.length) {
+      setSessionRp(rpDef.cast.filter(id => agentStore.agentById(id)))
+    } else {
+      rpPickerOpen.value = true
+      if (!agentStore.agentsLoaded.value) agentStore.loadAgents()
+    }
+  }
+}
+
 function switchToRpMode() {
   if (rpPrimaryId.value) { // 已在 RP 中，再点 = 退出
     setSessionRp([])
     rpPickerOpen.value = false
+    rpQuickOpen.value = false
     return
   }
-  // 恢复上次选卡，优先会话级备份，其次全局最后停留的 RP 卡（2026-09-24：
+  // 主页（空会话）：不弹角色卡选择，改成「继续上次的 RP 会话 / 开新对话」。
+  if (!messages.value.length) {
+    const last = findLastRpSession()
+    if (!last) {
+      // 从没演过：直接开新对话；没有卡的话 startFreshRp 会接着弹选卡
+      startFreshRp()
+      return
+    }
+    rpResumeSid.value = last.id
+    rpResumeName.value = last.name || tr('新对话')
+    rpResumeCast.value = rpCast(last.id).map(id => agentStore.agentById(id)?.name || id)
+    rpQuickOpen.value = true
+    if (!agentStore.agentsLoaded.value) agentStore.loadAgents()
+    return
+  }
+  // 已有消息的会话：恢复上次选卡，优先会话级备份，其次全局最后停留的 RP 卡（2026-09-24：
   // 新会话点「角色扮演」也要直接回上次的卡，别每次都弹选卡）。
   const last = rpLast()
   const valid = last.filter(id => agentStore.agentById(id))
@@ -4389,15 +4486,18 @@ function toggleRpAgent(id) {
   setSessionRp(next)
 }
 // 点空白处收起角色选择弹层 / 世界书面板
+// 主页的「角色扮演」入口（.home-rp-card）也要放行：它触发弹层后同一个 click
+// 会冒泡到 window，不在白名单里就会立刻把刚打开的弹层关掉（表现为「点了没反应」）。
 function onDocClickCloseRpPicker(e) {
-  if (e?.target?.closest?.('.rp-picker-pop, .rp-mode-switch, .wb-panel-host, .wb-open-btn')) return
+  if (e?.target?.closest?.('.rp-picker-pop, .rp-mode-switch, .home-rp-card, .wb-panel-host, .wb-open-btn')) return
   rpPickerOpen.value = false
+  rpQuickOpen.value = false
   worldbookOpen.value = false
 }
 onMounted(() => window.addEventListener('click', onDocClickCloseRpPicker))
 onUnmounted(() => window.removeEventListener('click', onDocClickCloseRpPicker))
 // 切会话时收起弹层（避免弹层跟着悬在别的会话标题下）
-watch(sessionId, () => { rpPickerOpen.value = false })
+watch(sessionId, () => { rpPickerOpen.value = false; rpQuickOpen.value = false })
 
 // ── 人物参数实时同步 ──
 // RP 模式激活时每 5 秒轻量拉一次 /api/agents：剧情里 Yosuri 用 rp_set_stat

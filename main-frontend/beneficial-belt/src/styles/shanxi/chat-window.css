@@ -4243,6 +4243,29 @@ img.gem-rail-avatar {
   border: 1px solid rgba(0, 0, 0, 0.07);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
 }
+/* 主页（空会话）用的版本：标题栏不渲染，弹层 Teleport 到 body 后居中显示 */
+.rp-picker-home {
+  position: fixed;
+  top: 22vh;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  z-index: 999;
+  width: 300px;
+  max-height: 56vh;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+}
+/* 主页「继续 / 开新对话」条目：图标 + 主文案，右侧带角色名小字 */
+.rp-resume-item .agent-picker-name { flex: 1; }
+.rp-picker-hint {
+  flex: none;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: 0.6;
+}
 .rp-picker-title {
   font-size: 12px;
   font-weight: 600;

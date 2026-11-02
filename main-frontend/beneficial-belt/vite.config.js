@@ -2,11 +2,24 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 // 默认跟随桌面端正式 API；需要联调其他实例时再显式覆盖目标端口。
-const apiTarget = process.env.AURORA_API_TARGET || 'http://localhost:8080';
+// 端口可能不是 8080：后端启动时 8080 被 Steam/Docker 占用会自动顺延，
+// 并把实际端口写到 ~/rescene_data/api_port，这里优先读它。
+function resolveApiTarget() {
+  if (process.env.AURORA_API_TARGET) return process.env.AURORA_API_TARGET;
+  try {
+    const p = readFileSync(resolve(homedir(), 'rescene_data', 'api_port'), 'utf8').trim();
+    if (/^\d+$/.test(p)) return `http://localhost:${p}`;
+  } catch { /* 文件不存在 = 后端还没起过，用默认 */ }
+  return 'http://localhost:8080';
+}
+const apiTarget = resolveApiTarget();
 
 export default defineConfig({
   plugins: [vue()],
@@ -35,7 +48,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/aether\/api/, '/api'),
       },
-      '/images': 'http://localhost:8080',
+      '/images': apiTarget,
       '/api': {
         target: apiTarget,
         ws: true,

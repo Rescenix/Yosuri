@@ -40,10 +40,10 @@ import (
 )
 
 const (
-	// codeWorkflowMaxRounds 现在只是兜底上限——真正约束成本的是下面的 token 预算
-	// （见 codeWorkflowExhausted）。复杂任务经常真实需要几十轮，20 轮硬顶会把没
-	// 跑完的正常任务错杀成"失败"；把它调宽松，让 token 预算做主要限制更贴合实际成本。
-	codeWorkflowMaxRounds = 60
+	// codeWorkflowMaxRounds 轮次兜底上限。0 = 不设上限（2026-11-02 用户要求解除）：
+	// 复杂任务经常真实需要几十上百轮，硬顶会把没跑完的正常任务错杀成"失败"。
+	// 真正约束成本的是下面的 token 预算（见 codeWorkflowExhausted），轮次不再拦人。
+	codeWorkflowMaxRounds = 0
 	// codeWorkflowMaxTokensDefault 单个工作流 input+output token 总量的默认上限；
 	// 可用 CODE_WORKFLOW_MAX_TOKENS 环境变量或单次请求的 ?max_tokens= 覆盖。
 	codeWorkflowMaxTokensDefault = 500000
@@ -64,7 +64,8 @@ func codeWorkflowTokenBudget() int {
 // codeWorkflowExhausted 判断是否该终止工作流：轮次或 token 预算任一触顶即真。
 // 抽成纯函数是为了能脱离整个 SSE handler 单测（同 shouldBlockRepeat 的理由）。
 func codeWorkflowExhausted(round, inputTokens, outputTokens, maxRounds, tokenBudget int) (bool, string) {
-	if round >= maxRounds {
+	// maxRounds <= 0 表示不设轮次上限（只靠 token 预算兜底）
+	if maxRounds > 0 && round >= maxRounds {
 		return true, fmt.Sprintf("超过最大迭代轮数(%d)", maxRounds)
 	}
 	if inputTokens+outputTokens >= tokenBudget {

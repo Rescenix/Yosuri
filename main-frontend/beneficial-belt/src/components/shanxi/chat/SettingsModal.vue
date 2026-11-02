@@ -858,7 +858,13 @@
                         <div v-show="activeTab === 'persona'" class="settings-panel">
                           <div class="settings-section-title settings-section-title-row">
                             <span>{{ tr('角色卡') }}</span>
-                            <button class="vendor-key-save" type="button" @click="startNewAgent">{{ tr('新建角色卡') }}</button>
+                            <div class="agent-card-head-ops">
+                              <button class="vendor-key-save" type="button" @click="startNewAgent">{{ tr('新建角色卡') }}</button>
+                              <button class="vendor-key-save" type="button" :disabled="importingCard" @click="pickCardFile">
+                                {{ importingCard ? tr('导入中…') : tr('导入角色卡') }}
+                              </button>
+                              <input ref="cardFileInputRef" type="file" accept=".png,.json,.charx" style="display:none" @change="onCardFilePicked" />
+                            </div>
                           </div>
                           <div class="settings-section-desc">
                             {{ tr('一张角色卡就是一个 Agent：卡里的人设和头像决定它是谁。每个 Agent 有自己的私有记忆，用户偏好等通用记忆所有 Agent 共享。 在聊天输入框的「群聊成员」里勾选，一个对话可以让多个 Agent 依次发言。') }}
@@ -1609,7 +1615,7 @@ import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { theme, mode, MODE_OPTIONS, THEME_PRESETS, customColor, customThemeName, setCustomColor, setCustomThemeName } from '../composables/useTheme.js'
 import { useEditorPrefs } from '../composables/useEditorPrefs.js'
-import { useAgentsStore } from '../composables/useAgents.js'
+import { useAgentsStore, refreshAgents } from '../composables/useAgents.js'
 
 import { renderMarkdown } from './markdownRenderer.js'
 import { isUpdateNotifyDisabled, setUpdateNotifyDisabled } from '../../../composables/updatePrefs.js'
@@ -1707,7 +1713,7 @@ const avatarFallback = computed(() => {
 const agentStore = useAgentsStore()
 const agentEditing = ref(false)
 const agentAvatarInputRef = ref(null)
-const agentDraft = reactive({ id: '', name: '', persona: '', avatar: '', color: '', character: '' })
+const agentDraft = reactive({ id: '', name: '', persona: '', avatar: '', color: '', character: '', greeting: '', alt_greetings: [], mes_example: '' })
 // 角色发言可选色板：多 agent 对话时每个角色正文用自己颜色，一眼分清谁在说话。
 // 单 agent 通用对话不套色（正文落回默认文字色），只在群聊里生效。
 const AGENT_VOICE_COLORS = ['#8b5e7c', '#c2506c', '#4d7c0f', '#0e7490', '#6d28d9', '#be123c', '#0369a1', '#b45309', '#3f6212', '#7c2d12']
@@ -1717,14 +1723,71 @@ onMounted(() => { if (!agentStore.agentsLoaded.value) agentStore.loadAgents() })
 watch(activeTab => { if (activeTab === 'models') loadTtsConfig() })
 
 function startNewAgent() {
-  Object.assign(agentDraft, { id: '', name: '', persona: '', avatar: '', color: '', character: '' })
+  Object.assign(agentDraft, { id: '', name: '', persona: '', avatar: '', color: '', character: '', greeting: '', alt_greetings: [], mes_example: '' })
   agentEditing.value = true
+}
+
+// ===== 酒馆角色卡导入（PNG / JSON / CHARX，V1/V2/V3）=====
+// 卡里的 JSON 藏在 PNG 的 tEXt 块里，所以必须整文件发后端解析，前端不做解码。
+const cardFileInputRef = ref(null)
+const importingCard = ref(false)
+
+function pickCardFile() {
+  if (importingCard.value) return
+  cardFileInputRef.value?.click()
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader()
+    fr.onload = () => resolve(String(fr.result || ''))
+    fr.onerror = () => reject(new Error(tr('文件读取失败')))
+    fr.readAsDataURL(file)
+  })
+}
+
+async function onCardFilePicked(event) {
+  const input = event.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 24 * 1024 * 1024) {
+    personaToast.value = { ok: false, message: tr('角色卡文件太大（上限 24MB）') }
+    setTimeout(() => { personaToast.value = null }, 3000)
+    return
+  }
+  importingCard.value = true
+  try {
+    const data = await readFileAsDataURL(file)
+    const res = await fetch('/api/cards/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, data }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + res.status))
+    await refreshAgents()
+    const bits = []
+    if (d.worldbook_entries > 0) bits.push(tr('世界书 ') + d.worldbook_entries + tr(' 条'))
+    if (d.warnings && d.warnings.length) bits.push(d.warnings.join('；'))
+    personaToast.value = {
+      ok: true,
+      message: tr('已导入角色卡「') + d.agent.name + '」' + (bits.length ? ' · ' + bits.join(' · ') : ''),
+    }
+  } catch (e) {
+    personaToast.value = { ok: false, message: tr('导入失败：') + e.message }
+  } finally {
+    importingCard.value = false
+    setTimeout(() => { personaToast.value = null }, 5000)
+  }
 }
 
 function editAgent(a) {
   Object.assign(agentDraft, {
     id: a.id, name: a.name, persona: a.persona || '',
     avatar: a.avatar || '', color: a.color || '', character: a.character || '',
+    // 导入卡带过来的三项，编辑保存时必须原样带回，否则会被空值覆盖掉
+    greeting: a.greeting || '', alt_greetings: a.alt_greetings || [], mes_example: a.mes_example || '',
   })
   agentEditing.value = true
 }
@@ -4049,6 +4112,9 @@ onUnmounted(() => {
 .vendor-key-link { color: var(--app-accent); text-decoration: none; }
 .vendor-key-link:hover { text-decoration: underline; }
 .settings-section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* 角色卡标题行右侧：新建 / 导入 两个按钮并排 */
+.agent-card-head-ops { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.agent-card-head-ops .vendor-key-save:disabled { opacity: .55; cursor: default; }
 .auto-sort-btn {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 11px; font-weight: 600; color: var(--app-accent);

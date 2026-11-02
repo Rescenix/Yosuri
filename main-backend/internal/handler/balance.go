@@ -24,7 +24,9 @@ type BalanceResponse struct {
 func GetBalance(c *gin.Context) {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "缺少API Key"})
+		// 没配 DeepSeek 官方 key 只是「查不到余额」，不是服务端故障。
+		// 以前返 500 → 前端每次开页都在控制台留一条红字，纯噪音。
+		c.JSON(http.StatusOK, gin.H{"is_available": false, "balance_infos": []any{}})
 		return
 	}
 

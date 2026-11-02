@@ -165,6 +165,8 @@ func RegisterRoutes(r *gin.Engine, sessionStore *SessionStore) {
 	r.DELETE("/api/agents/:id", HandleDeleteAgent)
 	r.POST("/api/agents/:id/avatar", HandleSaveAgentAvatar)
 	r.GET("/api/agents/:id/memory", HandleAgentMemory)
+	// 酒馆角色卡导入（PNG/JSON/CHARX，V1/V2/V3 通用格式）
+	r.POST("/api/cards/import", HandleImportCharacterCard)
 	// 世界书（Lorebook）：全局 + 角色卡私有，关键词触发注入
 	r.GET("/api/worldbook", HandleWorldbookGet)
 	r.POST("/api/worldbook", HandleWorldbookSave)

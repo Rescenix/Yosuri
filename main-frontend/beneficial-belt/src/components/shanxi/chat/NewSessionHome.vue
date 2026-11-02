@@ -10,22 +10,25 @@
             </Transition>
           </div>
 
-          <!-- 推荐位：星迹内测开放中，送一千金币。点击跳转 /game（走 router.push，避免 wails 404） -->
-          <div class="home-reco-card" role="link" tabindex="0"
-            @click="goGame" @keydown.enter="goGame" @keydown.space.prevent="goGame">
-            <span class="reco-spark" aria-hidden="true">✦</span>
+          <!-- 快捷入口：角色扮演。空会话时模式切换按钮挂在标题栏上不显示，
+               这里给一个直接入口，点了就由角色卡接管对话（已选过卡则直接进，
+               没选过就弹角色卡选择）。 -->
+          <div class="home-reco-card home-rp-card" role="button" tabindex="0"
+            @click.stop="$emit('start-roleplay')" @keydown.enter.stop="$emit('start-roleplay')" @keydown.space.prevent.stop="$emit('start-roleplay')">
+            <span class="reco-spark" aria-hidden="true">
+              <Icon icon="mdi:drama-masks" width="18" />
+            </span>
             <div class="reco-body">
               <div class="reco-title">
-                <span class="reco-badge">{{ tr('星迹内测') }}</span>
-                <span class="reco-open">{{ tr('限时开放中') }}</span>
+                <span class="reco-badge">{{ tr('角色扮演') }}</span>
+                <span class="reco-open">{{ tr('让角色卡接管对话') }}</span>
               </div>
-              <div class="reco-desc">{{ tr('登录星迹 · 送一千金币 · 先到先得') }}</div>
+              <div class="reco-desc">{{ tr('选一张卡开演 · 可多人同框 · 会记住剧情和状态') }}</div>
             </div>
             <span class="reco-cta">
-              {{ tr('立即体验') }}
+              {{ tr('开始') }}
               <Icon icon="mdi:arrow-right" width="14" />
             </span>
-            <!-- 特效保留：卡片扫光/闪烁由 reco-shine 驱动 -->
           </div>
 
           <div class="home-stats-card">
@@ -103,22 +106,16 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useRouter } from 'vue-router'
 import { useAuth } from '../../../composables/useAuth.js'
 import { useI18n, tr } from '../../../composables/useI18n.js'
 
 
 
 const props = defineProps({ showContent: { type: Boolean, default: true } })
+defineEmits(['send-followup', 'start-roleplay'])
 
 const apiBase = import.meta.env.VITE_API_BASE || ''
 const auth = useAuth()
-const router = useRouter()
-
-// 推荐位跳转：星迹内测入口，走 router.push（禁止 <a href>，避免 wails 404）
-function goGame() {
-  router.push('/game')
-}
 
 const greetingMessages = [
   "接下来做什么，{name}？",
