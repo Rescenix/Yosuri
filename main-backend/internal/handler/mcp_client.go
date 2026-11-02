@@ -506,12 +506,18 @@ func (c *mcpConn) request(method string, params any, timeout time.Duration) (jso
 // 也可能是 text/event-stream；两种都在这里归一为 result。
 // 调用方持有 c.mu，保证同一个 MCP session 内请求顺序稳定。
 func (c *mcpConn) sendHTTP(id int64, method string, params any, timeout time.Duration) (json.RawMessage, error) {
+	return c.sendHTTPContext(context.Background(), id, method, params, timeout)
+}
+
+// sendHTTPContext lets native providers share the HTTP transport while honoring
+// the workflow's cancellation and deadline.
+func (c *mcpConn) sendHTTPContext(parent context.Context, id int64, method string, params any, timeout time.Duration) (json.RawMessage, error) {
 	payload := map[string]any{"jsonrpc": "2.0", "method": method, "params": params}
 	if id > 0 {
 		payload["id"] = id
 	}
 	body, _ := json.Marshal(payload)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.remoteURL, bytes.NewReader(body))
 	if err != nil {

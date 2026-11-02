@@ -129,6 +129,8 @@
  "PPT 未生成",
  "PPTX 已生成，但文件结构无法解析；请下载后用 PowerPoint 打开。",
  "PPTX 文件读取失败",
+ "Parallel Search MCP：免费搜索，无需账号或 API Key，搜索使用 Fast 模式。",
+ "Parallel（免费，无 key）",
  "Pollinations（免费，无 key，速度快）",
  "SD 检查失败: ",
  "Seed（留空随机）",

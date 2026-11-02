@@ -283,6 +283,7 @@
                   <span class="param-label">{{ tr('联网来源') }}</span>
                   <select class="model-select" v-model="websearchMode">
                     <option value="bing">{{ tr('Bing（免费，无 key）') }}</option>
+                    <option value="parallel">{{ tr('Parallel（免费，无 key）') }}</option>
                     <option value="firecrawl">{{ tr('Firecrawl（免费 500 次/月）') }}</option>
                     <option value="custom">{{ tr('自定义模型（OpenAI 兼容，需 key）') }}</option>
                     <option value="mcp">{{ tr('MCP 搜索工具') }}</option>
@@ -291,6 +292,13 @@
 
                 <!-- 联网：Bing（默认，免 key）——无需配置，选中即用，不展开说明 -->
                                 <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">{{ tr('✅ 联网搜索已启用（Bing，模型自主触发）') }}</div>
+
+                <div v-else-if="websearchMode === 'parallel'" class="cap-card">
+                  <div class="firecrawl-key-status">{{ tr('Parallel Search MCP：免费搜索，无需账号或 API Key，搜索使用 Fast 模式。') }}</div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">{{ tr('保存') }}</button>
+                  </div>
+                </div>
 
                 <!-- 联网：Firecrawl 配置 -->
                 <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
@@ -439,6 +447,7 @@
                   <span class="param-label">{{ tr('联网来源') }}</span>
                   <select class="model-select" v-model="websearchMode">
                     <option value="bing">{{ tr('Bing（免费，无 key）') }}</option>
+                    <option value="parallel">{{ tr('Parallel（免费，无 key）') }}</option>
                     <option value="firecrawl">{{ tr('Firecrawl（免费 500 次/月）') }}</option>
                     <option value="custom">{{ tr('自定义模型（OpenAI 兼容，需 key）') }}</option>
                     <option value="mcp">{{ tr('MCP 搜索工具') }}</option>
@@ -447,6 +456,13 @@
 
                 <!-- 联网：Bing（默认，免 key）——无需配置，选中即用，不展开说明 -->
                                 <div v-if="websearchMode === 'bing'" class="firecrawl-key-status">{{ tr('✅ 联网搜索已启用（Bing，模型自主触发）') }}</div>
+
+                <div v-else-if="websearchMode === 'parallel'" class="cap-card">
+                  <div class="firecrawl-key-status">{{ tr('Parallel Search MCP：免费搜索，无需账号或 API Key，搜索使用 Fast 模式。') }}</div>
+                  <div class="cap-actions">
+                    <button class="vendor-key-save" type="button" @click="saveWebsearchCapability">{{ tr('保存') }}</button>
+                  </div>
+                </div>
 
                 <!-- 联网：Firecrawl 配置 -->
                 <div v-else-if="websearchMode === 'firecrawl'" class="cap-card">
@@ -2989,11 +3005,13 @@ async function saveWebsearchCapability() {
       .map(c => ({ ...c, api_key: MASKED }))
     await persist([...untouched, {
       id: WEBSEARCH_CFG_ID, name: tr('联网搜索'),
-      endpoint: mode === 'custom' ? websearchEndpoint.value.trim() : (mode === 'mcp' ? 'mcp://' + websearchMCPTool.value : 'https://api.firecrawl.dev'),
-      api_key: mode === 'custom' ? (websearchKeyDraft.value || (websearchKeySet.value ? MASKED : '')) : '',
-      default_model: mode === 'custom' ? websearchModel.value.trim() : '',
+      // Parallel uses its built-in endpoint; retain inactive custom/MCP settings
+      // so choosing this keyless source does not erase an existing credential.
+      endpoint: mode === 'custom' || mode === 'parallel' ? websearchEndpoint.value.trim() : (mode === 'mcp' ? 'mcp://' + websearchMCPTool.value : 'https://api.firecrawl.dev'),
+      api_key: mode === 'custom' ? (websearchKeyDraft.value || (websearchKeySet.value ? MASKED : '')) : (mode === 'parallel' && websearchKeySet.value ? MASKED : ''),
+      default_model: mode === 'custom' || mode === 'parallel' ? websearchModel.value.trim() : '',
       is_default: false,
-      extra: { mode, mcp_tool: mode === 'mcp' ? websearchMCPTool.value : '' }
+      extra: { mode, mcp_tool: mode === 'mcp' || mode === 'parallel' ? websearchMCPTool.value : '' }
     }])
     await loadConfigs()
     websearchKeyDraft.value = ''

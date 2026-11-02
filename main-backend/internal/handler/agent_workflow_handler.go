@@ -20,6 +20,7 @@ package handler
 // args 用真实 JSON，前端由 AgentWorkflowPanel.vue + useAgentWorkflow.js 消费。
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -1449,7 +1450,8 @@ func (r *WorkflowRunner) executeCodeCalls(c *gin.Context, backends []RouterBacke
 				// 跟着改名走，否则核心写工具不进影子仓 → 收尾「改动文件」卡片永远为空。
 				OnBeforeWrite(name, args)
 			}
-			nativeResult, err := callNativeTool(c.Request.Context(), name, tc.Function.Arguments)
+			toolCtx := context.WithValue(c.Request.Context(), parallelSearchSessionKey{}, sessionID)
+			nativeResult, err := callNativeTool(toolCtx, name, tc.Function.Arguments)
 			if err != nil {
 				results[i] = codeExecResult{output: "内置工具失败: " + err.Error(), failed: true}
 				return
