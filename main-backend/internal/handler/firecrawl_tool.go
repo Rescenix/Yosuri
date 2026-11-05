@@ -27,7 +27,7 @@ var webSearchToolDef = core.ToolDefinition{
 	Type: "function",
 	Function: core.ToolFunctionDetail{
 		Name: "web_search",
-		Description: "联网搜索：用关键词搜索互联网，返回带标题/链接/摘要的结果列表。引擎自动选择用户配置的搜索来源（默认免 key 的 Bing，或 Firecrawl/自定义模型/MCP 工具）。" +
+		Description: "联网搜索：用关键词搜索互联网，返回带标题/链接/摘要的结果列表。引擎自动选择用户配置的搜索来源（默认免 key 的 Bing，或 You.com/Firecrawl/自定义模型/MCP 工具）。" +
 			"当任务需要最新信息、实时数据、或你知识范围之外的网络内容时调用，也可用于核实旧知识的时效性。" +
 			"搜索词用中文或英文均可。",
 		Parameters: core.ToolParameters{
@@ -128,9 +128,10 @@ func firecrawlSearch(ctx context.Context, query string, limit int) (string, []st
 	return sb.String(), urls, nil
 }
 
-// webSearch 按用户选的「联网来源」分发（设置面板 → 模型 → 联网来源）：
+//	webSearch 按用户选的「联网来源」分发（设置面板 → 模型 → 联网来源）：
 //
 //	bing（默认）→ 免 key 的 Bing 网页搜索（国内可达，零配置）
+//	youcom      → 免 key 的 You.com MCP（free profile，结构化结果）
 //	firecrawl → Firecrawl /v1/search（要 key，500 次/月）
 //	custom → 自定义 OpenAI 兼容 Endpoint 的 /v1/responses（内置 web_search 服务端联网）
 //	mcp    → 用户指定的已装 MCP 搜索工具
@@ -142,6 +143,13 @@ func webSearch(ctx context.Context, query string, limit int) (string, []string, 
 		return bingSearch(ctx, query, limit)
 	}
 	switch capabilityMode(entry, "bing") {
+	case "youcom":
+		// You.com 免 key 也一样零配置；失败时降级到 Bing，和 Firecrawl 的兜底策略一致
+		text, urls, err := youcomSearch(ctx, query, limit)
+		if err != nil {
+			return bingSearch(ctx, query, limit)
+		}
+		return text, urls, nil
 	case "firecrawl":
 		text, urls, err := firecrawlSearch(ctx, query, limit)
 		if err != nil && firecrawlAPIKey() == "" {
